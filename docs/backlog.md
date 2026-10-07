@@ -1877,13 +1877,19 @@ a demo seeds changes.
 sales are written in the venue's receipt language (W109-5, Task 5 of the same plan) — DONE
 (2026-10-07).** `demoSeedLocale` (`apps/server/src/demo-seed.ts`) reads the setup person's language
 (`admin.locale`) — Spanish when it is Spanish, English otherwise — instead of the receipt language,
-and `seedSales` (`apps/server/scripts/demo-seed/seed-sales.ts`) takes the location's first receipt
-language, so a Barcelona demo set up in Spanish gets Spanish staff-facing names and Catalan practice
-sales. The plan's last step, Task 2 (W109-2, a country with no demo data), is still to come.
+and `seedDemoRestaurant` (`apps/server/scripts/demo-seed/seed.ts`) reads the location's first
+receipt language with `readReceiptLanguage` and hands it to `seedSales`
+(`apps/server/scripts/demo-seed/seed-sales.ts`), so a Barcelona demo set up in Spanish gets Spanish
+staff-facing names and Catalan practice sales. Where a dish has no text in the receipt language, a
+practice sale falls back to the venue's main content language, which `seedSales` reads with
+`readContentLanguages`, as a till sale does (`apps/server/src/working-order.ts`): a Madrid demo with
+Catalan receipts stores the dish's Spanish customer-facing text under the Catalan receipt key rather
+than an empty description. The plan's last step, Task 2 (W109-2, a country with no demo data), is still to come.
 
 Seen during W109-5's look at a Barcelona demo set up in Spanish (2026-10-07), OPEN, unqueued:
-(1) practice-sale invoice numbers run backwards in time — FS/1 is the newest sale and the highest
-number the oldest, because `seedSales` fills days from today backwards (`dayIndex` loop in
+(1) practice-sale invoice numbers do not follow time order — `seedSales` fills days from today
+backwards, at random hours within each day, so FS/1 falls on today and the highest numbers on the
+oldest day (`dayIndex` loop in
 `apps/server/scripts/demo-seed/seed-sales.ts`, unchanged since #165, 2026-08-30); (2) the
 dashboard's order detail dialog (Pedidos → Ver detalle) shows a quantity of one as "× 1.000",
 which a Spanish reader takes as a thousand; (3) product groups and prep stations stay English
