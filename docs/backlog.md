@@ -1227,6 +1227,19 @@ adjust the colour-field width using the shared field contract without changing s
 **Sidebar contrast (found during W69, 2026-10-06) — DONE (A306).** The group headings and the
 selected item read `--wt-color-primary-text`.
 
+**Hover contrast A306 measured but did not fix — OPEN.** A306's axe probes in real Chromium
+(2026-10-07) also measured two hovered treatments that do not use the filled buttons it fixed:
+(1) card actions drawn as a secondary button with coloured text and the opacity dip — the till
+profile's "Confirmar" 3.66:1 light, 4.19:1 dark, and the content-languages page's primary-coloured
+actions 3.61:1 light, 4.21:1 dark (its danger-coloured "Quitar" passed, 5.04:1 and 4.74:1); (2) a
+hovered till tile's muted price and kind text — 4.38:1 on an unpainted tile in light (dark 5.44:1),
+and 4.1:1 on a blue-painted tile in light (dark 4.84:1). The bar is 4.5:1. Not measured: the
+profile's hidden actions, disabled or sold-out tiles, a category row's made-at link, the prep
+stations screen. Next action: an item of its own that moves those hovers off the opacity dip, as
+A306 did for filled buttons, with axe cases that hover. Also seen in A306's screenshots, not
+measured: on a hovered Products row in the dark theme the status and allergen badges' borders
+disappear into the row; A306 changed no border or surface token, so it does not come from A306.
+
 **Dark modal danger-button hover contrast (found during W69, 2026-10-06), and its light reading of
 2026-10-07 — DONE (A306).** Primary and danger buttons hover onto their own fill tokens instead of
 dipping in opacity.
