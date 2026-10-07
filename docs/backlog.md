@@ -1952,7 +1952,7 @@ existing venue retains its saved zone (`applyPreparedLocation`,
 not an edit through that applicator.
 
 **A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
-DONE (#1257).** The save's refusal test also asserts `{ field: "color" }` since A281.
+DONE (#1257).** The save's refusal test also asserts `{ field: "color" }` since A281 (#1344).
 
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
@@ -4731,7 +4731,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     refresh, no error is shown: the dashboard's request code sets no timeout on a read. Found in
     #1298's review; I believe it predates the branch (not checked with `git blame`).
   - The prep-stations screenshot tests wrote `look/*.png` into their folder on every run, untracked
-    in git — fixed by A281: they write under the ignored `__screenshots__/look/`.
+    in git — fixed by A281 (#1344): they write under the ignored `__screenshots__/look/`.
     [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) — DONE
     ([PR #1305](https://github.com/clintongormley/waitron/pull/1305)). The Hours calendar shows Spain's 2026 national and regional
     holidays, transcribed from BOE-A-2025-21667 and compared with the archived annex by a test, with
@@ -6876,7 +6876,7 @@ bump it when a fixed version is published, and run the certificate suites in tho
   on draft lines, order lines or kitchen items, in which case a confirmed Delete switches the row
   off instead. Found along the way:
   `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) wrote untracked
-  `look/` screenshots into `apps/dashboard/src/screens/` — fixed by A281. (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
+  `look/` screenshots into `apps/dashboard/src/screens/` — fixed by A281 (#1344). (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
   and floor tables do too (W110e, #1290). A department is enabled through `active` on
   `PATCH /management-api/venue-service/departments/:departmentId`, from its policy-tree row and
   the departments tab; floor tables through `active` on `PATCH /management-api/tables/:id`, which
