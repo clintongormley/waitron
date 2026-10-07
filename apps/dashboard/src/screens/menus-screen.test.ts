@@ -4217,6 +4217,44 @@ describe("an include's Edit dialog", () => {
     expect(client.setIncludeFolder).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    [
+      "image",
+      "include-image-error",
+      "The folder's image is not in the library. Choose another, or remove it.",
+    ],
+    [
+      "color",
+      "include-color-error",
+      "The folder's colour was not accepted. Choose another colour, or no colour.",
+    ],
+  ])(
+    "puts an invalid-%s refusal about the folder beside its field and keeps the dialog open",
+    async (field, errorId, message) => {
+      const before = currentLocale();
+      setLocale("en");
+      onTestFinished(() => setLocale(before));
+      const { client } = winesClient(
+        { showAsFolder: true, overrides: {} },
+        {
+          setIncludeFolder: vi
+            .fn()
+            .mockRejectedValue({ code: "menu_section.invalid", params: { field } }),
+        },
+      );
+      const el = await mountLunch(client);
+      await openWines(el);
+      includeSave(el).click();
+      await vi.waitFor(() =>
+        expect(includeForm(el).shadowRoot!.querySelector(`#${errorId}`)?.textContent?.trim()).toBe(
+          message,
+        ),
+      );
+      expect(await bottomIn(includeModal(el))).toBe(t("form.fix_fields"));
+      expect(includeModal(el).open).toBe(true);
+    },
+  );
+
   it("a refusal that names no shown field shows at the bottom", async () => {
     const { client } = winesClient(
       { showAsFolder: true, overrides: {} },

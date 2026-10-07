@@ -2121,6 +2121,10 @@ export const en = {
     "Off: its sections and products appear in this list directly, in their own order.",
   "menus.include_names_required":
     "Add the folder's customer-facing name in the default content language, or remove all of the folder's customer-facing names.",
+  "menus.include_image_invalid":
+    "The folder's image is not in the library. Choose another, or remove it.",
+  "menus.include_color_invalid":
+    "The folder's colour was not accepted. Choose another colour, or no colour.",
 
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
@@ -4580,6 +4584,9 @@ export const es: Record<StringKey, string> = {
     "Desactivado: sus secciones y productos aparecen directamente en esta lista, en su propio orden.",
   "menus.include_names_required":
     "Añade el nombre de la carpeta para el cliente en el idioma de contenido predeterminado, o quita todos los nombres de la carpeta para el cliente.",
+  "menus.include_image_invalid":
+    "La imagen de la carpeta no está en la biblioteca. Elige otra o quítala.",
+  "menus.include_color_invalid": "No se aceptó el color de la carpeta. Elige otro color o ninguno.",
 
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":

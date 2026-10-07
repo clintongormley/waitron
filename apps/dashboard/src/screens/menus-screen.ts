@@ -133,6 +133,19 @@ function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
 }
 
+/** The include dialog's refusals worded for the folder; codes.ts's sentences speak of a section. */
+function includeRefusal(error: unknown): Record<string, string> {
+  const code = codeOf(error);
+  const field = fieldOf(error);
+  if (code === "menu_section.translation_required")
+    return { [field]: t("menus.include_names_required") };
+  if (code === "menu_section.invalid" && field === "image")
+    return { image: t("menus.include_image_invalid") };
+  if (code === "menu_section.invalid" && field === "color")
+    return { color: t("menus.include_color_invalid") };
+  return refusal(error);
+}
+
 /** Whether a refusal is about the price typed, so it belongs under that field, as
  * `namesTheName` in `course-list.ts` decides for a course's name. */
 function namesThePrice(error: unknown, save: PriceSave): boolean {
@@ -1448,10 +1461,7 @@ export class MenusScreen extends LitElement {
       try {
         await this.api.setIncludeFolder(listId, memberId, input);
       } catch (error) {
-        this.includeErrors =
-          codeOf(error) === "menu_section.translation_required"
-            ? { [fieldOf(error)]: t("menus.include_names_required") }
-            : refusal(error);
+        this.includeErrors = includeRefusal(error);
         this.busy = false;
         return;
       }
