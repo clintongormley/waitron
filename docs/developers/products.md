@@ -446,9 +446,10 @@ its own (`addProductToMenu` refuses one with `menu_item.variant_not_allowed`, an
 one as a member with `menu_section.membership_invalid`). A menu stores something
 for a variant only to override its price there: a `menu_item_variant_overrides` row, keyed by the
 parent's menu row and the variant, holds that menu's price, and saving the price blank deletes the
-row. Saving one size's price on a menu writes that size's row alone, whether the size is Active or
-Disabled (`setMenuVariantPrice`, `packages/catalogue/src/variants.ts`), while `setMenuVariants`
-replaces the row of every Active size at once. The table's
+row. Saving one size's price on a menu writes that size's row alone (`setMenuVariantPrice`,
+`packages/catalogue/src/variants.ts`), while `setMenuVariants` replaces the row of every Active size
+at once. A Disabled size holds no row: disabling it deletes its row on every menu, and
+`setMenuVariantPrice` refuses one with `product.variant_not_found`. The table's
 `menu_item_variant_overrides_overrides_ck` refuses a row with no price.
 
 ### Active and Available
@@ -466,13 +467,17 @@ while it is Available (`readOfferVariants` in `listMenuOffers`,
 `packages/catalogue/src/operations.ts`). A menu has no on/off setting of its own for a product or a
 variant. To take a product off a menu, change the structure so that nothing in it places the
 product; one that comes through an included menu goes when that menu's structure stops placing it or
-the menu is no longer included.
+the menu is no longer included. Disabling a product takes it off every menu, and disabling a
+variant deletes its price on every menu. Enabling the product again puts it on no menu; enabling the
+variant again puts it back wherever its product is listed, with no menu price of its own
+([product-categories.md](product-categories.md), "Moving and deleting").
 
-A menu's Price overrides tab lists every product an active menu's working structure reaches,
-disabled ones and their sizes too, with a Status column reading Active or Disabled; a size reads
-Disabled when it or its product is disabled. The tab reads `menuPrices`; a menu's offers, and the published document built from
-them (`packages/catalogue/src/menu-document.ts`), still come from `listMenuOffers`, which leaves
-disabled items out (both in `packages/catalogue/src/operations.ts`).
+A menu's Price overrides tab lists every Active product an active menu's working structure
+reaches, with its Active sizes. A disabled product or size is on no menu, so the tab's Status
+column, which reads Active or Disabled, reads Active on every row. The tab reads `menuPrices`; a
+menu's offers, and the published document built from them
+(`packages/catalogue/src/menu-document.ts`), come from `listMenuOffers` (both in
+`packages/catalogue/src/operations.ts`), and both leave a disabled product or size out.
 
 The offers a till sells from are each menu's published version, which leaves out a product that was
 disabled when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
