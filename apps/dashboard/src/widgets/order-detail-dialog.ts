@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, formatDecimalInput } from "@waitron/ui";
 import { compareDecimal, decimal, formatMoney, multiplyDecimal, toScale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -11,6 +11,8 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 const money = (value: string) => formatMoney(value, currentLocale());
+const quantity = (value: string) =>
+  formatDecimalInput(value.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, ""), currentLocale());
 const date = (value: string) =>
   new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
@@ -112,7 +114,7 @@ export class OrderDetailDialog extends LitElement {
               <section>
                 <h3>${t("orders.detail.lines")}</h3>
                 <ul>
-                  ${detail.lines.map((line) => html`<li>${line.name} ${line.variantName ?? ""} × ${line.quantity} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill(t("orders.detail.was"), { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill(t("orders.detail.served_by"), { name: line.creditedTo })}`}</li>`)}
+                  ${detail.lines.map((line) => html`<li>${line.name} ${line.variantName ?? ""} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill(t("orders.detail.was"), { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill(t("orders.detail.served_by"), { name: line.creditedTo })}`}</li>`)}
                 </ul>
               </section>
               <section>

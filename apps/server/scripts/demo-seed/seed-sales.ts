@@ -206,7 +206,7 @@ export async function seedSales(
 
   const rng = makeLcg(0x9e3779b9);
   const now = Date.now();
-  let count = 0;
+  const inputs: { instant: Date; offsetMinutes: number; input: RecordSaleInput }[] = [];
 
   for (let dayIndex = 0; dayIndex < days; dayIndex += 1) {
     // The calendar date `dayIndex` days ago (UTC). Sales are placed at UTC hours safely inside the
@@ -278,8 +278,6 @@ export async function seedSales(
       const total = totalOf(vatBreakdown);
       const method = rng() < 0.6 ? "cash" : "card";
 
-      backDating.set(instant, offsetMinutes);
-
       const input: RecordSaleInput = {
         origin: jobOrigin("demo_seed"),
         nodeId,
@@ -297,10 +295,15 @@ export async function seedSales(
         clock: backDating.clock,
       };
 
-      await withTransaction(db, (tx) => recordSale(tx, backend, input));
-      count += 1;
+      inputs.push({ instant, offsetMinutes, input });
     }
   }
 
-  return { count };
+  inputs.sort((a, b) => a.instant.getTime() - b.instant.getTime());
+  for (const { instant, offsetMinutes, input } of inputs) {
+    backDating.set(instant, offsetMinutes);
+    await withTransaction(db, (tx) => recordSale(tx, backend, input));
+  }
+
+  return { count: inputs.length };
 }
