@@ -23,6 +23,7 @@ import {
 import type { Setting } from "../api/client.js";
 import type { Decimal } from "@waitron/shared";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { clashesOf } from "@waitron/catalogue/src/menu-combine.js";
 import { stringToCents } from "@waitron/shared";
 import type {
   CategorySummary,
@@ -92,6 +93,29 @@ const parentKey = ({ item, variant }: Line): string | null => (variant ? item.me
 const toggleLabel = ({ item }: Line, expanded: boolean): string =>
   t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name);
 const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
+
+/** The row as a published menu holds it: Inactive sizes left out. */
+const activeOffer = (item: MenuPriceRow): MenuPriceRow["combined"] => {
+  const active = new Set(item.variants.filter((v) => v.active).map((v) => v.variantId));
+  return {
+    ...item.combined,
+    variants: item.combined.variants.filter(({ variantId }) => active.has(variantId)),
+  };
+};
+
+/** Whether a product with an Active size is sold at a clashing price a price for the product
+ * would settle; a product without one is sold at its own price. */
+const ownPriceSold = (item: MenuPriceRow): boolean => {
+  const sizes = item.variants.filter((v) => v.active);
+  return (
+    sizes.length === 0 ||
+    sizes.some(
+      ({ variantId }) =>
+        sizeSetting(item, variantId).state === "clash" &&
+        variantInheritedFrom(item, variantId, undefined).follows,
+    )
+  );
+};
 
 /** Whether this menu stores a price for any of the product's sizes. */
 const pricesASize = (item: MenuPriceRow): boolean =>
@@ -296,9 +320,7 @@ export class MenuPricesTable extends LitElement {
   /** Each row that clashes as this menu stores it, drafts aside, so a row under the Clashes filter
    * stays while a price is typed into it. */
   #clashing: ReadonlyMap<string, "size" | "own"> = new Map();
-  /** Clashing prices, by the same per-product rule as `clashesOf`
-   * (packages/catalogue/src/menu-combine.ts): a product with variants by its clashing variants.
-   * Unlike the publish check, Inactive products and variants are counted too. */
+  /** Clashing prices, as the publish check counts them. */
   #clashCount = 0;
   /** Whether the price filter starts on Clashes, decided on the first loaded update of each load;
    * undefined until then. Dropped for the rest of a load once it has no clash, so a clash that
@@ -363,18 +385,19 @@ export class MenuPricesTable extends LitElement {
     const clashing = new Map<string, "size" | "own">();
     let count = 0;
     for (const item of this.rows) {
+      if (!item.active) continue;
+      count += clashesOf(activeOffer(item)).length;
       const own =
         item.override === null &&
+        ownPriceSold(item) &&
         (item.combined.price.state === "clash" ||
           this.#productInheritance.get(item)!.inherited.state === "clash");
       const product = sizeClash(item) ? "size" : own ? "own" : null;
       if (product !== null) clashing.set(item.menuItemId, product);
-      if (product !== null && item.variants.length === 0) count++;
-      for (const { variantId, price } of item.variants) {
-        if (price !== null || variantInherited(item, variantId, undefined).state !== "clash")
-          continue;
+      for (const { variantId, price, active } of item.variants) {
+        if (!active || price !== null) continue;
+        if (variantInherited(item, variantId, undefined).state !== "clash") continue;
         clashing.set(`${item.menuItemId}:${variantId}`, "own");
-        count++;
       }
     }
     this.#clashing = clashing;
@@ -593,8 +616,10 @@ export class MenuPricesTable extends LitElement {
    * row whose own price, or what it inherits, is undecided and whose field holds no price. A size
    * is judged by what it inherits alone, which follows a price typed for its product. */
   #clash(line: Line): "size" | "own" | null {
+    if (!this.#active(line)) return null;
     if (line.variant === null && this.#withParent(line).sizeClash) return "size";
     if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
+    if (line.variant === null && !ownPriceSold(line.item)) return null;
     return (line.variant === null && this.#priceSetting(line).state === "clash") ||
       this.#inherited(line).state === "clash"
       ? "own"
