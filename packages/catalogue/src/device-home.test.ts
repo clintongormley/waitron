@@ -8,6 +8,7 @@ import {
   foldForSearch,
   homeDisplayProblem,
   indexDocument,
+  shownMembers,
   tileFill,
 } from "./device-home.js";
 import type { DocumentMember } from "./menu-document-types.js";
@@ -117,6 +118,43 @@ describe("indexDocument", () => {
       ["p-cola", "mi-cola-2"],
       ["p-water", "mi-water"],
     ]);
+  });
+  it("still indexes a direct node, so a shortcut can open it", () => {
+    const direct: DocumentMember = {
+      ...(section("bar", [product("cola")]) as Extract<DocumentMember, { kind: "section" }>),
+      direct: true,
+    };
+    const index = indexDocument([direct], (menuItemId) => menuItemId);
+    expect(index.sections.get("bar")).toBe(direct);
+    expect([...index.products.keys()]).toEqual(["p-cola"]);
+  });
+});
+
+describe("shownMembers", () => {
+  const product = (id: string): DocumentMember => ({
+    kind: "product",
+    menuItemId: `mi-${id}`,
+    productId: `p-${id}`,
+  });
+  const section = (id: string, members: DocumentMember[], direct = false): DocumentMember => ({
+    kind: "section",
+    sectionId: id,
+    internalName: id,
+    names: {},
+    image: null,
+    color: null,
+    ...(direct ? { direct: true as const } : {}),
+    members,
+  });
+  const ids = (members: DocumentMember[]) =>
+    members.map((member) => (member.kind === "section" ? member.sectionId : member.productId));
+  it("puts a direct node's members in its place, one level at a time", () => {
+    const folderB = section("folderB", [product("b1")]);
+    const directC = section("directC", [product("c1")], true);
+    const direct = section("direct", [product("a"), folderB, directC], true);
+    const shown = shownMembers([product("x"), direct, product("y")]);
+    expect(ids(shown)).toEqual(["p-x", "p-a", "folderB", "p-c1", "p-y"]);
+    expect(shown[2]).toBe(folderB);
   });
 });
 

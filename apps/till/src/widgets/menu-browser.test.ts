@@ -2163,6 +2163,190 @@ describe("till-menu-browser", () => {
     });
   });
 
+  describe("an included menu shown directly", () => {
+    type SectionNode = Extract<DocumentMember, { kind: "section" }>;
+    const directly = (node: DocumentMember): DocumentMember => ({
+      ...(node as SectionNode),
+      direct: true,
+    });
+    /** Drinks included twice: at the top level as a folder named "Bar (EN)", and inside Food under
+     * the included menu's own name. */
+    const bar: DocumentMember = {
+      ...(drinks as SectionNode),
+      includedMenu: { id: "menu-drinks", name: "Drinks staff" },
+      names: { en: "Bar (EN)", es: "Barra (ES)" },
+      fixed: { names: { en: "Bar (EN)", es: "Barra (ES)" } },
+    };
+    const foodWithDrinks = section("sec-food", "food-internal", { es: "Comida (ES)" }, [
+      member("jamon"),
+      drinks,
+    ]);
+    const twice = (top: DocumentMember, tiles: DocumentTile[] = []) =>
+      lunch({ structure: { members: [top, foodWithDrinks] }, ...withShortcuts(tiles) });
+
+    it("shows its sections and products on the home page, with no extra level", async () => {
+      const { el } = await mount({
+        menu: lunch({
+          structure: {
+            members: [
+              favourites,
+              directly(drinks),
+              food,
+              empty,
+              plain,
+              member("water"),
+              member("ghost"),
+            ],
+          },
+        }),
+      });
+      expect(names(entries(el, "structure"))).toEqual([
+        "Favourites (EN)",
+        "Cola",
+        "Lemonade",
+        "Beer (EN)",
+        "Comida (ES)",
+        "plain-internal",
+        "Agua",
+      ]);
+    });
+
+    it("opens one of its sections with a breadcrumb that skips the included menu", async () => {
+      const { el } = await mount({
+        menu: lunch({ structure: { members: [favourites, directly(drinks), food] } }),
+      });
+      await tap(el, entry(el, "structure", "Beer (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Beer (EN)");
+      expect(names(entries(el, "section"))).toEqual(["Caña"]);
+      expect(notice(el)).toBeNull();
+    });
+
+    it("inside a section, a direct include's members stand in its place", async () => {
+      const { el } = await mount({
+        menu: lunch({
+          structure: {
+            members: [
+              section("sec-food", "food-internal", { es: "Comida (ES)" }, [
+                member("jamon"),
+                directly(drinks),
+                member("wine"),
+              ]),
+            ],
+          },
+        }),
+      });
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      expect(names(entries(el, "section"))).toEqual([
+        "Jamón",
+        "Cola",
+        "Lemonade",
+        "Beer (EN)",
+        "Vino",
+      ]);
+      await tap(el, entry(el, "section", "Beer (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Comida (ES) › Beer (EN)");
+      expect(names(entries(el, "section"))).toEqual(["Caña"]);
+      await tap(el, [...root(el).querySelectorAll<HTMLElement>("nav.breadcrumb wt-button")][1]!);
+      expect(breadcrumb(el)).toBe("Home › Comida (ES)");
+    });
+
+    it("a shortcut to the included menu still opens it as a folder", async () => {
+      const { el } = await mount({
+        menu: lunch({
+          structure: { members: [favourites, directly(drinks), food] },
+          ...withShortcuts([sectionTile("sec-drinks")]),
+        }),
+      });
+      await tap(el, entry(el, "shortcuts", "Drinks (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Drinks (EN)");
+      expect(names(entries(el, "section"))).toEqual(["Cola", "Lemonade", "Beer (EN)"]);
+      await tap(el, entry(el, "section", "Beer (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Drinks (EN) › Beer (EN)");
+    });
+
+    it("paints a folder's override colour and photo", async () => {
+      // The published document already carries the folder's own colour and photo in `color` and
+      // `image`; this pins that the tile draws them.
+      const folder: DocumentMember = {
+        ...(bar as SectionNode),
+        color: "#256bb1",
+        image: "bar-folder.webp",
+        fixed: { color: "#256bb1", image: "bar-folder.webp" },
+      };
+      const menu = (tiles: HomeDisplay["tiles"]) =>
+        display("till", { tiles }, lunch({ structure: { members: [folder] } }));
+      const colours = await mount({ menu: menu("colours") });
+      const painted = entry(colours.el, "structure", "Bar (EN)");
+      expect(painted.hasAttribute("data-painted")).toBe(true);
+      expect(getComputedStyle(painted.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
+        "rgb(37, 107, 177)",
+      );
+      expect(getComputedStyle(painted.querySelector(".name")!).color).toBe("rgb(255, 255, 255)");
+      const thumbnails = await mount({ menu: menu("thumbnails") });
+      const pictured = entry(thumbnails.el, "structure", "Bar (EN)");
+      expect(pictured.querySelector("img")!.getAttribute("src")).toBe("/media/bar-folder.webp");
+    });
+
+    it("the same included menu in two lists draws each copy with its own name", async () => {
+      const { el } = await mount({ menu: twice(bar) });
+      expect(names(entries(el, "structure"))).toEqual(["Bar (EN)", "Comida (ES)"]);
+      await tap(el, entry(el, "structure", "Bar (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Bar (EN)");
+      expect(names(entries(el, "section"))).toEqual(["Cola", "Lemonade", "Beer (EN)"]);
+      await tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      expect(names(entries(el, "section"))).toEqual(["Jamón", "Drinks (EN)"]);
+      await tap(el, entry(el, "section", "Drinks (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Comida (ES) › Drinks (EN)");
+
+      const shownDirectly = await mount({ menu: twice(directly(bar)) });
+      expect(names(entries(shownDirectly.el, "structure"))).toEqual([
+        "Cola",
+        "Lemonade",
+        "Beer (EN)",
+        "Comida (ES)",
+      ]);
+      await tap(shownDirectly.el, entry(shownDirectly.el, "structure", "Comida (ES)"));
+      expect(names(entries(shownDirectly.el, "section"))).toEqual(["Jamón", "Drinks (EN)"]);
+    });
+
+    it("keeps an open folder open when a new menu shows it directly", async () => {
+      const { el } = await mount({ menu: twice(bar) });
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      await tap(el, entry(el, "section", "Drinks (EN)"));
+      el.menu = lunch({
+        structure: {
+          members: [
+            bar,
+            section("sec-food", "food-internal", { es: "Comida (ES)" }, [
+              member("jamon"),
+              directly(drinks),
+            ]),
+          ],
+        },
+      });
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      expect(breadcrumb(el)).toBe("Home › Comida (ES) › Drinks (EN)");
+    });
+
+    it("a shortcut to a menu included twice opens the top-level copy", async () => {
+      // Decision 16: the shortcut tile is drawn from the index (the copy indexed last, Food's),
+      // while opening it looks first among the top level's shown members.
+      const { el } = await mount({ menu: twice(bar, [sectionTile("sec-drinks")]) });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Drinks (EN)"]);
+      await tap(el, entry(el, "shortcuts", "Drinks (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Bar (EN)");
+
+      // Shown directly, the top level holds no copy, so the shortcut opens the copy indexed last.
+      const shownDirectly = await mount({
+        menu: twice(directly(bar), [sectionTile("sec-drinks")]),
+      });
+      await tap(shownDirectly.el, entry(shownDirectly.el, "shortcuts", "Drinks (EN)"));
+      expect(breadcrumb(shownDirectly.el)).toBe("Home › Drinks (EN)");
+    });
+  });
+
   describe("an open section the menu no longer holds (§9)", () => {
     it("says Not found and returns home when a new menu drops the open section", async () => {
       const { el } = await mount();

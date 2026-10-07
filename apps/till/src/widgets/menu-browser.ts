@@ -13,6 +13,7 @@ import {
   arrangeHome,
   foldForSearch,
   indexDocument,
+  shownMembers,
   tileFill,
   type HomeIndex,
 } from "@waitron/catalogue/src/device-home.js";
@@ -310,8 +311,8 @@ export class TillMenuBrowser extends LitElement {
    * pay widget does not take the dish. */
   @property({ type: Boolean }) weighs = false;
 
-  /** The open section's path of section ids: its first found anywhere in the menu, each next among
-   * the previous one's members. Empty is home. */
+  /** The open section's path of section ids: its first among the members home shows, else
+   * anywhere in the menu; each next among the previous one's members. Empty is home. */
   @state() private path: string[] = [];
 
   @state() private query = "";
@@ -360,17 +361,21 @@ export class TillMenuBrowser extends LitElement {
     return index;
   }
 
-  #trail(path: string[], index: MenuIndex): SectionNode[] | null {
+  /** One included menu can appear in two lists, each copy with its own name, so each step looks
+   * first among the members its list draws. */
+  #trail(path: string[], index: MenuIndex, home: readonly DocumentMember[]): SectionNode[] | null {
     const trail: SectionNode[] = [];
     for (const id of path) {
       const previous = trail.at(-1);
+      const among = (members: readonly DocumentMember[]) =>
+        members.find(
+          (member): member is SectionNode =>
+            member.kind === "section" && member.sectionId === id && index.sections.has(id),
+        );
       const next =
         previous === undefined
-          ? index.sections.get(id)
-          : previous.members.find(
-              (member): member is SectionNode =>
-                member.kind === "section" && member.sectionId === id && index.sections.has(id),
-            );
+          ? (among(shownMembers(home)) ?? index.sections.get(id))
+          : (among(shownMembers(previous.members)) ?? among(previous.members));
       if (next === undefined) return null;
       trail.push(next);
     }
@@ -380,7 +385,7 @@ export class TillMenuBrowser extends LitElement {
   /** The open section is judged before each render, so a menu that has lost it never draws it. */
   override willUpdate(): void {
     if (this.menu === undefined) return;
-    const trail = this.#trail(this.path, this.#index(this.menu));
+    const trail = this.#trail(this.path, this.#index(this.menu), this.menu.structure.members);
     if (trail === null) {
       this.notFound = true;
       this.path = [];
@@ -482,20 +487,24 @@ export class TillMenuBrowser extends LitElement {
   }
 
   /** The button for a section or product the index holds, a greyed one for a section only the
-   * unfiltered index holds, else nothing; `path` is where a section opens beneath. */
+   * unfiltered index holds, else nothing; `path` is where a section opens beneath. A structural
+   * member is drawn from itself, a shortcut from the index. */
   #tile(
-    ref: DocumentTile,
+    ref: DocumentTile | DocumentMember,
     path: string[],
     index: MenuIndex,
     mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
-      const section = index.sections.get(ref.sectionId);
-      if (section !== undefined)
-        return this.#sectionButton(section, mode, () => this.#open([...path, ref.sectionId]));
-      const filteredOut = this.#unfilteredIndex(this.menu!).sections.get(ref.sectionId);
-      return filteredOut === undefined ? nothing : this.#sectionButton(filteredOut, mode);
+      const id = ref.sectionId;
+      const own = "members" in ref ? ref : undefined;
+      if (index.sections.has(id))
+        return this.#sectionButton(own ?? index.sections.get(id)!, mode, () =>
+          this.#open([...path, id]),
+        );
+      const unfiltered = this.#unfilteredIndex(this.menu!).sections;
+      return unfiltered.has(id) ? this.#sectionButton(own ?? unfiltered.get(id)!, mode) : nothing;
     }
     const product = index.products.get(ref.productId);
     return product === undefined
@@ -505,7 +514,7 @@ export class TillMenuBrowser extends LitElement {
 
   #home(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
     const shortcuts = menu.home.shortcuts.map((tile) => this.#tile(tile, [], index, display.tiles));
-    const members = menu.structure.members.map((member) =>
+    const members = shownMembers(menu.structure.members).map((member) =>
       this.#tile(member, [], index, display.tiles),
     );
     const { blocks, divider } = arrangeHome(
@@ -557,7 +566,9 @@ export class TillMenuBrowser extends LitElement {
         </ol>
       </nav>
       ${this.#grid(
-        current.members.map((member) => this.#tile(member, this.path, index, display.tiles)),
+        shownMembers(current.members).map((member) =>
+          this.#tile(member, this.path, index, display.tiles),
+        ),
         display,
       )}
     </section>`;

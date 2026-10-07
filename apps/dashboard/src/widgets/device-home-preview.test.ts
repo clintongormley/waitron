@@ -589,6 +589,108 @@ describe("dashboard-device-home-preview", () => {
     });
   });
 
+  describe("an included menu shown directly", () => {
+    type SectionNode = Extract<DocumentMember, { kind: "section" }>;
+    const beer = () => documentSection("s-beer", "Beer", [documentProduct("mi-beer", "p-beer")]);
+    const lemonade = () => documentProduct("mi-lemonade", "p-lemonade");
+    const ham = () => documentProduct("mi-ham", "p-ham");
+    /** The included Drinks menu: Beer's section, then Water. */
+    const included = (extra: Partial<SectionNode> = {}): DocumentMember => ({
+      ...(documentSection("s-drinks", "Drinks", [
+        beer(),
+        documentProduct("mi-water", "p-water"),
+      ]) as SectionNode),
+      includedMenu: { id: "menu-drinks", name: "Drinks staff" },
+      ...extra,
+    });
+    const direct = () => included({ direct: true });
+    /** Drinks at the top level as a folder named "Bar", and inside Food under its own name. */
+    const bar = (extra: Partial<SectionNode> = {}) =>
+      included({
+        names: { es: "Barra para clientes" },
+        fixed: { names: { es: "Barra para clientes" } },
+        ...extra,
+      });
+    const twice = (top: DocumentMember, shortcuts: DocumentTile[] = []) =>
+      lunch(shortcuts, [top, documentSection("s-food", "Food", [ham(), included()])]);
+
+    it("shows its sections and products on the home page in its place", async () => {
+      const { el } = await mount({ document: lunch([], [lemonade(), direct(), ham()]) });
+      expect(names(tiles(el, "structure"))).toEqual([
+        "Lemonade",
+        "Beer para clientes",
+        "Water",
+        "Ham",
+      ]);
+    });
+
+    it("opens one of its sections with a breadcrumb that skips the included menu", async () => {
+      const { el } = await mount({ document: lunch([], [lemonade(), direct()]) });
+      await click(el, tile(el, "structure", "Beer para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Beer para clientes");
+      expect(names(tiles(el, "section"))).toEqual(["Beer"]);
+    });
+
+    it("inside a section, shows its members in its place", async () => {
+      const { el } = await mount({
+        document: lunch([], [documentSection("s-food", "Food", [ham(), direct()])]),
+      });
+      await click(el, tile(el, "structure", "Food para clientes"));
+      expect(names(tiles(el, "section"))).toEqual(["Ham", "Beer para clientes", "Water"]);
+      await click(el, tile(el, "section", "Beer para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Food para clientes › Beer para clientes");
+    });
+
+    it("a shortcut to the included menu still opens it as a folder", async () => {
+      const { el } = await mount({
+        document: lunch([sectionTile("s-drinks")], [lemonade(), direct()]),
+      });
+      await click(el, tile(el, "shortcuts", "Drinks para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Drinks para clientes");
+      expect(names(tiles(el, "section"))).toEqual(["Beer para clientes", "Water"]);
+    });
+
+    it("draws each copy of a menu included in two lists with its own name", async () => {
+      const { el } = await mount({ document: twice(bar()) });
+      expect(names(tiles(el, "structure"))).toEqual(["Barra para clientes", "Food para clientes"]);
+      await click(el, tile(el, "structure", "Barra para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Barra para clientes");
+      await click(el, home(el));
+      await click(el, tile(el, "structure", "Food para clientes"));
+      expect(names(tiles(el, "section"))).toEqual(["Ham", "Drinks para clientes"]);
+
+      const shownDirectly = await mount({ document: twice(bar({ direct: true })) });
+      expect(names(tiles(shownDirectly.el, "structure"))).toEqual([
+        "Beer para clientes",
+        "Water",
+        "Food para clientes",
+      ]);
+      await click(shownDirectly.el, tile(shownDirectly.el, "structure", "Food para clientes"));
+      expect(names(tiles(shownDirectly.el, "section"))).toEqual(["Ham", "Drinks para clientes"]);
+    });
+
+    it("keeps an open folder open when a new document shows it directly", async () => {
+      const { el } = await mount({ document: twice(bar()) });
+      await click(el, tile(el, "structure", "Food para clientes"));
+      await click(el, tile(el, "section", "Drinks para clientes"));
+      el.document = lunch(
+        [],
+        [bar(), documentSection("s-food", "Food", [ham(), included({ direct: true })])],
+      );
+      await el.updateComplete;
+      expect(breadcrumb(el)).toBe("Home › Food para clientes › Drinks para clientes");
+    });
+
+    it("opens the top-level copy from a shortcut to a menu included twice", async () => {
+      // Decision 16: the shortcut tile is drawn from the index (the copy indexed last, Food's),
+      // while opening it looks first among the top level's shown members.
+      const { el } = await mount({ document: twice(bar(), [sectionTile("s-drinks")]) });
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Drinks para clientes"]);
+      await click(el, tile(el, "shortcuts", "Drinks para clientes"));
+      expect(breadcrumb(el)).toBe("Home › Barra para clientes");
+    });
+  });
+
   it("lets no event from its search reach the page around it", async () => {
     const { el, host } = await mount();
     const heard: string[] = [];

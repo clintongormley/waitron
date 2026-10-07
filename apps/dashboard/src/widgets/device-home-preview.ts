@@ -15,6 +15,7 @@ import {
   arrangeHome,
   foldForSearch,
   indexDocument,
+  shownMembers,
   tileFill,
   type HomeIndex,
 } from "@waitron/catalogue/src/device-home.js";
@@ -240,8 +241,8 @@ export class DeviceHomePreview extends LitElement {
   /** Which device's display it draws. */
   @property() device: HomeDevice = "handheld";
 
-  /** The open section's path of section ids: its first found anywhere in the menu, each next among
-   * the previous one's members. Empty is home. */
+  /** The open section's path of section ids: its first among the members home shows, else
+   * anywhere in the menu; each next among the previous one's members. Empty is home. */
   @state() private path: string[] = [];
 
   @state() private query = "";
@@ -266,17 +267,25 @@ export class DeviceHomePreview extends LitElement {
     return this.#indexed;
   }
 
-  #trail(path: string[], index: PreviewIndex): SectionNode[] | null {
+  /** One included menu can appear in two lists, each copy with its own name, so each step looks
+   * first among the members its list draws. */
+  #trail(
+    path: string[],
+    index: PreviewIndex,
+    home: readonly DocumentMember[],
+  ): SectionNode[] | null {
     const trail: SectionNode[] = [];
     for (const id of path) {
       const previous = trail.at(-1);
+      const among = (members: readonly DocumentMember[]) =>
+        members.find(
+          (member): member is SectionNode =>
+            member.kind === "section" && member.sectionId === id && index.sections.has(id),
+        );
       const next =
         previous === undefined
-          ? index.sections.get(id)
-          : previous.members.find(
-              (member): member is SectionNode =>
-                member.kind === "section" && member.sectionId === id && index.sections.has(id),
-            );
+          ? (among(shownMembers(home)) ?? index.sections.get(id))
+          : (among(shownMembers(previous.members)) ?? among(previous.members));
       if (next === undefined) return null;
       trail.push(next);
     }
@@ -286,7 +295,11 @@ export class DeviceHomePreview extends LitElement {
   /** A new document that no longer holds the open section shows home instead. */
   override willUpdate(): void {
     if (this.document === null) return;
-    const trail = this.#trail(this.path, this.#index(this.document).index);
+    const trail = this.#trail(
+      this.path,
+      this.#index(this.document).index,
+      this.document.root.members,
+    );
     if (trail === null) this.path = [];
     this.#trailShown = trail ?? [];
   }
@@ -339,7 +352,7 @@ export class DeviceHomePreview extends LitElement {
   }
 
   /** The tile for a section or product the index holds, else nothing; `path` is where a section
-   * opens beneath. */
+   * opens beneath. A structural member is drawn from itself, a shortcut from the index. */
   #tile(
     ref: DocumentTile | DocumentMember,
     path: string[],
@@ -349,7 +362,8 @@ export class DeviceHomePreview extends LitElement {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       const section = index.sections.get(ref.sectionId);
-      return section === undefined ? nothing : this.#sectionTile(section, mode, path);
+      if (section === undefined) return nothing;
+      return this.#sectionTile("members" in ref ? ref : section, mode, path);
     }
     const offer = index.products.get(ref.productId);
     return offer === undefined ? nothing : this.#productTile(offer, mode);
@@ -359,7 +373,7 @@ export class DeviceHomePreview extends LitElement {
     const shortcuts = document.home.shortcuts.map((tile) =>
       this.#tile(tile, [], index, display.tiles),
     );
-    const members = document.root.members.map((member) =>
+    const members = shownMembers(document.root.members).map((member) =>
       this.#tile(member, [], index, display.tiles),
     );
     const { blocks, divider } = arrangeHome(
@@ -419,7 +433,9 @@ export class DeviceHomePreview extends LitElement {
         </ol>
       </nav>
       ${this.#grid(
-        current.members.map((member) => this.#tile(member, this.path, index, display.tiles)),
+        shownMembers(current.members).map((member) =>
+          this.#tile(member, this.path, index, display.tiles),
+        ),
         display,
       )}
     </section>`;
