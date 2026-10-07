@@ -20,7 +20,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { stationClaims } from "@waitron/venue-service";
+import { routingCells } from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -168,10 +168,10 @@ async function setupVenue(): Promise<{
       where location_id = ${cfg.locationId}
         and is_counter_default`);
     await publishWorkingMenu(tx, cat.id);
-    // Through the table definition: `stationClaims.id`
+    // Through the table definition: `routingCells.id`
     // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.
-    await tx.insert(stationClaims).values({
+    await tx.insert(routingCells).values({
       locationId: cfg.locationId,
       categoryId: bebidas.id,
       stationId: null,
