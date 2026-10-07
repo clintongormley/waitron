@@ -162,6 +162,18 @@ transport/retry workers remain. No Task 2 completion claim.
 
 ## 4. Email the PDF
 
+**2026-10-07 transport checkpoint.** `resolveInvoiceEmailDelivery` applies the mode rules below
+without changing account-mail routing. `createInvoiceEmailSender` renders transient PDF bytes,
+returns sanitised SMTP outcomes, and cancels its owned socket at the 30-second deadline.
+Local TCP SMTP fixtures exercise accepted readable original/duplicate attachments, recipient
+and DATA refusal, lost acknowledgement and an unanswered final reply. Implicit TLS fixtures
+exercise certificate refusal and test-trusted acceptance. An English-locale fixture preserves
+the existing `receiptLabelsFor` Spanish fixed-word fallback; no receipt language was added.
+Eight independent deletions fail the intended cases beside valid controls. The helpers still
+need the worker, metadata retry scheduling and issuance/UI integration described below;
+no Task 4 completion claim.
+
+
 **Inspect/change:**
 
 - `apps/server/src/account-email.ts`: the mail message type gains attachments, or a sibling invoice-mail module shares the transport.

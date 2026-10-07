@@ -4,7 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
-import { resolveEmailDelivery } from "./email-delivery.js";
+import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 
 // `putCredential` refuses a payload missing a field, so a row sealed under an older field list
 // cannot be written through the vault; the read is replaced instead, for the cases that set this.
@@ -84,4 +84,91 @@ describe("resolveEmailDelivery", () => {
       expect(isAppError(error) && error.params).toEqual({ purpose: "email.smtp", field });
     },
   );
+});
+
+describe("invoice email routing", () => {
+  it.each([
+    ["demo", false, false, "local_capture"],
+    ["demo", false, true, "local_capture"],
+    ["prepare", false, false, "local_capture"],
+    ["prepare", false, true, "smtp"],
+    ["live", false, false, "unconfigured"],
+    ["live", false, true, "smtp"],
+    [undefined, false, false, "unconfigured"],
+    [undefined, false, true, "smtp"],
+    ["demo", true, false, "local_capture"],
+    ["demo", true, true, "local_capture"],
+    ["prepare", true, false, "local_capture"],
+    ["prepare", true, true, "local_capture"],
+    ["live", true, false, "local_capture"],
+    ["live", true, true, "local_capture"],
+    [undefined, true, false, "local_capture"],
+    [undefined, true, true, "local_capture"],
+  ] as const)(
+    "routes intent=%s development=%s configured=%s to %s",
+    async (intent, devMode, configured, mode) => {
+      await seedTenant(suite.db);
+      if (configured) {
+        await withTransaction(suite.db, (tx) =>
+          putCredential(tx, ring, {
+            purpose: "email.smtp",
+            value: { url: "smtps://smtp.example.test:465", from: "Venue <venue@example.test>" },
+          }),
+        );
+      }
+      await expect(
+        resolveInvoiceEmailDelivery(suite.db, ring, { onboardingIntent: intent, devMode }),
+      ).resolves.toEqual(
+        mode === "unconfigured"
+          ? { mode }
+          : {
+              mode,
+              smtp:
+                mode === "smtp"
+                  ? {
+                      url: "smtps://smtp.example.test:465",
+                      from: "Venue <venue@example.test>",
+                    }
+                  : { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" },
+            },
+      );
+    },
+  );
+
+  it("captures demo invoice mail without changing the account-mail gateway", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: "email.smtp",
+        value: { url: "smtps://smtp.example.test:465", from: "Venue <venue@example.test>" },
+      }),
+    );
+    expect(
+      (
+        await resolveInvoiceEmailDelivery(suite.db, ring, {
+          onboardingIntent: "demo",
+          devMode: false,
+        })
+      ).mode,
+    ).toBe("local_capture");
+    expect((await resolveEmailDelivery(suite.db, ring, true)).mode).toBe("smtp");
+  });
+
+  it("uses new SMTP settings on the next invoice resolution", async () => {
+    await seedTenant(suite.db);
+    const mode = { onboardingIntent: "live" as const, devMode: false };
+    expect(await resolveInvoiceEmailDelivery(suite.db, ring, mode)).toEqual({
+      mode: "unconfigured",
+    });
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: "email.smtp",
+        value: { url: "smtps://new.example.test:465", from: "New <new@example.test>" },
+      }),
+    );
+    expect(await resolveInvoiceEmailDelivery(suite.db, ring, mode)).toEqual({
+      mode: "smtp",
+      smtp: { url: "smtps://new.example.test:465", from: "New <new@example.test>" },
+    });
+  });
 });
