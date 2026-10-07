@@ -967,6 +967,10 @@ unused `units` property is gone (it closes W75's leftover).
   (`packages/catalogue/src/variant-fallback.ts`), and the list follows that rule. The variant's
   square opens the variant's own editor at its photo, as a click on its row opens its editor. At
   phone width the square is hidden, as a product's is.
+  - Open, found by A330's Codex review and reproduced by it on `main` before #1354: at phone width
+    in a right-to-left layout, a long name in the Products list can run under the pinned Actions
+    column (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`, measures the room from the
+    left). Not fixed; next: a browser test at 390 px with `dir="rtl"` and a long unbroken name.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
