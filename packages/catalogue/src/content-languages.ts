@@ -94,6 +94,12 @@ export async function readContentTranslationCandidates(
   // rows and the variant branch to the rest; otherwise each variant would be counted twice. A
   // disabled variant is on no menu offer, so a language it lacks reaches no diner and must
   // not block a change of default.
+  // A `menu_include` is the folder an include shows: the included menu's names with the ones the
+  // include fixes in their place. It counts while the include shows its sections directly too,
+  // because switching the folder back on restores the fixed names. An include fixing no name
+  // patches with null, which `json_patch` answers with null, so it is left to the included menu's
+  // own row. A map that is blank throughout shows no customer name, so like an absent one it is no
+  // gap.
   const result = await tx.execute<ContentTranslationCandidate>(sql`
     select 'product' as kind, id, null as product_id, customer_name as translations from products
       where parent_id is null and customer_name is not null and customer_name <> '{}'
@@ -109,6 +115,14 @@ export async function readContentTranslationCandidates(
       from extra_lists where customer_name is not null and customer_name <> '{}'
     union all select 'menu_section' as kind, id, null, names as translations
       from sections where role in ('section', 'menu_root') and names <> '{}'
+    union all select 'menu_include' as kind, m.id, null,
+        json_patch(s.names, json_extract(m.folder_overrides, '$.names')) as translations
+      from section_members m join sections s on s.id = m.child_section_id
+      where s.role = 'menu_root'
+        and exists (
+          select 1 from json_each(json_patch(s.names, json_extract(m.folder_overrides, '$.names')))
+          where trim(value) <> ''
+        )
   `);
   return result.rows;
 }

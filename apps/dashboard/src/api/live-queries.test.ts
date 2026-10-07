@@ -176,6 +176,7 @@ it.each([
       "option_labels",
       "extra_lists",
       "sections",
+      "section_members",
       "catalogues",
       "units",
     ],

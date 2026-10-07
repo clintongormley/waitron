@@ -11,6 +11,7 @@ export type TranslationGapKind =
   | "extra_list"
   | "menu"
   | "section"
+  | "included_menu"
   | "unit";
 
 /**
@@ -26,7 +27,8 @@ export interface TranslationGap {
   /** The staff name; a unit has none, so its name in the default language. */
   name: string;
   reason: TranslationGapReason;
-  /** Whose editor holds it: a variant's product, an option's list, a section's or root's menu. */
+  /** Whose editor holds it: a variant's product, an option's list, a section's or root's menu, an
+   * included menu's folder's including menu. */
   parent?: { id: string; name: string };
 }
 
