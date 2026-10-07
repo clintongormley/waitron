@@ -865,6 +865,7 @@ export class ProductEditor extends LitElement {
   private save(event: Event, restore = false) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
+    if (!restore && saveActionState(this.#draftScope).unchanged) return;
     const errors = this.validate();
     if (this.attempted && Object.keys(errors).length) return;
     this.attempted = true;

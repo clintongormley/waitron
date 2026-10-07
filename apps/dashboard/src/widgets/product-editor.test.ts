@@ -91,6 +91,10 @@ async function input(el: ProductEditor, name: string, value: string) {
 function save(el: ProductEditor) {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
 }
+/** One change, so Save has something to send: an untouched form's Save sends nothing. */
+async function edit(el: ProductEditor) {
+  await input(el, "kitchen-name", "COUNTER");
+}
 function saveButton(el: ProductEditor): HTMLElementTagNameMap["wt-button"] {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
 }
@@ -605,6 +609,7 @@ it("shows a refused unit beside the price's own error on the price field once th
     units: [unit, kg],
     taxChoices: reduced,
   });
+  await edit(el);
   save(el);
   el.fieldErrors = { unit: "That unit is gone" };
   await el.updateComplete;
@@ -893,6 +898,7 @@ it("re-checks a variant row after a failed submission, and frees Save once the v
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   save(el);
   await el.updateComplete;
   expect(variantTable(el)!.errors).toEqual({ 1: t("editor.price_invalid") });
@@ -927,6 +933,7 @@ it("puts a refusal for a folded field under it, opening its section, until that 
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   el.fieldErrors = { "description-en": t("editor.field_rejected") };
   await el.updateComplete;
   await section(el, "descriptors").updateComplete;
@@ -963,6 +970,7 @@ it("submits past a refusal beside a field or on a variant's row, which then go",
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   el.fieldErrors = {
     "kitchen-name": t("editor.field_rejected"),
     "variant-1-price": t("editor.field_rejected"),
@@ -993,6 +1001,7 @@ it.each([["product-course", "courseId"]])(
       taxChoices: reduced,
       courses: [{ id: "course-1", name: "Starters" }],
     });
+    await edit(el);
     el.fieldErrors = { [name]: "That one is gone" };
     await el.updateComplete;
     await section(el, "kitchen").updateComplete;
@@ -1025,6 +1034,7 @@ it("keeps a refusal that names no field of the form in the bottom message, leavi
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   el.fieldErrors = { active: "Those extras lists still offer it" };
   await el.updateComplete;
   expect(await bottomOf(el)).toBe("Those extras lists still offer it");
@@ -1046,6 +1056,7 @@ it("keeps a refused translation for a language the form does not show in the bot
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   el.fieldErrors = { "customer-name-fr": "Add the French name" };
   await el.updateComplete;
   expect(await bottomOf(el)).toBe("Add the French name");
@@ -1065,15 +1076,18 @@ it("shows the refusal and the generic sentence together when both apply", async 
   expect(await bottomOf(el)).toBe(`Those extras lists still offer it ${t("form.fix_fields")}`);
 });
 
-it("starts again when reopened: no messages and Save working", async () => {
+it("starts again when reopened: no messages and Save quiet", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   save(el);
   await el.updateComplete;
+  expect(errorOf(el, "name")).toBe(t("editor.name_required"));
+  expect(saveButton(el).variant).toBe("primary");
   expect(saveButton(el).hasAttribute("disabled")).toBe(true);
   el.open = false;
   await el.updateComplete;
@@ -1082,6 +1096,10 @@ it("starts again when reopened: no messages and Save working", async () => {
 
   expect(errorOf(el, "name")).toBe("");
   expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).variant).toBe("secondary");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  await edit(el);
+  expect(saveButton(el).variant).toBe("primary");
   expect(saveButton(el).hasAttribute("disabled")).toBe(false);
 });
 
@@ -2138,6 +2156,7 @@ it("shows no colour chooser on a variant's page, and saves no colour of its own"
   const el = await mountVariant({ ...glass, color: "#b12525" });
   expect(el.shadowRoot!.querySelector("fieldset.color")).toBeNull();
   expect(el.shadowRoot!.querySelector('[name="product-color"]')).toBeNull();
+  await edit(el);
   expect(submittedValue(el).color).toBeNull();
 });
 
@@ -2350,6 +2369,7 @@ it("shows a variant's product's path as plain text, with no Change, and saves no
   expect(variantPath(el)).toBe(`${t("editor.classification")}: ${cocktailsPath}`);
   const form = el.shadowRoot!.querySelector(".form")!;
   expect(form.firstElementChild!.getAttribute("data-section")).toBe("categories");
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -2500,6 +2520,9 @@ it("associates a server refusal with its dropdown until the next save", async ()
   ).toBe("Tax is no longer available");
   expect(box.error).toBe("Tax is no longer available");
   // Submitting again is past the refusal.
+  await edit(el);
+  await box.updateComplete;
+  expect(box.error).toBe("Tax is no longer available");
   save(el);
   await el.updateComplete;
   await box.updateComplete;
@@ -2514,6 +2537,7 @@ it("saves a variant with no price of its own, which sells at the product's", asy
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -2671,6 +2695,7 @@ it("saves only once and refuses a second press", async () => {
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -2939,10 +2964,12 @@ it("saves a disabled product's other edits without enabling it", async () => {
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
   expect(submit.mock.calls[0]![0].detail.value.active).toBe(false);
+  expect(submit.mock.calls[0]![0].detail.value.kitchenName).toBe("COUNTER");
 });
 
 it("summarises each collapsed section from its filled-in values", async () => {
@@ -3080,6 +3107,7 @@ it("marks the variant row a reported problem belongs to", async () => {
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -3133,6 +3161,7 @@ it("keeps a variant's mark on that variant when the rows are reordered", async (
     units: [unit],
     taxChoices: reduced,
   });
+  await edit(el);
   save(el);
   await el.updateComplete;
   expect(variantTable(el)!.errors).toEqual({ 1: t("editor.price_invalid") });
@@ -3254,6 +3283,7 @@ it("draws Each as a chosen unit on a product, not as the grey prompt for nothing
   await chooseOption(sharedField(el, "wt-combobox", "unit"), each.value);
   await el.updateComplete;
   expect(el.currentValue.unitId).toBeNull();
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -3273,6 +3303,7 @@ it("submits the chosen real unit and marks it selected after load", async () => 
   const select = combobox(el, "unit")!;
   expect(select.value).toBe(kg.id);
   expect(await shownIn(el, "unit")).toBe("Kilogram (kg)");
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -3761,6 +3792,7 @@ it("shows no standalone ordering choice on a variant's page, and keeps the varia
   const el = await mountVariant({ ...glass, ordering: "public" });
   expect(section(el, "ordering")).toBeNull();
   expect(combobox(el, "ordering")).toBeNull();
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -4078,6 +4110,7 @@ it("shows a variant's product's unit as fixed text in the price field, with no u
   await openUnits(el);
   expect(combobox(el, "unit")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=add-unit]")).toBeNull();
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -4181,6 +4214,7 @@ it("drops a hint once the variant sets that field itself", async () => {
 
 it("saves every field a variant left blank as null, so it keeps reading the parent's", async () => {
   const el = await mountVariant();
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -4225,6 +4259,7 @@ it("saves a value typed into a variant's field, and null once it is cleared agai
   await input(el, "unit-price", "");
   await chooseOption(tax, "");
   await el.updateComplete;
+  await edit(el);
   save(el);
   expect(submit.mock.calls[1]![0].detail.value).toMatchObject({ unitPrice: null, vatClass: null });
 });
@@ -5141,6 +5176,8 @@ it("holds Save while the image picker is open", async () => {
     photoControl(el).dispatchEvent(
       new CustomEvent("image-picker-state", { detail: { open }, bubbles: true, composed: true }),
     );
+  await edit(el);
+  expect(saveButton(el).disabled).toBe(false);
   picker(true);
   await el.updateComplete;
   expect(saveButton(el).disabled).toBe(true);
@@ -5165,6 +5202,7 @@ it("leaves Descriptors closed on a refused photo, says why beside it, and puts f
 
 it("refuses a variant with no name on its row, and saves nothing", async () => {
   const el = await mountPricing({ ...saved, variants: [small, { ...large, name: " " }] });
+  await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
@@ -5388,6 +5426,7 @@ it("starts another product with the image library closed", async () => {
   await el.updateComplete;
   await photoControl(el).updateComplete;
   expect(photoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  await edit(el);
   expect(saveButton(el).disabled).toBe(false);
 });
 

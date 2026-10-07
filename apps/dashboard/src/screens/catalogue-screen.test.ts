@@ -303,6 +303,13 @@ async function productTable(el: CatalogueScreen) {
 function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
+/** One change in the open editor, so its Save has something to send. */
+async function editKitchenName(el: CatalogueScreen): Promise<void> {
+  emit(editor(el).shadowRoot!.querySelector('[name="kitchen-name"]')!, "wt-change", {
+    value: "CROQUETAS FRITAS",
+  });
+  await editor(el).updateComplete;
+}
 
 afterEach(cleanupWidgets);
 afterEach(() => localStorage.clear());
@@ -1531,6 +1538,7 @@ describe("catalogue-screen", () => {
       await flush(el);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
+      await editKitchenName(el);
       emit(editor(el), "wt-submit", { value: sent });
       await flush(el);
       expect(editor(el).fieldErrors).toEqual({ [field]: codeMessage(code) });
@@ -1595,6 +1603,7 @@ describe("catalogue-screen", () => {
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
+    await editKitchenName(el);
     emit(editor(el), "wt-submit", { value });
     await flush(el);
     expect(editor(el).open).toBe(true);

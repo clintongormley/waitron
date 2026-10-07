@@ -235,3 +235,33 @@ it("a refused save leaves Save enabled", async () => {
   el.fieldErrors = { name: "Refused by the server" };
   expect(await saveState(el)).toEqual(ready);
 });
+
+// A host `.click()` reaches Save's listener even while its inner button is disabled, so these
+// press the host: what they prove is that the handler itself sends nothing for an unchanged form.
+it("a press that reaches Save's handler on an untouched product sends nothing", async () => {
+  const el = await mount(full);
+  const submit = submissions(el);
+  button(el, "save").click();
+  await el.updateComplete;
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it("a press that reaches Save's handler on an untouched new product marks no field", async () => {
+  const el = await mount(null);
+  const submit = submissions(el);
+  button(el, "save").click();
+  await el.updateComplete;
+  expect(submit).not.toHaveBeenCalled();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!.error,
+  ).toBe("");
+});
+
+it("Enable on an untouched inactive product reaches its handler and saves", async () => {
+  const el = await mount({ ...full, active: false });
+  const submit = submissions(el);
+  button(el, "restore").click();
+  await el.updateComplete;
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.active).toBe(true);
+});
