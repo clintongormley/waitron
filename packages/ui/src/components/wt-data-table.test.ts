@@ -355,6 +355,47 @@ test("rows with no value sort last in both directions and keep their own order",
   expect(sortedKeys(el)).toEqual(["zoe", "wim", "first-blank", "second-blank"]);
 });
 
+test("text names compare decimal runs in both directions like the dashboard pickers", async () => {
+  const el = await sortTable([
+    { id: "half", value: "0,5 kg" },
+    { id: "quarter", value: "0,25 kg" },
+    { id: "ten", value: "10" },
+    { id: "two-eighty", value: "2.80" },
+    { id: "one-two", value: "1.2 Sopas" },
+    { id: "one-ten", value: "1.10 Postres" },
+  ]);
+  expect(sortedKeys(el)).toEqual(["quarter", "half", "one-ten", "one-two", "two-eighty", "ten"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="value"]')!.click();
+  await el.updateComplete;
+  expect(sortedKeys(el)).toEqual(["ten", "two-eighty", "one-two", "one-ten", "half", "quarter"]);
+});
+
+test("text decimal ties keep incoming order even across separators and zeros", async () => {
+  const el = await sortTable([
+    { id: "first", value: "Pack 00,50" },
+    { id: "second", value: "Pack 0.5" },
+    { id: "third", value: "Pack 0.500" },
+  ]);
+  expect(sortedKeys(el)).toEqual(["first", "second", "third"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="value"]')!.click();
+  await el.updateComplete;
+  expect(sortedKeys(el)).toEqual(["first", "second", "third"]);
+});
+
+test("ISO timestamp sort values keep chronological order in both directions", async () => {
+  const el = await sortTable([
+    { id: "month", value: "2026-10-01T00:00:00.000Z" },
+    { id: "fraction", value: "2026-09-30T23:59:59.025Z" },
+    { id: "year", value: "2027-01-01T00:00:00.000Z" },
+    { id: "second", value: "2026-09-30T23:59:59.005Z" },
+    { id: "missing", value: null },
+  ]);
+  expect(sortedKeys(el)).toEqual(["second", "fraction", "month", "year", "missing"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="value"]')!.click();
+  await el.updateComplete;
+  expect(sortedKeys(el)).toEqual(["year", "month", "fraction", "second", "missing"]);
+});
+
 test("a column of decimals sorts by size, not as text", async () => {
   const el = await sortTable([
     { id: "larger", value: 1.5 },

@@ -1,3 +1,4 @@
+import { compareLabels } from "@waitron/shared";
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
@@ -1540,10 +1541,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         const compared =
           typeof left.value === "number" && typeof right.value === "number"
             ? left.value - right.value
-            : String(left.value).localeCompare(String(right.value), undefined, {
-                numeric: true,
-                sensitivity: "base",
-              });
+            : compareLabels(String(left.value), String(right.value));
         return compared === 0 ? left.index - right.index : compared * direction;
       })
       .map(({ row }) => row);

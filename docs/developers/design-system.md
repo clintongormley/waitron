@@ -613,6 +613,10 @@ canvases. Define columns and cell content in the consuming screen so domain acti
 primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
+Text sort values use `compareLabels` from `@waitron/shared`, matching the dashboard pickers:
+number runs compare as exact decimals with either comma or point, so "0,25 kg" precedes
+"0,5 kg" and "1.10 Postres" precedes "1.2 Sopas". Number sort values compare numerically;
+a tie preserves the incoming row order, and missing values sort last in either direction.
 
 In the options and extras list forms, the reorder grip and other control columns take only the
 width their contents need. The option name takes the spare width; the extras product, quantity and

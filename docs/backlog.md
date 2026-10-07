@@ -2479,11 +2479,10 @@ point, so "0,25 kg" precedes "0,5 kg". Chromium checks cover both separators, mi
 values, integer order and differences below floating-point precision. This changes category
 pickers in the product editor and catalogue browser, the section's Add products list and category
 filter, and menu price section/category filters. A299 (#1328) retired the unused member-list
-editor, which also consumed this helper on A300's initial base. `wt-data-table` uses its own
-comparison and is outside
-this item's scope. A rendered Chromium probe confirms that table still lists "0,5 kg" before
-"0,25 kg", so its order differs from these pickers. To align table name sorting, queue a shared
-comparator change separately. Names such as "1.10 Postres" are read as decimals (1.1), so they
+editor, which also consumed this helper on A300's initial base. The table follow-up is DONE
+(A309): `@waitron/shared` now exports `compareLabels`, used by both `byLabel` and `wt-data-table`'s text sort. Chromium cases check decimal names in both
+directions, equal-decimal ties, and ISO timestamp order; numeric sort values retain their
+separate comparison. Names such as "1.10 Postres" are read as decimals (1.1), so they
 precede "1.2 Sopas"; this change does not infer outline or version numbering from names. Since
 W85a, product variants retain the product's own order.
 
