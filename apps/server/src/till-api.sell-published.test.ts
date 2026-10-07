@@ -873,6 +873,7 @@ describe("GET /api/menu-state", () => {
     expect(await state(v)).toEqual({
       menus: [{ menuId: v.menuId, versionId: v1 }],
       unavailable: nothing,
+      defaultMenuId: v.menuId,
     });
 
     const setBurger = (available: boolean) =>
@@ -881,6 +882,7 @@ describe("GET /api/menu-state", () => {
     expect(await state(v)).toEqual({
       menus: [{ menuId: v.menuId, versionId: v1 }],
       unavailable: { ...nothing, products: [v.burger.productId] },
+      defaultMenuId: v.menuId,
     });
     const status = await withTransaction(suite.db, (tx) => menuStatus(tx, [v.menuId]));
     expect(status.get(v.menuId)?.state).toBe("current");

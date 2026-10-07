@@ -196,6 +196,7 @@ import type {
   TillCourse,
   TillInfo,
   MenuState,
+  MenuStateAnswer,
   MenuUnavailable,
   TillMenuOffer,
   TillProduct,
@@ -1566,6 +1567,8 @@ export class TillApp extends LitElement {
   /** Who browsed the counter last, in which zone, and the menu they chose there by hand (null: the
    * zone's default). Held in memory only, so a reload starts from the profile's starting zone. */
   #browsing?: { personId: string; zoneId: string; menuId: string | null };
+  /** Per counter zone, the default menu its latest menu-state answer named. */
+  readonly #polledDefaults = new Map<string, string | null>();
   #counterOfferRequest = 0;
   @state() private selectedCatalogueId = "";
   @state() private selectedDiet: DietPredicate | null = null;
@@ -2166,6 +2169,7 @@ export class TillApp extends LitElement {
     // While this loads, the lock screen can start a newer sign-in, and a logout (idle, or from the
     // shell once it shows) or a server move can end this one.
     const replaced = () => signIn !== this.#signIns || session !== this.#operatorSession;
+    this.#polledDefaults.clear();
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
@@ -2573,6 +2577,7 @@ export class TillApp extends LitElement {
       )
         return;
       this.#loadCounterOffers(catalogue);
+      this.#polledDefaults.delete(this.counterServiceZoneId);
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
       this.receiptPrintMode = context.receiptPrintMode ?? "auto";
@@ -2728,12 +2733,14 @@ export class TillApp extends LitElement {
    * person's draft ({@link #reconcileDraft}); a comparison put off earlier is tried again at each
    * poll.
    */
-  #onMenuState(zoneId: string, state: MenuState): void {
+  #onMenuState(zoneId: string, state: MenuStateAnswer): void {
     if (zoneId === this.counterServiceZoneId) {
       if (this.#counterOffers.setUnavailable(state.unavailable)) this.#showCounterOffers();
+      if (state.defaultMenuId !== undefined) this.#polledDefaults.set(zoneId, state.defaultMenuId);
       const busy = this.submitting || this.parking || this.placing;
       if (versionsMoved(this.menus, state.menus) && !busy && this.basketRefresh === undefined)
-        void this.#refreshBasket();
+        void this.#refreshBasket().then(() => this.#followDefault());
+      else if (!busy) this.#followDefault();
     }
     if (zoneId === this.#tableZoneId) {
       if (this.#tableOffers.setUnavailable(state.unavailable)) {
@@ -2747,6 +2754,20 @@ export class TillApp extends LitElement {
           if (read) this.#reconcileDraft(false);
         });
     }
+  }
+
+  /** A counter following its zone's default, with nothing in its basket, moves to the default its
+   * zone's latest menu-state answer named. A table's menu is never moved. */
+  #followDefault(): void {
+    const menuId = this.#polledDefaults.get(this.counterServiceZoneId);
+    if (menuId === undefined || menuId === null) return;
+    if (this.#browsing?.menuId !== null || this.#store.lines.length > 0) return;
+    this.#selectMenu(menuId);
+  }
+
+  #clearBasket(): void {
+    this.#store.clear();
+    this.#followDefault();
   }
 
   /** Reloads the open table's offers; false when they could not be read or a table open overtook
@@ -3682,7 +3703,7 @@ export class TillApp extends LitElement {
       }
       if (session !== this.#operatorSession) return;
       this.#dismissStationChoices();
-      this.#store.clear();
+      this.#clearBasket();
       this.cardOutcome = undefined;
       await this.#refreshAfterWrite("held", "refresh.held_after_park");
     } catch (error) {
@@ -4494,7 +4515,7 @@ export class TillApp extends LitElement {
   #onNewSale(): void {
     if (!this.#inShell()) return;
     this.#dismissStationChoices();
-    this.#store.clear();
+    this.#clearBasket();
     this.invoiceChoice = undefined;
     this.invoiceRecipientOpen = false;
     this.invoiceRecipientOrderId = undefined;
@@ -6592,7 +6613,7 @@ export class TillApp extends LitElement {
       basket === this.#basketPayload()
     ) {
       this.#dismissStationChoices();
-      this.#store.clear();
+      this.#clearBasket();
       this.cardOutcome = undefined;
     }
     this.submittedNotice = t("counter.moved_to_table").replace("{table}", () => label);
@@ -7147,7 +7168,7 @@ export class TillApp extends LitElement {
       }
       if (this.#store.id === open.workingOrderId) {
         this.#dismissStationChoices();
-        this.#store.clear();
+        this.#clearBasket();
         this.stage = "order";
         this.collectFlow = undefined;
         this.counterLines = null;
@@ -7482,6 +7503,7 @@ export class TillApp extends LitElement {
     this.#endReloadLock();
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
+    this.#polledDefaults.clear();
     this.#tableZoneId = undefined;
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.

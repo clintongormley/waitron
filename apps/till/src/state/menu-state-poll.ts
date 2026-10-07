@@ -1,4 +1,4 @@
-import type { MenuState } from "../api/client.js";
+import type { MenuStateAnswer } from "../api/client.js";
 
 /** How often a signed-in till reads its zones' menu state (plan decision D11). */
 const POLL_MS = 15_000;
@@ -10,10 +10,10 @@ const POLL_MS = 15_000;
 const READ_LIMIT_MS = 25_000;
 
 export interface MenuStatePollOptions {
-  read(zoneId: string, signal: AbortSignal): Promise<MenuState>;
+  read(zoneId: string, signal: AbortSignal): Promise<MenuStateAnswer>;
   /** The zones whose offers the till holds now, read afresh at every tick. */
   zones(): readonly string[];
-  onState(zoneId: string, state: MenuState): void;
+  onState(zoneId: string, state: MenuStateAnswer): void;
 }
 
 /**

@@ -1,0 +1,505 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanupWidgets, draftServer, mountWidget } from "./widgets/test-helpers.js";
+import { TillApp } from "./till-app.js";
+import { setLocale } from "./i18n/t.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
+import type { TillLockScreen } from "./screens/till-lock-screen.js";
+import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type {
+  MenuState,
+  ServiceZoneSummary,
+  TillApi,
+  TillMenuOffer,
+  TillSaleResult,
+  ZoneOfferCatalogue,
+} from "./api/client.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+
+// The menu-state poll carries the zone's default menu as the department's timetable has it now. A
+// till following the default moves to it while its basket is empty; a person's own pick, a basket
+// with lines and a table's order are left alone.
+
+interface Menu {
+  id: string;
+  name: string;
+  product: string;
+}
+const DESAYUNOS: Menu = { id: "desayunos", name: "Desayunos", product: "Tostada" };
+const ALMUERZO: Menu = { id: "almuerzo", name: "Almuerzo", product: "Menú del día" };
+const CENA: Menu = { id: "cena", name: "Cena", product: "Croquetas" };
+
+const unit = {
+  id: "unit-each",
+  name: { es: "unidad", en: "unit" },
+  abbreviation: { es: "ud", en: "ea" },
+  precision: 0,
+  hardwareUnit: null,
+};
+
+function offer(menu: Menu): TillMenuOffer {
+  return {
+    id: `offer-${menu.id}`,
+    menuId: menu.id,
+    productId: menu.product,
+    grossPrice: null,
+    unitPrice: "3.00",
+    available: true,
+    image: null,
+    description: null,
+    menuName: menu.name,
+    placements: [[]],
+    name: menu.product,
+    customerName: { es: menu.product },
+    kitchenName: menu.product,
+    unit,
+    vatClass: "general",
+    category: null,
+    allergens: null,
+    diet: null,
+    dietDerivation: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
+    courseId: null,
+    offeredModifiers: [],
+    variants: [],
+  } satisfies TillMenuOffer;
+}
+
+const zone = (id: string, name: string): ServiceZoneSummary => ({
+  id,
+  name,
+  departmentId: "department-restaurant",
+  departmentName: "Restaurant",
+  serviceMode: "prepay",
+});
+const ZONES = [zone("zone-barra", "Barra"), zone("zone-terraza", "Terraza")];
+
+function offers(
+  zoneId: string,
+  menus: Menu[],
+  defaultMenuId: string,
+  serviceMode: ZoneOfferCatalogue["context"]["serviceMode"] = "prepay",
+): ZoneOfferCatalogue {
+  return {
+    context: { zoneId, departmentId: "department-restaurant", serviceMode },
+    defaultMenuId,
+    menus: menus.map((menu) => ({
+      id: menu.id,
+      name: menu.name,
+      isDefault: menu.id === defaultMenuId,
+      versionId: "v1",
+      structure: {
+        members: [
+          { kind: "product" as const, menuItemId: `offer-${menu.id}`, productId: menu.product },
+        ],
+      },
+      home: {
+        shortcuts: [],
+        handheld: HOME_DISPLAY_DEFAULTS.handheld,
+        till: HOME_DISPLAY_DEFAULTS.till,
+      },
+    })),
+    offers: menus.map(offer),
+    zones: ZONES,
+  };
+}
+
+/** Barra opens on Desayunos, beside Almuerzo. */
+const BARRA = offers("zone-barra", [DESAYUNOS, ALMUERZO], "desayunos");
+/** Terraza opens on Cena, beside Almuerzo and Desayunos. */
+const TERRAZA = offers("zone-terraza", [CENA, ALMUERZO, DESAYUNOS], "cena");
+
+function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenuId?: string } {
+  return {
+    menus: menus.map((menu) => ({ menuId: menu.id, versionId: "v1" })),
+    unavailable: { products: [], optionLabels: [] },
+    ...(defaultMenuId === undefined ? {} : { defaultMenuId }),
+  };
+}
+
+const saleResult: TillSaleResult = {
+  orderLabel: null,
+  orderNumber: 1,
+  invoiceNumber: "F-0001",
+  issuedAt: "2026-10-05T10:00:00.000Z",
+  total: "3.00",
+  vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
+  lines: [{ descriptions: { "es-ES": "Tostada" }, quantity: "1", gross: "3.00" }],
+  tender: { method: "cash", change: "17.00" },
+  qr: "https://example.test/vf",
+};
+
+const counterTab: CanvasDef["tabs"][number] = {
+  key: "counter",
+  title: "Counter",
+  columns: 12,
+  cards: [
+    { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+    { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+    { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+  ],
+};
+
+const tableCanvas: CanvasDef = {
+  formFactor: "till",
+  tabs: [
+    counterTab,
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 24,
+      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
+    },
+    {
+      key: "order",
+      title: "Order",
+      columns: 12,
+      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+    },
+  ],
+};
+
+const till = {
+  locale: "en-GB",
+  invoiceLocale: "es-ES",
+  venueName: "Casa Delgado",
+  nif: "B12345678",
+  orderFlow: "prepay" as const,
+  receiptPrintMode: "auto" as const,
+  bumpMode: "line" as const,
+  fireControl: "waiter" as const,
+  courses: [],
+  cardProvider: "none" as const,
+  tipsEnabled: false,
+  canvas: { formFactor: "till", tabs: [counterTab] } satisfies CanvasDef,
+  capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
+  inactivityTimeoutSeconds: null,
+  nodeId: "n1",
+  servers: [],
+};
+
+let drafts: ReturnType<typeof draftServer>;
+let api: Record<string, ReturnType<typeof vi.fn>>;
+
+function stubApi(overrides: Record<string, unknown> = {}) {
+  return {
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    getTill: vi.fn().mockResolvedValue(till),
+    getLocales: vi.fn().mockResolvedValue({ locales: [], venueDefault: "es-ES" }),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      stationId: null,
+    }),
+    listStaff: vi.fn().mockResolvedValue([]),
+    listDefaultZoneOffers: vi.fn(async () => BARRA),
+    listZoneOffers: vi.fn(async (zoneId: string) => (zoneId === "zone-terraza" ? TERRAZA : BARRA)),
+    menuState: vi.fn(async (zoneId: string) =>
+      zoneId === "zone-terraza" ? state([CENA, ALMUERZO, DESAYUNOS]) : state([DESAYUNOS, ALMUERZO]),
+    ),
+    setServiceZone: vi.fn(),
+    listWorkingOrders: vi.fn().mockResolvedValue([]),
+    listCounterWaiting: vi.fn().mockResolvedValue([]),
+    listStations: vi.fn().mockResolvedValue([]),
+    recordSale: vi.fn().mockResolvedValue(saleResult),
+    parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
+    logout: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as Record<string, ReturnType<typeof vi.fn>>;
+}
+
+async function mountApp(overrides: Record<string, unknown> = {}) {
+  api = stubApi(overrides);
+  return mountWidget<TillApp>("till-app", { api: api as unknown as TillApi });
+}
+
+/** Settles awaited API promises (the real `setTimeout` is not faked) and Lit's render. */
+async function flush(el: TillApp): Promise<void> {
+  for (let i = 0; i < 3; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+  }
+}
+
+/** One poll tick: only `setInterval` is faked, so every other wait in the app keeps real time. */
+async function poll(el: TillApp): Promise<void> {
+  vi.advanceTimersByTime(15_000);
+  await flush(el);
+}
+
+function emit(source: Element, type: string, detail?: unknown): void {
+  source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+}
+
+const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
+const counter = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+const selected = (el: TillApp) => counter(el).selectedMenuId;
+
+async function signIn(el: TillApp, personId = "p1"): Promise<void> {
+  await flush(el);
+  emit(lock(el), "logged-in", { personId, displayName: "Ana", permissions: [] });
+  await flush(el);
+}
+
+async function signInAgain(el: TillApp, personId = "p1"): Promise<void> {
+  emit(counter(el), "logout");
+  await flush(el);
+  await signIn(el, personId);
+}
+
+/** Adds the counter's product from `menu`, as a tap on its tile would. */
+function add(el: TillApp, menu: Menu): void {
+  const c = counter(el);
+  c.store.addProduct(
+    c.products.find((product) => product.productId === menu.product)!,
+    "1",
+  );
+}
+
+async function park(el: TillApp): Promise<void> {
+  emit(counter(el), "park-order", {});
+  await flush(el);
+}
+
+beforeEach(() => {
+  setLocale("en-GB");
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  drafts = draftServer(() => ({ tabId: "wo-7", revision: 2, groups: [] }));
+});
+afterEach(() => {
+  cleanupWidgets();
+  vi.useRealTimers();
+  sessionStorage.removeItem("waitron.lastMenu");
+});
+
+describe("a counter following its zone's default menu", () => {
+  it("moves to the polled default while the basket is empty", async () => {
+    const { el } = await mountApp();
+    await signIn(el);
+    expect(selected(el)).toBe("desayunos");
+
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(selected(el)).toBe("almuerzo");
+  });
+
+  it("stays put while the basket has lines, and moves as soon as the sale is over", async () => {
+    const { el } = await mountApp();
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(selected(el)).toBe("desayunos");
+
+    emit(counter(el), "confirm-payment", { method: "cash", amount: "20" });
+    await flush(el);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(selected(el)).toBe("desayunos");
+    const polls = api.menuState.mock.calls.length;
+    emit(counter(el), "new-sale");
+    await flush(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(selected(el)).toBe("almuerzo");
+    expect(api.menuState).toHaveBeenCalledTimes(polls);
+  });
+
+  it("reloads the offers first when the polled default is a menu it has not loaded", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [DESAYUNOS], "desayunos")),
+      // The reload still names Desayunos: the poll is the newer word on the default.
+      listZoneOffers: vi.fn(async () => BARRA),
+    });
+    await signIn(el);
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos"]);
+
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos", "almuerzo"]);
+    expect(selected(el)).toBe("almuerzo");
+  });
+
+  it("changes nothing when the poll's answer carries no default", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () =>
+        offers("zone-barra", [DESAYUNOS, ALMUERZO], "almuerzo"),
+      ),
+    });
+    await signIn(el);
+    expect(selected(el)).toBe("almuerzo");
+
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO]));
+    await poll(el);
+    expect(selected(el)).toBe("almuerzo");
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+  });
+});
+
+describe("a menu the person picked", () => {
+  it("is kept through a poll and through signing in again", async () => {
+    const { el } = await mountApp();
+    await signIn(el);
+    emit(counter(el), "menu-selected", { id: "desayunos" });
+    await flush(el);
+
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(selected(el)).toBe("desayunos");
+
+    await signInAgain(el);
+    expect(selected(el)).toBe("desayunos");
+    await poll(el);
+    expect(selected(el)).toBe("desayunos");
+  });
+});
+
+describe("the remembered default", () => {
+  it("belongs to its zone, and is dropped when the counter leaves the zone", async () => {
+    const { el } = await mountApp();
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+    const terraza: { defaultMenuId?: string } = {};
+    api.menuState.mockImplementation(async (zoneId: string) =>
+      zoneId === "zone-terraza"
+        ? state([CENA, ALMUERZO, DESAYUNOS], terraza.defaultMenuId)
+        : state([DESAYUNOS, ALMUERZO], "almuerzo"),
+    );
+    await poll(el);
+    expect(selected(el)).toBe("desayunos");
+
+    counter(el).store.removeLine(0);
+    emit(counter(el), "counter-zone-selected", { zoneId: "zone-terraza" });
+    await flush(el);
+    expect(selected(el)).toBe("cena");
+    add(el, CENA);
+    await park(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(selected(el)).toBe("cena");
+
+    add(el, CENA);
+    terraza.defaultMenuId = "desayunos";
+    await poll(el);
+    expect(selected(el)).toBe("cena");
+    await park(el);
+    expect(selected(el)).toBe("desayunos");
+
+    emit(counter(el), "counter-zone-selected", { zoneId: "zone-barra" });
+    await flush(el);
+    emit(counter(el), "counter-zone-selected", { zoneId: "zone-terraza" });
+    await flush(el);
+    expect(selected(el)).toBe("cena");
+    add(el, CENA);
+    await park(el);
+    expect(selected(el)).toBe("cena");
+  });
+
+  it("is forgotten by signing out and in again before the basket is cleared", async () => {
+    const { el } = await mountApp();
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(selected(el)).toBe("desayunos");
+
+    await signInAgain(el);
+    expect(counter(el).store.lineCount).toBe(1);
+    expect(selected(el)).toBe("desayunos");
+    await park(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(selected(el)).toBe("desayunos");
+
+    add(el, DESAYUNOS);
+    await poll(el);
+    expect(selected(el)).toBe("desayunos");
+    await park(el);
+    expect(selected(el)).toBe("almuerzo");
+  });
+});
+
+describe("an open table's order", () => {
+  const table = {
+    id: "t2",
+    label: "2",
+    zoneId: "zone-comedor",
+    capacity: 4,
+    state: "open-tab",
+    hasOpenTab: true,
+    tabLineCount: 0,
+    tabTotal: "0.00",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    enRoute: 0,
+    timingBand: "fresh",
+    status: null,
+    nextReservation: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
+    signals: [],
+    party: {
+      id: "party-a",
+      revision: 1,
+      guestCount: 2,
+      state: "open" as const,
+      mainBillId: "wo-7",
+      outstanding: "0.00",
+      billCount: 1,
+      tableIds: ["t2"],
+    },
+  };
+  const COMEDOR = offers("zone-comedor", [DESAYUNOS, ALMUERZO], "desayunos", "table_tab");
+  const shellGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+  const tableScreen = (el: TillApp) =>
+    shellGrid(el).shadowRoot!.querySelector<HTMLElement & { selectedMenuId: string }>(
+      "till-table-order-screen",
+    )!;
+
+  it("keeps the menu the table shows whatever the poll names for the table's zone", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      listZoneOffers: vi.fn(async (zoneId: string) =>
+        zoneId === "zone-comedor" ? COMEDOR : BARRA,
+      ),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      listZones: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
+        ]),
+      listStatuses: vi.fn().mockResolvedValue([]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+      menuState: vi.fn(async (zoneId: string) =>
+        zoneId === "zone-comedor"
+          ? state([DESAYUNOS, ALMUERZO], "almuerzo")
+          : state([DESAYUNOS, ALMUERZO], "desayunos"),
+      ),
+    });
+    await signIn(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el);
+    expect(tableScreen(el).selectedMenuId).toBe("desayunos");
+
+    await poll(el);
+    expect(api.menuState.mock.calls.map((call) => call[0])).toContain("zone-comedor");
+    expect(tableScreen(el).selectedMenuId).toBe("desayunos");
+  });
+});

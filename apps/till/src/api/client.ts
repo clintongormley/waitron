@@ -398,6 +398,9 @@ export interface ServiceZoneSummary {
 
 export type { MenuState, MenuUnavailable };
 
+/** A menu-state read with the zone's default menu as its menu timetable has it now. */
+export type MenuStateAnswer = MenuState & { defaultMenuId?: string | null };
+
 /** The offered lists as the picker asks them: only the extras items and option labels sellable now. */
 function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedModifier[] {
   return entries.map((entry) =>
@@ -2041,8 +2044,8 @@ export class TillApi {
     );
   }
 
-  menuState(zoneId: string, options: ReadOptions = {}): Promise<MenuState> {
-    return this.#request<MenuState>(
+  menuState(zoneId: string, options: ReadOptions = {}): Promise<MenuStateAnswer> {
+    return this.#request<MenuStateAnswer>(
       `/api/menu-state?zoneId=${encodeURIComponent(zoneId)}`,
       "GET",
       undefined,
