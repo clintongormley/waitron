@@ -2213,11 +2213,11 @@ row's Resolve menu. Blank or invalid text and Escape leave the saved clash avail
 and size rows have regression checks; no existing test check changed. A valid draft still hides
 Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list.
 
-**Price overrides reject a comma decimal separator (A280 visual follow-up, 2026-10-06).**
-Typing `2,80` through the native input in Spanish left Resolve visible in all four mounted-widget
-checks; `2.80` hid it. The field forwards its raw text, and the row uses `isProductPrice`.
-Confirm the desired input convention, then accept a localized decimal separator at the input
-boundary if required. No change to decimal parsing is included in A280.
+**Price overrides accept either decimal mark — DONE (A284, A280 visual follow-up).**
+The shared price field converts comma or point to an exact dot-decimal draft and displays the
+screen's decimal mark. The row's `isProductPrice` check receives the canonical draft; invalid
+multiple marks and grouping spaces remain available to the row's existing refusal. A284 adds
+native-input EN/ES regressions to `wt-price-input.test.ts` and runs the menu-prices-table suite.
 
 **A product has one colour everywhere, taken from its category unless it has its own — DONE (W92, #1250,
 2026-10-05).**
