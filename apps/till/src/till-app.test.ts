@@ -15779,9 +15779,11 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
   });
 });
 
-it("completes a cash sale without technical clock notices", async () => {
+it("shows a cash-sale ticket without technical clock notices", async () => {
   const { el } = await mountApp();
   await toTicket(el);
+  setLocale("en-GB");
+  await el.updateComplete;
   expect(el.shadowRoot!.textContent).not.toContain("Check the server's date and time");
   expect(el.shadowRoot!.textContent).not.toContain("has not been verified");
   expect(ticket(el)).not.toBeNull();

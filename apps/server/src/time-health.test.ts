@@ -98,7 +98,7 @@ it("raises a clock alert only for measured drift and clears it when the source i
   expect(await source?.read({} as never)).toEqual([]);
 });
 
-describe("sales during an authority clock warning", () => {
+describe("authority clock alerts and sales", () => {
   let venue: BillVenue;
   useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
@@ -108,7 +108,7 @@ describe("sales during an authority clock warning", () => {
     timeoutMs: 120_000,
   });
 
-  it("keeps the administrator alert without preventing a cash sale", async () => {
+  it("reports administrator drift alongside an independent cash sale", async () => {
     const module = await import("./time-health.js");
     const monitor = module.createAuthorityClockStatus();
     monitor.observe({
