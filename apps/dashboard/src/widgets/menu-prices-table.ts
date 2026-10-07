@@ -159,8 +159,15 @@ export class MenuPricesTable extends LitElement {
         container-type: inline-size;
       }
       .error {
-        margin-block: 0 var(--wt-space-3);
+        margin-block: 0;
         color: var(--wt-color-danger);
+      }
+      .clash-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: var(--wt-space-3);
+        margin-block-end: var(--wt-space-3);
       }
       wt-data-table::part(name-box) {
         display: contents;
@@ -287,6 +294,9 @@ export class MenuPricesTable extends LitElement {
   @state() private invalid: ReadonlySet<string> = new Set();
   /** Refusals hidden since their field changed. */
   @state() private hiddenRefusals: ReadonlySet<string> = new Set();
+  /** Whether the table's price filter is on Clashes, read from the table once it has drawn, since
+   * it restores a remembered choice itself. */
+  @state() private filterOnClashes = true;
   /** Fields whose last Enter or leaving failed their own check, so each change checks them again. */
   readonly #checking = new Set<string>();
   /** The text each field last sent, so a second commit of it sends nothing. */
@@ -472,6 +482,8 @@ export class MenuPricesTable extends LitElement {
   }
 
   protected override updated(changed: PropertyValues): void {
+    const table = this.#table();
+    if (table !== null) void table.updateComplete.then(() => this.#readFilter());
     if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
     // The cells read these, and the table redraws only when its own properties change.
     if (
@@ -504,6 +516,11 @@ export class MenuPricesTable extends LitElement {
         return true;
     }
     return false;
+  }
+
+  #readFilter(): void {
+    const onClashes = this.#table()?.filterValues("override").includes("clash") ?? true;
+    if (onClashes !== this.filterOnClashes) this.filterOnClashes = onClashes;
   }
 
   #table(): HTMLElementTagNameMap["wt-data-table"] | null {
@@ -995,11 +1012,26 @@ export class MenuPricesTable extends LitElement {
       count === 1
         ? t("menu_prices.clash_message_one")
         : t("menu_prices.clash_message").replace("{count}", String(count));
-    return html`<p class="error" role="status" data-test="clash-message">${words}</p>`;
+    // Clashes is offered only while a row is marked, which the publish count does not decide.
+    const offer = this.#clashing.size > 0 && !this.filterOnClashes;
+    return html`<div class="clash-line">
+      <p class="error" role="status" data-test="clash-message">${words}</p>
+      ${
+        offer
+          ? html`<wt-button
+              variant="ghost"
+              data-test="show-clashes"
+              @click=${() => this.#table()?.chooseFilter("override", ["clash"])}
+              >${t("menu_prices.show_clashes")}</wt-button
+            >`
+          : nothing
+      }
+    </div>`;
   }
 
   override render() {
     return html`${this.#clashMessage()}<wt-data-table
+        @wt-filter-change=${() => this.#readFilter()}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}

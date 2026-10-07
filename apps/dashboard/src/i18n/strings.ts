@@ -2074,6 +2074,7 @@ export const en = {
   "menu_prices.overridden_only": "Overridden only",
   "menu_prices.not_overridden": "Not overridden",
   "menu_prices.clashes_only": "Clashes",
+  "menu_prices.show_clashes": "Show clashes",
   "menu_prices.clash_message":
     "{count} prices clash. Settle them before this menu can be published.",
   "menu_prices.clash_message_one": "1 price clashes. Settle it before this menu can be published.",
@@ -4545,6 +4546,7 @@ export const es: Record<StringKey, string> = {
   "menu_prices.overridden_only": "Solo con precio propio",
   "menu_prices.not_overridden": "Sin precio propio",
   "menu_prices.clashes_only": "Con discrepancias",
+  "menu_prices.show_clashes": "Ver discrepancias",
   "menu_prices.clash_message":
     "{count} precios tienen discrepancias. Resuélvelas antes de poder publicar esta carta.",
   "menu_prices.clash_message_one":

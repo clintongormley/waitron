@@ -1,5 +1,5 @@
 import { combinedFixture } from "./test-helpers.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
@@ -124,6 +124,10 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
       expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
     }
     expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="clash"]')).not.toBeNull();
+    // The filter is off Clashes, so the red line offers to put it back.
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="show-clashes"]')).not.toBeNull(),
+    );
     // An Active size of an Inactive product says why it reads Inactive, muted.
     expect(
       root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="status-note"]'),

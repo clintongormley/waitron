@@ -3565,6 +3565,67 @@ describe("the clash message and the Clashes filter", () => {
     expect(shown(el)).toEqual(["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lager"]);
   });
 
+  const showClashes = (el: MenuPricesTable) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="show-clashes"]');
+
+  it("offers no Show clashes while the filter is on Clashes, or when nothing clashes", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    expect(priceFilter(el)).toBe("clash");
+    expect(showClashes(el)).toBeNull();
+    const calm = await mount();
+    expect(showClashes(calm)).toBeNull();
+    await choose(calm, "override", "overridden");
+    expect(showClashes(calm)).toBeNull();
+  });
+
+  it.each([
+    ["en-GB", "Show clashes"],
+    ["es-ES", "Ver discrepancias"],
+  ])(
+    "offers %s Show clashes beside the red line once another filter is chosen, and a click puts the filter back on Clashes",
+    async (locale, label) => {
+      setLocale(locale);
+      try {
+        const el = await mount({ rows: [burger, clashRow(lager)] });
+        await choose(el, "override", "");
+        await el.updateComplete;
+        const button = showClashes(el)!;
+        expect(text(button)).toBe(label);
+        expect(button.variant).toBe("ghost");
+        expect(message(el)!.contains(button)).toBe(false);
+        await userEvent.click(button);
+        await el.updateComplete;
+        await table(el).updateComplete;
+        expect(priceFilter(el)).toBe("clash");
+        expect(shown(el)).toEqual(["mi-lager"]);
+        expect(showClashes(el)).toBeNull();
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  it("puts the filter back on Clashes from the keyboard", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "not_overridden");
+    await el.updateComplete;
+    showClashes(el)!.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(priceFilter(el)).toBe("clash");
+    expect(showClashes(el)).toBeNull();
+  });
+
+  it("offers Show clashes on a return to the tab whose remembered filter is All prices", async () => {
+    const first = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(first, "override", "");
+    cleanupWidgets();
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await vi.waitFor(() => expect(showClashes(el)).not.toBeNull());
+    expect(priceFilter(el)).toBe("");
+  });
+
   it("keeps exactly the right products and variants under each price filter", async () => {
     const el = await mount({ rows: [burger, variantClashRow(), clashRow(lager)] });
     await choose(el, "override", "");

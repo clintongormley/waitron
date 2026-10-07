@@ -3284,6 +3284,38 @@ test("a filter with an initial choice starts on it, and its dropdown shows it", 
   expect(statusSelect(el).value).toBe("active");
 });
 
+test("filterValues reads what a filter narrows by: its initial choice, a restored one, or all chosen", async () => {
+  const el = await tableS({ viewKey: "test.values-initial", columns: initiallyActive });
+  expect(el.filterValues("status")).toEqual(["active"]);
+  expect(el.filterValues("name")).toEqual([]);
+  await chooseOption(statusSelect(el), "");
+  await el.updateComplete;
+  expect(el.filterValues("status")).toEqual([]);
+  sessionStorage.setItem("test.values-restored", JSON.stringify({ filters: { status: "off" } }));
+  const restored = await tableS({ viewKey: "test.values-restored", columns: initiallyActive });
+  expect(restored.filterValues("status")).toEqual(["off"]);
+});
+
+test("chooseFilter chooses as the person would: rows narrow, the dropdown shows it, it is reported and remembered", async () => {
+  const el = await tableS({ viewKey: "test.choose", columns: initiallyActive });
+  await chooseOption(statusSelect(el), "");
+  await el.updateComplete;
+  const seen: unknown[] = [];
+  el.addEventListener("wt-filter-change", (event) => seen.push((event as CustomEvent).detail));
+  el.chooseFilter("status", ["off"]);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+  expect(statusSelect(el).value).toBe("off");
+  expect(el.filterValues("status")).toEqual(["off"]);
+  expect(seen).toEqual([{ filters: { status: "off" } }]);
+  expect(storedFilters("test.choose")).toEqual({ status: "off" });
+  el.chooseFilter("missing", ["off"]);
+  el.chooseFilter("name", ["off"]);
+  await el.updateComplete;
+  expect(seen).toHaveLength(1);
+  expect(rowKeysS(el)).toEqual(["2"]);
+});
+
 /** Eight statuses and the all row: more than a filter's list shows without a search box. */
 const manyStatuses = statusOffering(
   Array.from({ length: 8 }, (_, index) => ({ value: `s${index}`, label: `Status ${index}` })),

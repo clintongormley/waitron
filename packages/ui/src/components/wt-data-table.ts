@@ -1812,6 +1812,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#setOpen([key], expanded);
   }
 
+  /** The values the filter on the column with this key narrows rows by now; none for all. */
+  filterValues(key: string): readonly string[] {
+    const column = this.columns.find((candidate) => candidate.key === key);
+    return column ? this.#activeValues(column) : [];
+  }
+
+  /** Chooses these values on the column's filter as the person choosing them would, so the choice
+   * is reported and remembered. A column without a filter is left alone. */
+  chooseFilter(key: string, values: readonly string[]): void {
+    const column = this.columns.find((candidate) => candidate.key === key);
+    if (column?.filter) this.#chooseFilter(column, values);
+  }
+
   /** The order the table draws these rows in when they share a parent. */
   sortedSiblings(rows: readonly Row[]): Row[] {
     const parentKey = rows[0] === undefined ? null : (this.rowParent?.(rows[0]) ?? null);
