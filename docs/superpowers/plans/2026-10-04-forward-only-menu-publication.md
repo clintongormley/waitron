@@ -17,19 +17,28 @@
 > **Rewritten 2026-10-07** against `main` at `ffd468189` (after W98, #1331). Every `file:line`
 > below was read at `ffd468189`. The one claim marked **(measured)** was run; everything else was
 > read.
+>
+> **Amended 2026-10-07 after the owner's answer (~10:45):** overtaking is refused, with no
+> cancel-or-replace choice; the manager cancels or reschedules the edition in the way through its
+> own actions, then tries again. Task 1 had already landed (`c0b3dd8b9`) with the refusal for a
+> new queued edition and an immediate publish (`refuseOvertaken`, `overtakenBy`); Tasks 3, 6, 7, 9,
+> 10 and 11 were rewritten to match. The spec's §3 and §8 carry a dated note saying so, added in
+> the same commit as this amendment.
 
 **Goal:** a manager can queue several fixed future editions of a menu, each activating at a chosen
 venue-local time, and the live edition only ever moves to a higher-numbered one. An immediate
 publish, a new queued edition or a reschedule that would put editions out of number order is
-refused, naming the editions it would overtake, until the manager explicitly cancels them.
+refused, naming each edition in the way by number and venue-local time and saying what to do:
+cancel that edition, or move it (earlier when it must go live first, later when it must go live
+after). Nothing is cancelled except through an edition's own Cancel action.
 
 **Spec:** [Devices, menus and service zones](../specs/2026-10-04-devices-menus-and-service-zones-design.md)
 §3, §8 (the publication bullet), §9 ("Publication snapshots", "Time"). Backlog entry
 "Department menu timetables and queued publication" (`docs/backlog.md:1023-1033`). The owner's
-requirements of 2026-10-07 ~10:00 (overtake scenario end to end; rescheduling gets the same
-decision as an immediate publish) are quoted under "Owner requirements" and each has its own test.
-The meaning of "replace" was put to the owner as question W99 in
-`~/waitron-campaign-b/questions.md:1917-1922`; this plan builds Option 1 (Decision 1).
+requirements of 2026-10-07 (~10:00, the overtake scenario end to end; ~10:45, overtaking is
+refused, which replaces the ~10:00 note's second point) are quoted under "Owner requirements" and
+each has its own tests. The owner's ~10:45 words answer question W99 in
+`~/waitron-campaign-b/questions.md:1917-1922` (Decision 1).
 
 **Risk triggers present** (review weight): a migration adding a catalogue table and a media
 migration that recreates two triggers whose bodies read it; a cross-package contract (catalogue's
@@ -158,8 +167,14 @@ the due queued rows to that same statement.
   (`:1266-1300`) and `#renderPreview` (`:2259-2276`). Its browser suite pins
   `client.publishMenu.mock.calls` as `[["menu-lunch", LUNCH_HASH]]`
   (`apps/dashboard/src/screens/menus-screen.test.ts:5205`, and `:5269`), lists write methods in
-  `WRITES` (`:327-345`) and stubs `publishMenu` at `:549`. **So the screen must call `publishMenu`
-  with exactly two arguments when no decision is sent.**
+  `WRITES` (`:327-345`) and stubs `publishMenu` at `:549`. **So `publishMenu` keeps exactly its two
+  arguments;** this plan adds none. A publish refusal is shown today in the preview's result
+  paragraph (`#renderResult` `:726-741`, `role="alert"`), as `menu_preview.failed_kept`/`failed`
+  with the refusal's sentence as `{reason}` (`publishFailure`, `menu-preview.ts:132-137`;
+  `apps/dashboard/src/i18n/strings.ts:2301-2304`, Spanish `:4701-4704`). The warnings dialog
+  (`:996-1025`) closes before the request is sent (`confirmingHash = null` in `#publish`), so no
+  dialog is open when a refusal comes back. `codeMessage(code)` (`packages/dashboard-kit/src/codes.ts:23`)
+  gives one fixed sentence per code and reads no params.
 - Field primitives: `wt-input type="date"` / `type="time"` are already used
   (`packages/venue-service/src/dashboard/prep-stations-screen.ts:1590-1625`,
   `hours-cell-editor.ts:177-190`). Forms contract: `docs/developers/design-system.md:1379` onwards
@@ -224,13 +239,18 @@ order, and every queued edition's number is greater than the live edition's.
   for ever. A new edition overtakes only by the first clause (it has the highest number), so
   queuing it no later than an existing queued edition, or publishing now while any is queued,
   overtakes those. Rescheduling earlier overtakes lower-numbered editions it passes; rescheduling
-  later overtakes higher-numbered editions it passes (owner requirement 2).
+  later overtakes higher-numbered editions it passes (both would put a newer version live before
+  an older one; owner requirement 2).
 - If the overtaken set is not empty the request is refused `menu_publication.overtakes_queued`
   `{ menuId, overtaken: [{ versionId, number, activatesAt }] }` (ascending number) and writes
-  nothing, unless it carries `overtaken: "cancel"`; then the overtaken editions are cancelled in the
-  same transaction BEFORE E is written (so the partial unique index below never sees two queued
-  editions at one instant), and E takes their place. Cancelling restores the invariant: after it,
-  no queued edition disagrees with E, and the others already agreed with each other.
+  nothing, settle included. There is no field that turns the refusal into a cancellation (owner,
+  2026-10-07 ~10:45). The manager cancels the edition in the way through its own Cancel action, or
+  reschedules it, and then repeats the request. Cancel and reschedule stay separate actions on each
+  queued edition.
+- While the invariant holds, one placement overtakes in one direction only: a lower-numbered Q1 at
+  or after T and a higher-numbered Q2 at or before T would put Q2 no later than Q1, which the
+  invariant forbids. The dashboard's sentence still groups the editions in the way by direction
+  rather than relying on this (Task 9).
 - An immediate publish with nothing queued behaves exactly as today. An immediate publish whose
   draft equals the live version stays today's no-op (`:452-454`), whatever is queued: it creates no
   edition, so it overtakes nothing.
@@ -292,7 +312,6 @@ number from this plan). Read the SQL: one `CREATE TABLE`, one `CREATE UNIQUE IND
 through `client.ts:125-147`):
 
 ```ts
-export type OvertakenDecision = "cancel";
 export interface OvertakenEdition { versionId: string; number: number; activatesAt: string }
 export interface QueuedEdition { versionId: string; number: number; activatesAt: string }
 export interface MenuEdition {
@@ -327,25 +346,25 @@ export interface MenuPublicationsAnswer {
 // row's published_at, or a due queued row's activates_at.
 export async function settleDue(tx, at: Date, menuIds?: readonly string[]):
   Promise<{ menuId: string; versionId: string; number: number }[]>;
-export async function overtakenBy(tx, menuId: string, number: number, activatesAt: Date,
-  except?: string): Promise<OvertakenEdition[]>;
-/** Refuses `menu_publication.overtakes_queued` unless `decision` is "cancel"; then cancels them. */
-export async function resolveOvertaken(tx, menuId: string, overtaken: readonly OvertakenEdition[],
-  decision: OvertakenDecision | undefined, personId: string, at: Date): Promise<void>;
+// Landed in Task 1 (c0b3dd8b9). Task 3 removes `except` (see Task 3 for why it cannot change an
+// answer); every caller then passes the placed edition's own number.
+export async function overtakenBy(tx, menuId: string, number: number, activatesAt: Date):
+  Promise<OvertakenEdition[]>;
+/** Landed in Task 1: refuses `menu_publication.overtakes_queued` when `overtaken` names any edition. */
+export function refuseOvertaken(menuId: string, overtaken: readonly OvertakenEdition[]): void;
 export async function nextNumber(tx, menuId: string): Promise<number>;
 export async function publishMenu(tx, menuId, expectedHash, personId,
-  options: { overtaken?: OvertakenDecision; at?: Date } = {}): Promise<PublishedMenuVersion>;
+  options: { at?: Date } = {}): Promise<PublishedMenuVersion>;
 ```
 
 `packages/catalogue/src/menu-schedule.ts` (new; exported from `index.ts`):
 
 ```ts
 export async function queueMenuPublication(tx, menuId: string, expectedHash: string,
-  activatesAt: Date, personId: string,
-  options: { overtaken?: OvertakenDecision; at?: Date } = {}): Promise<QueuedEdition>;
+  activatesAt: Date, personId: string, options: { at?: Date } = {}): Promise<QueuedEdition>;
+/** No person id: the schedule row has no column for who moved it, and a reschedule cancels nothing. */
 export async function rescheduleMenuPublication(tx, menuId: string, versionId: string,
-  activatesAt: Date, personId: string,
-  options: { overtaken?: OvertakenDecision; at?: Date } = {}): Promise<QueuedEdition>;
+  activatesAt: Date, options: { at?: Date } = {}): Promise<QueuedEdition>;
 export async function cancelMenuPublication(tx, menuId: string, versionId: string,
   personId: string, at?: Date): Promise<void>;
 export async function listMenuPublications(tx, menuId: string, at?: Date): Promise<MenuPublications>;
@@ -361,7 +380,7 @@ wording in `apps/dashboard/src/i18n/codes.ts` (Task 8) and a `STATUS` entry in `
 
 | Code | Params | Status | Raised by |
 | --- | --- | --- | --- |
-| `menu_publication.overtakes_queued` | `{ menuId, overtaken: OvertakenEdition[] }` | 409 | queue, reschedule, publish |
+| `menu_publication.overtakes_queued` | `{ menuId, overtaken: OvertakenEdition[] }` | 409 | queue, reschedule, publish: the placement would put editions out of number order; there is no way to override it in the request |
 | `menu_publication.not_found` | `{ menuId, versionId }` | 404 | reschedule, cancel: no schedule row for that version of that menu |
 | `menu_publication.not_queued` | `{ menuId, versionId, state: "activated" \| "cancelled" }` | 409 | reschedule, cancel of a settled (or due) edition |
 | `menu_publication.time_past` | `{ activatesAt }` | 400 | queue, reschedule: not after `at` |
@@ -377,10 +396,10 @@ Routes, `apps/server/src/catalogue-api.ts`, each in `gated` (one transaction, `p
 
 | Route | Body | Answer |
 | --- | --- | --- |
-| `POST /management-api/catalogues/:id/publish` (existing) | `{ expectedHash, overtaken?: "cancel" }` | 200 `{ versionId, number }` (unchanged shape) |
-| `POST /management-api/catalogues/:id/publications` | `{ expectedHash, activatesAt: { date, time, occurrence?: "earlier" \| "later" }, overtaken?: "cancel" }` | 201 `QueuedEdition` |
+| `POST /management-api/catalogues/:id/publish` (existing) | `{ expectedHash }` (unchanged) | 200 `{ versionId, number }` (unchanged shape); 409 `menu_publication.overtakes_queued` while an edition is queued and the draft differs from the live version |
+| `POST /management-api/catalogues/:id/publications` | `{ expectedHash, activatesAt: { date, time, occurrence?: "earlier" \| "later" } }` | 201 `QueuedEdition` |
 | `GET /management-api/catalogues/:id/publications` | — | 200 `MenuPublicationsAnswer` |
-| `PATCH /management-api/catalogues/:id/publications/:versionId` | `{ activatesAt: {…}, overtaken?: "cancel" }` | 200 `QueuedEdition` |
+| `PATCH /management-api/catalogues/:id/publications/:versionId` | `{ activatesAt: {…} }` | 200 `QueuedEdition` |
 | `POST /management-api/catalogues/:id/publications/:versionId/cancel` | — | 204 |
 
 `apps/server/src/menu-publication-time.ts` (new; the server half of local time, reusing
@@ -426,25 +445,54 @@ a run in flight and arms nothing more.
 
 ---
 
-## Owner requirements (2026-10-07 ~10:00, binding; each has its own named tests)
+## Owner requirements (2026-10-07, binding; each has its own named tests)
 
-> (1) **The overtake scenario, end to end:** v1 live; queue v2 for tomorrow; edit the draft; queue
-> v3 for the day after; then bring v3 forward to this afternoon. Bringing v3 ahead of v2 must not
-> happen silently and must not leave v2 able to activate later — the manager makes an explicit
-> cancel-or-replace decision about v2. After it: v3 is live at its time, v2 is cancelled, the DRAFT
-> is exactly as it was before the reschedule (it is never reset to the live or any queued
-> edition), and the next queued edition is numbered v4 (v2's number is not reused).
->
-> (2) **Rescheduling gets the same explicit decision as an immediate publish:** moving a queued
-> edition EARLIER than a lower-numbered queued edition, or a lower-numbered one LATER than a
-> higher-numbered one, shows the same clear cancel/replace choice the plan gives an overtaking
-> immediate publish (not a bare refusal); without the decision nothing changes. Cover both at the
-> route (real database) and in the browser (the choice is shown, in English and Spanish).
+**(1) The overtake scenario, end to end** (the ~10:00 note's first point, as the watcher restated
+it after the ~10:45 answer): v1 live; queue v2 for tomorrow; edit the draft; queue v3 for the day
+after; reschedule v3 to this afternoon → **refused**, naming v2 (its number and scheduled time),
+and nothing changes; the manager cancels v2 (or moves it earlier); reschedules v3 to this afternoon
+→ it succeeds. At 16:00 v3 is live, v2 is cancelled, the DRAFT is exactly as it was before the
+reschedule (it is never reset to the live or any queued edition), and the next queued edition is
+numbered v4 (v2's number is not reused).
 
-Where they are tested: (1) Task 3 case 1 (catalogue), Task 7 case 1 (route, real database),
-Task 11 case 1 (browser, English and Spanish). (2) Task 3 cases 2–3, Task 7 cases 2–4, Task 11
-cases 2–3 (both directions, English and Spanish); the same dialog for an immediate publish and a
-new schedule is Task 10.
+**(2) Overtaking is refused.** The owner, 2026-10-07 ~10:45, verbatim:
+
+> perhaps we just refuse to schedule a newer version before an older version, which leaves the
+> user the option of deleting or rescheduling the older version
+
+The supervising watcher's binding note (`queue.md`, 2026-10-07), verbatim:
+
+> scheduling, rescheduling or immediately publishing an edition so that it would go live BEFORE a
+> lower-numbered queued edition is REFUSED — no cancel/replace choice inside the dialog, no hidden
+> cancellation. The refusal names the edition(s) in the way (number and scheduled time) and says
+> what to do: cancel that edition, or reschedule it earlier; it is shown beside the date/time field
+> per the form rules (an immediate publish shows it in the dialog's message), EN and ES, with its
+> own domain error code (grep siblings for the name). Cancel and reschedule stay separate actions on
+> each queued edition. **This REPLACES point (2) of the 10:00 note** ("the same explicit decision …
+> not a bare refusal"); point (1)'s scenario still holds, as: bringing v3 ahead of v2 is refused;
+> the manager cancels v2 (or moves it earlier), then reschedules v3; then v3 is live at its time, v2
+> cancelled, the DRAFT unchanged, the next edition numbered v4. Test both refusals (reschedule and
+> immediate publish) at the route and in the browser, and the scenario end to end. Amend the spec's
+> §3 "explicitly cancel or replace" sentence with a dated note saying overtaking is refused and the
+> manager cancels or reschedules the older edition first.
+
+This plan applies it in both directions of the existing rule (moving a lower-numbered edition to
+no earlier than a higher-numbered one would also put the newer version live first), with the
+mirrored advice for that direction ("cancel it or move it later"; Decision 1). The code is the one
+Task 1 landed, `menu_publication.overtakes_queued`, beside its `menu_publication.*` siblings
+(`not_found`, `not_queued`, `time_past`, `unchanged`); the other `menu_*` families name their own
+nouns (`menu_item.*`, `menu_period.*`, `menu_section.*`), so the name fits the family.
+
+**Where they are tested:**
+- (1) Task 3 case 1 (catalogue; case 1b is the "move v2 earlier" variant), Task 7 case 1 (route,
+  real database), Task 11 case 1 (browser, English and Spanish).
+- (2) The **reschedule refusal**, both directions: Task 3 case 2 (catalogue), Task 7 case 2
+  (route, real database), Task 11 cases 1–2 (browser, English and Spanish, under the time field).
+  The **immediate-publish refusal**: Task 1 case 5 (catalogue, landed), Task 3 case 4 (it clears
+  once the edition in the way is cancelled), Task 6 case 4 (route, real database), Task 10 cases
+  1–2 (browser, English and Spanish, in the preview's publish message). The **new-schedule
+  refusal**: Task 1 case 5 (catalogue, landed), Task 7 case 3 (route), Task 9 case 3 (browser,
+  English and Spanish).
 
 The fixed timeline every scenario test uses (`Europe/Madrid`; the instants were measured above):
 now = 2026-10-07 10:00 local (`08:00Z`); "tomorrow" = 2026-10-08 08:00 (`06:00Z`); "the day after"
@@ -458,8 +506,8 @@ now = 2026-10-07 10:00 local (`08:00Z`); "tomorrow" = 2026-10-08 08:00 (`06:00Z`
   Catalogue functions take the caller's `tx` and open none. A test expecting a refusal from a write
   catches it OUTSIDE the transaction, around the whole `withTransaction` (CLAUDE.md §3), and
   asserts the domain code with `toMatchObject({ code, params })`, never `toBeInstanceOf(Error)`.
-- **Writes in this order** (a unique index the final state satisfies can still be broken one row at
-  a time, CLAUDE.md §3): settle, then cancel the overtaken, then insert or move the edition.
+- **Writes in this order:** settle, then insert or move the edition. No placement cancels
+  anything; only `cancelMenuPublication` does.
 - **Never move the live pointer to a lower number.** `settleDue` compares with the pointer's current
   number and leaves it when the candidate is not higher (a planted inconsistent row tests this).
 - **The draft is never read for writing by queue, reschedule or cancel:** they write only
@@ -544,7 +592,7 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
      queued version 2, queued after it → `unchanged` `{ number: 2 }`; but a draft identical to the
      live version 1 queued after a different version 2 is ACCEPTED as version 3 (going back to
      earlier content needs a new edition, spec §3).
-  5. **Overtaking is refused until Task 3 adds the decision.** With version 2 queued for the 9th:
+  5. **Overtaking is refused.** With version 2 queued for the 9th:
      queuing for the 8th, and queuing for the 9th at the same minute, each refuse
      `menu_publication.overtakes_queued` `{ menuId, overtaken: [{ versionId: <v2>, number: 2,
      activatesAt: "2026-10-09T06:00:00.000Z" }] }`; queuing for the 10th succeeds.
@@ -580,12 +628,12 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
 - [ ] Add the table and its constraints to `schema/publication.ts` as specified above, classify it,
   add the codes, generate (`pnpm --filter @waitron/catalogue db:generate`), read the SQL.
 - [ ] Implement `nextNumber` (extracted from `publishMenu:455-459`, which then calls it),
-  `overtakenBy` (the rule above, with `except`), the refusal in `publishMenu` (only after the
-  "already live" return, so a no-op publish stays a no-op), and `queueMenuPublication`,
-  `cancelMenuPublication`, `listMenuPublications` in `menu-schedule.ts`. Queue checks, in order:
-  build the document; clashes; hash; `activatesAt > at`; overtaken (refused here; Task 3 adds the
-  decision); unchanged (the predecessor is the highest-numbered non-cancelled edition, live or
-  queued, after any cancellation); then insert the version (`published_at = at`, `published_by =
+  `overtakenBy` (the rule above, with `except`, which Task 3 removes), the refusal in
+  `publishMenu` (only after the "already live" return, so a no-op publish stays a no-op), and
+  `queueMenuPublication`, `cancelMenuPublication`, `listMenuPublications` in `menu-schedule.ts`.
+  Queue checks, in order: build the document; clashes; hash; `activatesAt > at`; overtaken
+  (refused); unchanged (the predecessor is the highest-numbered non-cancelled edition, live or
+  queued); then insert the version (`published_at = at`, `published_by =
   personId`), its images exactly as `publishMenu:466-467`, and the schedule row.
 - [ ] Run the new file, `src/menu-publication.test.ts src/menu-publication.live.test.ts
   src/migrations.test.ts src/schema/schema-conformance.test.ts` in `@waitron/catalogue`;
@@ -680,60 +728,84 @@ CHECKs, add exactly the entries it names, each with a one-line reason.
 - [ ] Commit: "A queued menu edition is live from its time on every read, and settling it only ever
   moves the menu forwards".
 
-### Task 3: Cancel the overtaken editions on request; reschedule (catalogue)
+### Task 3: Reschedule a queued edition, refused when it would overtake another (catalogue)
 
-**Files:** `packages/catalogue/src/menu-publication.ts` (`resolveOvertaken`; `publishMenu`'s
-`overtaken` option), `menu-schedule.ts` (queue's option; `rescheduleMenuPublication`), `index.ts`;
-tests in `src/menu-schedule.test.ts`.
+**Files:** `packages/catalogue/src/menu-publication.ts` (`overtakenBy` loses `except`; its doc
+comment says why), `menu-schedule.ts` (`rescheduleMenuPublication`; queue keeps calling
+`refuseOvertaken(menuId, await overtakenBy(…))` as Task 1 left it), `index.ts`; tests in
+`src/menu-schedule.test.ts`; `docs/superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md`
+already carries the dated note (added with this plan's amendment), so nothing to edit there.
 
-- [ ] **Failing tests first** (catalogue, real database, explicit `at`):
+**Why `except` goes.** `overtakenBy` matches only rows whose number is below or above `number`,
+and a menu has one version per number (`menu_versions_menu_number_uq`, `publication.ts:26`), so
+the edition being moved, passed with its own number, can never match either clause; `except`
+cannot change an answer, and no test could fail when it is deleted (the ledger's note that it is
+untested at `menu-publication.ts:476` is this). This was read, not run. The implementer confirms
+it by deleting `except` and running the file of Task 1 plus this task's cases: all stay green. The
+clause that IS untested, "a higher number placed no later" (`:482-485`; the ledger's `:483-486`), is covered by case 2(b)
+below; confirm by deleting that clause after the cases pass and watching 2(b) and 2(c) fail with
+an empty `overtaken` (no refusal), then restore it.
+
+- [ ] **Failing tests first** (catalogue, real database, explicit `at`; "nothing written" means
+  the four publication tables compare equal before and after, as Task 1's `publicationTables()`
+  does):
   1. **Owner scenario (1), catalogue level.** v1 live (Soup €5.00); queue v2 for tomorrow (Soup
      €5.50 when queued); change Soup to €6.00; queue v3 for the day after; then change Soup to
      €7.50, so the draft differs from v1, v2 and v3 (without this edit the draft equals v3 and a
-     draft reset to v3 would go unseen). Take the draft's preview hash and a draft snapshot. `rescheduleMenuPublication(v3, this
-     afternoon)` without a decision → `menu_publication.overtakes_queued` naming
-     `[{ number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }]`, nothing written. With
-     `{ overtaken: "cancel" }` → `{ number: 3, activatesAt: "2026-10-07T14:00:00.000Z" }`; v2 is
-     `cancelled` (`cancelled_by` manager-ana). The draft's preview hash and the draft snapshot are
-     unchanged, and the preview still shows Soup at €7.50. At `14:00Z` every read answers v3;
-     activating then and again at tomorrow `06:00Z` leaves v3 live and v2 `cancelled`. Queue the
-     unchanged €7.50 draft → number 4.
-  2. **Owner scenario (2), earlier past a lower number:** v2 tomorrow, v3 the day after;
-     reschedule v3 to this afternoon → refused naming v2 (as case 1); with the decision, v2
-     cancelled.
-  3. **Owner scenario (2), later past a higher number:** reschedule v2 to 2026-10-10 08:00 →
-     refused naming `[{ number: 3, activatesAt: "2026-10-09T06:00:00.000Z" }]`, nothing written;
-     with the decision v3 is cancelled and v2 is queued for the 10th. Moving v2 to exactly v3's
-     instant is refused the same way (equal instants count).
-  4. **The same decision for a new edition and an immediate publish:** with v2 and v3 queued,
-     queuing a new edition for this afternoon names both; with the decision both are cancelled and
-     the new edition is v4. `publishMenu` with v2 queued refuses naming v2; with `{ overtaken:
-     "cancel" }` v2 is cancelled and the published version is 3 and live at once.
-  5. **No overtake, no effect:** `overtaken: "cancel"` on a request that overtakes nothing cancels
-     nothing; rescheduling v3 later (still after v2) or v2 earlier (still before v3) succeeds
-     without a decision; rescheduling to the same instant succeeds and writes nothing.
-  6. **Refusals:** reschedule to a past instant → `time_past`; of an unknown id →
-     `menu_publication.not_found`; of a cancelled edition → `not_queued` `{ state: "cancelled" }`;
-     of a due edition → `not_queued` `{ state: "activated" }` (settle first).
-  7. **Writes touch only the publication tables** (spy, as Task 1 case 8), for reschedule and for a
-     publish with the decision.
-  8. **Concurrency** (`racePair`, `packages/catalogue/test/fixtures.ts:221`): two queues of
-     different drafts for different times both succeed with numbers 2 and 3 — the first body queues
-     the current draft for the 8th; the second body, which `racePair` holds until the first has
-     committed, first sets Soup to €6.00 and then queues for the 9th using the hash of that new
-     draft (both inside its own transaction); an activation racing
-     an immediate publish with the decision leaves the pointer on the higher number whichever
-     commits first (run both orders).
+     draft reset to v3 would go unseen). Take the draft's preview hash and a draft snapshot.
+     `rescheduleMenuPublication(v3, this afternoon)` → `menu_publication.overtakes_queued`
+     `{ menuId: <Lunch>, overtaken: [{ versionId: <v2>, number: 2, activatesAt:
+     "2026-10-08T06:00:00.000Z" }] }`, nothing written. `cancelMenuPublication(v2, "manager-ana")`;
+     then `rescheduleMenuPublication(v3, this afternoon)` → `{ number: 3, activatesAt:
+     "2026-10-07T14:00:00.000Z" }`; v2 is `cancelled` with `cancelled_by` manager-ana. The draft's
+     preview hash and the draft snapshot are unchanged, and the preview still shows Soup at €7.50.
+     At `14:00Z` every read answers v3; activating then and again at tomorrow `06:00Z` leaves v3
+     live and v2 `cancelled`. Queue the unchanged €7.50 draft → number 4.
+     **1b. The same, moving v2 earlier instead.** Same setup; `rescheduleMenuPublication(v2,
+     2026-10-07 15:00 = 13:00Z)` succeeds; `rescheduleMenuPublication(v3, this afternoon)` now
+     succeeds; nothing is cancelled. At `13:00Z` every read answers v2, at `14:00Z` v3;
+     activating at `14:00Z` marks both `activated` and leaves the pointer on 3. The draft snapshot
+     is unchanged. (Kept to catalogue level: its two moves both succeed, a route path case 1 of
+     Task 7 already drives, while the order in which the two become live is catalogue logic.)
+  2. **The reschedule refusal in both directions, each writing nothing.** v2 queued for tomorrow,
+     v3 for the day after:
+     (a) a higher number placed earlier: v3 to this afternoon, and v3 to exactly v2's instant
+     (`2026-10-08T06:00Z`, equal instants count), each refuse naming v2 as case 1;
+     (b) a lower number placed later: v2 to 2026-10-10 08:00, and v2 to exactly v3's instant
+     (`2026-10-09T06:00Z`), each refuse naming `[{ versionId: <v3>, number: 3, activatesAt:
+     "2026-10-09T06:00:00.000Z" }]`;
+     (c) with v4 also queued for 2026-10-10 08:00, v2 to 2026-10-11 08:00 refuses naming v3 and v4
+     in ascending number.
+  3. **Moves that keep the order succeed:** v3 later (2026-10-10 08:00) and v2 earlier (still
+     before v3) each succeed and return the new instant; rescheduling to the edition's own instant
+     succeeds and leaves its row as it was.
+  4. **An immediate publish refused for a queued edition goes through once it is cancelled:** with
+     v2 queued and the draft changed, `publishMenu` refuses naming v2 (as Task 1 case 5);
+     `cancelMenuPublication(v2)`; the same `publishMenu` answers `{ number: 3 }` and version 3 is
+     live at once.
+  5. **Refusals:** reschedule to a past instant → `time_past`; of an unknown id →
+     `menu_publication.not_found`; of a version of Dinner → `not_found`; of a cancelled edition →
+     `not_queued` `{ state: "cancelled" }`; of a due edition → `not_queued` `{ state: "activated" }`
+     (settle first, and the refusal rolls the settle back, as Task 2 case 5).
+  6. **Writes touch only the publication tables** (spy, as Task 1 case 8): a reschedule writes only
+     `menu_scheduled_publications` (and `menu_publications` if its settle moved the pointer).
+  7. **Concurrency** (`racePair`, `packages/catalogue/test/fixtures.ts:221`): two queues of
+     different drafts for different times both succeed with numbers 2 and 3 — the first body
+     queues the current draft for the 8th; the second body, which `racePair` holds until the first
+     has committed, first sets Soup to €6.00 and then queues for the 9th using the hash of that new
+     draft (both inside its own transaction). An activation racing an immediate publish while v2
+     is due: the publish settles v2 first, so v2 is no longer queued and does not refuse it, and the
+     pointer ends on version 3 whichever commits first (run both orders).
   Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-schedule.test.ts` and see the new
-  cases fail.
-- [ ] Implement `resolveOvertaken` (refuse, or cancel each overtaken row with `cancelled_at = at`,
-  `cancelled_by = personId`), wire it into queue and publish, and implement
-  `rescheduleMenuPublication`: settle; find the menu's schedule row for the version (`not_found`);
-  require `queued` (`not_queued`); `activatesAt > at`; overtaken by the rule with `except =
-  versionId`; resolve; update `activates_at`.
+  cases fail (no `rescheduleMenuPublication`).
+- [ ] Implement `rescheduleMenuPublication`: settle; find the menu's schedule row for the version
+  (`not_found`); require `queued` (`not_queued`); `activatesAt > at` (`time_past`); read the
+  version's number; `refuseOvertaken(menuId, await overtakenBy(tx, menuId, number, activatesAt))`;
+  update `activates_at`. Remove `except` from `overtakenBy` and its doc comment. Do not add a way
+  to cancel from inside a placement.
 - [ ] Run the catalogue files of Tasks 1–2; typecheck; `pnpm format:check`.
-- [ ] Commit: "Ask before a menu edition overtakes queued ones, cancel them when told to, and move a
-  queued edition in either direction".
+- [ ] Commit: "Move a queued menu edition to another time, refused when it would go live out of
+  number order".
 
 ### Task 4: A queued edition's photos are held like a live version's
 
@@ -866,7 +938,7 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
 
 **Files:** create `apps/server/src/menu-publication-time.ts`, `menu-publication-time.test.ts`,
 `apps/server/src/catalogue-api.menu-schedule.test.ts`; modify `apps/server/src/catalogue-api.ts`
-(routes, the publish route's `overtaken`, `STATUS`); `packages/venue-service/src/index.ts`
+(routes and `STATUS`; the publish route's body and handler are unchanged); `packages/venue-service/src/index.ts`
 (export `localTimeOccurrences`, `offsetMinutes`, `isLocalDate`); `packages/catalogue/src/errors.ts`
 (the three route codes).
 
@@ -898,11 +970,13 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
      `time_past`.
   3. `POST …/publications/:versionId/cancel` → 204; again → 409 `not_queued`; a version of another
      menu → 404 `menu_publication.not_found`; a malformed id → 400 `shared.invalid_id`.
-  4. `POST …/publish` with an edition queued → 409 `menu_publication.overtakes_queued` naming it;
-     with `overtaken: "cancel"` → 200 `{ versionId, number: 3 }` and the edition `cancelled`;
-     `overtaken: "keep"` → 400 `management.request_invalid` `{ field: "overtaken" }`; with nothing
-     queued, `{ expectedHash }` alone behaves as today (the existing "publishing a menu" cases in
-     `catalogue-api.test.ts:4406` stay green).
+  4. **The immediate-publish refusal (owner requirement 2).** With v2 queued and the draft
+     changed, `POST …/publish` → 409 `menu_publication.overtakes_queued` `{ menuId, overtaken:
+     [{ versionId: <v2>, number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }] }`, and `GET
+     …/publications`, `GET …/status` and the four publication tables are unchanged. `POST
+     …/publications/<v2>/cancel` → 204; the same `POST …/publish` → 200 `{ versionId, number: 3 }`,
+     live at once. With nothing queued, `{ expectedHash }` behaves as today (the existing
+     "publishing a menu" cases in `catalogue-api.test.ts:4406` stay green).
   5. A queue whose draft changed since the preview → 409 `menu.changed_since_preview`; a draft
      identical to the live version → 409 `menu_publication.unchanged`.
   6. Each new route with the staff session → 403 `authorization.not_permitted`, nothing written.
@@ -911,9 +985,9 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
 - [ ] Implement the time module on `localTimeOccurrences`, `offsetMinutes`, `isLocalDate`
   (venue-service, now exported) and `validateTimeZone`, `civilDateOf` (`@waitron/reporting`) — no
   second parser. Routes: read the clock with `readLocationClock(tx, requireVenueCfg(deps).locationId)`
-  inside `gated`, call the time module, then the catalogue function with the person id; parse
-  `overtaken` with `requireEnum(body.overtaken, "overtaken", ["cancel"])` only when present. Add the
-  eight codes to `STATUS`.
+  inside `gated`, call the time module, then the catalogue function with the person id. No route
+  reads a field that would cancel an edition. Add the eight codes to `STATUS` (the publish route
+  needs only `overtakes_queued`'s 409, which the catalogue already throws).
 - [ ] Run the two files plus `src/catalogue-api.test.ts -t "publishing a menu"` and
   `pnpm --filter @waitron/venue-service exec vitest run src/hours-clock.test.ts` (it covers
   `localTimeOccurrences`, `hours-clock.test.ts:45`); typechecks; `pnpm format:check`.
@@ -932,48 +1006,56 @@ trigger paragraph); the comment of `scripts/behavioural-triggers.test.ts:100-105
      set €6.00 and `POST` v3 for 2026-10-09 08:00; then set €7.50, so the draft differs from v1, v2
      and v3 (without this edit the draft equals v3, and a draft reset to v3 would go unseen). Read
      the preview hash, `GET …/structure`, and take a draft snapshot straight from the suite's
-     database (every draft table, Global constraints). `PATCH …/publications/<v3>` with `{ activatesAt: { date:
-     "2026-10-07", time: "16:00" } }` → 409 `menu_publication.overtakes_queued` `{ overtaken:
-     [{ versionId: <v2>, number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }] }`, and `GET
-     …/publications` unchanged. Again with `overtaken: "cancel"` → 200 `{ number: 3, activatesAt:
-     "2026-10-07T14:00:00.000Z" }`; v2 `cancelled`. The preview hash, the structure answer and the
-     draft snapshot are unchanged, and the preview still prices Soup at €7.50. Step the clock to 16:00:30 local: `GET …/status` → version 3 live; step to
-     2026-10-08 08:00:30 and call `activateDueMenuPublications`: version 3 still live, v2 still
-     `cancelled`. `POST` the unchanged €7.50 draft → `number: 4`.
-  2. **Owner scenario (2), earlier past a lower number:** `PATCH` v3 before v2 without the decision
-     → 409 naming v2, nothing changed; with it → v2 cancelled.
-  3. **Owner scenario (2), later past a higher number:** `PATCH` v2 to 2026-10-10 08:00 → 409
-     naming v3, and `GET …/publications` is unchanged (as case 2 checks); with the decision → v3
-     cancelled, v2 at `2026-10-10T06:00Z`.
-  4. **The same refusal shape for the three triggers:** the 409 bodies of an overtaking `POST
-     …/publications`, `PATCH …/publications/:id` and `POST …/publish` have the same code and the
-     same `params.overtaken` element shape.
-  5. `PATCH` refusals: a repeated time without occurrence → 400 `time_repeated`; past → 400; a
+     database (every draft table, Global constraints). `PATCH …/publications/<v3>` with
+     `{ activatesAt: { date: "2026-10-07", time: "16:00" } }` → 409
+     `menu_publication.overtakes_queued` `{ menuId, overtaken: [{ versionId: <v2>, number: 2,
+     activatesAt: "2026-10-08T06:00:00.000Z" }] }`, and `GET …/publications` unchanged. `POST
+     …/publications/<v2>/cancel` → 204. The same `PATCH` again → 200 `{ number: 3, activatesAt:
+     "2026-10-07T14:00:00.000Z" }`; `GET …/publications` shows v2 `cancelled` and v3 `queued` at
+     `local: { date: "2026-10-07", time: "16:00", … }`. The preview hash, the structure answer and
+     the draft snapshot are unchanged, and the preview still prices Soup at €7.50. Step the clock
+     to 16:00:30 local: `GET …/status` → version 3 live; step to 2026-10-08 08:00:30 and call
+     `activateDueMenuPublications`: version 3 still live, v2 still `cancelled`. `POST` the
+     unchanged €7.50 draft → `number: 4`.
+  2. **The reschedule refusal in both directions (owner requirement 2).** v2 for 2026-10-08 08:00,
+     v3 for 2026-10-09 08:00: (a) `PATCH` v3 to 2026-10-07 16:00 → 409 naming v2; (b) `PATCH` v2 to
+     2026-10-10 08:00 → 409 naming `[{ versionId: <v3>, number: 3, activatesAt:
+     "2026-10-09T06:00:00.000Z" }]`. After each, `GET …/publications` and the four publication
+     tables are unchanged. A request body that also carries `overtaken: "cancel"` gets the same
+     409 and changes nothing (the field means nothing to the route).
+  3. **The same refusal shape for the three triggers:** the 409 bodies of an overtaking `POST
+     …/publications` (a new edition for 2026-10-08 08:00 while v2 is queued for that minute),
+     `PATCH …/publications/:id` and `POST …/publish` have the same code and the same
+     `params.overtaken` element shape.
+  4. `PATCH` refusals: a repeated time without occurrence → 400 `time_repeated`; past → 400; a
      cancelled edition → 409 `not_queued`; unknown → 404; staff → 403.
-  6. **Concurrency** (`Promise.all` of two `app.request` calls: two transactions, which the write
+  5. **Concurrency** (`Promise.all` of two `app.request` calls: two transactions, which the write
      queue runs one after the other). There is one draft, so two different drafts cannot race here;
-     that race is Task 3 case 8, at catalogue level with `racePair`. (a) Two `POST …/publications`
+     that race is Task 3 case 7, at catalogue level with `racePair`. (a) Two `POST …/publications`
      of the same draft for the SAME minute: exactly one 201 (number 2), one 409
      `menu_publication.overtakes_queued` naming number 2 (whichever runs second finds an edition at
      that instant; equal instants overtake, and the overtake check comes before the unchanged
      check), and one schedule row. (Different minutes would make the loser's code depend on which
      ran first: `unchanged` if it was later, `overtakes_queued` if earlier.) (b) A `POST
-     …/publications` without a decision against a `POST …/publish` of the same draft with
-     `overtaken: "cancel"`: whichever runs first, no edition is left queued and the live number is
-     the menu's highest number (queue first: the publish cancels it; publish first: the queue is
-     refused `menu_publication.unchanged`).
+     …/publications` against a `POST …/publish` of the same draft: exactly one succeeds. Queue
+     first: the publish is refused `overtakes_queued` naming the queued edition, which stays
+     queued. Publish first: the queue is refused `menu_publication.unchanged` (the draft is now
+     the live version) and nothing is queued. Either way every queued edition's number is above
+     the live number, and nothing is cancelled.
   Run the file and see the new cases fail (no `PATCH` route).
-- [ ] Add the route; update `product-categories.md` (state what the routes do and refuse, and that
-  `publishedAt` in a status is when the live version became live).
+- [ ] Add the route; update `product-categories.md` (state what the routes do and refuse, that an
+  overtaking request is refused and how the manager clears it, and that `publishedAt` in a status
+  is when the live version became live).
 - [ ] Run the file, `src/catalogue-api.test.ts -t "publishing a menu"`, typecheck,
   `pnpm format:check`.
-- [ ] Commit: "Move a queued menu edition through the routes, asking before it overtakes another".
+- [ ] Commit: "Move a queued menu edition through the routes, refused when it would go live out of
+  number order".
 
 ### Task 8: Menus shows the queue and cancels an edition
 
 **Files:** `apps/dashboard/src/api/client.ts` (`getMenuPublications`,
-`scheduleMenuPublication`, `rescheduleMenuPublication`, `cancelMenuPublication`, and
-`publishMenu(id, expectedHash, overtaken?)` sending `overtaken` only when given),
+`scheduleMenuPublication`, `rescheduleMenuPublication`, `cancelMenuPublication`; `publishMenu`
+is unchanged),
 `api/live-queries.ts` (`menu_scheduled_publications` in `MENU_PUBLICATION_READS`; a
 `getMenuPublications` entry over `menu_scheduled_publications`, `menu_publications`,
 `menu_versions`, `locations`); create `apps/dashboard/src/widgets/menu-publications.ts`,
@@ -1017,7 +1099,12 @@ so each needs a mock function in the stub; `publishMenu` is already there),
 - [ ] Implement with shared primitives only (`wt-data-table`, `wt-row-actions`, `wt-dialog`,
   `wt-form-actions`, `wt-button`); cells styled with `part=`; every colour and space a `--wt-*`
   token. The widget owns a `DashboardQueries` for `getMenuPublications`. English and Spanish
-  strings for everything shown; wording for all eight codes in `codes.ts`.
+  strings for everything shown; wording for all eight codes in `codes.ts`. `codeMessage` reads no
+  params, so `overtakes_queued`'s `codes.ts` sentence is the fallback that names no edition
+  (English "A version that is already scheduled would go live in the wrong order. Cancel it or
+  change its time, then try again."; Spanish "Una versión ya programada se publicaría en el orden
+  equivocado. Cancélala o cambia su hora y vuelve a intentarlo."); Tasks 9–11 show the sentence
+  that names each edition.
 - [ ] Run the files above, `src/screens/menus-screen.test.ts src/screens/menus-screen.a11y.test.ts
   src/screens/menus-screen.heading.test.ts src/screens/menu-details.unsaved.test.ts
   src/widgets/menu-preview.test.ts src/api/live-queries.test.ts`, `pnpm exec vitest run scripts/live-subscriptions.test.ts
@@ -1026,10 +1113,35 @@ so each needs a mock function in the stub; `publishMenu` is already there),
   headroom before the browser runs (CLAUDE.md §2).
 - [ ] Commit: "Show a menu's scheduled versions on its Preview tab, and cancel one after asking".
 
-### Task 9: Schedule a publication at a venue-local date and time
+### Task 9: Schedule a publication at a venue-local date and time; name the editions in the way
 
-**Files:** `apps/dashboard/src/widgets/menu-publications.ts`, `menu-publications.test.ts`, its
-a11y file; create `menu-publications.unsaved.test.ts`; `i18n/strings.ts`.
+**Files:** `apps/dashboard/src/widgets/menu-publications.ts` (the schedule form, and the exported
+pure helper `overtakeSentence`), `menu-publications.test.ts`, its a11y file; create
+`menu-publications.unsaved.test.ts`; `i18n/strings.ts`.
+
+**The overtake sentence** (used by Tasks 9, 10 and 11). `overtakeSentence(overtaken, placed,
+answer)`: `overtaken` is the refusal's `params.overtaken`; `placed` is the number of the edition
+being moved, or `null` for a new edition or an immediate publish (which is above every number);
+`answer` is a `MenuPublicationsAnswer` read AFTER the refusal (the caller reads
+`getMenuPublications(menuId)` once). Each edition in the way is named by its number and its
+venue-local time from the matching `answer.editions[].local` (by `versionId`), formatted as the
+list formats it (Task 8 case 1: "8 Oct 2026, 08:00", the offset added only for a time that occurs
+twice). Editions with a number below `placed` (all of them when `placed` is `null`) must go live
+first, so the advice is "cancel it or move it earlier"; editions above it must go live after, so
+the advice is "cancel it or move it later". One sentence per non-empty group, the editions joined
+with `Intl.ListFormat` in the screen language. It returns `null` when an edition the refusal names
+is not in the answer (the queue changed meanwhile) — the caller then shows `codeMessage(code)`, as
+it does when the read itself fails. Strings (`menu_publications.*`, beside the widget's own):
+
+| Key | English | Spanish |
+| --- | --- | --- |
+| `in_the_way_earlier` | Version {number}, scheduled for {time}, must go live first. Cancel it or move it earlier, then try again. | La versión {number}, programada para el {time}, debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo. |
+| `in_the_way_earlier_many` | Versions {list} must go live first. Cancel them or move them earlier, then try again. | Las versiones {list} deben publicarse antes. Cancélalas o adelántalas y vuelve a intentarlo. |
+| `in_the_way_later` | Version {number}, scheduled for {time}, must go live after this one. Cancel it or move it later, then try again. | La versión {number}, programada para el {time}, debe publicarse después de esta. Cancélala o retrásala y vuelve a intentarlo. |
+| `in_the_way_later_many` | Versions {list} must go live after this one. Cancel them or move them later, then try again. | Las versiones {list} deben publicarse después de esta. Cancélalas o retrásalas y vuelve a intentarlo. |
+
+`{list}` items read "2 (8 Oct 2026, 08:00)" / "2 (8 oct 2026, 08:00)", so two read "Versions 2 (8
+Oct 2026, 08:00) and 3 (9 Oct 2026, 08:00) must go live first. …".
 
 - [ ] **Failing browser tests first:**
   1. "Schedule a publication…" opens a `wt-dialog` form with a required date `wt-input
@@ -1039,121 +1151,141 @@ a11y file; create `menu-publications.unsaved.test.ts`; `i18n/strings.ts`.
      focus goes to the first invalid field, and the action stays disabled until they are filled.
   2. A valid entry calls `scheduleMenuPublication("menu-lunch", { expectedHash: <preview hash>,
      activatesAt: { date, time } })` once; on success the dialog closes and the list re-reads.
-  3. `menu_publication.time_skipped` → its sentence under the time field ("The clock skips 02:30 on
+  3. **The new-schedule refusal (owner requirement 2), English and Spanish** (restore the language
+     after each case, CLAUDE.md §4). With v2 queued for 8 Oct 08:00, scheduling for 2026-10-08
+     08:00 is refused `menu_publication.overtakes_queued` naming v2: `getMenuPublications` is read
+     once more, the time field shows "Version 2, scheduled for 8 Oct 2026, 08:00, must go live
+     first. Cancel it or move it earlier, then try again." (Spanish "La versión 2, programada para
+     el 8 oct 2026, 08:00, debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo."),
+     the bottom message is "Correct the highlighted fields to continue.", the entered values stay,
+     the dialog stays open, and "Schedule" stays enabled (a refusal never disables the action).
+     Changing the time removes the field's sentence and the bottom message. With two editions in
+     the way the sentence reads the `_many` form; when the re-read fails, or no longer lists a
+     named edition, the field shows the `codes.ts` fallback instead. Nothing in the dialog offers
+     to cancel anything.
+  4. `overtakeSentence` directly (pure): `placed` 3 with v2 in the way → the "earlier" sentence;
+     `placed` 2 with v3 in the way → the "later" sentence; a repeated local time carries its offset
+     ("25 Oct 2026, 02:30 (UTC+01:00)"); a mix of lower and higher numbers gives both sentences,
+     lower first; a named edition missing from the answer → `null`.
+  5. `menu_publication.time_skipped` → its sentence under the time field ("The clock skips 02:30 on
      28 Mar 2027. Choose another time."), action enabled; `time_past` → under the time field;
      `menu.changed_since_preview` and `menu_publication.unchanged` → the bottom message only.
-  4. `menu_publication.time_repeated` → a required `wt-combobox` named `occurrence` appears under
+  6. `menu_publication.time_repeated` → a required `wt-combobox` named `occurrence` appears under
      the time field, offering "First 02:30 (UTC+02:00)" and "Second 02:30 (UTC+01:00)" from the
      refusal's `occurrences`, with the sentence "02:30 happens twice on 25 Oct 2026, because the
      clocks go back. Choose which." The action is disabled until one is chosen; choosing "Second"
      and submitting sends `occurrence: "later"`; changing the date or time removes the field. In
      Spanish: "Primera 02:30 (UTC+02:00)", "Segunda 02:30 (UTC+01:00)".
-  5. The button is absent while the preview has clashes or failed to load, and when the draft's
+  7. The button is absent while the preview has clashes or failed to load, and when the draft's
      hash equals the latest scheduled-or-live edition's `contentHash`.
   `menu-publications.unsaved.test.ts`, modelled on `shift-dialog.unsaved.test.ts`: a typed date
   warns on Escape and on leaving the screen; a submitted value cleared by success does not.
-  a11y: the form untouched, with field errors, and with the occurrence choice, both themes.
+  a11y: the form untouched, with field errors, with the overtake sentence under the time field, and
+  with the occurrence choice, both themes.
   Run the three files and see them fail.
 - [ ] Implement following the forms contract (`design-system.md:1379` onwards) with a draft scope
-  from `leaveCoordinatorFor`. Every refusal is placed by what its code carries.
+  from `leaveCoordinatorFor`. Every refusal is placed by what its code carries. The overtake
+  refusal goes under the TIME field: its code is thrown only for the instant the request asked
+  for (`menu-schedule.ts`, `menu-publication.ts`, Task 3's reschedule), as `time_past`'s is, and
+  this plan places both under the same field.
 - [ ] Run the widget's three files and `src/screens/menus-screen.test.ts`; dashboard typecheck;
   `pnpm format:check`.
-- [ ] Commit: "Schedule a menu publication for a date and time in the venue's clock, and ask which
-  02:30 when the clocks go back".
+- [ ] Commit: "Schedule a menu publication for a date and time in the venue's clock, name the
+  versions that are in the way, and ask which 02:30 when the clocks go back".
 
-### Task 10: The overtake choice for an immediate publish and a new schedule
+### Task 10: An immediate publish refused for a queued edition names it
 
-**Files:** create `apps/dashboard/src/widgets/menu-overtake-dialog.ts`,
-`menu-overtake-dialog.test.ts`, `menu-overtake-dialog.a11y.test.ts`; modify
-`widgets/menu-publications.ts` (overtake handling for a new schedule), `screens/menus-screen.ts`
-(`#publish` handles the refusal, `:1266-1300`), `widgets/menu-preview.ts` (only if the event detail
-needs `overtaken`); tests `menu-publications.test.ts`, `screens/menus-screen.test.ts`;
-`i18n/strings.ts`.
+**Files:** `apps/dashboard/src/screens/menus-screen.ts` (`#publish` `:1266-1300` builds the
+refusal's sentence); test `screens/menus-screen.test.ts`. No new component, no dialog: the refusal
+is shown where every publish refusal is shown today, the preview's result paragraph (survey §3).
+The owner's watcher note says an immediate publish shows it "in the dialog's message"; no dialog is
+open when the answer comes back (the warnings dialog closes as the request is sent, and a draft
+with no warnings opens none), so the result paragraph is that message (Decision 1).
 
-The dialog is one component for all three triggers (Task 11 adds the reschedule one). English:
-heading "Cancel the versions this would overtake?"; one line per overtaken edition, "Version 2 — 8
-Oct 2026, 08:00"; the sentence "They would never become live afterwards, so they are cancelled.
-Their numbers are not used again."; buttons "Keep them" and, by trigger, "Cancel version 2 and
-publish now" (a publish), "Cancel version 2 and schedule" (a new edition), "Cancel version 2 and
-move version 3" (a reschedule, Task 11); several overtaken read "Cancel versions 2 and 3 and …".
-Spanish: "¿Cancelar las versiones que esto adelantaría?", "Versión 2 — 8 oct 2026, 08:00", "Nunca
-llegarían a publicarse después, así que se cancelan. Sus números no se vuelven a usar.",
-"Mantenerlas", "Cancelar la versión 2 y publicar ahora", "Cancelar la versión 2 y programar",
-"Cancelar la versión 2 y mover la versión 3", "Cancelar las versiones 2 y 3 y …".
-
-- [ ] **Failing browser tests first.**
-  1. `menu-overtake-dialog.test.ts`: given one and then three overtaken editions and each trigger,
-     the dialog shows the lines and buttons above, in English and in Spanish (restore the language
-     after each case, CLAUDE.md §4); "Keep them" dispatches a keep event and nothing else; the
-     confirm button dispatches a confirm event once.
-  2. **Immediate publish** (`menus-screen.test.ts`): `publishMenu` rejecting with
-     `menu_publication.overtakes_queued` shows the dialog; "Keep them" leaves
-     `client.publishMenu.mock.calls` as `[["menu-lunch", LUNCH_HASH]]`; confirming adds
-     `["menu-lunch", LUNCH_HASH, "cancel"]` and shows "Lunch Menu version 3 is now live." The same
-     in Spanish. Publishing with nothing queued still sends exactly two arguments (the pins at
-     `:5205, :5269` stay green).
-  3. **A new schedule that overtakes** (`menu-publications.test.ts`): `scheduleMenuPublication`
-     rejecting with the refusal shows the dialog with "Cancel version 2 and schedule"; "Keep them"
-     sends nothing more and keeps the schedule form's values; confirming re-sends the same body
-     plus `overtaken: "cancel"` once.
-  a11y (`menu-overtake-dialog.a11y.test.ts`): one and three editions, both themes.
-  Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-overtake-dialog.test.ts
-  src/widgets/menu-overtake-dialog.a11y.test.ts src/widgets/menu-publications.test.ts
-  src/screens/menus-screen.test.ts` and see the new cases fail.
-- [ ] Implement. The host's `#publish` keeps the hash, shows the dialog on the refusal, and on
-  confirm calls `publishMenu(menuId, hash, "cancel")`; other refusals behave as today.
-- [ ] Run the files above, `src/screens/menus-screen.a11y.test.ts`, dashboard typecheck,
+- [ ] **Failing browser tests first** (`menus-screen.test.ts`; restore the language after each
+  case):
+  1. **The immediate-publish refusal (owner requirement 2), English and Spanish.** `publishMenu`
+     rejects with `menu_publication.overtakes_queued` naming v2 (8 Oct 2026, 08:00), and the
+     stub's `getMenuPublications` lists v2 with that `local`. After pressing Publish, the result
+     paragraph reads "Lunch Menu was not published: version 1 is still live. Your changes are
+     still saved. Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move
+     it earlier, then try again." and in Spanish "No se ha publicado Lunch Menu: la versión 1 sigue
+     publicada. Tus cambios siguen guardados. La versión 2, programada para el 8 oct 2026, 08:00,
+     debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo."
+     `client.publishMenu.mock.calls` is `[["menu-lunch", LUNCH_HASH]]`; the Publish button is still
+     offered and enabled; nothing else was written (`writeCalls`).
+  2. The same through the warnings confirmation: confirming sends one publish, the dialog closes
+     as today, and the refusal shows in the result paragraph as in case 1.
+  3. When `getMenuPublications` rejects after the refusal, the result paragraph carries the
+     `codes.ts` fallback sentence instead. Publishing with nothing queued still sends exactly two
+     arguments (the pins at `:5205, :5269` stay green).
+  Run `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts` and see
+  the new cases fail.
+- [ ] Implement: in `#publish`'s catch, for `menu_publication.overtakes_queued` read
+  `this.api.getMenuPublications(menuId)` once and set the reason to `overtakeSentence(overtaken,
+  null, answer) ?? codeMessage(code)`; a failed read gives `codeMessage(code)`. Other refusals
+  behave as today, including the path for a refusal that lands after the person left the menu.
+- [ ] Run the file, `src/screens/menus-screen.a11y.test.ts`, dashboard typecheck,
   `pnpm format:check`.
-- [ ] Commit: "Ask the manager to cancel the versions an immediate publish or a new schedule would
-  overtake".
+- [ ] Commit: "When a publish is refused because a version is already scheduled, say which version
+  and what to do".
 
 ### Task 11: Change a queued version's time, and the owner's scenarios in the browser
 
-**Files:** `widgets/menu-publications.ts` ("Change time" row action and dialog, overtake handling
-for a reschedule), tests `menu-publications.test.ts`, `menu-publications.unsaved.test.ts`, the
-widget's a11y file; `i18n/strings.ts`; `docs/developers/design-system.md` (a paragraph after the
-Menus list one at `:691-700`); `docs/backlog.md` (the entry at `:1023-1033`).
+**Files:** `widgets/menu-publications.ts` ("Change time" row action and dialog, the overtake
+refusal for a reschedule), tests `menu-publications.test.ts`, `menu-publications.unsaved.test.ts`,
+the widget's a11y file; `i18n/strings.ts`; `docs/developers/design-system.md` (a paragraph after
+the Menus list one at `:691-700`); `docs/backlog.md` (the entry at `:1023-1033`).
 
 - [ ] **Failing browser tests first.** A stateful stub keeps the editions, answers the overtake
-  refusal by the rule (the "rule this plan enforces" above), and has a draft hash the test changes
-  to stand for a draft edit.
+  refusal by the rule (the "rule this plan enforces" above), cancels on `cancelMenuPublication`,
+  and has a draft hash the test changes to stand for a draft edit. Each case runs in English and
+  in Spanish (restore the language after each).
   1. **Owner scenario (1), browser.** v1 live. Schedule v2 for 2026-10-08 08:00; change the stub's
      draft hash (an edit); schedule v3 for 2026-10-09 08:00; change the draft hash again, so the
      draft differs from v3 (and from v1 and v2). "Change time" on v3 to 2026-10-07 16:00 → the
-     dialog shows "Version 2 — 8 Oct 2026, 08:00" and "Cancel version 2 and move version 3"; "Keep
-     them" → no further request, the list unchanged; again and confirm →
+     time field shows "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or
+     move it earlier, then try again." (Spanish as in Task 9 case 3), the bottom message "Correct
+     the highlighted fields to continue.", the values kept, "Change time" enabled, the list
+     unchanged, and the dialog offers nothing that cancels. Close the dialog. "Cancel this
+     version" on v2 and confirm → `cancelMenuPublication("menu-lunch", <v2>)` once; the list shows
+     v2 "Cancelled". "Change time" on v3 to 2026-10-07 16:00 again →
      `rescheduleMenuPublication("menu-lunch", <v3>, { activatesAt: { date: "2026-10-07", time:
-     "16:00" }, overtaken: "cancel" })` once; the list shows v2 "Cancelled" and v3 "Scheduled" at
-     7 Oct 2026, 16:00. No draft-writing method was called (`writeCalls` names only the two
-     schedules and the reschedule), the preview's hash is the one set before the reschedule, and
-     "Schedule a publication…" is still offered (the draft differs from every edition, so Task 9
-     case 5 does not hide it); scheduling now answers version 4. The same run in Spanish shows
-     "Versión 2 — 8 oct 2026, 08:00" and "Cancelar la versión 2 y mover la versión 3".
-  2. **Owner scenario (2), earlier past a lower number:** "Change time" on v3 to before v2 shows the
-     dialog naming version 2, in English and in Spanish; dismissing sends nothing; confirming sends
-     the decision once.
-  3. **Owner scenario (2), later past a higher number:** "Change time" on v2 to 2026-10-10 08:00 →
-     the dialog names "Version 3 — 9 Oct 2026, 08:00" and offers "Cancel version 3 and move version
-     2"; in Spanish "Versión 3 — 9 oct 2026, 08:00" and "Cancelar la versión 3 y mover la versión
-     2"; dismissing sends nothing and the list is unchanged; confirming sends `overtaken: "cancel"`
-     once and the list shows v3 "Cancelled" and v2 at 10 Oct 2026, 08:00.
-  4. The "Change time" form starts at the edition's local date and time, follows the Task 9 rules
+     "16:00" } })`, the dialog closes, and the list shows v3 "Scheduled" at 7 Oct 2026, 16:00. No
+     draft-writing method was called (`writeCalls` names only the two schedules, the two
+     reschedules and the cancel), the preview's hash is the one set before the first reschedule,
+     and "Schedule a publication…" is still offered (the draft differs from every edition, so Task
+     9 case 7 does not hide it); scheduling now answers version 4.
+  2. **The reschedule refusal, later direction (owner requirement 2).** v2 for 8 Oct, v3 for 9 Oct.
+     "Change time" on v2 to 2026-10-10 08:00 → the time field shows "Version 3, scheduled for 9 Oct
+     2026, 08:00, must go live after this one. Cancel it or move it later, then try again." (Spanish
+     "La versión 3, programada para el 9 oct 2026, 08:00, debe publicarse después de esta.
+     Cancélala o retrásala y vuelve a intentarlo."); the list is unchanged; exactly one reschedule
+     request was sent, and no cancel.
+  3. The "Change time" form starts at the edition's local date and time, follows the Task 9 rules
      (skipped, repeated, past), and has a draft scope (`menu-publications.unsaved.test.ts` gains its
-     case). The row action appears on queued rows only (Task 8 case 2).
-  a11y: the "Change time" form untouched and with the occurrence choice, both themes.
+     case). The row action appears on queued rows only (Task 8 case 2), beside "Cancel this
+     version", as two separate actions.
+  a11y: the "Change time" form untouched, with the overtake sentence, and with the occurrence
+  choice, both themes.
   Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-publications.test.ts
   src/widgets/menu-publications.unsaved.test.ts src/widgets/menu-publications.a11y.test.ts` and see
   the new cases fail.
-- [ ] Implement, reusing Task 9's form and Task 10's dialog.
+- [ ] Implement, reusing Task 9's form and `overtakeSentence` (with `placed` = the moved edition's
+  number).
 - [ ] Visual check: `wa-wt demo <this worktree's name>`, sign in, open a menu's Preview tab, queue
-  two editions and trigger each dialog; look in light and dark at 390 px and 1280 px (the row menu
-  stays on screen at 390 px; the dialog's lines wrap without overflow).
-- [ ] Docs: the design-system paragraph (where the queue sits, what each state says, the dialog's
-  wording rule); `docs/backlog.md`: the entry says W99 is done with this PR, and that the menus list
-  still shows "Unpublished" for a menu whose only edition is queued (Decision 11).
+  two editions, then trigger the refusal from a new schedule, from "Change time" in each direction
+  and from Publish; look in light and dark at 390 px and 1280 px (the row menu stays on screen at
+  390 px; the sentence under the time field wraps without overflow).
+- [ ] Docs: the design-system paragraph (where the queue sits, what each state says, and that an
+  overtaking request is refused with a sentence naming each version in the way, under the time
+  field or in the publish result, never with a choice to cancel); `docs/backlog.md`: the entry says
+  W99 is done with this PR, and that the menus list still shows "Unpublished" for a menu whose only
+  edition is queued (Decision 11).
 - [ ] Run every dashboard file of Tasks 8–11, the root guards of Task 8, dashboard typecheck,
   `pnpm format:check`.
-- [ ] Commit: "Move a queued menu version to another time, asking before it overtakes another".
+- [ ] Commit: "Move a queued menu version to another time, refused with the versions in the way
+  named".
 - [ ] During `/finish-branch`: the pre-push hook once; current-head CI for catalogue, media,
   server, dashboard and the root guards; the migration jobs; the duty's failed-start case.
 
@@ -1167,15 +1299,19 @@ Menus list one at `:691-700`); `docs/backlog.md` (the entry at `:1023-1033`).
 2. Several overdue editions after a restart expose only the latest, at once, in reads and in the
    single pointer write (Task 2 cases 1–2, Task 5 case 1 and the boot case).
 3. No path leaves a lower-numbered queued edition able to activate after a higher one: new queue,
-   immediate publish, reschedule earlier, reschedule later, equal instants (Task 3 cases 1–5,
-   Task 7 cases 1–4).
-4. The decision is explicit and identical for all three triggers; without it nothing is written,
-   settle included (Task 2 case 5, Task 3, Task 7 case 4, Tasks 10–11).
+   immediate publish, reschedule earlier, reschedule later, equal instants (Task 1 case 5, Task 3
+   cases 1–4, Task 7 cases 1–3).
+4. Overtaking is refused the same way for all three triggers, writes nothing (settle included),
+   and cancels nothing; no request field, dialog or button turns it into a cancellation; the
+   sentence names each edition in the way with its venue-local time and the right advice for its
+   direction (Task 2 case 5, Task 3 case 2, Task 6 case 4, Task 7 cases 2–3, Tasks 9–11). The
+   overtake sentence is placed under the time field, and a publish's in its result paragraph;
+   check that against the forms contract (Task 9's last step gives the reasoning).
 5. The draft is never touched by queue, reschedule, cancel or activation (the write spies; Task 3
    case 1 and Task 7 case 1, each with a draft edited after v3 so it differs from every edition,
    and a snapshot of every draft table; Task 11 case 1).
-6. Clock-change input cannot silently pick the wrong occurrence (Task 6 time cases, Task 9 case 4).
-7. Concurrency: no duplicate number, no backwards pointer (Task 3 case 8, Task 7 case 6).
+6. Clock-change input cannot silently pick the wrong occurrence (Task 6 time cases, Task 9 case 6).
+7. Concurrency: no duplicate number, no backwards pointer (Task 3 case 7, Task 7 case 5).
 8. The live read stays one statement with the pinned SQL shapes, and the sale path is unchanged
    except for reading the right version (Task 2 cases 7, 9).
 9. The duty is primary-only, stops on a failed start and on close, and cannot take the change
@@ -1219,12 +1355,20 @@ and the doc comments in `packages/media/src/images.ts` that say "live" now say "
 
 ## Decisions taken in this plan
 
-1. **"Replace" is one decision, `overtaken: "cancel"`** (owner question W99, Option 1, built as the
-   default): the same for an immediate publish, a new queued edition and a reschedule; the edition
-   being published or moved takes the overtaken ones' place. Without it the request is refused
-   `menu_publication.overtakes_queued`, naming each overtaken edition's number and time, and writes
-   nothing; the dashboard turns the refusal into the choice and re-sends. The field is an enum, so a
-   later "re-queue its contents as a new edition" value (Option 2) is additive.
+1. **Overtaking is refused, with no decision field** (owner, 2026-10-07 ~10:45, answering question
+   W99: "perhaps we just refuse to schedule a newer version before an older version, which leaves
+   the user the option of deleting or rescheduling the older version"). An immediate publish, a
+   new queued edition and a reschedule that would overtake are each refused
+   `menu_publication.overtakes_queued` `{ menuId, overtaken: [{ versionId, number, activatesAt }] }`
+   and write nothing. The manager clears it through the edition's own Cancel or Change time action
+   and tries again. The refusal applies in both directions of Decision 2; the dashboard's sentence
+   names each edition in the way by number and venue-local time and advises "cancel it or move it
+   earlier" for one that must go live first and "cancel it or move it later" for one that must go
+   live after (two directional sentences rather than one that covers both, because the dashboard
+   knows the direction from the numbers and the specific advice is the one that works). For a new
+   schedule and a reschedule the sentence sits under the time field with the form's generic bottom
+   message; for an immediate publish it is the `{reason}` of the preview's existing publish result
+   paragraph, because no dialog is open when that answer arrives (Task 10).
 2. **Overtaking is defined by number against time, in both directions, and equal instants count.**
    A new edition always takes the next number, so queuing it no later than an existing queued one
    overtakes that one.
