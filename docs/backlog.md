@@ -920,7 +920,7 @@ unused `units` property is gone (it closes W75's leftover).
   its photo with an own-or-inherited colour ring, or its colour square; it opens Colour… and
   Change photo…, which opens the existing editor with the photo field focused. Category and
   section squares still open their colour picker directly.
-- **A327, owner 2026-10-07 — DONE (the swatch opens the product's Edit dialog):** a product's
+- **A327, owner 2026-10-07 — DONE (#1349; the swatch opens the product's Edit dialog):** a product's
   leading slot, in the Products list and in the Menus Structure tree, is now one link named
   "Edit <name>" that opens the product's Edit dialog with its photo field focused; the menu holding
   Colour… and Change photo… is gone. A product's colour is set in that dialog. The product colour
@@ -937,6 +937,13 @@ unused `units` property is gone (it closes W75's leftover).
     width): at 440px or narrower the Menus Structure tree hides every swatch, and a product row's
     Actions menu holds only "Remove from <section>", so on a phone that tree offers no way to open
     the product. The Products list's Actions menu still offers Edit.
+  - Open, found by A327's review and NOT tested: the dashboard's in-app link handling
+    (`#onAppLink`, `apps/dashboard/src/dashboard-app.ts`, from W69 #1325) catches a `/manage` link
+    click before the link's own handler runs; #1349 lets a link opt out with `data-own-click`. By
+    reading only, the Printers screen's "all printers" breadcrumb has a handler that refuses to
+    leave while a printer is saving, which the app's handling would skip. Five other self-handled
+    links read as going where the app would send them anyway. Next: a test mounting that
+    breadcrumb under the real app while a save is out; if it navigates, mark it `data-own-click`.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
