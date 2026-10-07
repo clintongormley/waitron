@@ -377,10 +377,11 @@ export class WtCombobox extends LitElement {
   @property() searchPlaceholder = "Search";
   @property({ type: Boolean, reflect: true }) multiple = false;
   @property() value = "";
-  /** Treat an offered empty-string option as a selection, while its value remains empty. */
+  /** Treat an offered empty-string option as a selection, while its value remains empty. In a
+   * multiple choice it is the chosen row while `values` is empty, and choosing it empties them. */
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
-  /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`) when every
-   * possible trigger text is one of them. Ignored with `appearance="link"`. */
+  /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`), and in a
+   * multiple choice the `countLabel` of every choosable option. Ignored with `appearance="link"`. */
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
@@ -457,6 +458,8 @@ export class WtCombobox extends LitElement {
 
   private isSelected(option: ComboboxOption): boolean {
     if (option.action) return false;
+    if (this.multiple && this.showEmptyOption && option.value === "")
+      return this.values.length === 0;
     return this.multiple ? this.values.includes(option.value) : this.value === option.value;
   }
 
@@ -468,7 +471,10 @@ export class WtCombobox extends LitElement {
    * once more than one is chosen. */
   private get selectedText(): string {
     if (this.multiple) {
-      if (this.values.length === 0) return "";
+      if (this.values.length === 0) {
+        const empty = this.showEmptyOption && this.options.find((o) => !o.action && o.value === "");
+        return empty ? closedText(empty) : "";
+      }
       if (this.values.length === 1) {
         const chosen = this.options.find((o) => !o.action && o.value === this.values[0]);
         return chosen ? closedText(chosen) : "";
@@ -484,7 +490,11 @@ export class WtCombobox extends LitElement {
   // just after it closes can still reach its search box.
   private commitSelection(optionValue: string, sourceEvent: Event): void {
     if (this.disabled) return;
-    if (this.multiple) {
+    if (this.multiple && this.showEmptyOption && optionValue === "") {
+      if (this.values.length === 0) return;
+      this.values = [];
+      dispatchWtChange(this, sourceEvent, { values: this.values });
+    } else if (this.multiple) {
       this.values = this.values.includes(optionValue)
         ? this.values.filter((v) => v !== optionValue)
         : [...this.values, optionValue];
@@ -917,6 +927,15 @@ export class WtCombobox extends LitElement {
     return rows;
   }
 
+  /** The closed trigger's possible texts; of the counts, only that of every choosable option. */
+  private widthTexts(): string[] {
+    const options = this.options.filter((option) => !option.action);
+    const texts = options.map(closedText);
+    const choosable = options.filter((option) => !option.disabled && option.value !== "").length;
+    if (this.multiple && choosable >= 2) texts.push(this.countLabel(choosable));
+    return texts;
+  }
+
   private renderField({
     id: triggerId,
     invalid,
@@ -975,18 +994,7 @@ export class WtCombobox extends LitElement {
           @keydown=${this.onTriggerKeydown}
         >
           <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
-          ${
-            this.stableWidth
-              ? this.options
-                  .filter((option) => !option.action)
-                  .map(
-                    (option) =>
-                      html`<span class="width-option" aria-hidden="true"
-                        >${closedText(option)}</span
-                      >`,
-                  )
-              : nothing
-          }
+          ${this.stableWidth ? this.widthTexts().map((text) => html`<span class="width-option" aria-hidden="true">${text}</span>`) : nothing}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
       </div>
