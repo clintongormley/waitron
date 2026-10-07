@@ -121,6 +121,36 @@ media's `ImageUsage`; the translation-gap report's kinds). FULL `/finish-branch`
   (`menu-navigation.ts:482-505`).
 - **`includedMenu` readers** (grep 2026-10-07, non-test): `listSource` only
   (`menu-document.ts:657`); `includedMenuHashes` is written at `:230` and read by no non-test code.
+  **`menu_root` readers** (grep `menu_root` over `packages` and `apps`, non-test, 2026-10-07 plan
+  review): `menu-structure.ts:37, 93`, `menu-document.ts:188`, `menu-inclusion.ts:16, 57`,
+  `operations.ts:656` (an inactive included menu's offers), `section-graph.ts:78, 188`,
+  `sections.ts:120`, the two translation queries (`content-translation-report.ts:64-66`,
+  `content-languages.ts:111`) and the role list; none draws a list, so none needs `shownMembers`.
+  **Document-structure readers** (grep `root.members`, `structure.members`, `DocumentMember`,
+  `ZoneMenuMember`, non-test): `menu-document.ts` (`documentImages`, `documentOffers`, `shapeOf`,
+  the order check at `:1049-1052`), `menu-navigation.ts` (`indexMenuOccurrences`, `sectionAt`
+  `:151-162`), `device-home.ts` (`indexDocument`), the till's `menu-browser.ts`, and the dashboard's
+  `customer-menu-renderer.ts`, `menu-preview.ts:309-318` (target words) and `device-home-preview.ts`.
+  No kitchen-routing, printing or venue-service code walks the document (the `section_members`
+  grep finds only the catalogue, the live-query lists and tests).
+- **The same section id can appear more than once in one document** (an included root held by two
+  lists of one menu). Today every copy is identical, so three readers take the first or the last
+  copy and nobody notices: `shapeOf` keeps the FIRST node per id (`menu-document.ts:600-604`), so
+  `section_changed` compares first copies only (`:859-866`); change navigation targets the first
+  occurrence (`menu-navigation.ts:483-488`); and the till's and the preview's `#tile` draw a
+  structural section from `index.sections.get(id)` (`menu-browser.ts:494`,
+  `device-home-preview.ts:351-353`), the copy indexed LAST, never the member it was handed. Once an
+  include carries its own presentation and setting, all three can show or compare the wrong copy
+  (Decision 16).
+- **A change on the included root is attributed to the included menu.** `section_changed`'s
+  `source` is `listSource([...parents[0], sectionId])` (`menu-document.ts:874-878`), and the path
+  ends at the included root, whose node has `includedMenu`, so today every change to that node reads
+  "from the included menu". A change the INCLUDING menu makes (the switch, a fixed name) must not
+  (Decision 7).
+- **The catalogue's own test database has no media tables** (`useCatalogueDb` applies core and
+  catalogue only, `packages/catalogue/test/fixtures.ts:193-195`), and `imageOf` refuses every photo
+  name where `media_images` does not exist (`sections.ts:72-80, 88-93`). Catalogue tests that need a
+  section photo write it straight into the row (`menu-document.test.ts:892`).
 - **Till:** `indexMenu` → `indexDocument` (`apps/till/src/widgets/menu-browser.ts:50-57`;
   `packages/catalogue/src/device-home.ts:91-114`, which keys sections by id with `Map.set`);
   `#trail` (`menu-browser.ts:363-378`) finds the first id anywhere in the index and each next one
@@ -243,7 +273,15 @@ media's `ImageUsage`; the translation-gap report's kinds). FULL `/finish-branch`
    the INCLUDING menu's document, so a save changes its hash and `statusOf` reports `changed`; the
    included menu's own document and `includedMenuHashes` do not change. `diffEntries` reports a
    toggle as `section_changed` with the new field `direct` (with `names`/`image`/`color` when they
-   differ too).
+   differ too), with `source: "this_menu"`: the switch and the fixed values are the including
+   menu's own changes. So that the diff can tell a fixed value from a followed one, an include's
+   node carries `fixed?: IncludeFolderOverrides` — the overrides in force, present only while it is
+   shown as a folder AND fixes something (absent otherwise, so Decision 8's hash stability holds).
+   Attribution for an include node: `direct` → this menu; `names` → this menu when `fixed.names`
+   differs between the two documents, and the included menu when a language fixed in neither
+   differs (both can hold, giving two `section_changed` events, this menu's first); `image` /
+   `color` → this menu when the fixed key (its presence or its value) differs, else the included
+   menu. A section that is not an include keeps today's rule.
 8. **`MENU_DOCUMENT_FORMAT` stays 3.** `direct` is optional and present only when true; the hash
    skips absent keys (`menu-document.ts:344-357`), so every document without a direct include
    hashes exactly as before — a test pins it (Task 4). A live document published before this
@@ -285,9 +323,17 @@ media's `ImageUsage`; the translation-gap report's kinds). FULL `/finish-branch`
     existing member statement: no extra statement for `buildMenuDocuments`, `readMenuStructure` or
     any statement-count pin.
 16. **One included menu in two lists of one menu, with different settings:** each node carries its
-    own setting and presentation and draws correctly in its list. The index keys sections by id
-    (`device-home.ts:105-107`), so a home shortcut to that menu opens the node indexed last. Accepted
-    and pinned by a test (Task 5), not engineered around.
+    own setting and presentation, and each reader must use the COPY it was handed, not the first or
+    last copy with that id (survey, "The same section id can appear more than once"). So: the till's
+    and the preview's `#tile` draw a structural member from the member itself, using the index only
+    to ask whether it holds something to order (`index.sections.has(id)`); a home SHORTCUT still
+    draws from the index, as today. `#trail`'s first step looks first among
+    `shownMembers(structure.members)` and only then in the index, so a tile opened from the home
+    list breadcrumbs its own copy, and a shortcut opens the top-level copy where there is one, else
+    the copy indexed last (`device-home.ts:105-107`; accepted and pinned, Task 5). `diffEntries`
+    compares each copy with the copy at the same path, and change navigation targets the copy
+    whose fields differ (Task 4b). A list cannot hold the same included menu twice
+    (`section_members_child_uq`, `schema/sections.ts:84`), so "the same path" is unambiguous.
 17. **Configuration import refuses a malformed `folder_overrides` or a bad override colour**
     (`setup.request_invalid { field: "section_members.folder_overrides" }`), as it refuses a bad
     section colour.
@@ -342,6 +388,11 @@ export interface Presentation {
   image: string | null;
   color: string | null;
 }
+/** The body that sets one include's folder; the dashboard imports it, so it lives in this leaf. */
+export interface IncludeFolderInput {
+  showAsFolder: boolean;
+  overrides?: IncludeFolderOverrides;
+}
 
 // packages/catalogue/src/section-graph.ts
 export interface MemberRow { /* existing fields */ showAsFolder?: boolean; folderOverrides?: IncludeFolderOverrides; }
@@ -359,8 +410,7 @@ export function folderOverridesFrom(
   stored: IncludeFolderOverrides,
 ): IncludeFolderOverrides;
 
-// packages/catalogue/src/include-folder.ts (NEW, server)
-export interface IncludeFolderInput { showAsFolder: boolean; overrides?: IncludeFolderOverrides }
+// packages/catalogue/src/include-folder.ts (NEW, server; IncludeFolderInput comes from section-types)
 export async function setIncludeFolder(
   tx: Transaction,
   listId: string,
@@ -371,7 +421,8 @@ export async function setIncludeFolder(
 export function checkIncludeFolderRows(rows: Rows | undefined): void; // configuration import
 
 // packages/catalogue/src/menu-document-types.ts
-// DocumentMember section kind gains:  direct?: true;
+// DocumentMember section kind gains:  direct?: true;  fixed?: IncludeFolderOverrides;
+//   (`fixed`: the overrides in force, only while shown as a folder and non-empty — Decision 7)
 // SectionChangeField = "names" | "image" | "color" | "direct";
 // MenuField's single-kind union gains "direct".
 
@@ -411,15 +462,23 @@ leave `names` out when nothing is fixed. `image` / `color` — present (set to `
 - Spanish UI copy: "carta" for menu, as the screen's other strings.
 - English-only identifiers (no Spanish in code outside translations).
 - Comments only for an invariant or a non-obvious why (CLAUDE.md §1).
+- Queries on one transaction are awaited in turn, never `Promise.all` (CLAUDE.md §3).
+- In a catalogue test (no media tables) a photo is written straight into the row
+  (`tx.update(sections)` / `tx.update(sectionMembers)`), as `menu-document.test.ts:892` does;
+  `updateMenuDetails` and `setIncludeFolder` refuse every photo name there. A photo accepted
+  through a write is tested where media's migrations are applied (Tasks 2, 7).
+- Every fixture gives a folder's customer names, the included menu's own customer names and its
+  staff name three different texts (CLAUDE.md §3, "three names"), so a read of the wrong one fails.
 - Coverage bar 98/98/98/95 per package. Focused tests while implementing; the pre-push hook once;
   CI owns package suites.
 - Commit with `git commit -s`, explicit paths staged.
 
 ## Review focus
 
-1. **One included menu in two lists of the same menu, one as a folder and one directly:** each list
-   draws its own way, and a home shortcut to that menu still opens something with its members
-   (Task 4 document case, Task 5 till case).
+1. **One included menu in two lists of the same menu, one as a folder with a fixed name and one
+   directly (or a folder with another name):** each list draws its own copy with its own name, a
+   change to the SECOND include is listed and navigable, and a home shortcut to that menu still
+   opens something with its members (Task 4 case 10, Task 4b, Task 5).
 2. **An include swapped for another menu with `replaceMember`:** the new one starts as a folder that
    follows; it does not wear the old folder name (Task 1).
 3. **The included menu renamed while the Edit dialog is open, the manager changing only the
@@ -428,7 +487,7 @@ leave `names` out when nothing is fixed. `image` / `color` — present (set to `
    only:** the change is refused if the folder's effective names would lack the new default, and
    the report lists the folder (Task 8).
 5. **A photo used only as a folder override, deleted from the library:** refused while the include
-   names it, and the library lists the use with a link to the including menu (Task 2).
+   names it, and the library lists the use with a link to the including menu (Tasks 2, 2b).
 
 ---
 
@@ -492,19 +551,12 @@ leave `names` out when nothing is fixed. `image` / `color` — present (set to `
 **Files:**
 - Create: `packages/media/drizzle/00NN_include_folder_image_references.sql` via
   `pnpm --filter @waitron/media db:generate:custom --name=include_folder_image_references`.
-- Modify: `packages/media/src/images.ts` (`ImageUsage`, `listImageUsagesForFilename`,
-  `countUsages`, the comment at `:34-38`), `packages/media/src/module.ts:15-21`,
-  `packages/media/src/dashboard/client.ts`, `packages/media/src/dashboard/image-library.ts:30-37,
-  349-361`, `packages/media/src/dashboard/strings.ts` (EN and ES),
-  `packages/media/src/dashboard/live-queries.ts:1-11` (add `section_members` to the `images`
-  query, which lists `sections`), `scripts/behavioural-triggers.test.ts:107-119`.
-- Test: `packages/media/src/image-references.test.ts`, `packages/media/src/images.test.ts`,
-  `packages/media/src/dashboard/image-library.test.ts`,
-  `packages/media/src/schema/name-only-upgrade.test.ts:377-413`.
+- Modify: `packages/media/src/module.ts:15-21`, `scripts/behavioural-triggers.test.ts:96-119`.
+- Test: `packages/media/src/image-references.test.ts`,
+  `packages/media/src/schema/name-only-upgrade.test.ts:377-413`,
+  `apps/server/src/configuration-transfer.test.ts`.
 
-**Interfaces:** Consumes the `folder_overrides` column (Task 1). Produces the usage
-`{ kind: "menu_include"; id: string /* member id */; menuId: string /* menu owning the list */;
-menuName: string; includedMenuName: string }`.
+**Interfaces:** Consumes the `folder_overrides` column (Task 1). Produces the four triggers.
 
 - [ ] **Step 1: failing tests.**
   - `image-references.test.ts`, `describe("an image an include's folder names")`, with the file's
@@ -519,16 +571,9 @@ menuName: string; includedMenuName: string }`.
        both succeed.
     3. `it("a folder switched off still holds its stored photo")` — `show_as_folder = false` with
        `{ image: PRESENT }`: the delete is still refused.
-  - `images.test.ts`: `listImageUsages` lists `{ kind: "menu_include", id: memberId, menuId:
-    lunchId, menuName: "Lunch Menu", includedMenuName: "Drinks" }`, `listImages` counts it (the two
-    stay in step), and `deleteImage` answers `{ deleted: false, uses: [that usage] }`.
-  - `image-library.test.ts`: the usage reads "Drinks folder in Lunch Menu" in English and
-    "Carpeta Drinks en Lunch Menu" in Spanish, linked to
-    `/manage/menus/menu/<lunchId>/view/structure`.
-  - Run `pnpm --filter @waitron/media exec vitest run src/image-references.test.ts
-    src/images.test.ts src/dashboard/image-library.test.ts` — FAIL.
+  - Run `pnpm --filter @waitron/media exec vitest run src/image-references.test.ts` — FAIL.
 - [ ] **Step 2: the migration.** A one-line header (what it guards, as `0002`'s does), then four
-  triggers shaped like `0002_section_image_references.sql`, with
+  triggers shaped like `0006_recreate_section_image_triggers.sql`, with
   `json_extract(new.folder_overrides, '$.image')` in place of `new.image`:
   `section_members_media_image_fk_insert` (BEFORE INSERT ON section_members),
   `section_members_media_image_fk_update` (BEFORE UPDATE OF folder_overrides ON section_members),
@@ -536,32 +581,71 @@ menuName: string; includedMenuName: string }`.
   `exists (SELECT 1 FROM section_members WHERE json_extract(folder_overrides, '$.image') =
   old.filename)`), all raising `'section_members_media_image_fk'`. `json_extract` of a JSON `null`
   is SQL `NULL`, so a fixed "no image" passes the insert/update triggers — case 1 proves it. No
-  trailing `--> statement-breakpoint`.
-- [ ] **Step 3:** `images.ts`: the usage kind, a `sectionMembers` read joined to the list's
+  trailing `--> statement-breakpoint`. (`json_extract` raises on text that is not JSON, so every
+  writer of the column writes JSON: drizzle's `json` mapping does, and configuration import
+  refuses anything else first, Task 3 Step 6.)
+- [ ] **Step 3:** `module.ts`: both media tables `before: ["products", "sections",
+  "section_members"]`. The import already emits tables in list order with each `before` honoured
+  (`apps/server/src/configuration-transfer.ts:185-203`), and `sections` precedes `section_members`
+  in catalogue's list, so this names the edge rather than fixing a failure: the round-trip case of
+  Step 5 may pass before this step; say so in the commit if it does.
+- [ ] **Step 4:** `scripts/behavioural-triggers.test.ts`: add the four names to
+  `IMAGE_REFERENCE_TRIGGERS` and one clause to its comment naming the new file. The assertion is
+  `toEqual([...EXPECTED_TRIGGERS, ...IMAGE_REFERENCE_TRIGGERS].sort())` (`:543`): an ADDITION; no
+  existing name changes. List it under "Changed test checks" anyway.
+- [ ] **Step 5:** `apps/server/src/configuration-transfer.test.ts`: `it("an include's folder photo
+  travels with the configuration")` — a source venue whose include fixes `{ image: <a photo in its
+  library>, names: { en: "Bar" } }` exports and imports into an empty venue; the target's include
+  row holds the same `show_as_folder` and `folder_overrides`.
+- [ ] **Step 6:** `name-only-upgrade.test.ts`'s "then upgrading to the end of media's folder"
+  (`:377-413`): `latest` now also holds the four new triggers (the snapshot keeps every trigger
+  whose SQL names `media_images`, `:91-94`). Add `const ADDED = [the four names]`; compare
+  `untouched(latest).filter((t) => !ADDED.includes(t.name))` with `untouched(after.triggers)` (the
+  nine stay word for word, as strict as before), and add `it("adds the four include-folder image
+  triggers")` requiring each name in `latest` with `json_extract` and `folder_overrides` in its
+  SQL. Commit this setup change on its own first (message names the file, `:399-404`, and why).
+- [ ] **Step 7:** tests of Steps 1 and 5 pass; then `pnpm --filter @waitron/media exec vitest run
+  src/schema/name-only-upgrade.test.ts src/configuration-transfer.test.ts src/module.test.ts`;
+  root guards of Task 1 Step 7; `pnpm --filter @waitron/composition exec vitest run`;
+  `pnpm --filter @waitron/media typecheck`; `pnpm lint`; `pnpm format:check`.
+- [ ] **Step 8: commit** (explicit paths): "Keep a photo while an include's folder names it".
+
+### Task 2b: The photo library lists a folder's use of a photo
+
+**Files:**
+- Modify: `packages/media/src/images.ts` (`ImageUsage`, `listImageUsagesForFilename`,
+  `countUsages`, the comment at `:34-38`), `packages/media/src/dashboard/client.ts:20-30`,
+  `packages/media/src/dashboard/image-library.ts:30-37, 349-361`,
+  `packages/media/src/dashboard/strings.ts` (EN and ES),
+  `packages/media/src/dashboard/live-queries.ts:1-11` (add `section_members` to the `images`
+  query, which lists `sections`).
+- Test: `packages/media/src/images.test.ts`, `packages/media/src/dashboard/image-library.test.ts`.
+
+**Interfaces:** Consumes the Task 2 triggers. Produces the usage
+`{ kind: "menu_include"; id: string /* member id */; menuId: string /* menu owning the list */;
+menuName: string; includedMenuName: string }`.
+
+- [ ] **Step 1: failing tests.**
+  - `images.test.ts`: `listImageUsages` lists `{ kind: "menu_include", id: memberId, menuId:
+    lunchId, menuName: "Lunch Menu", includedMenuName: "Drinks" }`, `listImages` counts it (the two
+    stay in step), and `deleteImage` answers `{ deleted: false, uses: [that usage] }`.
+  - `image-library.test.ts`: the usage reads "Drinks folder in Lunch Menu" in English and
+    "Carpeta Drinks en Lunch Menu" in Spanish, linked to
+    `/manage/menus/menu/<lunchId>/view/structure`.
+  - Run `pnpm --filter @waitron/media exec vitest run src/images.test.ts
+    src/dashboard/image-library.test.ts` — FAIL.
+- [ ] **Step 2:** `images.ts`: the usage kind, a `sectionMembers` read joined to the list's
   `sections` row (`owner_menu_id`), that menu's `catalogues.name`, and the included root's
   `sections.internal_name`, with `sql\`json_extract(${sectionMembers.folderOverrides}, '$.image') =
   ${filename}\``; the same predicate counted in `countUsages`. Dashboard copy of the type,
   `usageHref` → structure of `menuId`, label `image.included_menu_folder`:
-  `"{included} folder in {menu}"` / `"Carpeta {included} en {menu}"`.
-- [ ] **Step 4:** `module.ts`: both media tables `before: ["products", "sections",
-  "section_members"]`.
-- [ ] **Step 5:** `scripts/behavioural-triggers.test.ts`: add the four names to
-  `IMAGE_REFERENCE_TRIGGERS` and one clause to its comment naming the new file. This is an
-  ADDITION to a list the guard holds by equality, not a changed check; list it under "Changed test
-  checks" anyway.
-- [ ] **Step 6:** `name-only-upgrade.test.ts`'s "then upgrading to the end of media's folder"
-  (`:377-413`): `latest` now also holds the four new triggers. Add `const ADDED = [the four
-  names]`; compare `untouched(latest).filter((t) => !ADDED.includes(t.name))` with
-  `untouched(after.triggers)` (the nine stay word for word, as strict as before), and add
-  `it("adds the four include-folder image triggers")` requiring each name in `latest` with
-  `json_extract` and `folder_overrides` in its SQL. Commit this setup change on its own first
-  (message names the file, `:399-404`, and why).
-- [ ] **Step 7:** tests of Step 1 pass; then `pnpm --filter @waitron/media exec vitest run
-  src/schema/name-only-upgrade.test.ts src/configuration-transfer.test.ts src/module.test.ts`;
-  root guards of Task 1 Step 7; `pnpm --filter @waitron/composition exec vitest run`;
+  `"{included} folder in {menu}"` / `"Carpeta {included} en {menu}"`. The live query gains
+  `section_members` (`scripts/live-subscriptions.test.ts` accepts it: the venue-service queries
+  already subscribe to it, `packages/venue-service/src/dashboard/live-queries.ts:91`).
+- [ ] **Step 3:** tests pass; `pnpm exec vitest run scripts/live-subscriptions.test.ts`;
   `pnpm --filter @waitron/media typecheck`; `pnpm lint`; `pnpm format:check`.
-- [ ] **Step 8: commit** (explicit paths): "Keep a photo while an include's folder names it, and
-  list that use in the photo library".
+- [ ] **Step 4: commit** (explicit paths): "List an include's folder among a photo's uses in the
+  photo library".
 
 ### Task 3: Write an include's setting, and read it with the menu's structure
 
@@ -608,7 +692,8 @@ menuName: string; includedMenuName: string }`.
     `{ es: "Bebidas" }` is accepted.
   - `it("refuses a bad colour, a photo not in the library, and names that are not text")` —
     `menu_section.invalid` with `field` `color`, `image`, `names`; `showAsFolder: "no"` →
-    `menu_section.invalid { field: "showAsFolder" }`.
+    `menu_section.invalid { field: "showAsFolder" }`. (This database has no media tables, so every
+    photo name is refused here, as `imageOf` refuses it; a photo ACCEPTED is Task 7's route case.)
   - `it("does not change the included menu, or which menus reach the include")` — Drinks' own
     `readMenuStructure` and `menu_items` rows are unchanged.
   - `configuration-transfer.test.ts`: `it("refuses imported folder overrides that are not an object
@@ -618,8 +703,9 @@ menuName: string; includedMenuName: string }`.
     src/include-folder.db.test.ts src/configuration-transfer.test.ts` — FAIL.
 - [ ] **Step 3:** `include-folder-presentation.ts` per "Seams and signatures" (type-only imports).
 - [ ] **Step 4:** `include-folder.ts` `setIncludeFolder`: `loadSectionGraph`; list role undefined →
-  `menu_section.not_found { sectionId: listId }`, `home_layout` → `menu_section.wrong_role`;
-  `heldMember(graph.children(listId), listId, memberId)`; product ref →
+  `menu_section.not_found { sectionId: listId }`, `home_layout` → `menu_section.wrong_role`, then
+  `heldMember(graph.children(listId), listId, memberId)` — exactly `writableMember`
+  (`sections.ts:104-107`); export and reuse it rather than repeating it; product ref →
   `menu_section.membership_invalid`; child role not `menu_root` → `menu_section.wrong_role
   { sectionId: child, role }`; `typeof showAsFolder !== "boolean"` → `menu_section.invalid
   { field: "showAsFolder" }`. When `overrides` is sent: names must be a plain object of strings
@@ -643,25 +729,24 @@ menuName: string; includedMenuName: string }`.
 
 **Files:**
 - Modify: `packages/catalogue/src/menu-document-types.ts:49-60, 139-156, 264`,
-  `packages/catalogue/src/menu-document.ts:178-206, 859-883`,
-  `packages/catalogue/src/menu-navigation.ts:482-505` (only if `field === "direct"` needs a case;
-  the generic `same(was[field], node[field])` branch already covers it — verify),
-  `packages/module/src/module.ts:198-210`.
-- Test: `packages/catalogue/src/menu-document.test.ts`, `packages/catalogue/src/menu-publication.test.ts`,
-  `packages/catalogue/src/menu-navigation.test.ts`.
+  `packages/catalogue/src/menu-document.ts:178-206`, `packages/catalogue/src/device-home.ts`
+  (`shownMembers`), `packages/module/src/module.ts:198-210`.
+- Test: `packages/catalogue/src/menu-document.test.ts`.
 
 **Interfaces:** Consumes `graph.folder`, `folderPresentation`, `setIncludeFolder`. Produces
-`DocumentMember.direct?: true`, `SectionChangeField` `"direct"`.
+`DocumentMember.direct?: true`, `DocumentMember.fixed?: IncludeFolderOverrides`, `shownMembers`.
 
 - [ ] **Step 1: failing database tests** (`menu-document.test.ts`, new `describe("an include shown
-  as a folder or directly")`, `menusFixture`; set the switch with `setIncludeFolder`):
+  as a folder or directly")`, `menusFixture`; the include's member id is read from
+  `readMenuStructure(tx, f.lunch)` (the fixture does not return it); set the switch with
+  `setIncludeFolder`; per Global constraints, photos are written straight into the rows):
   1. `it("a folder include is unchanged, and so is the hash of a menu with no direct include")` —
      record `menuDocumentHash(await build(f.lunch))` before any setting; after
      `setIncludeFolder(…, { showAsFolder: true })` the document and hash are identical.
   2. `it("an include shown directly keeps its node, marked direct, with its members in their
-     order")` — Lunch root is `[Drinks node with direct: true, includedMenu, Drinks' own names,
-     members [Lemonade, Beer]], Soup]`; `shownMembers(document.root.members)` lists Lemonade, Beer,
-     Soup in that order.
+     order")` — Lunch root is `[Drinks node with direct: true, includedMenu, Drinks' own names, no
+     fixed, members [Lemonade, Beer]], Soup]`; `shownMembers(document.root.members)` lists
+     Lemonade, Beer, Soup in that order.
   3. `it("the same menu is a folder in one including menu and direct in another")` — Dinner's
      Drinks node has no `direct` while Lunch's has.
   4. `it("an include inside the flattened menu keeps its own setting")` — create menu Wine with
@@ -672,59 +757,115 @@ menuName: string; includedMenuName: string }`.
   5. `it("a section named like one of the including menu's shows beside it")` — create a section
      "Beer" in Lunch's root; Lunch shows two Beer nodes with different `sectionId`s.
   6. `it("an inactive included menu still drops out")` — deactivate Drinks; no Drinks node,
-     whatever the setting.
-  7. `it("the folder shows the fixed names, image and colour, and follows every field left
-     alone")` — fix `{ names: { en: "Bar" }, color: "#112233" }`; the node's names are `{ en:
-     "Bar" }`, colour `#112233`, image Drinks' own. Then `updateMenuDetails(tx, f.drinksMenu, {
-     names: { en: "Drinks and more", es: "Bebidas" }, image: PHOTO })`: Lunch's node shows `{ en:
-     "Bar", es: "Bebidas" }` (en fixed, es followed) and `PHOTO` (followed). Both directions of
-     the queue's "rename after saving".
-  8. `it("switched off, the node shows the included menu's own presentation and keeps the stored
+     whatever the setting. (Today's behaviour: a regression pin that passes before Step 3.)
+  7. `it("the folder shows the fixed names and colour, and follows every field left alone")` — fix
+     `{ names: { en: "Bar" }, color: "#112233" }`; the node's names are `{ en: "Bar" }`, colour
+     `#112233`, image Drinks' own (null), `fixed` equal to the overrides. Then
+     `updateMenuDetails(tx, f.drinksMenu, { names: { en: "Drinks and more", es: "Bebidas" } })`
+     and `tx.update(sections).set({ image: "drinks.jpg" })` on `f.drinks`: Lunch's node shows
+     `{ en: "Bar", es: "Bebidas" }` (en fixed, es followed) and `drinks.jpg` (followed). Both
+     directions of the queue's "rename after saving".
+  8. `it("a fixed photo, and a fixed no-photo, replace the included menu's")` — with Drinks' root
+     image `drinks.jpg`, write the include's `folder_overrides` as `{ image: "bar.jpg" }` straight
+     into the row (`tx.update(sectionMembers)`; `setIncludeFolder` would refuse the name here): the
+     node's image is `bar.jpg`; as `{ image: null }`: null; `documentImages` lists `bar.jpg` in the
+     first case.
+  9. `it("switched off, the node shows the included menu's own presentation and keeps the stored
      overrides")` — after 7, `setIncludeFolder(…, { showAsFolder: false })`: the node has
-     `direct: true` and Drinks' own names; switching back on restores `{ en: "Bar", … }`.
-  9. `it("a home shortcut to an included menu shown directly is kept")` — add a Lunch home tile to
-     the Drinks root (`addTile`); with Drinks direct, `document.home.shortcuts` holds `{ kind:
-     "section", sectionId: f.drinks }`, not `empty`.
-  10. `it("the same included menu in two lists of one menu keeps each list's setting")` — include
-      Drinks also inside a Lunch section "Bar" as a folder while the root include is direct; both
-      nodes present, only the root one `direct`.
-  - `diffMenuDocuments` cases: `it("switching an include to direct is one section change named
-    direct")` — live = Lunch published as folder; proposed with direct → exactly one
-    `section_changed { sectionId: f.drinks, fields: ["direct"] }` (no `product_moved`); with fixed
-    names also present, fields `["names", "direct"]`.
-  - `menu-publication.test.ts`: `it("an include's new setting makes the including menu changed and
-    leaves the included menu current")` — publish Lunch and Drinks; `setIncludeFolder` on Lunch's
-    include; `menuStatus(Lunch).state` is `changed`, `menuStatus(Drinks).state` is `current`.
-  - `menu-navigation.test.ts`: `it("a direct change targets the include's direct field before and
-    after")`.
-  - Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-document.test.ts
-    src/menu-publication.test.ts src/menu-navigation.test.ts` — FAIL.
-- [ ] **Step 2:** types: `direct?: true` with a one-line comment (the members are drawn in its
-  place; a shortcut still opens it); `SectionChangeField` and `MenuField` gain `"direct"`.
-- [ ] **Step 3:** `listOf`: take `memberId` from `children()`; for an include, `const folder =
-  loaded.folder(memberId)`, `const shown = folderPresentation(section, folder)`; emit
-  `names/image/color` from `shown` and `...(folder.showAsFolder ? {} : { direct: true as const })`.
-  `shownMembers` lives in `device-home.ts` (Task 5 adds its own tests; add the function here so
-  case 2 can call it): `members.flatMap((m) => m.kind === "section" && m.direct === true ?
-  shownMembers(m.members) : [m])`.
-- [ ] **Step 4:** `diffEntries` section loop: `if (was.direct !== node.direct)
-  fields.push("direct")`.
-- [ ] **Step 5:** `ZoneMenuMember` section kind gains `readonly direct?: true` with the same
-  one-line comment.
-- [ ] **Step 6:** tests pass; then `pnpm --filter @waitron/catalogue exec vitest run
-  src/menu-change-navigation.test.ts src/menu-inclusion.test.ts src/menu-schedule.test.ts
+     `direct: true`, Drinks' own names and no `fixed`; switching back on restores `{ en: "Bar", … }`.
+  10. `it("a home shortcut to an included menu shown directly is kept")` — add a Lunch shortcut to
+      the Drinks root (`addShortcut(tx, f.lunch, section(f.drinks))`, `menu-home.ts:136`); with
+      Drinks direct, `document.home.shortcuts` holds `{ kind: "section", sectionId: f.drinks }`,
+      not `empty`.
+  11. `it("the same included menu in two lists of one menu keeps each list's setting")` — include
+      Drinks also inside a Lunch section "Bar" as a folder fixing `{ names: { en: "Bar drinks" } }`
+      while the root include is direct; both nodes present, only the root one `direct`, only the
+      nested one with those names.
+  - Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-document.test.ts` — FAIL.
+- [ ] **Step 2:** types: `direct?: true` and `fixed?: IncludeFolderOverrides`, each with a
+  one-line comment (`direct`: the members are drawn in its place, a shortcut still opens it;
+  `fixed`: what the include fixes, so a change list can tell it from a change to the included
+  menu).
+- [ ] **Step 3:** `listOf`: take `id` (the member id) from `children()`; for an include, `const
+  folder = loaded.folder(memberId)`, `const shown = folderPresentation(section, folder)`; emit
+  `names/image/color` from `shown`, `...(folder.showAsFolder ? {} : { direct: true as const })`,
+  and `...(folder.showAsFolder && Object.keys(folder.overrides).length > 0 ? { fixed:
+  folder.overrides } : {})`. `shownMembers` in `device-home.ts`: `members.flatMap((m) => m.kind
+  === "section" && m.direct === true ? shownMembers(m.members) : [m])`, with a doc comment (Task 5
+  adds its unit tests).
+- [ ] **Step 4:** `ZoneMenuMember` section kind gains `readonly direct?: true` with the same
+  one-line comment (`fixed` is the change list's business, not a module's).
+- [ ] **Step 5:** tests pass; then `pnpm --filter @waitron/catalogue exec vitest run
+  src/menu-inclusion.test.ts src/menu-schedule.test.ts src/menu-publication.test.ts
   src/device-home.test.ts src/integration.test.ts`; `pnpm --filter @waitron/venue-service exec
   vitest run src/operations.test.ts`; typecheck catalogue, module, venue-service; `pnpm lint`;
   `pnpm format:check`.
-- [ ] **Step 7: commit** — "The published menu carries whether each include is a folder or shown
+- [ ] **Step 6: commit** — "The published menu carries whether each include is a folder or shown
   directly, and the folder's own name, photo and colour".
+
+### Task 4b: The change list and change navigation name an include's own changes
+
+**Files:**
+- Modify: `packages/catalogue/src/menu-document-types.ts:264` (`SectionChangeField`), `:139-156`
+  (`MenuField`), `packages/catalogue/src/menu-document.ts:596-628` (`shapeOf`), `:859-883` (the
+  section loop), `packages/catalogue/src/menu-navigation.ts:482-505`.
+- Test: `packages/catalogue/src/menu-document.test.ts`, `packages/catalogue/src/menu-publication.test.ts`,
+  `packages/catalogue/src/menu-navigation.test.ts`.
+
+**Interfaces:** Consumes Task 4's `direct` and `fixed`. Produces `SectionChangeField` `"direct"`,
+`MenuField` kind `"direct"`.
+
+- [ ] **Step 1: failing tests.**
+  - `menu-document.test.ts`, `diffMenuDocuments`:
+    `it("switching an include to direct is one change this menu made, named direct")` — live =
+    Lunch published as a folder; proposed with direct → exactly one `section_changed { sectionId:
+    f.drinks, fields: ["direct"], source: "this_menu" }` (no `product_moved`, no `order_changed`).
+    `it("fixing a folder name is this menu's change; renaming the included menu is the included
+    menu's")` — fix `{ names: { en: "Bar" } }` → one `section_changed { fields: ["names"], source:
+    "this_menu" }`; from that live, rename Drinks' `es` only → one `{ fields: ["names"], source:
+    "included_menu", includedMenu: { id: f.drinksMenu, name: "Drinks" } }`; fixing a colour while
+    Drinks' image changes → two events, this menu's `["color"]` first, then the included menu's
+    `["image"]`.
+    `it("a change to the second include of the same menu is listed")` — Drinks in Lunch's root and
+    in Lunch section "Bar", both folders; switch only Bar's include to direct → one
+    `section_changed { sectionId: f.drinks, fields: ["direct"], source: "this_menu" }` (today's
+    first-copy comparison lists nothing: `shapeOf` keeps the root copy).
+  - `menu-publication.test.ts`: `it("an include's new setting makes the including menu changed and
+    leaves the included menu current")` — publish Lunch and Drinks; `setIncludeFolder` on Lunch's
+    include; `menuStatus(Lunch).state` is `changed`, `menuStatus(Drinks).state` is `current`.
+    (Follows from the hash; a regression pin that passes once Task 4 is in.)
+  - `menu-navigation.test.ts`: `it("a direct change targets the include's direct field before and
+    after")`; `it("a change to the second copy targets that copy's path")` — the "Bar" case above:
+    targets carry `sectionIds` `[bar, drinks]`, not `[drinks]`.
+  - Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-document.test.ts
+    src/menu-publication.test.ts src/menu-navigation.test.ts` — FAIL.
+- [ ] **Step 2:** types: `SectionChangeField` and `MenuField`'s single-kind union gain `"direct"`.
+- [ ] **Step 3:** `shapeOf` also keeps every copy by its full path (`pathKey([...path,
+  sectionId])` → node); `sections` (first copy and parents) is unchanged, so `namesOf`,
+  `listSource` and the order check keep working.
+- [ ] **Step 4:** the section loop compares each copy in `next` with the copy at the same path in
+  `prev` (a copy with no partner is an add or a move, reported elsewhere as today). Per section id
+  it collects fields per source over all its copies: a section that is not an include → today's
+  rule and source; an include → Decision 7's attribution, with `direct` when `was.direct !==
+  node.direct`. It pushes one `section_changed` per source that has fields, this menu's first,
+  fields in the order names, image, color, direct. For a section with one copy that is not an
+  include, or an include that fixes nothing in either document, the output is exactly today's (the
+  existing `section_changed` cases, e.g. "names a section's changed details", pin it).
+- [ ] **Step 5:** `menu-navigation.ts` `section_changed`: instead of the first occurrence, walk
+  every after-occurrence of the id that has a before-occurrence with the same `sectionIds`, and
+  push targets for the fields that differ there (the existing `changedNames` / `same` branches,
+  which already cover `direct`).
+- [ ] **Step 6:** tests pass; then `pnpm --filter @waitron/catalogue exec vitest run
+  src/menu-change-navigation.test.ts src/menu-schedule.test.ts src/integration.test.ts`;
+  catalogue typecheck; `pnpm lint`; `pnpm format:check`.
+- [ ] **Step 7: commit** — "The change list says when an include's folder or setting changed in
+  this menu, and finds a change on either copy of a menu included twice".
 
 ### Task 5: The till and the device-home preview draw an included menu shown directly in its place
 
 **Files:**
-- Modify: `packages/catalogue/src/device-home.ts` (doc comment of `shownMembers`; tests),
-  `apps/till/src/widgets/menu-browser.ts:363-378, 506-510, 556-562`,
-  `apps/dashboard/src/widgets/device-home-preview.ts:269-283, 359-363, 422`.
+- Modify: `apps/till/src/widgets/menu-browser.ts:363-378, 486-503, 506-510, 556-562`,
+  `apps/dashboard/src/widgets/device-home-preview.ts:269-283, 343-354, 359-363, 422`.
 - Test: `packages/catalogue/src/device-home.test.ts`, `apps/till/src/widgets/menu-browser.test.ts`,
   `apps/dashboard/src/widgets/device-home-preview.test.ts`.
 
@@ -748,20 +889,32 @@ menuName: string; includedMenuName: string }`.
     → breadcrumb `Home › Drinks (EN)`, its view lists Cola, Lemonade, Beer (EN).
     `it("paints a folder's override colour and photo")` — a folder node whose `color` is a palette
     colour and `image` a file paints as the existing painted-tile cases do (`mountPainted`,
-    `:1468`) — the document already carries the effective values, so this pins that the till
-    reads the node's own fields.
-    `it("the same menu as a folder in one list and direct in another")` — both draw correctly.
+    `:1468`). The document already carries the effective values (Task 4 cases 7-8 are the failing
+    proof), so this is a regression PIN that passes before Step 2; say so in the commit.
+    `it("the same included menu in two lists draws each copy with its own name")` — Drinks at the
+    top level as a folder named "Bar (EN)" and inside Food as a folder named "Drinks (EN)" (two
+    nodes with one `sectionId`, different `names`): the home tile reads "Bar (EN)" and Food's view
+    reads "Drinks (EN)"; tapping the home tile breadcrumbs `Home › Bar (EN)`. FAILS today: `#tile`
+    draws `index.sections.get(id)`, the copy indexed last (Food's). Then the same with the
+    top-level copy `direct: true`: home lists its members, Food's view shows the folder "Drinks
+    (EN)".
+    `it("a shortcut to a menu included twice opens the top-level copy")` — pins Decision 16.
   - `device-home-preview.test.ts`: the home block shows the direct node's members; a section of it
-    opens with breadcrumb skipping it; a shortcut opens it.
+    opens with breadcrumb skipping it; a shortcut opens it; the two-copies case above.
   - Run `pnpm --filter @waitron/catalogue exec vitest run src/device-home.test.ts`,
     `pnpm --filter @waitron/till exec vitest run src/widgets/menu-browser.test.ts`,
     `pnpm --filter @waitron/dashboard exec vitest run src/widgets/device-home-preview.test.ts` —
     FAIL where the widgets still draw the node (check free memory first:
     `memory_pressure | grep free`).
 - [ ] **Step 2:** in both widgets: the home block maps `shownMembers(structure.members)`; the
-  section view maps `shownMembers(current.members)`; `#trail`'s "next among the previous node's
-  members" searches `shownMembers(previous.members)` as well as `previous.members` (the latter keeps
-  a shortcut path `[root, section]` working).
+  section view maps `shownMembers(current.members)`; `#trail`'s FIRST id is looked up among
+  `shownMembers(structure.members)` and then in the index; each next id is searched in
+  `shownMembers(previous.members)` as well as `previous.members` (the latter keeps a shortcut path
+  `[root, section]` working). `#tile` draws a structural member (a `DocumentMember`, which has
+  `members`) from the member itself when `index.sections.has(member.sectionId)`, and a shortcut
+  tile from the index as today (Decision 16). For every section that appears once, the member and
+  the indexed node are the same object (`device-home.ts:105-107` stores the member), so nothing
+  else changes.
 - [ ] **Step 3:** tests pass; `pnpm --filter @waitron/till exec vitest run
   src/widgets/menu-browser.a11y.test.ts`; `pnpm --filter @waitron/dashboard exec vitest run
   src/widgets/device-home-preview.a11y.test.ts`; typecheck till and dashboard; `pnpm lint`;
@@ -785,7 +938,12 @@ menuName: string; includedMenuName: string }`.
     for it; a note `"Drinks: shown directly"` / Spanish `"Drinks: se muestra directamente"`; its
     sections are buttons at the top level, and their `data-section` paths include the included
     root's id. `it("the note is the include's change target")` — highlighted `{ kind: "section",
-    sectionIds: [root], field: { kind: "direct" } }` marks the note.
+    sectionIds: [root], field: { kind: "direct" } }` marks the note, and so do `{ kind: "name",
+    audience: "customer", language: "en" }`, `{ kind: "image" }` and `{ kind: "color" }` on the
+    same section (switching off with a fixed name changes `names` too, Task 4b, and the after side
+    must have somewhere to land). `it("an order change inside the included menu still has a
+    target")` — highlighted `{ kind: "list", sectionIds: [root] }` marks the note too (the
+    spliced members have no box of their own to mark).
   - `menu-preview.test.ts`: a `section_changed` with fields `["direct"]` reads
     `"Drinks: shown as a folder or directly"` / Spanish `"Drinks: mostrada como carpeta o
     directamente"`.
@@ -793,10 +951,12 @@ menuName: string; includedMenuName: string }`.
   - Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/customer-menu.test.ts
     src/widgets/menu-preview.test.ts src/widgets/menu-preview-navigation.test.ts` — FAIL.
 - [ ] **Step 2:** `members()`: for `member.kind === "section" && member.direct === true` (and not a
-  path repeat) render `value(input, base, value(input, fieldTarget(base, { kind: "direct" }),
-  html\`<p class="note" data-direct=…>${label("shown_directly", { name })}</p>\`))` followed by
-  `members(input, member.members, sectionIds)`; `name` is the node's resolved text as the section
-  heading resolves it. Strings: `menu_preview.shown_directly` "{name}: shown directly" / "{name}:
+  path repeat) render the note wrapped in `value(input, base, …)` and in the field targets
+  `direct`, `image`, `color`, each customer-name language the node has, and the list target
+  `{ kind: "list", sectionIds }`: `html\`<p class="note" data-direct=…>${label("shown_directly", {
+  name })}</p>\``; then `members(input, member.members, sectionIds)` at the same level, unwrapped;
+  `name` is the node's resolved text as the section heading resolves it. (Read how `value()` and
+  `inspection()` place name targets on a section heading today and nest the same targets.) Strings: `menu_preview.shown_directly` "{name}: shown directly" / "{name}:
   se muestra directamente"; `menu_preview.field_direct` "shown as a folder or directly" /
   "mostrada como carpeta o directamente"; `SECTION_FIELDS.direct`.
 - [ ] **Step 3:** tests pass; `customer-menu.a11y.test.ts` and `menu-preview.a11y.test.ts`;
@@ -811,7 +971,8 @@ menuName: string; includedMenuName: string }`.
   beside `sectionInput`), `apps/dashboard/src/api/client.ts:181-191, ~2414` (`folder` on the node;
   `setIncludeFolder`; re-export the types from `@waitron/catalogue/src/section-types.js`).
 - Create: `apps/server/src/catalogue-api.include-folder.test.ts` (setup modelled on
-  `apps/server/src/catalogue-api.menu-schedule.test.ts:1-100`).
+  `apps/server/src/catalogue-api.menu-schedule.test.ts:1-100`, whose `useVenueDb` applies core,
+  catalogue and identity only (`:31-33`); add `MEDIA_MIGRATIONS` so a photo can be accepted).
 - Test: `apps/dashboard/src/api/client-routes.test.ts` (if it pins every client route).
 
 - [ ] **Step 1: failing route tests.**
@@ -827,10 +988,14 @@ menuName: string; includedMenuName: string }`.
   - `it("answers the domain refusals with their codes")` — unknown member 404
     `menu_section.not_found`; product member `menu_section.membership_invalid`; translation gap
     `menu_section.translation_required { field: "names", language }`; bad colour
-    `menu_section.invalid { field: "color" }`. Status codes as the server's error map gives them
+    `menu_section.invalid { field: "color" }`; a photo the library does not hold
+    `menu_section.invalid { field: "image" }`. Status codes as the server's error map gives them
     for these codes today (read `apps/server/src/errors.ts` or the sibling route tests; assert
     what it maps, do not change it).
   - `it("a malformed member id is refused before the transaction")` — as sibling routes.
+  - `it("a photo in the library is accepted as the folder's image, and the published document
+    shows it")` — upload (or insert) a photo, `PUT … { showAsFolder: true, overrides: { image } }`
+    → 200; the including menu's preview document's include node has that `image` and `fixed`.
   - Run `pnpm --filter @waitron/server exec vitest run src/catalogue-api.include-folder.test.ts` —
     FAIL (404 route).
 - [ ] **Step 2:** the route: `requireManagementSession`, `sectionId(c)`, `memberId(c)`, parse with
@@ -876,8 +1041,15 @@ menuName: string; includedMenuName: string }`.
 - [ ] **Step 2:** candidates: `union all select 'menu_include' as kind, m.id, null,
   json_patch(s.names, json_extract(m.folder_overrides, '$.names')) as translations from
   section_members m join sections s on s.id = m.child_section_id where s.role = 'menu_root' and
-  json_type(m.folder_overrides, '$.names') = 'object'`. `contentTranslationGapsIn` treats blank
-  values as gaps already (`resolveContentText`), matching Decision 4.
+  json_type(m.folder_overrides, '$.names') = 'object' and exists (select 1 from
+  json_each(json_patch(s.names, json_extract(m.folder_overrides, '$.names'))) where trim(value) <>
+  '')`. `contentTranslationGapsIn` treats a blank value as a gap (`resolveContentText`), matching
+  Decision 4 for a map that has text somewhere; the `exists` clause keeps a map that is ALL blank
+  out, because the writer stores it as "no customer name" (Decision 4: effective `{}` is accepted)
+  and the report calls a `partial` gap one whose name "has text, but none in this language"
+  (`content-translation-report-types.ts:17-21`). Test it: Drinks' own names `{ en: "Drinks" }`, the
+  include fixing `{ en: "" }` (accepted by `setIncludeFolder`) → no gap in any language, and the
+  default can change.
 - [ ] **Step 3:** report: `TranslationGapKind` gains `"included_menu"`; `KIND_ORDER` places it after
   `"section"`; `candidateKind` maps `menu_include` → `included_menu`; a `named` row for includes
   (member id, the included root's `internal_name`, the list's `owner_menu_id`); `gap()` answers it
@@ -943,7 +1115,9 @@ menuName: string; includedMenuName: string }`.
 `draftParent`; emits `wt-submit` with `IncludeFolderInput` and `wt-cancel`; methods
 `commitSaved(input)` and `closeSaved(input)`, as `section-details-form.ts:203-210`.
 
-- [ ] **Step 1: failing tests** (model on `section-details-form.test.ts` and its unsaved file):
+- [ ] **Step 1: failing tests** (model on `section-details-form.test.ts` and its unsaved file;
+  the fixture's `menuName` (staff name, the heading), `own.names` and the stored fixed names are
+  three different texts — Global constraints):
   - `it("opens with the switch on and every field filled with the folder's current values")` —
     own `{ en: "Drinks", es: "Bebidas" }`, stored fixed `{ en: "Bar" }` → name fields read `Bar`
     and `Bebidas`; colour and photo show the effective ones.
@@ -971,7 +1145,11 @@ menuName: string; includedMenuName: string }`.
   (`name: "include-color"`) and `dashboard-image-upload` render only while the switch is on. The
   submission value is `{ showAsFolder: false }` when off, else `{ showAsFolder: true, overrides:
   folderOverridesFrom(own, shown, languages.languages, value.overrides) }`. The draft scope's
-  `current()` is that submission value; `restore` puts back the switch and the shown values.
+  `current()` is that submission value. `restore(v)` sets the switch to `v.showAsFolder` and the
+  shown fields to `folderPresentation(own, { showAsFolder: true, overrides: v.overrides ??
+  value.overrides })` — a submission with the switch off carries no overrides, so the stored ones
+  fill the hidden fields, as Decision 5 says switching back shows them. The unsaved test restores
+  from both shapes.
 - [ ] **Step 3:** tests pass; dashboard typecheck; `pnpm lint`; `pnpm format:check`.
 - [ ] **Step 4: commit** — "A dialog edits how one include shows its menu".
 
@@ -1019,18 +1197,44 @@ upgrade like `sections`), `docs/developers/products.md` only if it describes fol
 
 - [ ] **Step 1:** write the three doc changes; `pnpm exec prettier --file-info` on each to see
   whether it is format-checked; `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
-- [ ] **Step 2: LOOK.** Start the stack with `wa-wt demo waitron-feat-included-menu-direct-sections`
-  (lsof the venue folder and port 8080 before any reset). In the dashboard: a menu including
-  another; the include's ⋮ (Open, Edit, Remove); the dialog with the switch on and off, a refusal
-  beside a name; the row note; the preview with the direct include; the device-home preview.
-  On the till: home with the include shown directly, a section of it opened (breadcrumb), a
-  shortcut to the included menu. Each in light and dark, at 1280 and 390 px, in English and
-  Spanish. Save the screenshots under `~/waitron-campaign-b/a322-shots/` and look at every one.
-- [ ] **Step 3: commit** — `docs: …` with the explicit paths.
+- [ ] **Step 2: commit** — `docs: …` with the explicit paths.
+
+### Task 12b: LOOK at the Menus screen
+
+Split from the docs task so each stays well under 100 tool calls: 2 themes × 2 widths × 2
+languages is eight shots per view. Capture them with ONE Playwright script that loops over the
+combinations (the workspace's Chromium), then open and look at every file.
+
+- [ ] **Step 1:** start the stack with `wa-wt demo waitron-feat-included-menu-direct-sections`
+  (lsof the venue folder and port 8080 before any reset). Set up a menu including another, one
+  include shown directly and one as a folder with a fixed name and colour.
+- [ ] **Step 2:** shots of: the structure table with both include rows (labels "Menu: <name>",
+  the row notes, the swatch); the include's ⋮ (Open, Edit, Remove); the dialog with the switch on,
+  with it off, and with a refusal beside a name; the Menus preview with the direct include (the
+  note line, the members at the same level); the device-home preview. Each in light and dark, at
+  1280 and 390 px, in English and Spanish, under `~/waitron-campaign-b/a322-shots/dashboard/`.
+- [ ] **Step 3:** look at every one; fix what is wrong in its own commit (test first where a test
+  can say it), and record what was looked at in the ledger.
+
+### Task 12c: LOOK at the till
+
+- [ ] **Step 1:** same stack and venue as Task 12b; enrol a till (`dev-till-must-be-enrolled`:
+  devMode approves the join at once, the tab still picks a device).
+- [ ] **Step 2:** shots of: home with the include shown directly (no extra level); a section of it
+  opened (breadcrumb skipping the included menu); a shortcut to the included menu (it opens as a
+  folder); the folder include with its fixed name, colour and, in Thumbnails mode, photo. Each in
+  light and dark, at 1280 and 390 px, in English and Spanish, under
+  `~/waitron-campaign-b/a322-shots/till/`.
+- [ ] **Step 3:** look at every one; fix as in Task 12b.
 
 **Left open (for the backlog entry):** a folder's override photo shows on the till only in
-Thumbnails mode, as a section's does; a home shortcut to an included menu shown in two lists of one
-menu with different settings opens one of them (Decision 16).
+Thumbnails mode, as a section's does; a home shortcut to an included menu held in two lists of one
+menu opens the top-level copy, else the copy indexed last (Decision 16); renaming or clearing the
+included menu's own names is not checked against the folders that fix some languages, so a folder
+can end up lacking the default language (the missing-translations report lists it, and a default
+change is refused, but the write that caused it is not); a fixed value that happens to equal the
+included menu's value when the dialog opens is saved back as "follow" the next time the dialog is
+saved (Decision 3 compares with the included menu's value, and cannot tell the two apart).
 
 ---
 
@@ -1046,7 +1250,9 @@ menu with different settings opens one of them (Decision 16).
 - `packages/media/src/schema/name-only-upgrade.test.ts:399-404` — the "untouched" comparison
   leaves out the four new triggers, keeping the nine word for word; a new case requires the four.
 - `scripts/behavioural-triggers.test.ts:107-119` — four names added to `IMAGE_REFERENCE_TRIGGERS`.
-  An addition the equality requires, not a changed or weakened check; listed for the FYI.
+  The assertion (`:543`) is `toEqual` over the SORTED union of the two lists, so this is an
+  addition the equality requires; no existing name or value changes, nothing is weakened. Listed
+  for the FYI.
 - Any whole-shape pin of `MenuStructureNode` for an include, `ImageUsage`, `TranslationGapKind` or
   the `section_members` columns that gains the new key — an addition, listed with its `file:line`.
 
@@ -1054,11 +1260,15 @@ Anything else that fails is a side effect: STOP for that check (THE RULE).
 
 ## Self-review (writer)
 
-- Spec coverage: points 1-6 and the owner addition map to Tasks 1-12 — setting per include (1, 3,
+- Plan review 2026-10-07 (fresh context) split Task 2 (2, 2b), Task 4 (4, 4b) and Task 12 (12,
+  12b, 12c), and added Decision 7's attribution, Decision 16's per-copy reading and Task 8's
+  all-blank rule; tasks keep their numbers so cross-references hold.
+- Spec coverage: points 1-6 and the owner addition map to Tasks 1-12c — setting per include (1, 3,
   7, 9-11), splice in place in order and read-only at the included menu's prices (4, 5, 6;
   read-only and prices are unchanged code paths: Lunch's offers still come from `listMenuOffers`),
   till/preview/device home and shortcut (4, 5, 6), nested includes (4 case 4), name clashes (4 case
   5), spec amendment (committed with this plan), follow vs fixed both ways (4 case 7, 10, 11),
   switch hides fields (10), required-language refusals beside the field (3, 7, 10, 11),
-  image/colour painting (5, 9), W69 rules (10), Open <menu> (9), backlog (12).
+  image/colour painting (4 cases 7-8, 7, 9; 5 pins it), the change list (4b), W69 rules (10),
+  Open <menu> (9), backlog (12), LOOK (12b, 12c).
 - No placeholders; the interfaces block names every function a later task uses.
