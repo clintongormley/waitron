@@ -1190,10 +1190,13 @@ have focused regression tests and installed deletion controls. PR #1325 is a dra
 push hook passed, but CI run `37564044959` failed in dashboard and till tests. The repairs pass
 locally; the next pushed head still needs its normal hook and required CI.
 
-The CI investigation also found two unfinished owners: the printer detail's inline name and
-network connection forms still use local discard prompts. They need the shared warning and
-browser-leaving protection before W69 can finish. The earlier final-audit completion claim was
-too broad; the dated audit records this correction and the remaining acceptance work.
+The printer detail's inline name and network connection now register independent drafts with
+the shared leave controller. Focused browser cases cover Cancel, breadcrumb and Back decisions,
+normalized reverts, browser-leaving registration, successful and refused writes, newer input and
+independent saves. Standalone local discard arming remains to be retired; actual dashboard
+context/sign-out/Forward, activated native reload, stale input/response, forced teardown, focus and
+language/theme/width acceptance still need their remaining checks before W69 can finish. The dated
+audit records this checkpoint and the earlier correction to the final-audit completion claim.
 
 Activated desktop Chromium checks cover reload, external navigation and closing with the
 Schedule owner; the implementation does not promise prompts on every browser or after mobile

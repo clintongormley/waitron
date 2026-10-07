@@ -468,6 +468,7 @@ export class PrintersScreen extends LitElement {
         const printer = this.printers.find(({ id }) => id === this.selectedPrinterId);
         if (
           printer &&
+          !this.#detailConnectionScope &&
           this.#connectionIsDirty(printer) &&
           !this.discardDetailConnectionNavigationArmed
         ) {
@@ -477,6 +478,7 @@ export class PrintersScreen extends LitElement {
         }
         if (
           printer &&
+          !this.#detailNameScope &&
           this.detailName?.id === printer.id &&
           this.detailName.value !== printer.name &&
           !this.discardDetailNameNavigationArmed
@@ -619,6 +621,8 @@ export class PrintersScreen extends LitElement {
     saving: boolean;
     error: string | null;
   } | null = null;
+  #detailNameScope?: DraftScope<string>;
+  #detailConnectionScope?: DraftScope<{ host: string; port: string }>;
   @state() private discardDetailNameArmed = false;
   @state() private discardDetailNameNavigationArmed = false;
   @state() private detailConnection: {
@@ -871,6 +875,7 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#disposeDetailDrafts();
     this.#disposeCalibrationDraft();
     this.editingPrinter = null;
     this.#disposeAgentDraft();
@@ -2281,7 +2286,7 @@ export class PrintersScreen extends LitElement {
         data-test=${`edit-printer-${p.id}`}
         @click=${() => {
           this.#showPrinterStatus(p.id);
-          this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+          this.#openDetailName(p);
           void this.updateComplete.then(() => {
             if (this.detailName?.id === p.id)
               this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
@@ -2343,6 +2348,7 @@ export class PrintersScreen extends LitElement {
   }
 
   #resetPrinterSections(): void {
+    this.#disposeDetailDrafts();
     this.statusOpen = true;
     this.connectionOpen = false;
     this.calibrationOpen = false;
@@ -2353,6 +2359,75 @@ export class PrintersScreen extends LitElement {
     this.discardDetailConnectionNavigationArmed = false;
     this.discardDetailNameArmed = false;
     this.discardDetailNameNavigationArmed = false;
+  }
+
+  #disposeDetailDrafts(): void {
+    this.#detailNameScope?.dispose();
+    this.#detailNameScope = undefined;
+    this.#detailConnectionScope?.dispose();
+    this.#detailConnectionScope = undefined;
+  }
+
+  #openDetailName(printer: Printer): void {
+    this.#detailNameScope?.dispose();
+    this.detailName = { id: printer.id, value: printer.name, saving: false, error: null };
+    this.#detailNameScope = leaveCoordinatorFor(this)?.register<string>({
+      id: {},
+      current: () => this.detailName!.value.trim(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.detailName = { ...this.detailName!, value, error: null };
+      },
+    });
+  }
+
+  #detailConnectionValues(): { host: string; port: string } {
+    const draft = this.detailConnection!;
+    const port = draft.port.trim();
+    return { host: draft.host.trim(), port: /^\d+$/.test(port) ? String(Number(port)) : port };
+  }
+
+  #openDetailConnection(printer: Printer): void {
+    this.#detailConnectionScope?.dispose();
+    this.detailConnection = {
+      id: printer.id,
+      host: printer.host ?? "",
+      port: printer.port === null ? "" : String(printer.port),
+      saving: false,
+      error: null,
+    };
+    this.#detailConnectionScope = leaveCoordinatorFor(this)?.register({
+      id: {},
+      current: () => this.#detailConnectionValues(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.host === b.host && a.port === b.port,
+      restore: (value) => {
+        this.detailConnection = { ...this.detailConnection!, ...value, error: null };
+      },
+    });
+  }
+
+  async #cancelDetail(owner: "name" | "connection"): Promise<void> {
+    const scope = owner === "name" ? this.#detailNameScope : this.#detailConnectionScope;
+    if (!scope) return;
+    await leaveCoordinatorFor(this)!.request({
+      scopes: [scope.id],
+      reason: "cancel",
+      proceed: () => {
+        scope.dispose();
+        if (owner === "name") {
+          this.#detailNameScope = undefined;
+          this.detailName = null;
+        } else {
+          this.#detailConnectionScope = undefined;
+          this.detailConnection = null;
+        }
+        void this.updateComplete.then(() => {
+          this.renderRoot.querySelector<HTMLElement>(`[data-test=edit-printer-${owner}]`)?.focus();
+        });
+      },
+    });
   }
 
   #connectionIsDirty(printer: Printer): boolean {
@@ -2376,16 +2451,34 @@ export class PrintersScreen extends LitElement {
       };
       return;
     }
+    const scope = this.#detailConnectionScope;
     const savingDraft = { ...draft, saving: true, error: null };
     this.detailConnection = savingDraft;
     try {
       await this.api.updatePrinter(printer.id, { host, port: port ? Number(port) : null });
     } catch (error) {
-      if (this.detailConnection === savingDraft)
+      if (!this.isConnected || scope !== this.#detailConnectionScope) return;
+      if (scope && this.detailConnection?.id === printer.id)
+        this.detailConnection = {
+          ...this.detailConnection,
+          saving: false,
+          error: codeMessage(codeOf(error)),
+        };
+      else if (this.detailConnection === savingDraft)
         this.detailConnection = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
-    if (this.detailConnection === savingDraft) {
+    if (!this.isConnected || scope !== this.#detailConnectionScope) return;
+    if (scope) {
+      scope.commit({ host, port: port ? String(Number(port)) : "" });
+      if (scope.isDirty())
+        this.detailConnection = { ...this.detailConnection!, saving: false, error: null };
+      else {
+        scope.dispose();
+        this.#detailConnectionScope = undefined;
+        this.detailConnection = null;
+      }
+    } else if (this.detailConnection === savingDraft) {
       this.detailConnection = null;
       this.discardDetailConnectionArmed = false;
       this.discardDetailConnectionNavigationArmed = false;
@@ -2414,16 +2507,29 @@ export class PrintersScreen extends LitElement {
       this.detailName = { ...draft, error: t("form.name_required") };
       return;
     }
+    const scope = this.#detailNameScope;
     const savingDraft = { ...draft, saving: true, error: null };
     this.detailName = savingDraft;
     try {
       await this.api.updatePrinter(printer.id, { name });
     } catch (error) {
-      if (this.detailName === savingDraft)
+      if (!this.isConnected || scope !== this.#detailNameScope) return;
+      if (scope && this.detailName?.id === printer.id)
+        this.detailName = { ...this.detailName, saving: false, error: codeMessage(codeOf(error)) };
+      else if (this.detailName === savingDraft)
         this.detailName = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
-    if (this.detailName === savingDraft) {
+    if (!this.isConnected || scope !== this.#detailNameScope) return;
+    if (scope) {
+      scope.commit(name);
+      if (scope.isDirty()) this.detailName = { ...this.detailName!, saving: false, error: null };
+      else {
+        scope.dispose();
+        this.#detailNameScope = undefined;
+        this.detailName = null;
+      }
+    } else if (this.detailName === savingDraft) {
       this.detailName = null;
       this.discardDetailNameArmed = false;
     }
@@ -2466,12 +2572,18 @@ export class PrintersScreen extends LitElement {
             event.preventDefault();
             if (this.detailName?.saving) return;
             if (this.detailConnection?.saving) return;
-            if (p && this.#connectionIsDirty(p) && !this.discardDetailConnectionNavigationArmed) {
+            if (
+              p &&
+              !this.#detailConnectionScope &&
+              this.#connectionIsDirty(p) &&
+              !this.discardDetailConnectionNavigationArmed
+            ) {
               this.discardDetailConnectionNavigationArmed = true;
               return;
             }
             if (
               p &&
+              !this.#detailNameScope &&
               this.detailName &&
               this.detailName.id === p.id &&
               this.detailName.value !== p.name &&
@@ -2480,8 +2592,11 @@ export class PrintersScreen extends LitElement {
               this.discardDetailNameNavigationArmed = true;
               return;
             }
-            this.selectedPrinterId = null;
-            this.#url.write({ printer: null });
+            const leaving = this.#url.write({ printer: null });
+            if (!leaving) {
+              this.#resetPrinterSections();
+              this.selectedPrinterId = null;
+            }
           }}
           >${t("printers.filter_all")}</a
         >
@@ -2530,6 +2645,7 @@ export class PrintersScreen extends LitElement {
                         value: event.detail.value,
                         error: event.detail.value.trim() ? null : t("form.name_required"),
                       };
+                    this.#detailNameScope?.changed();
                     this.discardDetailNameArmed = false;
                     this.discardDetailNameNavigationArmed = false;
                   }}
@@ -2552,6 +2668,10 @@ export class PrintersScreen extends LitElement {
                     data-test="cancel-printer-name"
                     ?disabled=${this.detailName.saving}
                     @click=${() => {
+                      if (this.#detailNameScope) {
+                        void this.#cancelDetail("name");
+                        return;
+                      }
                       if (this.detailName?.value !== p.name && !this.discardDetailNameArmed) {
                         this.discardDetailNameArmed = true;
                       } else {
@@ -2574,7 +2694,7 @@ export class PrintersScreen extends LitElement {
             : html`<wt-button
                 data-test="edit-printer-name"
                 @click=${() => {
-                  this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+                  this.#openDetailName(p);
                   this.discardDetailNameArmed = false;
                   void this.updateComplete.then(() => {
                     if (this.detailName?.id === p.id)
@@ -2662,6 +2782,7 @@ export class PrintersScreen extends LitElement {
                             host: event.detail.value,
                             error: null,
                           };
+                        this.#detailConnectionScope?.changed();
                         this.discardDetailConnectionArmed = false;
                         this.discardDetailConnectionNavigationArmed = false;
                       }}
@@ -2681,6 +2802,7 @@ export class PrintersScreen extends LitElement {
                             port: event.detail.value,
                             error: null,
                           };
+                        this.#detailConnectionScope?.changed();
                         this.discardDetailConnectionArmed = false;
                         this.discardDetailConnectionNavigationArmed = false;
                       }}
@@ -2696,6 +2818,10 @@ export class PrintersScreen extends LitElement {
                         data-test="cancel-printer-connection"
                         ?disabled=${this.detailConnection.saving}
                         @click=${() => {
+                          if (this.#detailConnectionScope) {
+                            void this.#cancelDetail("connection");
+                            return;
+                          }
                           if (this.#connectionIsDirty(p) && !this.discardDetailConnectionArmed) {
                             this.discardDetailConnectionArmed = true;
                           } else {
@@ -2719,13 +2845,7 @@ export class PrintersScreen extends LitElement {
                 : html`<wt-button
                     data-test="edit-printer-connection"
                     @click=${() => {
-                      this.detailConnection = {
-                        id: p.id,
-                        host: p.host ?? "",
-                        port: p.port === null ? "" : String(p.port),
-                        saving: false,
-                        error: null,
-                      };
+                      this.#openDetailConnection(p);
                       this.discardDetailConnectionArmed = false;
                       this.discardDetailConnectionNavigationArmed = false;
                     }}

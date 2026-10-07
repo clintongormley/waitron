@@ -4087,3 +4087,41 @@ changed-test notes are retained under Lane E `receipts/w69-final-audit-20261007/
 `ci-printer-repro.log`, `ci-observer-*.log`, `ci-observer-control.json` and
 `ci-dashboard-corrected.log`. No fiscal, root guard or coverage threshold was changed.
 Keep the single completed Claude review; do not repeat it solely for these fixes or a rebase.
+
+
+## Inline printer detail draft checkpoint, 2026-10-07
+
+The inline name and network connection in `apps/dashboard/src/screens/printers-screen.ts` now
+register separate normalized snapshots with the shared leave controller. The name compares its
+trimmed submitted value; the connection compares its trimmed host and normalized numeric port.
+Successful writes commit only their submitted snapshot before refresh. Newer delivered input
+remains editable and dirty after either success or refusal. Cancel consults only the requested
+field owner's scope. A scoped name save leaves a changed connection protected.
+
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/printer-inline.unsaved.test.ts`
+passes 15 browser cases using the real leave controller and URL guard with a synthetic API.
+The first four cases failed at missing unload protection; six save cases subsequently failed at
+remaining dirty after success or newer input remaining disabled. Two separate installed-copy
+registration deletions each fail the affected owner's unload assertion with the other owner's
+revert control passing; restoring that copy passes all 15. Both copied source/test files matched
+the feature tree at that point, before the following breadcrumb correction; that copy was removed.
+
+The existing printer suite reported six failures and 417 passes after the first breadcrumb change:
+an unguarded URL write updates history without publishing an accepted route. The breadcrumb now
+keeps its immediate list reset when the write returns no guarded operation. The six failed cases,
+inline consumer cases and new owner suite pass together: 34 passed, 404 skipped. No existing
+assertion or fixture changed. The earlier combined run was interrupted without a Tests count
+while the new test file had been edited; it is excluded from verification evidence.
+
+This is a partial owner checkpoint. The standalone local discard arming remains in the screen
+and must be retired, preserving the existing behavioral assertions through shared-controller
+fixtures where necessary. Remaining acceptance includes the actual dashboard context, sign-out
+and Forward paths; activated native reload; stale input/response and forced teardown; focus and
+EN/ES/light/dark/phone/desktop visual checks. The browser registration assertions do not establish
+activated native prompts or live printer writes. W69 and draft PR #1325 remain incomplete.
+
+The final fixed-source run of `pnpm --filter @waitron/dashboard exec vitest run
+src/screens/printers-screen.test.ts src/screens/printer-inline.unsaved.test.ts --reporter=verbose`
+passes all 438 cases after the breadcrumb correction. Dashboard typechecking, changed-source ESLint,
+source Prettier checking and `git diff --check` also pass. These are local checkpoint checks;
+no new push hook or current-head CI result is claimed.
