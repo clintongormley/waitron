@@ -2115,6 +2115,10 @@ export const en = {
   "menus.read_only_here": "Read-only here",
   "menus.include_as_folder": "Shown as a folder",
   "menus.include_direct": "Sections shown directly",
+  "menus.include_edit_heading": "{name} in this menu",
+  "menus.include_show_as_folder": "Show as a folder",
+  "menus.include_direct_hint":
+    "Off: its sections and products appear in this list directly, in their own order.",
 
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
@@ -4568,6 +4572,10 @@ export const es: Record<StringKey, string> = {
   "menus.read_only_here": "Solo lectura aquí",
   "menus.include_as_folder": "Se muestra como carpeta",
   "menus.include_direct": "Sus secciones se muestran directamente",
+  "menus.include_edit_heading": "{name} en esta carta",
+  "menus.include_show_as_folder": "Mostrar como carpeta",
+  "menus.include_direct_hint":
+    "Desactivado: sus secciones y productos aparecen directamente en esta lista, en su propio orden.",
 
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":
