@@ -412,6 +412,7 @@ export class ProductEditor extends LitElement {
   @state() private unitUsage: ExtraOfferUsage[] = [];
   @state() private unitUsageUnavailable = false;
   #unitUsageGeneration = 0;
+  #variantReturn: { index: number | null; row: boolean; scrollTop: number } | null = null;
   @state() private variantOpen = false;
   /** Which variant the variant window is editing, or null while it is adding a new one. */
   @state() private variantIndex: number | null = null;
@@ -943,8 +944,42 @@ export class ProductEditor extends LitElement {
   private addVariant(event: Event) {
     event.stopPropagation();
     if (this.suspended) return;
-    this.variantIndex = null;
+    this.openVariant(null);
+  }
+
+  private openVariant(index: number | null): void {
+    const body = this.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
+    this.#variantReturn = {
+      index,
+      row: deepActiveElement()?.getAttribute("data-test") === `edit-row-${index}`,
+      scrollTop: body.scrollTop,
+    };
+    this.variantIndex = index;
     this.variantOpen = true;
+  }
+
+  private async returnVariantFocus(): Promise<void> {
+    const opener = this.#variantReturn;
+    this.#variantReturn = null;
+    if (!opener) return;
+    await this.updateComplete;
+    const form = this.shadowRoot!.querySelector("dashboard-variant-form")!;
+    await form.updateComplete;
+    await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    const table = this.shadowRoot!.querySelector("dashboard-variant-table");
+    await table?.updateComplete;
+    const target =
+      opener.index === null
+        ? this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")
+        : table?.shadowRoot!.querySelector<HTMLElement>(
+            `[data-test=${opener.row ? "edit-row" : "actions"}-${opener.index}]`,
+          );
+    if (target instanceof LitElement) await target.updateComplete;
+    if (!this.isConnected || !this.open || this.variantOpen) return;
+    // Suspension disables the opener before the child opens; an edited row is replaced on Save.
+    target?.focus({ preventScroll: true });
+    this.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!.scrollTop =
+      opener.scrollTop;
   }
 
   /** After a Disable or Remove: a table left with no row on screen cannot keep the focus itself, so
@@ -963,6 +998,7 @@ export class ProductEditor extends LitElement {
   private closeVariant(): void {
     this.variantOpen = false;
     this.variantIndex = null;
+    void this.returnVariantFocus();
   }
 
   private submitVariant(event: CustomEvent<{ value: EditorVariant }>): void {
@@ -976,6 +1012,7 @@ export class ProductEditor extends LitElement {
     this.variantIndex = null;
     this.change("variants", variants);
     this.shadowRoot!.querySelector("dashboard-variant-form")!.closeSaved(event.detail.value);
+    void this.returnVariantFocus();
   }
 
   /** The product's category as a path, with Change; a variant's page shows its product's path,
@@ -1569,8 +1606,7 @@ export class ProductEditor extends LitElement {
                 }}
                 @wt-edit=${(event: CustomEvent<{ index: number }>) => {
                   event.stopPropagation();
-                  this.variantIndex = event.detail.index;
-                  this.variantOpen = true;
+                  this.openVariant(event.detail.index);
                 }}
                 @wt-open=${(event: CustomEvent<{ index: number }>) => {
                   event.stopPropagation();
