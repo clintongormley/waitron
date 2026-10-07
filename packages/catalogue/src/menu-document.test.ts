@@ -1870,6 +1870,32 @@ describe("an include shown as a folder or directly", () => {
       expect(diffMenuDocuments(reversedKeys(document) as MenuDocument, document)).toEqual([]);
     });
 
+    it("a fixed name and the included menu's renaming each point at their own languages", async () => {
+      const f = await menusFixture(fx.db);
+      const live = await build(f.lunch);
+      await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
+        showAsFolder: true,
+        overrides: { names: { en: "Bar" } },
+      });
+      await app((tx) =>
+        updateMenuDetails(tx, f.drinksMenu, {
+          names: { en: "Something to drink", es: "Bebidas" },
+        }),
+      );
+      const changes = diffMenuDocuments(live, await build(f.lunch));
+      const name = (language: string) => [
+        {
+          kind: "section",
+          sectionIds: [f.drinks],
+          field: { kind: "name", audience: "customer", language },
+        },
+      ];
+      expect(changes.map(({ source, targets }) => ({ source, targets }))).toEqual([
+        { source: "this_menu", targets: { before: name("en"), after: name("en") } },
+        { source: "included_menu", targets: { before: [], after: name("es") } },
+      ]);
+    });
+
     it("a change to the second include of the same menu is listed", async () => {
       const f = await menusFixture(fx.db);
       const bar = await app(async (tx) => {

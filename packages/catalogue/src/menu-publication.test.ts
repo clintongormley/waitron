@@ -900,6 +900,52 @@ describe("menuStatus", () => {
       ]);
     });
 
+    it("an include's setting is never also on another menu that changed its own include", async () => {
+      const f = await published();
+      await publish(f.drinksMenu);
+      const includeOf = async (listId: string) =>
+        (
+          await fx.db
+            .select({ id: sectionMembers.id })
+            .from(sectionMembers)
+            .where(
+              and(
+                eq(sectionMembers.sectionId, listId),
+                eq(sectionMembers.childSectionId, f.drinks),
+              ),
+            )
+        )[0]!.id;
+      const lunchInclude = await includeOf(f.lunchRoot);
+      const dinnerRoot = await app(async (tx) => requireMenuRoot(tx, f.dinner));
+      const dinnerInclude = await includeOf(dinnerRoot);
+      const drinksChange = async () =>
+        changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes).filter(
+          (change) => change.kind === "section_changed" && change.sectionId === f.drinks,
+        );
+      await app(async (tx) => {
+        await updateSection(tx, f.beer, { internalName: "Beers" });
+        await setIncludeFolder(tx, f.lunchRoot, lunchInclude, {
+          showAsFolder: false,
+        });
+      });
+      const switched = {
+        kind: "section_changed",
+        sectionId: f.drinks,
+        name: "Drinks",
+        fields: ["direct"],
+        source: "this_menu",
+      };
+      expect(await drinksChange()).toEqual([switched]);
+      await app((tx) => setIncludeFolder(tx, dinnerRoot, dinnerInclude, { showAsFolder: false }));
+      expect(await drinksChange()).toEqual([switched]);
+      const bar = { showAsFolder: true, overrides: { names: { en: "Bar" }, color: "#112233" } };
+      await app(async (tx) => {
+        await setIncludeFolder(tx, f.lunchRoot, lunchInclude, bar);
+        await setIncludeFolder(tx, dinnerRoot, dinnerInclude, bar);
+      });
+      expect(await drinksChange()).toEqual([{ ...switched, fields: ["names", "color"] }]);
+    });
+
     it("flags neither for a reporting category", async () => {
       const f = await published();
       await app((tx) => updateProduct(tx, f.lemonade, { categoryId: f.coldDrinks }));

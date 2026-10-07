@@ -121,6 +121,10 @@ function changedText(
   return result;
 }
 
+function filterFields(fields: Fields, keep: (field: MenuField) => boolean): Fields {
+  return { before: fields.before.filter(keep), after: fields.after.filter(keep) };
+}
+
 function changedNames(
   before: {
     name: string;
@@ -487,15 +491,34 @@ export function navigateMenuChanges(
           );
         const before = copies(beforeOccurrences),
           after = copies(afterOccurrences);
+        const split = changes.some(
+          (other) =>
+            other.kind === "section_changed" &&
+            other.sectionId === change.sectionId &&
+            other.source !== change.source,
+        );
         const compare = (from: string[], to: string[], parent?: readonly string[]) => {
           const was = sectionAt(live, from),
             node = sectionAt(proposed, to);
+          // An include's names changed by both menus are two events: the languages the include
+          // fixes are this menu's, the rest the included menu's.
+          const fixed = new Set([
+            ...Object.keys(was.fixed?.names ?? {}),
+            ...Object.keys(node.fixed?.names ?? {}),
+          ]);
+          const ownName = (name: MenuField) =>
+            !split ||
+            (name.kind === "name" && name.audience === "customer" && fixed.has(name.language!)) ===
+              (change.source === "this_menu");
           for (const field of change.fields) {
             const changed =
               field === "names"
-                ? changedNames(
-                    { name: was.internalName, customerName: was.names },
-                    { name: node.internalName, customerName: node.names },
+                ? filterFields(
+                    changedNames(
+                      { name: was.internalName, customerName: was.names },
+                      { name: node.internalName, customerName: node.names },
+                    ),
+                    ownName,
                   )
                 : same(was[field], node[field])
                   ? { before: [], after: [] }
