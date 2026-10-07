@@ -2192,9 +2192,14 @@ refusals retain their metadata and reserve another generation, due after 5 secon
 30 seconds, 2 minutes or 10 minutes, stopping after five attempts. Unknown outcomes are
 not automatically replayed. Synthetic database cases cover another sale committing while
 the injected sender waits, competing passes, due times, unchanged consent/recipient snapshots,
-duplicate markers, late outcomes, rollback and sanitised throws. Production invoice projection,
-mail routing/sender composition and worker lifecycle remain pending; no email issuance or
-Task 4 completion claim.
+duplicate markers, late outcomes, rollback and sanitised throws. The routed sender now reads
+the current mail settings before each send; a real local SMTP case rotates the saved gateway
+and sender address between two sends, then removes it and observes a certain failure with
+no further message. The standalone loop checks primary status on each iteration, contains
+pass failures and finishes the pending send's report before returning after a stop signal.
+Database cases cover idle and in-flight stops, an already-stopped worker, secondary-to-primary
+gating and recovery after a pass failure. Production invoice projection and boot's start/stop
+composition remain pending; no email issuance or Task 4 completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain

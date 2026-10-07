@@ -146,8 +146,18 @@ that transaction before transport, and records the outcome with the claim identi
 expires abandoned claims and derives the duplicate marker from delivery metadata. Synthetic
 database cases use an injected sender and a stored-sale projection of the issue time; they
 cover another real sale committing during a held send, competing passes, due eligibility,
-late outcomes and sanitised throws. Production invoice projection, SMTP composition and
-worker lifecycle remain pending. This does not complete Tasks 2 or 4.
+late outcomes and sanitised throws.
+
+**2026-10-07 sender/loop checkpoint.** The routed sender reads the stored mail settings
+before each send and closes that read transaction before SMTP. A real local SMTP fixture
+sends through two successive stored gateways with one sender, then removes the credential
+and observes a certain failure without another message. The standalone loop checks primary
+status on each iteration, contains pass failures and waits for a pending send's report before
+returning after a stop signal. Database cases cover an idle stop, an already-stopped worker,
+secondary-to-primary gating, a held send and recovery after a pass failure. Independent
+deletions of the primary/stop/error guards, credential refresh and unconfigured refusal fail
+their intended cases beside passing controls. Production invoice projection and boot's
+start/stop composition remain pending. This does not complete Tasks 2 or 4.
 
 ## 3. Set up email for a live venue, without a terminal
 
