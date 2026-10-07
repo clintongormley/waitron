@@ -928,9 +928,9 @@ unused `units` property is gone (it closes W75's leftover).
   Colour… and Change photo… is gone. A product's colour is set in that dialog. The product colour
   dialog (`product-color-form.ts`), which only that menu opened, is retired with the dashboard
   client's `setProductColor`.
-  - Open: `PATCH /management-api/products/:id` (`apps/server/src/catalogue-api.ts`) now has no
-    caller in `apps/` outside tests; the dashboard's `setProductColor` was its only one. Deleting
-    the route, or keeping it on purpose, is not decided.
+  - A358 — DONE: retired `PATCH /management-api/products/:id` and its ownership helper. Product
+    edits use the existing editor save route. Modifier-usage and frozen menu-preview fixtures
+    now save through that editor; their stored-content assertions remain.
   - Open: `wt-row-actions` (`packages/ui/src/components/wt-row-actions.ts`) keeps the `disabled`
     property and the `trigger` slot and part that A303 added for the retired menu. Nothing outside
     its own tests uses them now, and those tests still name Colour… and Change photo…. Retiring
@@ -6693,7 +6693,7 @@ the ruling calls legitimate. Nobody has decided whether the form should be relax
 note should become its own document type.
 
 **A negative catalogue price can still be stored by a direct call — OPEN (left by #487).** A
-negative catalogue price is never valid (owner ruling 2026-09-21); the four catalogue writes in
+negative catalogue price is never valid (owner ruling 2026-09-21); the product-create and menu-item writes in
 `apps/server/src/catalogue-api.ts` refuse one at the request boundary. `createProduct` and
 `updateProduct` (`packages/catalogue/src/operations.ts`) still accept and store a negative when
 called directly — a seed, a script or a future caller — and `products.unit_price` carries no
@@ -6703,7 +6703,7 @@ cents, so a check constraint is now the only thing that would refuse it at the d
 
 **Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
 `isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) allows at most two decimal places
-and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the four
+and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the
 screened catalogue writes use allows any number of decimals and twelve whole digits, and ROUNDS the
 excess. So `POST /management-api/products` with `unitPrice: "1.999"` stores `2.00` without saying
 so, while the product-editor route refuses the same value with `product.invalid`; an eleven-digit

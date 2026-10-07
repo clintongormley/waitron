@@ -346,15 +346,6 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
         vatClass: "general",
       }),
     );
-    await expect403(
-      await send(
-        app,
-        "PATCH",
-        "/management-api/products/00000000-0000-0000-0000-000000000000",
-        staffCookie,
-        { unitPrice: "9.99" },
-      ),
-    );
     const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
     await expect403(
       await send(app, "POST", `/management-api/locations/${ZERO_UUID}/catalogues`, staffCookie, {
@@ -448,13 +439,18 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   const product = (await create.json()) as { id: string; modifiers: unknown };
   expect(product.modifiers).toEqual(modifiers);
   const ordered = [...modifiers].reverse();
+  const editor = await send(app, "GET", `/management-api/products/${product.id}/editor`, cookie);
+  expect(editor.status).toBe(200);
+  const editorBody = (await editor.json()) as Record<string, unknown>;
+  delete editorBody.courseId;
   expect(
     (
-      await send(app, "PATCH", `/management-api/products/${product.id}`, cookie, {
+      await send(app, "PUT", `/management-api/products/${product.id}/editor`, cookie, {
+        ...editorBody,
         modifiers: ordered,
       })
     ).status,
-  ).toBe(204);
+  ).toBe(200);
   const list = await send(app, "GET", `/management-api/catalogues/${menu.id}/products`, cookie);
   expect(await list.json()).toMatchObject([{ id: product.id, modifiers: ordered }]);
 });

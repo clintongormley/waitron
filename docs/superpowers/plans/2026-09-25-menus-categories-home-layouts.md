@@ -1,5 +1,9 @@
 # Menus, reusable sections and home layouts — Implementation Plan
 
+> 2026-10-07, A358: `PATCH /management-api/products/:id` is retired after A327 removed its
+> application caller. Product edits use `PUT /management-api/products/:id/editor`. The route
+> references below record the plan's earlier contract; see [Products](../../developers/products.md).
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

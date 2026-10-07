@@ -9,7 +9,7 @@ import {
   type ContentLanguageRules,
   type Decimal,
 } from "@waitron/shared";
-import { products, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
   moveCatalogueItems,
@@ -80,14 +80,12 @@ import {
   setLocationDefaultCatalogue,
   updateMenuDetails,
   updateMenuItem,
-  updateProduct,
   listMenuVariants,
   setMenuVariantPrice,
   setMenuVariants,
   type MenuVariant,
   readProductEditor,
   saveProductEditor,
-  productWithId,
   isModifierListKind,
   readProductModifiers,
   writeProductModifiers,
@@ -96,7 +94,6 @@ import {
   type ProductAllergens,
   type ProductEditorValue,
   type ProductRouting,
-  type UpdateProductInput,
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -401,7 +398,6 @@ async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Pro
   }
 }
 
-/** A SHAPE screen only; `createProduct`/`updateProduct` validate the content (the `diet.*` codes). */
 function screenDietOverride(value: unknown): void {
   if (value !== undefined && value !== null && !isPlainObject(value)) {
     throw new AppError("management.request_invalid", { field: "dietOverride" });
@@ -740,16 +736,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     const cfg = requireVenueCfg(deps);
     await setProductCourse(tx, cfg, saved.id, routing.courseId, "any");
     return readProductEditor(tx, saved.id);
-  };
-
-  const assertOwned = async (tx: Transaction, id: string): Promise<void> => {
-    const [row] = await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(productWithId(id, "top-level"));
-    if (row === undefined) {
-      throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
-    }
   };
 
   mountListSurface(app, gated, log, {
@@ -1470,133 +1456,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         return { ...product, modifiers: stored.get(product.id) ?? [] };
       });
       return c.json(created, 201);
-    }),
-  );
-
-  app.patch("/management-api/products/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      const body = await readJsonBody<{
-        name?: unknown;
-        customerName?: unknown;
-        unitPrice?: unknown;
-        vatClass?: unknown;
-        unitId?: unknown;
-        pricingUnit?: unknown;
-        categoryId?: unknown;
-        allergens?: unknown;
-        dietOverride?: unknown;
-        image?: unknown;
-        color?: unknown;
-        active?: unknown;
-        available?: unknown;
-        ordering?: unknown;
-        modifiers?: unknown;
-        // Retired fields, declared so `refuseRetiredFields` can see them.
-        soldAlone?: unknown;
-        modifierIds?: unknown;
-        optionGroupIds?: unknown;
-      }>(c);
-      const patch: UpdateProductInput = {};
-      if (body.name !== undefined) {
-        if (typeof body.name !== "string" || !body.name.trim()) {
-          throw new AppError("management.request_invalid", { field: "name" });
-        }
-        patch.name = body.name.trim();
-      }
-      if (body.customerName !== undefined) {
-        patch.customerName = screenCustomerName(body.customerName);
-      }
-      if (body.unitPrice !== undefined) {
-        if (typeof body.unitPrice !== "string") {
-          throw new AppError("management.request_invalid", { field: "unitPrice" });
-        }
-        refuseNegativePrice(body.unitPrice, "unitPrice");
-        patch.unitPrice = body.unitPrice;
-      }
-      if (body.vatClass !== undefined) {
-        if (typeof body.vatClass !== "string") {
-          throw new AppError("management.request_invalid", { field: "vatClass" });
-        }
-        patch.vatClass = body.vatClass as never;
-      }
-      if (body.pricingUnit !== undefined) {
-        if (typeof body.pricingUnit !== "string") {
-          throw new AppError("management.request_invalid", { field: "pricingUnit" });
-        }
-        patch.pricingUnit = body.pricingUnit as never;
-      }
-      if (body.unitId !== undefined) {
-        if (typeof body.unitId !== "string" || !isUuid(body.unitId)) {
-          throw new AppError("management.request_invalid", { field: "unitId" });
-        }
-        patch.unitId = body.unitId;
-      }
-      if (body.categoryId !== undefined) {
-        if (typeof body.categoryId !== "string" && body.categoryId !== null) {
-          throw new AppError("management.request_invalid", { field: "categoryId" });
-        }
-        patch.categoryId = body.categoryId;
-      }
-      if (body.image !== undefined) {
-        if (typeof body.image !== "string" && body.image !== null) {
-          throw new AppError("management.request_invalid", { field: "image" });
-        }
-        patch.image = body.image;
-      }
-      if (body.color !== undefined) {
-        if (typeof body.color !== "string" && body.color !== null) {
-          throw new AppError("management.request_invalid", { field: "color" });
-        }
-        patch.color = body.color;
-      }
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "active" });
-        }
-        patch.active = body.active;
-      }
-      if (body.available !== undefined) {
-        if (typeof body.available !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "available" });
-        }
-        patch.available = body.available;
-      }
-      if (body.ordering !== undefined) {
-        if (!isProductOrdering(body.ordering)) {
-          throw new AppError("management.request_invalid", { field: "ordering" });
-        }
-        patch.ordering = body.ordering;
-      }
-      if (body.allergens !== undefined) {
-        patch.allergens = body.allergens as ProductAllergens | null;
-      }
-      if (body.dietOverride !== undefined) {
-        screenDietOverride(body.dietOverride);
-        patch.dietOverride = body.dietOverride as DietOverride | null;
-      }
-      // A full replace when present; `[]` detaches them all. An empty `patch` is fine: `updateProduct`
-      // always bumps `updatedAt`, so its `.set()` is never empty.
-      refuseRetiredFields(body);
-      const modifiers = parseProductModifiers(body.modifiers);
-      await gated(c, sessionId, async (tx) => {
-        await assertOwned(tx, productId);
-        // A customer-facing name is optional: absent or wholly blank, the staff name is what a
-        // receipt shows, so there is nothing to hold to the venue's default content language. One
-        // with no text in that language is a translation gap and is refused.
-        if (patch.customerName != null)
-          await validateContentTranslations(
-            tx,
-            patch.customerName,
-            deps.venueLocale ?? FALLBACK_LOCALE,
-          );
-        await updateProduct(tx, productId, patch);
-        if (modifiers !== undefined) {
-          await writeProductModifiers(tx, productId, modifiers);
-        }
-      });
-      return c.body(null, 204);
     }),
   );
 }
