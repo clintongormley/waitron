@@ -225,9 +225,11 @@ Watchers tabs go.
   Disable are in the ⋮ menu. Editing a station sets its name, its printers and "Show the rest of
   the order".
 - **Routing:** the grid of #1363, with section 8's period choices in a cell. The "Where is this
-  made?" tester opens from a button as a panel you close again; it no longer sits at the top of
-  the page over the grid (owner, 2026-10-07). It already takes a weekday and time; it also names
-  the period that decided, as in "Cocktails, in every zone, during Lunch".
+  made?" tester goes (owner, 2026-10-07): the grid lays out every answer, and the station-closed
+  explanations it gave no longer arise. The one thing only the tester showed is how extras are
+  routed (`chooseExtraMaker`, `packages/venue-service/src/routing.ts`): an extra whose cell
+  resolves to the default station, or to No preparation, is made with its dish instead. Such a
+  cell says so, for example "Downstairs bar (default) — as an extra, follows its dish".
 
 ### 9.4 Device profiles and devices
 
@@ -266,7 +268,7 @@ description of what the business sells stay in Venue settings.
 
 The Menu timetable screen; department and station hours; the all-day menu; zone menu choices; a
 department's separate list of orderable menus (it becomes its periods' menus); the service style; the tree table and the "Ready for service" tabs; the "?" help on Order number; the
-station fallback setting; watchers and the Tickets and Watchers tabs; the two-a-year local-holiday
+station fallback setting; the "Where is this made?" tester; watchers and the Tickets and Watchers tabs; the two-a-year local-holiday
 cap; Venue settings' receipt fields that move to departments.
 
 Waitron is not live, so data is dropped and recreated rather than converted (CLAUDE.md §3). Each
