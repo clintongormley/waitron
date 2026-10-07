@@ -417,6 +417,13 @@ describe("sizeClash", () => {
     expect(sizeClash(productClash)).toBe(false);
   });
 
+  it("is true when an Active size clashes at size level and no Active size follows the product's clash", () => {
+    const both = lemonadeOn({}, { price: "3.50", variants: { "v-large": "3.90" } });
+    expect(both.combined.price.state).toBe("clash");
+    expect(sizeClash(withInactive(both, "v-small"))).toBe(true);
+    expect(sizeClash(both)).toBe(false);
+  });
+
   it("is false when the clashing size is Inactive", () => {
     expect(sizeClash(withInactive(sizeLevelClash, "v-large"))).toBe(false);
   });

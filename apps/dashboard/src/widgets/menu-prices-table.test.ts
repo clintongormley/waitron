@@ -2741,7 +2741,8 @@ it("turns a clashing product's sentence into the one naming its variants' clash 
     ],
   });
   // Its own price is never sold: each Active size's price comes from its size's own sources.
-  expect(clashMarker(el, "mi-lemonade")).toBe("");
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].sizes);
+  expect(override(el, "mi-lemonade").placeholder).toBe("—");
   await allPrices(el);
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;

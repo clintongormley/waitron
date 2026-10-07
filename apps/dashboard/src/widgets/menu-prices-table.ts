@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import {
+  followsClash,
   productInherited,
   sizeClash,
   sizeSetting,
@@ -103,19 +104,10 @@ const activeOffer = (item: MenuPriceRow): MenuPriceRow["combined"] => {
   };
 };
 
-/** Whether a product with an Active size is sold at a clashing price a price for the product
- * would settle; a product without one is sold at its own price. */
-const ownPriceSold = (item: MenuPriceRow): boolean => {
-  const sizes = item.variants.filter((v) => v.active);
-  return (
-    sizes.length === 0 ||
-    sizes.some(
-      ({ variantId }) =>
-        sizeSetting(item, variantId).state === "clash" &&
-        variantInheritedFrom(item, variantId, undefined).follows,
-    )
-  );
-};
+/** Whether a clash in the product's own price stops publishing: it has no Active size, or an
+ * Active size charges that clashing price. */
+const ownPriceSold = (item: MenuPriceRow): boolean =>
+  item.variants.every((v) => !v.active) || followsClash(item);
 
 /** Whether this menu stores a price for any of the product's sizes. */
 const pricesASize = (item: MenuPriceRow): boolean =>
