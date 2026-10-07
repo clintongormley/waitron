@@ -1025,6 +1025,11 @@ unused `units` property is gone (it closes W75's leftover).
     a refused field is drawn about 14 px wider than the others, pushing its "?" to the right; and at
     390 wide a refusal's focus scrolls the table only part way sideways, leaving Spanish prices
     half-hidden behind the pinned Resolve column.
+  - Open, from #1368's review (read, not tested): closing a refusal's message now clears the
+    outcome, so a later save's "Saved …" message with its Undo can appear where before it stayed
+    hidden — the docs say so, but no test covers that case. And when the message closes (its ×, or
+    Undo replacing it), keyboard focus is not put back where it was, unlike the dashboard's alert
+    toast. Next: a test for the first, and return focus to the field the save came from.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
