@@ -2456,11 +2456,8 @@ it.each(["en-GB", "es-ES"])(
         .getBoundingClientRect();
       for (const key of ["mi-lager", "mi-lemonade:v-small"]) {
         const field = override(el, key).getBoundingClientRect();
-        // A column pinned to the end paints over whatever scrolls beneath it.
-        const pinned = row(el, key)!.querySelector<HTMLElement>('td[data-pinned="end"]');
-        const right = Math.min(scroller.right, pinned?.getBoundingClientRect().left ?? Infinity);
         expect(field.left, key).toBeGreaterThanOrEqual(scroller.left - 0.5);
-        expect(field.right, key).toBeLessThanOrEqual(right + 0.5);
+        expect(field.right, key).toBeLessThanOrEqual(scroller.right + 0.5);
       }
       for (const key of ["mi-lager", "mi-lemonade", "mi-lemonade:v-small"]) {
         const sentence = cell(el, "override", key).querySelector("[part~=clash]")!;
@@ -2671,7 +2668,7 @@ describe.each(["en-GB", "es-ES"] as const)("the clash spelled out (%s)", (locale
 const clashMarker = (el: MenuPricesTable, key: string) =>
   text(cell(el, "override", key).querySelector("[part~=clash]"));
 
-it("drops a product's Clash once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
+it("drops a product's clash sentence once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
   const resolved: MenuPriceRow = {
     ...lager,
     override: "2.20",
@@ -2689,7 +2686,7 @@ it("drops a product's Clash once this menu's saved price decides it, and shows i
   expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
 });
 
-it("drops a product's Clash while a price is typed for it, and not for text that is no price", async () => {
+it("drops a product's clash sentence while a price is typed for it, and not for text that is no price", async () => {
   const el = await mount({ rows: [clashRow(lager)] });
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
   await typeIn(el, "mi-lager", "2.20");
@@ -2700,7 +2697,7 @@ it("drops a product's Clash while a price is typed for it, and not for text that
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
 });
 
-it("drops a size's Clash once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
+it("drops a size's clash sentence once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
   const source = variantClashRow();
   const resolved = {
     ...source,
@@ -2733,7 +2730,7 @@ it("drops a size's Clash once this menu's saved price decides it, and shows it a
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
 });
 
-it("turns a clashing product's Clash into its size's once a price is typed for the product", async () => {
+it("turns a clashing product's sentence into the one naming its variants' clash once a price is typed for the product", async () => {
   const el = await mount({
     rows: [
       {

@@ -1060,8 +1060,8 @@ unused `units` property is gone (it closes W75's leftover).
     Clashes a product that clashes itself stays folded until opened, as the table folds any row
     that matches a filter in its own right. Once a load has had no clash, a clash that comes back
     (Undo, a live re-read) does not switch the filter back to Clashes.
-  - Open, for A345 (not yet in this backlog: a menu with clashes cannot be published from
-    anywhere): a product with variants whose own price clashes while no variant's does is
+  - Open, for A345 (the campaign queue's item "A menu with clashes cannot be published, from
+    anywhere"; not yet in this backlog): a product with variants whose own price clashes while no variant's does is
     marked red and offered under Clashes, but not counted, because `clashesOf` counts only its
     variants. And the tab counts Inactive products and variants, which the publish check leaves
     out. Whether the tab or the publish check is right is A345's question.
