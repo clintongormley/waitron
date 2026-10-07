@@ -53,7 +53,7 @@ interface Venue {
   stations: { cocina: string; barra: string; pase: string };
 }
 
-// Three products: café has a product exception, tostada has a folder claim, and agua uses the default.
+// Three products: café has a product cell, tostada a category cell, and agua uses the default.
 async function seedVenue(db: Database): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
@@ -143,7 +143,7 @@ async function counts(db: Database) {
       (select count(*) from department_menus) as department_menus,
       (select count(*) from menu_items) as items,
       (select count(*) from product_modifiers where extra_list_id is not null) as extras,
-      (select count(*) from route_exceptions) as routes`);
+      (select count(*) from routing_cells) as routes`);
   return rows[0]!;
 }
 

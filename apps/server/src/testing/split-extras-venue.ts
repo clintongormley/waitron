@@ -24,7 +24,7 @@ import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
 import { createWatcher, setPrinterWatcher } from "../watchers.js";
-import { setClaim } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { createTable } from "../tables.js";
 import { seatTable } from "../parties.js";
 import { OPERATOR } from "./party-venue.js";
@@ -139,10 +139,30 @@ export async function setupSplitExtrasVenue() {
       drinks: drinks.id,
       bottled: bottled.id,
     };
-    await setClaim(tx, cfg, burgers.id, { kind: "station", stationId: stations.grill });
-    await setClaim(tx, cfg, sides.id, { kind: "station", stationId: stations.fryer });
-    await setClaim(tx, cfg, sauces.id, { kind: "no_preparation" });
-    await setClaim(tx, cfg, bottled.id, { kind: "no_preparation" });
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "category", categoryId: burgers.id }, zoneId: null },
+      { kind: "station", stationId: stations.grill },
+    );
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "category", categoryId: sides.id }, zoneId: null },
+      { kind: "station", stationId: stations.fryer },
+    );
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "category", categoryId: sauces.id }, zoneId: null },
+      { kind: "no_preparation" },
+    );
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "category", categoryId: bottled.id }, zoneId: null },
+      { kind: "no_preparation" },
+    );
 
     const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
     const product = async (
@@ -267,7 +287,7 @@ export async function fireNewOrder(
 }
 
 /** Offer one optional, uncapped extras list on `dishId`, returning the list id and the offered
- *  products' ids in order. Callers choose whether these products have a folder claim. */
+ *  products' ids in order. Callers choose whether these products have a category cell. */
 type ExtraItem = {
   name: string;
   customerName?: string;

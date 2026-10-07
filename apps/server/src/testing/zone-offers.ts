@@ -12,8 +12,7 @@ import type { ServiceMode } from "@waitron/module";
 import {
   configureZone,
   createDepartment,
-  createException,
-  setClaim,
+  setRoutingCell,
   setZoneSalePolicyOverride,
   listDepartments,
   zoneAllDayMenus,
@@ -193,27 +192,32 @@ async function topLevelProducts(tx: Transaction, cfg: Cfg): Promise<string[]> {
   return rows.map((row) => row.id);
 }
 
-/** Test-only: route one top-level product to a station on every order, as an exception. */
+/** Test-only: route one top-level product to a station in every zone; a later call replaces it. */
 export async function routeProductTo(
   tx: Transaction,
   cfg: Cfg,
   productId: string,
   stationId: string,
 ): Promise<void> {
-  await createException(tx, cfg, {
-    zoneId: null,
-    categoryId: null,
-    productId,
-    target: { kind: "station", stationId },
-  });
+  await setRoutingCell(
+    tx,
+    cfg,
+    { row: { kind: "product", productId }, zoneId: null },
+    { kind: "station", stationId },
+  );
 }
 
-/** Test-only: a station claims a folder. */
+/** Test-only: route a category to a station in every zone. */
 export async function claimFolderFor(
   tx: Transaction,
   cfg: Cfg,
   categoryId: string,
   stationId: string,
 ): Promise<void> {
-  await setClaim(tx, cfg, categoryId, { kind: "station", stationId });
+  await setRoutingCell(
+    tx,
+    cfg,
+    { row: { kind: "category", categoryId }, zoneId: null },
+    { kind: "station", stationId },
+  );
 }

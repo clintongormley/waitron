@@ -34,7 +34,7 @@ import {
 import { claimFolderFor } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { addTabRound, fireLines, unsentDishLines } from "./working-order.js";
-import { setClaim, stationClaims } from "@waitron/venue-service";
+import { routingCells, setRoutingCell } from "@waitron/venue-service";
 import { setStationFallback, setStationToday } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
@@ -248,27 +248,45 @@ describe("sending split-off extras", () => {
       }
       const claims = await tx
         .select({
-          categoryId: stationClaims.categoryId,
-          stationId: stationClaims.stationId,
-          noPreparation: stationClaims.noPreparation,
+          categoryId: routingCells.categoryId,
+          productId: routingCells.productId,
+          zoneId: routingCells.zoneId,
+          stationId: routingCells.stationId,
+          noPreparation: routingCells.noPreparation,
         })
-        .from(stationClaims)
-        .where(eq(stationClaims.locationId, venue.cfg.locationId));
+        .from(routingCells)
+        .where(eq(routingCells.locationId, venue.cfg.locationId));
       expect(claims).toHaveLength(4);
       expect(claims).toEqual(
         expect.arrayContaining([
           {
             categoryId: venue.folders.burgers,
+            productId: null,
+            zoneId: null,
             stationId: venue.stations.grill,
             noPreparation: false,
           },
           {
             categoryId: venue.folders.sides,
+            productId: null,
+            zoneId: null,
             stationId: venue.stations.fryer,
             noPreparation: false,
           },
-          { categoryId: venue.folders.sauces, stationId: null, noPreparation: true },
-          { categoryId: venue.folders.bottled, stationId: null, noPreparation: true },
+          {
+            categoryId: venue.folders.sauces,
+            productId: null,
+            zoneId: null,
+            stationId: null,
+            noPreparation: true,
+          },
+          {
+            categoryId: venue.folders.bottled,
+            productId: null,
+            zoneId: null,
+            stationId: null,
+            noPreparation: true,
+          },
         ]),
       );
       for (const listId of [venue.lists.burger, venue.lists.water]) {
@@ -378,7 +396,12 @@ describe("sending split-off extras", () => {
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await setClaim(tx, cfg, drinks.id, { kind: "no_preparation" });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
+        { kind: "no_preparation" },
+      );
       await claimFolderFor(tx, cfg, sides.id, fryer.id);
       const printer = await createPrinter(
         tx,
@@ -431,7 +454,12 @@ describe("sending split-off extras", () => {
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "no_preparation" });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
+        { kind: "no_preparation" },
+      );
       const water = await createProduct(tx, {
         catalogueId,
         categoryId: drinks.id,
@@ -493,7 +521,12 @@ describe("sending split-off extras", () => {
       await attachPrinterToStation(tx, { stationId: fryer.id, printerId: printer.id });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await setClaim(tx, cfg, drinks.id, { kind: "no_preparation" });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
+        { kind: "no_preparation" },
+      );
       await claimFolderFor(tx, cfg, sides.id, fryer.id);
       const water = await createProduct(tx, {
         catalogueId,

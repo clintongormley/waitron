@@ -15,11 +15,11 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createProduct } from "@waitron/catalogue";
+import { createCategory, createProduct } from "@waitron/catalogue";
 import { hashPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import { createException, setStationFallback, setStationToday } from "@waitron/venue-service";
+import { setRoutingCell, setStationFallback, setStationToday } from "@waitron/venue-service";
 import { takeBillPayment } from "./bill-payments.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
@@ -142,12 +142,12 @@ interface Dish {
 }
 
 /** A new product with three different names, offered in both zones with no route of its own. */
-async function dish(name: string): Promise<Dish> {
+async function dish(name: string, categoryId: string | null = null): Promise<Dish> {
   return inTx(v, async (tx) => {
     const staffName = `${name} ${randomUUID().slice(0, 8)}`;
     const product = await createProduct(tx, {
       catalogueId,
-      categoryId: null,
+      categoryId,
       name: staffName,
       customerName: { [v.cfg.locale]: `Customer ${name}` },
       kitchenName: `KITCHEN ${name}`,
@@ -174,12 +174,12 @@ async function dish(name: string): Promise<Dish> {
 
 async function routeTo(productId: string, stationId: string, zoneId?: string): Promise<void> {
   await inTx(v, (tx) =>
-    createException(tx, v.cfg, {
-      productId,
-      zoneId: zoneId ?? null,
-      categoryId: null,
-      target: { kind: "station", stationId },
-    }),
+    setRoutingCell(
+      tx,
+      v.cfg,
+      { row: { kind: "product", productId }, zoneId: zoneId ?? null },
+      { kind: "station", stationId },
+    ),
   );
 }
 
@@ -303,12 +303,22 @@ function dishNotSent(workingOrderId: string, dishes: string, orderNumber: number
 }
 
 describe("paying a pay-first order, or an open counter order in a zone that sends before payment, whose dish no kitchen station can take", () => {
-  it("alerts for a switched-off station instead of using a later matching rule", async () => {
-    const made = await dish("Steak");
+  it("alerts for a switched-off station instead of using the next row's cell", async () => {
+    const category = await inTx(v, (tx) =>
+      createCategory(tx, { name: `Grills ${randomUUID().slice(0, 8)}` }),
+    );
+    const made = await dish("Steak", category.id);
     const closed = await station("Closed grill");
     const open = await station("Kitchen");
     await routeTo(made.productId, closed, v.counter.zoneId);
-    await routeTo(made.productId, open);
+    await inTx(v, (tx) =>
+      setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "category", categoryId: category.id }, zoneId: null },
+        { kind: "station", stationId: open },
+      ),
+    );
     await switchOff(closed);
     const id = randomUUID();
     await park(id, [made]);
