@@ -2478,7 +2478,8 @@ and hovered, and as a link with no description at rest and focused and with one 
 themes — verified 2026-10-03 by running `packages/ui/src/components/wt-choice-row.a11y.test.ts`;
 `wt-toast` open in its info and error
 tones, and closed — verified 2026-09-14 by running
-`packages/ui/src/components/wt-toast.a11y.test.ts`; `wt-relative-time` at rest, focused, with the
+`packages/ui/src/components/wt-toast.a11y.test.ts` — and, verified 2026-10-07 by running the same
+file, open in its info and error tones holding an action button, in both themes; `wt-relative-time` at rest, focused, with the
 exact time shown, and as a deadline already gone — verified 2026-10-06 by running
 `packages/ui/src/components/wt-relative-time.a11y.test.ts`; `wt-notice` on screen, fading and gone —
 verified 2026-09-30 by running `packages/ui/src/components/wt-notice.a11y.test.ts`; `wt-language-chooser` closed, open
