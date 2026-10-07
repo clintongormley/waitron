@@ -125,8 +125,23 @@ describe("departmental tab transfers", () => {
     return v;
   }
 
-  it("refuses the opposite direction and does not grant destination browsing", async () => {
+  it("refuses the opposite direction even when both departments have receiving desks", async () => {
     const v = await ready();
+    await withTransaction(suite.db, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: randomUUID(), formFactor: "till" })
+        .returning();
+      await setProfileServiceScope(tx, v.cfg, profile!.id, {
+        departmentId: v.a,
+        allowedZoneIds: null,
+        startingZoneId: v.az,
+      });
+      await service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+        receivingProfileId: profile!.id,
+        destinationDepartmentIds: [v.b],
+      });
+    });
     await withTransaction(suite.db, (tx) =>
       tx
         .update(orderServiceContexts)
