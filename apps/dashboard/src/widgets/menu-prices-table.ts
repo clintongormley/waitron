@@ -915,7 +915,8 @@ export class MenuPricesTable extends LitElement {
               ? [{ value: "clash", label: t("menu_prices.clashes_only") }]
               : []),
           ],
-          ...(this.#startOnClashes ? { initial: "clash" } : {}),
+          // Never absent: the table forgets a chosen All prices on a column with no `initial`.
+          initial: this.#startOnClashes ? "clash" : "",
         },
       },
       {

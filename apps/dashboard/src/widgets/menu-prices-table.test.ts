@@ -3503,6 +3503,56 @@ describe("the clash message and the Clashes filter", () => {
     expect(message(el)).toBeNull();
   });
 
+  async function load(el: MenuPricesTable, rows: MenuPriceRow[]): Promise<void> {
+    el.loading = true;
+    el.rows = [];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    el.rows = rows;
+    el.loading = false;
+    await el.updateComplete;
+    await table(el).updateComplete;
+  }
+
+  const priceFilter = (el: MenuPricesTable) =>
+    table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      'wt-combobox[data-filter="override"]',
+    )!.value;
+
+  it("starts on Clashes once a failed load is followed by one with a clash", async () => {
+    const el = await mount({ rows: [], failed: true });
+    el.failed = false;
+    await reread(el, [burger, clashRow(lager)]);
+    expect(priceFilter(el)).toBe("clash");
+    expect(shown(el)).toEqual(["mi-lager"]);
+  });
+
+  it("keeps the person's All prices when the next menu loaded has a clash", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "");
+    await load(el, [burger, variantClashRow()]);
+    expect(priceFilter(el)).toBe("");
+    expect(shown(el)).toEqual(["mi-burger", "mi-lemonade"]);
+    expect(message(el)).not.toBeNull();
+  });
+
+  it("keeps the person's All prices through a menu without a clash and into one with a clash", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "");
+    await load(el, [burger, lager]);
+    await load(el, [burger, clashRow(lager)]);
+    expect(priceFilter(el)).toBe("");
+    expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+  });
+
+  it("keeps the person's Not overridden when the next menu loaded has a clash", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "not_overridden");
+    await load(el, [burger, lemonade, clashRow(lager)]);
+    expect(priceFilter(el)).toBe("not_overridden");
+    expect(shown(el)).toEqual(["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lager"]);
+  });
+
   it("keeps exactly the right products and variants under each price filter", async () => {
     const el = await mount({ rows: [burger, variantClashRow(), clashRow(lager)] });
     await choose(el, "override", "");
