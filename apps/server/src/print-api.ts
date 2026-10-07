@@ -73,6 +73,8 @@ import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { replaceWatcherPrinters, setPrinterWatcher } from "./watchers.js";
 import { DEMO_PRINTER_KEY } from "./demo-printer.js";
+import { setPrinterPortable } from "@waitron/layouts";
+import { readPrinterHolders } from "./device-equipment.js";
 
 export interface PrintApiDeps {
   db: Database;
@@ -846,6 +848,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) input.hasCashDrawer = hasCashDrawer;
+      const portable = optionalBool(body.portable, "portable");
+      if (portable !== undefined) input.portable = portable;
       const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
       return c.json(created, 201);
     }),
@@ -856,6 +860,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, async (tx) => {
         const configured = await listPrinters(tx, deps.cfg);
+        const holders = await readPrinterHolders(tx);
         // Aggregated over the full history, unlike the job list's bounded completed history.
         // `max(delivered_at)` is the latest instant only because every writer stores the canonical
         // `toISOString()` spelling.
@@ -879,6 +884,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           const summary = byPrinter.get(printer.id);
           return {
             ...printer,
+            holder: holders.get(printer.id) ?? null,
             pendingJobs: summary?.pending_jobs ?? 0,
             lastPrintAgentId: summary?.last_print_agent_id ?? null,
             lastPrintAt:
@@ -920,6 +926,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (hasCashDrawer !== undefined) patch.hasCashDrawer = hasCashDrawer;
       const active = optionalBool(body.active, "active");
       if (active !== undefined) patch.active = active;
+      const portable = optionalBool(body.portable, "portable");
       await gated(sessionId, async (tx) => {
         // Either field can make the stored key a Bluetooth address, so both need the other's value.
         if (patch.transport !== undefined || typeof patch.localKey === "string") {
@@ -935,6 +942,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           }
         }
         await updatePrinter(tx, deps.cfg, id, patch);
+        if (portable !== undefined) await setPrinterPortable(tx, id, portable);
       });
       return c.body(null, 204);
     }),

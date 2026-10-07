@@ -2,7 +2,7 @@
 // connection. Printer resolution reads an active row, and the caller's write transaction is the only
 // one running on the venue file, so a deactivation cannot land between that read and the enqueue.
 // Originals and duplicates are separate actions; a queue resend preserves the original job bytes.
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   deviceProfiles,
   devices,
@@ -15,7 +15,8 @@ import {
 import type { Transaction } from "@waitron/db";
 import { canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
-import { getPrintedReceipt, profileAllows } from "@waitron/layouts";
+import { getPrintedReceipt, profileAllows, readPrinterRoles } from "@waitron/layouts";
+import type { ProfilePrinterRole } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
@@ -42,42 +43,70 @@ export interface DevicePrinter extends EscSetting {
 }
 
 /**
- * The device's receipt printer when it may open that printer's drawer: its profile allows the
- * drawer and the printer has one. Otherwise `undefined`, and the automatic paths open nothing.
+ * The device's active printer for a role, `undefined` for none. One lookup reads the device's
+ * printers once, on first use, so it must not outlive a change to the device's equipment.
  */
-async function drawerPrinter(tx: Transaction, origin: Origin): Promise<DevicePrinter | undefined> {
-  const printer = await resolveReceiptPrinter(tx, origin);
+export type PrinterLookup = (role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>;
+
+export function printerLookup(tx: Transaction, origin: Origin): PrinterLookup {
+  let read: Promise<Map<ProfilePrinterRole, DevicePrinter>> | undefined;
+  return async (role) => {
+    read ??= readDevicePrinters(tx, origin);
+    return (await read).get(role);
+  };
+}
+
+/**
+ * The device's drawer printer when it may open that drawer: its profile allows the drawer and the
+ * printer has one. Otherwise `undefined`, and the automatic paths open nothing.
+ */
+async function drawerPrinter(printers: PrinterLookup): Promise<DevicePrinter | undefined> {
+  const printer = await printers("cash_drawer");
   if (printer === undefined || !printer.opensDrawer || !printer.hasCashDrawer) return undefined;
   return printer;
 }
 
 /**
- * The device's current receipt printer when it is active; `undefined` when it has none, the printer
- * is switched off, or the origin is a job rather than a device. The caller decides what "no printer"
- * means: the hooks enqueue nothing, the drawer-open route throws `drawer.no_printer`.
+ * The printer the device's receipts resolve to (`readPrinterRoles`) when it is active; `undefined`
+ * when it resolves to none, the printer is switched off, or the origin is a job rather than a
+ * device. The caller decides what "no printer" means: the hooks enqueue nothing.
  */
 export async function resolveReceiptPrinter(
   tx: Transaction,
   origin: Origin,
 ): Promise<DevicePrinter | undefined> {
-  return resolveDevicePrinter(tx, origin, devices.receiptPrinterId);
+  return printerLookup(tx, origin)("receipt");
 }
 
-/** As {@link resolveReceiptPrinter}, for the device's current payment slip printer. */
+/**
+ * As {@link resolveReceiptPrinter}, for the printer whose drawer the device opens: its own drawer
+ * choice, else its profile's default, never its receipt printer.
+ */
+export async function resolveDrawerPrinter(
+  tx: Transaction,
+  origin: Origin,
+): Promise<DevicePrinter | undefined> {
+  return printerLookup(tx, origin)("cash_drawer");
+}
+
+/** As {@link resolveReceiptPrinter}, for the device's payment slips. */
 export async function resolvePaymentSlipPrinter(
   tx: Transaction,
   origin: Origin,
 ): Promise<DevicePrinter | undefined> {
-  return resolveDevicePrinter(tx, origin, devices.paymentSlipPrinterId);
+  return printerLookup(tx, origin)("payment_slip");
 }
 
-async function resolveDevicePrinter(
+/** Each role's printer, by role, when the device resolves one and it is switched on. */
+async function readDevicePrinters(
   tx: Transaction,
   origin: Origin,
-  column: typeof devices.receiptPrinterId | typeof devices.paymentSlipPrinterId,
-): Promise<DevicePrinter | undefined> {
-  if (origin.source !== "device") return undefined;
-  const [row] = await tx
+): Promise<Map<ProfilePrinterRole, DevicePrinter>> {
+  if (origin.source !== "device") return new Map();
+  const roles = await readPrinterRoles(tx, origin.deviceId);
+  const ids = roles.flatMap((role) => (role.resolvedId === null ? [] : [role.resolvedId]));
+  if (ids.length === 0) return new Map();
+  const rows = await tx
     .select({
       id: printers.id,
       hasCashDrawer: printers.hasCashDrawer,
@@ -88,17 +117,26 @@ async function resolveDevicePrinter(
     })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .innerJoin(printers, and(eq(printers.id, column), eq(printers.active, true)))
+    .innerJoin(printers, and(inArray(printers.id, ids), eq(printers.active, true)))
     .where(eq(devices.id, origin.deviceId));
-  if (row === undefined) return undefined;
-  const { formFactor, capabilities, ...printer } = row;
-  return {
-    ...printer,
-    opensDrawer: profileAllows(
-      { formFactor, capabilities: capabilities as string[] },
-      "open-cash-drawer",
-    ),
-  };
+  const byId = new Map(
+    rows.map(({ formFactor, capabilities, ...printer }) => [
+      printer.id,
+      {
+        ...printer,
+        opensDrawer: profileAllows(
+          { formFactor, capabilities: capabilities as string[] },
+          "open-cash-drawer",
+        ),
+      },
+    ]),
+  );
+  return new Map(
+    roles.flatMap((role) => {
+      const printer = role.resolvedId === null ? undefined : byId.get(role.resolvedId);
+      return printer === undefined ? [] : [[role.role, printer] as const];
+    }),
+  );
 }
 
 /** Use the filed issuer where available and the current optional trim, address and logo. */
@@ -147,8 +185,9 @@ async function resolvePrinterAndReceipt(
   ticket: TillSaleResult,
   saleId: string,
   duplicate: boolean,
+  printers: PrinterLookup,
 ): Promise<{ printer: DevicePrinter; receiptBytes: Uint8Array } | undefined> {
-  const printer = await resolveReceiptPrinter(tx, cfg.origin);
+  const printer = await printers("receipt");
   if (printer === undefined) return undefined;
   const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
   /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
@@ -163,6 +202,7 @@ export async function enqueueSaleReceipt(
   cfg: OriginConfig,
   ticket: TillSaleResult,
   saleId: string,
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   const [sale] = await tx
     .select({ workingOrderId: sales.workingOrderId })
@@ -172,13 +212,13 @@ export async function enqueueSaleReceipt(
     ? await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId)
     : null;
   if (context?.serviceMode === "prepay") {
-    await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber);
+    await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
   }
   const mode = context
     ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
     : "auto";
   if (ticket.invoiceType !== "F1" && mode !== "auto") return;
-  await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
+  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers);
 }
 
 /** A collection number is a separate document, never a fiscal receipt or a drawer command. */
@@ -187,10 +227,11 @@ export async function enqueueCollectionTicket(
   cfg: OriginConfig,
   zoneId: string,
   orderNumber: number,
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   const policy = await VENUE_SERVICE.resolveSalePolicy(tx, cfg, zoneId);
   if (policy.collectionNumber !== "numbered") return;
-  const printer = await resolveReceiptPrinter(tx, cfg.origin);
+  const printer = await printers("receipt");
   if (printer === undefined) return;
   const builder = esc(printer);
   const bytes = builder
@@ -329,6 +370,7 @@ export async function enqueueOriginalReceipt(
   cfg: OriginConfig,
   ticket: TillSaleResult,
   saleId: string,
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   if (ticket.invoiceType === "F1") {
     const [original] = await tx
@@ -339,7 +381,7 @@ export async function enqueueOriginalReceipt(
     // A failed original is retried through its existing job, preserving its bytes and history.
     if (original !== undefined) return;
   }
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false);
+  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false, printers);
   if (resolved === undefined) return;
   await enqueuePrintJob(
     tx,
@@ -358,8 +400,9 @@ async function enqueueBillDrawer(
   operatorId: string,
   reason: "bill_payment" | "bill_refund" | "card_slip",
   authorization: { authorizedBy: string; viaOverride: boolean } | null,
+  printers: PrinterLookup,
 ): Promise<void> {
-  const printer = await drawerPrinter(tx, cfg.origin);
+  const printer = await drawerPrinter(printers);
   if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
     deviceId: cfg.origin.deviceId,
@@ -381,8 +424,9 @@ export async function enqueueBillPaymentDrawer(
   cfg: OriginConfig,
   billPaymentId: string,
   operatorId: string,
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
-  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_payment", null);
+  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_payment", null, printers);
 }
 
 /**
@@ -394,8 +438,9 @@ export async function enqueueBillCardSlipDrawer(
   cfg: OriginConfig,
   billPaymentId: string,
   operatorId: string,
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
-  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "card_slip", null);
+  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "card_slip", null, printers);
 }
 
 /**
@@ -409,7 +454,15 @@ export async function enqueueBillRefundDrawer(
   operatorId: string,
   authorization: { authorizedBy: string; viaOverride: boolean },
 ): Promise<void> {
-  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_refund", authorization);
+  await enqueueBillDrawer(
+    tx,
+    cfg,
+    billPaymentId,
+    operatorId,
+    "bill_refund",
+    authorization,
+    printerLookup(tx, cfg.origin),
+  );
 }
 
 /**
@@ -423,9 +476,10 @@ export async function enqueueSaleDrawer(
   saleId: string,
   method: "cash" | "card",
   operatorId?: string,
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   if (operatorId === undefined) return;
-  const printer = await drawerPrinter(tx, cfg.origin);
+  const printer = await drawerPrinter(printers);
   if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
     deviceId: cfg.origin.deviceId,

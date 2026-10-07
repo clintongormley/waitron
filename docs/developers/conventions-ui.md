@@ -151,15 +151,21 @@ and since every role holds the permission, it makes the refusal by wrapping `aut
 role is ever refused.
 
 Since A238 (owner, 2026-10-03; `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md` §2
-and §4), what a device may do with cash and the drawer is set on its device profile, never on the
+and §4), whether a device may take cash and open the drawer is set on its device profile, never on the
 device, by its form factor, or per till. The per-till "Opens the cash drawer" switch of 2026-10-02
 (B29) is gone with the `tills` table; a till that must not open a drawer it shares with another
-till gets a profile of its own.
+till gets a profile of its own. WHICH drawer a device opens is its own drawer choice
+(`devices.cash_drawer_printer_id`), else its profile's default from the profile's cash drawer list
+(the `cash_drawer` role `readPrinterRoles` returns, `packages/layouts/src/device-equipment.ts`),
+and not by following its receipt printer, so choosing another receipt printer leaves the drawer where it
+was (W100).
 
 - **Opening the drawer by itself.** A cash sale, a hand-keyed card's slip, a collect, a bill payment
   and a bill refund each open a drawer only through `drawerPrinter`
-  (`apps/server/src/receipt-print.ts`), which returns the requesting device's current receipt
-  printer only when that printer is active and has a drawer and the device's profile allows
+  (`apps/server/src/receipt-print.ts`), which takes the `cash_drawer` role's printer from a
+  `printerLookup` (an immediate sale, and a bill payment that settles its bill, share it with their
+  receipt; other paths build their own) and returns it
+  only when that printer is active and has a drawer and the device's profile allows
   `open-cash-drawer` ("Open cash drawer" in the profile editor; `profileAllows`,
   `packages/layouts/src/device-profile.ts`). A handheld whose profile has it opens the drawer like a
   till; a till whose profile lacks it opens none, and so does a kitchen display, whatever its
@@ -171,8 +177,9 @@ till gets a profile of its own.
   `apps/server/src/till-session.ts`). A profile without
   `open-cash-drawer` is refused `device.forbidden_action` (`assertDeviceCapability`,
   `apps/server/src/device-session.ts`); the operator always needs
-  `cash.drawer` or the PIN of someone holding it; then the device's current receipt printer must
-  exist (`drawer.no_printer`) and have a drawer (`drawer.not_attached`).
+  `cash.drawer` or the PIN of someone holding it; then the device's drawer must resolve, through
+  `resolveDrawerPrinter`, to an active printer (`drawer.no_printer`) that has a drawer
+  (`drawer.not_attached`).
 - **Taking cash.** A cash sale (`POST /api/sales`), a cash collection
   (`POST /api/working-orders/:id/collect`) and a cash bill payment
   (`POST /api/working-orders/:id/payments`, `apps/server/src/bill-payments-api.ts`) from a device
@@ -182,7 +189,8 @@ till gets a profile of its own.
   `apps/server/src/bill-refunds.ts`): a cash one the same way.
 
 Regressions: the drawer cases in `apps/server/src/receipt-print.test.ts` (among them "every device
-whose profile allows the drawer opens its receipt printer's drawer"),
+whose profile allows the drawer opens its chosen drawer" and "the drawer follows the device's
+drawer choice, not its receipt printer"),
 `apps/server/src/till-api.receipt.test.ts` ("opens a handheld's drawer on a cash sale when its
 profile allows the drawer"), `apps/server/src/till-api.fiscal-sale-paths.test.ts` and
 `apps/server/src/bill-payments-api.test.ts`; and the `device.cash_not_allowed` cases in

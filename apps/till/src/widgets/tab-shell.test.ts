@@ -99,25 +99,25 @@ describe("till-tab-shell", () => {
     expect(fired).toEqual(["show-expo", "show-schedule", "open-allergens", "logout"]);
   });
 
-  it("offers Printers beside Allergens, emitting open-printers", async () => {
+  it("offers Equipment beside Allergens, emitting open-equipment", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs });
-    const printers = el.shadowRoot!.querySelector<HTMLElement>("wt-button.printers")!;
-    expect(printers.textContent).toContain(t("printers.open"));
-    expect(printers.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.allergens"));
+    const equipment = el.shadowRoot!.querySelector<HTMLElement>("wt-button.equipment")!;
+    expect(equipment.textContent).toContain(t("equipment.open"));
+    expect(equipment.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.allergens"));
     let fired = 0;
-    el.addEventListener("open-printers", () => (fired += 1));
-    printers.click();
+    el.addEventListener("open-equipment", () => (fired += 1));
+    equipment.click();
     expect(fired).toBe(1);
   });
 
-  it("offers Profile before Printers only when the device can switch profile, emitting open-profile", async () => {
+  it("offers Profile before Equipment only when the device can switch profile, emitting open-profile", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs });
     expect(el.shadowRoot!.querySelector("wt-button.profile")).toBeNull();
     el.canSwitchProfile = true;
     await el.updateComplete;
     const profile = el.shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!;
     expect(profile.textContent).toContain(t("profile.open"));
-    expect(profile.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.printers"));
+    expect(profile.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.equipment"));
     let fired = 0;
     el.addEventListener("open-profile", () => (fired += 1));
     profile.click();

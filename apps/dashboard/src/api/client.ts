@@ -612,12 +612,33 @@ export interface DeviceRow {
   deviceProfileId: string | null;
   /** The profile was deleted while only disabled devices held it. */
   profileRetired: boolean;
+  /** The device's own choice; null is Use default, which `equipment` resolves. */
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
+  cashDrawerPrinterId: string | null;
+  /** Each role's choice and what it resolves to now: receipt, slip, drawer, then reader. */
+  equipment: RoleEquipment[];
   /** A whole percentage, 0 to 100. */
   batteryLevel: number | null;
   batteryCharging: boolean | null;
   batteryReportedAt: string | null;
+}
+
+export type EquipmentRole = "receipt" | "payment_slip" | "cash_drawer" | "card_terminal";
+
+/** The other device holding an item, and who is signed in on it, if anyone. */
+export interface EquipmentHolder {
+  deviceId: string;
+  deviceName: string;
+  personName: string | null;
+}
+
+export interface RoleEquipment {
+  role: EquipmentRole;
+  selection: "default" | "item";
+  chosenId: string | null;
+  /** What the role prints, opens or pays on now; null is None. */
+  resolved: { id: string; name: string; available: boolean } | null;
 }
 
 export interface Canvas {
@@ -652,6 +673,11 @@ export interface DeviceProfile extends ProfileServiceScope {
   startingScreen: string | null;
   receiptPrinterIds: string[];
   paymentSlipPrinterIds: string[];
+  cashDrawerPrinterIds: string[];
+  /** Each list's default, which a device on Use default resolves; null is None. */
+  receiptPrinterDefaultId: string | null;
+  paymentSlipPrinterDefaultId: string | null;
+  cashDrawerPrinterDefaultId: string | null;
   /** Never empty: every role when the profile narrows nothing. */
   admittedRoles: PersonRole[];
   personExceptions: PersonException[];
@@ -661,8 +687,24 @@ export interface DeviceProfile extends ProfileServiceScope {
 export type ProfileSaveExtras = Partial<
   ProfileKitchenLists &
     ProfileServiceScope &
+    ProfileEquipmentDefaults &
     Pick<DeviceProfile, "startingScreen" | "admittedRoles" | "personExceptions">
 >;
+
+/** The drawer list and each printer list's default; on a new profile, absent is empty and None. */
+export type ProfileEquipmentDefaults = Pick<
+  DeviceProfile,
+  | "cashDrawerPrinterIds"
+  | "receiptPrinterDefaultId"
+  | "paymentSlipPrinterDefaultId"
+  | "cashDrawerPrinterDefaultId"
+>;
+
+/** The card readers a profile's devices may choose, in order, and the one they start on. */
+export interface ProfileReaderList {
+  readerIds: string[];
+  defaultReaderId: string | null;
+}
 
 /** The departments and their zones a profile can be given, switched-off ones included. */
 export interface ProfileScopeChoices {
@@ -676,7 +718,7 @@ export interface ProfileKitchenLists {
   watcherIds: string[];
 }
 
-/** In list order: a device joining the profile starts on the first printer in each that it can use. */
+/** In the order the device's equipment choices offer them. */
 export type ProfilePrinterLists = Pick<
   DeviceProfile,
   "receiptPrinterIds" | "paymentSlipPrinterIds"
@@ -948,6 +990,9 @@ export interface Printer {
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
+  /** Carried by one device at a time, which `holder` names. */
+  portable: boolean;
+  holder: EquipmentHolder | null;
   active: boolean;
 }
 
@@ -968,6 +1013,7 @@ export interface PrinterInput {
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
+  portable?: boolean;
 }
 
 export interface PrinterAddressProbe {
@@ -1019,6 +1065,7 @@ export interface PrinterPatch {
   paperWidth?: PrintPaperWidth;
   resolution?: PrintResolution;
   hasCashDrawer?: boolean;
+  portable?: boolean;
   active?: boolean;
 }
 
@@ -1430,6 +1477,13 @@ export interface ReaderRow {
   active: boolean;
   canEnable: boolean;
   deviceCount: number;
+}
+
+/** A reader some device holds or has a payment in progress on. */
+export interface ReaderHolderRow {
+  readerId: string;
+  holder: EquipmentHolder | null;
+  paymentInProgressDeviceIds: string[];
 }
 
 export interface AvailableReader {
@@ -2825,8 +2879,11 @@ export class DashboardApi {
       stationId?: string | null;
       /** Absent or null clears it; a kitchen screen needs exactly one of this and `stationId`. */
       watcherId?: string | null;
+      /** Null puts the role on Use default. */
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;
+      /** Absent leaves the stored drawer choice; null is Use default. */
+      cashDrawerPrinterId?: string | null;
       /** Absent leaves the device's stored made-here stations as they are. */
       madeHereStationIds?: string[];
       /** The profiles staff may switch to besides `profileId`; absent leaves them as they are. */
@@ -3502,10 +3559,30 @@ export class DashboardApi {
     );
   }
 
+  /** Null puts the device on its profile's default reader. */
   setDeviceReader(id: string, readerId: string | null): Promise<void> {
     return this.#request<void>(`/management-api/payments/devices/${id}/reader`, "PUT", {
       readerId,
     });
+  }
+
+  listReaderHolders(): Promise<ReaderHolderRow[]> {
+    return this.#request<ReaderHolderRow[]>("/management-api/payments/reader-holders", "GET");
+  }
+
+  getProfileReaders(profileId: string): Promise<ProfileReaderList> {
+    return this.#request<ProfileReaderList>(
+      `/management-api/payments/device-profiles/${profileId}/readers`,
+      "GET",
+    );
+  }
+
+  setProfileReaders(profileId: string, list: ProfileReaderList): Promise<ProfileReaderList> {
+    return this.#request<ProfileReaderList>(
+      `/management-api/payments/device-profiles/${profileId}/readers`,
+      "PUT",
+      list,
+    );
   }
 
   listStuckPayments(): Promise<StuckPaymentRow[]> {

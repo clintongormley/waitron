@@ -21,7 +21,9 @@ const device: DeviceRow = {
   profileRetired: false,
   receiptPrinterId: null,
   paymentSlipPrinterId: null,
+  cashDrawerPrinterId: null,
   madeHereStationIds: ["s1"],
+  equipment: [],
   enrolledAt: "2026-10-01T00:00:00.000Z",
   lastSeenAt: null,
   batteryLevel: null,
@@ -43,6 +45,10 @@ const profile: DeviceProfile = {
   inactivityTimeoutSeconds: null,
   receiptPrinterIds: [],
   paymentSlipPrinterIds: [],
+  cashDrawerPrinterIds: [],
+  receiptPrinterDefaultId: null,
+  paymentSlipPrinterDefaultId: null,
+  cashDrawerPrinterDefaultId: null,
 };
 const station: Station = {
   id: "s1",
@@ -112,6 +118,8 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
         },
         { id: "r2", provider: "test", name: "Bar", active: true, canEnable: true, deviceCount: 0 },
       ],
+      listReaderHolders: async () => [],
+      getProfileReaders: async () => ({ readerIds: ["r1", "r2"], defaultReaderId: null }),
       updateDevice: async () => {},
       setDeviceReader: async () => {},
       ...overrides,
@@ -187,10 +195,14 @@ for (const [field, initial, edited] of [
   ["profile", "p1", "p2"],
   ["receipt-printer", "", "printer1"],
   ["slip-printer", "", "printer2"],
+  ["cash-drawer", "", "printer3"],
   ["reader", "r1", "r2"],
 ] as const) {
   it(`device ${field} compares submitted values and clears a normalized revert`, async () => {
-    const { app, screen } = await mount();
+    // A profile change puts the reader back to Use default, so this case stores none to keep.
+    const { app, screen } = await mount(
+      field === "profile" ? { getDeviceReader: async () => ({ readerId: null }) } : {},
+    );
     expect(unload()).toBe(false);
     change(screen, field, edited);
     expect(unload()).toBe(true);
@@ -201,6 +213,44 @@ for (const [field, initial, edited] of [
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 }
+it("a profile change that resets a stored reader stays dirty until the reader is chosen again", async () => {
+  const { screen } = await mount();
+  change(screen, "profile", "p2");
+  expect(unload()).toBe(true);
+  change(screen, "profile", "p1");
+  await screen.updateComplete;
+  expect((q(screen, "[data-test=edit-reader]") as HTMLInputElement).value).toBe("");
+  expect(unload()).toBe(true);
+  change(screen, "reader", "r1");
+  expect(unload()).toBe(false);
+});
+it("a saved cash drawer choice closes the dialog with nothing left to warn about", async () => {
+  const sent: unknown[] = [];
+  const { screen } = await mount({
+    updateDevice: async (id, body) => {
+      sent.push([id, body]);
+    },
+  });
+  change(screen, "cash-drawer", "printer3");
+  q(screen, "[data-test=edit-save]")!.click();
+  await expect.poll(() => modal(screen)).toBeNull();
+  expect(sent).toEqual([
+    [
+      "d1",
+      {
+        name: "Counter",
+        profileId: "p1",
+        stationId: null,
+        watcherId: null,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        cashDrawerPrinterId: "printer3",
+        madeHereStationIds: ["s1"],
+      },
+    ],
+  ]);
+  expect(unload()).toBe(false);
+});
 it("device made-here selection compares membership and includes invalid name input", async () => {
   const { screen } = await mount();
   const box = q(screen, 'input[value="s2"]') as HTMLInputElement;
@@ -656,4 +706,44 @@ it("W69 an unchanged approved set stays committed when the wire omits it", async
   expect(unload()).toBe(false);
   approve(screen, false);
   expect(unload()).toBe(true);
+});
+it("W100 a profile chosen while the reader is still loading keeps Use default and reads that profile's readers", async () => {
+  let ready!: (value: { readerId: string }) => void;
+  let called = false;
+  const listsRead: string[] = [];
+  const waiting = mount({
+    getDeviceReader: () =>
+      new Promise((resolve) => {
+        ready = resolve;
+        called = true;
+      }),
+    getProfileReaders: async (profileId) => {
+      listsRead.push(profileId);
+      return profileId === "p2"
+        ? { readerIds: ["r2"], defaultReaderId: null }
+        : { readerIds: ["r1"], defaultReaderId: null };
+    },
+  });
+  await expect.poll(() => called).toBe(true);
+  const screen = document
+    .querySelector("device-edit-leave-test-app")!
+    .shadowRoot!.querySelector("dashboard-devices-screen")!;
+  try {
+    change(screen, "profile", "p2");
+  } finally {
+    ready({ readerId: "r1" });
+    await waiting;
+  }
+  await screen.updateComplete;
+  const reader = q(screen, "[data-test=edit-reader]") as HTMLInputElement & {
+    options: { value: string }[];
+  };
+  expect(reader.value).toBe("");
+  await expect.poll(() => listsRead).toContain("p2");
+  await expect.poll(() => reader.options.map((option) => option.value)).toEqual(["", "r2"]);
+  expect(unload()).toBe(true);
+  change(screen, "profile", "p1");
+  expect(unload()).toBe(true);
+  change(screen, "reader", "r1");
+  expect(unload()).toBe(false);
 });

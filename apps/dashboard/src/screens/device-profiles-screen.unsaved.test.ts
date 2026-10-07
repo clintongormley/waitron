@@ -18,6 +18,10 @@ const profile: DeviceProfile = {
   inactivityTimeoutSeconds: 300,
   receiptPrinterIds: ["r1", "r2"],
   paymentSlipPrinterIds: [],
+  cashDrawerPrinterIds: [],
+  receiptPrinterDefaultId: null,
+  paymentSlipPrinterDefaultId: null,
+  cashDrawerPrinterDefaultId: null,
   departmentId: "d1",
   allowedZoneIds: null,
   startingZoneId: "z1",
@@ -37,6 +41,8 @@ const printer: Printer = {
   paperWidth: "80mm",
   resolution: "203dpi",
   hasCashDrawer: false,
+  portable: false,
+  holder: null,
   active: true,
   lastPrintAgentId: null,
   pendingJobs: 0,
@@ -135,6 +141,8 @@ async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
           { id: "z3", name: "Bar", departmentId: "d2", active: true },
         ],
       }),
+      listReaders: async () => [],
+      getProfileReaders: async () => ({ readerIds: [], defaultReaderId: null }),
       updateDeviceProfile: async () => loaded,
       createDeviceProfile: async () => ({ ...loaded, id: "p2" }),
       ...overrides,
@@ -182,6 +190,7 @@ for (const [id, initial, edited] of [
   ["profile-person-pe1", "", "deny"],
   ["cap-take-orders", false, true],
   ["payment-slip-printers-r1", false, true],
+  ["receipt-printers-default", "", "r1"],
 ] as const) {
   it(`W69 profile ${id} protects changed values and clears a revert`, async () => {
     const { screen } = await mount();
@@ -514,4 +523,182 @@ it("W69 a create accepted with newer input uses Update on its next save", async 
     ],
   ]);
   expect(unload()).toBe(false);
+});
+
+const readerRow = (id: string, name: string) => ({
+  id,
+  provider: "test",
+  name,
+  active: true,
+  canEnable: true,
+  deviceCount: 0,
+});
+async function mountWithEquipment(overrides: Partial<DashboardApi> = {}) {
+  const mounted = await mount({
+    listPrinters: async () => [
+      { ...printer, hasCashDrawer: true },
+      { ...printer, id: "r2", name: "Bar", hasCashDrawer: true },
+    ],
+    listReaders: async () => [readerRow("ra", "Counter"), readerRow("rb", "Terrace")],
+    getProfileReaders: async () => ({ readerIds: ["ra"], defaultReaderId: null }),
+    ...overrides,
+  });
+  await expect.poll(() => q(mounted.screen, "profile-reader-rb")).not.toBeNull();
+  return mounted;
+}
+it("W100 reading the profile's card readers leaves the opened editor clean", async () => {
+  const { screen } = await mountWithEquipment();
+  expect(unload()).toBe(false);
+  change(screen, "profile-name", "New counter");
+  expect(unload()).toBe(true);
+});
+for (const [id, initial, edited] of [
+  ["cash-drawer-printers-r1", false, true],
+  ["cash-drawer-printers-default", "", "r2"],
+  ["payment-slip-printers-default", "", "r1"],
+  ["profile-reader-rb", false, true],
+  ["profile-readers-default", "", "ra"],
+] as const) {
+  it(`W100 profile ${id} protects changed values and clears a revert`, async () => {
+    const { screen } = await mountWithEquipment();
+    expect(unload()).toBe(false);
+    change(screen, id, edited);
+    expect(unload()).toBe(true);
+    change(screen, id, initial);
+    expect(unload()).toBe(false);
+  });
+}
+it("W100 Discard puts back the profile's card readers and closes the editor", async () => {
+  const { app, screen } = await mountWithEquipment();
+  change(screen, "profile-reader-rb", true);
+  q(screen, "profile-cancel")!.click();
+  await choose(app, "keep");
+  expect((q(screen, "profile-reader-rb") as HTMLInputElement & { checked: boolean }).checked).toBe(
+    true,
+  );
+  q(screen, "profile-cancel")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => q(screen, "editor-form")).toBeNull();
+  expect(unload()).toBe(false);
+});
+it("W100 a saved reader list closes the editor with nothing left to warn about", async () => {
+  const sent: unknown[] = [];
+  const { screen } = await mountWithEquipment({
+    setProfileReaders: async (id, list) => {
+      sent.push([id, list]);
+      return list;
+    },
+  });
+  change(screen, "profile-reader-rb", true);
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => q(screen, "editor-form")).toBeNull();
+  expect(sent).toEqual([["p1", { readerIds: ["ra", "rb"], defaultReaderId: null }]]);
+  expect(unload()).toBe(false);
+});
+it("W100 a refused reader list keeps only the readers unsaved", async () => {
+  const { screen } = await mountWithEquipment({
+    setProfileReaders: async () => {
+      throw { code: "connection.failed" };
+    },
+  });
+  change(screen, "profile-name", "New counter");
+  change(screen, "profile-reader-rb", true);
+  q(screen, "profile-save")!.click();
+  await expect
+    .poll(() => screen.shadowRoot!.textContent)
+    .toContain(codeMessage("connection.failed"));
+  expect(q(screen, "editor-form")).not.toBeNull();
+  expect(unload()).toBe(true);
+  change(screen, "profile-reader-rb", false);
+  expect(unload()).toBe(false);
+});
+it("W100 the reader list sent is the one captured when Save was pressed", async () => {
+  let finish!: () => void;
+  const sent: unknown[] = [];
+  const { screen } = await mountWithEquipment({
+    updateDeviceProfile: async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return profile;
+    },
+    setProfileReaders: async (id, list) => {
+      sent.push([id, list]);
+      return list;
+    },
+  });
+  change(screen, "profile-reader-rb", true);
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => typeof finish).toBe("function");
+  change(screen, "profile-readers-default", "ra");
+  finish();
+  await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
+  expect(sent).toEqual([["p1", { readerIds: ["ra", "rb"], defaultReaderId: null }]]);
+  expect(q(screen, "editor-form")).not.toBeNull();
+  expect(unload()).toBe(true);
+  change(screen, "profile-readers-default", "");
+  expect(unload()).toBe(false);
+});
+it("W100 a department chosen while a refused reader save is in flight is sent by the next Save", async () => {
+  let finish: (() => void) | undefined;
+  const writes: unknown[][] = [];
+  let readerSaves = 0;
+  const { screen } = await mountWithEquipment({
+    updateDeviceProfile: async (...args) => {
+      writes.push(args);
+      if (writes.length === 1)
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      return profile;
+    },
+    setProfileReaders: async (_id, list) => {
+      readerSaves += 1;
+      if (readerSaves === 1) throw { code: "connection.failed" };
+      return list;
+    },
+  });
+  change(screen, "profile-reader-rb", true);
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => typeof finish).toBe("function");
+  change(screen, "profile-department", "d2");
+  finish!();
+  await expect
+    .poll(() => screen.shadowRoot!.textContent)
+    .toContain(codeMessage("connection.failed"));
+  await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]![7]).toMatchObject({
+    departmentId: "d2",
+    allowedZoneIds: null,
+    startingZoneId: "z3",
+  });
+});
+it("W100 a department saved before a refused reader save is not sent again", async () => {
+  const writes: unknown[][] = [];
+  let readerSaves = 0;
+  const { screen } = await mountWithEquipment({
+    updateDeviceProfile: async (...args) => {
+      writes.push(args);
+      return { ...profile, ...(args[7] as Partial<DeviceProfile> | undefined) };
+    },
+    setProfileReaders: async (_id, list) => {
+      readerSaves += 1;
+      if (readerSaves === 1) throw { code: "connection.failed" };
+      return list;
+    },
+  });
+  change(screen, "profile-department", "d2");
+  change(screen, "profile-reader-rb", true);
+  q(screen, "profile-save")!.click();
+  await expect
+    .poll(() => screen.shadowRoot!.textContent)
+    .toContain(codeMessage("connection.failed"));
+  expect(writes[0]![7]).toMatchObject({ departmentId: "d2" });
+  await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => q(screen, "editor-form")).toBeNull();
+  expect(writes).toHaveLength(2);
+  expect(writes[1]![7]).toBeUndefined();
 });

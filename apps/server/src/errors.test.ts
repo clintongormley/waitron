@@ -168,7 +168,7 @@ describe("the mirror error codes carry no params", () => {
 });
 
 describe("the drawer error code carries its declared params and maps to HTTP 400", () => {
-  it("constructs drawer.no_printer naming the device with no receipt printer", () => {
+  it("constructs drawer.no_printer naming the device with no drawer", () => {
     const deviceId = "99999999-9999-9999-9999-999999999999";
     const error = new AppError("drawer.no_printer", { deviceId });
     expect(error.code).toBe("drawer.no_printer");

@@ -2806,6 +2806,27 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });
 
+  it.each(["reader.not_held", "reader.payment_in_progress"])(
+    "tries the card again as a new payment after the reader refused to start it with %s",
+    async (code) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({ code, status: 409 })
+        .mockResolvedValueOnce(
+          onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+        );
+      const el = await takeOnReader(takeBillPayment);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage(code));
+
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+
+      expect(sent()).toHaveLength(2);
+      expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    },
+  );
+
   it("says a reader that could not reach the card network took nothing", async () => {
     const el = await takeOnReader(
       vi.fn().mockResolvedValue(onReader("network_unavailable", "failed", {})),

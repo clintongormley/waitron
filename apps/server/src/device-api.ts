@@ -19,13 +19,7 @@ import {
   profilesAdmitting,
   type Permission,
 } from "@waitron/identity";
-import {
-  chooseDevicePrinter,
-  kindOfFormFactor,
-  listDeviceProfiles,
-  printerChoices,
-  type PrinterRole,
-} from "@waitron/layouts";
+import { kindOfFormFactor, listDeviceProfiles, type ProfilePrinterRole } from "@waitron/layouts";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -49,6 +43,13 @@ import {
   switchActiveProfile,
   updateDeviceSettings,
 } from "./device.js";
+import {
+  readDeviceEquipment,
+  readDevicesEquipment,
+  releaseDevice,
+  selectDeviceEquipment,
+  type EquipmentRole,
+} from "./device-equipment.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -131,6 +132,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // A conflict the operator resolves by renaming the device.
   "device.name_taken": 409,
   "device.binding_invalid": 400,
+  "device.equipment_held": 409,
+  "reader.payment_in_progress": 409,
   "device_profile.not_found": 404,
   "device.not_found": 404,
   "station.not_found": 404,
@@ -258,7 +261,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const choices = await printerChoices(deps.db, device.deviceProfileId, device.locationId);
       const approvedProfiles = await withTransaction(deps.db, async (tx) => {
         const [active, ...alternatives] = await readApprovedProfiles(tx, device.deviceId);
         if (active === undefined) return [];
@@ -279,9 +281,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         name: device.label,
         stationId: device.stationId,
         watcherId: device.watcherId,
-        receiptPrinterId: device.receiptPrinterId,
-        paymentSlipPrinterId: device.paymentSlipPrinterId,
-        printerChoices: choices,
         profileId: device.deviceProfileId,
         // Its active profile first, then the approved ones the person signed in on it may use; every
         // approved one with nobody signed in. Display only: the switch checks both again.
@@ -290,41 +289,26 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
-  // ── Switch the session's device's current printers (SESSION-GUARDED) ─────────────────────────
-  // Any signed-in staff member may switch; a named field is written, an absent one left alone.
-  app.put("/api/device/printers", (c) =>
+  // ── The device's equipment (DEVICE-GUARDED read, SESSION-GUARDED choice) ────────────────────────
+  app.get("/api/device/equipment", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      return c.json(
+        await withTransaction(deps.db, (tx) => readDeviceEquipment(tx, device.deviceId)),
+      );
+    }),
+  );
+
+  // Any signed-in staff member may choose; a held item is taken by a scan or a confirmed list choice.
+  app.put("/api/device/equipment", (c) =>
     run(c, log, async () => {
       const { device } = await requireSession({ db: deps.db }, c);
-      const body = await readJsonBody<{
-        receiptPrinterId?: unknown;
-        paymentSlipPrinterId?: unknown;
-      }>(c);
-      const choices: [PrinterRole, string | null][] = [];
-      if (body.receiptPrinterId !== undefined)
-        choices.push([
-          "receipt",
-          requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
-        ]);
-      if (body.paymentSlipPrinterId !== undefined)
-        choices.push([
-          "payment_slip",
-          requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
-        ]);
-      const stored = await withTransaction(deps.db, async (tx) => {
-        for (const [role, printerId] of choices) {
-          const chosen = await chooseDevicePrinter(tx, device.deviceId, role, printerId);
-          if (!chosen.ok) throw new AppError("device.binding_invalid", { field: chosen.field });
-        }
-        const [row] = await tx
-          .select({
-            receiptPrinterId: devices.receiptPrinterId,
-            paymentSlipPrinterId: devices.paymentSlipPrinterId,
-          })
-          .from(devices)
-          .where(ownDeviceById(device.deviceId));
-        return row!;
+      const choice = parseEquipmentChoice(await readJsonBody<Record<string, unknown>>(c));
+      const equipment = await withTransaction(deps.db, async (tx) => {
+        await selectDeviceEquipment(tx, { deviceId: device.deviceId, ...choice });
+        return readDeviceEquipment(tx, device.deviceId);
       });
-      return c.json(stored, 200);
+      return c.json(equipment, 200);
     }),
   );
 
@@ -487,8 +471,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // The inner join always matches: `device_profile_id` is NOT NULL with a RESTRICT FK.
-      const { rows, madeHere, alternatives } = await gated(sessionId, async (tx) => ({
-        rows: await tx
+      const { rows, madeHere, alternatives, equipment } = await gated(sessionId, async (tx) => {
+        const rows = await tx
           .select({
             id: devices.id,
             formFactor: deviceProfiles.formFactor,
@@ -498,6 +482,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             deviceProfileId: devices.deviceProfileId,
             receiptPrinterId: devices.receiptPrinterId,
             paymentSlipPrinterId: devices.paymentSlipPrinterId,
+            cashDrawerPrinterId: devices.cashDrawerPrinterId,
             label: devices.label,
             active: devices.active,
             lastSeenAt: devices.lastSeenAt,
@@ -514,10 +499,17 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
           .leftJoin(kitchenStations, eq(kitchenStations.id, devices.stationId))
           .leftJoin(watchers, eq(watchers.id, devices.watcherId))
-          .orderBy(desc(devices.enrolledAt)),
-        madeHere: await listMadeHereStations(tx),
-        alternatives: await readApprovedAlternatives(tx),
-      }));
+          .orderBy(desc(devices.enrolledAt));
+        return {
+          rows,
+          madeHere: await listMadeHereStations(tx),
+          alternatives: await readApprovedAlternatives(tx),
+          equipment: await readDevicesEquipment(
+            tx,
+            rows.map((row) => row.id),
+          ),
+        };
+      });
       return c.json(
         rows.map(
           ({
@@ -543,6 +535,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               row.deviceProfileId,
               ...(alternatives.get(row.id) ?? []).map((profile) => profile.id),
             ],
+            equipment: equipment.get(row.id) ?? [],
           }),
         ),
       );
@@ -565,6 +558,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .returning({ id: devices.id });
         if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
         await endDeviceSessions(tx, id);
+        await releaseDevice(tx, id);
       });
       return c.body(null, 204);
     }),
@@ -584,6 +578,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         watcherId?: unknown;
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
+        cashDrawerPrinterId?: unknown;
         madeHereStationIds?: unknown;
         approvedProfileIds?: unknown;
       }>(c);
@@ -610,10 +605,17 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           body.stationId == null ? null : requireBodyUuid(body.stationId, "stationId");
         const watcherId =
           body.watcherId == null ? null : requireBodyUuid(body.watcherId, "watcherId");
-        const chosen: Record<PrinterRole, string | null> = {
+        const chosen: Partial<Record<ProfilePrinterRole, string | null>> = {
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
         };
+        // Absent leaves the stored drawer choice alone.
+        if (body.cashDrawerPrinterId !== undefined) {
+          chosen.cash_drawer = requireNullableBodyUuid(
+            body.cashDrawerPrinterId,
+            "cashDrawerPrinterId",
+          );
+        }
         // Absent leaves the stored stations alone: a kitchen screen's dialog does not show them.
         const madeHere = body.madeHereStationIds;
         if (madeHere !== undefined && (!Array.isArray(madeHere) || !madeHere.every(isUuid))) {
@@ -645,16 +647,22 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             watcherId: binding.watcherId,
           },
         );
-        // Only a printer that differs from the one held is checked: `chooseDevicePrinter` takes
-        // switched-on printers only, and a device may still hold a listed one since switched off.
-        const current: Record<PrinterRole, string | null> = {
+        // Only a choice that differs from the stored one is applied: a new choice must be switched
+        // on, and a device may still hold a listed one since switched off.
+        const current: Record<ProfilePrinterRole, string | null> = {
           receipt: held.receiptPrinterId,
           payment_slip: held.paymentSlipPrinterId,
+          cash_drawer: held.cashDrawerPrinterId,
         };
-        for (const role of ["receipt", "payment_slip"] as const) {
-          if (chosen[role] === current[role]) continue;
-          const result = await chooseDevicePrinter(tx, id, role, chosen[role]);
-          if (!result.ok) throw new AppError("device.binding_invalid", { field: result.field });
+        for (const role of ["receipt", "payment_slip", "cash_drawer"] as const) {
+          const printerId = chosen[role];
+          if (printerId === undefined || printerId === current[role]) continue;
+          await selectDeviceEquipment(tx, {
+            deviceId: id,
+            role,
+            selection: printerId === null ? "default" : { id: printerId },
+            via: "manage",
+          });
         }
         if (madeHere !== undefined) {
           await setMadeHereStations(tx, deps.cfg, id, madeHere as string[]);
@@ -699,4 +707,35 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       ),
     );
   }
+}
+
+const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
+  "receipt",
+  "payment_slip",
+  "cash_drawer",
+  "card_terminal",
+];
+
+/** `PUT /api/device/equipment`'s body, each field checked for shape. */
+function parseEquipmentChoice(body: Record<string, unknown>): {
+  role: EquipmentRole;
+  selection: "default" | { id: string };
+  via: "scan" | "list";
+  takeOver: boolean;
+} {
+  const role = EQUIPMENT_ROLES.find((known) => known === body.role);
+  if (role === undefined) throw new AppError("management.request_invalid", { field: "role" });
+  const selection = body.selection;
+  let chosen: "default" | { id: string };
+  if (selection === "default") chosen = "default";
+  else if (typeof selection === "object" && selection !== null && "id" in selection) {
+    chosen = { id: requireBodyUuid(selection.id, "selection") };
+  } else throw new AppError("management.request_invalid", { field: "selection" });
+  if (body.via !== "scan" && body.via !== "list") {
+    throw new AppError("management.request_invalid", { field: "via" });
+  }
+  if (body.takeOver !== undefined && typeof body.takeOver !== "boolean") {
+    throw new AppError("management.request_invalid", { field: "takeOver" });
+  }
+  return { role, selection: chosen, via: body.via, takeOver: body.takeOver === true };
 }

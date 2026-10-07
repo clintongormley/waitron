@@ -31,7 +31,7 @@ import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
-import type { TillPrintersDialog } from "./widgets/printers-dialog.js";
+import type { TillEquipmentDialog } from "./widgets/equipment-dialog.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
@@ -40,11 +40,15 @@ import type {
   CounterWaitingOrder,
   DeadEndAnswer,
   DevDeviceList,
+  DeviceEquipment,
+  EquipmentChange,
+  EquipmentItem,
   FloorZone,
   HeldOrderSummary,
   PayOutcome,
   PartyBill,
   ProductCatalogue,
+  RoleEquipment,
   ServiceZoneSummary,
   StationQueue,
   TabLine,
@@ -14305,187 +14309,225 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   });
 });
 
-describe("the device's printers, switched from the header", () => {
-  const P1 = { id: "P1", name: "Counter printer" };
-  const P2 = { id: "P2", name: "Bar printer" };
-  const S1 = { id: "S1", name: "Counter slip printer" };
-  const S2 = { id: "S2", name: "Portable slip printer" };
-  const identity = {
-    deviceId: "till-dev",
-    name: "Till 1",
-    formFactor: "till",
-    stationId: null,
-    // A switched-off receipt printer the device stays on: it is not among the choices.
-    receiptPrinterId: "P-off",
-    paymentSlipPrinterId: "S1",
-    printerChoices: { receipt: [P1, P2], paymentSlip: [S1, S2] },
-  };
-  const printersDialog = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillPrintersDialog>("till-printers-dialog");
+describe("the device's equipment, chosen from the header", () => {
+  const item = (id: string, name: string, extra: Partial<EquipmentItem> = {}): EquipmentItem => ({
+    id,
+    name,
+    portable: false,
+    available: true,
+    busy: false,
+    heldBy: null,
+    ...extra,
+  });
+  const P1 = item("P1", "Counter printer");
+  const P2 = item("P2", "Bar printer");
+  const P3 = item("P3", "Kitchen printer");
+  const POFF = item("P-off", "Old printer", { available: false });
+  const S1 = item("S1", "Counter slip printer");
+  const S2 = item("S2", "Portable slip printer");
+  const KNOWN = new Map([P1, P2, P3, POFF, S1, S2].map((each) => [each.id, each]));
 
-  async function openPrinters(overrides: Record<string, unknown> = {}) {
+  /** The four roles as the server answers them for these explicit receipt and slip choices: the
+   * receipt chosen from P1 and P2, the slip from S1 and S2, no drawer or reader. */
+  function equipmentOf(chosen: { receipt: string | null; payment_slip: string | null }) {
+    const role = (name: "receipt" | "payment_slip", choices: EquipmentItem[]): RoleEquipment => {
+      const picked = chosen[name] === null ? null : KNOWN.get(chosen[name])!;
+      return {
+        role: name,
+        selection: picked === null ? "default" : "item",
+        chosenId: picked?.id ?? null,
+        resolved:
+          picked === null
+            ? null
+            : { id: picked.id, name: picked.name, available: picked.available },
+        chosen: picked,
+        default: null,
+        choices,
+      };
+    };
+    const none = (name: "cash_drawer" | "card_terminal"): RoleEquipment => ({
+      role: name,
+      selection: "default",
+      chosenId: null,
+      resolved: null,
+      chosen: null,
+      default: null,
+      choices: [],
+    });
+    return {
+      roles: [
+        role("receipt", [P1, P2]),
+        role("payment_slip", [S1, S2]),
+        none("cash_drawer"),
+        none("card_terminal"),
+      ],
+    } satisfies DeviceEquipment;
+  }
+  // A switched-off receipt printer the device stays on: it is not among the choices.
+  const initial = equipmentOf({ receipt: "P-off", payment_slip: "S1" });
+  const pick = (role: "receipt" | "payment_slip", id: string): EquipmentChange => ({
+    role,
+    selection: { id },
+    via: "list",
+    takeOver: false,
+  });
+  const equipmentDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog");
+  const chosenIn = (el: TillApp, role: "receipt" | "payment_slip") =>
+    equipmentDialog(el)!.equipment!.roles.find((each) => each.role === role)!.chosenId;
+  const openButton = (el: TillApp) =>
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".equipment")!;
+
+  async function openEquipment(overrides: Record<string, unknown> = {}) {
     const { el } = await mountApp({
-      getDeviceIdentity: vi.fn().mockResolvedValue(identity),
+      getDeviceEquipment: vi.fn().mockResolvedValue(initial),
       ...overrides,
     });
     await toCounter(el);
-    expect(printersDialog(el)).toBeNull();
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    expect(equipmentDialog(el)).toBeNull();
+    openButton(el).click();
     await flush(el);
     return el;
   }
 
-  it("opens the dialog with the device's current printers and the profile's choices", async () => {
-    const el = await openPrinters();
+  it("opens the dialog with the device's equipment as the server answers it", async () => {
+    const el = await openEquipment();
 
-    const dialog = printersDialog(el)!;
+    const dialog = equipmentDialog(el)!;
     expect(dialog.open).toBe(true);
-    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
-    expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
+    expect(dialog.equipment).toEqual(initial);
     expect(dialog.error).toBeNull();
   });
 
-  it("sends only the printer changed and shows the one the server stored", async () => {
-    const setDevicePrinters = vi
-      .fn()
-      .mockResolvedValue({ receiptPrinterId: "P-off", paymentSlipPrinterId: "S2" });
-    const el = await openPrinters({ setDevicePrinters });
+  it("sends the choice picked and shows what the server stored", async () => {
+    const stored = equipmentOf({ receipt: "P-off", payment_slip: "S2" });
+    const setDeviceEquipment = vi.fn().mockResolvedValue(stored);
+    const el = await openEquipment({ setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("payment_slip", "S2"));
     await flush(el);
 
-    expect(setDevicePrinters).toHaveBeenCalledTimes(1);
-    expect(setDevicePrinters.mock.calls[0]).toEqual([
-      { paymentSlipPrinterId: "S2" },
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(setDeviceEquipment.mock.calls[0]).toEqual([
+      pick("payment_slip", "S2"),
       { signal: expect.any(AbortSignal) },
     ]);
-    const dialog = printersDialog(el)!;
-    expect(dialog.paymentSlip).toEqual({ current: "S2", choices: [S1, S2] });
-    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
+    const dialog = equipmentDialog(el)!;
+    expect(dialog.equipment).toEqual(stored);
     expect(dialog.error).toBeNull();
   });
 
-  it("keeps the dialog open with the refusal when the server refuses the printer", async () => {
-    const setDevicePrinters = vi.fn().mockRejectedValue({
+  it("keeps the dialog open with the refusal when the server refuses the choice", async () => {
+    const setDeviceEquipment = vi.fn().mockRejectedValue({
       field: "receiptPrinterId",
       code: "device.binding_invalid",
       status: 400,
     });
-    const el = await openPrinters({ setDevicePrinters });
+    const el = await openEquipment({ setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
 
-    const dialog = printersDialog(el)!;
+    const dialog = equipmentDialog(el)!;
     expect(dialog).not.toBeNull();
     expect(dialog.error).toEqual({ code: "device.binding_invalid", field: "receiptPrinterId" });
-    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
+    expect(dialog.equipment).toEqual(initial);
   });
 
-  it("opens on the printers boot read when reading the device again fails", async () => {
-    const getDeviceIdentity = vi
+  it("opens on the equipment read at sign-in when reading it again fails", async () => {
+    const getDeviceEquipment = vi
       .fn()
-      .mockResolvedValueOnce(identity)
+      .mockResolvedValueOnce(initial)
       .mockRejectedValue(new TypeError("Failed to fetch"));
-    const el = await openPrinters({ getDeviceIdentity });
+    const el = await openEquipment({ getDeviceEquipment });
 
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
-    const dialog = printersDialog(el)!;
-    expect(dialog.receipt).toEqual({ current: "P-off", choices: [P1, P2] });
-    expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(equipmentDialog(el)!.equipment).toEqual(initial);
   });
 
-  it("offers what the device answers when the dialog opens, not what it answered at boot", async () => {
-    const getDeviceIdentity = vi
-      .fn()
-      .mockResolvedValueOnce(identity)
-      .mockResolvedValue({
-        ...identity,
-        receiptPrinterId: "P2",
-        printerChoices: { receipt: [P2], paymentSlip: [S1, S2] },
-      });
-    const el = await openPrinters({ getDeviceIdentity });
+  it("offers what the device answers when the dialog opens, not what it answered at sign-in", async () => {
+    const later = equipmentOf({ receipt: "P2", payment_slip: "S1" });
+    const getDeviceEquipment = vi.fn().mockResolvedValueOnce(initial).mockResolvedValue(later);
+    const el = await openEquipment({ getDeviceEquipment });
 
-    expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P2] });
+    expect(equipmentDialog(el)!.equipment).toEqual(later);
   });
 
-  it("opens with no printer when the device could never be read", async () => {
-    const el = await openPrinters({
-      getDeviceIdentity: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+  it("opens with no equipment known when the device could never be read", async () => {
+    const el = await openEquipment({
+      getDeviceEquipment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
 
-    const dialog = printersDialog(el)!;
-    expect(dialog.receipt).toEqual({ current: null, choices: [] });
-    expect(dialog.paymentSlip).toEqual({ current: null, choices: [] });
+    expect(equipmentDialog(el)!.equipment).toBeNull();
   });
 
-  it("shows a switch that got no answer as a failure naming no printer", async () => {
-    const el = await openPrinters({
-      setDevicePrinters: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+  it("shows a choice that got no answer as a failure naming no field", async () => {
+    const el = await openEquipment({
+      setDeviceEquipment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
 
-    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("payment_slip", "S2"));
     await flush(el);
 
-    const dialog = printersDialog(el)!;
+    const dialog = equipmentDialog(el)!;
     expect(dialog.error).toEqual({ code: "server.internal" });
-    expect(dialog.paymentSlip).toEqual({ current: "S1", choices: [S1, S2] });
+    expect(chosenIn(el, "payment_slip")).toBe("S1");
   });
 
-  it("sends a later switch only once the earlier one has answered, and shows the later one's answer", async () => {
+  it("sends a later choice only once the earlier one has answered, and shows the later one's answer", async () => {
     const answers: ((value: unknown) => void)[] = [];
-    const setDevicePrinters = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
-    const el = await openPrinters({ setDevicePrinters });
+    const setDeviceEquipment = vi.fn(() => new Promise((resolve) => answers.push(resolve)));
+    const el = await openEquipment({ setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    expect(setDevicePrinters).toHaveBeenCalledTimes(1);
-    answers[0]!({ receiptPrinterId: "P1", paymentSlipPrinterId: "S1" });
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
+    answers[0]!(equipmentOf({ receipt: "P1", payment_slip: "S1" }));
     await flush(el);
-    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
-    answers[1]!({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(2);
+    answers[1]!(equipmentOf({ receipt: "P2", payment_slip: "S1" }));
     await flush(el);
 
-    expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P1, P2] });
+    expect(chosenIn(el, "receipt")).toBe("P2");
   });
 
-  it("shows no refusal of an earlier switch once the later one succeeds", async () => {
+  it("shows no refusal of an earlier choice once the later one succeeds", async () => {
     const answers: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = [];
-    const setDevicePrinters = vi.fn(
+    const setDeviceEquipment = vi.fn(
       () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
     );
-    const el = await openPrinters({ setDevicePrinters });
+    const el = await openEquipment({ setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
     answers[0]!.reject({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
     await flush(el);
-    answers[1]!.resolve({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+    answers[1]!.resolve(equipmentOf({ receipt: "P2", payment_slip: "S1" }));
     await flush(el);
 
-    expect(printersDialog(el)!.error).toBeNull();
-    expect(printersDialog(el)!.receipt).toEqual({ current: "P2", choices: [P1, P2] });
+    expect(equipmentDialog(el)!.error).toBeNull();
+    expect(chosenIn(el, "receipt")).toBe("P2");
   });
 
-  it("shows an earlier switch's success with a later switch's refusal", async () => {
+  it("shows an earlier choice's success with a later choice's refusal", async () => {
     const answers: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = [];
-    const setDevicePrinters = vi.fn(
+    const setDeviceEquipment = vi.fn(
       () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
     );
-    const el = await openPrinters({ setDevicePrinters });
+    const el = await openEquipment({ setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    answers[0]!.resolve({ receiptPrinterId: "P1", paymentSlipPrinterId: "S1" });
+    answers[0]!.resolve(equipmentOf({ receipt: "P1", payment_slip: "S1" }));
     await flush(el);
     answers[1]!.reject({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
     await flush(el);
 
-    expect(printersDialog(el)!.receipt).toEqual({ current: "P1", choices: [P1, P2] });
-    expect(printersDialog(el)!.error).toEqual({
+    expect(chosenIn(el, "receipt")).toBe("P1");
+    expect(equipmentDialog(el)!.error).toEqual({
       code: "device.binding_invalid",
       field: "receiptPrinterId",
     });
@@ -14494,433 +14536,1146 @@ describe("the device's printers, switched from the header", () => {
   it("keeps a retried pick shown, with the refusal, until the retry answers", async () => {
     let answer!: (value: unknown) => void;
     const refusal = { field: "receiptPrinterId", code: "device.binding_invalid", status: 400 };
-    const setDevicePrinters = vi
+    const setDeviceEquipment = vi
       .fn()
       .mockRejectedValueOnce(refusal)
       .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
-    const el = await openPrinters({ setDevicePrinters });
+    const el = await openEquipment({ setDeviceEquipment });
     const receiptBox = () =>
-      printersDialog(el)!.shadowRoot!.querySelector<WtCombobox>(
+      equipmentDialog(el)!.shadowRoot!.querySelector<WtCombobox>(
         'wt-combobox[name="receiptPrinterId"]',
       )!;
 
     await chooseOption(receiptBox(), "P2");
     await flush(el);
-    expect(printersDialog(el)!.error).toEqual({
+    expect(equipmentDialog(el)!.error).toEqual({
       code: "device.binding_invalid",
       field: "receiptPrinterId",
     });
     await chooseOption(receiptBox(), "P2");
     await flush(el);
 
-    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(2);
     expect(receiptBox().value).toBe("P2");
-    expect(printersDialog(el)!.error).toEqual({
+    expect(equipmentDialog(el)!.error).toEqual({
       code: "device.binding_invalid",
       field: "receiptPrinterId",
     });
 
-    answer({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+    answer(equipmentOf({ receipt: "P2", payment_slip: "S1" }));
     await flush(el);
-    expect(printersDialog(el)!.error).toBeNull();
+    expect(equipmentDialog(el)!.error).toBeNull();
     expect(receiptBox().value).toBe("P2");
   });
 
-  /** A server holding the device's printers, which both reads and switches go through. */
-  function printersServer() {
-    const stored: { receiptPrinterId: string | null; paymentSlipPrinterId: string | null } = {
-      receiptPrinterId: "P-off",
-      paymentSlipPrinterId: "S1",
+  /** The device with reader R1 among its choices, then once the refused pick turned out not to be
+   * free: P2 carried by the bar till, or R1 busy with another device's payment. */
+  function refusedPick(code: "device.equipment_held" | "reader.payment_in_progress") {
+    const R1 = item("R1", "Bar reader");
+    const before = structuredClone(initial);
+    before.roles[3]!.choices = [R1];
+    const after = structuredClone(before);
+    if (code === "device.equipment_held") {
+      after.roles[0]!.choices[1] = {
+        ...P2,
+        heldBy: { deviceId: "dev-bar", deviceName: "Bar till", personName: "Ana" },
+      };
+      return {
+        before,
+        after,
+        change: pick("receipt", "P2"),
+        refusal: { code, status: 409, field: "receiptPrinterId" },
+        shown: { code, field: "receiptPrinterId" },
+      };
+    }
+    after.roles[3]!.choices = [{ ...R1, busy: true }];
+    return {
+      before,
+      after,
+      change: {
+        role: "card_terminal",
+        selection: { id: "R1" },
+        via: "list",
+        takeOver: false,
+      } satisfies EquipmentChange,
+      refusal: { code, status: 409 },
+      shown: { code },
     };
-    const getDeviceIdentity = vi.fn(async () => ({ ...identity, ...stored }));
-    return { stored, getDeviceIdentity };
   }
 
-  it("sends a payment slip switch picked during a receipt switch only after the receipt switch is stored, and shows both", async () => {
-    const { stored, getDeviceIdentity } = printersServer();
-    // Each switch is stored only when the test releases it, and answers with everything stored then.
+  it.each(["device.equipment_held", "reader.payment_in_progress"] as const)(
+    "after a %s refusal the list is read again, so it shows why, and the refusal stays shown",
+    async (code) => {
+      const { before, after, change, refusal, shown } = refusedPick(code);
+      const getDeviceEquipment = vi.fn().mockResolvedValue(before);
+      const el = await openEquipment({
+        getDeviceEquipment,
+        setDeviceEquipment: vi.fn().mockRejectedValue(refusal),
+      });
+      const reads = getDeviceEquipment.mock.calls.length;
+      getDeviceEquipment.mockResolvedValue(after);
+
+      emit(equipmentDialog(el)!, "equipment-change", change);
+      await flush(el);
+      await flush(el);
+
+      expect(getDeviceEquipment).toHaveBeenCalledTimes(reads + 1);
+      expect(equipmentDialog(el)!.equipment).toEqual(after);
+      expect(equipmentDialog(el)!.error).toEqual(shown);
+    },
+  );
+
+  it("after any other refusal the list is not read again", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(initial);
+    const el = await openEquipment({
+      getDeviceEquipment,
+      setDeviceEquipment: vi.fn().mockRejectedValue({
+        code: "device.binding_invalid",
+        field: "receiptPrinterId",
+        status: 400,
+      }),
+    });
+    const reads = getDeviceEquipment.mock.calls.length;
+
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
+    await flush(el);
+    await flush(el);
+
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(reads);
+  });
+
+  /** A server holding the device's choices, which both reads and choices go through. */
+  function equipmentServer() {
+    const stored: { receipt: string | null; payment_slip: string | null } = {
+      receipt: "P-off",
+      payment_slip: "S1",
+    };
+    const store = (change: EquipmentChange) => {
+      stored[change.role as "receipt" | "payment_slip"] =
+        change.selection === "default" ? null : change.selection.id;
+    };
+    const getDeviceEquipment = vi.fn(async () => equipmentOf(stored));
+    return { stored, store, getDeviceEquipment };
+  }
+
+  it("sends a slip choice picked during a receipt choice only after the receipt choice is stored, and shows both", async () => {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
+    // Each choice is stored only when the test releases it, and answers with everything stored then.
     const held: (() => void)[] = [];
-    const setDevicePrinters = vi.fn(
-      (change: Partial<typeof stored>) =>
+    const setDeviceEquipment = vi.fn(
+      (change: EquipmentChange) =>
         new Promise((resolve) =>
           held.push(() => {
-            Object.assign(stored, change);
-            resolve({ ...stored });
+            store(change);
+            resolve(equipmentOf(stored));
           }),
         ),
     );
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
-    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
+    emit(equipmentDialog(el)!, "equipment-change", pick("payment_slip", "S2"));
     await flush(el);
-    expect(setDevicePrinters).toHaveBeenCalledTimes(1);
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
     held[0]!();
     await flush(el);
-    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(2);
     held[1]!();
     await flush(el);
 
-    expect(stored).toEqual({ receiptPrinterId: "P1", paymentSlipPrinterId: "S2" });
-    expect(printersDialog(el)!.receipt.current).toBe("P1");
-    expect(printersDialog(el)!.paymentSlip.current).toBe("S2");
+    expect(stored).toEqual({ receipt: "P1", payment_slip: "S2" });
+    expect(chosenIn(el, "receipt")).toBe("P1");
+    expect(chosenIn(el, "payment_slip")).toBe("S2");
   });
 
-  it("keeps showing what another tab stored after reopening, when an earlier switch answers late", async () => {
-    const { stored, getDeviceIdentity } = printersServer();
+  async function reopen(el: TillApp): Promise<void> {
+    emit(equipmentDialog(el)!, "close");
+    await flush(el);
+    openButton(el).click();
+    await flush(el);
+  }
+
+  it("keeps showing what another tab stored after reopening, when an earlier choice answers late", async () => {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
     let answer!: () => void;
-    const setDevicePrinters = vi.fn((change: Partial<typeof stored>) => {
-      Object.assign(stored, change);
-      const answered = { ...stored };
+    const setDeviceEquipment = vi.fn((change: EquipmentChange) => {
+      store(change);
+      const answered = equipmentOf(stored);
       return new Promise((resolve) => (answer = () => resolve(answered)));
     });
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
-    const reopen = async () => {
-      emit(printersDialog(el)!, "close");
-      await flush(el);
-      shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
-      await flush(el);
-    };
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    stored.receiptPrinterId = "P3";
-    await reopen();
-    expect(printersDialog(el)!.receipt.current).toBe("P3");
+    stored.receipt = "P3";
+    await reopen(el);
+    expect(chosenIn(el, "receipt")).toBe("P3");
     answer();
     await flush(el);
 
-    expect(printersDialog(el)!.receipt.current).toBe("P3");
-    getDeviceIdentity.mockRejectedValue(new TypeError("Failed to fetch"));
-    await reopen();
-    expect(printersDialog(el)!.receipt.current).toBe("P3");
+    expect(chosenIn(el, "receipt")).toBe("P3");
+    getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
+    await reopen(el);
+    expect(chosenIn(el, "receipt")).toBe("P3");
   });
 
-  it("shows an earlier switch the server stored after the reopened dialog read the device", async () => {
-    const { stored, getDeviceIdentity } = printersServer();
+  it("shows an earlier choice the server stored after the reopened dialog read the equipment", async () => {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
     let release!: () => void;
-    const setDevicePrinters = vi.fn(
-      (change: Partial<typeof stored>) =>
+    const setDeviceEquipment = vi.fn(
+      (change: EquipmentChange) =>
         new Promise(
           (resolve) =>
             (release = () => {
-              Object.assign(stored, change);
-              resolve({ ...stored });
+              store(change);
+              resolve(equipmentOf(stored));
             }),
         ),
     );
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    stored.receiptPrinterId = "P3";
-    emit(printersDialog(el)!, "close");
-    await flush(el);
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
-    await flush(el);
-    expect(printersDialog(el)!.receipt.current).toBe("P3");
+    stored.receipt = "P3";
+    await reopen(el);
+    expect(chosenIn(el, "receipt")).toBe("P3");
     release();
     await flush(el);
 
-    expect(stored.receiptPrinterId).toBe("P2");
-    expect(printersDialog(el)!.receipt.current).toBe("P2");
+    expect(stored.receipt).toBe("P2");
+    expect(chosenIn(el, "receipt")).toBe("P2");
   });
 
-  it("shows a switch's answer when the reopened dialog's read of the device, sent before it, finishes after it", async () => {
-    const { stored, getDeviceIdentity } = printersServer();
+  it("shows a choice's answer when the reopened dialog's read, sent before it, finishes after it", async () => {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
     let release!: () => void;
-    const setDevicePrinters = vi.fn(
-      (change: Partial<typeof stored>) =>
+    const setDeviceEquipment = vi.fn(
+      (change: EquipmentChange) =>
         new Promise(
           (resolve) =>
             (release = () => {
-              Object.assign(stored, change);
-              resolve({ ...stored });
+              store(change);
+              resolve(equipmentOf(stored));
             }),
         ),
     );
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
-    const reopen = async () => {
-      emit(printersDialog(el)!, "close");
-      await flush(el);
-      shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
-      await flush(el);
-    };
-    // The server answers this read from what it had stored before the switch was saved.
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
+    // The server answers this read from what it had stored before the choice was saved.
     let deliver!: () => void;
-    getDeviceIdentity.mockImplementationOnce(() => {
-      const read = { ...identity, ...stored };
+    getDeviceEquipment.mockImplementationOnce(() => {
+      const read = equipmentOf(stored);
       return new Promise((resolve) => (deliver = () => resolve(read)));
     });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    await reopen();
+    await reopen(el);
     release();
     await flush(el);
     deliver();
     await flush(el);
 
-    expect(stored.receiptPrinterId).toBe("P2");
-    expect(printersDialog(el)!.receipt.current).toBe("P2");
-    getDeviceIdentity.mockRejectedValue(new TypeError("Failed to fetch"));
-    await reopen();
-    expect(printersDialog(el)!.receipt.current).toBe("P2");
+    expect(stored.receipt).toBe("P2");
+    expect(chosenIn(el, "receipt")).toBe("P2");
+    getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
+    await reopen(el);
+    expect(chosenIn(el, "receipt")).toBe("P2");
   });
 
-  it("sends a later pick after a switch whose request rejects with nothing", async () => {
-    const setDevicePrinters = vi
+  it("sends a later pick after a choice whose request rejects with nothing", async () => {
+    const setDeviceEquipment = vi
       .fn()
       .mockRejectedValueOnce(undefined)
-      .mockResolvedValue({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
-    const el = await openPrinters({ setDevicePrinters });
+      .mockResolvedValue(equipmentOf({ receipt: "P2", payment_slip: "S1" }));
+    const el = await openEquipment({ setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
     await flush(el);
-    expect(printersDialog(el)!.error).toEqual({ code: "server.internal" });
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    expect(equipmentDialog(el)!.error).toEqual({ code: "server.internal" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
 
-    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
-    expect(printersDialog(el)!.receipt.current).toBe("P2");
-    expect(printersDialog(el)!.error).toBeNull();
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(chosenIn(el, "receipt")).toBe("P2");
+    expect(equipmentDialog(el)!.error).toBeNull();
   });
 
-  it("gives up on a switch that gets no answer within the request limit, and sends the next pick", async () => {
+  it("gives up on a choice that gets no answer within the request limit, and sends the next pick", async () => {
     let calls = 0;
-    const setDevicePrinters = vi.fn((_change: unknown, options?: { signal?: AbortSignal }) => {
+    const setDeviceEquipment = vi.fn((_change: unknown, options?: { signal?: AbortSignal }) => {
       calls++;
-      if (calls > 1) return Promise.resolve({ receiptPrinterId: "P2", paymentSlipPrinterId: "S1" });
+      if (calls > 1) return Promise.resolve(equipmentOf({ receipt: "P2", payment_slip: "S1" }));
       // Like fetch, the hung request rejects only when its signal aborts.
       return new Promise((_, reject) =>
         options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
       );
     });
-    const el = await openPrinters({ setDevicePrinters });
+    const el = await openEquipment({ setDeviceEquipment });
 
     vi.useFakeTimers();
     try {
-      emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
-      emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+      emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
+      emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
       await vi.advanceTimersByTimeAsync(149_999);
-      expect(setDevicePrinters).toHaveBeenCalledTimes(1);
+      expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(1);
     } finally {
       vi.useRealTimers();
     }
     await flush(el);
 
-    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
-    expect(printersDialog(el)!.receipt.current).toBe("P2");
-    expect(printersDialog(el)!.error).toBeNull();
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(chosenIn(el, "receipt")).toBe("P2");
+    expect(equipmentDialog(el)!.error).toBeNull();
   });
 
-  it("sends a pick while the read of the device after an earlier switch has no answer", async () => {
-    const { stored, getDeviceIdentity } = printersServer();
+  it("sends a pick while the read after an earlier choice has no answer", async () => {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
     let release!: () => void;
-    const setDevicePrinters = vi.fn(
-      (change: Partial<typeof stored>) =>
+    const setDeviceEquipment = vi.fn(
+      (change: EquipmentChange) =>
         new Promise(
           (resolve) =>
             (release = () => {
-              Object.assign(stored, change);
-              resolve({ ...stored });
+              store(change);
+              resolve(equipmentOf(stored));
             }),
         ),
     );
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    emit(printersDialog(el)!, "close");
-    await flush(el);
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
-    await flush(el);
-    // The read made because the reopened dialog's read came back while the switch was out.
-    getDeviceIdentity.mockImplementationOnce(() => new Promise(() => {}));
+    await reopen(el);
+    // The read made because the reopened dialog's read came back while the choice was out.
+    getDeviceEquipment.mockImplementationOnce(() => new Promise(() => {}));
     release();
     await flush(el);
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(4);
-    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(4);
+    emit(equipmentDialog(el)!, "equipment-change", pick("payment_slip", "S2"));
     await flush(el);
 
-    expect(setDevicePrinters).toHaveBeenCalledTimes(2);
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(2);
   });
 
-  it("reads the device again when a read it set aside came back while a later switch was out", async () => {
-    const { stored, getDeviceIdentity } = printersServer();
-    // Each switch is stored when sent and answers when the test says.
+  it("reads the equipment again when a read it set aside came back while a later choice was out", async () => {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
+    // Each choice is stored when sent and answers when the test says.
     const answers: (() => void)[] = [];
-    const setDevicePrinters = vi.fn((change: Partial<typeof stored>) => {
-      Object.assign(stored, change);
-      const answered = { ...stored };
+    const setDeviceEquipment = vi.fn((change: EquipmentChange) => {
+      store(change);
+      const answered = equipmentOf(stored);
       return new Promise((resolve) => answers.push(() => resolve(answered)));
     });
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
     await flush(el);
-    emit(printersDialog(el)!, "close");
-    await flush(el);
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
-    await flush(el);
-    // The read made because the reopened dialog's read came back while the first switch was out,
+    await reopen(el);
+    // The read made because the reopened dialog's read came back while the first choice was out,
     // which the server answers late.
     let deliver!: () => void;
-    getDeviceIdentity.mockImplementationOnce(
-      () => new Promise((resolve) => (deliver = () => resolve({ ...identity, ...stored }))),
+    getDeviceEquipment.mockImplementationOnce(
+      () => new Promise((resolve) => (deliver = () => resolve(equipmentOf(stored)))),
     );
     answers[0]!();
     await flush(el);
-    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("payment_slip", "S2"));
     await flush(el);
     answers[1]!();
     await flush(el);
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    stored.receiptPrinterId = "P3";
+    stored.receipt = "P3";
     deliver();
     await flush(el);
     answers[2]!();
     await flush(el);
 
-    expect(printersDialog(el)!.receipt.current).toBe("P3");
-    expect(printersDialog(el)!.paymentSlip.current).toBe("S2");
+    expect(chosenIn(el, "receipt")).toBe("P3");
+    expect(chosenIn(el, "payment_slip")).toBe("S2");
   });
 
-  /** A switch to receipt P2 the reopened dialog's read of the device came back during, so its
-   * answer is set aside, and the read made once it answers fails. */
-  async function switchSetAsideThenReadFails() {
-    const { stored, getDeviceIdentity } = printersServer();
+  /** A choice of receipt P2 the reopened dialog's read came back during, so its answer is set
+   * aside, and the read made once it answers fails. */
+  async function choiceSetAsideThenReadFails() {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
     let release!: () => void;
-    const setDevicePrinters = vi.fn(
-      (change: Partial<typeof stored>) =>
+    const setDeviceEquipment = vi.fn(
+      (change: EquipmentChange) =>
         new Promise((resolve) => {
           release = () => {
-            Object.assign(stored, change);
-            resolve({ ...stored });
+            store(change);
+            resolve(equipmentOf(stored));
           };
         }),
     );
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
-    const reopen = async () => {
-      emit(printersDialog(el)!, "close");
-      await flush(el);
-      shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
-      await flush(el);
-    };
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    await reopen();
-    expect(printersDialog(el)!.receipt.current).toBe("P-off");
-    getDeviceIdentity.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await reopen(el);
+    expect(chosenIn(el, "receipt")).toBe("P-off");
+    getDeviceEquipment.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     release();
     await flush(el);
-    expect(stored.receiptPrinterId).toBe("P2");
-    return { el, getDeviceIdentity, setDevicePrinters, reopen };
+    expect(stored.receipt).toBe("P2");
+    return { el, getDeviceEquipment, setDeviceEquipment };
   }
 
-  it("reads the device once after a switch it set aside, once per failed opening, and a later opening shows what the server stored", async () => {
-    const { el, getDeviceIdentity, reopen } = await switchSetAsideThenReadFails();
+  it("reads the equipment once after a choice it set aside, once per failed opening, and a later opening shows what the server stored", async () => {
+    const { el, getDeviceEquipment } = await choiceSetAsideThenReadFails();
 
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(4);
-    getDeviceIdentity.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    await reopen();
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(5);
-    await reopen();
-    expect(printersDialog(el)!.receipt.current).toBe("P2");
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(4);
+    getDeviceEquipment.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await reopen(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(5);
+    await reopen(el);
+    expect(chosenIn(el, "receipt")).toBe("P2");
   });
 
-  it("reads the device again after the next switch answers, when the read after a switch it set aside failed", async () => {
-    const { el, getDeviceIdentity, setDevicePrinters } = await switchSetAsideThenReadFails();
+  it("reads the equipment again after the next choice answers, when the read after a choice it set aside failed", async () => {
+    const { el, getDeviceEquipment, setDeviceEquipment } = await choiceSetAsideThenReadFails();
 
-    setDevicePrinters.mockRejectedValueOnce({
+    setDeviceEquipment.mockRejectedValueOnce({
       field: "paymentSlipPrinterId",
       code: "device.binding_invalid",
       status: 400,
     });
-    emit(printersDialog(el)!, "printers-change", { paymentSlipPrinterId: "S2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("payment_slip", "S2"));
     await flush(el);
 
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(5);
-    expect(printersDialog(el)!.receipt.current).toBe("P2");
-    expect(printersDialog(el)!.error).toEqual({
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(5);
+    expect(chosenIn(el, "receipt")).toBe("P2");
+    expect(equipmentDialog(el)!.error).toEqual({
       code: "device.binding_invalid",
       field: "paymentSlipPrinterId",
     });
   });
 
-  it("shows a switch the server stored when its answer never arrived", async () => {
-    const { stored, getDeviceIdentity } = printersServer();
-    const setDevicePrinters = vi.fn(async (change: Partial<typeof stored>) => {
-      Object.assign(stored, change);
+  it("shows a choice the server stored when its answer never arrived", async () => {
+    const { stored, store, getDeviceEquipment } = equipmentServer();
+    const setDeviceEquipment = vi.fn(async (change: EquipmentChange) => {
+      store(change);
       throw new TypeError("Failed to fetch");
     });
-    const el = await openPrinters({ getDeviceIdentity, setDevicePrinters });
+    const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P1"));
     await flush(el);
 
-    expect(printersDialog(el)!.error).toEqual({ code: "server.internal" });
-    expect(printersDialog(el)!.receipt.current).toBe("P1");
+    expect(stored.receipt).toBe("P1");
+    expect(equipmentDialog(el)!.error).toEqual({ code: "server.internal" });
+    expect(chosenIn(el, "receipt")).toBe("P1");
   });
 
-  it("does not show a refusal of a switch picked before the dialog was reopened", async () => {
+  it("does not show a refusal of a choice picked before the dialog was reopened", async () => {
     let refuse!: (error: unknown) => void;
-    const setDevicePrinters = vi.fn(() => new Promise((_, reject) => (refuse = reject)));
-    const el = await openPrinters({ setDevicePrinters });
+    const setDeviceEquipment = vi.fn(() => new Promise((_, reject) => (refuse = reject)));
+    const el = await openEquipment({ setDeviceEquipment });
 
-    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
     await flush(el);
-    emit(printersDialog(el)!, "close");
-    await flush(el);
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
-    await flush(el);
+    await reopen(el);
     refuse({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
     await flush(el);
 
-    expect(printersDialog(el)!.error).toBeNull();
+    expect(equipmentDialog(el)!.error).toBeNull();
   });
 
   it("closes the dialog when the operator logs out", async () => {
-    const el = await openPrinters();
+    const el = await openEquipment();
 
     emit(shell(el)!, "logout");
     await flush(el);
 
     expect(lock(el)).not.toBeNull();
-    expect(printersDialog(el)).toBeNull();
+    expect(equipmentDialog(el)).toBeNull();
   });
 
-  it("does not open the dialog over the lock screen when the operator logs out while the device is read", async () => {
+  it("does not open the dialog over the lock screen when the operator logs out while the equipment is read", async () => {
     let answer!: (value: unknown) => void;
-    const getDeviceIdentity = vi
+    const getDeviceEquipment = vi
       .fn()
-      .mockResolvedValueOnce(identity)
+      .mockResolvedValueOnce(initial)
       .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
-    const { el } = await mountApp({ getDeviceIdentity });
+    const { el } = await mountApp({ getDeviceEquipment });
     await toCounter(el);
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".printers")!.click();
+    openButton(el).click();
     await flush(el);
-    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
 
     emit(shell(el)!, "logout");
     await flush(el);
-    answer(identity);
+    answer(initial);
     await flush(el);
 
     expect(lock(el)).not.toBeNull();
-    expect(printersDialog(el)).toBeNull();
+    expect(equipmentDialog(el)).toBeNull();
   });
 
   it("closes the dialog when it asks to close", async () => {
-    const el = await openPrinters();
+    const el = await openEquipment();
 
-    emit(printersDialog(el)!, "close");
+    emit(equipmentDialog(el)!, "close");
     await flush(el);
 
-    expect(printersDialog(el)).toBeNull();
+    expect(equipmentDialog(el)).toBeNull();
+  });
+
+  describe("beside the 15-second poll", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function poll(el: TillApp): Promise<void> {
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await flush(el);
+    }
+
+    it("a poll answered while a choice is still out does not replace the choice's answer", async () => {
+      const { stored, store, getDeviceEquipment } = equipmentServer();
+      let release!: () => void;
+      const setDeviceEquipment = vi.fn(
+        (change: EquipmentChange) =>
+          new Promise(
+            (resolve) =>
+              (release = () => {
+                store(change);
+                resolve(equipmentOf(stored));
+              }),
+          ),
+      );
+      const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
+
+      emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
+      await flush(el);
+      // Answered from what the server held before the choice was stored.
+      await poll(el);
+      expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+      // So no later read can put right a stale answer that was shown.
+      getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
+      release();
+      await flush(el);
+
+      expect(stored.receipt).toBe("P2");
+      expect(chosenIn(el, "receipt")).toBe("P2");
+    });
+
+    it("a poll sent before a choice and answered after the choice's answer is set aside", async () => {
+      const { stored, store, getDeviceEquipment } = equipmentServer();
+      const setDeviceEquipment = vi.fn(async (change: EquipmentChange) => {
+        store(change);
+        return equipmentOf(stored);
+      });
+      const el = await openEquipment({ getDeviceEquipment, setDeviceEquipment });
+      let deliver!: () => void;
+      getDeviceEquipment.mockImplementationOnce(() => {
+        const read = equipmentOf(stored);
+        return new Promise((resolve) => (deliver = () => resolve(read)));
+      });
+
+      await poll(el);
+      emit(equipmentDialog(el)!, "equipment-change", pick("receipt", "P2"));
+      await flush(el);
+      expect(chosenIn(el, "receipt")).toBe("P2");
+      deliver();
+      await flush(el);
+
+      expect(stored.receipt).toBe("P2");
+      expect(chosenIn(el, "receipt")).toBe("P2");
+    });
+  });
+});
+
+describe("the device's equipment: scanning, the pay screens, takeovers and sign-ins", () => {
+  const BAR_TILL = { deviceId: "dev-bar", deviceName: "Bar till", personName: "Ana" };
+  const R1 = { id: "00000000-0000-4000-8000-0000000000a1", name: "Barra" };
+  const R2 = { id: "00000000-0000-4000-8000-0000000000a2", name: "Terraza" };
+  const PP = { id: "00000000-0000-4000-8000-0000000000b1", name: "Portable printer" };
+  const item = (
+    of: { id: string; name: string },
+    extra: Partial<EquipmentItem> = {},
+  ): EquipmentItem => ({
+    ...of,
+    portable: true,
+    available: true,
+    busy: false,
+    heldBy: null,
+    ...extra,
+  });
+  const none = (role: "payment_slip" | "cash_drawer"): RoleEquipment => ({
+    role,
+    selection: "default",
+    chosenId: null,
+    resolved: null,
+    chosen: null,
+    default: null,
+    choices: [],
+  });
+
+  /** The device on portable printer PP and on `reader` (or none), choosing among R1 and R2; a
+   * `holder` carries what the device no longer resolves to. */
+  function equipmentOn(
+    printer: "held" | "taken",
+    reader: { id: string; name: string } | null,
+    takenReader?: { id: string; name: string },
+  ): DeviceEquipment {
+    const readers = [R1, R2].map((each) =>
+      item(each, {
+        provider: "stripe",
+        ...(each.id === takenReader?.id ? { heldBy: BAR_TILL } : {}),
+      }),
+    );
+    const pp = item(PP, printer === "taken" ? { heldBy: BAR_TILL } : {});
+    return {
+      roles: [
+        {
+          role: "receipt",
+          selection: printer === "held" ? "item" : "default",
+          chosenId: printer === "held" ? PP.id : null,
+          resolved: printer === "held" ? { ...PP, available: true } : null,
+          chosen: printer === "held" ? pp : null,
+          default: null,
+          choices: [pp],
+        },
+        none("payment_slip"),
+        none("cash_drawer"),
+        {
+          role: "card_terminal",
+          selection: "default",
+          chosenId: null,
+          resolved: reader === null ? null : { ...reader, available: true, provider: "stripe" },
+          chosen: null,
+          default: readers[0]!,
+          choices: readers,
+        },
+      ],
+    };
+  }
+
+  const bootOn = (reader: { id: string; name: string } | null) => ({
+    ...till,
+    capabilities: [...till.capabilities, "integrated-card-payment"] as CapabilityFlag[],
+    cardProvider: reader === null ? ("none" as const) : ("stripe_terminal" as const),
+    activeReaders: reader === null ? [] : [{ ...reader, provider: "stripe_terminal" }],
+    defaultReaderId: reader?.id,
+  });
+  const equipmentDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog");
+  const openButton = (el: TillApp) =>
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".equipment")!;
+  const toast = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
+      "wt-toast[data-equipment-toast]",
+    )!;
+  const readerName = (el: TillApp) =>
+    tenderPay(el).shadowRoot!.querySelector(".reader-name")?.textContent?.trim();
+
+  /** One poll tick: only `setInterval` is faked, so every other wait in the app keeps real time. */
+  async function poll(el: TillApp): Promise<void> {
+    vi.advanceTimersByTime(15_000);
+    await flush(el);
+    await flush(el);
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("scan and the list send the same request shape, but for the way it was chosen", async () => {
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
+      new DOMException("Permission denied", "NotAllowedError"),
+    );
+    const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOn("held", R2));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOn("held", R1)),
+      setDeviceEquipment,
+    });
+    await toCounter(el);
+    openButton(el).click();
+    await flush(el);
+    const dialog = equipmentDialog(el)!;
+
+    await chooseOption(
+      dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="cardReaderId"]')!,
+      R2.id,
+    );
+    await flush(el);
+    dialog
+      .shadowRoot!.querySelector('[data-equipment-row="card_terminal"]')!
+      .querySelector<HTMLElement>("[data-equipment-scan]")!
+      .click();
+    await dialog.updateComplete;
+    dialog.shadowRoot!.querySelector("till-equipment-scanner")!.dispatchEvent(
+      new CustomEvent("equipment-scanned", {
+        detail: { id: R2.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(2);
+    const [listed, scanned] = setDeviceEquipment.mock.calls.map((call) => call[0]);
+    expect(listed).toEqual({
+      role: "card_terminal",
+      selection: { id: R2.id },
+      via: "list",
+      takeOver: false,
+    });
+    expect(scanned).toEqual({ ...listed, via: "scan" });
+  });
+
+  it("after a takeover the next poll shows a notice naming the device that took it, until dismissed", async () => {
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(equipmentOn("held", R1))
+      .mockResolvedValue(equipmentOn("taken", R1));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment,
+    });
+    await toCounter(el);
+    await flush(el);
+    expect(toast(el).open).toBe(false);
+
+    await poll(el);
+
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(toast(el).open).toBe(true);
+    expect(toast(el).message).toBe(
+      t("equipment.taken_person")
+        .replace("{item}", PP.name)
+        .replace("{device}", "Bar till")
+        .replace("{person}", "Ana"),
+    );
+    toast(el).dispatchEvent(new CustomEvent("wt-close"));
+    await flush(el);
+    expect(toast(el).open).toBe(false);
+    await poll(el);
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("a takeover notice is gone once the person signs out", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValueOnce(equipmentOn("held", R1))
+        .mockResolvedValue(equipmentOn("taken", R1)),
+    });
+    await toCounter(el);
+    await flush(el);
+    await poll(el);
+    expect(toast(el).open).toBe(true);
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+
+    expect(lock(el)).not.toBeNull();
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("a sign-in's equipment read that reports a takeover after sign-out shows no notice on the lock screen", async () => {
+    let answer!: (equipment: DeviceEquipment) => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValueOnce(equipmentOn("held", R1))
+        .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve))),
+    });
+    await toCounter(el);
+    await flush(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+    await flush(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+
+    answer(equipmentOn("taken", R1));
+    await flush(el);
+
+    expect(lock(el)).not.toBeNull();
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("the takeover notice's action opens no equipment dialog over the lock screen", async () => {
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(equipmentOn("held", R1))
+      .mockResolvedValue(equipmentOn("taken", R1));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment,
+    });
+    await toCounter(el);
+    await flush(el);
+    await poll(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    const reads = getDeviceEquipment.mock.calls.length;
+
+    toast(el).dispatchEvent(new CustomEvent("wt-activate"));
+    await flush(el);
+
+    expect(lock(el)).not.toBeNull();
+    expect(equipmentDialog(el)).toBeNull();
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(reads);
+  });
+
+  it("names only the device that took it when nobody is signed in there", async () => {
+    const taken = equipmentOn("taken", R1);
+    const receipt = taken.roles[0]!;
+    receipt.choices = [{ ...receipt.choices[0]!, heldBy: { ...BAR_TILL, personName: null } }];
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValueOnce(equipmentOn("held", R1))
+        .mockResolvedValue(taken),
+    });
+    await toCounter(el);
+    await flush(el);
+
+    await poll(el);
+
+    expect(toast(el).message).toBe(
+      t("equipment.taken").replace("{item}", PP.name).replace("{device}", "Bar till"),
+    );
+  });
+
+  it("shows no notice when a choice changed but no other device carries what it was on", async () => {
+    // A manager put the receipt back on Use default from the dashboard: nobody took the printer.
+    const released = equipmentOn("held", R1);
+    released.roles[0] = {
+      ...released.roles[0]!,
+      selection: "default",
+      chosenId: null,
+      resolved: null,
+      chosen: null,
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValueOnce(equipmentOn("held", R1))
+        .mockResolvedValue(released),
+    });
+    await toCounter(el);
+    await flush(el);
+
+    await poll(el);
+
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("reads the equipment on no tick while nobody is signed in, and makes no activity of its own", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOn("held", R1));
+    const sessionActivity = fakeSessionActivity();
+    currentApi = stubApi({ getDeviceEquipment });
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api: currentApi,
+      sessionActivity: sessionActivity as never,
+    });
+    await flush(el);
+    await poll(el);
+    expect(getDeviceEquipment).not.toHaveBeenCalled();
+
+    await toCounter(el);
+    const interactions = sessionActivity.noteInteraction.mock.calls.length;
+    await poll(el);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+    expect(sessionActivity.noteInteraction.mock.calls.length).toBe(interactions);
+
+    emit(shell(el)!, "logout");
+    await flush(el);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+  });
+
+  it("after choosing another reader in the equipment dialog, the pay screen pays on the new one without a reload", async () => {
+    const getTill = vi.fn().mockResolvedValue(bootOn(R1));
+    const getDeviceIdentity = vi.fn().mockResolvedValue({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      stationId: null,
+    });
+    const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const { el } = await mountApp({
+      getTill,
+      getDeviceIdentity,
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOn("held", R1)),
+      setDeviceEquipment: vi.fn().mockResolvedValue(equipmentOn("held", R2)),
+      pay,
+    });
+    const c = await toCounter(el);
+    await flush(el);
+    expect(readerName(el)).toBe(R1.name);
+
+    openButton(el).click();
+    await flush(el);
+    emit(equipmentDialog(el)!, "equipment-change", {
+      role: "card_terminal",
+      selection: { id: R2.id },
+      via: "list",
+      takeOver: false,
+    });
+    await flush(el);
+    await flush(el);
+    emit(equipmentDialog(el)!, "close");
+    await flush(el);
+
+    expect(tenderPay(el).cardProvider).toBe("stripe_terminal");
+    expect(tenderPay(el).activeReaders.map((reader) => reader.id)).toEqual([R2.id]);
+    expect(tenderPay(el).defaultReaderId).toBe(R2.id);
+    expect(readerName(el)).toBe(R2.name);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(pay).toHaveBeenCalledOnce();
+    expect(pay.mock.calls[0]![0]).not.toHaveProperty("readerId");
+    // Neither the app nor the device was read again: the equipment answer names the provider.
+    expect(getTill).toHaveBeenCalledOnce();
+    expect(getDeviceIdentity).toHaveBeenCalledOnce();
+  });
+
+  it("the pay screen takes the reader and its provider from the equipment answer alone", async () => {
+    const getTill = vi.fn().mockResolvedValue(bootOn(null));
+    const { el } = await mountApp({
+      getTill,
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOn("held", R2)),
+    });
+    await toCounter(el);
+    await flush(el);
+
+    expect(tenderPay(el).activeReaders).toEqual([{ ...R2, provider: "stripe_terminal" }]);
+    expect(tenderPay(el).defaultReaderId).toBe(R2.id);
+    expect(tenderPay(el).cardProvider).toBe("stripe_terminal");
+    expect(getTill).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["sumup", ["sumup_cloud"]],
+    ["simulator", []],
+    [undefined, []],
+  ] as const)(
+    "a resolved reader whose stored provider is %s is offered as %j",
+    async (provider, offered) => {
+      const equipment = equipmentOn("held", R2);
+      const reader = equipment.roles.find((role) => role.role === "card_terminal")!;
+      reader.resolved = { ...R2, available: true, ...(provider === undefined ? {} : { provider }) };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue(bootOn(null)),
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipment),
+      });
+      await toCounter(el);
+      await flush(el);
+
+      expect(tenderPay(el).activeReaders.map((each) => each.provider)).toEqual(offered);
+      expect(tenderPay(el).cardProvider).toBe(offered[0] ?? "none");
+    },
+  );
+
+  it("a reader chosen in the dialog is offered though reading the till's setup again would fail", async () => {
+    const getTill = vi
+      .fn()
+      .mockResolvedValueOnce(bootOn(R1))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(bootOn(R2));
+    const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOn("held", R1));
+    const { el } = await mountApp({
+      getTill,
+      getDeviceEquipment,
+      setDeviceEquipment: vi.fn().mockResolvedValue(equipmentOn("held", R2)),
+    });
+    await toCounter(el);
+    openButton(el).click();
+    await flush(el);
+    emit(equipmentDialog(el)!, "equipment-change", {
+      role: "card_terminal",
+      selection: { id: R2.id },
+      via: "list",
+      takeOver: false,
+    });
+    await flush(el);
+    await flush(el);
+    emit(equipmentDialog(el)!, "close");
+    getDeviceEquipment.mockResolvedValue(equipmentOn("held", R2));
+    await poll(el);
+    await poll(el);
+
+    expect(tenderPay(el).activeReaders.map((reader) => reader.id)).toEqual([R2.id]);
+    expect(tenderPay(el).cardProvider).toBe("stripe_terminal");
+  });
+
+  it("after the sign-in's equipment read fails, the next poll's reader is offered", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(equipmentOn("held", R2)),
+    });
+    await toCounter(el);
+    await flush(el);
+    expect(tenderPay(el).activeReaders.map((reader) => reader.id)).toEqual([R1.id]);
+
+    await poll(el);
+
+    expect(tenderPay(el).activeReaders.map((reader) => reader.id)).toEqual([R2.id]);
+    expect(tenderPay(el).defaultReaderId).toBe(R2.id);
+  });
+
+  it("a poll sent before a profile switch and answered after it does not bring back the old profile's reader", async () => {
+    const COUNTER = { id: "pr-counter", name: "Counter till" };
+    const BAR = { id: "pr-bar", name: "Bar till" };
+    let oldAnswer!: (value: DeviceEquipment) => void;
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(equipmentOn("held", R1))
+      .mockImplementationOnce(
+        () => new Promise<DeviceEquipment>((resolve) => (oldAnswer = resolve)),
+      )
+      .mockResolvedValue(equipmentOn("held", null));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        stationId: null,
+        profileId: COUNTER.id,
+        approvedProfiles: [COUNTER, BAR],
+      }),
+      switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: BAR.id }),
+      getDeviceEquipment,
+    });
+    await toCounter(el);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!.click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-profile-dialog")!, "profile-switch", {
+      profileId: BAR.id,
+    });
+    await flush(el);
+    await flush(el);
+    await flush(el);
+    expect(tenderPay(el).activeReaders).toEqual([]);
+
+    oldAnswer(equipmentOn("held", R1));
+    await flush(el);
+    await flush(el);
+
+    expect(tenderPay(el).activeReaders).toEqual([]);
+    expect(tenderPay(el).cardProvider).toBe("none");
+  });
+
+  it("after a poll reports the reader was taken, the pay screen no longer offers it", async () => {
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(equipmentOn("held", R1))
+      .mockResolvedValue(equipmentOn("held", null, R1));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment,
+    });
+    await toCounter(el);
+    await flush(el);
+    expect(tenderPay(el).activeReaders.map((reader) => reader.id)).toEqual([R1.id]);
+
+    await poll(el);
+
+    expect(tenderPay(el).activeReaders).toEqual([]);
+    expect(tenderPay(el).defaultReaderId).toBeUndefined();
+    expect(tenderPay(el).cardProvider).toBe("none");
+    expect(readerName(el)).toBeUndefined();
+    expect(toast(el).message).toBe(
+      t("equipment.taken_person")
+        .replace("{item}", R1.name)
+        .replace("{device}", "Bar till")
+        .replace("{person}", "Ana"),
+    );
+  });
+
+  it("locking and a different person signing in keep the choices", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOn("held", R1));
+    const setDeviceEquipment = vi.fn();
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment,
+      setDeviceEquipment,
+    });
+    await toCounter(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
+    await flush(el);
+    openButton(el).click();
+    await flush(el);
+
+    expect(setDeviceEquipment).not.toHaveBeenCalled();
+    expect(equipmentDialog(el)!.equipment).toEqual(equipmentOn("held", R1));
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+  });
+
+  it("a profile switch re-reads the equipment and shows the choices it kept and the ones it let go", async () => {
+    const COUNTER = { id: "pr-counter", name: "Counter till" };
+    const BAR = { id: "pr-bar", name: "Bar till" };
+    const kept = equipmentOn("held", null);
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(equipmentOn("held", R1))
+      .mockResolvedValue(kept);
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        stationId: null,
+        profileId: COUNTER.id,
+        approvedProfiles: [COUNTER, BAR],
+      }),
+      switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: BAR.id }),
+      getDeviceEquipment,
+    });
+    await toCounter(el);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!.click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-profile-dialog")!, "profile-switch", {
+      profileId: BAR.id,
+    });
+    await flush(el);
+    await flush(el);
+    await flush(el);
+    const reads = getDeviceEquipment.mock.calls.length;
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(tenderPay(el).activeReaders).toEqual([]);
+
+    getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
+    openButton(el).click();
+    await flush(el);
+
+    const shown = equipmentDialog(el)!.equipment!;
+    expect(shown).toEqual(kept);
+    expect(shown.roles.find((role) => role.role === "receipt")!.chosenId).toBe(PP.id);
+    expect(shown.roles.find((role) => role.role === "card_terminal")!.resolved).toBeNull();
   });
 });
 
@@ -15015,9 +15770,6 @@ describe("switching the device's profile from the header", () => {
     name: "Till 1",
     formFactor: "till",
     stationId: null,
-    receiptPrinterId: null,
-    paymentSlipPrinterId: null,
-    printerChoices: { receipt: [], paymentSlip: [] },
     profileId: COUNTER.id,
     approvedProfiles: [COUNTER, BAR],
   };
@@ -15048,8 +15800,6 @@ describe("switching the device's profile from the header", () => {
         getDeviceIdentity: vi.fn().mockResolvedValue(identity),
         switchDeviceProfile: vi.fn().mockResolvedValue({
           activeProfileId: BAR.id,
-          receiptPrinterId: null,
-          paymentSlipPrinterId: null,
         }),
         ...overrides,
       },
@@ -15313,11 +16063,22 @@ describe("switching the device's profile from the header", () => {
     expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
   });
 
+  it("opens on the profiles last read when reading the device again fails", async () => {
+    const getDeviceIdentity = vi
+      .fn()
+      .mockResolvedValueOnce(identity)
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await openProfile({ getDeviceIdentity });
+    const dialog = profileDialog(el)!;
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    expect(dialog.open).toBe(true);
+    expect(dialog.profiles).toEqual([COUNTER, BAR]);
+    expect(dialog.activeProfileId).toBe(COUNTER.id);
+  });
+
   it("refuses to switch while an order is in progress, sending nothing until it is cleared", async () => {
     const switchDeviceProfile = vi.fn().mockResolvedValue({
       activeProfileId: BAR.id,
-      receiptPrinterId: null,
-      paymentSlipPrinterId: null,
     });
     const { el, c } = await openProfile({ switchDeviceProfile });
     c.store.addProduct(cafe, "1");
@@ -15408,13 +16169,11 @@ describe("switching the device's profile from the header", () => {
     try {
       let switched = false;
       const { el } = await openProfile({
-        // A device read after the switch with no printer choices makes the printers step throw.
-        getDeviceIdentity: vi.fn(async () =>
-          switched ? { ...identity, printerChoices: undefined } : identity,
-        ),
+        // A device read after the switch that answers nothing makes the profiles step throw.
+        getDeviceIdentity: vi.fn(async () => (switched ? null : identity)),
         switchDeviceProfile: vi.fn(async () => {
           switched = true;
-          return { activeProfileId: BAR.id, receiptPrinterId: null, paymentSlipPrinterId: null };
+          return { activeProfileId: BAR.id };
         }),
       });
 
@@ -15473,8 +16232,6 @@ describe("switching the device's profile from the header", () => {
       getDeviceIdentity: vi.fn().mockResolvedValue(identity),
       switchDeviceProfile: vi.fn().mockResolvedValue({
         activeProfileId: BAR.id,
-        receiptPrinterId: null,
-        paymentSlipPrinterId: null,
       }),
       listDefaultZoneOffers,
       listZoneOffers: vi.fn((zoneId: string) => offersIn(zoneId, `menu-${zoneId}`)),

@@ -2,7 +2,7 @@ import { foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
 import { devices, id, table } from "@waitron/db";
 import { cardReaders } from "./card-readers.js";
 
-/** A device's DEFAULT card reader: a mutable mapping, replaced or removed as the manager re-points it. */
+/** A device's explicit card reader choice; no row = Use default. */
 export const deviceCardReaders = table(
   "device_card_readers",
   {

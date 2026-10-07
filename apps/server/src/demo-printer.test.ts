@@ -15,8 +15,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
-import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
-import { enqueuePrintJob, esc } from "@waitron/printing";
+import {
+  emptyPrinterLists,
+  readProfilePrinterLists,
+  resolveDevicePrinterId,
+  setProfilePrinterLists,
+} from "@waitron/layouts";
+import { enqueuePrintJob, esc, updatePrinter } from "@waitron/printing";
 import {
   configureDemoPrinter,
   deliverDemoPrinterJobs,
@@ -52,6 +57,18 @@ async function devicePrinters(deviceId: string) {
     .from(devices)
     .where(eq(devices.id, deviceId));
   return row;
+}
+
+/** The lists of a profile that had none, once the Demo printer listed itself on every role. */
+function demoEverywhere(printerId: string) {
+  return {
+    receiptPrinterIds: [printerId],
+    paymentSlipPrinterIds: [printerId],
+    cashDrawerPrinterIds: [printerId],
+    receiptPrinterDefaultId: printerId,
+    paymentSlipPrinterDefaultId: printerId,
+    cashDrawerPrinterDefaultId: printerId,
+  };
 }
 
 function profileLists(profileId: string) {
@@ -93,14 +110,8 @@ describe("the Demo printer", () => {
       { printerId: demo!.printerId, kind: "drawer", status: "done" },
     ]);
     expect(jobs.find((job) => job.printerId === otherId)?.status).toBe("queued");
-    expect(await devicePrinters(deviceId)).toEqual({
-      receipt: demo!.printerId,
-      paymentSlip: demo!.printerId,
-    });
-    expect(await profileLists(profileId)).toEqual({
-      receiptPrinterIds: [demo!.printerId],
-      paymentSlipPrinterIds: [demo!.printerId],
-    });
+    expect(await devicePrinters(deviceId)).toEqual({ receipt: null, paymentSlip: null });
+    expect(await profileLists(profileId)).toEqual(demoEverywhere(demo!.printerId));
   });
 
   it("deactivates the pretend printer in Live mode and cannot claim its waiting jobs", async () => {
@@ -128,6 +139,7 @@ describe("the Demo printer", () => {
     expect(printer?.active).toBe(false);
     expect(await devicePrinters(deviceId)).toEqual({ receipt: null, paymentSlip: null });
     expect(await profileLists(profileId)).toEqual({
+      ...emptyPrinterLists(),
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
@@ -152,6 +164,7 @@ describe("the Demo printer", () => {
     const bar = await realPrinter(locationId, "Bar");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [bar],
         paymentSlipPrinterIds: [bar],
       }),
@@ -172,6 +185,10 @@ describe("the Demo printer", () => {
     expect(await profileLists(profileId)).toEqual({
       receiptPrinterIds: [bar, demo!.printerId],
       paymentSlipPrinterIds: [bar, demo!.printerId],
+      cashDrawerPrinterIds: [demo!.printerId],
+      receiptPrinterDefaultId: demo!.printerId,
+      paymentSlipPrinterDefaultId: demo!.printerId,
+      cashDrawerPrinterDefaultId: demo!.printerId,
     });
   });
 
@@ -189,38 +206,112 @@ describe("the Demo printer", () => {
     const demo = await configureDemoPrinter(suite.db, locationId, true);
 
     expect(await profileLists(retiredId)).toEqual({
+      ...emptyPrinterLists(),
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
+    expect(await profileLists(profileId)).toEqual(demoEverywhere(demo!.printerId));
+  });
+
+  it("becomes each role's default where the profile had none, and devices on Use default resolve to it", async () => {
+    const { locationId, deviceId, profileId } = await venue();
+
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+
+    expect(await profileLists(profileId)).toEqual(demoEverywhere(demo!.printerId));
+    for (const role of ["receipt", "payment_slip", "cash_drawer"] as const) {
+      expect(
+        await withTransaction(suite.db, (tx) => resolveDevicePrinterId(tx, deviceId, role)),
+      ).toBe(demo!.printerId);
+    }
+  });
+
+  it("leaves a profile's own default in place", async () => {
+    const { locationId, profileId } = await venue();
+    const bar = await realPrinter(locationId, "Bar");
+    await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, bar));
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [bar],
+        paymentSlipPrinterIds: [bar],
+        cashDrawerPrinterIds: [bar],
+        receiptPrinterDefaultId: bar,
+        paymentSlipPrinterDefaultId: null,
+        cashDrawerPrinterDefaultId: bar,
+      }),
+    );
+
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+
     expect(await profileLists(profileId)).toEqual({
-      receiptPrinterIds: [demo!.printerId],
-      paymentSlipPrinterIds: [demo!.printerId],
+      receiptPrinterIds: [bar, demo!.printerId],
+      paymentSlipPrinterIds: [bar, demo!.printerId],
+      cashDrawerPrinterIds: [bar, demo!.printerId],
+      receiptPrinterDefaultId: bar,
+      paymentSlipPrinterDefaultId: demo!.printerId,
+      cashDrawerPrinterDefaultId: bar,
     });
   });
 
-  it("moves a device off it in Live mode to the first printer still listed", async () => {
+  it("puts a device back on Use default when Live mode takes it off the list", async () => {
     const { locationId, deviceId, profileId } = await venue();
     const bar = await realPrinter(locationId, "Bar");
     // Listed after the device paired, so the device still holds none.
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: [bar],
         paymentSlipPrinterIds: [bar],
       }),
     );
     const demo = await configureDemoPrinter(suite.db, locationId, true);
-    expect(await devicePrinters(deviceId)).toEqual({
-      receipt: demo!.printerId,
-      paymentSlip: demo!.printerId,
-    });
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: demo!.printerId, paymentSlipPrinterId: demo!.printerId })
+      .where(eq(devices.id, deviceId));
 
     await configureDemoPrinter(suite.db, locationId, false);
 
-    expect(await devicePrinters(deviceId)).toEqual({ receipt: bar, paymentSlip: bar });
+    expect(await devicePrinters(deviceId)).toEqual({ receipt: null, paymentSlip: null });
     expect(await profileLists(profileId)).toEqual({
+      ...emptyPrinterLists(),
       receiptPrinterIds: [bar],
       paymentSlipPrinterIds: [bar],
     });
+  });
+
+  it("starts again with its drawer switched off, staying off the drawer list and default", async () => {
+    const { locationId, profileId } = await venue();
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    await withTransaction(suite.db, (tx) =>
+      updatePrinter(tx, { locationId }, demo!.printerId, { hasCashDrawer: false }),
+    );
+    await configureDemoPrinter(suite.db, locationId, false);
+
+    expect(await configureDemoPrinter(suite.db, locationId, true)).toEqual(demo);
+
+    const [printer] = await suite.db
+      .select({ hasCashDrawer: printers.hasCashDrawer })
+      .from(printers)
+      .where(eq(printers.id, demo!.printerId));
+    expect(printer?.hasCashDrawer).toBe(false);
+    expect(await profileLists(profileId)).toEqual({
+      ...demoEverywhere(demo!.printerId),
+      cashDrawerPrinterIds: [],
+      cashDrawerPrinterDefaultId: null,
+    });
+  });
+
+  it("runs again in practice after its drawer was switched off, keeping the lists it already had", async () => {
+    const { locationId, profileId } = await venue();
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    await withTransaction(suite.db, (tx) =>
+      updatePrinter(tx, { locationId }, demo!.printerId, { hasCashDrawer: false }),
+    );
+
+    expect(await configureDemoPrinter(suite.db, locationId, true)).toEqual(demo);
+
+    expect(await profileLists(profileId)).toEqual(demoEverywhere(demo!.printerId));
   });
 
   it("uses its own inactive agent even when a real agent has the same display name", async () => {

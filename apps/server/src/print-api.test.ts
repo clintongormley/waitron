@@ -4,17 +4,20 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
+  deviceProfiles,
+  devices,
   joinRequests,
   locations,
   nowIso,
   printAgents,
   printJobs,
+  printerHolders,
   watchers,
   stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
@@ -1550,6 +1553,107 @@ describe("mountPrintApi — management: printers CRUD", () => {
         error: { code: "management.request_invalid", params: { field } },
       });
     }
+  });
+});
+
+describe("portable printers", () => {
+  type Listed = { id: string; portable: boolean; holder: unknown };
+
+  // The suite shares one database, and a later case routes the demo printer onto every profile.
+  const seeded: { deviceId: string; profileId: string }[] = [];
+  afterEach(async () => {
+    for (const { deviceId, profileId } of seeded.splice(0)) {
+      await suite.db.delete(printerHolders).where(eq(printerHolders.deviceId, deviceId));
+      await suite.db.delete(devices).where(eq(devices.id, deviceId));
+      await suite.db.delete(deviceProfiles).where(eq(deviceProfiles.id, profileId));
+    }
+  });
+
+  async function seedHolder(label?: string): Promise<string> {
+    const device = await seedDevice(suite.db, { locationId, ...(label ? { label } : {}) });
+    seeded.push(device);
+    return device.deviceId;
+  }
+
+  async function listed(app: Hono, id: string): Promise<Listed> {
+    const response = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+    return ((await response.json()) as Listed[]).find((row) => row.id === id)!;
+  }
+
+  async function addPrinter(app: Hono, body: Record<string, unknown>): Promise<string> {
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Mano", transport: "network_tcp", host: "10.0.0.61", ...body },
+    });
+    expect(created.status).toBe(201);
+    return ((await created.json()) as { id: string }).id;
+  }
+
+  it("creates a printer fixed unless asked, and portable when asked", async () => {
+    const app = mountApp();
+    const fixed = await addPrinter(app, {});
+    const portable = await addPrinter(app, { host: "10.0.0.62", portable: true });
+    expect(await listed(app, fixed)).toMatchObject({ portable: false, holder: null });
+    expect(await listed(app, portable)).toMatchObject({ portable: true, holder: null });
+  });
+
+  it("names the device holding a portable printer and who is signed in on it", async () => {
+    const app = mountApp();
+    const id = await addPrinter(app, { host: "10.0.0.63", portable: true });
+    const deviceId = await seedHolder("Mano de Ana");
+    await suite.db.insert(printerHolders).values({ printerId: id, deviceId });
+    expect((await listed(app, id)).holder).toEqual({
+      deviceId,
+      deviceName: "Mano de Ana",
+      personName: null,
+    });
+  });
+
+  it("marking a printer portable puts every device that chose it for receipts back on Use default", async () => {
+    const app = mountApp();
+    const id = await addPrinter(app, { host: "10.0.0.64", hasCashDrawer: true });
+    const deviceId = await seedHolder();
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: id, cashDrawerPrinterId: id })
+      .where(eq(devices.id, deviceId));
+    const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { portable: true },
+    });
+    expect(patched.status).toBe(204);
+    expect((await listed(app, id)).portable).toBe(true);
+    const [device] = await suite.db
+      .select({ receipt: devices.receiptPrinterId, drawer: devices.cashDrawerPrinterId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(device).toEqual({ receipt: null, drawer: id });
+  });
+
+  it("marking a portable printer fixed lets go of its holder", async () => {
+    const app = mountApp();
+    const id = await addPrinter(app, { host: "10.0.0.65", portable: true });
+    const deviceId = await seedHolder();
+    await suite.db.insert(printerHolders).values({ printerId: id, deviceId });
+    const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { portable: false },
+    });
+    expect(patched.status).toBe(204);
+    expect(await listed(app, id)).toMatchObject({ portable: false, holder: null });
+  });
+
+  it("refuses a portable flag that is not true or false", async () => {
+    const app = mountApp();
+    const id = await addPrinter(app, { host: "10.0.0.66" });
+    const res = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { portable: "yes" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "portable" } },
+    });
   });
 });
 

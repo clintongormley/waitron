@@ -140,6 +140,7 @@ export class StripeTerminalProvider implements PaymentProvider {
         amount: params.amount,
         billPaymentId: params.billPaymentId,
         deviceProfileId: params.deviceProfileId,
+        readerId: params.readerId,
       });
       if (params.billPaymentId !== undefined) {
         return billPaymentIdempotencyKey(params.billPaymentId);

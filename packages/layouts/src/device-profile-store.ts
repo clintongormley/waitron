@@ -25,6 +25,8 @@ import {
   validateStartingScreen,
 } from "./device-profile.js";
 import {
+  emptyPrinterLists,
+  foldPrinterLists,
   readProfilePrinterLists,
   setProfilePrinterLists,
   type ProfilePrinterLists,
@@ -89,11 +91,7 @@ function knownScreen(stored: string | null): NavigationScreen | null {
 }
 
 function toRow(row: StoredProfile, lists: ProfilePrinterLists): DeviceProfileRow {
-  return {
-    ...toSettings(row),
-    receiptPrinterIds: lists.receiptPrinterIds,
-    paymentSlipPrinterIds: lists.paymentSlipPrinterIds,
-  };
+  return { ...toSettings(row), ...lists };
 }
 
 const live = isNull(deviceProfiles.retiredAt);
@@ -150,21 +148,17 @@ export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfile
       profileId: deviceProfilePrinters.deviceProfileId,
       printerId: deviceProfilePrinters.printerId,
       role: deviceProfilePrinters.role,
+      isDefault: deviceProfilePrinters.isDefault,
     })
     .from(deviceProfilePrinters)
     .orderBy(asc(deviceProfilePrinters.position));
-  const lists = new Map<string, ProfilePrinterLists>();
-  for (const { profileId, printerId, role } of listed) {
-    let entry = lists.get(profileId);
-    if (entry === undefined) {
-      entry = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
-      lists.set(profileId, entry);
-    }
-    (role === "receipt" ? entry.receiptPrinterIds : entry.paymentSlipPrinterIds).push(printerId);
+  const byProfile = new Map<string, typeof listed>();
+  for (const row of listed) {
+    const group = byProfile.get(row.profileId);
+    if (group === undefined) byProfile.set(row.profileId, [row]);
+    else group.push(row);
   }
-  return rows.map((row) =>
-    toRow(row, lists.get(row.id) ?? { receiptPrinterIds: [], paymentSlipPrinterIds: [] }),
-  );
+  return rows.map((row) => toRow(row, foldPrinterLists(byProfile.get(row.id) ?? [])));
 }
 
 /** The profile without its printer lists; {@link getDeviceProfileWithPrinters} reads those too. */
@@ -211,7 +205,7 @@ export async function createDeviceProfile(
     inactivityTimeoutSeconds?: number | null;
     /** Absent means none. */
     startingScreen?: unknown;
-    /** Absent means both lists empty. */
+    /** Absent means every list empty and no defaults. */
     printerLists?: ProfilePrinterLists;
   },
 ): Promise<DeviceProfileRow> {
@@ -242,7 +236,7 @@ export async function createDeviceProfile(
   } catch (error) {
     translateWriteError(error);
   }
-  const lists = input.printerLists ?? { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
+  const lists = input.printerLists ?? emptyPrinterLists();
   await setProfilePrinterLists(tx, created.id, lists);
   return toRow(created, lists);
 }
@@ -259,7 +253,7 @@ export async function updateDeviceProfile(
     inactivityTimeoutSeconds?: number | null;
     /** Absent keeps the stored one, which must still be a screen the new capabilities show. */
     startingScreen?: unknown;
-    /** Absent leaves both lists as they are. */
+    /** Absent leaves every list and default as it is. */
     printerLists?: ProfilePrinterLists;
   },
 ): Promise<DeviceProfileRow> {

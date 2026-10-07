@@ -39,24 +39,69 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { printerLabel } from "../i18n/domain.js";
+import type { StringKey } from "../i18n/strings.js";
 import type {
   DashboardApi,
   DeviceProfile,
   DeviceRow,
+  EquipmentRole,
   FormFactor,
   JoinRequestRow,
   PairingModeState,
   Printer,
   ProfileKitchenLists,
+  ProfileReaderList,
+  ReaderHolderRow,
   ReaderRow,
   Station,
   Watcher,
 } from "../api/client.js";
 
 type PairField = "name" | "profile" | "binding";
-type EditField = PairField | "receipt" | "slip" | "reader" | "approved";
+type EditField = PairField | "receipt" | "slip" | "drawer" | "reader" | "approved";
 type IdentityErrors = Record<PairField, string>;
-type FieldRefusal = { field: EditField; code: string } | null;
+/** `sentence`, when set, is what the field says in place of the code's own message. */
+type FieldRefusal = { field: EditField; code: string; sentence?: string } | null;
+
+/** A printer role the Edit dialog offers, with the device column and profile default it reads. */
+const PRINTER_ROLES = [
+  {
+    field: "receipt",
+    form: "receiptPrinterId",
+    list: "receiptPrinterIds",
+    defaultKey: "receiptPrinterDefaultId",
+    test: "edit-receipt-printer",
+    label: "devices.receipt_printer_now",
+  },
+  {
+    field: "slip",
+    form: "paymentSlipPrinterId",
+    list: "paymentSlipPrinterIds",
+    defaultKey: "paymentSlipPrinterDefaultId",
+    test: "edit-slip-printer",
+    label: "devices.slip_printer_now",
+  },
+  {
+    field: "drawer",
+    form: "cashDrawerPrinterId",
+    list: "cashDrawerPrinterIds",
+    defaultKey: "cashDrawerPrinterDefaultId",
+    test: "edit-cash-drawer",
+    label: "devices.cash_drawer_now",
+  },
+] as const;
+
+/** What a refusal about equipment says under its field, when the code's own message is too vague. */
+function equipmentSentence(error: unknown, field: EditField): string | undefined {
+  const code = codeOf(error);
+  const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
+  if (code === "device.equipment_held" && typeof params.holderDeviceName === "string")
+    return t("devices.err_equipment_held").replace("{device}", params.holderDeviceName);
+  if (code === "reader.payment_in_progress") return t("devices.err_reader_busy");
+  if (code === "device.binding_invalid" && field === "reader")
+    return t("devices.err_reader_not_allowed");
+  return undefined;
+}
 
 /** Refusals of a Pair or Edit save about one field, by code alone; others read their params first. */
 const FIELD_BY_CODE: Record<string, EditField> = {
@@ -76,6 +121,8 @@ const FIELD_BY_PARAM: Record<string, EditField> = {
   watcherId: "binding",
   receiptPrinterId: "receipt",
   paymentSlipPrinterId: "slip",
+  cashDrawerPrinterId: "drawer",
+  cardReaderId: "reader",
   approvedProfileIds: "approved",
 };
 
@@ -90,7 +137,12 @@ function refusedField(
   let field: EditField | undefined;
   // An unknown approved profile names its field; an unknown active profile names none.
   const named = code === "device_profile.not_found" && typeof params.field === "string";
-  if (code === "management.request_invalid" || code === "device.binding_invalid" || named)
+  if (
+    code === "management.request_invalid" ||
+    code === "device.binding_invalid" ||
+    code === "device.equipment_held" ||
+    named
+  )
     field = typeof params.field === "string" ? FIELD_BY_PARAM[params.field] : undefined;
   // A made-here station refused the same way names no field the form marks.
   else if (code === "station.not_found")
@@ -106,7 +158,7 @@ function withRefusal<F extends EditField>(
 ): Record<F, string> {
   const byField: Partial<Record<EditField, string>> = errors;
   if (refused !== null && byField[refused.field] === "")
-    byField[refused.field] = codeMessage(refused.code);
+    byField[refused.field] = refused.sentence ?? codeMessage(refused.code);
   return errors;
 }
 
@@ -120,9 +172,10 @@ interface EditForm {
   profileId: string;
   /** `station:<id>`, `watcher:<id>`, or empty. */
   binding: string;
-  /** Empty for none. */
+  /** Empty for Use default. */
   receiptPrinterId: string;
   paymentSlipPrinterId: string;
+  cashDrawerPrinterId: string;
   madeHere: string[];
   /** Ticked profiles staff may switch to; only those {@link DevicesScreen} offers are sent. */
   approved: string[];
@@ -173,6 +226,23 @@ function pairTitle(request: JoinRequestRow): string {
     "{name}",
     waitingName(request),
   );
+}
+
+/** The table's equipment columns, one per role, drawn after Shows. */
+const EQUIPMENT_COLUMNS = [
+  { key: "receipt", role: "receipt", label: "devices.receipt_printer_now" },
+  { key: "slip", role: "payment_slip", label: "devices.slip_printer_now" },
+  { key: "drawer", role: "cash_drawer", label: "devices.cash_drawer_now" },
+  { key: "reader", role: "card_terminal", label: "devices.default_reader" },
+] as const satisfies readonly { key: string; role: EquipmentRole; label: StringKey }[];
+
+/** What the role uses now, or None, marked when it comes from the profile's default. */
+function equipmentName(device: DeviceRow, role: EquipmentRole): string {
+  const equipment = device.equipment.find((entry) => entry.role === role);
+  const name = equipment?.resolved?.name ?? t("equipment.none");
+  return equipment === undefined || equipment.selection === "default"
+    ? `${name} (${t("devices.default_mark")})`
+    : name;
 }
 
 /** A battery report older than this is greyed and says when it was taken (spec §6). */
@@ -413,6 +483,7 @@ export class DevicesScreen extends LitElement {
     binding: "",
     receiptPrinterId: "",
     paymentSlipPrinterId: "",
+    cashDrawerPrinterId: "",
     madeHere: [],
     approved: [],
   };
@@ -427,7 +498,13 @@ export class DevicesScreen extends LitElement {
   @state() private readers: ReaderRow[] = [];
   @state() private readerReadError: string | null = null;
   @state() private chosenReaderId = "";
+  /** Who holds each reader and where a payment is in progress, read with the Edit dialog's readers. */
+  @state() private readerHolders = new Map<string, ReaderHolderRow>();
+  /** Each profile's card readers, read as the Edit dialog needs them. */
+  @state() private profileReaders = new Map<string, ProfileReaderList>();
   #storedReaderId: string | null = null;
+  /** Set when the profile changes before the reader has loaded, so the late load keeps Use default. */
+  #profileChangedWhileReaderLoads = false;
   #editEpoch = 0;
   #editLeave?: LeaveCoordinator;
   #editScope?: DraftScope<Parameters<DashboardApi["updateDevice"]>[1]>;
@@ -450,14 +527,24 @@ export class DevicesScreen extends LitElement {
       ...bindingIds(this.#editBindingShown() ? form.binding : ""),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
+      // Absent leaves the stored drawer choice alone, so only a changed one is sent.
+      ...(form.cashDrawerPrinterId === (this.editing!.cashDrawerPrinterId ?? "")
+        ? {}
+        : {
+            cashDrawerPrinterId: form.cashDrawerPrinterId === "" ? null : form.cashDrawerPrinterId,
+          }),
       ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
       ...this.#approvalsToSend(this.editing!),
     };
   }
 
+  /** Carries the drawer and approvals whether or not the request does: once they are saved, the
+   * request omits them. */
   #editSnapshot() {
+    const drawer = this.editForm.cashDrawerPrinterId;
     return {
       ...this.#editPayload(),
+      cashDrawerPrinterId: drawer === "" ? null : drawer,
       approvedProfileIds: this.#approvedOf(this.editForm.approved),
     };
   }
@@ -479,6 +566,7 @@ export class DevicesScreen extends LitElement {
         a.watcherId === b.watcherId &&
         a.receiptPrinterId === b.receiptPrinterId &&
         a.paymentSlipPrinterId === b.paymentSlipPrinterId &&
+        a.cashDrawerPrinterId === b.cashDrawerPrinterId &&
         (a.approvedProfileIds ?? []).length === (b.approvedProfileIds ?? []).length &&
         (a.approvedProfileIds ?? []).every((id) => b.approvedProfileIds?.includes(id)) &&
         (a.madeHereStationIds === undefined
@@ -941,11 +1029,6 @@ export class DevicesScreen extends LitElement {
 
   // ── The Edit dialog ──────────────────────────────────────────────────────────────────────────────
 
-  /** The first printer in `ids` that is switched on, as the server's `firstUsablePrinters` picks. */
-  #firstSwitchedOn(ids: readonly string[]): string {
-    return ids.find((id) => this.printers.find((p) => p.id === id)?.active) ?? "";
-  }
-
   /** The stored station or watcher as a Shows choice, or empty when it is gone or switched off. */
   #activeBinding(stored: { stationId: string | null; watcherId: string | null }): string {
     if (
@@ -972,6 +1055,7 @@ export class DevicesScreen extends LitElement {
       binding: this.editHeld?.value ?? this.#activeBinding(device),
       receiptPrinterId: device.receiptPrinterId ?? "",
       paymentSlipPrinterId: device.paymentSlipPrinterId ?? "",
+      cashDrawerPrinterId: device.cashDrawerPrinterId ?? "",
       madeHere: device.madeHereStationIds,
       approved: device.approvedProfileIds,
     };
@@ -984,19 +1068,27 @@ export class DevicesScreen extends LitElement {
     this.readerReadError = null;
     this.chosenReaderId = "";
     this.#storedReaderId = null;
+    this.#profileChangedWhileReaderLoads = false;
+    this.readerHolders = new Map();
+    this.profileReaders = new Map();
     this.#registerEditDraft();
-    if (this.canManageReaders) void this.#loadReader(device.id, epoch);
+    if (this.canManageReaders) void this.#loadReader(device, epoch);
   }
 
   /** The reader is the payments module's, under its own permission: without it the field is gone. */
-  async #loadReader(deviceId: string, epoch: number): Promise<void> {
+  async #loadReader(device: DeviceRow, epoch: number): Promise<void> {
+    const profileId = device.deviceProfileId;
     try {
-      const [{ readerId }, readers] = await Promise.all([
-        this.api.getDeviceReader(deviceId),
+      const [{ readerId }, readers, holders, list] = await Promise.all([
+        this.api.getDeviceReader(device.id),
         this.api.listReaders(),
+        this.api.listReaderHolders(),
+        profileId === null ? null : this.api.getProfileReaders(profileId),
       ]);
       if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
       this.readers = readers.filter((reader) => reader.active);
+      this.readerHolders = new Map(holders.map((row) => [row.readerId, row]));
+      if (profileId !== null && list !== null) this.profileReaders = new Map([[profileId, list]]);
       this.#storedReaderId = readerId;
       this.chosenReaderId = readerId ?? "";
       this.readerState = "ready";
@@ -1007,6 +1099,12 @@ export class DevicesScreen extends LitElement {
         equal: (a, b) => a === b,
         restore: () => {},
       });
+      if (this.#profileChangedWhileReaderLoads) {
+        this.chosenReaderId = "";
+        this.#readerScope?.changed();
+        const chosen = this.editForm.profileId;
+        if (!this.profileReaders.has(chosen)) void this.#loadProfileReaders(chosen, epoch);
+      }
     } catch (error) {
       if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
       const code = codeOf(error);
@@ -1039,7 +1137,7 @@ export class DevicesScreen extends LitElement {
 
   #editErrors(): Record<EditField, string> {
     return withRefusal(
-      { ...this.#editOwnErrors(), receipt: "", slip: "", reader: "", approved: "" },
+      { ...this.#editOwnErrors(), receipt: "", slip: "", drawer: "", reader: "", approved: "" },
       this.editRefusal,
     );
   }
@@ -1050,8 +1148,8 @@ export class DevicesScreen extends LitElement {
     this.#editScope?.changed();
   }
 
+  /** A new profile's lists decide what the device may use, so every choice goes to Use default. */
   #onEditProfile(profileId: string): void {
-    const profile = this.deviceProfiles.find((p) => p.id === profileId);
     const offered = this.#bindingOptions(profileId, this.editHeld).some(
       (option) => option.value === this.editForm.binding,
     );
@@ -1059,15 +1157,34 @@ export class DevicesScreen extends LitElement {
       {
         profileId,
         binding: offered ? this.editForm.binding : "",
-        receiptPrinterId: this.#firstSwitchedOn(profile?.receiptPrinterIds ?? []),
-        paymentSlipPrinterId: this.#firstSwitchedOn(profile?.paymentSlipPrinterIds ?? []),
+        receiptPrinterId: "",
+        paymentSlipPrinterId: "",
+        cashDrawerPrinterId: "",
       },
       "profile",
       "binding",
       "receipt",
       "slip",
+      "drawer",
+      "reader",
       "approved",
     );
+    this.chosenReaderId = "";
+    this.#readerScope?.changed();
+    if (this.readerState === "loading") this.#profileChangedWhileReaderLoads = true;
+    if (this.readerState === "ready" && !this.profileReaders.has(profileId))
+      void this.#loadProfileReaders(profileId, this.#editEpoch);
+  }
+
+  async #loadProfileReaders(profileId: string, epoch: number): Promise<void> {
+    try {
+      const list = await this.api.getProfileReaders(profileId);
+      if (epoch !== this.#editEpoch) return;
+      this.profileReaders = new Map([...this.profileReaders, [profileId, list]]);
+    } catch (error) {
+      if (epoch !== this.#editEpoch) return;
+      this.readerReadError = codeOf(error);
+    }
   }
 
   /** The other live profiles of the chosen profile's form factor: the only ones the server approves. */
@@ -1102,12 +1219,39 @@ export class DevicesScreen extends LitElement {
     this.#setEdit({ approved: checked ? [...rest, profileId] : rest }, "approved");
   }
 
+  /** Another device holding a portable printer; a cash drawer is never held. */
+  #printerHolder(printer: Printer, drawer: boolean): string | null {
+    const holder = printer.holder;
+    if (drawer || !printer.portable || holder === null || holder.deviceId === this.editing?.id)
+      return null;
+    return holder.deviceName;
+  }
+
+  #printerChoiceLabel(printer: Printer, drawer: boolean): string {
+    const holder = this.#printerHolder(printer, drawer);
+    return holder === null
+      ? printerLabel(printer)
+      : `${printerLabel(printer)} (${t("equipment.carried_by").replace("{device}", holder)})`;
+  }
+
+  /** What Use default gives this device: the profile's default, unless another device carries it. */
+  #useDefaultLabel(name: string | null): string {
+    return t("devices.use_default").replace("{name}", name ?? t("equipment.none"));
+  }
+
   /**
-   * Switched-off printers are left out. While the profile is unchanged the device keeps the printer
-   * it holds, so that one is offered even when switched off, and marked when the profile no longer
+   * Use default first, naming what it resolves to; then the profile's switched-on printers, each
+   * another device carries marked. While the profile is unchanged the device keeps the printer it
+   * chose, so that one is offered even when switched off, and marked when the profile no longer
    * lists it.
    */
-  #printerOptions(ids: readonly string[], held: string | null): { value: string; label: string }[] {
+  #printerOptions(
+    role: (typeof PRINTER_ROLES)[number],
+    profile: DeviceProfile | undefined,
+    held: string | null,
+  ): { value: string; label: string }[] {
+    const ids = profile?.[role.list] ?? [];
+    const drawer = role.field === "drawer";
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
     const listed = ids.flatMap((id) => {
       const printer = this.printers.find((p) => p.id === id);
@@ -1115,9 +1259,14 @@ export class DevicesScreen extends LitElement {
     });
     const unlisted =
       keep === null || ids.includes(keep) ? undefined : this.printers.find((p) => p.id === keep);
+    const fallback = this.printers.find((p) => p.id === profile?.[role.defaultKey]);
+    const resolved =
+      fallback === undefined || this.#printerHolder(fallback, drawer) !== null
+        ? null
+        : printerLabel(fallback);
     return [
-      { value: "", label: t("devices.no_printer") },
-      ...listed.map((p) => ({ value: p.id, label: printerLabel(p) })),
+      { value: "", label: this.#useDefaultLabel(resolved) },
+      ...listed.map((p) => ({ value: p.id, label: this.#printerChoiceLabel(p, drawer) })),
       ...(unlisted === undefined
         ? []
         : [
@@ -1139,6 +1288,36 @@ export class DevicesScreen extends LitElement {
   #onMadeHereChange(stationId: string, checked: boolean): void {
     const rest = this.editForm.madeHere.filter((id) => id !== stationId);
     this.#setEdit({ madeHere: checked ? [...rest, stationId] : rest });
+  }
+
+  /** Another device's hold on a reader, or its payment in progress there, as a mark on its name. */
+  #readerChoiceLabel(reader: ReaderRow): string {
+    const row = this.readerHolders.get(reader.id);
+    const own = this.editing?.id;
+    if (row?.paymentInProgressDeviceIds.some((id) => id !== own))
+      return `${this.#readerLabel(reader)} (${t("equipment.busy")})`;
+    if (row?.holder && row.holder.deviceId !== own)
+      return `${this.#readerLabel(reader)} (${t("equipment.carried_by").replace("{device}", row.holder.deviceName)})`;
+    return this.#readerLabel(reader);
+  }
+
+  /** Use default first, then the chosen profile's switched-on readers in its order. */
+  #readerOptions(): { value: string; label: string }[] {
+    const list = this.profileReaders.get(this.editForm.profileId);
+    const listed = (list?.readerIds ?? []).flatMap((id) => {
+      const reader = this.readers.find((r) => r.id === id);
+      return reader === undefined ? [] : [reader];
+    });
+    const fallback = this.readers.find((r) => r.id === list?.defaultReaderId);
+    const holder = fallback && this.readerHolders.get(fallback.id)?.holder;
+    const resolved =
+      fallback === undefined || (holder && holder.deviceId !== this.editing?.id)
+        ? null
+        : this.#readerLabel(fallback);
+    return [
+      { value: "", label: this.#useDefaultLabel(resolved) },
+      ...listed.map((reader) => ({ value: reader.id, label: this.#readerChoiceLabel(reader) })),
+    ];
   }
 
   async #submitEdit(): Promise<void> {
@@ -1178,10 +1357,16 @@ export class DevicesScreen extends LitElement {
         ...(this.#editBindingShown() ? (["binding"] as const) : []),
         "receipt",
         "slip",
+        "drawer",
         ...(this.#approvalChoices().length > 0 ? (["approved"] as const) : []),
       ]);
       if (field === null) this.editError = codeOf(error);
-      else this.editRefusal = { field, code: codeOf(error) };
+      else
+        this.editRefusal = {
+          field,
+          code: codeOf(error),
+          sentence: equipmentSentence(error, field),
+        };
       return;
     }
     if (epoch === this.#editEpoch) editScope?.commit(submittedDevice);
@@ -1215,7 +1400,11 @@ export class DevicesScreen extends LitElement {
         // device closes the dialog as any saved edit does.
         if (this.readerState === "ready") {
           this.editSaving = false;
-          this.editRefusal = { field: "reader", code: codeOf(error) };
+          this.editRefusal = {
+            field: "reader",
+            code: codeOf(error),
+            sentence: equipmentSentence(error, "reader"),
+          };
           return;
         }
       }
@@ -1280,6 +1469,18 @@ export class DevicesScreen extends LitElement {
             >${d.kind === "kds_station" ? this.#bindingName(d) : ""}</span
           >`,
       },
+      ...EQUIPMENT_COLUMNS.filter(
+        (column) => column.role !== "card_terminal" || this.canManageReaders,
+      ).map((column): DataTableColumn<DeviceRow> => ({
+        key: column.key,
+        choosable: "shown",
+        label: t(column.label),
+        sortValue: (d) => equipmentName(d, column.role),
+        cell: (d) =>
+          html`<span data-test=${`device-${column.key}-${d.id}`}
+            >${equipmentName(d, column.role)}</span
+          >`,
+      })),
       {
         key: "battery",
         choosable: "shown",
@@ -1744,45 +1945,27 @@ export class DevicesScreen extends LitElement {
           this.editSaving,
           this.editHeld,
         )}
-        <wt-combobox
-          data-test="edit-receipt-printer"
-          name="receiptPrinterId"
-          show-empty-option
-          label=${t("devices.receipt_printer_now")}
-          search="auto"
-          searchPlaceholder=${t("categories.combobox_search")}
-          noResultsLabel=${t("categories.combobox_no_results")}
-          .options=${this.#printerOptions(profile?.receiptPrinterIds ?? [], device.receiptPrinterId)}
-          .value=${form.receiptPrinterId}
-          ?disabled=${this.editSaving}
-          .error=${errors.receipt}
-          .invalid=${errors.receipt !== ""}
-          @wt-change=${(e: CustomEvent<{ value: string }>) =>
-            this.isConnected &&
-            epoch === this.#editEpoch &&
-            this.#setEdit({ receiptPrinterId: e.detail.value }, "receipt")}
-        ></wt-combobox>
-        <wt-combobox
-          data-test="edit-slip-printer"
-          name="paymentSlipPrinterId"
-          show-empty-option
-          label=${t("devices.slip_printer_now")}
-          search="auto"
-          searchPlaceholder=${t("categories.combobox_search")}
-          noResultsLabel=${t("categories.combobox_no_results")}
-          .options=${this.#printerOptions(
-            profile?.paymentSlipPrinterIds ?? [],
-            device.paymentSlipPrinterId,
-          )}
-          .value=${form.paymentSlipPrinterId}
-          ?disabled=${this.editSaving}
-          .error=${errors.slip}
-          .invalid=${errors.slip !== ""}
-          @wt-change=${(e: CustomEvent<{ value: string }>) =>
-            this.isConnected &&
-            epoch === this.#editEpoch &&
-            this.#setEdit({ paymentSlipPrinterId: e.detail.value }, "slip")}
-        ></wt-combobox>
+        ${PRINTER_ROLES.map(
+          (role) =>
+            html`<wt-combobox
+              data-test=${role.test}
+              name=${role.form}
+              show-empty-option
+              label=${t(role.label)}
+              search="auto"
+              searchPlaceholder=${t("categories.combobox_search")}
+              noResultsLabel=${t("categories.combobox_no_results")}
+              .options=${this.#printerOptions(role, profile, device[role.form])}
+              .value=${form[role.form]}
+              ?disabled=${this.editSaving}
+              .error=${errors[role.field]}
+              .invalid=${errors[role.field] !== ""}
+              @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                this.isConnected &&
+                epoch === this.#editEpoch &&
+                this.#setEdit({ [role.form]: e.detail.value }, role.field)}
+            ></wt-combobox>`,
+        )}
         ${this.#renderApproved(errors.approved)} ${kitchen ? nothing : this.#renderMadeHere()}
         ${this.readerState === "hidden" ? nothing : this.#renderReader(errors.reader)}
       </div>
@@ -1881,10 +2064,7 @@ export class DevicesScreen extends LitElement {
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
       ?disabled=${this.readerState !== "ready" || this.editSaving}
-      .options=${[
-        { value: "", label: t("devices.default_reader_none") },
-        ...this.readers.map((r) => ({ value: r.id, label: this.#readerLabel(r) })),
-      ]}
+      .options=${this.#readerOptions()}
       .value=${this.chosenReaderId}
       .error=${error}
       .invalid=${error !== ""}

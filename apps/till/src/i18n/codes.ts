@@ -397,8 +397,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo no está configurado. Solicita el alta en este local",
   },
   "device.binding_invalid": {
-    en: "That printer is not available to this device. Choose another",
-    es: "Esa impresora no está disponible para este dispositivo. Elige otra",
+    en: "That printer or card reader is not available to this device. Choose another",
+    es: "Esa impresora o lector de tarjetas no está disponible para este dispositivo. Elige otro",
+  },
+  "device.equipment_held": {
+    en: "Another device has that equipment now. Choose again",
+    es: "Otro dispositivo tiene ahora ese equipo. Vuelve a elegir",
+  },
+  "reader.not_held": {
+    en: "This device no longer has that card reader. Choose a reader in Equipment and try again. No card was charged.",
+    es: "Este dispositivo ya no tiene ese lector de tarjetas. Elige un lector en Equipo e inténtalo de nuevo. No se ha cobrado ninguna tarjeta.",
+  },
+  "reader.payment_in_progress": {
+    en: "Another device is taking a card payment on that reader. Try again when it finishes; if it is stuck, a manager can resolve it in the dashboard.",
+    es: "Otro dispositivo está cobrando con tarjeta en ese lector. Vuelve a intentarlo cuando termine; si se ha quedado atascado, un responsable puede resolverlo en el panel.",
   },
   "device_profile.not_approved": {
     en: "This device can no longer switch to that profile. Choose another",

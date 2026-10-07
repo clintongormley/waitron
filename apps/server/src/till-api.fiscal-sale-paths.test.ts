@@ -50,7 +50,12 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
-import { MANUAL_PROVIDER, SimulatorPaymentProvider, cardReaders } from "@waitron/payments";
+import {
+  MANUAL_PROVIDER,
+  SimulatorPaymentProvider,
+  cardReaderHolders,
+  cardReaders,
+} from "@waitron/payments";
 import { stationClaims } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
@@ -334,10 +339,16 @@ async function seedReader(
   return { id: r!.id, providerRef };
 }
 
-/** Point a device at its DEFAULT reader (`device_card_readers`). */
-async function setDefaultReader(deviceId: string, readerId: string): Promise<void> {
+/** Set the device's chosen reader (`device_card_readers`), which it holds. */
+async function setChosenReader(deviceId: string, readerId: string): Promise<void> {
   await suite.db.execute(sql`
     insert into device_card_readers (device_id, reader_id) values (${deviceId}, ${readerId})`);
+  await holdReader(deviceId, readerId);
+}
+
+/** The device holds the reader (`card_reader_holders`), so a pay may name it. */
+async function holdReader(deviceId: string, readerId: string): Promise<void> {
+  await suite.db.insert(cardReaderHolders).values({ readerId, deviceId });
 }
 
 /** Seal the `payments.stripe` credential so the provider counts as CONNECTED (the pay
@@ -903,12 +914,12 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
   );
 });
 
-// POST /api/pay resolves the reader (request `readerId`, else the paying device's default in
-// `device_card_readers`), pre-checks its provider is connected, and drives it through
+// POST /api/pay resolves the reader (request `readerId`, else the paying device's chosen reader in
+// `device_card_readers`, else its profile's default), pre-checks its provider is connected, and drives it through
 // `payWorkingOrderIntegrated` over a `FakeStripe`-backed provider. These cases pin the reader
 // ROUTING: which reader a collect drives, and which id lands on `payments.reader_id`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
-  it("routes to the device's DEFAULT reader, captures, and STAMPS payments.reader_id", async () => {
+  it("routes to the device's chosen reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
     const app = new Hono();
@@ -917,7 +928,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
@@ -933,7 +944,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const outcome = (await payRes.json()) as { outcome: string; ticket?: { total: string } };
     expect(outcome.outcome).toBe("captured");
     expect(outcome.ticket?.total).toBe("1.50");
-    // The payment records the reader it settled on — the default.
+    // The payment records the reader it settled on — the chosen one.
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
@@ -946,7 +957,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
@@ -969,7 +980,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     }
   });
 
-  it("a request readerId OVERRIDES the device default, and stamps that reader", async () => {
+  it("a request readerId OVERRIDES the device's chosen reader, and stamps that reader", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -979,7 +990,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await connectStripe();
     const dflt = await seedReader({ name: "Default" });
     const other = await seedReader({ name: "Other" });
-    await setDefaultReader(deviceIdOf(deviceCookie), dflt.id);
+    await setChosenReader(deviceIdOf(deviceCookie), dflt.id);
+    await holdReader(deviceIdOf(deviceCookie), other.id);
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
@@ -994,7 +1006,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
     expect(payRes.status).toBe(200);
     expect((await payRes.json()).outcome).toBe("captured");
-    // The OVERRIDE reader was charged and stamped, not the default.
+    // The OVERRIDE reader was charged and stamped, not the chosen one.
     expect(await readerIdOnPayment(workingOrderId)).toBe(other.id);
   });
 
@@ -1013,6 +1025,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await connectStripe();
     const readerA = await seedReader({ name: "Reader A" });
     const readerB = await seedReader({ name: "Reader B" });
+    await holdReader(deviceIdOf(deviceCookie), readerA.id);
+    await holdReader(deviceIdOf(deviceCookie), readerB.id);
 
     const pay = async (readerId: string): Promise<void> => {
       const res = await app.request("/api/pay", {
@@ -1047,7 +1061,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
     // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
@@ -1069,7 +1083,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
-  it("a device with no default reader and no request readerId is reader.not_found", async () => {
+  it("a device with no chosen reader, no profile default and no request readerId is reader.not_found", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -1100,7 +1114,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const reader = await seedReader(); // active reader, but provider not connected
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const payRes = await app.request("/api/pay", {
       method: "POST",
@@ -1128,7 +1142,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
@@ -1212,7 +1226,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         async (deviceCookie) => {
           await connectStripe();
           const reader = await seedReader();
-          await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+          await setChosenReader(deviceIdOf(deviceCookie), reader.id);
         },
         {},
       );
@@ -1496,7 +1510,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
     const payRes = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -1558,7 +1572,7 @@ describe("POST /api/pay when the device changes profile while the payment is sta
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
     const reader = await seedReader();
-    await setDefaultReader(deviceId, reader.id);
+    await setChosenReader(deviceId, reader.id);
     const workingOrderId = randomUUID();
     const res = await app.request("/api/pay", {
       method: "POST",
@@ -1606,16 +1620,16 @@ describe("POST /api/pay when the device changes profile while the payment is sta
   });
 });
 
-// GET /api/till: the paying device's default reader's provider, mapped to the till's union, and the
+// GET /api/till: the provider of the reader the device pays on, mapped to the till's union, and the
 // `activeReaders` list the reader picker reads.
 describe("GET /api/till (per-device card provider, over HTTP)", () => {
-  it("maps the device's default reader provider to the till union and lists active readers", async () => {
+  it("maps the device's chosen reader's provider to the till union and lists active readers", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const reader = await seedReader(); // provider "stripe"
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
     expect(res.status).toBe(200);
@@ -1626,14 +1640,14 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     };
     // "stripe" → "stripe_terminal" (the till's closed union), never the raw seat id.
     expect(body.cardProvider).toBe("stripe_terminal");
-    // `cardProvider` names only the provider TYPE, so the default reader is named by id.
+    // `cardProvider` names only the provider TYPE, so the reader is named by id.
     expect(body.defaultReaderId).toBe(reader.id);
     expect(body.activeReaders).toEqual([
       { id: reader.id, name: "Front counter", provider: "stripe_terminal" },
     ]);
   });
 
-  it("a device with no default reader gets cardProvider 'none'", async () => {
+  it("a device with no chosen reader and no profile default gets cardProvider 'none'", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
@@ -1664,7 +1678,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     );
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const reader = await seedReader();
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
     expect(res.status).toBe(200);
@@ -2123,7 +2137,7 @@ describe("handheld sales and device capability gates", () => {
 
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
-    // The handheld's own receipt printer has a drawer; only its profile keeps that drawer shut.
+    // The handheld's own receipt and drawer printer has a drawer; only its profile keeps it shut.
     await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Counter",
@@ -2132,7 +2146,7 @@ describe("handheld sales and device capability gates", () => {
         hasCashDrawer: true,
       });
       await tx.execute(
-        sql`update devices set receipt_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
+        sql`update devices set receipt_printer_id = ${printer.id}, cash_drawer_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
       );
     });
 
@@ -2813,14 +2827,14 @@ it("files an extras pick and an options answer through cash checkout and reprint
 });
 
 describe("card readers the till cannot drive, and readers named by id", () => {
-  it("GET /api/till maps a SumUp default reader and leaves out a reader whose provider it does not know", async () => {
+  it("GET /api/till maps a chosen SumUp reader and leaves out a reader whose provider it does not know", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const sumup = await seedReader({ provider: "sumup", name: "SumUp Solo" });
     await seedReader({ provider: "carrier_pigeon", name: "Unknown" });
-    await setDefaultReader(deviceIdOf(deviceCookie), sumup.id);
+    await setChosenReader(deviceIdOf(deviceCookie), sumup.id);
 
     const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
     expect(res.status).toBe(200);
@@ -2832,13 +2846,13 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     ]);
   });
 
-  it("GET /api/till reports no card provider for a device whose default reader's provider is unknown", async () => {
+  it("GET /api/till reports no card provider for a device whose chosen reader's provider is unknown", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const unknown = await seedReader({ provider: "carrier_pigeon", name: "Unknown" });
-    await setDefaultReader(deviceIdOf(deviceCookie), unknown.id);
+    await setChosenReader(deviceIdOf(deviceCookie), unknown.id);
 
     const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
     expect(res.status).toBe(200);
@@ -2886,7 +2900,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     // No `connectStripe()`: with the seat list present this reader answers reader.provider_disconnected.
     const reader = await seedReader();
-    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
@@ -3054,8 +3068,8 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
 
 // Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer.
 describe("a hand-keyed card payment opens the drawer of the device that took it, for the slip", () => {
-  /** A new receipt printer, with or without a drawer, set as `deviceCookie`'s device's own, printing
-   *  receipts automatically. */
+  /** A new printer, with or without a drawer, set as `deviceCookie`'s device's own receipt and drawer
+   *  printer, printing receipts automatically. */
   async function deviceReceiptPrinter(
     cfg: TillConfig,
     deviceCookie: string,
@@ -3069,14 +3083,14 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         hasCashDrawer,
       });
       await tx.execute(
-        sql`update devices set receipt_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
+        sql`update devices set receipt_printer_id = ${printer.id}, cash_drawer_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
       );
       return printer.id;
     });
   }
 
-  /** Another device's receipt printer here, with a drawer that device may open: the printer a lookup
-   *  by location rather than by device would pick. */
+  /** Another device's receipt and drawer printer here, with a drawer that device may open: the
+   *  printer a lookup by location rather than by device would pick. */
   const otherDevicesDrawerPrinter = async (cfg: TillConfig) =>
     deviceReceiptPrinter(cfg, await enrolDrawerTill(cfg), true);
 
@@ -3190,7 +3204,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect((await jobs()).drawer).toHaveLength(1);
   });
 
-  it("a card sale on a handheld whose profile does not allow the drawer opens none, although its receipt printer and another printer here have one", async () => {
+  it("a card sale on a handheld whose profile does not allow the drawer opens none, although its drawer printer and another printer here have one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
     await otherDevicesDrawerPrinter(cfg);
     const profileId = await seedProfileFF("phone-portrait");
@@ -3261,7 +3275,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     },
   );
 
-  it("a card sale at a device whose receipt printer has no drawer opens nothing, while another printer here has one", async () => {
+  it("a card sale at a device whose drawer printer has no drawer opens nothing, while another printer here has one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
     await otherDevicesDrawerPrinter(cfg);
     const deviceCookie = await enrolDrawerTill(cfg);
@@ -3342,7 +3356,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     ["ticket_then_pay", "cash"],
     ["ticket_then_pay", "card"],
   ] as const)(
-    "a handheld whose profile does not allow the drawer collecting a placed %s order by %s opens none, although its receipt printer and another printer here have one",
+    "a handheld whose profile does not allow the drawer collecting a placed %s order by %s opens none, although its drawer printer and another printer here have one",
     async (orderFlow, method) => {
       const { cfg, each, app, cookie, on } = await venueWithTill(orderFlow);
       await otherDevicesDrawerPrinter(cfg);

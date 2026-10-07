@@ -86,8 +86,8 @@ export function parseDeviceCookie(raw: string | null): { id: string; token: stri
   return isUuid(id) ? { id, token: raw.slice(dot + 1) } : null;
 }
 
-/** The identity a `requireDevice` call resolves the cookie to. The reader default lives in
- * `device_card_readers`, not on this row. */
+/** The identity a `requireDevice` call resolves the cookie to. Its equipment is read through
+ * `device-equipment.ts`, not from this row. */
 export interface DeviceBinding {
   deviceId: string;
   // Read from the device's profile; the device KIND is derived from it via `kindOfFormFactor`.
@@ -97,8 +97,6 @@ export interface DeviceBinding {
   stationId: string | null;
   watcherId: string | null;
   deviceProfileId: string;
-  receiptPrinterId: string | null;
-  paymentSlipPrinterId: string | null;
   capabilities: CapabilityFlag[];
 }
 
@@ -111,8 +109,6 @@ export const deviceBindingColumns = {
   stationId: devices.stationId,
   watcherId: devices.watcherId,
   deviceProfileId: devices.deviceProfileId,
-  receiptPrinterId: devices.receiptPrinterId,
-  paymentSlipPrinterId: devices.paymentSlipPrinterId,
   capabilities: deviceProfiles.capabilities,
 };
 
@@ -162,8 +158,6 @@ export function toDeviceBinding(
     stationId: row.stationId,
     watcherId: row.watcherId,
     deviceProfileId: row.deviceProfileId,
-    receiptPrinterId: row.receiptPrinterId,
-    paymentSlipPrinterId: row.paymentSlipPrinterId,
     capabilities: row.capabilities as CapabilityFlag[],
   };
 }

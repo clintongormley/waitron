@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { nodeId as brandNodeId, stringToCents } from "@waitron/shared";
 import {
@@ -13,6 +14,8 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
+import { cardReaderHolders } from "../src/schema/card-reader-holders.js";
+import { cardReaders } from "../src/schema/card-readers.js";
 import { paymentPolicy } from "../src/schema/payment-policy.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
@@ -165,4 +168,21 @@ export async function billPaymentOfRow(db: Database, paymentRef: string): Promis
     sql`select bill_payment_id from payments where payment_ref = ${paymentRef}`,
   );
   return rows.rows[0]!.bill_payment_id;
+}
+
+/** Pairs a card reader and makes `deviceId` its holder, as a device that selected it would be. */
+export async function seedHeldReader(db: Database, deviceId: string): Promise<string> {
+  const [reader] = await db
+    .insert(cardReaders)
+    .values({ provider: "sumup", providerRef: `rdr_${randomUUID()}`, name: "Reader" })
+    .returning({ id: cardReaders.id });
+  await db.insert(cardReaderHolders).values({ readerId: reader!.id, deviceId });
+  return reader!.id;
+}
+
+export async function readerOfRow(db: Database, paymentRef: string): Promise<string | null> {
+  const rows = await db.execute<{ reader_id: string | null }>(
+    sql`select reader_id from payments where payment_ref = ${paymentRef}`,
+  );
+  return rows.rows[0]!.reader_id;
 }

@@ -13,7 +13,7 @@ import {
 import { mediaImages, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { validateReceiptConfig } from "@waitron/layouts";
+import { emptyPrinterLists, setProfilePrinterLists, validateReceiptConfig } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -401,6 +401,41 @@ describe("GET /management-api/receipt-preview", () => {
           }
         },
       );
+    });
+
+    it("counts a device on Use default with its profile's default receipt printer", async () => {
+      const [printer] = await suite.db
+        .insert(printers)
+        .values({
+          locationId: venue.cfg.locationId,
+          name: "Default receipt printer",
+          transport: "network_tcp",
+          host: "192.0.2.12",
+          paperWidth: "58mm",
+          resolution: "180dpi",
+        })
+        .returning({ id: printers.id });
+      const { deviceId, profileId } = await seedDevice(suite.db, {
+        locationId: venue.cfg.locationId,
+        label: "Caja por defecto",
+      });
+      try {
+        await withTransaction(suite.db, (tx) =>
+          setProfilePrinterLists(tx, profileId, {
+            ...emptyPrinterLists(),
+            receiptPrinterIds: [printer!.id],
+            receiptPrinterDefaultId: printer!.id,
+          }),
+        );
+        const result = await at("");
+        expect([result.paperWidths, result.paperWidth]).toEqual([["58mm"], "58mm"]);
+      } finally {
+        await suite.db.execute(
+          sql`delete from device_profile_printers where device_profile_id = ${profileId}`,
+        );
+        await suite.db.execute(sql`delete from devices where id = ${deviceId}`);
+        await suite.db.execute(sql`delete from printers where id = ${printer!.id}`);
+      }
     });
 
     it("draws at the width asked for, at the resolution of that width's printer", async () => {

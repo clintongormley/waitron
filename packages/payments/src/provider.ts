@@ -20,6 +20,13 @@ export type PaymentState =
   | "declined"
   | "initiated";
 
+/** A payment still waiting on its provider: `attempting` until it answers, `initiated` until a
+ * hosted payment is paid or expires. */
+export const IN_PROGRESS_PAYMENT_STATES = [
+  "attempting",
+  "initiated",
+] as const satisfies readonly PaymentState[];
+
 /**
  * `network_unavailable` is reported but never persisted: it is returned when the network is down and
  * offline acceptance is refused, and nothing durable is written.
@@ -41,6 +48,10 @@ export interface CollectParams {
    * every reader of a vendor. A server-driven reader provider throws without it; a provider with no
    * server-side reader ignores it. */
   readerRef?: string;
+  /** Waitron's `card_readers.id` for this sale's reader, distinct from the vendor's `readerRef`.
+   * Written on the provider's rows; the start is refused unless the origin device holds it and no
+   * other device has a payment in progress on it. */
+  readerId?: string;
   /** Staff consent to accept this card offline if the network is down (default false). Even when
    * true, the venue's policy must allow it and the amount be within its cap. */
   allowOffline?: boolean;

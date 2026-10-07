@@ -13,8 +13,9 @@ import {
 } from "@waitron/db";
 import { endDeviceSessions, hashSecret, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { firstUsablePrinters, type FormFactor } from "@waitron/layouts";
+import type { FormFactor } from "@waitron/layouts";
 import { insertDevice, resolveDeviceBinding, updateDeviceSettings } from "./device.js";
+import { settleDevice } from "./device-equipment.js";
 import type { PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -513,19 +514,14 @@ export async function acceptDeviceJoinRequest(
   });
 
   const [disabled] = await tx
-    .select({
-      locationId: devices.locationId,
-      deviceProfileId: devices.deviceProfileId,
-      receiptPrinterId: devices.receiptPrinterId,
-      paymentSlipPrinterId: devices.paymentSlipPrinterId,
-    })
+    .select({ id: devices.id })
     .from(devices)
     .where(and(eq(devices.id, row.id), eq(devices.active, false)));
   if (disabled !== undefined) {
     // An ACTIVE row with this id is left to the insert below, which refuses it.
     await updateDeviceSettings(
       tx,
-      { id: row.id, ...disabled },
+      disabled,
       {
         label: input.label,
         profileId: input.profileId,
@@ -539,19 +535,17 @@ export async function acceptDeviceJoinRequest(
     return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
   }
 
-  const printers = await firstUsablePrinters(tx, input.profileId, row.locationId);
   await insertDevice(tx, {
     id: row.id,
     locationId: row.locationId,
     stationId: binding.stationId,
     watcherId: binding.watcherId,
     deviceProfileId: input.profileId,
-    receiptPrinterId: printers.receiptPrinterId,
-    paymentSlipPrinterId: printers.paymentSlipPrinterId,
     label: input.label,
     tokenHash: row.tokenHash,
     active: true,
   });
+  await settleDevice(tx, row.id, { acquire: true });
 
   return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
 }

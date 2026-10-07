@@ -28,6 +28,8 @@ import {
   SCAN_POLL_MS,
 } from "./printers-screen.js";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
+import { formatEquipmentCode } from "@waitron/shared";
+import { decodeQrImage } from "../testing/decode-qr.js";
 
 class PrinterLeaveFixture extends LitElement {
   readonly leave = new LeaveController(this);
@@ -111,6 +113,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -128,6 +132,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -145,6 +151,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     pendingJobs: 0,
     lastPrintAt: null,
     lastPrintAgentId: null,
@@ -3127,6 +3135,8 @@ describe("printers-screen", () => {
       paperWidth: "80mm",
       resolution: "180dpi",
       hasCashDrawer: false,
+      portable: false,
+      holder: null,
       pendingJobs: 0,
       lastPrintAt: null,
       lastPrintAgentId: null,
@@ -3171,6 +3181,8 @@ describe("printers-screen", () => {
       paperWidth: "80mm",
       resolution: "180dpi",
       hasCashDrawer: false,
+      portable: false,
+      holder: null,
       pendingJobs: 0,
       lastPrintAt: null,
       lastPrintAgentId: null,
@@ -9331,4 +9343,96 @@ describe("Print test page in a printer's row menu", () => {
       }
     },
   );
+});
+
+describe("portable printers and their equipment label", () => {
+  const PORTABLE_ID = "0b3f6c1e-2a4d-4e8f-9a1b-7c6d5e4f3a2b";
+  const portable: Printer = {
+    ...printers[0]!,
+    id: PORTABLE_ID,
+    name: "Mano de sala",
+    portable: true,
+    holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+  };
+
+  async function openDetails(api: DashboardApi, id: string): Promise<PrintersScreen> {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinterDetails(el, id);
+    const section = q(el, "[data-test=printer-section-calibration]")!;
+    if (!section.hasAttribute("open")) {
+      section.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+      await flush(el);
+    }
+    return el;
+  }
+
+  it("the portable switch saves", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    toggleSwitch(el, '[name="printer-portable"]', true);
+    await flush(el);
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { portable: true });
+  });
+
+  it("the detail says a printer is carried by one device at a time, and which device has it", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([portable, printers[1]]) });
+    const el = await openDetails(api, PORTABLE_ID);
+    expect(text(el, "[data-test=printer-portable]")).toBe(t("printers.yes"));
+    expect(text(el, "[data-test=printer-holder]")).toBe(
+      t("equipment.holder_with_person").replace("{device}", "Móvil 2").replace("{person}", "Ana"),
+    );
+  });
+
+  it("a portable printer nobody carries says so, and a fixed printer offers no label", async () => {
+    const free = { ...portable, holder: null };
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([free, printers[1]]) });
+    const el = await openDetails(api, PORTABLE_ID);
+    expect(text(el, "[data-test=printer-holder]")).toBe(t("equipment.holder_none"));
+    expect(q(el, "[data-test=open-equipment-label]")).not.toBeNull();
+    const fixed = await openDetails(stubApi(), "p1");
+    expect(text(fixed, "[data-test=printer-portable]")).toBe(t("printers.no"));
+    expect(q(fixed, "[data-test=printer-holder]")).toBeNull();
+    expect(q(fixed, "[data-test=open-equipment-label]")).toBeNull();
+  });
+
+  it("the label modal shows the exact code text formatEquipmentCode gives for this printer, and its QR image decodes to that text", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([portable, printers[1]]) });
+    const el = await openDetails(api, PORTABLE_ID);
+    q(el, "[data-test=open-equipment-label]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=equipment-label-qr]")).not.toBeNull());
+    const code = formatEquipmentCode("printer", PORTABLE_ID);
+    expect(text(el, "[data-test=equipment-label-code]")).toBe(code);
+    expect(text(el, "[data-test=equipment-label-name]")).toBe("Mano de sala");
+    const qr = q(el, "[data-test=equipment-label-qr]") as HTMLImageElement;
+    expect(await decodeQrImage(qr.src)).toBe(code);
+  });
+
+  it("prints the label: its QR, its code and the printer's name", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([portable, printers[1]]) });
+    const el = await openDetails(api, PORTABLE_ID);
+    q(el, "[data-test=open-equipment-label]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=equipment-label-qr]")).not.toBeNull());
+    const label = q(el, "dashboard-equipment-label") as HTMLElement & {
+      print: (label: { qr: string; code: string; name: string }) => void;
+    };
+    const print = vi.fn();
+    label.print = print;
+    q(el, "[data-test=print-equipment-label]")!.click();
+    expect(print).toHaveBeenCalledExactlyOnceWith({
+      qr: (q(el, "[data-test=equipment-label-qr]") as HTMLImageElement).src,
+      code: formatEquipmentCode("printer", PORTABLE_ID),
+      name: "Mano de sala",
+    });
+  });
 });

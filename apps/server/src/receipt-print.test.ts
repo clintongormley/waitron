@@ -4,6 +4,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
+  deviceProfilePrinters,
   deviceProfiles,
   devices,
   diningTables,
@@ -11,6 +12,8 @@ import {
   nowIso,
   partyTables,
   kitchenStations,
+  printerHolders,
+  printers,
   printJobs,
   readTenant,
   sales,
@@ -57,6 +60,7 @@ import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.j
 import { collectOrder, printSaleReceipt, recordTillSale, reprintSale } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
+import { takeBillPayment } from "./bill-payments.js";
 import {
   DRAWER_KICK,
   enqueueReceiptReprint,
@@ -275,7 +279,11 @@ async function configureReceipt(
     if (opts.printerId !== undefined) {
       await tx
         .update(devices)
-        .set({ receiptPrinterId: opts.printerId, paymentSlipPrinterId: opts.printerId })
+        .set({
+          receiptPrinterId: opts.printerId,
+          paymentSlipPrinterId: opts.printerId,
+          cashDrawerPrinterId: opts.printerId,
+        })
         .where(eq(devices.id, cfg.origin.deviceId));
     }
   });
@@ -507,6 +515,100 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
       .map((job) => decodeTicket(new Uint8Array(job.payload)))
       .filter(Boolean),
   ).toHaveLength(2);
+});
+
+it("a prepaid cash sale reads the device's printers once for its collection ticket, receipt and drawer", async () => {
+  const { cfg, each, zoneId } = await setupVenue("prepay");
+  const printerId = await makePrinter(cfg);
+  await configureReceipt(cfg, { mode: "auto", printerId });
+  async function collectionNumber(value: "numbered" | "none"): Promise<void> {
+    await suite.db.execute(sql`
+      update department_sale_policies
+      set paid_when = 'prepay', collection_number = ${value}
+      where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})
+    `);
+  }
+  /** The reads a cash sale of a parked order takes; only a sale with an operator opens the drawer. */
+  async function readsOfSale(operatorId: string | undefined): Promise<number> {
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+    });
+    const selects = vi.spyOn(suite.db, "select");
+    try {
+      await recordTillSale(
+        deps(),
+        cfg,
+        { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
+        operatorId,
+      );
+      return selects.mock.calls.length;
+    } finally {
+      selects.mockRestore();
+    }
+  }
+  await collectionNumber("numbered");
+  await readsOfSale(OPERATOR);
+
+  const all = await readsOfSale(OPERATOR);
+  const noDrawer = await readsOfSale(undefined);
+  await collectionNumber("none");
+  const receiptOnly = await readsOfSale(undefined);
+
+  expect(await drawerOpensFor(cfg)).toHaveLength(2);
+  // Each extra job adds only its enqueue's own check that the printer is switched on.
+  expect(all - noDrawer).toBe(1);
+  expect(noDrawer - receiptOnly).toBe(1);
+});
+
+it("a cash bill payment that pays the bill in full reads the device's printers once for its drawer and receipt", async () => {
+  const { cfg, each } = await setupVenue();
+  const printerId = await makePrinter(cfg);
+  await configureReceipt(cfg, { mode: "auto", printerId });
+  const tabId = await withTransaction(suite.db, async (tx) => {
+    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const table = await createTable(tx, cfg, { label: "Mesa 4", zoneId: offers.zoneId });
+    const { tabId } = await openPartyTab(tx, cfg, {
+      tableId: table.id,
+      lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
+    });
+    return tabId;
+  });
+
+  const selects = vi.spyOn(suite.db, "select");
+  let printerReads: number;
+  try {
+    const { invoice } = await takeBillPayment(
+      deps(),
+      cfg,
+      tabId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "1.50",
+        method: "cash",
+        tendered: "1.50",
+        applied: "1.50",
+        tip: "0.00",
+      },
+      OPERATOR,
+    );
+    expect(invoice).not.toBeNull();
+    // The one select that reads the device's printers with its profile's drawer permission.
+    printerReads = selects.mock.calls.filter(
+      ([fields]) => fields !== undefined && "hasCashDrawer" in fields && "capabilities" in fields,
+    ).length;
+  } finally {
+    selects.mockRestore();
+  }
+
+  expect((await drawerOpensFor(cfg)).map((open) => open.reason)).toEqual(["bill_payment"]);
+  const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
+  expect(jobs.filter((job) => opensDrawer(new Uint8Array(job.payload)))).toHaveLength(1);
+  expect(jobs.filter((job) => decodeTicket(new Uint8Array(job.payload)))).toHaveLength(1);
+  expect(printerReads).toBe(1);
 });
 
 describe("receipt grouping after table changes", () => {
@@ -1189,7 +1291,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   );
 });
 
-describe("every device whose profile allows the drawer opens its receipt printer's drawer", () => {
+describe("every device whose profile allows the drawer opens its chosen drawer", () => {
   /** Another till device at the venue's location, and the config a sale there runs under. */
   async function addTill(
     cfg: DeviceRequestConfig,
@@ -1320,6 +1422,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
         deviceProfileId: profile!.id,
         stationId: station!.id,
         receiptPrinterId: printerId,
+        cashDrawerPrinterId: printerId,
       })
       .returning({ id: devices.id });
     const display = { ...cfg, origin: deviceOrigin(device!.id) };
@@ -1368,6 +1471,185 @@ describe("every device whose profile allows the drawer opens its receipt printer
       ]);
     },
   );
+});
+
+describe("the drawer follows the device's drawer choice, not its receipt printer", () => {
+  /** Every print job, oldest first, with what it is and what it carries. */
+  async function allJobs() {
+    return withTransaction(suite.db, (tx) =>
+      tx
+        .select({
+          printerId: printJobs.printerId,
+          kind: printJobs.kind,
+          saleId: printJobs.saleId,
+          payload: printJobs.payload,
+        })
+        .from(printJobs)
+        .orderBy(sql`rowid`),
+    );
+  }
+
+  async function sell(
+    cfg: DeviceRequestConfig,
+    product: { zoneId: string; menuItemId: string },
+    method: "cash" | "card",
+    workingOrderId: string = randomUUID(),
+  ): Promise<void> {
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        workingOrderId,
+        zoneId: product.zoneId,
+        lines: [{ menuItemId: product.menuItemId, quantity: "1" }],
+        tender: { method, amount: "2.00" },
+      },
+      OPERATOR,
+    );
+  }
+
+  /** A venue whose device prints receipts on `receipt` and opens the drawer of `drawer`. */
+  async function venue(opts: { receiptHasDrawer: boolean }) {
+    const base = await setupVenue();
+    const cfg = base.cfg;
+    const drawer = await makePrinter(cfg);
+    const receipt = await makePrinter(cfg, { hasCashDrawer: opts.receiptHasDrawer });
+    await configureReceipt(cfg, { mode: "auto", printerId: receipt });
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(devices)
+        .set({ cashDrawerPrinterId: drawer })
+        .where(eq(devices.id, cfg.origin.deviceId)),
+    );
+    return {
+      cfg,
+      drawer,
+      receipt,
+      product: { zoneId: base.zoneId, menuItemId: base.each.menuItemId },
+    };
+  }
+
+  it("a device switching to a portable receipt printer without a drawer still opens its chosen drawer on a cash sale", async () => {
+    const { cfg, drawer, product } = await venue({ receiptHasDrawer: true });
+    const portable = await makePrinter(cfg, { hasCashDrawer: false });
+    await withTransaction(suite.db, async (tx) => {
+      await tx.update(printers).set({ portable: true }).where(eq(printers.id, portable));
+      await tx
+        .insert(printerHolders)
+        .values({ printerId: portable, deviceId: cfg.origin.deviceId });
+      await tx
+        .update(devices)
+        .set({ receiptPrinterId: portable })
+        .where(eq(devices.id, cfg.origin.deviceId));
+    });
+
+    await sell(cfg, product, "cash");
+
+    const saleId = await onlySaleId(cfg);
+    const jobs = await allJobs();
+    expect(jobs.map((job) => [job.printerId, job.kind])).toEqual([
+      [portable, "document"],
+      [drawer, "drawer"],
+    ]);
+    const kick = jobs[1]!;
+    expect(kick.saleId).toBeNull();
+    expect([...new Uint8Array(kick.payload)]).toEqual([...DRAWER_KICK]);
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      {
+        reason: "cash_sale",
+        saleId,
+        personId: OPERATOR,
+        deviceId: cfg.origin.deviceId,
+        printerId: drawer,
+      },
+    ]);
+  });
+
+  it("a hand-keyed card opens one audited drawer job on the drawer printer, not the receipt printer", async () => {
+    const { cfg, drawer, receipt, product } = await venue({ receiptHasDrawer: true });
+
+    await sell(cfg, product, "card");
+
+    expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([
+      [receipt, "document"],
+      [drawer, "drawer"],
+    ]);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      {
+        reason: "card_slip",
+        saleId: await onlySaleId(cfg),
+        personId: OPERATOR,
+        deviceId: cfg.origin.deviceId,
+        printerId: drawer,
+      },
+    ]);
+  });
+
+  it("a device whose drawer choice resolves to none opens nothing on a cash sale, though its receipt printer has a drawer", async () => {
+    const { cfg, receipt, product } = await venue({ receiptHasDrawer: true });
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(devices)
+        .set({ cashDrawerPrinterId: null })
+        .where(eq(devices.id, cfg.origin.deviceId)),
+    );
+
+    await sell(cfg, product, "cash");
+
+    expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([
+      [receipt, "document"],
+    ]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("a device with no drawer choice of its own opens its profile's default drawer", async () => {
+    const { cfg, drawer, receipt, product } = await venue({ receiptHasDrawer: true });
+    await withTransaction(suite.db, async (tx) => {
+      const [device] = await tx
+        .update(devices)
+        .set({ cashDrawerPrinterId: null })
+        .where(eq(devices.id, cfg.origin.deviceId))
+        .returning({ profileId: devices.deviceProfileId });
+      await tx.insert(deviceProfilePrinters).values({
+        deviceProfileId: device!.profileId,
+        printerId: drawer,
+        role: "cash_drawer",
+        position: 0,
+        isDefault: true,
+      });
+    });
+
+    await sell(cfg, product, "cash");
+
+    expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([
+      [receipt, "document"],
+      [drawer, "drawer"],
+    ]);
+    expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId])).toEqual([
+      ["cash_sale", drawer],
+    ]);
+  });
+
+  it("a receipt document and a reprint open no drawer, though the device has one it could open", async () => {
+    const { cfg, drawer, receipt, product } = await venue({ receiptHasDrawer: true });
+    await configureReceipt(cfg, { mode: "on_request" });
+    const workingOrderId = randomUUID();
+    await sell(cfg, product, "cash", workingOrderId);
+    expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([[drawer, "drawer"]]);
+
+    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
+    await reprintSale({ db: suite.db, backend }, cfg, workingOrderId);
+
+    const jobs = await allJobs();
+    expect(jobs.map((job) => [job.printerId, job.kind])).toEqual([
+      [drawer, "drawer"],
+      [receipt, "document"],
+      [receipt, "document"],
+    ]);
+    for (const job of jobs.slice(1)) expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
+    expect(await drawerOpensFor(cfg)).toHaveLength(1);
+  });
 });
 
 describe("a receipt reprint and the printer's alert (A167)", () => {

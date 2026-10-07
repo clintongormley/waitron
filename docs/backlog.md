@@ -3272,10 +3272,11 @@ The original walkthrough is retained under _Detail → Setup wizard_.
       is (owner, 2026-10-02).
     - **For the owner:** a card taken on a connected machine that also prints a paper merchant
       slip opens no drawer; B30 covers only the machine Waitron does not talk to.
-    - From B29's review, not fixed there: a cash sale with automatic receipts reads the device's
-      receipt printer twice in one transaction (`enqueueSaleReceipt` and `enqueueSaleDrawer` each
-      call `resolveReceiptPrinter`) — resolve it once. The other B29 reload finding concerned
-      Printing rules, which A261 step 8 retired.
+    - B29's review finding that a cash sale read the device's receipt printer twice is done by W100
+      (2026-10-07): a till's immediate sale, and a cash or hand-keyed card payment against a bill,
+      each read the device's printer roles once and share them between the drawer and the receipt
+      (`printerLookup`, `apps/server/src/receipt-print.ts`). The other B29 reload finding concerned Printing rules,
+      which A261 step 8 retired.
   - **Task 17 (#991, a table that leaves without paying).** Asesor Q28 was decided by the owner
     without the asesor (2026-10-01): the full simplified invoice is issued when the table leaves.
     Open:
@@ -3793,6 +3794,11 @@ that has fallen behind.
   NFC is Chrome-for-Android only; the browser's own QR decoder is not dependable, so decode in JS or
   WASM. Also here: restoring `stripe_on_device` (Tap-to-Pay). Redsys and
   bank terminals are parked; Bizum research is under _Later and parked_.
+  _2026-10-07: the printed QR sticker and the dropdown landed with W100 (this branch's pull request;
+  see "Devices, profiles and departmental transfers" below). One difference from the decision
+  above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
+  the dropdown moves it to the waiter's device. NFC (queued as W102) and Tap-to-Pay are still
+  open._
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
   BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
   Stripe Checkout adapter that already exists forecloses no cheaper provider later.
@@ -4758,7 +4764,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
-  action flags); transfers queued in lane D, equipment queued in lane E, neither implemented.**
+  action flags); equipment BUILT except NFC (W100, this branch's pull request); transfers queued in
+  lane D, not implemented.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt
@@ -4791,7 +4798,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     one of its zones' `zone_menus`. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
     must define portable assignment, Use default, busy-terminal protection and a drawer
     independent of receipt printers before it removes today's printer choice, which a switch keeps
-    while the new profile lists the printer and otherwise replaces with the first usable one. The
+    while the new profile lists the printer and otherwise replaces with the first usable one — done
+    by W100 (2026-10-07): a switch now puts a choice the new profile does not list on Use default. The
     [transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md) consumes W97's
     admission check and department scope.
   - **Left open by W97** (each found in its review, none fixed on the branch):
@@ -4850,6 +4858,56 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       receives a bill reader payment's `device.profile_changed` answer, its automatic resend under
       the same id gets the failed payment back and tells staff the card was declined: no card was
       charged, but the reason shown is wrong; the next tap starts a fresh payment (read, not run).
+  - **W100 delivers** (the [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md),
+    Tasks 1–4, this branch's pull request). "Equipment" here means a device's receipt printer, its
+    payment-slip printer (the printer for the card slip), its card reader and its cash drawer.
+    - Each profile lists the printers, card readers and cash drawers its devices may use, with a
+      default for each role. A device is on "Use default" until someone picks an item from the
+      list. When a device joins or switches profile, a choice the profile no longer lists goes back
+      to Use default, and the device takes any portable item it uses that nobody else holds.
+    - A printer marked portable, and every card reader, is held by one device at a time. A till
+      takes an item another device holds by scanning its label, or by choosing it from the list
+      and confirming; a manager on the dashboard cannot take a held item. A signed-in till checks
+      its equipment every 15 seconds (`apps/till/src/state/equipment-poll.ts`) and tells staff
+      when another device has taken one of theirs. Disabling a device releases what it holds and
+      keeps its choices; enabling it again takes them back if they are still free.
+    - A card payment starts only on a reader the device holds (`reader.not_held`) and not while
+      another device has a payment in progress on it (`reader.payment_in_progress`, which also
+      refuses taking the reader over).
+    - The cash drawer is chosen on its own, from the profile's drawer list, not from the receipt
+      printer.
+    - The dashboard prints a QR label for a printer or card reader; the till's camera scanner reads
+      it (decoded in JavaScript with the `jsqr` package). The profile editor sets the lists and
+      defaults; the Devices table shows each device's four items, and its edit dialog names the
+      device carrying a portable item; the till has an Equipment dialog with a list for each item
+      and, on a device with a camera, a Scan button for the printers and the card reader.
+    - **Removed: staff can no longer switch a device's printing off.** The till's "No printer"
+      choice is gone and the dashboard's empty choice now means Use default, so a device is without
+      a printer, reader or drawer only when its profile's default is None (owner question Q1
+      below).
+    - **Not shown: whether equipment is disconnected.** The till says an item is switched off when
+      a printer is disabled or a reader is disabled or unpaired; nothing stores whether a printer or
+      reader is online (Q7).
+    - **Still pending: NFC** — tapping a phone on an NFC sticker to pick a reader (plan Task 5),
+      queued as W102.
+    - Owner questions, each with the default built (answer when convenient):
+      - Q1. A device cannot override its profile's default with "none" — owner question, default
+        built.
+      - Q2. A card reader is never shared by several devices at once; every reader has one holder —
+        owner question, default built.
+      - Q3. A payment stuck "attempting" (started, outcome unknown) after a crash keeps its reader
+        busy until the sweep or a manager resolves it — owner question, default built.
+      - Q4. QR labels are decoded with the `jsqr` package, not the browser's own decoder — owner
+        question, default built.
+      - Q5. Card readers have no location, which does not matter while a venue has one location —
+        owner question, default built.
+      - Q6. "One payment in progress per reader" is not a database rule: the checks stop another
+        device, not the holding device starting two payments at once — owner question, default
+        built.
+      - Q7. Disconnected equipment is not shown (above) — owner question, default built.
+      - Also as built: a till's equipment list (`GET /api/device/equipment`) needs only a joined
+        device, not a signed-in person, so a locked till can see who holds an item on another
+        device (staff names are already public through `/api/staff`).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,

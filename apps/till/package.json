@@ -14,12 +14,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@waitron/ui": "workspace:*",
-    "@waitron/shared": "workspace:*",
     "@waitron/catalogue": "workspace:*",
     "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",
     "@waitron/diagnostics": "workspace:*",
+    "@waitron/shared": "workspace:*",
+    "@waitron/ui": "workspace:*",
+    "jsqr": "^1.4.0",
     "lit": "^3.2.0",
     "qrcode-generator": "^2.0.4"
   },

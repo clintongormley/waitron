@@ -107,6 +107,34 @@ describe("MenuStatePoll", () => {
     poll.stop();
   });
 
+  it("a read cancelled by a stop that then fails session.required does not stop the poll started again", async () => {
+    const { read, reads } = pendingRead();
+    const poll = new MenuStatePoll({ read, zones: () => ["counter"], onState: vi.fn() });
+    poll.start();
+    vi.advanceTimersByTime(15_000);
+    poll.stop();
+    poll.start();
+    reads[0]!.fail({ code: "session.required", status: 401 });
+    await settle();
+    expect(poll.running).toBe(true);
+    vi.advanceTimersByTime(15_000);
+    expect(read).toHaveBeenCalledTimes(2);
+    poll.stop();
+  });
+
+  it("an older read failing session.required after a newer one for its zone answered does not stop the poll", async () => {
+    const { read, reads } = pendingRead();
+    const poll = new MenuStatePoll({ read, zones: () => ["counter"], onState: vi.fn() });
+    poll.start();
+    vi.advanceTimersByTime(30_000);
+    reads[1]!.answer(state("v3"));
+    await settle();
+    reads[0]!.fail({ code: "session.required", status: 401 });
+    await settle();
+    expect(poll.running).toBe(true);
+    poll.stop();
+  });
+
   it("cancels a read that has been out for 25 seconds", () => {
     const { read, reads } = pendingRead();
     const poll = new MenuStatePoll({ read, zones: () => ["counter"], onState: vi.fn() });

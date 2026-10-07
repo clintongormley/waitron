@@ -22,6 +22,7 @@ export type {
 // The test doubles under ./testing/ are NOT re-exported, so importing the package root cannot
 // reach one.
 export {
+  assertReaderStartable,
   assertReversible,
   associatePaymentWithSale,
   captureAttempting,
@@ -68,9 +69,32 @@ export {
   recordResolution,
 } from "./resolutions.js";
 export type { NewPaymentResolution } from "./resolutions.js";
+export {
+  clearUnlistedReaderChoice,
+  readProfileReaderList,
+  readReaderEquipment,
+  readReaderRole,
+  readerHeldBy,
+  readerPaymentInProgress,
+  releaseDeviceReader,
+  resolveDeviceReaderId,
+  selectDeviceReader,
+  setProfileReaderList,
+  settleDeviceReader,
+  settleProfileReaderDevices,
+} from "./device-readers.js";
+export type {
+  ListedReader,
+  ProfileReaderList,
+  ReaderEquipment,
+  ReaderInfo,
+  ReaderRoleState,
+  SelectDeviceReaderInput,
+  SelectDeviceReaderResult,
+} from "./device-readers.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export { SimulatorPaymentProvider, DEMO_READER_ID, DEMO_READER_REF } from "./simulator.js";
-export { refundLookupOf } from "./provider.js";
+export { IN_PROGRESS_PAYMENT_STATES, refundLookupOf } from "./provider.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_ALERTS } from "./alerts.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -109,6 +133,8 @@ export type {
 export { cardProviderById, selectCardProviders } from "./card-provider.js";
 export { cardReaders } from "./schema/card-readers.js";
 export { deviceCardReaders } from "./schema/device-card-readers.js";
+export { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
+export { cardReaderHolders } from "./schema/card-reader-holders.js";
 
 export { payments } from "./schema/payments.js";
 export { paymentResolutions } from "./schema/payment-resolutions.js";

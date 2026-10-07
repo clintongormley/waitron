@@ -465,21 +465,24 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     expect(gherkins).toBeDefined();
   });
 
-  it("never opens a cash drawer, even when the device's receipt printer has one", async () => {
+  it("never opens a cash drawer, even when the device's receipt and drawer printer has one", async () => {
     const billId = await billOf("hamburger", "fire");
     const deviceId = venue.cfg.origin.deviceId;
     const [device] = await inTx(venue, (tx) =>
       tx
-        .select({ receiptPrinterId: devices.receiptPrinterId })
+        .select({
+          receiptPrinterId: devices.receiptPrinterId,
+          cashDrawerPrinterId: devices.cashDrawerPrinterId,
+        })
         .from(devices)
         .where(eq(devices.id, deviceId)),
     );
-    // The kitchen's printer is also the device's receipt printer, with a drawer attached, and the
-    // device's profile allows the drawer.
+    // The kitchen's printer is also the device's receipt and drawer printer, with a drawer
+    // attached, and the device's profile allows the drawer.
     await inTx(venue, async (tx) => {
       await tx
         .update(devices)
-        .set({ receiptPrinterId: venue.printerId })
+        .set({ receiptPrinterId: venue.printerId, cashDrawerPrinterId: venue.printerId })
         .where(eq(devices.id, deviceId));
       await tx
         .update(printers)
@@ -502,7 +505,10 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       await inTx(venue, async (tx) => {
         await tx
           .update(devices)
-          .set({ receiptPrinterId: device!.receiptPrinterId })
+          .set({
+            receiptPrinterId: device!.receiptPrinterId,
+            cashDrawerPrinterId: device!.cashDrawerPrinterId,
+          })
           .where(eq(devices.id, deviceId));
         await tx
           .update(printers)

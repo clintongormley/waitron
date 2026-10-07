@@ -123,6 +123,7 @@ export const payments = table(
       .where(sql`${t.billPaymentId} is not null`),
     index("payments_working_order_idx").on(t.workingOrderId),
     index("payments_sale_idx").on(t.saleId),
+    index("payments_reader_idx").on(t.readerId),
     // The reconcile sweep's filter: one provider's rows over a settled_at window.
     index("payments_reconcile_idx").on(t.provider, t.settledAt),
     check("payments_amount_ck", sql`${t.amount} > 0`),

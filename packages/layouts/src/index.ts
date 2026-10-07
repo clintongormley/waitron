@@ -65,20 +65,31 @@ export {
 } from "./device-profile-store.js";
 export type { DeviceProfileRow, DeviceProfileSettings } from "./device-profile-store.js";
 export {
+  emptyPrinterLists,
   readProfilePrinterLists,
   setProfilePrinterLists,
-  resettleDevicesOnProfile,
-  firstUsablePrinters,
-  printerChoices,
-  chooseDevicePrinter,
 } from "./device-printers.js";
+export {
+  clearUnlistedPrinterChoices,
+  readPrinterRoles,
+  readPrinterEquipment,
+  releaseDevicePrinters,
+  resolveDevicePrinterId,
+  resolveDevicePrinterIds,
+  selectDevicePrinter,
+  setPrinterPortable,
+  settleDevicePrinters,
+  settleProfilePrinterDevices,
+} from "./device-equipment.js";
 export type {
-  PrinterRole,
-  ProfilePrinterLists,
-  PrinterChoice,
-  DevicePrinterField,
-  ChooseDevicePrinterResult,
-} from "./device-printers.js";
+  ListedPrinter,
+  PrinterEquipment,
+  PrinterInfo,
+  PrinterRoleState,
+  SelectDevicePrinterInput,
+  SelectDevicePrinterResult,
+} from "./device-equipment.js";
+export type { PrinterRole, ProfilePrinterRole, ProfilePrinterLists } from "./device-printers.js";
 export { getTenantTheme, putTenantTheme } from "./theme-store.js";
 export {
   encodeLogoRaster,

@@ -32,6 +32,8 @@ import "@waitron/ui/src/components/wt-notice.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
+import "../widgets/equipment-label.js";
+import { holderText } from "../i18n/equipment.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -140,16 +142,21 @@ interface EditablePrinter {
   paperWidth: PrintPaperWidth;
   resolution: PrintResolution;
   hasCashDrawer: boolean;
+  portable: boolean;
   /** The settings as saved, so a save sends only the ones that changed. */
   saved: {
     paperWidth: PrintPaperWidth;
     resolution: PrintResolution;
     hasCashDrawer: boolean;
+    portable: boolean;
   };
   active: boolean;
 }
 
-type CalibrationSettings = Pick<EditablePrinter, "paperWidth" | "resolution" | "hasCashDrawer">;
+type CalibrationSettings = Pick<
+  EditablePrinter,
+  "paperWidth" | "resolution" | "hasCashDrawer" | "portable"
+>;
 
 /** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
 export const SCAN_LISTEN_MS = 30_000;
@@ -635,8 +642,8 @@ export class PrintersScreen extends LitElement {
     })) === "proceeded";
 
   #calibrationValues(): CalibrationSettings {
-    const { paperWidth, resolution, hasCashDrawer } = this.editingPrinter!;
-    return { paperWidth, resolution, hasCashDrawer };
+    const { paperWidth, resolution, hasCashDrawer, portable } = this.editingPrinter!;
+    return { paperWidth, resolution, hasCashDrawer, portable };
   }
 
   #disposeCalibrationDraft(): void {
@@ -814,6 +821,9 @@ export class PrintersScreen extends LitElement {
   @state() private testPageSent: string | null = null;
   @state() private refreshErrorKey: string | null = null;
   @state() private addedPrinterName: string | null = null;
+  /** The portable printer whose equipment label is open. */
+  @state() private labelPrinterId: string | null = null;
+  #labelOpener: HTMLElement | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -1366,6 +1376,8 @@ export class PrintersScreen extends LitElement {
               paperWidth: "80mm",
               resolution: "180dpi",
               hasCashDrawer: false,
+              portable: false,
+              holder: null,
               pendingJobs: 0,
               lastPrintAt: null,
               lastPrintAgentId: null,
@@ -1677,6 +1689,7 @@ export class PrintersScreen extends LitElement {
     if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
+    if (row.portable !== row.saved.portable) patch.portable = row.portable;
     const readding = this.#readdingId === id;
     // An in-flight save owns reactivation; closing its wizard must not disable the printer.
     if (readding) this.#readdingId = undefined;
@@ -2213,10 +2226,12 @@ export class PrintersScreen extends LitElement {
       paperWidth: p.paperWidth,
       resolution: p.resolution,
       hasCashDrawer: p.hasCashDrawer,
+      portable: p.portable,
       saved: {
         paperWidth: p.paperWidth,
         resolution: p.resolution,
         hasCashDrawer: p.hasCashDrawer,
+        portable: p.portable,
       },
     };
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
@@ -2229,7 +2244,8 @@ export class PrintersScreen extends LitElement {
       equal: (a, b) =>
         a.paperWidth === b.paperWidth &&
         a.resolution === b.resolution &&
-        a.hasCashDrawer === b.hasCashDrawer,
+        a.hasCashDrawer === b.hasCashDrawer &&
+        a.portable === b.portable,
       restore: (value) => {
         this.editingPrinter = { ...this.editingPrinter!, ...value };
       },
@@ -2769,8 +2785,22 @@ export class PrintersScreen extends LitElement {
             ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
             ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
             ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
+            ${field(t("printers.portable"), t(p.portable ? "printers.yes" : "printers.no"), "printer-portable")}
+            ${p.portable ? field(t("printers.holder"), holderText(p.holder), "printer-holder") : nothing}
             ${field(t("printers.profiles"), offeredOn.join(", ") || t("printers.no"), "printer-profiles")}
           </dl>
+          ${
+            p.portable
+              ? html`<wt-button
+                  data-test="open-equipment-label"
+                  @click=${(event: Event) => {
+                    this.#labelOpener = event.currentTarget as HTMLElement;
+                    this.labelPrinterId = p.id;
+                  }}
+                  >${t("equipment.label")}</wt-button
+                >`
+              : nothing
+          }
           <wt-button
             data-test="calibrate-printer-details"
             @click=${(event: Event) => {
@@ -3318,6 +3348,15 @@ export class PrintersScreen extends LitElement {
               this.drawerTestSent = false;
             }}
           ></wt-switch>
+          <wt-switch
+            name="printer-portable"
+            label=${t("printers.portable")}
+            .checked=${p.portable}
+            @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+              e.stopPropagation();
+              this.#editPrinter(p.id, { portable: e.detail.checked });
+            }}
+          ></wt-switch>
           ${
             p.hasCashDrawer
               ? html`
@@ -3811,6 +3850,20 @@ export class PrintersScreen extends LitElement {
     </wt-modal>`;
   }
 
+  #renderEquipmentLabel(): TemplateResult | typeof nothing {
+    const printer = this.printers.find((p) => p.id === this.labelPrinterId);
+    if (printer === undefined) return nothing;
+    return html`<dashboard-equipment-label
+      kind="printer"
+      .itemId=${printer.id}
+      .name=${printer.name}
+      .opener=${this.#labelOpener}
+      @wt-close=${() => {
+        this.labelPrinterId = null;
+      }}
+    ></dashboard-equipment-label>`;
+  }
+
   override render(): TemplateResult {
     // Each of these dialogs shows the refusal and the failed read itself.
     const dialogOpen =
@@ -3843,7 +3896,7 @@ export class PrintersScreen extends LitElement {
           : html`${this.#renderTestPageSent()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}
+      ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

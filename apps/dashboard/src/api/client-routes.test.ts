@@ -566,6 +566,62 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads who holds each reader, and reads and replaces a profile's reader list", async () => {
+    const holders = [
+      {
+        readerId: "r-1",
+        holder: { deviceId: "dev-1", deviceName: "Mano 1", personName: "Ana" },
+        paymentInProgressDeviceIds: [],
+      },
+    ];
+    const list = { readerIds: ["r-2", "r-1"], defaultReaderId: "r-1" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(holders))
+      .mockResolvedValueOnce(jsonResponse(list))
+      .mockResolvedValueOnce(jsonResponse(list));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.listReaderHolders()).resolves.toEqual(holders);
+    await expect(api.getProfileReaders("p-1")).resolves.toEqual(list);
+    await expect(api.setProfileReaders("p-1", list)).resolves.toEqual(list);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/payments/reader-holders", "GET", undefined],
+      ["/management-api/payments/device-profiles/p-1/readers", "GET", undefined],
+      ["/management-api/payments/device-profiles/p-1/readers", "PUT", list],
+    ]);
+  });
+
+  it("sends a device's drawer choice and a printer's portable switch", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    await api.updateDevice("dev-1", {
+      name: "Caja",
+      profileId: "p-1",
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      cashDrawerPrinterId: "pr-9",
+    });
+    await api.updatePrinter("pr-2", { portable: true });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/devices/dev-1",
+        "PATCH",
+        {
+          name: "Caja",
+          profileId: "p-1",
+          receiptPrinterId: null,
+          paymentSlipPrinterId: null,
+          cashDrawerPrinterId: "pr-9",
+        },
+      ],
+      ["/management-api/printers/pr-2", "PATCH", { portable: true }],
+    ]);
+  });
+
   it("lists the stuck card payments and asks the provider to resolve one", async () => {
     const stuck = [
       {

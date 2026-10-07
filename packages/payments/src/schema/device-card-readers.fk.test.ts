@@ -60,7 +60,7 @@ async function seedDeviceAndReader(db: Database): Promise<Seeded> {
 }
 
 describe("device_card_readers", () => {
-  it("stores a device's default reader, round-trips, and a delete clears the default", async () => {
+  it("stores a device's chosen reader, round-trips, and a delete clears the choice", async () => {
     const db = suite.db;
     const { deviceId, readerId } = await seedDeviceAndReader(db);
 
@@ -83,7 +83,7 @@ describe("device_card_readers", () => {
     expect(afterDelete).toHaveLength(0);
   });
 
-  it("rejects a second default reader for the same device (PK device_id)", async () => {
+  it("rejects a second chosen reader for the same device (PK device_id)", async () => {
     const db = suite.db;
     const { deviceId, readerId } = await seedDeviceAndReader(db);
     const [reader2] = await db

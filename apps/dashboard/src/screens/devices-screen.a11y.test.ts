@@ -79,6 +79,8 @@ const devices: DeviceRow[] = [
     profileRetired: false,
     receiptPrinterId: "pr1",
     paymentSlipPrinterId: null,
+    cashDrawerPrinterId: null,
+    equipment: [],
     batteryLevel: null,
     batteryCharging: null,
     batteryReportedAt: null,
@@ -99,6 +101,8 @@ const devices: DeviceRow[] = [
     profileRetired: false,
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
+    cashDrawerPrinterId: null,
+    equipment: [],
     batteryLevel: null,
     batteryCharging: null,
     batteryReportedAt: null,
@@ -115,6 +119,10 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     startingScreen: null,
     departmentId: "dep-1",
     allowedZoneIds: null,
@@ -131,6 +139,10 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     startingScreen: null,
     departmentId: "dep-1",
     allowedZoneIds: null,
@@ -147,6 +159,10 @@ const deviceProfiles: DeviceProfile[] = [
     inactivityTimeoutSeconds: null,
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
     startingScreen: null,
     departmentId: null,
     allowedZoneIds: null,
@@ -191,6 +207,8 @@ const printers: Printer[] = [
     paperWidth: "80mm",
     resolution: "180dpi",
     hasCashDrawer: false,
+    portable: false,
+    holder: null,
     active: true,
   },
 ];
@@ -240,6 +258,8 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     ]),
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
     setDeviceReader: vi.fn().mockResolvedValue(undefined),
+    listReaderHolders: vi.fn().mockResolvedValue([]),
+    getProfileReaders: vi.fn().mockResolvedValue({ readerIds: ["r1"], defaultReaderId: "r1" }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -413,6 +433,91 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       const body = dialog.querySelector<HTMLElement>(".body")!;
       expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders a till's Edit dialog with Use default, a carried printer, a busy reader and a held refusal accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const till: DeviceRow = {
+        ...devices[0]!,
+        id: "till",
+        kind: "till",
+        stationId: null,
+        binding: null,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      };
+      const carried = {
+        ...printers[0]!,
+        id: "pr2",
+        name: "Mano de sala",
+        portable: true,
+        holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+      };
+      const equipped = {
+        ...deviceProfiles[0]!,
+        receiptPrinterIds: [printers[0]!.id, "pr2"],
+        receiptPrinterDefaultId: printers[0]!.id,
+        cashDrawerPrinterIds: [printers[0]!.id],
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            listDevices: vi.fn().mockResolvedValue([till]),
+            listDeviceProfiles: vi.fn().mockResolvedValue([equipped, ...deviceProfiles.slice(1)]),
+            listPrinters: vi.fn().mockResolvedValue([printers[0], carried]),
+            getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+            listReaderHolders: vi
+              .fn()
+              .mockResolvedValue([
+                { readerId: "r1", holder: null, paymentInProgressDeviceIds: ["d7"] },
+              ]),
+            updateDevice: vi.fn().mockRejectedValue({
+              code: "device.equipment_held",
+              params: {
+                field: "receiptPrinterId",
+                holderDeviceId: "d7",
+                holderDeviceName: "Móvil 2",
+                holderPersonName: "Ana",
+              },
+            }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      deep(el.shadowRoot!, "[data-test=edit-device-till]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-cash-drawer]")).not.toBeNull(),
+      );
+      await vi.waitFor(() =>
+        expect(
+          (
+            el.shadowRoot!.querySelector("[data-test=edit-reader]") as HTMLElement & {
+              disabled: boolean;
+            }
+          ).disabled,
+        ).toBe(false),
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
+      await vi.waitFor(() =>
+        expect(
+          (
+            el.shadowRoot!.querySelector("[data-test=edit-receipt-printer]") as HTMLElement & {
+              error: string;
+            }
+          ).error,
+        ).not.toBe(""),
+      );
+      await flush(el);
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
     },

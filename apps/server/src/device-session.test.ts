@@ -141,8 +141,6 @@ async function enrolDeviceFixture(): Promise<{
 /** The bindings a station screen enrolled without a watcher or hardware target carries. */
 const NO_BINDINGS = {
   watcherId: null,
-  receiptPrinterId: null,
-  paymentSlipPrinterId: null,
   // `enrolDeviceFixture`'s kds profile declares no capabilities, so the binding carries `[]`.
   capabilities: [],
 } as const;
@@ -457,8 +455,6 @@ describe("requireDevice (venue database)", () => {
         stationId: null,
         watcherId: null,
         deviceProfileId,
-        receiptPrinterId: null,
-        paymentSlipPrinterId: null,
         // The `till` profile declares both fenced flags — carried on the binding by the profile join.
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       },
@@ -600,8 +596,6 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
       stationId: null,
       deviceProfileId: tillProfileId,
       watcherId: null,
-      receiptPrinterId: null,
-      paymentSlipPrinterId: null,
       capabilities: ["take-cash"],
     });
   });
@@ -744,8 +738,6 @@ describe("assertTakesCash on a resolved device", () => {
     stationId: null,
     watcherId: null,
     deviceProfileId: randomUUID(),
-    receiptPrinterId: null,
-    paymentSlipPrinterId: null,
     capabilities,
   });
 

@@ -44,6 +44,8 @@ export const printers = table(
     paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
     resolution: printResolution("resolution").notNull().default("180dpi"),
     hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
+    // A portable printer is used by one device at a time, its holder in `printer_holders`.
+    portable: flag("portable").notNull().default(false),
     // Deactivate via active := false, never a hard delete (print_jobs reference it).
     active: flag("active").notNull().default(true),
   },

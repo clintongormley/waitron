@@ -180,6 +180,10 @@ type ProfileRow = {
   inactivityTimeoutSeconds: number | null;
   receiptPrinterIds: string[];
   paymentSlipPrinterIds: string[];
+  cashDrawerPrinterIds: string[];
+  receiptPrinterDefaultId: string | null;
+  paymentSlipPrinterDefaultId: string | null;
+  cashDrawerPrinterDefaultId: string | null;
 };
 
 async function seedCanvas(app: Hono, cookie: string, name: string): Promise<string> {
@@ -228,6 +232,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      cashDrawerPrinterIds: [],
+      receiptPrinterDefaultId: null,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: null,
       startingScreen: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
@@ -251,6 +259,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      cashDrawerPrinterIds: [],
+      receiptPrinterDefaultId: null,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: null,
       startingScreen: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
@@ -290,6 +302,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      cashDrawerPrinterIds: [],
+      receiptPrinterDefaultId: null,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: null,
       startingScreen: null,
       departmentId: null,
       allowedZoneIds: null,
@@ -967,6 +983,90 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(stored).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: p2 });
   });
 
+  it("stores a drawer list and each role's default, keeps a default a PUT omits, and refuses one not listed", async () => {
+    const app = mountApp();
+    const counter = await seedPrinter(uniqueName("Counter"));
+    const [drawer] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: (await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`))
+          .rows[0]!.id,
+        name: uniqueName("Drawer"),
+        transport: "network_tcp",
+        host: "10.0.0.9",
+        hasCashDrawer: true,
+      })
+      .returning({ id: printers.id });
+    const name = uniqueName("Defaults");
+    const base = { name, formFactor: "till", ...ordering, canvasId: null, capabilities: [] };
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        ...base,
+        receiptPrinterIds: [counter],
+        receiptPrinterDefaultId: counter,
+        cashDrawerPrinterIds: [drawer!.id],
+        cashDrawerPrinterDefaultId: drawer!.id,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const row = (await created.json()) as ProfileRow & Record<string, unknown>;
+    expect(row).toMatchObject({
+      receiptPrinterIds: [counter],
+      receiptPrinterDefaultId: counter,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterIds: [drawer!.id],
+      cashDrawerPrinterDefaultId: drawer!.id,
+    });
+
+    const kept = await app.request(`/management-api/device-profiles/${row.id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, receiptPrinterDefaultId: null }),
+    });
+    expect(kept.status).toBe(200);
+    expect(await kept.json()).toMatchObject({
+      receiptPrinterIds: [counter],
+      receiptPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: drawer!.id,
+    });
+
+    const refused = await app.request(`/management-api/device-profiles/${row.id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, paymentSlipPrinterDefaultId: counter }),
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: {
+        code: "device_profile.invalid",
+        params: { reason: "default_not_listed", field: "paymentSlipPrinterDefaultId" },
+      },
+    });
+    const noDrawer = await app.request(`/management-api/device-profiles/${row.id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, cashDrawerPrinterIds: [drawer!.id, counter] }),
+    });
+    expect(noDrawer.status).toBe(400);
+    expect(await noDrawer.json()).toMatchObject({
+      error: { code: "device_profile.invalid", params: { reason: "no_cash_drawer" } },
+    });
+    const malformed = await app.request(`/management-api/device-profiles/${row.id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, cashDrawerPrinterDefaultId: "nope" }),
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "cashDrawerPrinterDefaultId" },
+      },
+    });
+  });
+
   it("refuses a printer list that is not an array of ids, and a printer that does not exist", async () => {
     const app = mountApp();
     const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
@@ -1345,6 +1445,10 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       startingScreen: "show-schedule",
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
+      cashDrawerPrinterIds: [],
+      receiptPrinterDefaultId: null,
+      paymentSlipPrinterDefaultId: null,
+      cashDrawerPrinterDefaultId: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: [place.terrace],
       startingZoneId: place.terrace,

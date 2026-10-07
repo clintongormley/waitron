@@ -1,13 +1,15 @@
-import type { ExtraSelection, OptionSelection } from "@waitron/shared";
+import type { ExtraSelection, OptionSelection, TillReaderProvider } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   AppError,
+  deviceOrigin,
   isAppError,
   isValidGuestCount,
   SUPPORTED_LOCALES,
   thousandthsToDecimal,
+  tillProviderForReader,
 } from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
 import {
@@ -53,11 +55,13 @@ import type { CanvasDef, CapabilityFlag, NavigationScreen, ProfileAction } from 
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
 import {
+  assertReaderStartable,
   cardProviderById,
   cardReaders,
-  deviceCardReaders,
   DEMO_READER_ID,
   DEMO_READER_REF,
+  readReaderRole,
+  resolveDeviceReaderId,
   SimulatorPaymentProvider,
 } from "@waitron/payments";
 import { resendPrintJob } from "@waitron/printing";
@@ -90,7 +94,7 @@ import {
   enqueueManualDrawerOpen,
   confirmReceiptHandover,
   readOriginalReceiptPrint,
-  resolveReceiptPrinter,
+  resolveDrawerPrinter,
 } from "./receipt-print.js";
 import {
   clearPlacement,
@@ -279,18 +283,13 @@ function named(...subjects: (ZoneSubject | false)[]): ZoneSubject[] {
 }
 
 /** The subset of `apps/till`'s `CardProvider` union this surface hands out. */
-type TillCardProvider = "sumup_cloud" | "stripe_terminal" | "simulator" | "none";
+type TillCardProvider = TillReaderProvider | "simulator" | "none";
 
 /**
- * An unrecognised provider maps to `undefined`, which callers answer as `"none"` rather than leak a
- * raw seat id.
+ * The reader a card is charged on: the one the request names, else the device's own. It must be
+ * switched on, held by this device, and free of another device's payment in progress. The payment's
+ * start checks the last two again in the transaction that writes its first row.
  */
-function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_terminal" | undefined {
-  if (provider === "sumup") return "sumup_cloud";
-  if (provider === "stripe") return "stripe_terminal";
-  return undefined;
-}
-
 async function resolvePayReader(
   deps: TillApiDeps,
   deviceId: string | undefined,
@@ -299,11 +298,8 @@ async function resolvePayReader(
   return withTransaction(deps.db, async (tx) => {
     let readerId = requestedReaderId;
     if (readerId === undefined && deviceId !== undefined) {
-      const [row] = await tx
-        .select({ readerId: deviceCardReaders.readerId })
-        .from(deviceCardReaders)
-        .where(eq(deviceCardReaders.deviceId, deviceId));
-      readerId = row?.readerId;
+      const role = await readReaderRole(tx, deviceId);
+      readerId = role?.chosenId ?? role?.defaultId ?? undefined;
     }
     if (readerId === undefined) throw new AppError("reader.not_found", { id: "" });
     const [reader] = await tx
@@ -315,6 +311,8 @@ async function resolvePayReader(
       .from(cardReaders)
       .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
     if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
+    if (deviceId === undefined) throw new AppError("reader.not_held", { readerId: reader.id });
+    await assertReaderStartable(tx, deviceOrigin(deviceId), reader.id);
     // Refuse a disconnected provider here with the actionable `reader.provider_disconnected`,
     // before an adapter meets the missing credential mid-charge.
     if (deps.providers !== undefined) {
@@ -456,6 +454,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "reader.not_found": 404,
   "reader.provider_disconnected": 409,
+  "reader.not_held": 409,
+  "reader.payment_in_progress": 409,
   "table.not_found": 404,
   "table.inactive": 409,
   "zone.not_found": 404,
@@ -1177,33 +1177,28 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         } else {
           canvas = await getCanvasForFormFactor(tx, "till");
         }
-        let defaultReaderProvider: "sumup_cloud" | "stripe_terminal" | undefined;
+        let defaultReaderProvider: TillReaderProvider | undefined;
         let defaultReaderId: string | undefined;
-        if (device != null) {
+        const activeReaders: {
+          id: string;
+          name: string;
+          provider: TillReaderProvider;
+        }[] = [];
+        const resolvedReaderId =
+          device == null ? null : await resolveDeviceReaderId(tx, device.deviceId);
+        if (resolvedReaderId !== null) {
           const [reader] = await tx
-            .select({ id: cardReaders.id, provider: cardReaders.provider })
-            .from(deviceCardReaders)
-            .innerJoin(cardReaders, eq(cardReaders.id, deviceCardReaders.readerId))
-            .where(
-              and(eq(deviceCardReaders.deviceId, device.deviceId), eq(cardReaders.active, true)),
-            );
-          if (reader !== undefined) {
-            const provider = tillProviderForReader(reader.provider);
-            if (provider !== undefined) {
-              defaultReaderProvider = provider;
-              defaultReaderId = reader.id;
-            }
-          }
-        }
-        const activeReaders = (
-          await tx
             .select({ id: cardReaders.id, name: cardReaders.name, provider: cardReaders.provider })
             .from(cardReaders)
-            .where(eq(cardReaders.active, true))
-        ).flatMap((r) => {
-          const provider = tillProviderForReader(r.provider);
-          return provider === undefined ? [] : [{ id: r.id, name: r.name, provider }];
-        });
+            .where(and(eq(cardReaders.id, resolvedReaderId), eq(cardReaders.active, true)));
+          const provider =
+            reader === undefined ? undefined : tillProviderForReader(reader.provider);
+          if (reader !== undefined && provider !== undefined) {
+            defaultReaderProvider = provider;
+            defaultReaderId = reader.id;
+            activeReaders.push({ id: reader.id, name: reader.name, provider });
+          }
+        }
         return {
           invoiceLocale: (await readReceiptLanguage(tx, deps.cfg.locationId)).locale,
           receiptLanguages: resolveInstalledReceiptLanguageRules(geographyOf(taxpayer, loc))
@@ -2077,7 +2072,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             attempts,
           );
 
-          const printer = await resolveReceiptPrinter(tx, cfg.origin);
+          const printer = await resolveDrawerPrinter(tx, cfg.origin);
           if (printer === undefined) {
             throw new AppError("drawer.no_printer", { deviceId: session.deviceId });
           }

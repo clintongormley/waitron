@@ -489,6 +489,8 @@ Every named owner has the `.ts` extension. In the Test column, a named sibling h
 | TS `till-floor-screen`                                                                                                              | **E** readonly floor/placement and immediate table actions. Nested seat/name widgets P as above. Existing explicit clear/close confirmations remain.                                                                                                                                                                                                                                                                                                                     | Floor/table/tab/shell                                                                            | TS `till-floor-screen`; TW `seat-dialog`                                                                                                          |
 | TS `till-counter-screen`; `apps/till/src/till-app.ts`, `apps/till/src/state/working-order.ts`, `apps/till/src/state/draft-sync.ts`  | **P** memory-only/unassigned basket against destructive replacement/unload, seed current accepted order payload; compare actual line selections/quantities/notes/label, with existing position meaning. **E** retained view/logout transitions, automatic party DraftSync and notes already copied into store. Committing UI selections updates store baseline for that child only; sale/place acceptance commits relevant basket. Never delete server draft as Discard. | Destructive local order replacement/unload only for basket; local form scopes cover other routes | `apps/till/src/till-app.test.ts`; TS `till-counter-screen`; `apps/till/src/state/draft-sync.test.ts`; `apps/till/src/state/working-order.test.ts` |
 
+_2026-10-07, W100: the till's `printers-dialog` was replaced by `equipment-dialog`, exempt for the same reason: each pick is sent at once (a pick of equipment another device holds first asks whether to take it over). The dashboard's `equipment-label` dialog has no inputs, only Close and Print, so it is read-only and exempt._
+
 The store's existing dirty flag measures line synchronization and excludes the full form contract, notably label edits. Do not reuse it as W69 truth. Party drafts already autosave with a delay and serialize writes; existing flush/close/refusal/takeover paths remain intact. The till logout currently locks the UI and closes its draft writer before finishing cleanup. Voluntary signout protection runs before that sequence, while expiry/inactivity/operator switches bypass it. Persisted working orders survive UI-only Discard. A retained counter basket can remain after logout because it already does; this item introduces no new persistence or access to it.
 
 ## Setup steps and accumulated draft
@@ -709,6 +711,8 @@ the existing device behavior/accessibility suites remain unchanged. Eight EN/ES,
 phone/desktop confirmation renderings also ran with axe. Synthetic unload checks cover listener
 cancellation; the browser reload prompt is still Task 5. Device pairing settings and Payments
 reader dialogs remain pending; the Device/Reader inventory row is not complete.
+
+_2026-10-07, W100: Device Edit now also protects the cash drawer choice. Choosing another profile puts the reader back to Use default, so switching the profile away and back leaves the reader on Use default rather than the stored one; that revert is a real unsaved change, not a normalized one._
 
 ### Device pairing settings checkpoint (2026-10-06)
 

@@ -74,6 +74,7 @@ import {
   enqueueOriginalReceipt,
   enqueueReceiptReprint,
   enqueueSaleReceipt,
+  printerLookup,
 } from "./receipt-print.js";
 
 /**
@@ -833,8 +834,11 @@ async function fileImmediateSale(
     ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
 
-  await enqueueSaleReceipt(tx, cfg, ticket, saleId);
-  if (taken !== null) await enqueueSaleDrawer(tx, cfg, saleId, taken.method, operatorId);
+  const printers = printerLookup(tx, cfg.origin);
+  await enqueueSaleReceipt(tx, cfg, ticket, saleId, printers);
+  if (taken !== null) {
+    await enqueueSaleDrawer(tx, cfg, saleId, taken.method, operatorId, printers);
+  }
   return ticket;
 }
 
@@ -1083,6 +1087,7 @@ async function payIntegrated(
       amount: addDecimal(baseAmount, tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
       ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
+      ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       allowOffline: req.allowOffline,
       simulationOutcome: req.simulationOutcome,
       demoAttemptId: req.demoAttemptId,

@@ -545,9 +545,21 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check who can sign in on this profile and save again",
     es: "Revisa quién puede iniciar sesión con este perfil y vuelve a guardar",
   },
+  "device.equipment_held": {
+    en: "Another device has that equipment now. Choose another",
+    es: "Otro dispositivo tiene ahora ese equipo. Elige otro",
+  },
+  "reader.payment_in_progress": {
+    en: "A payment is in progress on that card reader. Try again when it finishes",
+    es: "Hay un cobro en curso en ese lector de tarjetas. Vuelve a intentarlo cuando termine",
+  },
+  "reader.not_held": {
+    en: "This device does not have that card reader. Choose it on the device first",
+    es: "Este dispositivo no tiene ese lector de tarjetas. Elígelo primero en el dispositivo",
+  },
   "device.binding_invalid": {
-    en: "This profile cannot use that printer, or it has been disabled. Choose another",
-    es: "Este perfil no puede usar esa impresora, o la impresora se ha deshabilitado. Elige otra",
+    en: "This profile cannot use that printer or card reader, or it has been disabled. Choose another",
+    es: "Este perfil no puede usar esa impresora o lector de tarjetas, o se ha deshabilitado. Elige otro",
   },
   "shared.invalid_id": {
     en: "That identifier isn't valid",

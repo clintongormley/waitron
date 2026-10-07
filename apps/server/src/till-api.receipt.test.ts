@@ -6,6 +6,7 @@ import {
   deviceProfiles,
   devices,
   drawerOpens,
+  printers,
   printJobs,
   sales,
   saleLines,
@@ -48,7 +49,7 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { CAPABILITY_FLAGS, setProfilePrinterLists } from "@waitron/layouts";
+import { CAPABILITY_FLAGS, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -281,7 +282,11 @@ async function configureReceipt(
       venueReceiptPrinter = opts.printerId;
       await tx
         .update(devices)
-        .set({ receiptPrinterId: opts.printerId, paymentSlipPrinterId: opts.printerId })
+        .set({
+          receiptPrinterId: opts.printerId,
+          paymentSlipPrinterId: opts.printerId,
+          cashDrawerPrinterId: opts.printerId,
+        })
         .where(eq(devices.locationId, cfg.locationId));
     }
   });
@@ -290,7 +295,11 @@ async function configureReceipt(
 async function startOnVenuePrinter(deviceId: string): Promise<void> {
   await suite.db
     .update(devices)
-    .set({ receiptPrinterId: venueReceiptPrinter, paymentSlipPrinterId: venueReceiptPrinter })
+    .set({
+      receiptPrinterId: venueReceiptPrinter,
+      paymentSlipPrinterId: venueReceiptPrinter,
+      cashDrawerPrinterId: venueReceiptPrinter,
+    })
     .where(eq(devices.id, deviceId));
 }
 
@@ -1096,7 +1105,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect(opens[0]!.saleId).toBeNull();
   });
 
-  it("throws drawer.no_printer (400) and writes nothing when the device has no receipt printer", async () => {
+  it("throws drawer.no_printer (400) and writes nothing when the device has no drawer", async () => {
     const { cfg, supervisorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1159,7 +1168,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   });
 });
 
-describe("POST /api/drawer/open from a device opens its own receipt printer's drawer", () => {
+describe("POST /api/drawer/open from a device opens its own chosen drawer", () => {
   /** A till device allowed to open a drawer, and its cookie. */
   async function enrolDrawerTill(cfg: TillConfig): Promise<{ cookie: string; deviceId: string }> {
     tillDeviceCounter += 1;
@@ -1183,7 +1192,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
   async function setDevicePrinter(deviceId: string, printerId: string): Promise<void> {
     await suite.db
       .update(devices)
-      .set({ receiptPrinterId: printerId })
+      .set({ receiptPrinterId: printerId, cashDrawerPrinterId: printerId })
       .where(eq(devices.id, deviceId));
   }
 
@@ -1202,7 +1211,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
     return { ...venue, app, press };
   }
 
-  it("opens the drawer of the pressing device's own receipt printer, and the row names that device", async () => {
+  it("opens the pressing device's own chosen drawer, and the row names that device", async () => {
     const { cfg, supervisorId, press } = await venueWithAuthorizedOperator();
     const till = await enrolDrawerTill(cfg);
     const printerId = await makePrinter(cfg);
@@ -1440,7 +1449,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
       authorizedBy: supervisorId, // the supervisor who authorized it
       viaOverride: true,
     });
-    // The kick still fires to the device's receipt printer.
+    // The kick still fires to the device's drawer printer.
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]!.printerId).toBe(printerId);
@@ -2280,7 +2289,8 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
 });
 
 describe("receipts, payment slips and the cash drawer follow the requesting device", () => {
-  /** A device on its own profile listing `receipt` and `slip`; it starts on the first of each. */
+  /** A device on its own profile listing `receipt`, `slip` and `drawer`, the first of each its
+   *  default. */
   async function enrolPrintingDevice(
     cfg: TillConfig,
     opts: {
@@ -2288,6 +2298,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       capabilities: string[];
       receipt: string[];
       slip: string[];
+      drawer?: string[];
     },
   ): Promise<{ deviceId: string; cookie: string }> {
     tillDeviceCounter += 1;
@@ -2303,8 +2314,13 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       .returning({ id: deviceProfiles.id });
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profile!.id, {
+        ...emptyPrinterLists(),
         receiptPrinterIds: opts.receipt,
         paymentSlipPrinterIds: opts.slip,
+        cashDrawerPrinterIds: opts.drawer ?? [],
+        receiptPrinterDefaultId: opts.receipt[0] ?? null,
+        paymentSlipPrinterDefaultId: opts.slip[0] ?? null,
+        cashDrawerPrinterDefaultId: opts.drawer?.[0] ?? null,
       }),
     );
     const dev = await enrolDeviceForTest(suite.db, cfg, {
@@ -2425,10 +2441,10 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const onA = await signIn(a.cookie);
     const id = await cardSaleWithCapture(app, cfg, onA, each.menuItemId);
 
-    const switched = await app.request("/api/device/printers", {
+    const switched = await app.request("/api/device/equipment", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: onA },
-      body: JSON.stringify({ paymentSlipPrinterId: r1 }),
+      body: JSON.stringify({ role: "payment_slip", selection: { id: r1 }, via: "list" }),
     });
     expect(switched.status).toBe(200);
     expect((await post(app, onA, `/api/sales/${id}/payment-slip`)).status).toBe(200);
@@ -2436,15 +2452,17 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     expect((await jobs()).map((job) => job.printerId)).toEqual([r1]);
   });
 
-  it("opens no drawer on a cash sale when the device's receipt printer has none, whatever another printer has", async () => {
+  it("opens no drawer on a cash sale when the device's drawer printer no longer has one, whatever its receipt printer has", async () => {
     const { cfg, each, app, signIn } = await venueWithPrinters();
-    const noDrawer = await makePrinter(cfg, false);
-    await makePrinter(cfg);
+    const detached = await makePrinter(cfg);
+    const receipt = await makePrinter(cfg);
     const device = await enrolPrintingDevice(cfg, {
       capabilities: ["open-cash-drawer", "take-cash"],
-      receipt: [noDrawer],
+      receipt: [receipt],
       slip: [],
+      drawer: [detached],
     });
+    await suite.db.update(printers).set({ hasCashDrawer: false }).where(eq(printers.id, detached));
 
     await ringSale(app, cfg, await signIn(device.cookie), each.menuItemId);
 
@@ -2460,6 +2478,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       capabilities: ["open-cash-drawer", "take-cash"],
       receipt: [drawer],
       slip: [],
+      drawer: [drawer],
     });
 
     await ringSale(app, cfg, await signIn(handheld.cookie), each.menuItemId);
@@ -2479,6 +2498,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       capabilities: ["take-cash"],
       receipt: [drawer],
       slip: [],
+      drawer: [drawer],
     });
 
     await ringSale(app, cfg, await signIn(till.cookie), each.menuItemId);
@@ -2495,6 +2515,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       capabilities: ["open-cash-drawer"],
       receipt: [drawer],
       slip: [],
+      drawer: [drawer],
     });
 
     const res = await app.request("/api/drawer/open", {
@@ -2519,6 +2540,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       capabilities: [],
       receipt: [drawer],
       slip: [],
+      drawer: [drawer],
     });
 
     const res = await post(app, await signIn(handheld.cookie), "/api/drawer/open");
@@ -2531,11 +2553,37 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("refuses the drawer by hand from a device with no receipt printer, naming the device", async () => {
+  it("opens the drawer by hand on the device's drawer printer, not its receipt printer", async () => {
+    const { cfg, app, signIn, supervisorId } = await venueWithPrinters();
+    const receipt = await makePrinter(cfg);
+    const drawer = await makePrinter(cfg);
+    const device = await enrolPrintingDevice(cfg, {
+      capabilities: ["open-cash-drawer"],
+      receipt: [receipt],
+      slip: [],
+      drawer: [drawer],
+    });
+
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: await signIn(device.cookie) },
+      body: JSON.stringify({ override: { personId: supervisorId, pin: "5555" } }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await jobs()).map((job) => [job.printerId, job.kind, job.payload])).toEqual([
+      [drawer, "drawer", [...DRAWER_KICK]],
+    ]);
+    expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId])).toEqual([
+      ["manual", drawer],
+    ]);
+  });
+
+  it("refuses the drawer by hand from a device whose drawer resolves to none, naming the device, though its receipt printer has a drawer", async () => {
     const { cfg, app, signIn, supervisorId } = await venueWithPrinters();
     const device = await enrolPrintingDevice(cfg, {
       capabilities: ["open-cash-drawer"],
-      receipt: [],
+      receipt: [await makePrinter(cfg)],
       slip: [],
     });
 

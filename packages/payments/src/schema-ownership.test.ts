@@ -14,13 +14,23 @@ const OWNED = [
   "card_readers",
   "device_card_readers",
   "payment_resolutions",
+  "device_profile_card_readers",
+  "card_reader_holders",
 ];
 
 /**
  * Every core table this package's schema files import (to declare foreign keys) or otherwise
  * risk re-exporting. None of these may ever appear in this package's output.
  */
-const CORE = ["working_orders", "sales", "tenants", "tenders", "invoice_series", "devices"];
+const CORE = [
+  "working_orders",
+  "sales",
+  "tenants",
+  "tenders",
+  "invoice_series",
+  "devices",
+  "device_profiles",
+];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 

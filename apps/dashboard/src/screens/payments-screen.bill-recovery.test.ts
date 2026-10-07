@@ -49,6 +49,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     liveData: new LiveData(),
     listPaymentProviders: vi.fn().mockResolvedValue([]),
     listReaders: vi.fn().mockResolvedValue([]),
+    listReaderHolders: vi.fn().mockResolvedValue([]),
     listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([PAYMENT]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([REFUND]),

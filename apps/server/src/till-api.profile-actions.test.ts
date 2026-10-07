@@ -89,9 +89,9 @@ import {
  *
  * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
  * read, including the POST previews (`/payments/preview`, `/adjustments/preview`) and the dead-end
- * checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-printer
- * routes; and table placement, which needs `venue.configure`. Left ungated by decision, each with
- * its reason:
+ * checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
+ * routes (choosing equipment is not printing, paying or opening the drawer); and table placement,
+ * which needs `venue.configure`. Left ungated by decision, each with its reason:
  * - the watcher "done" marks: each is the watcher's own record of what it has seen, not preparing
  *   or handing over. `/api/device/watcher/done` is made by the watcher's own display, which is
  *   allowed only `prepare-orders`; `/api/watchers/:id/done` by a person signed in on a till that

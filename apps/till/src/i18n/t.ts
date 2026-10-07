@@ -40,6 +40,26 @@ export function named(name: string, withName: string, unnamed: string): string {
   return name === "" ? unnamed : withName.replace("{name}", () => name);
 }
 
+/** A sentence about `item` and the device carrying it: `withPerson` naming who is signed in there,
+ * or `withDevice` when nobody is. Each `{item}`, `{device}` and `{person}` is filled in one pass,
+ * so a name containing one of them is written as it is. */
+export function carriedText(
+  item: string,
+  holder: { deviceName: string; personName: string | null },
+  withDevice: StringKey,
+  withPerson: StringKey,
+): string {
+  const values: Record<string, string> = {
+    item,
+    device: holder.deviceName,
+    person: holder.personName ?? "",
+  };
+  return t(holder.personName === null ? withDevice : withPerson).replace(
+    /\{(item|device|person)\}/g,
+    (_whole, key: string) => values[key]!,
+  );
+}
+
 /** The hour and minute of `at`, as the active locale writes a time of day. */
 export function clockTime(at: Date | number): string {
   return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(at);

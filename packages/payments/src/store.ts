@@ -14,6 +14,7 @@ import { devices, nowIso, workingOrders } from "@waitron/db";
 import "./errors.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
+import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
 import type { CardDetails, PaymentState } from "./provider.js";
 
 /** `amount` is the exact decimal for the column's count of cents, never a float. */
@@ -46,6 +47,8 @@ interface NewPayment {
   card?: CardDetails;
   /** The bill payment this attempt charges for; absent for a payment of a whole order. */
   billPaymentId?: string;
+  /** Waitron's `card_readers.id` the payment runs on; absent when no reader is named. */
+  readerId?: string;
 }
 
 /** The storage boundary: a money column counts whole cents, and nothing above this sees a count. */
@@ -87,6 +90,7 @@ async function insertPayment(
     cardEntryMode: params.card?.entryMode ?? null,
     cardAuthCode: params.card?.authCode ?? null,
     billPaymentId: params.billPaymentId ?? null,
+    readerId: params.readerId ?? null,
     state,
     settledAt,
   });
@@ -117,8 +121,28 @@ export async function insertFailedPayment(
   await insertPayment(tx, params, "failed", null);
 }
 
+/**
+ * Refuses a payment start on `readerId` unless the origin device holds it and no other device has a
+ * payment in progress on it; no reader named passes. Run in the transaction that writes the
+ * payment's first row, so a takeover and a start cannot both commit.
+ */
+export async function assertReaderStartable(
+  tx: Transaction,
+  origin: DeviceOrigin,
+  readerId: string | undefined,
+): Promise<void> {
+  if (readerId === undefined) return;
+  if ((await readerHeldBy(tx, readerId)) !== origin.deviceId) {
+    throw new AppError("reader.not_held", { readerId });
+  }
+  if (await readerPaymentInProgress(tx, readerId, origin.deviceId)) {
+    throw new AppError("reader.payment_in_progress", { readerId });
+  }
+}
+
 /** Committed BEFORE a provider's network call, so a crash mid-network leaves a recoverable row and
- * the `payment_ref` is already claimed. Resolved by `captureAttempting`/`failAttempting`. */
+ * the `payment_ref` is already claimed. Resolved by `captureAttempting`/`failAttempting`. A named
+ * reader is checked by {@link assertReaderStartable}, after the profile. */
 export async function insertAttempting(
   tx: Transaction,
   params: NewPayment & {
@@ -136,6 +160,7 @@ export async function insertAttempting(
       throw new AppError("device.profile_changed", {});
     }
   }
+  await assertReaderStartable(tx, params.origin, params.readerId);
   await insertPayment(tx, params, "attempting", null);
 }
 

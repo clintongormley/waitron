@@ -20,6 +20,7 @@ import type {
 import type { PaymentRow } from "../store.js";
 import { recordAttemptResolution } from "../resolutions.js";
 import {
+  assertReaderStartable,
   captureAttempting,
   claimAcceptedOffline,
   declineForwarded,
@@ -238,15 +239,19 @@ export class FakePaymentProvider implements PaymentProvider {
       paymentRef,
       amount: params.amount,
       billPaymentId: params.billPaymentId,
+      readerId: params.readerId,
     };
     const crash = this.crashNext;
     this.crashNext = null;
     if (crash !== null) {
-      await this.db.transaction((tx) =>
-        crash === "captured"
-          ? insertCapturedPayment(tx, { ...common, settledAt: new Date() })
-          : insertAttempting(tx, common),
-      );
+      await this.db.transaction(async (tx) => {
+        if (crash === "captured") {
+          await assertReaderStartable(tx, params.origin, params.readerId);
+          await insertCapturedPayment(tx, { ...common, settledAt: new Date() });
+        } else {
+          await insertAttempting(tx, common);
+        }
+      });
       throw new Error(`fake provider: the process stopped after writing a ${crash} row`);
     }
     if (this.stallNext) {
@@ -264,6 +269,7 @@ export class FakePaymentProvider implements PaymentProvider {
     this.failNext = false;
     const settledAt = willFail ? null : new Date();
     await this.db.transaction(async (tx) => {
+      await assertReaderStartable(tx, params.origin, params.readerId);
       if (willFail) {
         await insertFailedPayment(tx, common);
       } else {
@@ -392,6 +398,7 @@ export class FakePaymentProvider implements PaymentProvider {
   /** On "refuse" writes NOTHING and reports `network_unavailable`. */
   private async collectOffline(params: CollectParams, paymentRef: string): Promise<PaymentResult> {
     return this.db.transaction(async (tx) => {
+      await assertReaderStartable(tx, params.origin, params.readerId);
       const policy = await getPaymentPolicy(tx);
       const decision = resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount);
       if (decision === "refuse") {
@@ -412,6 +419,7 @@ export class FakePaymentProvider implements PaymentProvider {
         amount: params.amount,
         settledAt,
         billPaymentId: params.billPaymentId,
+        readerId: params.readerId,
       });
       return {
         provider: this.provider,

@@ -49,7 +49,11 @@ declare module "@waitron/shared" {
         | "bad_canvas_ref"
         | "bad_inactivity_timeout"
         | "shared_display_action"
-        | "bad_starting_screen";
+        | "bad_starting_screen"
+        | "default_not_listed"
+        | "no_cash_drawer";
+      /** The printer list or default field a `default_not_listed` or `no_cash_drawer` names. */
+      field?: string;
     };
     /** `field` names the request field that held the id, where that is not the path's own. */
     "device_profile.not_found": { field?: "approvedProfileIds" };

@@ -2666,29 +2666,45 @@ describe("TillApi", () => {
     });
   });
 
-  it("setDevicePrinters PUTs only the field given to /api/device/printers and returns the stored pair", async () => {
-    const stored = { receiptPrinterId: "P-off", paymentSlipPrinterId: "S1" };
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stored));
+  it("getDeviceEquipment GETs /api/device/equipment with the signal it is given", async () => {
+    const equipment = { roles: [] };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(equipment));
+    const signal = new AbortController().signal;
 
-    const r = await new TillApi("", fetchStub).setDevicePrinters({ paymentSlipPrinterId: "S1" });
+    const r = await new TillApi("", fetchStub).getDeviceEquipment({ signal });
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/device/printers",
+      "/api/device/equipment",
+      expect.objectContaining({ method: "GET", credentials: "include", signal }),
+    );
+    expect(r).toEqual(equipment);
+  });
+
+  it("setDeviceEquipment PUTs the role, selection, way and takeover to /api/device/equipment and returns the equipment", async () => {
+    const equipment = { roles: [] };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(equipment));
+    const change = {
+      role: "card_terminal",
+      selection: { id: "R1" },
+      via: "list",
+      takeOver: true,
+    } as const;
+
+    const r = await new TillApi("", fetchStub).setDeviceEquipment(change);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/equipment",
       expect.objectContaining({
         method: "PUT",
         credentials: "include",
-        body: JSON.stringify({ paymentSlipPrinterId: "S1" }),
+        body: JSON.stringify(change),
       }),
     );
-    expect(r).toEqual(stored);
+    expect(r).toEqual(equipment);
   });
 
   it("switchDeviceProfile POSTs the profile to /api/device/active-profile and returns what was stored", async () => {
-    const stored = {
-      activeProfileId: "pr-bar",
-      receiptPrinterId: "P1",
-      paymentSlipPrinterId: null,
-    };
+    const stored = { activeProfileId: "pr-bar" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stored));
 
     const r = await new TillApi("", fetchStub).switchDeviceProfile("pr-bar");

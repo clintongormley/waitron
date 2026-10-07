@@ -973,14 +973,15 @@ browser test** — most of these rules exist because a test passed while proving
   cash payment, or a card hand-keyed on a machine Waitron does not talk to (its slip is kept in the
   drawer, owner 2026-10-01), enqueues a separate audited `drawer` job; receipt jobs are `document`
   jobs and contain no drawer command. A card on a connected machine opens nothing. A device opens
-  its current receipt printer's drawer only when its profile has `open-cash-drawer` and that
-  printer has a drawer, handhelds included (`drawerPrinter`, `apps/server/src/receipt-print.ts`);
-  nothing per till decides it, and a till that must not open a drawer it shares gets a profile of
-  its own (approved by the owner 2026-10-03, A238). `take-cash` decides whether a device takes cash
+  the drawer of its own drawer choice, else its profile's default drawer, not by following its
+  receipt printer, and only when its profile has `open-cash-drawer` and that printer is active and has a
+  drawer, handhelds included (`drawerPrinter` and `resolveDrawerPrinter`,
+  `apps/server/src/receipt-print.ts`); a till that must not open a drawer it shares gets a profile
+  of its own (approved by the owner 2026-10-03, A238). `take-cash` decides whether a device takes cash
   at all: a cash sale, collection or bill payment, or a refund of a cash bill payment, from a
   profile without it is refused `device.cash_not_allowed` (`assertTakesCash`, `apps/server/src/device-session.ts`). The manual open needs a session on an
   active device, the profile's `open-cash-drawer`, and always `cash.drawer`
-  or the PIN of someone holding it. The one exception is the dashboard's "Test open drawer"
+  or the PIN of someone holding it, and opens the same drawer the automatic paths would. The one exception is the dashboard's "Test open drawer"
   calibration (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's
   drawer for a manager holding `printer.manage` and `cash.drawer`. Drawer jobs cannot be manually
   resent. The receipt review reproduced a resent cash receipt opening the drawer without a new

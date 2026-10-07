@@ -19,14 +19,10 @@ import {
   listStaffAdmittedTo,
   sessions,
 } from "@waitron/identity";
-import { payments } from "@waitron/payments";
-import {
-  getDeviceProfile,
-  isSharedDisplay,
-  kindOfFormFactor,
-  printerChoices,
-} from "@waitron/layouts";
+import { IN_PROGRESS_PAYMENT_STATES, payments } from "@waitron/payments";
+import { getDeviceProfile, isSharedDisplay, kindOfFormFactor } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
+import { settleDevice } from "./device-equipment.js";
 import { requireLiveStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readWatcher } from "./watchers.js";
@@ -71,21 +67,23 @@ export async function insertDevice(
   }
 }
 
-/** The printers a device row holds. */
+/** The receipt, slip and drawer printers a device row has chosen; `null` is Use default. */
 interface DevicePrinters {
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
+  cashDrawerPrinterId: string | null;
 }
 
 /**
  * Write a device's name, profile and binding, plus any `also` columns, refusals mapped by
- * {@link mapDeviceNameTaken}. The printers it holds stay while the profile does; under a new profile
- * each stays if that profile offers it at the device's own location, and otherwise becomes the
- * first one it offers there. Returns the printers the row now holds.
+ * {@link mapDeviceNameTaken}. When the profile changes or a disabled device comes back, its
+ * equipment settles ({@link settleDevice}), taking the profile's free portable defaults; anything
+ * else, such as a rename, leaves its choices and holds alone. Returns the printer choices the row
+ * now holds.
  */
 export async function updateDeviceSettings(
   tx: Transaction,
-  device: DevicePrinters & { id: string; locationId: string; deviceProfileId: string | null },
+  device: { id: string },
   settings: {
     label: string;
     profileId: string;
@@ -94,13 +92,10 @@ export async function updateDeviceSettings(
   },
   also: Partial<typeof devices.$inferInsert> = {},
 ): Promise<DevicePrinters> {
-  const printers =
-    settings.profileId === device.deviceProfileId
-      ? {
-          receiptPrinterId: device.receiptPrinterId,
-          paymentSlipPrinterId: device.paymentSlipPrinterId,
-        }
-      : await keptOrFirstPrinters(tx, device, settings.profileId);
+  const [before] = await tx
+    .select({ profileId: devices.deviceProfileId, active: devices.active })
+    .from(devices)
+    .where(eq(devices.id, device.id));
   try {
     await tx
       .update(devices)
@@ -110,27 +105,24 @@ export async function updateDeviceSettings(
         deviceProfileId: settings.profileId,
         stationId: settings.stationId,
         watcherId: settings.watcherId,
-        ...printers,
       })
       .where(eq(devices.id, device.id));
   } catch (error) {
     throw mapDeviceNameTaken(error);
   }
-  return printers;
-}
-
-async function keptOrFirstPrinters(
-  tx: Transaction,
-  device: DevicePrinters & { locationId: string },
-  profileId: string,
-): Promise<DevicePrinters> {
-  const choices = await printerChoices(tx, profileId, device.locationId);
-  const pick = (current: string | null, offered: { id: string }[]) =>
-    offered.some((choice) => choice.id === current) ? current : (offered[0]?.id ?? null);
-  return {
-    receiptPrinterId: pick(device.receiptPrinterId, choices.receipt),
-    paymentSlipPrinterId: pick(device.paymentSlipPrinterId, choices.paymentSlip),
-  };
+  const comingBack = before !== undefined && !before.active && also.active === true;
+  if (before?.profileId !== settings.profileId || comingBack) {
+    await settleDevice(tx, device.id, { acquire: true });
+  }
+  const [stored] = await tx
+    .select({
+      receiptPrinterId: devices.receiptPrinterId,
+      paymentSlipPrinterId: devices.paymentSlipPrinterId,
+      cashDrawerPrinterId: devices.cashDrawerPrinterId,
+    })
+    .from(devices)
+    .where(eq(devices.id, device.id));
+  return stored!;
 }
 
 /**
@@ -253,7 +245,7 @@ export async function assertNoPaymentInProgress(tx: Transaction, deviceId: strin
     .select({ id: payments.id })
     .from(payments)
     .where(
-      and(eq(payments.deviceId, deviceId), inArray(payments.state, ["attempting", "initiated"])),
+      and(eq(payments.deviceId, deviceId), inArray(payments.state, IN_PROGRESS_PAYMENT_STATES)),
     )
     .limit(1);
   if (found !== undefined) throw new AppError("device.payment_in_progress", {});
@@ -289,25 +281,22 @@ export async function endSessionsNotAdmitted(
 /**
  * Switch the device's active profile to `profileId` for the person signed in on `sessionId`: one
  * the device is approved for and the person may sign in on, whose list names the station or watcher
- * the device shows, with no payment of the device's in progress. Printers follow
+ * the device shows, with no payment of the device's in progress. Its equipment settles through
  * {@link updateDeviceSettings}; the sessions of people the new profile does not admit end, every
  * one when it is a shared display. Choosing the active profile changes nothing.
  */
 export async function switchActiveProfile(
   tx: Transaction,
   input: { deviceId: string; sessionId: string; personId: string; profileId: string },
-): Promise<{ activeProfileId: string } & DevicePrinters> {
+): Promise<{ activeProfileId: string }> {
   const [device] = await tx
     .select({
       id: devices.id,
       active: devices.active,
       label: devices.label,
-      locationId: devices.locationId,
       deviceProfileId: devices.deviceProfileId,
       stationId: devices.stationId,
       watcherId: devices.watcherId,
-      receiptPrinterId: devices.receiptPrinterId,
-      paymentSlipPrinterId: devices.paymentSlipPrinterId,
     })
     .from(devices)
     .where(eq(devices.id, input.deviceId));
@@ -317,13 +306,8 @@ export async function switchActiveProfile(
     .from(sessions)
     .where(and(eq(sessions.id, input.sessionId), isNull(sessions.endedAt)));
   if (session === undefined) throw new AppError("session.required", {});
-  if (input.profileId === device.deviceProfileId) {
-    return {
-      activeProfileId: device.deviceProfileId,
-      receiptPrinterId: device.receiptPrinterId,
-      paymentSlipPrinterId: device.paymentSlipPrinterId,
-    };
-  }
+  if (input.profileId === device.deviceProfileId)
+    return { activeProfileId: device.deviceProfileId };
   const alternatives = (await readApprovedAlternatives(tx, device.id)).get(device.id) ?? [];
   if (!alternatives.some((profile) => profile.id === input.profileId))
     throw new AppError("device_profile.not_approved", {});
@@ -334,7 +318,7 @@ export async function switchActiveProfile(
     stationId: device.stationId,
     watcherId: device.watcherId,
   });
-  const printers = await updateDeviceSettings(tx, device, {
+  await updateDeviceSettings(tx, device, {
     label: device.label,
     profileId: input.profileId,
     stationId: device.stationId,
@@ -342,7 +326,7 @@ export async function switchActiveProfile(
   });
   await keepApprovedAfterSwitch(tx, device.id, device.deviceProfileId, input.profileId);
   await endSessionsNotAdmitted(tx, device.id, input.profileId);
-  return { activeProfileId: input.profileId, ...printers };
+  return { activeProfileId: input.profileId };
 }
 
 /**

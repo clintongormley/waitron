@@ -199,8 +199,10 @@ async function venueWith(
   const session = await withTransaction(db, (tx) =>
     loginWithPin(tx, { deviceId: sessionDeviceId, personId: staffId, pin: "5555" }),
   );
-  // Every device prints its receipts on the one printer.
-  await withTransaction(db, (tx) => tx.update(devices).set({ receiptPrinterId: printerId }));
+  // Every device prints its receipts on the one printer and opens its drawer.
+  await withTransaction(db, (tx) =>
+    tx.update(devices).set({ receiptPrinterId: printerId, cashDrawerPrinterId: printerId }),
+  );
   return {
     app,
     cfg,
@@ -564,7 +566,8 @@ function reprint(v: Venue, saleId: string, body?: unknown): Promise<Response> {
 }
 
 describe("an issued receipt reprinted in another receipt language", () => {
-  /** A Barcelona venue saved as Catalan whose receipt printer has a cash drawer, and one cash sale. */
+  /** A Barcelona venue saved as Catalan whose receipt and drawer printer has a cash drawer, and one
+   *  cash sale. */
   async function catalanSale() {
     const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
     await withTransaction(suite.db, (tx) => tx.update(printers).set({ hasCashDrawer: true }));

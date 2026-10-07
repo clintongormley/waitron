@@ -2,7 +2,6 @@ import { and, eq, isNull } from "drizzle-orm";
 import {
   deviceProfilePrinters,
   deviceProfiles,
-  devices,
   kitchenStations,
   printAgents,
   printers,
@@ -85,7 +84,8 @@ export async function configureDemoPrinter(
   });
 }
 
-/** Takes the printer off every profile list; `setProfilePrinterLists` moves the devices on it. */
+/** Takes the printer off every profile list and default; `setProfilePrinterLists` clears the
+ * devices' choices of it. */
 async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<void> {
   const listing = await tx
     .selectDistinct({ id: deviceProfilePrinters.deviceProfileId })
@@ -94,49 +94,63 @@ async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<vo
   for (const { id: profileId } of listing) {
     const lists = await readProfilePrinterLists(tx, profileId);
     const without = (ids: string[]) => ids.filter((id) => id !== printerId);
+    const unlessIt = (id: string | null) => (id === printerId ? null : id);
     await setProfilePrinterLists(tx, profileId, {
       receiptPrinterIds: without(lists.receiptPrinterIds),
       paymentSlipPrinterIds: without(lists.paymentSlipPrinterIds),
+      cashDrawerPrinterIds: without(lists.cashDrawerPrinterIds),
+      receiptPrinterDefaultId: unlessIt(lists.receiptPrinterDefaultId),
+      paymentSlipPrinterDefaultId: unlessIt(lists.paymentSlipPrinterDefaultId),
+      cashDrawerPrinterDefaultId: unlessIt(lists.cashDrawerPrinterDefaultId),
     });
   }
 }
 
 /**
- * Lists the printer last on every live profile's receipt and payment slip lists, puts each active
- * device at the location on it for whichever of the two kinds it has no printer for, and gives it to
- * every preparation station there. A printer a device already holds stays. Safe to repeat.
+ * Lists the printer last on every live profile's receipt and payment slip lists and makes it the
+ * default of each that has none; while the printer has a cash drawer it does the same on the cash
+ * drawer list, so devices on Use default print and open the drawer on it. Gives it to every
+ * preparation station there. A device's own choice, a profile's own default and a listing the
+ * profile already has stay. Safe to repeat.
  */
 export async function routeToDemoPrinter(
   tx: Transaction,
   locationId: string,
   printerId: string,
 ): Promise<void> {
+  const [printer] = await tx
+    .select({ hasCashDrawer: printers.hasCashDrawer })
+    .from(printers)
+    .where(eq(printers.id, printerId));
+  // `setProfilePrinterLists` refuses a newly listed drawer printer without a drawer.
+  const opensDrawer = printer?.hasCashDrawer === true;
   const profiles = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)
     .where(isNull(deviceProfiles.retiredAt));
   for (const profile of profiles) {
     const lists = await readProfilePrinterLists(tx, profile.id);
-    if (
-      lists.receiptPrinterIds.includes(printerId) &&
-      lists.paymentSlipPrinterIds.includes(printerId)
-    )
+    const listed = [lists.receiptPrinterIds, lists.paymentSlipPrinterIds];
+    const defaults = [lists.receiptPrinterDefaultId, lists.paymentSlipPrinterDefaultId];
+    if (opensDrawer) {
+      listed.push(lists.cashDrawerPrinterIds);
+      defaults.push(lists.cashDrawerPrinterDefaultId);
+    }
+    if (listed.every((ids) => ids.includes(printerId)) && defaults.every((id) => id !== null))
       continue;
     const append = (ids: string[]) => (ids.includes(printerId) ? ids : [...ids, printerId]);
     await setProfilePrinterLists(tx, profile.id, {
       receiptPrinterIds: append(lists.receiptPrinterIds),
       paymentSlipPrinterIds: append(lists.paymentSlipPrinterIds),
+      cashDrawerPrinterIds: opensDrawer
+        ? append(lists.cashDrawerPrinterIds)
+        : lists.cashDrawerPrinterIds,
+      receiptPrinterDefaultId: lists.receiptPrinterDefaultId ?? printerId,
+      paymentSlipPrinterDefaultId: lists.paymentSlipPrinterDefaultId ?? printerId,
+      cashDrawerPrinterDefaultId:
+        lists.cashDrawerPrinterDefaultId ?? (opensDrawer ? printerId : null),
     });
   }
-  const atLocation = and(eq(devices.locationId, locationId), eq(devices.active, true));
-  await tx
-    .update(devices)
-    .set({ receiptPrinterId: printerId })
-    .where(and(atLocation, isNull(devices.receiptPrinterId)));
-  await tx
-    .update(devices)
-    .set({ paymentSlipPrinterId: printerId })
-    .where(and(atLocation, isNull(devices.paymentSlipPrinterId)));
   const stations = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)

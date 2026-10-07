@@ -28,6 +28,7 @@ export default defineConfig({
     include: [
       "axe-core",
       "qrcode-generator",
+      "jsqr",
       "lit/directives/unsafe-html.js",
       "lit/directives/keyed.js",
       "lit/directives/live.js",

@@ -21,6 +21,8 @@ const printer: Printer = {
   paperWidth: "80mm",
   resolution: "180dpi",
   hasCashDrawer: false,
+  portable: false,
+  holder: null,
   pendingJobs: 0,
   lastPrintAt: null,
   lastPrintAgentId: null,

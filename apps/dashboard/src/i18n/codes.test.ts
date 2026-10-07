@@ -416,10 +416,10 @@ it("says a category delete deleted nothing because the categories' contents chan
 
 it("says a printer a device cannot use may have been disabled, in the Printers screen's word", () => {
   expect(codeMessage("device.binding_invalid", "en")).toBe(
-    "This profile cannot use that printer, or it has been disabled. Choose another",
+    "This profile cannot use that printer or card reader, or it has been disabled. Choose another",
   );
   expect(codeMessage("device.binding_invalid", "es")).toBe(
-    "Este perfil no puede usar esa impresora, o la impresora se ha deshabilitado. Elige otra",
+    "Este perfil no puede usar esa impresora o lector de tarjetas, o se ha deshabilitado. Elige otro",
   );
 });
 

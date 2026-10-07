@@ -48,16 +48,23 @@ import type {
   PersonRole,
   PersonSummary,
   Printer,
+  ProfileEquipmentDefaults,
   ProfileKitchenLists,
   ProfilePrinterLists,
+  ProfileReaderList,
   ProfileSaveExtras,
+  ReaderRow,
   ProfileScopeChoices,
   ProfileServiceScope,
   Station,
   Watcher,
 } from "../api/client.js";
 
-type PrinterListKey = keyof ProfilePrinterLists;
+/** Every printer list and default a profile holds; the save sends the drawer and defaults apart. */
+type PrinterDraft = ProfilePrinterLists & ProfileEquipmentDefaults;
+type PrinterListKey = "receiptPrinterIds" | "paymentSlipPrinterIds" | "cashDrawerPrinterIds";
+type PrinterDefaultKey =
+  "receiptPrinterDefaultId" | "paymentSlipPrinterDefaultId" | "cashDrawerPrinterDefaultId";
 
 interface ProfileDraft {
   name: string;
@@ -65,7 +72,7 @@ interface ProfileDraft {
   capabilities: CapabilityFlag[];
   formFactor: FormFactor;
   inactivityMinutes: number | null;
-  printerLists: ProfilePrinterLists;
+  printerLists: PrinterDraft;
   kitchenLists: ProfileKitchenLists;
   departmentId: string;
   everyZone: boolean;
@@ -79,17 +86,70 @@ interface ProfileDraft {
 const PRINTER_LISTS = [
   {
     key: "receiptPrinterIds",
+    defaultKey: "receiptPrinterDefaultId",
+    defaultField: "receiptDefault",
     test: "receipt-printers",
     heading: "device_profiles.receipt_printers",
+    defaultLabel: "device_profiles.receipt_default",
   },
   {
     key: "paymentSlipPrinterIds",
+    defaultKey: "paymentSlipPrinterDefaultId",
+    defaultField: "slipDefault",
     test: "payment-slip-printers",
     heading: "device_profiles.payment_slip_printers",
+    defaultLabel: "device_profiles.payment_slip_default",
   },
-] as const satisfies readonly { key: PrinterListKey; test: string; heading: StringKey }[];
+  {
+    key: "cashDrawerPrinterIds",
+    defaultKey: "cashDrawerPrinterDefaultId",
+    defaultField: "drawerDefault",
+    test: "cash-drawer-printers",
+    heading: "device_profiles.cash_drawer_printers",
+    defaultLabel: "device_profiles.cash_drawer_default",
+  },
+] as const satisfies readonly {
+  key: PrinterListKey;
+  defaultKey: PrinterDefaultKey;
+  defaultField: EditorField;
+  test: string;
+  heading: StringKey;
+  defaultLabel: StringKey;
+}[];
 
-const NO_PRINTER_LISTS: ProfilePrinterLists = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
+const NO_EQUIPMENT: ProfileEquipmentDefaults = {
+  cashDrawerPrinterIds: [],
+  receiptPrinterDefaultId: null,
+  paymentSlipPrinterDefaultId: null,
+  cashDrawerPrinterDefaultId: null,
+};
+
+const NO_PRINTER_LISTS: PrinterDraft = {
+  receiptPrinterIds: [],
+  paymentSlipPrinterIds: [],
+  ...NO_EQUIPMENT,
+};
+
+const NO_READERS: ProfileReaderList = { readerIds: [], defaultReaderId: null };
+
+/** The same ids in the same order. */
+function sameOrderedIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, index) => b[index] === id);
+}
+
+function sameReaders(a: ProfileReaderList, b: ProfileReaderList): boolean {
+  return a.defaultReaderId === b.defaultReaderId && sameOrderedIds(a.readerIds, b.readerIds);
+}
+
+/** The drawer list and the three defaults, out of a profile or a draft that carries more. */
+function equipmentOf(from: ProfileEquipmentDefaults): ProfileEquipmentDefaults {
+  return {
+    cashDrawerPrinterIds: from.cashDrawerPrinterIds,
+    receiptPrinterDefaultId: from.receiptPrinterDefaultId,
+    paymentSlipPrinterDefaultId: from.paymentSlipPrinterDefaultId,
+    cashDrawerPrinterDefaultId: from.cashDrawerPrinterDefaultId,
+  };
+}
 
 const NO_KITCHEN_LISTS: ProfileKitchenLists = { stationIds: [], watcherIds: [] };
 
@@ -184,6 +244,11 @@ const FIELDS = [
   "startingScreen",
   "stationIds",
   "watcherIds",
+  "receiptDefault",
+  "slipDefault",
+  "drawerList",
+  "drawerDefault",
+  "readerDefault",
 ] as const;
 type EditorField = (typeof FIELDS)[number];
 type FieldErrors = Partial<Record<EditorField, string>>;
@@ -202,6 +267,11 @@ const FIELD_TARGET: Record<EditorField, string> = {
   startingScreen: "[data-test=profile-starting-screen]",
   stationIds: "[data-test=profile-stations] wt-switch",
   watcherIds: "[data-test=profile-watchers] wt-switch",
+  receiptDefault: "[data-test=receipt-printers-default]",
+  slipDefault: "[data-test=payment-slip-printers-default]",
+  drawerList: "[data-test=cash-drawer-printers] wt-switch",
+  drawerDefault: "[data-test=cash-drawer-printers-default]",
+  readerDefault: "[data-test=profile-readers-default]",
 };
 
 /** The request field a refusal names, as the editor field that shows it. */
@@ -217,6 +287,11 @@ const FIELD_BY_PARAM: Record<string, EditorField> = {
   personExceptions: "people",
   stationIds: "stationIds",
   watcherIds: "watcherIds",
+  receiptPrinterDefaultId: "receiptDefault",
+  paymentSlipPrinterDefaultId: "slipDefault",
+  cashDrawerPrinterIds: "drawerList",
+  cashDrawerPrinterDefaultId: "drawerDefault",
+  defaultReaderId: "readerDefault",
 };
 
 /** What a refusal says under each field, when it is not the refusal's own sentence. */
@@ -227,6 +302,11 @@ const FIELD_SENTENCE: Partial<Record<EditorField, StringKey>> = {
   roles: "device_profiles.err_roles_required",
   people: "device_profiles.err_people",
   startingScreen: "device_profiles.err_starting_screen",
+  receiptDefault: "device_profiles.err_default_not_listed",
+  slipDefault: "device_profiles.err_default_not_listed",
+  drawerDefault: "device_profiles.err_default_not_listed",
+  readerDefault: "device_profiles.err_default_not_listed",
+  drawerList: "device_profiles.err_no_cash_drawer",
 };
 
 /** `device_profile.invalid`'s reasons that are about one field. */
@@ -382,7 +462,14 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
   // In whole MINUTES (`null` = never); the wire value is SECONDS.
   @state() private draftInactivityMinutes: number | null = null;
-  @state() private draftPrinterLists: ProfilePrinterLists = NO_PRINTER_LISTS;
+  @state() private draftPrinterLists: PrinterDraft = NO_PRINTER_LISTS;
+  /** The drawer list and defaults as opened, so a save sends only the ones it changed. */
+  #loadedEquipment: ProfileEquipmentDefaults | null = null;
+  /** "hidden" when the session may not manage card readers. */
+  @state() private readerState: "loading" | "ready" | "hidden" | "failed" = "loading";
+  @state() private readers: ReaderRow[] = [];
+  @state() private draftReaders: ProfileReaderList = NO_READERS;
+  #loadedReaders: ProfileReaderList = NO_READERS;
   @state() private draftKitchenLists: ProfileKitchenLists = NO_KITCHEN_LISTS;
   /** The lists the edited profile held when opened, so a save that leaves them alone omits them. */
   #loadedKitchenLists: ProfileKitchenLists = NO_KITCHEN_LISTS;
@@ -410,6 +497,9 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private deleteTarget: DeviceProfile | null = null;
 
   #draftScope?: DraftScope<ProfileDraft>;
+  /** The card readers are read after the editor opens, so their draft is a scope of its own under
+   * the editor's. */
+  #readerScope?: DraftScope<ProfileReaderList>;
   #leave?: LeaveCoordinator;
   #saveTurn = 0;
 
@@ -423,10 +513,7 @@ export class DeviceProfilesScreen extends LitElement {
         .sort(),
       formFactor: this.draftFormFactor,
       inactivityMinutes: ordering ? this.draftInactivityMinutes : null,
-      printerLists: {
-        receiptPrinterIds: [...this.draftPrinterLists.receiptPrinterIds],
-        paymentSlipPrinterIds: [...this.draftPrinterLists.paymentSlipPrinterIds],
-      },
+      printerLists: structuredClone(this.draftPrinterLists),
       kitchenLists: ordering
         ? { stationIds: [], watcherIds: [] }
         : {
@@ -553,7 +640,12 @@ export class DeviceProfilesScreen extends LitElement {
     let field: EditorField | undefined;
     if (code === "device_profile.name_taken") field = "name";
     else if (code === "device_profile.invalid")
-      field = typeof params.reason === "string" ? FIELD_BY_REASON[params.reason] : undefined;
+      field =
+        typeof params.field === "string"
+          ? FIELD_BY_PARAM[params.field]
+          : typeof params.reason === "string"
+            ? FIELD_BY_REASON[params.reason]
+            : undefined;
     else if (
       code === "management.request_invalid" ||
       code === "device_profile.access_invalid" ||
@@ -600,6 +692,7 @@ export class DeviceProfilesScreen extends LitElement {
         ["department", "zones", "startingZone", "roles", "people", "startingScreen"].includes(field)
       )
         return !kds;
+      if (field === "readerDefault") return !kds && this.#readersShown();
       return true;
     });
   }
@@ -763,6 +856,8 @@ export class DeviceProfilesScreen extends LitElement {
     this.saving = false;
     this.#draftScope?.dispose();
     this.#draftScope = undefined;
+    this.#readerScope?.dispose();
+    this.#readerScope = undefined;
     this.#leave = undefined;
     this.editingId = null;
     this.draftName = "";
@@ -771,6 +866,11 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
     this.draftPrinterLists = NO_PRINTER_LISTS;
+    this.#loadedEquipment = null;
+    this.readerState = "loading";
+    this.readers = [];
+    this.draftReaders = NO_READERS;
+    this.#loadedReaders = NO_READERS;
     this.draftKitchenLists = NO_KITCHEN_LISTS;
     this.#loadedKitchenLists = NO_KITCHEN_LISTS;
     this.draftDepartmentId = "";
@@ -801,6 +901,7 @@ export class DeviceProfilesScreen extends LitElement {
     const baseline = this.#draftValue();
     const scope = this.#draftScope;
     const opened = this.#opened;
+    void this.#loadReaders(null, opened);
     this.api.getProfileScopeChoices().then(
       (choices) => {
         if (opened !== this.#opened) return;
@@ -846,9 +947,12 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftFormFactor = profile.formFactor;
       this.draftInactivityMinutes =
         profile.inactivityTimeoutSeconds == null ? null : profile.inactivityTimeoutSeconds / 60;
+      const equipment = equipmentOf(profile);
+      this.#loadedEquipment = equipment;
       this.draftPrinterLists = {
         receiptPrinterIds: profile.receiptPrinterIds,
         paymentSlipPrinterIds: profile.paymentSlipPrinterIds,
+        ...equipment,
       };
       const stored = kitchenLists.find((entry) => entry.profileId === id);
       this.#loadedKitchenLists = {
@@ -868,9 +972,51 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftStartingScreen = profile.startingScreen;
       this.mode = "editor";
       this.#registerDraft();
+      void this.#loadReaders(id, this.#opened);
     } catch (error) {
       if (opened === this.#opened) this.#showReadError(error);
     }
+  }
+
+  /** The readers belong to the payments module and its own permission: without it they are gone. */
+  async #loadReaders(profileId: string | null, opened: number): Promise<void> {
+    try {
+      const [readers, list] = await Promise.all([
+        this.api.listReaders(),
+        profileId === null ? NO_READERS : this.api.getProfileReaders(profileId),
+      ]);
+      if (opened !== this.#opened) return;
+      this.readers = readers;
+      this.#loadedReaders = list;
+      this.draftReaders = list;
+      this.readerState = "ready";
+      this.#readerScope?.dispose();
+      this.#readerScope = this.#leave?.register<ProfileReaderList>({
+        id: {},
+        parent: this,
+        current: () => this.draftReaders,
+        snapshot: (value) => structuredClone(value),
+        equal: sameReaders,
+        restore: (value) => {
+          this.draftReaders = value;
+        },
+      });
+    } catch (error) {
+      if (opened !== this.#opened) return;
+      if (codeOf(error) === "authorization.not_permitted") this.readerState = "hidden";
+      else {
+        this.readerState = "failed";
+        this.#showReadError(error);
+      }
+    }
+  }
+
+  /** Drawn once read, and only where the venue has a reader or the profile still lists one. */
+  #readersShown(): boolean {
+    return (
+      this.readerState === "ready" &&
+      (this.readers.length > 0 || this.draftReaders.readerIds.length > 0)
+    );
   }
 
   #onName(event: CustomEvent<{ value: string }>): void {
@@ -925,19 +1071,73 @@ export class DeviceProfilesScreen extends LitElement {
     this.#draftScope?.changed();
   }
 
-  /** Appended when switched on: the order decides which printer a joining device starts on. */
+  /** Appended when switched on; switching off the list's default leaves it with none. */
   #onPrinterToggle(
     event: CustomEvent<{ checked: boolean }>,
-    key: PrinterListKey,
+    list: (typeof PRINTER_LISTS)[number],
     printerId: string,
   ): void {
     event.stopPropagation();
-    const others = this.draftPrinterLists[key].filter((id) => id !== printerId);
+    const others = this.draftPrinterLists[list.key].filter((id) => id !== printerId);
+    const unlisted = !event.detail.checked && this.draftPrinterLists[list.defaultKey] === printerId;
     this.draftPrinterLists = {
       ...this.draftPrinterLists,
-      [key]: event.detail.checked ? [...others, printerId] : others,
+      [list.key]: event.detail.checked ? [...others, printerId] : others,
+      ...(unlisted ? { [list.defaultKey]: null } : {}),
     };
+    this.#clearRefusal(
+      list.defaultField,
+      ...(list.key === "cashDrawerPrinterIds" ? (["drawerList"] as const) : []),
+    );
     this.#draftScope?.changed();
+  }
+
+  #onPrinterDefault(
+    event: CustomEvent<{ value: string }>,
+    list: (typeof PRINTER_LISTS)[number],
+  ): void {
+    event.stopPropagation();
+    this.draftPrinterLists = {
+      ...this.draftPrinterLists,
+      [list.defaultKey]: event.detail.value === "" ? null : event.detail.value,
+    };
+    this.#clearRefusal(list.defaultField);
+    this.#draftScope?.changed();
+  }
+
+  #onReaderToggle(event: CustomEvent<{ checked: boolean }>, readerId: string): void {
+    event.stopPropagation();
+    const others = this.draftReaders.readerIds.filter((id) => id !== readerId);
+    const unlisted = !event.detail.checked && this.draftReaders.defaultReaderId === readerId;
+    this.draftReaders = {
+      readerIds: event.detail.checked ? [...others, readerId] : others,
+      defaultReaderId: unlisted ? null : this.draftReaders.defaultReaderId,
+    };
+    this.#clearRefusal("readerDefault");
+    this.#readerScope?.changed();
+  }
+
+  #onReaderDefault(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.draftReaders = {
+      ...this.draftReaders,
+      defaultReaderId: event.detail.value === "" ? null : event.detail.value,
+    };
+    this.#clearRefusal("readerDefault");
+    this.#readerScope?.changed();
+  }
+
+  /** The drawer list and defaults this save sends: on an edit only those that changed. */
+  #equipmentToSend(): Partial<ProfileEquipmentDefaults> {
+    const draft = this.draftPrinterLists;
+    const loaded = this.#loadedEquipment ?? NO_EQUIPMENT;
+    const sent: Partial<ProfileEquipmentDefaults> = {};
+    const drawers = draft.cashDrawerPrinterIds;
+    if (!sameOrderedIds(drawers, loaded.cashDrawerPrinterIds))
+      sent.cashDrawerPrinterIds = [...drawers];
+    for (const { defaultKey } of PRINTER_LISTS)
+      if (draft[defaultKey] !== loaded[defaultKey]) sent[defaultKey] = draft[defaultKey];
+    return sent;
   }
 
   #onKitchenToggle(
@@ -979,7 +1179,10 @@ export class DeviceProfilesScreen extends LitElement {
    */
   #extrasToSend(formFactor: FormFactor): ProfileSaveExtras | undefined {
     const loaded = this.#loaded;
-    const extras: ProfileSaveExtras = { ...this.#kitchenListsToSend(formFactor, loaded !== null) };
+    const extras: ProfileSaveExtras = {
+      ...this.#kitchenListsToSend(formFactor, loaded !== null),
+      ...this.#equipmentToSend(),
+    };
     if (isSharedDisplay(formFactor)) {
       if (loaded !== null && loaded.startingScreen !== null) extras.startingScreen = null;
     } else {
@@ -1030,6 +1233,47 @@ export class DeviceProfilesScreen extends LitElement {
     else proceed();
   }
 
+  /** The editor stays open on the saved profile, so the next Save edits it rather than adding
+   * another. */
+  #keepEditing(saved: DeviceProfile, submitted: ProfileDraft): void {
+    this.editingId = saved.id;
+    this.#loaded = saved;
+    this.#loadedKitchenLists = structuredClone(submitted.kitchenLists);
+    this.#loadedEquipment = equipmentOf(submitted.printerLists);
+  }
+
+  /**
+   * Saves the reader list captured at Save once the profile is saved, when it changed. Only a
+   * refusal for this editor's opening keeps it open; false means the save goes no further.
+   */
+  async #saveReaders(
+    saved: DeviceProfile,
+    submitted: ProfileDraft,
+    readers: ProfileReaderList | null,
+    scope: DraftScope<ProfileReaderList> | undefined,
+    active: () => boolean,
+  ): Promise<boolean> {
+    if (readers === null || sameReaders(readers, this.#loadedReaders)) return true;
+    try {
+      await this.api.setProfileReaders(saved.id, readers);
+    } catch (error) {
+      if (!active()) return false;
+      this.#keepEditing(saved, submitted);
+      const refused = this.#refusedField(error);
+      if (refused === null) this.#showError(codeOf(error));
+      else {
+        this.fieldRefusal = refused;
+        void this.#focusFirstError({ [refused.field]: refused.sentence });
+      }
+      return false;
+    }
+    if (!active()) return false;
+    this.#loadedReaders = readers;
+    scope?.commit(readers);
+    return true;
+  }
+
+  /** The server accepts `""` as a name, so an empty name is refused here. */
   async #save(): Promise<void> {
     if (this.saving) return;
     this.attempted = true;
@@ -1053,11 +1297,16 @@ export class DeviceProfilesScreen extends LitElement {
       isSharedDisplay(formFactor) || this.draftInactivityMinutes == null
         ? null
         : this.draftInactivityMinutes * 60;
-    const printerLists = this.draftPrinterLists;
+    const printerLists: ProfilePrinterLists = {
+      receiptPrinterIds: this.draftPrinterLists.receiptPrinterIds,
+      paymentSlipPrinterIds: this.draftPrinterLists.paymentSlipPrinterIds,
+    };
     const extras = this.#extrasToSend(formFactor);
     const extrasArg = extras === undefined ? [] : ([extras] as const);
     const scope = this.#draftScope;
     const submitted = this.#draftValue();
+    const readers = this.readerState === "ready" ? this.draftReaders : null;
+    const readerScope = this.#readerScope;
     const opened = this.#opened;
     const active = () => this.isConnected && opened === this.#opened;
     const turn = ++this.#saveTurn;
@@ -1089,11 +1338,9 @@ export class DeviceProfilesScreen extends LitElement {
       written = true;
       if (!active()) return;
       scope?.commit(submitted);
-      if (scope?.isDirty()) {
-        this.editingId = saved.id;
-        this.#loaded = saved;
-        this.#loadedKitchenLists = structuredClone(submitted.kitchenLists);
-      } else {
+      if (!(await this.#saveReaders(saved, submitted, readers, readerScope, active))) return;
+      if (scope?.isDirty() || readerScope?.isDirty()) this.#keepEditing(saved, submitted);
+      else {
         this.#clearDraft();
         this.mode = "list";
       }
@@ -1132,7 +1379,8 @@ export class DeviceProfilesScreen extends LitElement {
    */
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
-    void this.#mutate(async () => {
+    let readersFailed: { error: unknown } | null = null;
+    const copied = this.#mutate(async () => {
       const extras: ProfileSaveExtras = {};
       if (isSharedDisplay(profile.formFactor)) {
         const stored = this.kitchenLists.find((entry) => entry.profileId === profile.id);
@@ -1156,8 +1404,12 @@ export class DeviceProfilesScreen extends LitElement {
         if (profile.personExceptions.length > 0) extras.personExceptions = profile.personExceptions;
         if (profile.startingScreen !== null) extras.startingScreen = profile.startingScreen;
       }
+      if (profile.cashDrawerPrinterIds.length > 0)
+        extras.cashDrawerPrinterIds = profile.cashDrawerPrinterIds;
+      for (const { defaultKey } of PRINTER_LISTS)
+        if (profile[defaultKey] !== null) extras[defaultKey] = profile[defaultKey];
       const extrasArg = Object.keys(extras).length === 0 ? [] : ([extras] as const);
-      await this.api.createDeviceProfile(
+      const created = await this.api.createDeviceProfile(
         name,
         profile.canvasId,
         profile.capabilities,
@@ -1169,7 +1421,23 @@ export class DeviceProfilesScreen extends LitElement {
         },
         ...extrasArg,
       );
+      readersFailed = await this.#copyReaders(profile.id, created.id);
     });
+    void copied.then(() => {
+      if (readersFailed !== null) this.#showError(codeOf(readersFailed.error));
+    });
+  }
+
+  /** The copy is made and kept even when its readers cannot be; a manager who may not manage card
+   * readers copies none, as the editor hides them. */
+  async #copyReaders(fromId: string, toId: string): Promise<{ error: unknown } | null> {
+    try {
+      const list = await this.api.getProfileReaders(fromId);
+      if (list.readerIds.length > 0) await this.api.setProfileReaders(toId, list);
+      return null;
+    } catch (error) {
+      return codeOf(error) === "authorization.not_permitted" ? null : { error };
+    }
   }
 
   // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
@@ -1278,80 +1546,168 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   /** The list's own printers first, in its order, switched-off ones included so a save keeps them;
-   * then every other printer that is switched on. */
-  #printerChoices(key: PrinterListKey): { printer: Printer; listed: boolean }[] {
+   * then every other printer that is switched on. The drawer list offers only printers with a
+   * drawer, and marks one it still holds whose drawer was since taken off. */
+  #printerChoices(key: PrinterListKey): { printer: Printer; listed: boolean; label: string }[] {
     const listed = this.draftPrinterLists[key];
+    const drawers = key === "cashDrawerPrinterIds";
+    const label = (printer: Printer) =>
+      drawers && !printer.hasCashDrawer
+        ? `${printerLabel(printer)} (${t("device_profiles.no_drawer_attached")})`
+        : printerLabel(printer);
     return [
       ...listed.flatMap((id) => {
         const printer = this.printers.find((p) => p.id === id);
-        return printer === undefined ? [] : [{ printer, listed: true }];
+        return printer === undefined ? [] : [{ printer, listed: true, label: label(printer) }];
       }),
       ...this.printers
-        .filter((printer) => printer.active && !listed.includes(printer.id))
-        .map((printer) => ({ printer, listed: false })),
+        .filter(
+          (printer) =>
+            printer.active && !listed.includes(printer.id) && (!drawers || printer.hasCashDrawer),
+        )
+        .map((printer) => ({ printer, listed: false, label: label(printer) })),
     ];
   }
 
   #renderPrinterList(
     list: (typeof PRINTER_LISTS)[number],
-    choices: { printer: Printer; listed: boolean }[],
+    choices: { printer: Printer; listed: boolean; label: string }[],
+    errors: FieldErrors,
   ): TemplateResult {
     const drawn = choices.filter((choice) => choice.listed).map((choice) => choice.printer.id);
+    const listError = list.key === "cashDrawerPrinterIds" ? errors.drawerList : undefined;
+    const defaultError = errors[list.defaultField] ?? "";
     return html`<div
-      class="field"
-      role="group"
-      aria-labelledby="${list.test}-heading"
-      data-test=${list.test}
-    >
-      <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
-      <div class="toggles">
-        ${choices.map(({ printer, listed }) => {
-          const position = drawn.indexOf(printer.id);
-          const name = printerLabel(printer);
-          return html`<div class="printer-choice">
-            <wt-switch
-              data-test="${list.test}-${printer.id}"
-              data-printer-id=${printer.id}
-              label=${name}
-              .checked=${listed}
-              @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                this.#onPrinterToggle(e, list.key, printer.id)}
-            ></wt-switch>
-            ${
-              listed
-                ? html`<span class="order"
-                    ><wt-button
-                      variant="ghost"
-                      size="sm"
-                      data-test="${list.test}-up-${printer.id}"
-                      aria-label="${t("device_profiles.move_up")} ${printer.name}"
-                      ?disabled=${position === 0}
-                      @click=${() => this.#movePrinter(list.key, drawn, printer.id, -1)}
-                      >${t("device_profiles.move_up")}</wt-button
-                    >
-                    <wt-button
-                      variant="ghost"
-                      size="sm"
-                      data-test="${list.test}-down-${printer.id}"
-                      aria-label="${t("device_profiles.move_down")} ${printer.name}"
-                      ?disabled=${position === drawn.length - 1}
-                      @click=${() => this.#movePrinter(list.key, drawn, printer.id, 1)}
-                      >${t("device_profiles.move_down")}</wt-button
-                    ></span
-                  >`
-                : nothing
-            }
-          </div>`;
-        })}
+        class="field"
+        role="group"
+        aria-labelledby="${list.test}-heading"
+        aria-describedby=${listError ? `${list.test}-error` : nothing}
+        data-test=${list.test}
+      >
+        <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
+        <div class="toggles">
+          ${choices.map(({ printer, listed, label }) => {
+            const position = drawn.indexOf(printer.id);
+            return html`<div class="printer-choice">
+              <wt-switch
+                data-test="${list.test}-${printer.id}"
+                data-printer-id=${printer.id}
+                name=${list.key}
+                label=${label}
+                .checked=${listed}
+                @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
+                  this.#onPrinterToggle(e, list, printer.id)}
+              ></wt-switch>
+              ${
+                listed
+                  ? html`<span class="order"
+                      ><wt-button
+                        variant="ghost"
+                        size="sm"
+                        data-test="${list.test}-up-${printer.id}"
+                        aria-label="${t("device_profiles.move_up")} ${printer.name}"
+                        ?disabled=${position === 0}
+                        @click=${() => this.#movePrinter(list.key, drawn, printer.id, -1)}
+                        >${t("device_profiles.move_up")}</wt-button
+                      >
+                      <wt-button
+                        variant="ghost"
+                        size="sm"
+                        data-test="${list.test}-down-${printer.id}"
+                        aria-label="${t("device_profiles.move_down")} ${printer.name}"
+                        ?disabled=${position === drawn.length - 1}
+                        @click=${() => this.#movePrinter(list.key, drawn, printer.id, 1)}
+                        >${t("device_profiles.move_down")}</wt-button
+                      ></span
+                    >`
+                  : nothing
+              }
+            </div>`;
+          })}
+        </div>
+        ${this.#groupError(list.test, listError)}
       </div>
-    </div>`;
+      <wt-combobox
+        class="field"
+        data-test="${list.test}-default"
+        name=${list.defaultKey}
+        label=${t(list.defaultLabel)}
+        search="auto"
+        show-empty-option
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${[
+          { value: "", label: t("device_profiles.default_none") },
+          ...choices
+            .filter((choice) => choice.listed)
+            .map(({ printer, label }) => ({ value: printer.id, label })),
+        ]}
+        .value=${this.draftPrinterLists[list.defaultKey] ?? ""}
+        .error=${defaultError}
+        .invalid=${defaultError !== ""}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPrinterDefault(e, list)}
+      ></wt-combobox>`;
   }
 
-  #renderPrinterLists(): TemplateResult {
+  #renderPrinterLists(errors: FieldErrors): TemplateResult {
     const lists = PRINTER_LISTS.map((list) => ({ list, choices: this.#printerChoices(list.key) }));
     if (lists.every(({ choices }) => choices.length === 0))
       return html`<p class="field" data-test="no-printers">${t("device_profiles.no_printers")}</p>`;
-    return html`${lists.map(({ list, choices }) => this.#renderPrinterList(list, choices))}`;
+    return html`${lists.map(({ list, choices }) => this.#renderPrinterList(list, choices, errors))}`;
+  }
+
+  /** The profile's readers first, in its order, a disabled one marked; then every other enabled one. */
+  #renderReaders(errors: FieldErrors): TemplateResult | typeof nothing {
+    if (!this.#readersShown()) return nothing;
+    const listed = this.draftReaders.readerIds;
+    const label = (reader: ReaderRow) =>
+      reader.active ? reader.name : `${reader.name} (${t("devices.watcher_disabled_mark")})`;
+    const choices = [
+      ...listed.flatMap((id) => {
+        const reader = this.readers.find((r) => r.id === id);
+        return reader === undefined ? [] : [{ reader, listed: true }];
+      }),
+      ...this.readers
+        .filter((reader) => reader.active && !listed.includes(reader.id))
+        .map((reader) => ({ reader, listed: false })),
+    ];
+    const error = errors.readerDefault ?? "";
+    return html`${this.#switchGroup(
+        "profile-readers",
+        t("device_profiles.card_readers"),
+        undefined,
+        choices.map(
+          ({ reader, listed }) =>
+            html`<wt-switch
+              data-test="profile-reader-${reader.id}"
+              name="readerIds"
+              label=${label(reader)}
+              .checked=${listed}
+              @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
+                this.#onReaderToggle(e, reader.id)}
+            ></wt-switch>`,
+        ),
+      )}
+      <wt-combobox
+        class="field"
+        data-test="profile-readers-default"
+        name="defaultReaderId"
+        label=${t("device_profiles.reader_default")}
+        search="auto"
+        show-empty-option
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${[
+          { value: "", label: t("device_profiles.default_none") },
+          ...choices
+            .filter((choice) => choice.listed)
+            .map(({ reader }) => ({ value: reader.id, label: label(reader) })),
+        ]}
+        .value=${this.draftReaders.defaultReaderId ?? ""}
+        .error=${error}
+        .invalid=${error !== ""}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onReaderDefault(e)}
+      ></wt-combobox>`;
   }
 
   /** The list's own entries first, switched-off ones included and marked so a save keeps them;
@@ -1759,8 +2115,8 @@ export class DeviceProfilesScreen extends LitElement {
         }
         ${ordering ? this.#renderWhere(errors) : nothing}
         ${ordering ? this.#renderWho(errors) : nothing} ${this.#renderCapabilities(errors)}
-        ${this.#renderPrinterLists()} ${ordering ? nothing : this.#renderKitchenLists(errors)}
-        ${formMessage(message)}
+        ${this.#renderPrinterLists(errors)} ${ordering ? this.#renderReaders(errors) : nothing}
+        ${ordering ? nothing : this.#renderKitchenLists(errors)} ${formMessage(message)}
         <wt-form-actions .showError=${false}>
           <wt-button
             slot="cancel"

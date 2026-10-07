@@ -14,6 +14,7 @@ import {
   deviceOrigin,
   draftLineMergeKey,
   firstCodeInCauseChain,
+  formatEquipmentCode,
   divideDecimal,
   FALLBACK_LOCALE,
   fiscalRecordId,
@@ -40,6 +41,9 @@ import {
   nodeId,
   normaliseDraftLines,
   normaliseUuid,
+  parseEquipmentCode,
+  mayTakeOver,
+  tillProviderForReader,
   readOrigin,
   readSaleOrigin,
   resolveActiveLocale,
@@ -155,6 +159,19 @@ describe("package public surface (./index.js)", () => {
 
   it("re-exports the media library filename pattern", () => {
     expect(MEDIA_FILENAME.test(`${"ab".repeat(32)}.webp`)).toBe(true);
+  });
+
+  it("re-exports the equipment label code", () => {
+    const id = "0b3f6c1e-2a4d-4e8f-9a1b-7c6d5e4f3a2b";
+    expect(parseEquipmentCode(formatEquipmentCode("printer", id))).toEqual({ kind: "printer", id });
+  });
+
+  it("re-exports the equipment takeover rule", () => {
+    expect(mayTakeOver("manage", true)).toBe(false);
+  });
+
+  it("re-exports the till's name for a reader's provider", () => {
+    expect(tillProviderForReader("sumup")).toBe("sumup_cloud");
   });
 
   it("re-exports the timing band classifier", () => {

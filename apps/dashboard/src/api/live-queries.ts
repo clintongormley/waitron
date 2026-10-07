@@ -42,13 +42,15 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "units",
   ],
-  listPrinters: ["printers", "print_jobs", "watcher_printers"],
+  listPrinters: ["printers", "print_jobs", "watcher_printers", "printer_holders"],
   listPrinterProfiles: ["device_profile_printers", "device_profiles"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
   // The venue's card readers, plus the per-reader device count aggregated over `device_card_readers`,
-  // so a reader added/retired OR a device re-pointed refreshes the list.
+  // so a reader added/retired OR a device's chosen reader changed refreshes the list.
   listReaders: ["card_readers", "device_card_readers"],
+  listReaderHolders: ["card_reader_holders", "payments"],
+  getProfileReaders: ["device_profile_card_readers", "card_readers"],
   // The route reads `tenant_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
   listStuckPayments: ["payments", "working_orders", "devices"],
@@ -263,6 +265,14 @@ export const QUERY_DEPENDENCIES = {
     "kitchen_stations",
     "device_made_here_stations",
     "device_approved_profiles",
+    // Each device's equipment (`readDevicesEquipment`, apps/server/src/device-equipment.ts).
+    "printer_holders",
+    "card_reader_holders",
+    "device_card_readers",
+    "device_profile_printers",
+    "device_profile_card_readers",
+    "printers",
+    "card_readers",
   ],
   listStations: ["kitchen_stations"],
   listWatchers: ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"],

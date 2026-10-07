@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { deviceProfiles, withTransaction } from "@waitron/db";
-import { firstUsablePrinters } from "@waitron/layouts";
+import { readProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -78,18 +78,24 @@ describe("seedDemoRestaurant", () => {
         ticket_stations: 4,
       },
     ]);
-    // The seeded venue has no devices yet; one paired later starts on its profile's first printers.
+    // The seeded venue has no devices yet; one paired later prints on its profile's defaults.
     const demoId = printers[0]!.id;
-    const firstPrinters = await withTransaction(suite.db, async (tx) => {
+    const defaults = await withTransaction(suite.db, async (tx) => {
       const found = [];
       for (const p of await tx.select({ id: deviceProfiles.id }).from(deviceProfiles)) {
-        found.push(await firstUsablePrinters(tx, p.id, venue.locationId));
+        found.push(await readProfilePrinterLists(tx, p.id));
       }
       return found;
     });
-    expect(firstPrinters.length).toBeGreaterThan(0);
+    expect(defaults.length).toBeGreaterThan(0);
     expect(
-      new Set(firstPrinters.flatMap((p) => [p.receiptPrinterId, p.paymentSlipPrinterId])),
+      new Set(
+        defaults.flatMap((p) => [
+          p.receiptPrinterDefaultId,
+          p.paymentSlipPrinterDefaultId,
+          p.cashDrawerPrinterDefaultId,
+        ]),
+      ),
     ).toEqual(new Set([demoId]));
   });
 
