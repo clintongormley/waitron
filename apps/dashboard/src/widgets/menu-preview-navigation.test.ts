@@ -3,6 +3,7 @@ import { commands, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import type { WtCombobox } from "@waitron/ui/src/components/wt-combobox.js";
 import type {
+  DocumentMember,
   MenuChange,
   MenuDocument,
   MenuTarget,
@@ -1046,3 +1047,118 @@ it.each(["reduce", "no-preference"] as const)(
     expect(el.shadowRoot!.activeElement).toBe(row);
   },
 );
+
+/** The fixture with the menu "Bar" included in `parent`, as a folder or shown directly. */
+function withInclude(direct: boolean, parent: string[] = []) {
+  const doc = fixture();
+  const include: DocumentMember = {
+    kind: "section",
+    sectionId: "bar",
+    internalName: "Counter bar menu",
+    names: { en: "Drinks", es: "Bebidas" },
+    image: null,
+    color: null,
+    includedMenu: { id: "menu-bar", name: "Bar list" },
+    ...(direct ? { direct: true as const } : {}),
+    members: [documentSection("cold", "Counter cold drinks", [])],
+  };
+  let members = doc.root.members;
+  for (const id of parent) {
+    const section = members.find((m) => m.kind === "section" && m.sectionId === id);
+    if (section?.kind !== "section") throw new Error("parent fixture");
+    members = section.members;
+  }
+  members.push(include);
+  return doc;
+}
+function switched(
+  before: string[],
+  after: string[],
+): Extract<MenuChange, { kind: "section_changed" }> {
+  const at = (sectionIds: string[]): MenuTarget => ({
+    kind: "section",
+    sectionIds,
+    field: { kind: "direct" },
+  });
+  return {
+    id: "switched",
+    kind: "section_changed",
+    sectionId: "bar",
+    name: "Counter bar menu",
+    fields: ["direct"],
+    source: "this_menu",
+    targets: { before: [at(before)], after: [at(after)] },
+  };
+}
+
+it("follows an include switched to its sections to the note that says so, and back to its folder", async () => {
+  const change = switched(["bar"], ["bar"]);
+  const el = await mount([change], withInclude(true), withInclude(false));
+  q<HTMLButtonElement>(el, 'button[data-change-id="switched"]')!.click();
+  const view = await renderer(el);
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.querySelector("[data-direct]")?.textContent)
+    .toBe("Bebidas: shown directly");
+  expect(view.shadowRoot!.activeElement?.getAttribute("data-change-target")).toBe(
+    menuTargetKey(change.targets.after[0]!),
+  );
+  q<HTMLButtonElement>(el, 'button[data-side="before"]')!.click();
+  await expect
+    .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+    .toBe(menuTargetKey(change.targets.before[0]!));
+  expect(
+    view.shadowRoot!.activeElement!.querySelector("button[aria-expanded]")!.textContent,
+  ).toContain("Bebidas");
+  expect(q(el, '[data-test="navigation-unavailable"]')).toBeNull();
+});
+
+it("follows an include moved to another list and switched to its sections at each of its rows", async () => {
+  const removed: MenuChange = {
+    id: "removed",
+    kind: "section_removed",
+    sectionId: "bar",
+    parentSectionIds: ["outer"],
+    name: "Counter bar menu",
+    under: ["Counter drinks"],
+    source: "this_menu",
+    targets: {
+      before: [{ kind: "section", sectionIds: ["outer", "bar"], field: { kind: "summary" } }],
+      after: [],
+    },
+  };
+  const added: MenuChange = {
+    id: "added",
+    kind: "section_added",
+    sectionId: "bar",
+    parentSectionIds: [],
+    name: "Counter bar menu",
+    under: [],
+    source: "this_menu",
+    targets: {
+      before: [],
+      after: [{ kind: "section", sectionIds: ["bar"], field: { kind: "summary" } }],
+    },
+  };
+  const change = switched(["outer", "bar"], ["bar"]);
+  const el = await mount(
+    [removed, added, change],
+    withInclude(true),
+    withInclude(false, ["outer"]),
+  );
+  const view = await renderer(el);
+  for (const row of [removed, added, change])
+    for (const side of ["before", "after"] as const)
+      for (const target of row.targets[side]) {
+        const link = [
+          ...q(el, `button[data-change-id="${row.id}"]`)!
+            .closest("li")!
+            .querySelectorAll<HTMLButtonElement>(`button[data-side="${side}"]`),
+        ].find((b) => b.dataset.targetKey === menuTargetKey(target));
+        expect(link).toBeDefined();
+        link!.click();
+        await expect
+          .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+          .toBe(menuTargetKey(target));
+        expect(q(el, '[data-test="navigation-unavailable"]')).toBeNull();
+      }
+});

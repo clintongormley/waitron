@@ -1005,6 +1005,62 @@ it.each([
 );
 
 it.each([
+  ["en", "Drinks: shown as a folder or directly", "this menu", "Drinks: shown directly"],
+  [
+    "es-ES",
+    "Drinks: mostrada como carpeta o directamente",
+    "esta carta",
+    "Drinks: se muestra directamente",
+  ],
+])(
+  "names an include switched between a folder and its sections, and draws it in place, in %s",
+  async (locale, words, source, note) => {
+    setLocale(locale);
+    const document = menuDocument(
+      [
+        {
+          kind: "section",
+          sectionId: "s-bar",
+          internalName: "Counter bar menu",
+          names: { en: "Drinks", es: "Drinks" },
+          image: null,
+          color: null,
+          includedMenu: { id: "menu-bar", name: "Bar list" },
+          direct: true,
+          members: [documentSection("s-cold", "Cold", [documentProduct("mi-cola", "p-cola")])],
+        },
+      ],
+      { "p-cola": "Cola" },
+    );
+    const el = await mount({
+      preview: {
+        ...preview([
+          {
+            id: "switched",
+            targets: {
+              before: [],
+              after: [{ kind: "section", sectionIds: ["s-bar"], field: { kind: "direct" } }],
+            },
+            kind: "section_changed",
+            sectionId: "s-bar",
+            name: "Drinks",
+            fields: ["direct"],
+            source: "this_menu",
+          },
+        ]),
+        document,
+      },
+    });
+    expect(text(q(el, 'button[data-change-id="switched"]'))).toBe(words);
+    expect(text(q(el, '[data-test="changes"] .source'))).toBe(`— ${source}`);
+    expect(text(q(el, 'button[data-side="after"]'))).toContain(words.split(": ")[1]);
+    const view = q<CustomerMenu>(el, "dashboard-customer-menu")!;
+    await view.updateComplete;
+    expect(text(view.shadowRoot!.querySelector("[data-direct]"))).toBe(note);
+  },
+);
+
+it.each([
   [390, "en", "light"],
   [390, "es-ES", "dark"],
   [1280, "en", "dark"],
