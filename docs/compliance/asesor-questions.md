@@ -22,6 +22,12 @@ request, Q21 gained parts (d) and (e): may or must the invoice be issued before 
 counter as well as the table. The Word copies carry them as 1.1(d) and (e); 1.1 is retitled to
 match, and section 1 is now "at the table and the counter".
 
+Later on **2026-10-07**: **Q44 and Q45 added** after Q42, from A231d (full invoices by email as a PDF
+and on A4). Q44 carries the owner's interim answers to the design's five asesor questions, for the
+asesor to confirm; Q45 asks when structured business invoicing reaches a restaurant's full invoices,
+now that Orden HAC/1028/2026 has started the clock. The standalone English and Spanish Word copies do
+not carry them yet.
+
 On **2026-10-07**: **Q43** now records a measurement. In AEAT's preproduction environment, two
 runs of shuffled envíos of up to 1,000 records each got their replies back in the order sent. The
 question to the asesor stands; the Word copies do not carry Q43 yet. The same day the owner
@@ -1121,6 +1127,99 @@ decision asks which operation date an F1 carries for a service spanning dates, w
 > final la señal ya facturada? ¿Cambia la señal la respuesta a (a) o (b) para el resto del
 > importe?
 
+
+### Q44. Sending a full invoice as a PDF, by email or on A4 — the owner's interim answers (added 2026-10-07)
+
+**Why it matters.** A231d lets a full invoice (F1) reach the customer by email as a PDF, or printed
+on an ordinary office printer, as well as on the receipt printer
+([design](../superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md), whose
+"Questions for the asesor" are the five parts below). The customer picks ONE way to receive the
+original. On 2026-10-07 the owner answered the five parts in place of the asesor so the build (A231p)
+can go ahead, with public F1 still disabled; the asesor is asked to confirm or correct each answer.
+The owner's answers:
+
+- **(a)** a PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so;
+- **(b)** staff ask the customer and record the consent on the till; the customer does not sign or confirm anything;
+- **(c)** keeping is the same as for a printed F1: the invoice's database record, from which the invoice can be drawn again. The PDF file sent is not stored;
+- **(d)** to a business customer, before the business regime (Q45) applies, the PDF goes unsigned, with the QR and legend as on paper;
+- **(e)** a retry after a failed or uncertain send is still the original.
+
+Sources, each found word for word in the BOE or AEAT page fetched 2026-10-07: RD 1619/2012 art. 14.3
+(a duplicate has the original's effect only in art. 14.2's cases, quoted in the design's register);
+art. 9.2, sending an electronic invoice «estará condicionada a que su destinatario haya dado su
+consentimiento»; art. 21.1, keeping by electronic means must ensure «su legibilidad en el formato
+original en el que se hayan recibido o remitido»; art. 8.4, origin and integrity «se presumirá
+acreditada cuando se haya expedido utilizando un sistema o programa informático en conformidad con
+los requisitos»; DGT binding ruling V2891-18 (08/11/2018), an emailed PDF «con independencia de que
+no haya sido firmada digitalmente por el emisor de la misma, tendrá la calificación de factura
+electrónica»; AEAT's Veri*Factu FAQ, the QR on a PDF «no tendrá especialidades respecto de la que
+corresponde a la emisión en papel». Part (c) is the one where the owner's answer departs from our
+reading of art. 21.1: we read "the format sent" as the PDF itself, and the design proposed keeping it.
+
+> Vamos a permitir entregar la factura completa (F1) por correo electrónico, en PDF, o impresa en
+> una impresora de oficina (A4), además de en la impresora de tickets. El cliente elige una sola forma
+> de recibir el original. Hasta tener su respuesta hemos decidido lo siguiente; le rogamos que lo
+> confirme o lo corrija.
+>
+> **(a) Duplicados.** Cada factura tiene un único original (artículo 14.1 del RD 1619/2012). Si el
+> original se entregó en papel y el cliente pide además el PDF por correo, lo enviamos marcado
+> «duplicado»; y al revés, si el original se envió por correo y el cliente pide el papel. El artículo
+> 14.2 sólo prevé duplicados cuando hay varios destinatarios o se ha perdido el original. ¿Es correcto
+> marcarlo como duplicado, o debe ser otra cosa (por ejemplo, una copia sin valor fiscal)? ¿Cómo debe
+> marcarse?
+>
+> **(b) Consentimiento.** El personal pregunta al cliente si quiere recibir la factura por correo y
+> lo anota en la caja; el cliente no firma ni confirma nada por sí mismo. ¿Basta como consentimiento
+> del destinatario (artículo 9.2 del RD 1619/2012) y, si el cliente es un consumidor, como
+> consentimiento expreso del artículo 63.3 del Real Decreto Legislativo 1/2007? ¿Basta con que la
+> revocación se comunique al personal o por escrito al establecimiento?
+>
+> **(c) Conservación.** De una factura impresa conservamos su registro en nuestra base de datos, a
+> partir del cual puede volver a generarse. Haremos lo mismo con la enviada en PDF: no guardamos el
+> fichero enviado. El artículo 21.1 del RD 1619/2012 pide, en la conservación por medios
+> electrónicos, que se asegure «su legibilidad en el formato original en el que se hayan recibido o
+> remitido». ¿Basta con conservar el registro, o debemos guardar el PDF tal como se envió? ¿Durante
+> cuánto tiempo?
+>
+> **(d) Firma.** A un cliente empresario o profesional, antes de que le sea aplicable la factura
+> electrónica obligatoria (Q45), enviamos el PDF sin firma electrónica, con el código QR y la leyenda
+> igual que en papel, apoyándonos en el artículo 8.4 del RD 1619/2012 y en la consulta vinculante
+> V2891-18 de la DGT. ¿Está de acuerdo?
+>
+> **(e) Reintentos.** Si el servidor de correo rechaza el envío, si la impresora rechaza el trabajo
+> antes de imprimir, o si no podemos saber si el correo o la impresión llegaron a salir, tratamos el
+> siguiente intento como el original, no como un duplicado. ¿Es correcto? ¿Y si el servidor de correo
+> aceptó el envío pero el cliente dice que no lo ha recibido?
+
+### Q45. When does structured business invoicing reach a restaurant's full invoices? (added 2026-10-07)
+
+**Why it matters.** Once the business regime applies, an invoice to a Spanish business must be a
+structured message and a PDF alone is not enough (RD 238/2026 art. 7.1, quoted in the A231d design's
+register). A231 already holds Spanish business sales behind the owner's and the asesor's answer on
+that date. The date is now set: [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.php?id=BOE-A-2026-20587)
+(BOE núm. 247, 5 October 2026) «entrará en vigor el día siguiente al de su publicación en el
+«Boletín Oficial del Estado», dándose inicio al cómputo de los plazos» of
+[RD 238/2026](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295)'s fourth final provision:
+«Doce meses después, para los empresarios y profesionales cuyo volumen de operaciones […] haya
+excedido de 8 millones de euros durante el año natural inmediato anterior» and «Veinticuatro meses
+después, para el resto de los empresarios y profesionales». RD 1619/2012 art. 8 bis.1 says the
+regime «no será de aplicación cuando se expida factura simplificada a que se refiere el artículo 4,
+salvo las referidas en el artículo 7.2». Each quote was found word for word in the BOE text fetched
+2026-10-07. Our reading: about October 2027 for the largest businesses, about October 2028 for the
+rest, and a restaurant's full invoices to businesses are inside the regime.
+
+> La Orden HAC/1028/2026 (BOE de 5 de octubre de 2026) entró en vigor el día siguiente a su
+> publicación e inició el cómputo de los plazos de la disposición final cuarta del RD 238/2026: doce
+> meses para los empresarios con un volumen de operaciones superior a 8 millones de euros, y
+> veinticuatro meses para el resto.
+>
+> **(a)** ¿En qué día exacto termina cada plazo?
+>
+> **(b)** Un restaurante expide sobre todo facturas simplificadas y, a clientes empresarios que lo
+> piden, facturas completas (F1). Entendemos que el artículo 8 bis.1 del RD 1619/2012 excluye las
+> simplificadas, salvo las del artículo 7.2. ¿Deben las facturas completas a empresarios expedirse
+> como factura electrónica estructurada desde esa fecha, también en hostelería? ¿Qué plazo aplica al
+> restaurante: el de su propio volumen de operaciones o el del cliente?
 ---
 
 ## USEFUL — reduces uncertainty, not blocking

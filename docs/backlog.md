@@ -1650,6 +1650,16 @@ it by itself later; its source code waits 7 days before counting such a job fail
 five questions. This settles A3's open "Printing A4 invoices on an office printer" design when
 built.
 
+**Owner decisions in place of the asesor's answers (2026-10-07, under the plan's Task 0.1), so A231p may be built.** Public F1 stays disabled until A231's own enablement gates are met; the asesor is asked to confirm these as [Q44](compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07):
+
+1. A PDF emailed after a paper original, or paper after an emailed original, is a «duplicado» and is marked so.
+2. Consent to email: staff ask the customer and record the answer on the till. The customer does not sign or confirm anything themselves.
+3. Keeping: the same as a printed F1 — the invoice's database record. No copy of the PDF file is stored, so the design's append-only table of delivered PDFs is dropped; A231p revises its plan to match.
+4. An unsigned PDF is a valid original for a business customer before the business regime below applies, carrying the same QR and legend as paper. Receipts, each found word for word in the source fetched 2026-10-07: RD 1619/2012 art. 8.4, «se presumirá acreditada cuando se haya expedido utilizando un sistema o programa informático en conformidad con los requisitos»; DGT binding ruling V2891-18 (08/11/2018), an emailed PDF «con independencia de que no haya sido firmada digitalmente por el emisor de la misma, tendrá la calificación de factura electrónica»; AEAT's Veri*Factu FAQ, the QR on a PDF «no tendrá especialidades respecto de la que corresponde a la emisión en papel».
+5. A retry after a failed or uncertain send is still the original.
+
+**When the business e-invoicing regime starts.** [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.php?id=BOE-A-2026-20587) (BOE núm. 247, 5 October 2026) «entrará en vigor el día siguiente al de su publicación en el «Boletín Oficial del Estado», dándose inicio al cómputo de los plazos» of [RD 238/2026](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295)'s fourth final provision: «Doce meses después» for businesses whose turnover is over €8 million, and «Veinticuatro meses después, para el resto de los empresarios y profesionales». So from about October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are asked as [Q45](compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07). Researched 2026-10-07 in the watcher session; the fetched texts were not kept in the repository.
+
 ### A275. Invoice a bill paid later by transfer (full or simplified invoice) — WAITS ON ASESOR Q42 (2026-10-06)
 
 The owner, 2026-10-06: a large bill (their example, €5,000) is rarely paid on the spot; the customer
