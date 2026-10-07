@@ -1204,8 +1204,7 @@ of the publication plan).
   clock in the process.
 - **DONE (A376):** the schedule and Change time forms closed with "Cancel" / "Cancelar" directly
   under a sentence that says "Cancel it…" / "Cancélala…", which in Spanish could read as
-  cancelling the version in the way. The button now reads "Close" / "Cerrar"; the version-cancel
-  confirmation keeps "Cancel".
+  cancelling the version in the way. The button now reads "Close" / "Cerrar".
 - **DONE (A365, 2026-10-07):** `loadConfig` refuses `WAITRON_MAX_TICK_MS` above
   2,147,483,647 with `server.config_invalid` / `above_timer_limit`. The boundary is accepted by
   the config reader; trading boot still applies its stricter filing-duty budget.

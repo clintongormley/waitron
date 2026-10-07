@@ -83,8 +83,7 @@ const IN_THE_WAY = {
 /**
  * What to do about the editions an `overtakes_queued` refusal names, one sentence for those that
  * must go live first and one for those that must go live after. `placed` is the number of the
- * edition being moved, null for one not yet numbered, or "now" for an immediate publish, which can
- * only wait. Null when the list read after the refusal lacks a named edition.
+ * edition being moved, null for one not yet numbered, or "now" for an immediate publish. Null when the list read after the refusal lacks a named edition.
  */
 export function overtakeSentence(
   overtaken: readonly { versionId: string }[],

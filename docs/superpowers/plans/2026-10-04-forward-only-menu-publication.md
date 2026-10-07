@@ -1371,6 +1371,8 @@ and the doc comments in `packages/media/src/images.ts` that say "live" now say "
    schedule and a reschedule the sentence sits under the time field with the form's generic bottom
    message; for an immediate publish it is the `{reason}` of the preview's existing publish result
    paragraph, because no dialog is open when that answer arrives (Task 10).
+   > 2026-10-07 (A376): for an immediate publish the dashboard now advises cancelling or publishing
+   > once the version is live; a move cannot clear it.
 2. **Overtaking is defined by number against time, in both directions, and equal instants count.**
    A new edition always takes the next number, so queuing it no later than an existing queued one
    overtakes that one.
