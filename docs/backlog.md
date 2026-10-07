@@ -2493,7 +2493,7 @@ other items in the tree's row menus are greyed out while a change is out; the li
 menu's own editor is a link, which has no greyed-out state, so it stays live. (A322 renamed it from
 "Edit <menu>", so that the include's own Edit could sit beside it.)
 
-**An included menu can show its sections directly instead of as one folder — DONE (A322, this PR,
+**An included menu can show its sections directly instead of as one folder — DONE (A322, #1372,
 2026-10-07).** Each include of a menu has its own setting. On the Menus screen the include's row
 says "Shown as a folder" or "Sections shown directly", and its ⋮ holds "Open <menu>" (the included
 menu's own Structure tab), Edit and "Remove from this menu". Edit opens a dialog with a "Show as a
