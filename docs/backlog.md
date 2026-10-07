@@ -1877,7 +1877,7 @@ a demo seeds changes.
 text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
 in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
 `data-sets/casa-delgado-es.ts`) has a Catalan and a Galician value, written by Claude; nothing
-writes them until Task 4 (W109-4). The PR carries the side-by-side table. A speaker of each should
+wrote them until Task 4 (W109-4), which now does in the areas that use them. The PR carries the side-by-side table. A speaker of each should
 read it; the drafter was least sure of the Galician "Charcutaría", "Lombo embuchado", "Ventrecha de
 bonito", "Luras á romana", "Polbo á feira", "Café só", "Tortilla de patacas" and the doneness
 choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error en marcar" and
@@ -1916,8 +1916,10 @@ the regional language in the Valencian Community, the Balearic Islands and Galic
 starts with `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`):
 its default, its area's required languages, then English. The dashboard's required-language
 messages now say Waitron keeps the language enabled for the region, not that the region requires
-it. The demo's side is Task 4 (W109-4); Task 3 (W109-3) gave the demo data its Catalan and Galician
-text and the rule.
+it. **The demo's side is BUILT too (W109-4, Task 4), so this entry is DONE:** a demo keeps the
+languages setup gives its area, writes every customer-facing text in each of them (menus' customer
+names included), and saves its row through the required-language check; a Barcelona demo is
+Catalan (default), Spanish and English with nothing listed as missing.
 Left by #1320, OPEN, unqueued: `resolveInstalledDefaultContentLanguage`
 (`packages/country-packs/src/registry.ts`) is now called only by its own tests; delete it with its
 cases once the demo-data plan's Tasks 3 and 4 no longer name it. And seen during #1320's look
@@ -4372,10 +4374,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   the languages Waitron keeps enabled for its area plus English, the regional language the default
   where one is kept (owner, 2026-10-06 ~17:23; entry "Content languages per region", A2); the
   fixed `["es", "ca", "en"]` is gone from `packages/catalogue/src/provisioning.ts`.
-- **Two writers still skip the required-language check (`content.language_required`) — OPEN.**
-  The demo seed (`apps/server/scripts/demo-seed/seed-catalogue.ts`) replaces setup's row with its
-  own pair, fixed by the demo-data plan's Task 4 (W109-4); the Prepare-to-Live configuration copy
-  (`packages/catalogue/src/configuration-transfer.ts`) copies the saved row as it is, unplanned.
+- **One writer still skips the required-language check (`content.language_required`) — OPEN.**
+  The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
+  copies the saved row as it is, unplanned. The demo seed
+  (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4.
 - **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).** The
   Content languages page's **Missing translations** section lists, per enabled language, what has
   no customer-facing name in it.
