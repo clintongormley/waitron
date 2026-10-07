@@ -715,6 +715,60 @@ it("protects an image only a live menu version names, and releases it once anoth
   });
 });
 
+it("protects an image only a queued menu edition names, and counts it as a use", async () => {
+  const {
+    addMember,
+    createCatalogue,
+    createProduct,
+    previewMenu,
+    publishMenu,
+    queueMenuPublication,
+    readMenuStructure,
+    updateProduct,
+  } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
+    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const lemonade = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Lemonade",
+      pricingUnit: "each",
+      unitPrice: "3.00",
+      vatClass: "reduced",
+    });
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
+    await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "person-1");
+    await updateProduct(tx, lemonade.id, { image: image.filename });
+    const activatesAt = new Date(Date.now() + 60 * 60 * 1000);
+    const queued = await queueMenuPublication(
+      tx,
+      menu.id,
+      (await previewMenu(tx, menu.id)).hash,
+      activatesAt,
+      "manager-ana",
+    );
+    // The working state lets go; the queued edition still shows the photo.
+    await updateProduct(tx, lemonade.id, { image: null });
+    const uses = [
+      {
+        kind: "scheduled_menu_version" as const,
+        id: queued.versionId,
+        menuId: menu.id,
+        menuName: "Lunch Menu",
+        number: 2,
+        activatesAt: activatesAt.toISOString(),
+      },
+    ];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+  });
+});
+
 it("protects the photo of a product a live menu version offers only as an extra", async () => {
   const {
     addMember,

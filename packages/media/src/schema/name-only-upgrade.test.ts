@@ -373,3 +373,42 @@ describe("after the upgrade, a photo the live menu version names", () => {
     expect(await bytesFor(MENU_PHOTO)).toBe(0);
   });
 });
+
+describe("then upgrading to the end of media's folder", () => {
+  const REWRITTEN = [
+    "menu_version_images_media_image_fk_parent_delete",
+    "menu_version_images_media_image_fk_parent_rename",
+  ];
+  const LIVE_CLAUSE =
+    "JOIN menu_publications ON menu_publications.version_id = menu_version_images.version_id";
+  const QUEUED_JOIN =
+    "JOIN menu_scheduled_publications ON menu_scheduled_publications.version_id = menu_version_images.version_id";
+  const QUEUED_STATE = "menu_scheduled_publications.state = 'queued'";
+  type Trigger = { name: string; sql: string };
+  let latest: Trigger[];
+
+  beforeAll(async () => {
+    const venueDir = join(root!, "venue");
+    await store!.close();
+    store = undefined;
+    await applyMigrations(venueDir, setsUpTo(MEDIA_MIGRATIONS.migrationsFolder));
+    store = await openVenueDatabase(venueDir);
+    latest = (await snapshot(store.venue)).triggers as Trigger[];
+  });
+
+  it("leaves the other nine triggers word for word", () => {
+    const untouched = (triggers: unknown[]) =>
+      (triggers as Trigger[]).filter((trigger) => !REWRITTEN.includes(trigger.name));
+    expect(untouched(after.triggers)).toHaveLength(9);
+    expect(untouched(latest)).toEqual(untouched(after.triggers));
+  });
+
+  it("keeps a photo a live version names and adds a queued edition's to the two rewritten", () => {
+    for (const name of REWRITTEN) {
+      const trigger = latest.find((each) => each.name === name);
+      expect(trigger?.sql).toContain(LIVE_CLAUSE);
+      expect(trigger?.sql).toContain(QUEUED_JOIN);
+      expect(trigger?.sql).toContain(QUEUED_STATE);
+    }
+  });
+});

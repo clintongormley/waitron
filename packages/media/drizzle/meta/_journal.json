@@ -57,6 +57,13 @@
       "when": 1790886208486,
       "tag": "0007_recreate_product_image_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791368349951,
+      "tag": "0008_queued_edition_image_references",
+      "breakpoints": true
     }
   ]
 }

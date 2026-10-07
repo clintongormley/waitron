@@ -2,16 +2,20 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, catalogues, products, withTransaction, type Database } from "@waitron/db";
 import {
+  activateDueMenuPublications,
   addMember,
+  cancelMenuPublication,
   CATALOGUE_MIGRATIONS,
   createCatalogue,
   createProduct,
   createSectionIn,
   menuVersionImages,
   menuPublications,
+  menuScheduledPublications,
   menuVersions,
   previewMenu,
   publishMenu,
+  queueMenuPublication,
   readMenuStructure,
   sections,
   updateProduct,
@@ -24,10 +28,12 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
  * `products.image`, `sections.image` and `menu_version_images.filename` may only name a photo
- * that exists, and a photo one of the first two still names cannot be deleted or renamed. Nor can a photo a LIVE menu version names. The rules are triggers, not keys
+ * that exists, and a photo one of the first two still names cannot be deleted or renamed. Nor can a
+ * photo a LIVE menu version or a queued edition names. The rules are triggers, not keys
  * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why,
- * `0002_section_image_references.sql` for `sections.image`, and
- * `0003_published_image_references.sql` for a published version's photos).
+ * `0002_section_image_references.sql` for `sections.image`,
+ * `0003_published_image_references.sql` for a published version's photos, and
+ * `0008_queued_edition_image_references.sql` for a queued edition's).
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
@@ -244,29 +250,29 @@ describe("an image a catalogue row still names", () => {
   });
 });
 
-describe("an image a live menu version names", () => {
-  /** A menu whose one product shows the image, published, and then the product letting it go. */
-  async function publishedOnly(): Promise<{ menuId: string; productId: string }> {
-    await seedTenant(suite.db);
-    return withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Lunch Menu" });
-      const product = await createProduct(tx, {
-        catalogueId: menu.id,
-        categoryId: null,
-        name: "Toast",
-        pricingUnit: "each",
-        unitPrice: "2.00",
-        vatClass: "general",
-        image: PRESENT,
-      });
-      const { rootSectionId } = await readMenuStructure(tx, menu.id);
-      await addMember(tx, rootSectionId, { kind: "product", productId: product.id });
-      await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "person-1");
-      await updateProduct(tx, product.id, { image: null });
-      return { menuId: menu.id, productId: product.id };
+/** A menu whose one product shows the image, published, and then the product letting it go. */
+async function publishedOnly(): Promise<{ menuId: string; productId: string }> {
+  await seedTenant(suite.db);
+  return withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const product = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Toast",
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "general",
+      image: PRESENT,
     });
-  }
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "product", productId: product.id });
+    await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "person-1");
+    await updateProduct(tx, product.id, { image: null });
+    return { menuId: menu.id, productId: product.id };
+  });
+}
 
+describe("an image a live menu version names", () => {
   /** Publishes the menu again, now without the image, so the version naming it is no longer live. */
   async function republish(menuId: string): Promise<void> {
     await withTransaction(suite.db, async (tx) =>
@@ -351,5 +357,109 @@ describe("an image a live menu version names", () => {
     await publishedOnly();
     await suite.db.execute(sql`update media_images set filename = filename`);
     expect(await imageCount()).toBe(1);
+  });
+});
+
+describe("an image a queued menu edition names", () => {
+  const RENAMED = `${"c".repeat(64)}.jpg`;
+  const HOUR = 60 * 60 * 1000;
+
+  async function removeImage(filename: string): Promise<void> {
+    await suite.db.execute(sql`delete from media_images where filename = ${filename}`);
+  }
+  async function renameImage(filename: string): Promise<void> {
+    await suite.db.execute(
+      sql`update media_images set filename = ${RENAMED} where filename = ${filename}`,
+    );
+  }
+  async function filenames(): Promise<string[]> {
+    const rows = await suite.db.execute<{ filename: string }>(
+      sql`select filename from media_images order by filename`,
+    );
+    return rows.rows.map((row) => row.filename);
+  }
+
+  /**
+   * Toast switches to `ABSENT`, the edition is queued to go live an hour after `at`, and the
+   * product lets the photo go again, so only the queued edition names it.
+   */
+  async function queueWithAbsent(menuId: string, productId: string, at: Date): Promise<string> {
+    return withTransaction(suite.db, async (tx) => {
+      await updateProduct(tx, productId, { image: ABSENT });
+      const { hash } = await previewMenu(tx, menuId);
+      const { versionId } = await queueMenuPublication(
+        tx,
+        menuId,
+        hash,
+        new Date(at.getTime() + HOUR),
+        "manager-ana",
+        { at },
+      );
+      await updateProduct(tx, productId, { image: null });
+      return versionId;
+    });
+  }
+
+  /** "Lunch Menu" live with Toast showing `PRESENT`, and `ABSENT` in the library. */
+  async function liveWithAbsentInLibrary(): Promise<{ menuId: string; productId: string }> {
+    const ids = await publishedOnly();
+    await suite.db.insert(mediaImages).values({ filename: ABSENT, names: { en: "New toast" } });
+    return ids;
+  }
+
+  it("cannot be deleted or renamed while queued, and the live version still holds its own", async () => {
+    const { menuId, productId } = await liveWithAbsentInLibrary();
+    await queueWithAbsent(menuId, productId, new Date());
+    await expect(removeImage(ABSENT)).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    await expect(renameImage(ABSENT)).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    await expect(removeImage(PRESENT)).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    expect(await filenames()).toEqual([PRESENT, ABSENT]);
+  });
+
+  it("can be renamed and deleted once the queued edition is cancelled", async () => {
+    const { menuId, productId } = await liveWithAbsentInLibrary();
+    const versionId = await queueWithAbsent(menuId, productId, new Date());
+    await withTransaction(suite.db, (tx) =>
+      cancelMenuPublication(tx, menuId, versionId, "manager-luis"),
+    );
+    await renameImage(ABSENT);
+    expect(await filenames()).toEqual([PRESENT, RENAMED]);
+    await removeImage(RENAMED);
+    expect(await filenames()).toEqual([PRESENT]);
+  });
+
+  it("is held through the pointer once activated, and the superseded version's photo is free", async () => {
+    const { menuId, productId } = await liveWithAbsentInLibrary();
+    const at = new Date();
+    await queueWithAbsent(menuId, productId, at);
+    const { activated } = await withTransaction(suite.db, (tx) =>
+      activateDueMenuPublications(tx, new Date(at.getTime() + 2 * HOUR)),
+    );
+    expect(activated).toHaveLength(1);
+    await expect(removeImage(ABSENT)).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    await removeImage(PRESENT);
+    expect(await filenames()).toEqual([ABSENT]);
+  });
+
+  it("is held while due but not yet marked activated", async () => {
+    const { menuId, productId } = await liveWithAbsentInLibrary();
+    const versionId = await queueWithAbsent(menuId, productId, new Date(Date.now() - 2 * HOUR));
+    const [row] = await suite.db
+      .select({ state: menuScheduledPublications.state })
+      .from(menuScheduledPublications)
+      .where(sql`${menuScheduledPublications.versionId} = ${versionId}`);
+    expect(row).toEqual({ state: "queued" });
+    await expect(removeImage(ABSENT)).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    expect(await filenames()).toEqual([PRESENT, ABSENT]);
   });
 });
