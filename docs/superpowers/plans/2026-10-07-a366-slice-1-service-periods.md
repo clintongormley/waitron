@@ -234,8 +234,9 @@ describe("service day", () => {
 ```
 
 Add `"empty" | "order" | "step"` to the `reason` union of `menu_timetable.invalid` in `errors.ts`
-(`:49`), and allow `reason` without a `date` and `departmentId` (today's `invalidTimetable`,
-`menu-timetable-rules.ts:19-24`, only passes `reason` with both).
+(`:49-54`; `date`, `departmentId` and `reason` are already optional there). Change
+`invalidTimetable` (`menu-timetable-rules.ts:19-24`), whose `clash` argument today requires all
+three together, so `reason` can be passed alone.
 
 - [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/service-day.test.ts`. Expected: cannot import `./service-day.js`.
 
@@ -524,7 +525,7 @@ background after checking headroom (`memory_pressure | grep free`). Fix fixtures
 menu is an active catalogue never listed anywhere else saves; a slot `06:00`–`06:00` saves; a slot
 `12:10`–`14:00` inserted directly is refused by the database.
 - [ ] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. drizzle emits the
-`DROP TABLE` of a removed table before the rebuilds (as in `0027_retire_zone_menus.sql:1-2`), so on
+`DROP TABLE` of a removed table before the rebuilds (as in `0027_retire_zone_menus.sql:1`), so on
 a venue holding a period or a zone menu choice the first statement is refused: that is this
 slice's venue reset. Run `scripts/migration-upgrade.test.ts`, and add a `RESETS` entry for
 `venue-service/0033_...` naming exactly the refusal it prints, as the `0027_retire_zone_menus`
@@ -543,7 +544,7 @@ venue-service and server.
 
 **Files:**
 - Modify: `apps/server/src/working-order.ts` (`readBasketOffers :347`, `priceOrderLines :399-466`,
-  `applyLineEdits` around `:4855`), `apps/server/src/order-drafts.ts :767`,
+  `applyLineEdits :4575`, which prices at `:4855`), `apps/server/src/order-drafts.ts :767`,
   `packages/venue-service/src/errors.ts`
 - Test: `apps/server/src/till-api.service-periods.test.ts`, `working-order.test.ts`
 
