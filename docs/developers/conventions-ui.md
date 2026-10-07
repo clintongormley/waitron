@@ -666,10 +666,10 @@ they never rewrite the record. Regression: `packages/shared/src/content-language
 
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 
-W69's shared dialog API, confirmation and application renderers are implemented on its feature
-branch. Product/Variant, Unit Add/Edit, Related Unit and explicit Product colour forms use the
-shared registry; other modal/page owners remain in progress. The [backlog](../backlog.md)
-records that boundary. Use `beforeClose`
+Use the shared registry for staged modal, page and credential input, including keypad PIN
+entry. The application shells share one confirmation and accepted-history adapter. The
+[dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md) records behavioral
+checks and their limits; the [backlog](../backlog.md) tracks delivery. Use `beforeClose`
 with a scoped ui-core coordinator request and `requestClose(reason)`
 for voluntary dismissal. Commit the exact submitted snapshot after a successful write, before
 refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits
@@ -703,6 +703,10 @@ inheritance; an answer for an earlier opening cannot commit a replacement Produc
 cases: `catalogue-forms.unsaved.test.ts`, `unit-owners.unsaved.test.ts` and
 `menu-colour.unsaved.test.ts` under `apps/dashboard/src/`. Category colour selection submits
 immediately and remains exempt.
+
+_Historical implementation checkpoints, 2026-10-06: the modal receipts below describe the
+tree when measured. Their pending-rollout wording is superseded by the dated owner audit;
+whole-branch review and current-head CI still decide delivery._
 
 On the W69 implementation branch, extras/options list forms register their normalized submitted
 values and ordered rows. Their Product-related forms name the Product as their parent; the option

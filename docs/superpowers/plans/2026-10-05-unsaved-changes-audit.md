@@ -381,7 +381,7 @@ Run each command separately and inspect its exit status. The broad search delibe
 ```sh
 git rev-parse HEAD
 rg --files apps/dashboard/src apps/till/src apps/setup/src packages
-rg -n 'wt-modal|wt-dialog|wt-form-actions|<form|wt-input|wt-textarea|wt-price-input|wt-combobox|wt-number-stepper|wt-switch' apps/dashboard/src apps/till/src apps/setup/src packages --glob '*.ts' --glob '!*.test.ts' --glob '!*.test-helpers.ts'
+rg -n 'wt-modal|wt-dialog|wt-form-actions|<form|wt-input|wt-textarea|wt-price-input|wt-combobox|wt-number-stepper|wt-switch|till-numeric-pad' apps/dashboard/src apps/till/src apps/setup/src packages --glob '*.ts' --glob '!*.test.ts' --glob '!*.test-helpers.ts'
 rg -n 'save|submit|draft|cancel|close|focusout' apps/dashboard/src/screens apps/dashboard/src/widgets apps/till/src/screens apps/till/src/widgets apps/setup/src/screens --glob '*.ts' --glob '!*.test.ts'
 rg -n 'new UrlStateController|history\.|popstate|setup-goto|setup-patch|logout|session\.required|session\.expired' apps packages --glob '*.ts' --glob '!*.test.ts'
 rg -n 'save|submit|draft|persist|flush|dirty|close' apps/till/src/state apps/till/src/till-app.ts --glob '*.ts' --glob '!*.test.ts'
@@ -3963,3 +3963,38 @@ The rendered-link matrix is covered at this checkpoint. The final advancing-owne
 audit, reconciliation with main, whole-branch run-it review, normal push hook and current-head
 CI remain outstanding. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. W69 is not ready
 for finish-branch or landing.
+
+
+## Final owner discovery: PIN entry, 2026-10-07
+
+The repeated discovery on rebased W69 found the PIN sign-in owner still outside the shared
+registry. It uses `till-numeric-pad`, which the field-tag search omitted. The inventory already
+classified `till-lock-screen` as protected; its implementation remained missing despite the
+previous modal/page checkpoints. Include numeric keypads when repeating discovery and inspect
+the containing credential owner, rather than treating the keypad's primitive exemption as its
+parent's exemption.
+
+Five new actual-control cases failed before registration and Cancel interception. The existing
+41 lock-screen cases and those five then passed. A later-input case failed because excluding
+an in-flight login by a count also excluded digits typed after submission. The submitted-value exemption now leaves later digits protected. The final lock-screen pair
+passes 56 cases; types and changed-source lint pass. Existing assertions are unchanged.
+Five independent installed deletion experiments remove Cancel interception, keypad notifications,
+the pending-submit exemption, connection identity or disposal. Each produces its intended
+assertion failure beside a passing standalone clean-close control. The restored copy passes
+56 cases and matches the three source/test files byte for byte before removal. Exact commands
+and outputs are in Lane E `receipts/w69-final-audit-20261007/`.
+
+The native Cancel/Escape flows passed at measured 390/1280 widths in EN/ES and both themes.
+Eight confirmation-scoped axe scans passed; sixteen captures were inspected. Keep restores
+Cancel focus and retains masked digits. These flows use the actual sign-in screen with a
+synthetic login API, not live authentication or a PIN-specific activated browser warning.
+The first real-shell locale case used the wrong event name and failed before reaching its
+handler; the corrected `wt-locale-selected` case passes and is the runtime receipt.
+
+Main advanced from `5839b1e4b57a2608ff4621f2b6a37c4c35aa1ce7` to
+`34be43393ff99f9e86dd5dbca406f215265ffdc7`, adding demo seed changes and documentation.
+The rebase completed without conflicts. The other lanes' working changes include printer
+and payment screens; the W69 queue explicitly waives that overlap. No foreign source was changed.
+The complete repeated source search is retained in Lane E's
+`receipts/w69-final-audit-20261007/form-discovery.json`. A search result is an inventory,
+not runtime evidence. Whole-branch review and required current-head CI remain outstanding.

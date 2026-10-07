@@ -1487,8 +1487,9 @@ For an action that leaves every registered editor, call
 input; Discard restores only dirty inputs before your continuation runs. An explicit ID list
 selects those owners and their descendants, while `[]` selects none. Supply `except: [retainedOwner]`
 when the action keeps an editor mounted; its descendants are retained too. A new or changed
-affected owner invalidates an unanswered question. Dashboard logout and language changes use
-these selections on the W69 branch; sidebar/history/page-owner rollout remains incomplete.
+affected owner invalidates an unanswered question. Application shells use these selections for
+voluntary logout, locale changes and navigation; retained order drafts are explicitly excluded
+from transitions that keep them.
 
 The controller renders one `wt-unsaved-changes` per application, supplying `heading`, `message`,
 `keepLabel` and `discardLabel` from that application's translations. The compact confirmation focuses Keep
@@ -1498,42 +1499,28 @@ for an aborted request emits no choice. Its message is the inner dialog's access
 Keep the original editor mounted until the coordinator approves leaving, so Keep restores focus
 and preserves the draft. Read-only and automatically saved forms need no draft scope.
 
-W69 is being rolled out in stages. These shared APIs are available on its implementation branch;
-the application renderers, Product/Variant, Unit, explicit Product colour, extras/options lists
-and nested option-label forms are wired. Image Upload/Edit and enclosing picker owners also use
-the registry: snapshots copy translated names and preserve the selected File by identity, while
-the picker contributes a clean parent scope for its staged child. Menu and section metadata
-forms also register their submitted details, with a Section parent for nested image edits. Their
-writes commit before the following refresh. Add-to-menus and section Add products compare selected
-ID membership independently of offered order or search filters. A successful placement removes
-only accepted destinations from the pending choice; a refused destination still asks before
-closing. Inline member replacement registers only the pending replacement choice; its immediate
-Add/Remove/Reorder actions stay exempt. W93 retired the layout name dialogs and the screen that drew member replacements.
-Device Home Page display choices and Include menu write immediately on selection and stay exempt. Add/Edit staff compare their normalized submitted details and role/status.
-Their writes commit before refresh; resending an invitation leaves an edited staff form unsaved.
-Profile detail and credential modals also use the registry. Successful writes commit before
-refresh; independently accepted authenticator steps and the Google redirect clear their own
-scope. Recovery-code output is exempt, and disconnect clears sensitive local values.
-Reader rename and discovery names also use the registry on this branch. Compare trimmed names
-and commit each accepted row separately before refresh, so accepting one reader does not discard
-another edited name. Give each opening its own identity and ignore departed close reports.
-Details and unpair confirmations stay exempt. The remaining form owners stay tracked in the W69
-backlog entry. Page navigation is a separate part of that
-rollout. The coordinator's dirty-only unload registration
-requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)
-records its activation and platform limits.
+The dashboard, till and setup shells share this controller and the accepted-history adapter.
+Its leave callback receives the destination URL so Account settings can retain underlying
+page drafts. Sidebar and product-link requests defer screen changes until acceptance. Plain
+same-app anchors use the dispatched click's composed path; modified clicks, new-tab targets
+and downloads keep browser handling. Fragment-only form links keep their target's handler,
+which owns any leave request. Preview department changes and same-page receipt Back retain
+staged inputs; a tab or management-link departure asks before leaving them.
 
-On the W69 branch, the dashboard installs the shared accepted-history adapter. Its leave
-callback receives the destination URL so Account settings can retain the underlying page's
-drafts. Sidebar and product-link requests defer screen changes until acceptance. Plain same-app
-anchors use the dispatched click's composed path; modified clicks, new-tab targets and downloads
-keep browser handling. Fragment-only form links keep their target's click handler, which owns
-any leave request; the dashboard shell does not turn them into page navigation. The profile shell
-tests cover Keep/Discard through sidebar, links and
-indexed Back/Forward. Changing the Receipts preview department, including same-page Back,
-retains its staged receipt inputs because the preview does not save or replace them. Leaving
-Receipts through a tab or its department-management link still requests a leave decision.
-Other application shells, direct history writers and individual page/tab owners remain part of the rollout.
+Each form owns its comparison and successful-write boundary. Compare membership for selected
+ID sets and preserve order for submitted positions. Nested image forms retain File identity;
+a child save commits that child without committing its parent. Independent receipt, credential
+and inline-row writes commit separately. A failed refresh after a successful write cannot make
+that submitted value dirty again. Read-only views, immediately saved controls and safety
+acknowledgements remain exempt. The [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md)
+records the coverage and limits of the rollout checks.
+
+The dirty-only unload listener requests the browser's own warning. Activated desktop Chromium
+checks cover reload, external navigation and closing with a Schedule draft. The
+[design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md) records activation and
+platform limits; mobile process termination and every-platform reliability are unverified.
+PIN sign-in compares ephemeral keypad input and asks on voluntary Cancel; explicit submission
+remains direct, and disconnect clears proof without asking.
 
 #### A value saved from its own table row
 
