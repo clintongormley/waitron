@@ -1147,7 +1147,6 @@ it("returns a tab line's stored staff names and options answers", async () => {
         labelKitchenName: "Rare kitchen",
       },
     ];
-    // A waiter reads a tab's lines, so a line shows the variant's staff name.
     await tx
       .update(workingOrderLines)
       .set({
@@ -1159,7 +1158,7 @@ it("returns a tab line's stored staff names and options answers", async () => {
       })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     expect((await readTabLines(tx, cfg, tabId))[0]).toMatchObject({
-      name: "Large",
+      name: "Recorded coffee (Large)",
       optionSnapshots,
     });
   });

@@ -335,7 +335,7 @@ describe("a comp (plan D4)", () => {
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 1050, nominalValue: 1050 });
   });
 
-  it("records a variant line under the variant's staff name, as the till shows it, not the Wine's", async () => {
+  it("records the parent and variant staff pair for a comp and cancel", async () => {
     const glass = { name: "Wine", variantId: venue.wineGlassId };
     const comped = await bill([glass]);
     const cancelled = await bill([glass]);
@@ -351,14 +351,14 @@ describe("a comp (plan D4)", () => {
 
     expect((await recordedOn(comped.billId))[0]).toMatchObject({
       action: "comp",
-      lineName: "Wine glass",
+      lineName: "Wine (Wine glass)",
       lineListUnitPrice: 400,
     });
     // The cancel deleted the line, so the record is the only place the variant is still named.
     expect(await rowsOf(venue, cancelled.billId)).toEqual([]);
     expect((await recordedOn(cancelled.billId))[0]).toMatchObject({
       action: "cancel",
-      lineName: "Wine glass",
+      lineName: "Wine (Wine glass)",
     });
   });
 });
