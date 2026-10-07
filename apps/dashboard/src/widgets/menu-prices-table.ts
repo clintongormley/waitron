@@ -198,6 +198,10 @@ export class MenuPricesTable extends LitElement {
         z-index: 4;
         max-width: calc(100% - 2 * var(--wt-space-3));
       }
+      /* Room for the open message after the table, so the page can scroll the last row clear of it. */
+      wt-toast[open] + .outcome-room {
+        block-size: calc(var(--outcome-height, 0px) + var(--wt-space-3));
+      }
       @media (max-width: 48rem) {
         wt-toast {
           inset-inline: var(--wt-space-2);
@@ -974,7 +978,8 @@ export class MenuPricesTable extends LitElement {
         .message=${this.#outcomeText()}
         .duration=${this.outcome?.kind === "saved" ? 5000 : 0}
         >${this.#undoButton()}</wt-toast
-      >`;
+      >
+      <div class="outcome-room"></div>`;
   }
 
   #outcomeText(): string {

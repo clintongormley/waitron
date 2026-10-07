@@ -2834,6 +2834,46 @@ it("keeps a field scrolled into view clear of an outcome message that wraps onto
   ).toBeLessThanOrEqual(toast.getBoundingClientRect().top + 0.5);
 });
 
+it("lets the page scroll the last row's refused field and its message clear of an open refusal, and adds no room once it closes", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(390, 800);
+    await vi.waitFor(() => expect(window.innerWidth).toBe(390));
+    const { el, host } = await mountInViewportScroller({ rows: manyRows() });
+    const last = "mi-burger-29";
+    el.refusals = { [last]: "Refused here" };
+    el.outcome = {
+      kind: "refused",
+      save: { ...burgerSaved, key: last, menuItemId: last, name: "Burger 29" },
+      reason: "Refused here",
+    };
+    await el.updateComplete;
+    const field = override(el, last);
+    await vi.waitFor(() => expect(field.matches(":focus-within")).toBe(true));
+    const toast = outcomeToast(el);
+    expect(toast.open).toBe(true);
+    host.scrollTop = host.scrollHeight;
+    const top = toast.getBoundingClientRect().top;
+    const message = field.shadowRoot!.querySelector("[data-error]")!;
+    expect(text(message)).toBe("Refused here");
+    expect(field.getBoundingClientRect().bottom).toBeLessThanOrEqual(top + 0.5);
+    expect(message.getBoundingClientRect().bottom).toBeLessThanOrEqual(top + 0.5);
+    const open = host.scrollHeight;
+    toast.shadowRoot!.querySelector<HTMLButtonElement>("button.close")!.click();
+    await toast.updateComplete;
+    expect(toast.getBoundingClientRect().height).toBe(0);
+    const closed = host.scrollHeight;
+    el.outcome = null;
+    await el.updateComplete;
+    expect(override(el, last).error).toBe("Refused here");
+    expect(closed).toBe(host.scrollHeight);
+    expect(open).toBeGreaterThan(closed);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("widens a field's end margin when a narrower window wraps the outcome message, after being moved", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
