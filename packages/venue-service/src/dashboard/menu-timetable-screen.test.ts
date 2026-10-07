@@ -574,7 +574,7 @@ describe("Menu timetable: the department's list", () => {
     await click(el, saveButton(el));
     await click(el, byTest(el, "use-normal-week"));
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    expect(modal(el)!.getAttribute("heading")).toBe("Menus for Restaurant");
+    await expect.poll(() => modal(el)!.getAttribute("heading")).toBe("Menus for Restaurant");
     expect(draftList(el)).not.toContain("Brunch de Navidad");
   });
 });
