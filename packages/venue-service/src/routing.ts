@@ -3,6 +3,7 @@ import { addDays } from "./hours-rules.js";
 import type {
   RoutingCell,
   RoutingDecision,
+  RoutingModel,
   RoutingRow,
   RoutingSelectionRules,
   SelectedCell,
@@ -309,4 +310,16 @@ export function chooseExtraMaker(
             ? { kind: "follows_dish", why: "same_station" }
             : { kind: "made", stationId: choice.route.stationId };
   return { outcome, decidedBy: choice.decidedBy, fallbacks: choice.fallbacks };
+}
+
+/** The cells are copied and frozen so `selectRoutingCell` can cache its index for them. */
+export function selectionRulesFromModel(model: RoutingModel): RoutingSelectionRules {
+  return {
+    cells: Object.freeze([...model.cells]),
+    parentOf: new Map(model.categories.map((category) => [category.id, category.parentId])),
+    activeStationIds: new Set(
+      model.stations.filter((station) => station.active).map((station) => station.id),
+    ),
+    defaultStationId: model.defaultStationId,
+  };
 }

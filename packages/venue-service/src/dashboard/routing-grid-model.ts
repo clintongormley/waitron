@@ -1,0 +1,156 @@
+import type { GridCategory, GridProduct, GridRow, RoutingModel } from "../routing.js";
+
+/** Heads the products with no category. It has no cell address, so nothing can edit it. */
+export type NoCategoryHeading = { readonly kind: "no_category_heading" };
+export type RoutingGridEntry = GridRow | NoCategoryHeading;
+
+export function isNoCategoryHeading(entry: RoutingGridEntry): entry is NoCategoryHeading {
+  return "kind" in entry;
+}
+
+interface Hidden {
+  categories: number;
+  products: number;
+}
+
+function append<T>(lists: Map<string, T[]>, key: string, value: T): void {
+  const list = lists.get(key);
+  if (list === undefined) lists.set(key, [value]);
+  else list.push(value);
+}
+
+/**
+ * The grid's rows in tree order: All categories, the root categories, every row whose ancestors
+ * are all expanded, every category or product holding a cell (at its own place, without its
+ * hidden ancestors), then the products with no category under their heading. A category whose
+ * children are not shown counts the rows of its subtree that are absent. Siblings keep the
+ * model's order; a category's subcategories come before its products.
+ */
+export function visibleRoutingRows(
+  model: RoutingModel,
+  expanded: ReadonlySet<string>,
+): RoutingGridEntry[] {
+  const known = new Map(model.categories.map((category) => [category.id, category]));
+  const childCategories = new Map<string, GridCategory[]>();
+  const productsIn = new Map<string, GridProduct[]>();
+  const uncategorised: GridProduct[] = [];
+  const roots: GridCategory[] = [];
+  for (const category of model.categories) {
+    const parent = category.parentId;
+    if (parent === null || parent === category.id || !known.has(parent)) {
+      roots.push(category);
+    } else {
+      append(childCategories, parent, category);
+    }
+  }
+  for (const product of model.products) {
+    if (product.categoryId === null || !known.has(product.categoryId)) {
+      uncategorised.push(product);
+    } else {
+      append(productsIn, product.categoryId, product);
+    }
+  }
+  const categoriesWithCells = new Set<string>();
+  const productsWithCells = new Set<string>();
+  for (const { row } of model.cells) {
+    if (row.kind === "category") categoriesWithCells.add(row.categoryId);
+    if (row.kind === "product") productsWithCells.add(row.productId);
+  }
+
+  const entries: RoutingGridEntry[] = [
+    { row: { kind: "all" }, name: "", path: [], depth: 0, hiddenProducts: 0, hiddenCategories: 0 },
+  ];
+  const placed = new Set<string>();
+
+  // Returns the absent rows below `category`, for its ancestors' counts.
+  function place(category: GridCategory, path: string[], shown: boolean): Hidden {
+    placed.add(category.id);
+    const depth = path.length + 1;
+    const open = shown && expanded.has(category.id);
+    const entry: GridRow = {
+      row: { kind: "category", categoryId: category.id },
+      name: category.name,
+      path,
+      depth,
+      hiddenProducts: 0,
+      hiddenCategories: 0,
+    };
+    const visible = shown || categoriesWithCells.has(category.id);
+    if (visible) entries.push(entry);
+    const below: Hidden = { categories: 0, products: 0 };
+    const childPath = [...path, category.name];
+    for (const child of childCategories.get(category.id) ?? []) {
+      if (placed.has(child.id)) continue;
+      const absent = place(child, childPath, open);
+      below.categories += absent.categories;
+      below.products += absent.products;
+    }
+    for (const product of productsIn.get(category.id) ?? []) {
+      if (open || productsWithCells.has(product.id)) {
+        entries.push({
+          row: { kind: "product", productId: product.id },
+          name: product.name,
+          path: childPath,
+          depth: depth + 1,
+          hiddenProducts: 0,
+          hiddenCategories: 0,
+        });
+      } else {
+        below.products += 1;
+      }
+    }
+    if (!open) {
+      entry.hiddenCategories = below.categories;
+      entry.hiddenProducts = below.products;
+    }
+    return { categories: below.categories + (visible ? 0 : 1), products: below.products };
+  }
+
+  for (const root of roots) place(root, [], true);
+  // A category on a parent cycle has no root above it; it is placed as a root of its own.
+  for (const category of model.categories) {
+    if (!placed.has(category.id)) place(category, [], true);
+  }
+
+  if (uncategorised.length > 0) {
+    entries.push({ kind: "no_category_heading" });
+    for (const product of uncategorised) {
+      entries.push({
+        row: { kind: "product", productId: product.id },
+        name: product.name,
+        path: [],
+        depth: 1,
+        hiddenProducts: 0,
+        hiddenCategories: 0,
+      });
+    }
+  }
+  return entries;
+}
+
+export function expandCategory(expanded: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  return new Set([...expanded, id]);
+}
+
+export function collapseCategory(expanded: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  const next = new Set(expanded);
+  next.delete(id);
+  return next;
+}
+
+export function expandAll(model: RoutingModel): ReadonlySet<string> {
+  return new Set(model.categories.map((category) => category.id));
+}
+
+export function collapseAll(): ReadonlySet<string> {
+  return new Set();
+}
+
+/** Keeps the expanded categories the refreshed model still has; a new one starts collapsed. */
+export function pruneExpanded(
+  model: RoutingModel,
+  expanded: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const known = new Set(model.categories.map((category) => category.id));
+  return new Set([...expanded].filter((id) => known.has(id)));
+}
