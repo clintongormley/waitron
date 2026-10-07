@@ -2727,10 +2727,7 @@ it.each(["en-GB", "es-ES"])(
     setLocale(locale);
     try {
       await atDesktopWidth(async () => {
-        const el = await mount({
-          rows: [burger, variantClashRow(), clashRow(lager)],
-          saving: new Set(["mi-burger"]),
-        });
+        const el = await mount({ rows: [burger, variantClashRow(), clashRow(lager)] });
         const box = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
         expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth);
         const right = (key: string) => override(el, key).getBoundingClientRect().right;
@@ -2747,6 +2744,12 @@ it.each(["en-GB", "es-ES"])(
           expect(under.top, key).toBeGreaterThanOrEqual(field.bottom);
           expect(under.left, key).toBeGreaterThanOrEqual(field.left - 0.5);
           expect(under.right, key).toBeLessThanOrEqual(tip.getBoundingClientRect().right + 0.5);
+          // The note's box spans the cell whichever way it is aligned, so read where its words sit.
+          const words = document.createRange();
+          words.selectNodeContents(note);
+          const lines = [...words.getClientRects()];
+          expect(lines.length, key).toBeGreaterThan(0);
+          for (const line of lines) expect(line.left, key).toBeCloseTo(field.left, 0);
         }
       });
     } finally {
