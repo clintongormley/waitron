@@ -46,7 +46,7 @@ describe("image library", () => {
       );
       const selects = vi.spyOn(tx, "select");
       expect((await readImage(tx, image.image.id)).usageCount).toBe(0);
-      expect(selects).toHaveBeenCalledTimes(5);
+      expect(selects).toHaveBeenCalledTimes(6);
       selects.mockRestore();
     });
   });
@@ -633,6 +633,106 @@ it("protects an image used by sections, a menu's own list among them, and counts
     await updateSection(tx, drinks.id, { image: null });
     await tx.update(sections).set({ image: null }).where(eq(sections.id, root!.id));
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
+it("protects the photo an include's folder names, even switched off, and counts the use", async () => {
+  const { sectionMembers, sections } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
+    const [lunch] = await tx.insert(catalogues).values({ name: "Lunch Menu" }).returning({
+      id: catalogues.id,
+    });
+    const [drinksMenu] = await tx
+      .insert(catalogues)
+      .values({ name: "Drinks catalogue" })
+      .returning({
+        id: catalogues.id,
+      });
+    const [lunchRoot] = await tx
+      .insert(sections)
+      .values({ internalName: "Lunch root", role: "menu_root", ownerMenuId: lunch!.id })
+      .returning({ id: sections.id });
+    const [drinksRoot] = await tx
+      .insert(sections)
+      .values({
+        internalName: "Drinks",
+        names: { en: "Drinks (customer)" },
+        role: "menu_root",
+        ownerMenuId: drinksMenu!.id,
+      })
+      .returning({ id: sections.id });
+    const [member] = await tx
+      .insert(sectionMembers)
+      .values({
+        sectionId: lunchRoot!.id,
+        position: 0,
+        childSectionId: drinksRoot!.id,
+        folderOverrides: { names: { en: "Wines (folder)" }, image: image.filename },
+      })
+      .returning({ id: sectionMembers.id });
+    const uses = [
+      {
+        kind: "menu_include" as const,
+        id: member!.id,
+        menuId: lunch!.id,
+        menuName: "Lunch Menu",
+        includedMenuName: "Drinks",
+      },
+    ];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    await tx
+      .update(sectionMembers)
+      .set({ showAsFolder: false })
+      .where(eq(sectionMembers.id, member!.id));
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+    await tx
+      .update(sectionMembers)
+      .set({ folderOverrides: { image: null } })
+      .where(eq(sectionMembers.id, member!.id));
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
+it("lists a folder photo held by a member that includes no section, as the count and the delete trigger see it", async () => {
+  const { sectionMembers, sections } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Folder photo" } }, {});
+    const [lunch] = await tx.insert(catalogues).values({ name: "Lunch Menu" }).returning({
+      id: catalogues.id,
+    });
+    const [lunchRoot] = await tx
+      .insert(sections)
+      .values({ internalName: "Lunch root", role: "menu_root", ownerMenuId: lunch!.id })
+      .returning({ id: sections.id });
+    const [member] = await tx
+      .insert(sectionMembers)
+      .values({
+        sectionId: lunchRoot!.id,
+        position: 0,
+        missingName: "Gone",
+        folderOverrides: { image: image.filename },
+      })
+      .returning({ id: sectionMembers.id });
+    const uses = [
+      {
+        kind: "menu_include" as const,
+        id: member!.id,
+        menuId: lunch!.id,
+        menuName: "Lunch Menu",
+        includedMenuName: "",
+      },
+    ];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
   });
 });
 

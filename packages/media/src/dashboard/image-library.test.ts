@@ -183,18 +183,21 @@ it("refreshes image ordering passively after content-language settings change", 
   ).toBe("Brouillon");
 });
 
-// `countUsages` (packages/media/src/images.ts) counts a live or queued version's photos from these.
-it.each(["menu_publications", "menu_version_images", "menu_scheduled_publications"])(
-  "refreshes the library passively when %s changes",
-  async (type) => {
-    const liveData = new LiveData();
-    const background = api();
-    const client = Object.assign(api(), { background, liveData });
-    await mount(client);
-    liveData.invalidate([{ type }]);
-    await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
-  },
-);
+// `countUsages` (packages/media/src/images.ts) counts a live or queued version's photos, and an
+// include folder's, from these.
+it.each([
+  "menu_publications",
+  "menu_version_images",
+  "menu_scheduled_publications",
+  "section_members",
+])("refreshes the library passively when %s changes", async (type) => {
+  const liveData = new LiveData();
+  const background = api();
+  const client = Object.assign(api(), { background, liveData });
+  await mount(client);
+  liveData.invalidate([{ type }]);
+  await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
+});
 
 // The library's live read (listImages) names neither; only the delete dialog's one-off
 // getImage does, and it is not refreshed live.
@@ -929,6 +932,37 @@ for (const [locale, label] of [
     );
     expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
       "/manage/menus/menu/lunch",
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+  });
+}
+
+for (const [locale, label] of [
+  ["en-GB", "Drinks folder in Lunch Menu"],
+  ["es-ES", "Carpeta Drinks en Lunch Menu"],
+]) {
+  it(`links an include's folder using the image to its menu's structure, and blocks the delete (${locale})`, async () => {
+    setLocale(locale);
+    const client = api();
+    client.getImage.mockResolvedValue({
+      image,
+      uses: [
+        {
+          kind: "menu_include",
+          id: "member-1",
+          menuId: "lunch",
+          menuName: "Lunch Menu",
+          includedMenuName: "Drinks",
+        },
+      ],
+    });
+    await mount(client);
+    click("[data-test=delete-one]");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(label),
+    );
+    expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
+      "/manage/menus/menu/lunch/view/structure",
     );
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   });

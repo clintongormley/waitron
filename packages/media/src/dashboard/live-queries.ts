@@ -3,6 +3,7 @@ export const QUERY_DEPENDENCIES = {
     "media_images",
     "products",
     "sections",
+    "section_members",
     "content_languages",
     "menu_publications",
     "menu_version_images",

@@ -21,6 +21,13 @@ export type ImageUsage =
       name: string;
       active: boolean;
     }
+  | {
+      kind: "menu_include";
+      id: string;
+      menuId: string;
+      menuName: string;
+      includedMenuName: string;
+    }
   | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number }
   | {
       kind: "scheduled_menu_version";
