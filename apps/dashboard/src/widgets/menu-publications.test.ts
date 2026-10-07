@@ -352,6 +352,69 @@ describe("a menu's scheduled versions", () => {
     expect(cell(el, "version-v-lunch-2")).toBeNull();
   });
 
+  it("clears a failed re-read's error once a later live read succeeds", async () => {
+    const live = new LiveData();
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(queue())
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue(queue());
+    const el = await mount(stubApi({ liveData: live, getMenuPublications: read }));
+    await openCancel(el);
+    inShadow(el, "cancel-confirm")!.click();
+    await flush(el);
+    await flush(el);
+    expect(table(el).errorMessage).toBe(codeMessage("connection.failed"));
+    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+    await flush(el);
+    await flush(el);
+    expect(table(el).errorMessage).toBe("");
+    expect(inShadow(el, "editions-retry")).toBeNull();
+    expect(cell(el, "version-v-lunch-2")).toBe("Version 2");
+  });
+
+  it.each(["menu_publication.not_queued", "menu_publication.not_found"])(
+    "reads the list again after a %s refusal, keeping the dialog and its sentence",
+    async (code) => {
+      const settled = queue();
+      settled.editions[0] = { ...settled.editions[0]!, state: "activated" };
+      const read = vi.fn().mockResolvedValueOnce(queue()).mockResolvedValue(settled);
+      const api = stubApi({
+        getMenuPublications: read,
+        cancelMenuPublication: vi.fn().mockRejectedValue({ code, params: {} }),
+      });
+      const el = await mount(api);
+      await openCancel(el);
+      inShadow(el, "cancel-confirm")!.click();
+      await flush(el);
+      await flush(el);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(cell(el, "state-v-lunch-2")).toBe("Activated");
+      expect(rowMenu(el, "v-lunch-2")).toBeNull();
+      expect(dialog(el).open).toBe(true);
+      expect(await messageIn(dialog(el))).toBe(codeMessage(code));
+    },
+  );
+
+  it("keeps the dialog's refusal when a live read succeeds after it", async () => {
+    const live = new LiveData();
+    const api = stubApi({
+      liveData: live,
+      cancelMenuPublication: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await mount(api);
+    await openCancel(el);
+    inShadow(el, "cancel-confirm")!.click();
+    await flush(el);
+    await flush(el);
+    live.invalidate([{ type: "menu_scheduled_publications" }]);
+    await vi.waitFor(() => expect(api.getMenuPublications).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+    expect(await messageIn(dialog(el))).toBe(codeMessage("connection.failed"));
+  });
+
   it("follows another menu when it is given one, dropping the first menu's list", async () => {
     const other = { timeZone: "Europe/Madrid", live: null, editions: [] };
     const read = vi.fn(async (menuId: string) => (menuId === "menu-lunch" ? queue() : other));

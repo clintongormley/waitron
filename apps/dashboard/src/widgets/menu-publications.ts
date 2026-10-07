@@ -151,6 +151,8 @@ export class MenuPublicationsPanel extends LitElement {
     try {
       await this.#queries.watch("getMenuPublications", [menuId], (answer) => {
         this.answer = answer;
+        // The controller's recovery fires only for its own failed reads, not a failed re-read.
+        this.readError = null;
       });
     } catch {
       // The query's error callback has already recorded the failure.
@@ -197,6 +199,12 @@ export class MenuPublicationsPanel extends LitElement {
       await this.api.cancelMenuPublication(this.menuId, target.versionId);
     } catch (error) {
       this.cancelError = codeOf(error);
+      // The row the refusal came from is out of date.
+      if (
+        this.cancelError === "menu_publication.not_queued" ||
+        this.cancelError === "menu_publication.not_found"
+      )
+        void this.#refresh();
       return;
     } finally {
       this.busy = false;
