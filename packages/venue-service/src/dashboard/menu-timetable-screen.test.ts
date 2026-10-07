@@ -626,6 +626,17 @@ describe("Menu timetable: named periods", () => {
     );
   });
 
+  it("puts a name refused for itself, not as taken, under the name field as a value to check", async () => {
+    const { api, state } = server();
+    state.writes.push(refusal("menu_timetable.invalid", { field: "name" }));
+    const el = await mount(api);
+    await menuAction(el, row(el, "periods", "Noches"), "edit-period");
+    await setField(el, "name", "Cenas");
+    await click(el, saveButton(el));
+    expect(field(el, "name")!.error).toBe("Check this value.");
+    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+  });
+
   it("refuses to delete a period still placed, naming its days", async () => {
     const { api, state } = server();
     state.writes.push(

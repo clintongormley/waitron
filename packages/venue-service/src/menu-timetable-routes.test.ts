@@ -268,6 +268,32 @@ describe("the menu timetable routes", () => {
     );
   });
 
+  it("tell a period name another period has apart from a name refused for itself", async () => {
+    const r = await routed();
+    const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+      name: "Tardes",
+      menuId: r.cafe,
+    });
+    const tardes = ((await created.json()) as { id: string }).id;
+    await answers(
+      await r.send("PUT", `/menu-periods/${tardes}`, r.manager, { name: " Mañanas " }),
+      409,
+      { code: "menu_period.name_taken", params: { departmentId: r.restaurant, name: "Mañanas" } },
+    );
+    await answers(
+      await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+        name: "  ",
+        menuId: r.cafe,
+      }),
+      400,
+      { code: "menu_timetable.invalid", params: { field: "name" } },
+    );
+    expect(restaurantOf(await r.model(), r).periods.map((period) => period.name)).toEqual([
+      "Mañanas",
+      "Tardes",
+    ]);
+  });
+
   it("refuse every write to anyone who may not manage venue service, changing nothing", async () => {
     const r = await routed();
     const before = await r.model();

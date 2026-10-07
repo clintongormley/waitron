@@ -386,7 +386,7 @@ export async function saveMenuPeriod(
         period.id === null ? undefined : ne(menuPeriods.id, period.id),
       ),
     );
-  if (taken !== undefined) invalidTimetable("name");
+  if (taken !== undefined) throw new AppError("menu_period.name_taken", { departmentId, name });
   const values = { name, menuId: period.menuId };
   if (period.id === null) {
     const [row] = await tx

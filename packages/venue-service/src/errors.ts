@@ -21,6 +21,8 @@ declare module "@waitron/shared" {
     "menu_period.not_found": { periodId: string };
     /** Deleting a named period that `uses` still place, past special dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
+    /** Another of the department's named periods already has `name`, as trimmed. */
+    "menu_period.name_taken": { departmentId: string; name: string };
     /**
      * `field` is the request path of the refused value, as for `hours.invalid`. A refusal naming a
      * date also names the department, and whether slots would overlap a neighbouring day's across a

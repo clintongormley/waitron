@@ -538,8 +538,10 @@ export class MenuTimetableScreen extends LitElement {
     { field = "", date }: { field?: string; date?: string },
   ): { field: string; sentence: string } | undefined {
     if (editor.kind === "period") {
-      if (code === "menu_timetable.invalid" && field === "name")
+      if (code === "menu_period.name_taken")
         return { field: "name", sentence: t("menu.name_taken") };
+      if (code === "menu_timetable.invalid" && field === "name")
+        return { field: "name", sentence: t("menu.field_refused") };
       if (code === "department_menu.not_found")
         return { field: "menuId", sentence: t("menu.not_on_list") };
       return undefined;
