@@ -2336,8 +2336,10 @@ disabled translation uses the untagged staff Name. The Missing translations sect
 "a translation in {language}" in English and "una traducción en {language}" in Spanish.
 At 390px the dashboard showed a strip about 24px wide of the hidden side menu along
 the left edge, and the till's basket squeezed into a narrow column that cut off its prices, remove
-buttons and total — both FIXED by A310 (follow-ups below). **A312 OPEN, queued:** switching the
-dashboard to English left the alert text in Spanish until a reload; not checked further here.
+buttons and total — both FIXED by A310 (follow-ups below). **A312 DONE:** the shell retains the arriving alerts' codes and parameters and translates its
+visible pop-up when it renders. The bell list observes the shared language choice too. Chromium
+cases switch single-alert and batch pop-ups and open/reopened bell lists between English and
+Spanish in both themes without another alert read; dismissal clears the pop-up message.
 Screenshots: `~/waitron-campaign/w109-4-shots/`.
 
 **Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not

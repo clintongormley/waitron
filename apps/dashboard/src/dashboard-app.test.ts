@@ -4814,6 +4814,100 @@ describe("alerts in the shell", () => {
     expect(toast(el).open).toBe(false);
   });
 
+  describe.each(["light", "dark"] as const)("alert language switching (%s theme)", (theme) => {
+    it.each([false, true])(
+      "retranslates the bell list with close-before-switch=%s",
+      async (closeFirst) => {
+        const listAlerts = vi
+          .fn()
+          .mockResolvedValue({ visible: true, alerts: [alert("1", "error")] });
+        const { el } = await mountWidget<DashboardApp>(
+          "dashboard-app",
+          { api: alertsApi({ listAlerts }), request: stubRequest },
+          theme,
+        );
+        await flush(el);
+        const widget = bell(el) as AlertsBell;
+        widget.open();
+        await flush(el);
+        const item = () => widget.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-item]")!;
+        expect(item().textContent).toContain("A card payment of €12.50 taken while offline");
+        if (closeFirst) {
+          widget
+            .shadowRoot!.querySelector<import("@waitron/ui").WtRowActions>("wt-row-actions")!
+            .hide();
+        }
+        emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });
+        await flush(el);
+        if (closeFirst) widget.open();
+        await widget.updateComplete;
+        expect(panel(el).matches(":popover-open")).toBe(true);
+        expect(item().textContent).toContain(
+          "Un pago con tarjeta de 12,50\u00a0€ cobrado sin conexión",
+        );
+        expect(item().textContent).toContain("Problema");
+        expect(item().textContent).toContain("Pagos con tarjeta");
+        expect(item().querySelector("[data-test=alert-handle]")!.textContent).toBe(
+          "Marcar como resuelto",
+        );
+        emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
+        await flush(el);
+        expect(item().textContent).toContain("A card payment of €12.50 taken while offline");
+        expect(item().querySelector("[data-test=alert-handle]")!.textContent).toBe("Mark handled");
+        expect(listAlerts).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each([1, 2])(
+      "retranslates a visible %i-alert pop-up without a new arrival",
+      async (count) => {
+        const liveData = new LiveData();
+        const listAlerts = vi
+          .fn()
+          .mockResolvedValueOnce({ visible: true, alerts: [] })
+          .mockResolvedValue({
+            visible: true,
+            alerts: Array.from({ length: count }, (_, i) => alert(String(i + 1), "error")),
+          });
+        const { el } = await mountWidget<DashboardApp>(
+          "dashboard-app",
+          { api: alertsApi({ listAlerts, liveData }), request: stubRequest },
+          theme,
+        );
+        await flush(el);
+        liveData.invalidate([{ type: "incidents" }]);
+        await vi.waitFor(() => expect(toast(el).open).toBe(true));
+        await flush(el);
+        const message = () => toastButton(el, "message").textContent!.trim();
+        const english =
+          count === 1
+            ? "A card payment of €12.50 taken while offline was declined when it was sent on (reference pi_1). Collect the money another way."
+            : "2 new alerts";
+        const spanish =
+          count === 1
+            ? "Un pago con tarjeta de 12,50\u00a0€ cobrado sin conexión se rechazó al enviarlo (referencia pi_1). Cobra el importe de otra forma."
+            : "2 avisos nuevos";
+        expect(message()).toBe(english);
+        emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });
+        await flush(el);
+        expect(message()).toBe(spanish);
+        expect(toast(el).open).toBe(true);
+        expect(toast(el).tone).toBe("error");
+        emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
+        await flush(el);
+        expect(message()).toBe(english);
+        expect(listAlerts).toHaveBeenCalledTimes(2);
+        toastButton(el, "close").click();
+        await flush(el);
+        emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });
+        await flush(el);
+        expect(toast(el).open).toBe(false);
+        expect(toast(el).message).toBe("");
+        expect(toastButton(el, "message")).toBeNull();
+      },
+    );
+  });
+
   it("counts several new alerts in one pop-up, with the error tone only when one is an error", async () => {
     const liveData = new LiveData();
     const listAlerts = vi
