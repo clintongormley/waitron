@@ -4632,10 +4632,11 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   temporarily in that screen (W97 retired the device-default-zone control, 2026-10-06).
   A301 — DONE (owner 2026-10-06): a department row now has the tree's arrow, named for the
   department in English and Spanish, which hides and shows its zones; a department with no zones
-  keeps the arrow's space so the names line up. Departments start open and a folded one is not
-  remembered after a reload, unlike the Products, menu Structure and menu prices trees, which
-  start closed (the table can only remember branches opened from a closed start). A zone with no
-  department shows its "Not configured" note apart from its name, in the muted text colour.
+  keeps the arrow's space so the names line up. Departments start open, unlike the Products, menu
+  Structure and menu prices trees, which start closed, and a folded department is not remembered
+  after a reload: the table remembers only the branches a person opens, only in a tree that starts
+  closed and turns on `rememberExpanded`, which of those three only the Products tree does. A zone
+  with no department shows its "Not configured" note apart from its name, in the muted text colour.
   A261-2c — DONE (#1285). Non-fiscal
   placement accepts an over-limit order; collection refuses the over-limit invoice without taking
   money (owner decision, 2026-10-06). A261-2d — DONE (#1274); left open:
@@ -6794,8 +6795,8 @@ bump it when a fixed version is published, and run the certificate suites in tho
   inner-joins `zone_service_policies` and `openTab` answers `service_zone.not_found` (read, not
   run); and an active
   zone with no department had its "Not configured" note run onto its name with no space before
-  it (read in `venue-operations-screen.ts`, not seen) — DONE by A301: the note now has its own
-  gap and the muted colour. (e) a test gap,
+  it (the owner's screenshot read "Private roomNot configured") — DONE by A301: the note now has
+  its own gap and the muted colour. (e) a test gap,
   reported by W110's review and not re-checked: `#fallbackReason`
   (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) turns the server's
   `switched_off` reason into `prep.test_disabled` for both of its callers, and the review found
