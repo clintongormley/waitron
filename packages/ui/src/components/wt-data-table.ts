@@ -69,7 +69,7 @@ function repeatKeys(keys: readonly string[]): (_item: unknown, index: number) =>
   return (_item, index) => unique[index]!;
 }
 
-/** The host width, in px, from which `leadingFilters` opens its panel beside the rows rather than
+/** The host width, in px, from which Filters opens its panel beside the rows rather than
  * over the whole screen: the panel is seven `--wt-tap-min` steps wide, so at this width and above
  * the rows beside it stay wider than NARROW_TREE_WIDTH at the default tokens. */
 const SIDE_FILTERS_WIDTH = 768;
@@ -355,7 +355,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .filters-trigger,
       .filters-clear-all,
       .filters-close {
         min-height: var(--wt-tap-min);
@@ -368,7 +367,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         cursor: pointer;
       }
 
-      .filters-trigger:focus-visible,
       .filters-clear-all:focus-visible,
       .filters-close:focus-visible {
         outline: var(--wt-focus-ring);
@@ -797,10 +795,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Starts every body cell's content at the cell's top rather than lining cells up by their
    * first line's baseline. */
   @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
-  /** Draws Filters as an icon button at the toolbar's start, and opens its panel beside the rows at
-   * their leading side while the table is SIDE_FILTERS_WIDTH or wider, and over the whole screen
-   * while it is narrower. */
-  @property({ type: Boolean, reflect: true, attribute: "leading-filters" }) leadingFilters = false;
   @state() private sideFilters = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
@@ -845,7 +839,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   });
   #scrollWidth = 0;
   #narrowFrame: number | null = null;
-  /** Watched while column widths are held or `leadingFilters` is set. Its effects wait a frame:
+  /** Watched while column widths are held or a column has a filter. Its effects wait a frame:
    * run inside the callback, they make Chromium report "ResizeObserver loop completed with
    * undelivered notifications". */
   readonly #hostObserver = new ResizeObserver(([entry]) => {
@@ -862,7 +856,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#resizeFrame = requestAnimationFrame(() => {
       this.#resizeFrame = null;
       if (!this.isConnected) return;
-      if (this.leadingFilters) this.sideFilters = this.#hostWidth >= SIDE_FILTERS_WIDTH;
+      this.sideFilters = this.#hostWidth >= SIDE_FILTERS_WIDTH;
       if (this.#widthsReleased) this.requestUpdate();
       this.#widthsReleased = false;
     });
@@ -874,10 +868,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   readonly #headObserver = new ResizeObserver(() => this.#padScroll());
   #observedHead: Element | null = null;
   #remembered: Set<string> | null = null;
-  readonly #resizeFilters = (): void => {
-    if (!this.leadingFilters && this.filtersPanel?.matches(":popover-open"))
-      this.#positionFilters();
-  };
 
   #rememberedOpen(): Set<string> {
     if (this.#remembered) return this.#remembered;
@@ -929,14 +919,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#padScroll();
   }
 
+  #hasFilters(): boolean {
+    return this.columns.some((column) => column.filter);
+  }
+
   #observeHost(): void {
-    if (this.leadingFilters || this.filterColumnWidths) this.#hostObserver.observe(this);
+    if (this.#hasFilters() || this.filterColumnWidths) this.#hostObserver.observe(this);
     else this.#hostObserver.disconnect();
   }
 
   /** Below the side width the panel is a full-screen popover, shown once it is rendered as one. */
   #placeLeadingFilters(): void {
-    const panel = this.leadingFilters ? this.filtersPanel : null;
+    const panel = this.filtersPanel;
     if (!panel) return;
     panel.toggleAttribute("data-fullscreen", !this.sideFilters);
     if (this.filtersOpen && !this.sideFilters && !panel.matches(":popover-open"))
@@ -945,7 +939,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    window.addEventListener("resize", this.#resizeFilters);
     this.#observeHost();
     if (this.hasUpdated) {
       this.#observeScroll();
@@ -956,7 +949,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#endColumnDrag();
-    window.removeEventListener("resize", this.#resizeFilters);
     this.#hostObserver.disconnect();
     if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = null;
@@ -971,8 +963,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     super.updated(changed);
     this.#observeScroll();
     this.#observeHead();
-    if (changed.has("leadingFilters")) this.#observeHost();
-    if (changed.has("filtersOpen") || changed.has("sideFilters") || changed.has("leadingFilters"))
+    if (changed.has("columns")) this.#observeHost();
+    if (changed.has("filtersOpen") || changed.has("sideFilters") || changed.has("columns"))
       this.#placeLeadingFilters();
   }
 
@@ -1392,30 +1384,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #releaseColumnWidths(): void {
     this.filterColumnWidths = null;
     this.filterHostWidth = null;
-    if (!this.leadingFilters) this.#hostObserver.disconnect();
-  }
-
-  #positionFilters(): void {
-    this.filtersPanel.style.left = "";
-    this.filtersPanel.style.top = "";
-    this.filtersPanel.toggleAttribute("data-fullscreen", innerWidth <= NARROW_TREE_WIDTH);
-    if (innerWidth <= NARROW_TREE_WIDTH) return;
-    const anchor = this.getBoundingClientRect();
-    const box = this.filtersPanel.getBoundingClientRect();
-    this.filtersPanel.style.left = `${Math.max(8, Math.min(anchor.right + 8, innerWidth - box.width - 8))}px`;
-    this.filtersPanel.style.top = `${Math.max(8, Math.min(anchor.top, innerHeight - box.height - 8))}px`;
-  }
-
-  #toggleFilters(event?: MouseEvent): void {
-    event?.preventDefault();
-    if (this.filtersPanel.matches(":popover-open")) {
-      this.#hideFilters();
-      return;
-    }
-    this.filtersPanel.showPopover();
-    this.filtersOpen = true;
-    this.#focusFirstFilter();
-    this.#positionFilters();
+    if (!this.#hasFilters()) this.#hostObserver.disconnect();
   }
 
   async #toggleLeadingFilters(event: MouseEvent): Promise<void> {
@@ -1427,13 +1396,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.sideFilters = this.getBoundingClientRect().width >= SIDE_FILTERS_WIDTH;
     this.filtersOpen = true;
     await this.updateComplete;
-    this.#focusFirstFilter();
+    if (this.filtersOpen) this.#focusFirstFilter();
   }
 
   /** Widths held for a choice made beside the rows would keep them at that narrower width. */
   #hideFilters(): void {
     if (this.filtersPanel.matches(":popover-open")) this.filtersPanel.hidePopover();
-    if (this.leadingFilters && this.sideFilters) this.#releaseColumnWidths();
+    if (this.sideFilters) this.#releaseColumnWidths();
     this.filtersOpen = false;
   }
 
@@ -1993,7 +1962,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (!this.searchable && !hasFilters && !chooser && !start && !end && expandAll === nothing)
       return nothing;
     return html`<div class="table-toolbar">
-      ${this.leadingFilters && hasFilters ? this.#renderLeadingTrigger(activeCount) : nothing}
+      ${hasFilters ? this.#renderLeadingTrigger(activeCount) : nothing}
       <slot name="toolbar-start"></slot>
       ${
         this.searchable
@@ -2009,22 +1978,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 this.searchText = (event.target as HTMLInputElement).value;
               }}
             />`
-          : nothing
-      }
-      ${
-        hasFilters && !this.leadingFilters
-          ? html`<button
-                type="button"
-                class="filters-trigger"
-                aria-expanded=${this.filtersOpen}
-                popovertarget="filters-panel"
-                @click=${this.#toggleFilters}
-              >
-                ${this.filtersLabel}${
-                  activeCount ? html`<span class="filters-count">${activeCount}</span>` : nothing
-                }
-              </button>
-              ${this.#renderFiltersPanel()}`
           : nothing
       }
       ${
@@ -2082,7 +2035,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (
       event.key !== "Escape" ||
       event.defaultPrevented ||
-      !(this.filtersPanel.matches(":popover-open") || (this.leadingFilters && this.filtersOpen))
+      !(this.filtersPanel.matches(":popover-open") || this.filtersOpen)
     )
       return;
     event.preventDefault();
@@ -2095,17 +2048,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.filtersTrigger.focus();
   }
 
-  /** With `leadingFilters` one panel serves both widths: in the flow beside the rows, or a
+  /** One panel serves both widths: in the flow beside the rows, or a
    * full-screen popover. Any close of the popover closes the filters; the close reported
    * when the panel stops being a popover is ignored, because the panel stays open beside the
    * rows. */
   #renderFiltersPanel() {
-    const side = this.leadingFilters && this.sideFilters;
-    const opened = (event: ToggleEvent) => {
-      this.filtersOpen = event.newState === "open";
-    };
+    const side = this.sideFilters;
     const placed = (event: ToggleEvent) => {
-      if ((event.currentTarget as HTMLElement).hasAttribute("popover")) opened(event);
+      if ((event.currentTarget as HTMLElement).hasAttribute("popover"))
+        this.filtersOpen = event.newState === "open";
     };
     return html`<div
       id="filters-panel"
@@ -2115,8 +2066,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       ?data-side=${side}
       role="group"
       aria-label=${this.filtersLabel}
-      @toggle=${this.leadingFilters ? nothing : opened}
-      @beforetoggle=${this.leadingFilters ? placed : nothing}
+      @beforetoggle=${placed}
       @keydown=${this.#filtersKeydown}
     >
       <h2>${this.filtersLabel}</h2>
@@ -2168,9 +2118,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Every branch with rows to filter draws this one template, so a choice that empties the rows
    * or brings them back keeps the toolbar and the filters panel, and the focus inside them. */
   #withToolbar(content: unknown) {
-    const side = this.leadingFilters && this.columns.some((column) => column.filter);
     return html`${this.#renderToolbar()}<slot name="toolbar-bottom"></slot>${
-        side ? html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>` : content
+        this.#hasFilters()
+          ? html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>`
+          : content
       }`;
   }
 

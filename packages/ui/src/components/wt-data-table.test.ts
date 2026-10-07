@@ -2024,23 +2024,20 @@ async function tableS(props: Partial<WtDataTable<RowS>> = {}): Promise<WtDataTab
   return el;
 }
 
-test.each([[false], [true]])(
-  "with leadingFilters %s, typing a search that matches nothing, and then one that matches, keeps focus in the search box",
-  async (leadingFilters) => {
-    const el = await tableS({ searchable: true, columns: withStatus, leadingFilters });
-    const root = el.shadowRoot!;
-    const input = root.querySelector<HTMLInputElement>(".table-search")!;
-    input.focus();
-    await userEvent.keyboard("zzz");
-    await el.updateComplete;
-    expect(root.querySelector(".empty")).not.toBeNull();
-    expect(root.activeElement).toBe(input);
-    await userEvent.keyboard("{Backspace}{Backspace}{Backspace}ada");
-    await el.updateComplete;
-    expect(rowKeysS(el)).toEqual(["1"]);
-    expect(root.activeElement).toBe(input);
-  },
-);
+test("with a filter column, typing a search that matches nothing, and then one that matches, keeps focus in the search box", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  const root = el.shadowRoot!;
+  const input = root.querySelector<HTMLInputElement>(".table-search")!;
+  input.focus();
+  await userEvent.keyboard("zzz");
+  await el.updateComplete;
+  expect(root.querySelector(".empty")).not.toBeNull();
+  expect(root.activeElement).toBe(input);
+  await userEvent.keyboard("{Backspace}{Backspace}{Backspace}ada");
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(root.activeElement).toBe(input);
+});
 
 test("an empty source table shows only its empty state, even with an initial filter", async () => {
   const status = withStatus[1]!;
@@ -2162,6 +2159,8 @@ test.each([390, 1280])("filtering preserves header geometry at %i px", async (wi
       ],
     });
     const root = el.shadowRoot!;
+    await openFilters(el);
+    await settle();
     const geometry = () => ({
       headers: [...root.querySelectorAll("thead th")].map((cell) => {
         const { x, y, width, height } = cell.getBoundingClientRect();
@@ -2237,6 +2236,8 @@ test.each([390, 1280])(
         columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
       });
       const root = el.shadowRoot!;
+      await openFilters(el);
+      await settle();
       const geometry = () => ({
         widths: [...root.querySelectorAll("thead th")].map(
           (cell) => cell.getBoundingClientRect().width,
@@ -2366,7 +2367,7 @@ test("the Filters trigger closes its open panel", async () => {
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
 
-test("a pointer click on the open Filters trigger closes the panel", async () => {
+test("a pointer click on the open Filters trigger closes the side panel", async () => {
   const previousWidth = innerWidth;
   const previousHeight = innerHeight;
   await page.viewport(1280, 900);
@@ -2374,10 +2375,16 @@ test("a pointer click on the open Filters trigger closes the panel", async () =>
     const el = await tableS({ columns: withStatus });
     const root = el.shadowRoot!;
     const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
+    const panel = root.querySelector<HTMLElement>(".filters-panel")!;
     await userEvent.click(trigger);
-    expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
+    await el.updateComplete;
+    expect(panel.hasAttribute("data-side")).toBe(true);
+    expect(getComputedStyle(panel).display).not.toBe("none");
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
     await userEvent.click(trigger);
-    expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(false);
+    await el.updateComplete;
+    expect(getComputedStyle(panel).display).toBe("none");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
   } finally {
     await page.viewport(previousWidth, previousHeight);
   }
@@ -2395,7 +2402,7 @@ test("restoring source rows does not announce a closed Filters panel as expanded
   expect(root.querySelector(".filters-trigger")!.getAttribute("aria-expanded")).toBe("false");
 });
 
-test("a press outside the Filters panel closes it and updates its trigger", async () => {
+test("a press on the rows beside the side Filters panel leaves it open and its trigger expanded", async () => {
   const previousWidth = innerWidth;
   const previousHeight = innerHeight;
   await page.viewport(1280, 900);
@@ -2403,11 +2410,15 @@ test("a press outside the Filters panel closes it and updates its trigger", asyn
     const el = await tableS({ columns: withStatus });
     const root = el.shadowRoot!;
     const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
+    const panel = root.querySelector<HTMLElement>(".filters-panel")!;
     await userEvent.click(trigger);
-    expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
+    await el.updateComplete;
+    expect(panel.hasAttribute("data-side")).toBe(true);
     await userEvent.click(root.querySelector("table")!);
-    await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
-    expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(false);
+    await el.updateComplete;
+    await settle();
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(getComputedStyle(panel).display).not.toBe("none");
   } finally {
     await page.viewport(previousWidth, previousHeight);
   }
@@ -2522,7 +2533,7 @@ test.each([390, 1280])("the Filters panel fits its %i px viewport", async (width
   await page.viewport(width, 900);
   try {
     const el = await tableS({ columns: withStatus });
-    el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await openFilters(el);
     const panel = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
     const box = panel.getBoundingClientRect();
     if (width === 390) {
@@ -2530,16 +2541,17 @@ test.each([390, 1280])("the Filters panel fits its %i px viewport", async (width
       expect(box.width).toBeCloseTo(390, 0);
       expect(box.height).toBeCloseTo(900, 0);
     } else {
+      const table = el.getBoundingClientRect();
       expect(box.width).toBeLessThan(390);
-      expect(box.right).toBeLessThanOrEqual(1280);
-      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.left).toBeCloseTo(table.left, 0);
+      expect(box.right).toBeLessThanOrEqual(table.right);
     }
   } finally {
     await page.viewport(previousWidth, previousHeight);
   }
 });
 
-test("the desktop Filters panel opens just beside a table when there is room", async () => {
+test("a table narrower than 768 px in a desktop window opens Filters over the whole screen", async () => {
   const previousWidth = innerWidth;
   const previousHeight = innerHeight;
   await page.viewport(1280, 900);
@@ -2549,13 +2561,14 @@ test("the desktop Filters panel opens just beside a table when there is room", a
     el.style.marginInlineStart = "50px";
     el.style.marginBlockStart = "40px";
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
-    const table = el.getBoundingClientRect();
-    const panel = el
-      .shadowRoot!.querySelector<HTMLElement>(".filters-panel")!
-      .getBoundingClientRect();
-    expect(panel.left).toBeCloseTo(table.right + 8, 0);
-    expect(panel.top).toBeCloseTo(table.top, 0);
+    await openFilters(el);
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+    expect(panel.matches(":popover-open")).toBe(true);
+    const box = panel.getBoundingClientRect();
+    expect(box.left).toBeCloseTo(0, 0);
+    expect(box.top).toBeCloseTo(0, 0);
+    expect(box.width).toBeCloseTo(1280, 0);
+    expect(box.height).toBeCloseTo(900, 0);
   } finally {
     await page.viewport(previousWidth, previousHeight);
   }
@@ -2568,12 +2581,15 @@ test("the Filters panel fills a phone after it was opened beside a desktop table
   try {
     const el = await tableS({ columns: withStatus });
     const root = el.shadowRoot!;
-    const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
     const panel = root.querySelector<HTMLElement>(".filters-panel")!;
-    trigger.click();
-    panel.hidePopover();
+    await openFilters(el);
+    expect(panel.hasAttribute("data-side")).toBe(true);
+    root.querySelector<HTMLButtonElement>(".filters-close")!.click();
+    await el.updateComplete;
     await page.viewport(390, 900);
-    trigger.click();
+    await settle();
+    await openFilters(el);
+    expect(panel.matches(":popover-open")).toBe(true);
     expect(panel.getBoundingClientRect().left).toBeCloseTo(0, 0);
     expect(panel.getBoundingClientRect().width).toBeCloseTo(390, 0);
   } finally {
@@ -2588,10 +2604,11 @@ test("an open Filters panel remains reachable when the viewport becomes a phone"
   try {
     const el = await tableS({ columns: withStatus });
     const root = el.shadowRoot!;
-    root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await openFilters(el);
     const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+    expect(panel.hasAttribute("data-side")).toBe(true);
     await page.viewport(390, 900);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
     expect(panel.getBoundingClientRect().left).toBeCloseTo(0, 0);
     expect(panel.getBoundingClientRect().width).toBeCloseTo(390, 0);
     expect(
@@ -2611,10 +2628,12 @@ test("Tab stays inside the full-screen Filters panel on a phone", async () => {
       columns: [...withStatus, { ...withStatus[1]!, key: "other-status" }],
     });
     const root = el.shadowRoot!;
-    root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+    await openFilters(el);
     const panel = root.querySelector<HTMLElement>(".filters-panel")!;
     const first = panel.querySelector<WtCombobox>(".filter-section .table-filter")!;
-    expect(first.shadowRoot!.activeElement).toBe(first.shadowRoot!.querySelector(".trigger"));
+    await vi.waitFor(() =>
+      expect(first.shadowRoot!.activeElement).toBe(first.shadowRoot!.querySelector(".trigger")),
+    );
     await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
     expect(root.activeElement).toBe(panel.querySelector(".filters-close"));
     const combobox = panel.querySelectorAll<WtCombobox>("wt-combobox")[1]!;
@@ -2806,7 +2825,7 @@ test("the search box draws a primary border, and a filter dropdown the 2px prima
   expect(search.matches(":focus-visible")).toBe(true);
   expect(getComputedStyle(search).borderColor).toBe("rgb(7, 8, 9)");
   expect(getComputedStyle(search).outlineStyle).toBe("none");
-  el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  await openFilters(el);
   const filter = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!;
   filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
   expect(getComputedStyle(filter.shadowRoot!.querySelector(".field")!).boxShadow).toBe(
@@ -2816,7 +2835,7 @@ test("the search box draws a primary border, and a filter dropdown the 2px prima
 
 test("the search box and filter dropdown paint from the theme tokens", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
-  el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  await openFilters(el);
   el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-close")!.focus();
   host.style.setProperty("--wt-tap-min", "52px");
   host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
@@ -2854,7 +2873,7 @@ test("the search box rounds its corners to the medium radius, not into a pill", 
   ]).toEqual(["7px", "7px", "7px", "7px"]);
 });
 
-test("the toolbar keeps a usable search box beside the Filters button at phone width", async () => {
+test("at phone width the toolbar gives the search box its own full-width line below the Filters button", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   el.style.width = "360px";
   await el.updateComplete;
@@ -2867,11 +2886,12 @@ test("the toolbar keeps a usable search box beside the Filters button at phone w
   const filters = el
     .shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!
     .getBoundingClientRect();
-  expect(filters.top).toBeGreaterThanOrEqual(search.bottom);
+  expect(search.top).toBeGreaterThanOrEqual(filters.bottom);
+  expect(filters.left).toBeCloseTo(toolbar.left, 0);
   expect(search.width).toBeCloseTo(toolbar.width, 0);
 });
 
-test("the toolbar keeps the search box and Filters button on one line when wide", async () => {
+test("the toolbar keeps the Filters button and the search box after it on one line when wide", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   el.style.width = "1000px";
   await el.updateComplete;
@@ -2885,8 +2905,9 @@ test("the toolbar keeps the search box and Filters button on one line when wide"
     .shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!
     .getBoundingClientRect();
   expect(filter.top).toBeLessThan(search.bottom);
-  expect(search.right).toBeLessThan(filter.left);
-  expect(filter.right).toBeCloseTo(toolbar.right, 0);
+  expect(filter.right).toBeLessThan(search.left);
+  expect(filter.left).toBeCloseTo(toolbar.left, 0);
+  expect(search.right).toBeCloseTo(toolbar.right, 0);
   // Natural width, not stretched: the dropdown is far narrower than the space the search box fills.
   expect(filter.width).toBeLessThan(search.width / 2);
 });
@@ -3224,10 +3245,18 @@ test("a long filter's search box and empty list read English wording by default"
 });
 
 /** Opens the filter's list and clicks the row labelled `label`, as a person would. */
+/** Presses Filters and waits until the panel is open, beside the rows or over the screen. */
+async function openFilters(el: WtDataTable<RowS>): Promise<void> {
+  const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
+  trigger.click();
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+  await el.updateComplete;
+}
+
 async function clickFilterRow(filter: WtCombobox, label: string): Promise<void> {
   const root = filter.getRootNode() as ShadowRoot;
-  if (!root.querySelector(".filters-panel")!.matches(":popover-open"))
-    root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  if (root.querySelector(".filters-trigger")!.getAttribute("aria-expanded") !== "true")
+    await openFilters(root.host as WtDataTable<RowS>);
   await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
   await filter.updateComplete;
   const row = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
@@ -6517,7 +6546,7 @@ test("rows that share a key three at a time are each drawn, through a reorder", 
   expect(rowText(el)).toEqual(["P0Edit", "W0Edit", "R0Edit", "Q0Edit", "U0Edit", "S0Edit"]);
 });
 
-/** A table with `leadingFilters`, a control a screen slots at the toolbar's start, and the given
+/** A table with a control a screen slots at the toolbar's start, and the given
  * width, in a 1280×900 window unless the test changes it. */
 async function leadingTable<R>(
   width: number,
@@ -6534,7 +6563,7 @@ async function leadingTable<R>(
     /></wt-data-table>`,
   )) as WtDataTable<R>;
   el.style.width = `${width}px`;
-  Object.assign(el, { leadingFilters: true, ...props });
+  Object.assign(el, props);
   await el.updateComplete;
   await settle();
   const root = el.shadowRoot!;
@@ -6581,14 +6610,13 @@ async function pickInOpenPanel(filter: WtCombobox, label: string): Promise<void>
   await filter.updateComplete;
 }
 
-test("leadingFilters draws Filters first, as an icon button named by its label, with its count and the panel it controls", async () => {
+test("Filters is drawn first, as an icon button named by its label, with its count and the panel it controls", async () => {
   const status = withStatus[1]!;
   const { el, root, trigger } = await leadingTable<RowS>(900, {
     rows: rowsS,
     rowKey: (r: RowS) => r.id,
     columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
   });
-  expect(el.hasAttribute("leading-filters")).toBe(true);
   const toolbar = root.querySelector(".table-toolbar")!;
   expect(toolbar.firstElementChild).toBe(trigger);
   const search = el.querySelector("input")!;
@@ -6611,18 +6639,43 @@ test("leadingFilters draws Filters first, as an icon button named by its label, 
   );
 });
 
-test("without leadingFilters, Filters stays a text button after the search box with its panel in the toolbar", async () => {
-  const el = await tableS({ searchable: true, columns: withStatus });
-  const root = el.shadowRoot!;
-  const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
-  expect(el.hasAttribute("leading-filters")).toBe(false);
-  expect(trigger.textContent!.trim()).toBe("Filters");
-  expect(trigger.hasAttribute("aria-label")).toBe(false);
-  expect(trigger.previousElementSibling).toBe(root.querySelector(".table-search"));
-  expect(root.querySelector(".filters-panel")!.parentElement).toBe(
-    root.querySelector(".table-toolbar"),
-  );
-  expect(root.querySelector(".table-body")).toBeNull();
+test("a table with a filter column and no other setting draws the Filters icon button before its search box, and opens the panel beside the rows from 768 px and full screen below", async () => {
+  onTestFinished(() => commands.parkPointer());
+  await inWindow(1280, 900, async () => {
+    for (const width of [768, 767]) {
+      const el = await tableS({ searchable: true, columns: withStatus });
+      el.style.width = `${width}px`;
+      await settle();
+      const root = el.shadowRoot!;
+      const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
+      const search = root.querySelector(".table-search")!;
+      const panel = root.querySelector<HTMLElement>(".filters-panel")!;
+      expect(root.querySelector(".table-toolbar")!.firstElementChild).toBe(trigger);
+      expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
+        search.getBoundingClientRect().left,
+      );
+      expect(trigger.getAttribute("aria-label")).toBe("Filters");
+      expect(trigger.querySelector('wt-icon[name="table-filter"]')).not.toBeNull();
+      expect(panel.parentElement).toBe(root.querySelector(".table-body"));
+      await userEvent.click(trigger);
+      await el.updateComplete;
+      await settle();
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      if (width >= 768) {
+        expect(panel.hasAttribute("data-side")).toBe(true);
+        expect(panel.matches(":popover-open")).toBe(false);
+        expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(
+          root.querySelector(".scroll")!.getBoundingClientRect().left,
+        );
+      } else {
+        expect(panel.hasAttribute("data-side")).toBe(false);
+        expect(panel.matches(":popover-open")).toBe(true);
+        expect(panel.hasAttribute("data-fullscreen")).toBe(true);
+        expect(panel.getBoundingClientRect().width).toBe(innerWidth);
+      }
+      cleanup();
+    }
+  });
 });
 
 test("the leading Filters button's tooltip shows on hover and on keyboard focus, over the sticky headings, and Escape hides it", async () => {
@@ -7009,25 +7062,6 @@ test.each([[900], [500]])(
     });
   },
 );
-
-test("without leadingFilters, a keyboard choice that empties the rows and one that brings them back leave focus on the filter", async () => {
-  const el = await tableS({ rows: [rowsS[0]!], columns: withStatus });
-  const root = el.shadowRoot!;
-  root.querySelector<HTMLButtonElement>(".filters-trigger")!.focus();
-  await userEvent.keyboard("{Enter}");
-  const filter = root.querySelector<WtCombobox>(".filter-section .table-filter")!;
-  const filterTrigger = filter.shadowRoot!.querySelector(".trigger");
-  await vi.waitFor(() => expect(filter.shadowRoot!.activeElement).toBe(filterTrigger));
-  await chooseByKeys(2);
-  await el.updateComplete;
-  expect(root.querySelector(".empty")).not.toBeNull();
-  expect(root.activeElement).toBe(filter);
-  await chooseByKeys(-1);
-  await el.updateComplete;
-  expect(rowKeysS(el)).toEqual(["1"]);
-  expect(root.activeElement).toBe(filter);
-  expect(filter.shadowRoot!.activeElement).toBe(filterTrigger);
-});
 
 test("the leading Filters button's tooltip stays shown while the pointer moves from the button across the gap onto it, and once hidden it takes no pointer", async () => {
   await inWindow(1280, 900, async () => {

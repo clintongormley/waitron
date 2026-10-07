@@ -3399,9 +3399,10 @@ it("pressing Select again leaves Select mode and clears the selection, as Done d
 it("opens the Products table's Filters from the toolbar's start", async () => {
   const el = await mountBrowser();
   const table = await tableOf(el);
-  expect(table.leadingFilters).toBe(true);
-  expect(table.shadowRoot!.querySelector(".table-toolbar")!.firstElementChild).toBe(
-    table.shadowRoot!.querySelector(".filters-trigger"),
+  const trigger = table.shadowRoot!.querySelector(".filters-trigger")!;
+  expect(table.shadowRoot!.querySelector(".table-toolbar")!.firstElementChild).toBe(trigger);
+  expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
+    el.shadowRoot!.querySelector('wt-input[name="catalogue-search"]')!.getBoundingClientRect().left,
   );
 });
 

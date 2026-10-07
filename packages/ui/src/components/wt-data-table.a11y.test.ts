@@ -1,5 +1,5 @@
 import { html } from "lit";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption, cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
@@ -330,9 +330,9 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("an open Filters panel with a chosen filter", async () => {
+  test("an open full-screen Filters panel with a chosen filter", async () => {
     const el = (await mountThemed(
-      '<wt-data-table aria-label="Users"></wt-data-table>',
+      '<wt-data-table aria-label="Users" style="width: 500px"></wt-data-table>',
       theme,
     )) as WtDataTable<Row>;
     el.columns = [
@@ -353,7 +353,9 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.rows = [{ id: "1", name: "Ada", status: "Active" }];
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
-    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>(".filters-panel")!;
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+    expect(panel.hasAttribute("data-fullscreen")).toBe(true);
     await expectNoA11yViolations(host);
   });
 
@@ -579,7 +581,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
 
   async function leadingTable(): Promise<WtDataTable<Row>> {
     const el = (await mountThemed(
-      `<wt-data-table aria-label="Users" leading-filters style="width: 900px"
+      `<wt-data-table aria-label="Users" style="width: 900px"
         ><input slot="toolbar-start" type="search" aria-label="Search users"
       /></wt-data-table>`,
       theme,
