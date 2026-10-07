@@ -1557,6 +1557,8 @@ still reachable (a Spanish venue with no province requires nothing), so it stays
   Task 6 closes the rest of "Product languages are hard-coded at setup".
 - **A fallback demo in an area that requires languages** lists every required language under
   Missing translations, because its text is English only (Task 2). No pack reaches this today.
+  _2026-10-07, as built (W109-2): wrong — the seed writes the data set's own text in every enabled
+  language, so only a required language the set lacks is listed; see `docs/backlog.md`, W109-2._
 - Staff-facing names a demo writes in English whatever the staff language — reporting categories
   (`seed-catalogue.ts:113`) and the four kitchen stations (`seed-catalogue.ts:56-67`) — stay as
   they are.
