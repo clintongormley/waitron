@@ -2585,6 +2585,14 @@ pairs against the pre-optimisation comparator: all matched. Raw runs and probe s
 in `~/waitron-campaign-d/receipts/a363/`. These are local measurements, not a browser-wide
 latency bound.
 
+A separate installed Chromium probe repeated the same six lists with three warm-ups and nine
+alternating runs under default locales en-US and es-ES. For 5,000 names, median (range) milliseconds
+were old 59.9 (58.7–114.7), pre-fix 84.7 (83.5–93.4), cached 9.8 (9.5–13.1) in en-US;
+and old 60.2 (57.1–200.2), pre-fix 85.2 (82.2–122.0), cached 9.8 (9.5–11.4) in es-ES.
+Every demo-list median also improved, and both direct and cached full-list orders matched the
+base comparator under each locale. These probe logs and source are retained beside the Node
+receipts; the disposable probe and checkout were removed.
+
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
 DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
 
