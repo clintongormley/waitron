@@ -1839,6 +1839,13 @@ paper originals with a null staff attribution. Synthetic tests cover reservation
 automatic enrollment and token-checked completion without a handover snapshot; email/A4
 rows without staff attribution are refused. Generated core migration 0119, schema
 conformance and stepwise upgrade checks passed. No whole-Task-2 claim.
+The invoice-mail routing helper now captures demo/development mail locally, resolves prepare
+mail through configured SMTP or capture, and reports unconfigured live/restored venues.
+The standalone sender renders a transient PDF and uses Nodemailer. Local SMTP fixtures cover
+readable original/duplicate attachments, recipient and DATA refusals, lost final acknowledgement,
+and an unanswered attempt ending at 30 seconds with its socket closed. Implicit TLS tests
+cover a refused untrusted certificate and a trusted test connection. These helpers are not
+wired into a delivery worker yet; no email issuance or Task 4 completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain
