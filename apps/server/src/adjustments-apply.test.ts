@@ -775,6 +775,33 @@ describe("a bill discount across VAT rates (Review Focus 5)", () => {
   });
 });
 
+// A generated id, digest or timestamp can hold the PIN's digits by chance, so such a value skips the
+// "contains the PIN" check, but only when its key names that kind of value and it has that shape.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function generatedShape(key: string): RegExp | null {
+  if (key === "fingerprint") return /^[0-9a-f]{64}$/;
+  if (key.endsWith("At")) return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+  if (key === "id" || key === "madeHere" || /Ids?$/.test(key)) return UUID;
+  return null;
+}
+
+function expectNoPinIn(value: unknown, pin: string, key = ""): void {
+  if (Array.isArray(value)) {
+    for (const item of value) expectNoPinIn(item, pin, key);
+  } else if (typeof value === "object" && value !== null) {
+    for (const [name, item] of Object.entries(value)) {
+      expect(name.toLowerCase()).not.toBe("pin");
+      expect(name).not.toContain(pin);
+      expectNoPinIn(item, pin, name);
+    }
+  } else {
+    const text = String(value);
+    expect(text).not.toBe(pin);
+    if (!generatedShape(key)?.test(text)) expect(text).not.toContain(pin);
+  }
+}
+
 describe("approval (plan D6)", () => {
   const comp = async (billId: string, approver?: AdjustmentArgs["approver"]) => ({
     lineId: await lineIdOf(venue, billId, 1),
@@ -804,12 +831,12 @@ describe("approval (plan D6)", () => {
       requestedBy: venue.staffId,
       approvedBy: venue.managerId,
     });
-    // The recorded command keeps the approver, never the PIN (ruling R2).
+    // The recorded command never holds the PIN (ruling R2).
     const commands = await inTx(venue, (tx) =>
       tx.select().from(serviceCommands).where(eq(serviceCommands.scopeId, billId)),
     );
     expect(commands).toHaveLength(1);
-    expect(JSON.stringify(commands)).not.toContain(PINS.manager);
+    expectNoPinIn(commands, PINS.manager);
   });
 
   it("refuses a staff member as the approver", async () => {
