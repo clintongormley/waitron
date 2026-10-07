@@ -1,5 +1,5 @@
 import "./errors.js";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { invoiceDeliveries, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
@@ -80,4 +80,27 @@ export async function reportInvoicePrintJob(
       : { status: "failed", failureCode: "transport_failed" },
     now,
   );
+}
+
+export async function endInvoicePrintDeliveries(
+  tx: Transaction,
+  jobIds: string[],
+  now = new Date(),
+): Promise<void> {
+  if (jobIds.length === 0) return;
+  // A handed-out payload may have printed even when its agent later reports an unpairing.
+  await tx
+    .update(invoiceDeliveries)
+    .set({
+      status: sql`case when ${invoiceDeliveries.status} = 'sending' then 'unknown' else 'failed' end`,
+      failureCode: "transport_failed",
+      expiredAt: sql`case when ${invoiceDeliveries.status} = 'sending' then ${now.toISOString()} else ${invoiceDeliveries.expiredAt} end`,
+    })
+    .where(
+      and(
+        eq(invoiceDeliveries.medium, "receipt"),
+        inArray(invoiceDeliveries.printJobId, jobIds),
+        inArray(invoiceDeliveries.status, ["queued", "sending"]),
+      ),
+    );
 }

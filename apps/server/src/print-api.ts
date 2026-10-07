@@ -56,7 +56,11 @@ import {
 } from "./station-printers.js";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
-import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
+import {
+  claimInvoicePrintJobs,
+  reportInvoicePrintJob,
+  endInvoicePrintDeliveries,
+} from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { requireAgent } from "./print-agent-session.js";
 import { createJoinRequest, readAgentJoinStatus } from "./join-requests.js";
@@ -560,17 +564,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               .where(
                 and(eq(printers.transport, "bluetooth"), inArray(printers.localKey, addresses)),
               );
-            await endUnpairedPrinterJobs(tx, agentId, addresses);
+            const ended = await endUnpairedPrinterJobs(tx, agentId, addresses);
+            await endInvoicePrintDeliveries(tx, ended, deps.now?.());
           }
         }
         // Absent from an agent that predates the field, which then changes nothing.
         if (bluetoothPrinting === false && pairedBluetooth.length > 0) {
           const elsewhere = printableElsewhere();
-          await failUnprintableBluetoothJobs(
+          const ended = await failUnprintableBluetoothJobs(
             tx,
             agentId,
             pairedBluetooth.map((p) => p.localKey).filter((key) => !elsewhere.has(key)),
           );
+          await endInvoicePrintDeliveries(tx, ended, deps.now?.());
         }
         return claimInvoicePrintJobs(
           tx,
