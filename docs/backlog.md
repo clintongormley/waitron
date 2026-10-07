@@ -5125,10 +5125,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       clears — a returning category or No category row has none.
     - **Done by A371 (owner answer, 2026-10-07): a routing preview lists an extra that stops or
       starts following its dish.** A cell that names a station, even the default one, sends an
-      extra there (the owner kept that rule); only an extra with no cell of its own or above it, or
-      a No preparation cell, follows its dish. The preview now also works out, for every dish and
+      extra there (the owner kept that rule). The preview now also works out, for every dish and
       every extra it offers, where the extra is made before and after the change, through
-      `chooseExtraMaker` as an order does, and lists the extra when that place changes, naming its
+      `chooseExtraMaker`, and lists the extra when that place changes, naming its
       dish ("Cheese — with Burger"); the grid then asks before saving. An extra that follows its
       dish both before and after lists nothing. A dish offers an extra when the catalogue attaches
       it (in every zone) or when a published menu a zone serves offers it with the dish (in that
@@ -5143,8 +5142,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       (`visibleRoutingRows` and `rowInModel`,
       `packages/venue-service/src/dashboard/routing-grid-model.ts`). An inactive product's cells
       stay out of sight until it is active again, as before.
-    - **A routing preview works out every active product in every active zone twice**, whatever the
-      change; only products under the changed row can move, and a change to one zone's cell moves
+    - **A routing preview works out every active product in every active zone twice, and every
+      extra each one offers there (`extraMoves`)**, whatever the change; only products under the
+      changed row, and the extras those products offer, can move, and a change to one zone's cell moves
       products in that zone only. The preview before A261-4 looped the same way.
     - **Owner question: should a configuration import refuse a routing cell on a zone in a
       switched-off department, as a save would?** Since main's A282 (#1339) no product path leaves
