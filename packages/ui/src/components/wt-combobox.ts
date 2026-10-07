@@ -381,8 +381,8 @@ export class WtCombobox extends LitElement {
    * multiple choice it is the chosen row while `values` is empty, and choosing it empties them. */
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
   /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`), and in a
-   * multiple choice one count text too: `countLabel(n)`, where n is the number of choosable options
-   * (not an action, not disabled, not the empty value), only when n is at least 2. Ignored with
+   * multiple choice every count text too: `countLabel(k)` for every k from 2 to the number of
+   * choosable options (not an action, not disabled, not the empty value). Ignored with
    * `appearance="link"`. */
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
@@ -929,12 +929,14 @@ export class WtCombobox extends LitElement {
     return rows;
   }
 
-  /** The closed trigger's possible texts; of the counts, only that of every choosable option. */
+  /** Every count's text is reserved, not only the largest count's, because a smaller count's text
+   * can be the wider one. */
   private widthTexts(): string[] {
     const options = this.options.filter((option) => !option.action);
     const texts = options.map(closedText);
+    if (!this.multiple) return texts;
     const choosable = options.filter((option) => !option.disabled && option.value !== "").length;
-    if (this.multiple && choosable >= 2) texts.push(this.countLabel(choosable));
+    for (let count = 2; count <= choosable; count += 1) texts.push(this.countLabel(count));
     return texts;
   }
 

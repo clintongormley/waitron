@@ -3495,7 +3495,7 @@ test("Enter on the highlighted empty option of a multiple choice clears its valu
   expect(received).toEqual([[]]);
 });
 
-test("stable-width on a multiple choice also reserves the count text for every choosable option", async () => {
+test("stable-width on a multiple choice also reserves the count text of every count from two to the choosable options", async () => {
   const el = await mountWith(
     '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width></wt-combobox>',
     [
@@ -3508,8 +3508,31 @@ test("stable-width on a multiple choice also reserves the count text for every c
   await el.updateComplete;
   const reserved = () =>
     [...el.shadowRoot!.querySelectorAll(".width-option")].map((span) => span.textContent!.trim());
-  expect(reserved()).toEqual(["Any tag", "Gluten-free", "Vegan", "Vegetarian", "Kosher", "3 tags"]);
+  expect(reserved()).toEqual([
+    "Any tag",
+    "Gluten-free",
+    "Vegan",
+    "Vegetarian",
+    "Kosher",
+    "2 tags",
+    "3 tags",
+  ]);
   el.options = [{ value: "", label: "Any tag" }, TAGS[0]!];
   await el.updateComplete;
   expect(reserved()).toEqual(["Any tag", "Gluten-free"]);
+});
+
+test("stable-width on a multiple choice keeps the trigger's width when a smaller count's text is the widest", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" multiple show-empty-option stable-width style="display: inline-block"></wt-combobox>',
+    ANY_TAG,
+  );
+  el.countLabel = (count) => (count === 2 ? "two chosen, a much longer label" : `${count} chosen`);
+  await el.updateComplete;
+  const { trigger, value } = fieldParts(el);
+  const before = trigger.getBoundingClientRect().width;
+  el.values = ["gluten-free", "vegan"];
+  await el.updateComplete;
+  expect(value.textContent!.trim()).toBe("two chosen, a much longer label");
+  expect(trigger.getBoundingClientRect().width).toBe(before);
 });

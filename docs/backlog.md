@@ -1201,10 +1201,9 @@ Whether the Pricing fold should also name an empty base price or VAT is a questi
 **An Add course button beside the course dropdown (A212) — DONE (#1087); left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
 rows too, so adding a course with a disabled course's name is refused as taken (measured
 2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
-it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there:
-`wt-combobox`'s `stable-width` attribute (`packages/ui/src/components/wt-combobox.ts`) is not in
-`docs/developers/design-system.md`; and the catalogue-screen test "ignores the closed window's late
-close…" catches its guard's removal only through an unhandled error, because the late close throws
+it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there
+(its other point, `wt-combobox`'s `stable-width` missing from `docs/developers/design-system.md`,
+A342 documented): the catalogue-screen test "ignores the closed window's late close…" catches its guard's removal only through an unhandled error, because the late close throws
 before it changes anything a state assertion could see.
 
 **Allergens and dietary preferences are edited in place (A213) — DONE (#1079); left open by #1079
