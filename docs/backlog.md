@@ -1060,9 +1060,11 @@ unused `units` property is gone (it closes W75's leftover).
     Clashes a product that clashes itself stays folded until opened, as the table folds any row
     that matches a filter in its own right. Once a load has had no clash, a clash that comes back
     (Undo, a live re-read) does not switch the filter back to Clashes.
-  - Open, for A345: a product with variants whose own price clashes while no variant's does is
+  - Open, for A345 (not yet in this backlog: a menu with clashes cannot be published from
+    anywhere): a product with variants whose own price clashes while no variant's does is
     marked red and offered under Clashes, but not counted, because `clashesOf` counts only its
-    variants — whether the tab or the publish check is right is A345's question.
+    variants. And the tab counts Inactive products and variants, which the publish check leaves
+    out. Whether the tab or the publish check is right is A345's question.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
@@ -2377,7 +2379,7 @@ a clash came from.
 **Resolve follows an unsaved price — DONE (A280, 2026-10-06).** A valid draft hides the
 row's Resolve menu. Blank or invalid text and Escape leave the saved clash available. Product
 and size rows have regression checks; no existing test check changed. A valid draft still hides
-Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list.
+Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list. (A344 removed the Resolve menu, 2026-10-07.)
 
 **Price overrides accept either decimal mark — DONE (A284, A280 visual follow-up).**
 The shared price field converts comma or point to an exact dot-decimal draft and displays the
