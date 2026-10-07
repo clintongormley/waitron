@@ -171,8 +171,10 @@ result.
 
 `GET /management-api/catalogues/:id/status` gives `{ state: "unpublished", clashes }`, or
 `{ state, clashes, version, publishedAt, hash }`, with `state` current or changed relative to the
-live version. `clashes` counts unresolved settings. `GET /management-api/catalogues/status` gives
-all menus' statuses keyed by menu id. `GET /management-api/catalogues/:id/preview` gives
+live version. `publishedAt` is when the live version became live: the moment of an immediate
+publish, or a queued edition's scheduled time, which a status read counts as live from that time
+on, before anything has marked it activated. `clashes` counts unresolved settings.
+`GET /management-api/catalogues/status` gives all menus' statuses keyed by menu id. `GET /management-api/catalogues/:id/preview` gives
 `{ hash, changes, warnings, status, clashes, document }`. `clashes` lists the products, sizes and
 fields that need a decision. `document` is the proposed published document, with the combined
 structure and the Device Home Page as `home` (below); a shortcut whose target the document does not
@@ -186,9 +188,55 @@ there are any, and a display when it differs from the default.
 `{ versionId, number }` (200). It first refuses unresolved settings with
 `menu.clashes_unresolved` (409, `menuId`, `count`), then refuses a changed working hash with
 `menu.changed_since_preview` (409, `menuId`). An unchanged menu returns its existing live version
-without writing another. Missing or non-string `expectedHash` answers `management.request_invalid`
-(400). A malformed menu id answers `shared.invalid_id` (400), an unknown menu
-`catalogue.not_found` (404).
+without writing another. Otherwise, while any edition is still queued, the publish would overtake
+it and is refused `menu_publication.overtakes_queued` (below). Missing or non-string `expectedHash`
+answers `management.request_invalid` (400). A malformed menu id answers `shared.invalid_id` (400),
+an unknown menu `catalogue.not_found` (404).
+
+A menu edition can also be queued to go live at a set minute, then moved or cancelled until then.
+Its content and number are fixed when it is queued; a later change to the working menu is not in
+it. The routes below take the time as a date and time on the venue location's clock, answer the
+instant, and list each time as that clock shows it. Each of them, and the publish route, needs the
+`person.manage` permission (403 `authorization.not_permitted`). A write that succeeds first marks
+the menu's editions whose time has come as activated, then makes its own change.
+
+- `POST /management-api/catalogues/:id/publications`, with
+  `{ expectedHash, activatesAt: { date, time, occurrence? } }`, gives `{ versionId, number,
+  activatesAt }` (201). It refuses, in this order, unresolved settings, a changed working hash (both
+  as the publish route does), a time not after now with `menu_publication.time_past` (400,
+  `activatesAt`), an overtaking placement, and a menu identical to its highest-numbered live or
+  queued edition with `menu_publication.unchanged` (409, `menuId`, `number`).
+- `GET /management-api/catalogues/:id/publications` gives `{ timeZone, live, editions }`: `live` is
+  `{ versionId, number, since, local }` or null; `editions` lists every queued edition soonest
+  first, then the ten most recently numbered settled ones, each
+  `{ versionId, number, state, activatesAt, queuedAt, cancelledAt, contentHash, local }`. `local`
+  is `{ date, time, offset, repeated }` on the venue clock. An edition whose time has passed reads
+  `activated` before anything has marked it. An unknown menu answers `catalogue.not_found` (404).
+- `PATCH /management-api/catalogues/:id/publications/:versionId`, with `{ activatesAt }`, moves a
+  queued edition and gives `{ versionId, number, activatesAt }` (200). It refuses a version with
+  no schedule row on this menu with `menu_publication.not_found` (404, `menuId`, `versionId`), an
+  activated or cancelled edition with `menu_publication.not_queued` (409, `menuId`, `versionId`,
+  `state`), then a past time and an overtaking move.
+- `POST /management-api/catalogues/:id/publications/:versionId/cancel` cancels a queued edition
+  (204), refused `menu_publication.not_found` or `menu_publication.not_queued` as above. A
+  cancelled edition's number is never used again.
+
+On the two routes that take a time, the time refusals come before any of these: a malformed `activatesAt` answers
+`management.request_invalid` (400, `field` naming `activatesAt` or the part at fault); a minute the
+clock skips `menu_publication.time_skipped` (400, `date`, `time`); a minute it shows twice, sent
+without `occurrence: "earlier" | "later"`, `menu_publication.time_repeated` (400, `date`, `time`,
+`occurrences: [{ at, offset }]`); a location time zone that is not a named zone
+`menu_publication.clock_unreadable` (409), which the list answers too. Malformed ids answer
+`shared.invalid_id` (400).
+
+The routes keep a menu's editions going live in number order. A new edition, queued or published now, overtakes every queued
+edition whose time is at or after its own; a move overtakes a lower-numbered queued edition whose
+time is at or after the new time, and a higher-numbered one whose time is at or before it. An
+overtaking request is refused `menu_publication.overtakes_queued` (409,
+`{ menuId, overtaken: [{ versionId, number, activatesAt }] }`, lowest number first) and writes
+nothing. No request field overrides it: the routes read no field beyond those above. The manager
+clears it by cancelling each edition named, or by moving it out of the way (a lower-numbered one
+earlier, a higher-numbered one later), and then repeats the request.
 
 Tills sell from live versions of active menus. Reading a live version outside document format 3 refuses
 with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu

@@ -59,6 +59,7 @@ import {
   cancelMenuPublication,
   listMenuPublications,
   queueMenuPublication,
+  rescheduleMenuPublication,
   type MenuPublicationsAnswer,
   readMenuStructure,
   listOptionLists,
@@ -1032,6 +1033,20 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         };
       });
       return c.json(answer);
+    }),
+  );
+
+  app.patch("/management-api/catalogues/:id/publications/:versionId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const versionId = requireUuidParam(c.req.param("versionId"), "MenuVersionId");
+      const body = await readJsonBody<{ activatesAt?: unknown }>(c);
+      const moved = await gated(c, sessionId, async (tx) => {
+        const activatesAt = activationInstant(body.activatesAt, await venueTimeZone(tx));
+        return rescheduleMenuPublication(tx, menuId, versionId, activatesAt);
+      });
+      return c.json(moved);
     }),
   );
 

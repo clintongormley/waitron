@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, activateDueMenuPublications } from "@waitron/catalogue";
 import type { MenuPreview, MenuPublicationsAnswer, MenuStatus } from "@waitron/catalogue";
 import { locationId as brandLocationId, nodeId as brandNodeId, seriesId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -18,8 +18,13 @@ import "./errors.js";
 const NOW = new Date("2026-10-07T08:00:00Z");
 const TOMORROW = { date: "2026-10-08", time: "08:00" };
 const TOMORROW_AT = "2026-10-08T06:00:00.000Z";
+const DAY_AFTER = { date: "2026-10-09", time: "08:00" };
+const DAY_AFTER_AT = "2026-10-09T06:00:00.000Z";
+const AFTERNOON = { date: "2026-10-07", time: "16:00" };
+const AFTERNOON_AT = "2026-10-07T14:00:00.000Z";
 
 let locationId: string;
+let managerId: string;
 let managerCookie: string;
 let staffCookie: string;
 
@@ -51,6 +56,7 @@ const suite = useVenueDb({
         .insert(persons)
         .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
         .returning({ id: persons.id });
+      managerId = manager!.id;
       const managerSession = await startManagementSession(tx, { personId: manager!.id });
       const staffSession = await startManagementSession(tx, { personId: staff!.id });
       return { managerSid: managerSession.token, staffSid: staffSession.token };
@@ -193,6 +199,55 @@ async function setVenueZone(timeZone: string): Promise<void> {
 
 const cancelPath = (menuId: string, versionId: string) =>
   `/management-api/catalogues/${menuId}/publications/${versionId}/cancel`;
+
+async function reschedule(
+  app: Hono,
+  menuId: string,
+  versionId: string,
+  body: Record<string, unknown>,
+  cookie?: string,
+): Promise<Response> {
+  return send(app, "PATCH", `/management-api/catalogues/${menuId}/publications/${versionId}`, {
+    body,
+    ...(cookie === undefined ? {} : { cookie }),
+  });
+}
+
+/** Signs the manager in again at the faked clock's time, past the first session's idle limit. */
+async function signInAgain(): Promise<void> {
+  const { token } = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { personId: managerId }),
+  );
+  managerCookie = `${MANAGEMENT_COOKIE}=${token}`;
+}
+
+/** Every table the draft's document is built from, each row in a fixed order. */
+async function draftSnapshot(): Promise<Record<string, string[]>> {
+  const tables: Record<string, string[]> = {};
+  for (const table of [
+    "catalogues",
+    "categories",
+    "category_details",
+    "content_languages",
+    "extra_list_items",
+    "extra_lists",
+    "menu_details",
+    "menu_item_variant_overrides",
+    "menu_items",
+    "option_labels",
+    "option_lists",
+    "product_modifiers",
+    "product_units",
+    "products",
+    "section_members",
+    "sections",
+    "units",
+  ]) {
+    const { rows } = await suite.db.execute(sql.raw(`select * from ${table}`));
+    tables[table] = rows.map((row) => JSON.stringify(row)).sort();
+  }
+  return tables;
+}
 
 /** Every row of the four publication tables, in a fixed order. */
 async function publicationTables(): Promise<Record<string, string[]>> {
@@ -463,4 +518,297 @@ describe("queuing, listing and cancelling menu editions through the routes", () 
     }
     expect(await publicationTables()).toEqual(tables);
   });
+});
+
+const OVERTAKES = "menu_publication.overtakes_queued";
+const publishPath = (menuId: string) => `/management-api/catalogues/${menuId}/publish`;
+
+/** v1 live at 5.00, v2 (5.50) queued for tomorrow 08:00 and v3 (6.00) for the day after. */
+async function twoQueued(app: Hono) {
+  const { menuId, itemId } = await lunchWithSoup(app);
+  await setSoupPrice(app, menuId, itemId, "5.50");
+  const v2 = await json<{ versionId: string }>(await queue(app, menuId, TOMORROW), 201);
+  await setSoupPrice(app, menuId, itemId, "6.00");
+  const v3 = await json<{ versionId: string }>(await queue(app, menuId, DAY_AFTER), 201);
+  expect(v3).toMatchObject({ number: 3, activatesAt: DAY_AFTER_AT });
+  return {
+    menuId,
+    itemId,
+    v2: { versionId: v2.versionId, number: 2, activatesAt: TOMORROW_AT },
+    v3: { versionId: v3.versionId, number: 3, activatesAt: DAY_AFTER_AT },
+  };
+}
+
+describe("moving a queued menu edition through the routes", () => {
+  it("refuses to bring v3 ahead of v2, moves it once v2 is cancelled, and leaves the draft as it was (owner scenario 1)", async () => {
+    const app = mountApp();
+    const { menuId, itemId, v2, v3 } = await twoQueued(app);
+    await setSoupPrice(app, menuId, itemId, "7.50");
+    const hash = await previewHash(app, menuId);
+    const structurePath = `/management-api/catalogues/${menuId}/structure`;
+    const structure = await json(await send(app, "GET", structurePath), 200);
+    const draft = await draftSnapshot();
+    const draftUnchanged = async () => {
+      expect(await previewHash(app, menuId)).toBe(hash);
+      expect(await json(await send(app, "GET", structurePath), 200)).toEqual(structure);
+      expect(await draftSnapshot()).toEqual(draft);
+    };
+    const listed = await publications(app, menuId);
+
+    const toAfternoon = () => reschedule(app, menuId, v3.versionId, { activatesAt: AFTERNOON });
+    expect(await json(await toAfternoon(), 409)).toEqual({
+      error: { code: OVERTAKES, params: { menuId, overtaken: [v2] } },
+    });
+    expect(await publications(app, menuId)).toEqual(listed);
+
+    expect((await send(app, "POST", cancelPath(menuId, v2.versionId))).status).toBe(204);
+    expect(await json(await toAfternoon(), 200)).toEqual({
+      versionId: v3.versionId,
+      number: 3,
+      activatesAt: AFTERNOON_AT,
+    });
+    expect((await publications(app, menuId)).editions).toEqual([
+      expect.objectContaining({
+        versionId: v3.versionId,
+        number: 3,
+        state: "queued",
+        activatesAt: AFTERNOON_AT,
+        local: { ...AFTERNOON, offset: "+02:00", repeated: false },
+      }),
+      expect.objectContaining({ versionId: v2.versionId, number: 2, state: "cancelled" }),
+    ]);
+    await draftUnchanged();
+    const preview = await json<MenuPreview>(
+      await send(app, "GET", `/management-api/catalogues/${menuId}/preview`),
+      200,
+    );
+    expect(preview.changes).toContainEqual(
+      expect.objectContaining({ kind: "price_changed", name: "Soup", from: "5.00", to: "7.50" }),
+    );
+
+    const firstCookie = managerCookie;
+    try {
+      vi.setSystemTime(new Date("2026-10-07T14:00:30Z"));
+      await signInAgain();
+      const afternoonStatus = { state: "changed", version: 3, publishedAt: AFTERNOON_AT };
+      expect(await status(app, menuId)).toMatchObject(afternoonStatus);
+
+      vi.setSystemTime(new Date("2026-10-08T06:00:30Z"));
+      await signInAgain();
+      const { activated } = await withTransaction(suite.db, (tx) =>
+        activateDueMenuPublications(tx),
+      );
+      expect(activated.filter((row) => row.menuId === menuId)).toEqual([
+        { menuId, versionId: v3.versionId, number: 3 },
+      ]);
+      expect(await status(app, menuId)).toMatchObject(afternoonStatus);
+      const later = await publications(app, menuId);
+      expect(later.live).toMatchObject({ versionId: v3.versionId, number: 3, since: AFTERNOON_AT });
+      expect(later.editions).toEqual([
+        expect.objectContaining({ versionId: v3.versionId, state: "activated" }),
+        expect.objectContaining({ versionId: v2.versionId, state: "cancelled" }),
+      ]);
+      await draftUnchanged();
+
+      expect(await json(await queue(app, menuId, DAY_AFTER, hash), 201)).toEqual({
+        versionId: expect.any(String),
+        number: 4,
+        activatesAt: DAY_AFTER_AT,
+      });
+    } finally {
+      managerCookie = firstCookie;
+    }
+  });
+
+  it("refuses a move in either direction that would put a newer edition live first, writing nothing (owner requirement 2)", async () => {
+    const app = mountApp();
+    const { menuId, v2, v3 } = await twoQueued(app);
+    const listed = await publications(app, menuId);
+    const tables = await publicationTables();
+    const nothingChanged = async () => {
+      expect(await publications(app, menuId)).toEqual(listed);
+      expect(await publicationTables()).toEqual(tables);
+    };
+    for (const extra of [{}, { overtaken: "cancel" }]) {
+      const earlier = await reschedule(app, menuId, v3.versionId, {
+        activatesAt: AFTERNOON,
+        ...extra,
+      });
+      expect(await json(earlier, 409)).toEqual({
+        error: { code: OVERTAKES, params: { menuId, overtaken: [v2] } },
+      });
+      await nothingChanged();
+
+      const later = await reschedule(app, menuId, v2.versionId, {
+        activatesAt: { date: "2026-10-10", time: "08:00" },
+        ...extra,
+      });
+      expect(await json(later, 409)).toEqual({
+        error: { code: OVERTAKES, params: { menuId, overtaken: [v3] } },
+      });
+      await nothingChanged();
+    }
+  });
+
+  it("gives an overtaking queue, move and publish the same refusal, writing nothing", async () => {
+    const app = mountApp();
+    const { menuId, itemId, v2, v3 } = await twoQueued(app);
+    await setSoupPrice(app, menuId, itemId, "6.50");
+    const hash = await previewHash(app, menuId);
+    const tables = await publicationTables();
+    const refusals = [
+      await json(await queue(app, menuId, TOMORROW, hash), 409),
+      await json(await reschedule(app, menuId, v3.versionId, { activatesAt: AFTERNOON }), 409),
+      await json(
+        await send(app, "POST", publishPath(menuId), { body: { expectedHash: hash } }),
+        409,
+      ),
+    ];
+    expect(refusals).toEqual([
+      { error: { code: OVERTAKES, params: { menuId, overtaken: [v2, v3] } } },
+      { error: { code: OVERTAKES, params: { menuId, overtaken: [v2] } } },
+      { error: { code: OVERTAKES, params: { menuId, overtaken: [v2, v3] } } },
+    ]);
+    expect(await publicationTables()).toEqual(tables);
+  });
+
+  it("refuses a move to an unchosen repeated or past minute, of a cancelled, unknown or malformed edition, and for staff", async () => {
+    const app = mountApp();
+    const { menuId, v2, v3 } = await twoQueued(app);
+    expect((await send(app, "POST", cancelPath(menuId, v3.versionId))).status).toBe(204);
+    const tables = await publicationTables();
+    const move = (versionId: string, activatesAt: unknown, cookie?: string) =>
+      reschedule(app, menuId, versionId, { activatesAt }, cookie);
+
+    const autumn = { date: "2026-10-25", time: "02:30" };
+    expect(await json(await move(v2.versionId, autumn), 400)).toEqual({
+      error: {
+        code: "menu_publication.time_repeated",
+        params: {
+          ...autumn,
+          occurrences: [
+            { at: "2026-10-25T00:30:00.000Z", offset: "+02:00" },
+            { at: "2026-10-25T01:30:00.000Z", offset: "+01:00" },
+          ],
+        },
+      },
+    });
+    expect(
+      await json(await move(v2.versionId, { date: "2026-10-07", time: "09:59" }), 400),
+    ).toEqual({
+      error: {
+        code: "menu_publication.time_past",
+        params: { activatesAt: "2026-10-07T07:59:00.000Z" },
+      },
+    });
+    expect(
+      await json(await move(v2.versionId, { date: "2026-10-07", time: "25:00" }), 400),
+    ).toEqual({
+      error: { code: "management.request_invalid", params: { field: "activatesAt.time" } },
+    });
+    expect(await json(await move(v3.versionId, AFTERNOON), 409)).toEqual({
+      error: {
+        code: "menu_publication.not_queued",
+        params: { menuId, versionId: v3.versionId, state: "cancelled" },
+      },
+    });
+    const missing = crypto.randomUUID();
+    expect(await json(await move(missing, AFTERNOON), 404)).toEqual({
+      error: { code: "menu_publication.not_found", params: { menuId, versionId: missing } },
+    });
+    expect(await json(await move("not-a-uuid", AFTERNOON), 400)).toEqual({
+      error: { code: "shared.invalid_id", params: { kind: "MenuVersionId", value: "not-a-uuid" } },
+    });
+    for (const activatesAt of [AFTERNOON, { date: "2026-10-07", time: "25:00" }]) {
+      expect(await json(await move(v2.versionId, activatesAt, staffCookie), 403)).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    }
+    expect(await publicationTables()).toEqual(tables);
+  });
+});
+
+describe("two publication requests at once", () => {
+  async function scheduleRows(menuId: string): Promise<number> {
+    const { rows } = await suite.db.execute(
+      sql`select version_id from menu_scheduled_publications where menu_id = ${menuId}`,
+    );
+    return rows.length;
+  }
+
+  it("queues one of two identical requests for the same minute and refuses the other as overtaken", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await setSoupPrice(app, menuId, itemId, "5.50");
+    const hash = await previewHash(app, menuId);
+    const answers = await Promise.all([
+      queue(app, menuId, TOMORROW, hash),
+      queue(app, menuId, TOMORROW, hash),
+    ]);
+    expect(answers.map((res) => res.status).sort()).toEqual([201, 409]);
+    const won = await json<{ versionId: string }>(
+      answers.find((res) => res.status === 201)!,
+      201,
+    );
+    expect(won).toEqual({ versionId: expect.any(String), number: 2, activatesAt: TOMORROW_AT });
+    expect(
+      await json(
+        answers.find((res) => res.status === 409)!,
+        409,
+      ),
+    ).toEqual({
+      error: {
+        code: OVERTAKES,
+        params: {
+          menuId,
+          overtaken: [{ versionId: won.versionId, number: 2, activatesAt: TOMORROW_AT }],
+        },
+      },
+    });
+    expect(await scheduleRows(menuId)).toBe(1);
+  });
+
+  it.each([{ sentFirst: "queue" as const }, { sentFirst: "publish" as const }])(
+    "lets exactly one of a queue and a publish of the same draft through ($sentFirst sent first)",
+    async ({ sentFirst }) => {
+      const app = mountApp();
+      const { menuId, itemId } = await lunchWithSoup(app);
+      await setSoupPrice(app, menuId, itemId, "5.50");
+      const hash = await previewHash(app, menuId);
+      const queueing = () => queue(app, menuId, TOMORROW, hash);
+      const publishing = () =>
+        send(app, "POST", publishPath(menuId), { body: { expectedHash: hash } });
+      const [queued, published] =
+        sentFirst === "queue"
+          ? await Promise.all([queueing(), publishing()])
+          : (await Promise.all([publishing(), queueing()])).reverse();
+
+      const listed = () => publications(app, menuId);
+      if (queued!.status === 201) {
+        const edition = await json<{ versionId: string }>(queued!, 201);
+        const v2 = { versionId: edition.versionId, number: 2, activatesAt: TOMORROW_AT };
+        expect(edition).toEqual(v2);
+        expect(await json(published!, 409)).toEqual({
+          error: { code: OVERTAKES, params: { menuId, overtaken: [v2] } },
+        });
+        const answer = await listed();
+        expect(answer.live).toMatchObject({ number: 1 });
+        expect(answer.editions).toEqual([expect.objectContaining({ ...v2, state: "queued" })]);
+      } else {
+        expect(await json(published!, 200)).toEqual({ versionId: expect.any(String), number: 2 });
+        expect(await json(queued!, 409)).toEqual({
+          error: { code: "menu_publication.unchanged", params: { menuId, number: 2 } },
+        });
+        const answer = await listed();
+        expect(answer.live).toMatchObject({ number: 2 });
+        expect(answer.editions).toEqual([]);
+        expect(await scheduleRows(menuId)).toBe(0);
+      }
+      const { live, editions } = await listed();
+      for (const edition of editions) {
+        expect(edition.state).not.toBe("cancelled");
+        if (edition.state === "queued") expect(edition.number).toBeGreaterThan(live!.number);
+      }
+    },
+  );
 });
