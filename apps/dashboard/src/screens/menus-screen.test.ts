@@ -5071,6 +5071,24 @@ describe("publishing", () => {
     await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalledWith("menu-lunch"));
   });
 
+  it("hands the publications widget no preview once a background preview read fails", async () => {
+    const live = new LiveData();
+    const client = api({
+      liveData: live,
+      getMenuPreview: vi.fn().mockResolvedValue(lunchPreview()),
+    });
+    const el = await mountPreview(client);
+    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
+      "dashboard-menu-publications",
+    )!;
+    expect(schedule.preview?.hash).toBe(LUNCH_HASH);
+    client.getMenuPreview.mockRejectedValue({ code: "server.internal" });
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
+    expect(panel(el).preview).not.toBeNull();
+    expect(schedule.preview).toBeNull();
+  });
+
   function navigablePreview(): MenuPreview {
     const snapshot = lunchPreview();
     const live = lunchDocument();

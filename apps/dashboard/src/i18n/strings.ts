@@ -2317,6 +2317,30 @@ export const en = {
   "menu_publications.cancel_question":
     "Cancel version {number}, scheduled for {time}? Its number is not used again.",
   "menu_publications.keep": "Keep it",
+  "menu_publications.schedule": "Schedule a publication…",
+  "menu_publications.schedule_heading": "Schedule {menu}",
+  "menu_publications.schedule_intro":
+    "The menu as this preview shows it goes live at the date and time you choose, on the venue's clock ({zone}).",
+  "menu_publications.date_label": "Date",
+  "menu_publications.time_label": "Time",
+  "menu_publications.date_required": "Choose a date.",
+  "menu_publications.time_required": "Choose a time.",
+  "menu_publications.schedule_action": "Schedule",
+  "menu_publications.time_skipped": "The clock skips {time} on {date}. Choose another time.",
+  "menu_publications.time_repeated":
+    "{time} happens twice on {date}, because the clocks go back. Choose which.",
+  "menu_publications.occurrence_label": "Which {time}",
+  "menu_publications.occurrence_earlier": "First {time} (UTC{offset})",
+  "menu_publications.occurrence_later": "Second {time} (UTC{offset})",
+  "menu_publications.in_the_way_item": "{number} ({time})",
+  "menu_publications.in_the_way_earlier":
+    "Version {number}, scheduled for {time}, must go live first. Cancel it or move it earlier, then try again.",
+  "menu_publications.in_the_way_earlier_many":
+    "Versions {list} must go live first. Cancel them or move them earlier, then try again.",
+  "menu_publications.in_the_way_later":
+    "Version {number}, scheduled for {time}, must go live after this one. Cancel it or move it later, then try again.",
+  "menu_publications.in_the_way_later_many":
+    "Versions {list} must go live after this one. Cancel them or move them later, then try again.",
   "add_to_menus.heading": "Add {name} to menus",
   "add_to_menus.intro":
     "{name} is saved. Choose where it goes on your menus, or skip this and add it later from Menus.",
@@ -4732,6 +4756,30 @@ export const es: Record<StringKey, string> = {
   "menu_publications.cancel_question":
     "¿Cancelar la versión {number}, programada para el {time}? Su número no se vuelve a usar.",
   "menu_publications.keep": "Mantenerla",
+  "menu_publications.schedule": "Programar una publicación…",
+  "menu_publications.schedule_heading": "Programar {menu}",
+  "menu_publications.schedule_intro":
+    "La carta tal como la muestra esta vista previa se publica en la fecha y la hora que elijas, según el reloj del local ({zone}).",
+  "menu_publications.date_label": "Fecha",
+  "menu_publications.time_label": "Hora",
+  "menu_publications.date_required": "Elige una fecha.",
+  "menu_publications.time_required": "Elige una hora.",
+  "menu_publications.schedule_action": "Programar",
+  "menu_publications.time_skipped": "El reloj se salta las {time} el {date}. Elige otra hora.",
+  "menu_publications.time_repeated":
+    "Las {time} se repiten el {date}, porque se atrasa la hora. Elige cuál de las dos.",
+  "menu_publications.occurrence_label": "Cuál de las {time}",
+  "menu_publications.occurrence_earlier": "Primera {time} (UTC{offset})",
+  "menu_publications.occurrence_later": "Segunda {time} (UTC{offset})",
+  "menu_publications.in_the_way_item": "{number} ({time})",
+  "menu_publications.in_the_way_earlier":
+    "La versión {number}, programada para el {time}, debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo.",
+  "menu_publications.in_the_way_earlier_many":
+    "Las versiones {list} deben publicarse antes. Cancélalas o adelántalas y vuelve a intentarlo.",
+  "menu_publications.in_the_way_later":
+    "La versión {number}, programada para el {time}, debe publicarse después de esta. Cancélala o retrásala y vuelve a intentarlo.",
+  "menu_publications.in_the_way_later_many":
+    "Las versiones {list} deben publicarse después de esta. Cancélalas o retrásalas y vuelve a intentarlo.",
   "add_to_menus.heading": "Añadir {name} a las cartas",
   "add_to_menus.intro":
     "{name} está guardado. Elige dónde va en tus cartas, u omite este paso y añádelo más tarde desde Cartas.",

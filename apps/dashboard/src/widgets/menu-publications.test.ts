@@ -1,11 +1,12 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DataTableColumn } from "@waitron/ui";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { page, userEvent } from "vitest/browser";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import "./menu-publications.js";
-import type { MenuPublicationsPanel } from "./menu-publications.js";
-import type { DashboardApi, MenuPublicationsAnswer } from "../api/client.js";
+import { overtakeSentence, type MenuPublicationsPanel } from "./menu-publications.js";
+import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -57,10 +58,38 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
   return {
     getMenuPublications: vi.fn(async () => queue()),
     cancelMenuPublication: vi.fn().mockResolvedValue(undefined),
+    scheduleMenuPublication: vi.fn().mockResolvedValue({
+      versionId: "v-lunch-5",
+      number: 5,
+      activatesAt: "2026-10-10T10:00:00.000Z",
+    }),
     ...overrides,
   } as unknown as DashboardApi & {
     getMenuPublications: ReturnType<typeof vi.fn>;
     cancelMenuPublication: ReturnType<typeof vi.fn>;
+    scheduleMenuPublication: ReturnType<typeof vi.fn>;
+  };
+}
+
+const DRAFT_HASH = "d".repeat(64);
+
+/** The open menu's preview: no clashes, v1 live, and a draft unlike every listed edition. */
+function draftPreview(overrides: Partial<MenuPreview> = {}): MenuPreview {
+  return {
+    clashes: [],
+    hash: DRAFT_HASH,
+    changes: [],
+    warnings: [],
+    status: {
+      state: "changed",
+      clashes: 0,
+      version: 1,
+      publishedAt: "2026-10-07T08:00:00.000Z",
+      hash: "1".repeat(64),
+    },
+    document: {} as MenuPreview["document"],
+    live: null,
+    ...overrides,
   };
 }
 
@@ -71,11 +100,15 @@ async function flush(el: MenuPublicationsPanel): Promise<void> {
   if (table) await table.updateComplete;
 }
 
-async function mount(api = stubApi()): Promise<MenuPublicationsPanel> {
+async function mount(
+  api = stubApi(),
+  props: Partial<MenuPublicationsPanel> = {},
+): Promise<MenuPublicationsPanel> {
   const { el } = await mountWidget<MenuPublicationsPanel>("dashboard-menu-publications", {
     api,
     menuId: "menu-lunch",
     menuName: "Lunch Menu",
+    ...props,
   });
   await flush(el);
   return el;
@@ -486,5 +519,621 @@ describe("a menu's scheduled versions", () => {
     live.invalidate([{ type: "menu_scheduled_publications" }]);
     await vi.waitFor(() => expect(cell(el, "state-v-lunch-2")).toBe("Cancelled"));
     expect(read).toHaveBeenCalledTimes(2);
+  });
+});
+
+const OVERTAKES = "menu_publication.overtakes_queued";
+const V2_IN_THE_WAY = {
+  versionId: "v-lunch-2",
+  number: 2,
+  activatesAt: "2026-10-08T06:00:00.000Z",
+};
+const V3_IN_THE_WAY = {
+  versionId: "v-lunch-3",
+  number: 3,
+  activatesAt: "2026-10-09T06:00:00.000Z",
+};
+const V4_IN_THE_WAY = {
+  versionId: "v-lunch-4",
+  number: 4,
+  activatesAt: "2026-10-25T01:30:00.000Z",
+};
+const REPEATED = {
+  code: "menu_publication.time_repeated",
+  params: {
+    date: "2026-10-25",
+    time: "02:30",
+    occurrences: [
+      { at: "2026-10-25T00:30:00.000Z", offset: "+02:00" },
+      { at: "2026-10-25T01:30:00.000Z", offset: "+01:00" },
+    ],
+  },
+};
+
+type Field = HTMLElementTagNameMap["wt-input"];
+type Choice = HTMLElementTagNameMap["wt-combobox"];
+
+function scheduleDialog(el: MenuPublicationsPanel): HTMLElementTagNameMap["wt-dialog"] {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    'wt-dialog[data-test="schedule-dialog"]',
+  )!;
+}
+
+function field(el: MenuPublicationsPanel, name: "date" | "time"): Field {
+  return scheduleDialog(el).querySelector<Field>(`wt-input[name="${name}"]`)!;
+}
+
+function occurrence(el: MenuPublicationsPanel): Choice | null {
+  return scheduleDialog(el).querySelector<Choice>('wt-combobox[name="occurrence"]');
+}
+
+function submitButton(el: MenuPublicationsPanel): HTMLElementTagNameMap["wt-button"] {
+  return scheduleDialog(el).querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="schedule-submit"]',
+  )!;
+}
+
+async function openSchedule(el: MenuPublicationsPanel): Promise<void> {
+  inShadow(el, "schedule-open")!.click();
+  await flush(el);
+  await scheduleDialog(el).updateComplete;
+}
+
+async function enter(el: MenuPublicationsPanel, name: "date" | "time", value: string) {
+  const input = field(el, name);
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+  await flush(el);
+}
+
+async function submit(el: MenuPublicationsPanel): Promise<void> {
+  submitButton(el).click();
+  await flush(el);
+  await flush(el);
+  await flush(el);
+}
+
+async function bottom(el: MenuPublicationsPanel): Promise<string> {
+  return messageIn(scheduleDialog(el));
+}
+
+/** Opens the form on a draft unlike every edition, enters the time and submits it. */
+async function scheduleAt(
+  api: ReturnType<typeof stubApi>,
+  date: string,
+  time: string,
+): Promise<MenuPublicationsPanel> {
+  const el = await mount(api, { preview: draftPreview() });
+  await openSchedule(el);
+  await enter(el, "date", date);
+  await enter(el, "time", time);
+  await submit(el);
+  return el;
+}
+
+describe("scheduling a publication", () => {
+  it("opens a form with a required date and a required time, both marked", async () => {
+    const el = await mount(stubApi(), { preview: draftPreview() });
+    expect(inShadow(el, "schedule-open")!.textContent!.trim()).toBe("Schedule a publication…");
+    await openSchedule(el);
+    expect(scheduleDialog(el).open).toBe(true);
+    for (const [name, type, label] of [
+      ["date", "date", "Date"],
+      ["time", "time", "Time"],
+    ] as const) {
+      const input = field(el, name);
+      expect(input.type).toBe(type);
+      expect(input.label).toBe(label);
+      expect(input.required).toBe(true);
+      expect(input.shadowRoot!.querySelector("label [data-required]")).not.toBeNull();
+      expect(input.shadowRoot!.querySelector("input")!.name).toBe(name);
+    }
+    expect(occurrence(el)).toBeNull();
+    expect(submitButton(el).textContent!.trim()).toBe("Schedule");
+    expect(submitButton(el).disabled).toBe(false);
+    expect(await bottom(el)).toBe("");
+  });
+
+  it("explains empty fields beside each and at the bottom, focuses the first, and holds the action until both are filled", async () => {
+    const api = stubApi();
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await submit(el);
+    expect(api.scheduleMenuPublication).not.toHaveBeenCalled();
+    expect(field(el, "date").error).toBe("Choose a date.");
+    expect(field(el, "time").error).toBe("Choose a time.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "date"));
+    expect(submitButton(el).disabled).toBe(true);
+    await enter(el, "date", "2026-10-10");
+    expect(field(el, "date").error).toBe("");
+    expect(field(el, "time").error).toBe("Choose a time.");
+    expect(submitButton(el).disabled).toBe(true);
+    await enter(el, "time", "12:00");
+    expect(field(el, "time").error).toBe("");
+    expect(await bottom(el)).toBe("");
+    expect(submitButton(el).disabled).toBe(false);
+  });
+
+  it("schedules the previewed menu once at the entered venue time, closes, and reads the list again", async () => {
+    const api = stubApi();
+    const el = await scheduleAt(api, "2026-10-10", "12:00");
+    expect(api.scheduleMenuPublication.mock.calls).toEqual([
+      [
+        "menu-lunch",
+        { expectedHash: DRAFT_HASH, activatesAt: { date: "2026-10-10", time: "12:00" } },
+      ],
+    ]);
+    expect(scheduleDialog(el).open).toBe(false);
+    expect(api.getMenuPublications).toHaveBeenCalledTimes(2);
+  });
+
+  it("schedules on Enter in a field", async () => {
+    const api = stubApi();
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-10");
+    await enter(el, "time", "12:00");
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    await flush(el);
+    expect(api.scheduleMenuPublication).toHaveBeenCalledTimes(1);
+    expect(scheduleDialog(el).open).toBe(false);
+  });
+
+  it("sends one schedule however often the action is pressed while it is out", async () => {
+    let answer!: (value: unknown) => void;
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-10");
+    await enter(el, "time", "12:00");
+    submitButton(el).click();
+    submitButton(el).click();
+    await flush(el);
+    expect(api.scheduleMenuPublication).toHaveBeenCalledTimes(1);
+    answer({ versionId: "v-lunch-5", number: 5, activatesAt: "2026-10-10T10:00:00.000Z" });
+    await flush(el);
+    await flush(el);
+    expect(scheduleDialog(el).open).toBe(false);
+  });
+
+  it.each([
+    [
+      "en",
+      "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+      "Correct the highlighted fields to continue.",
+    ],
+    [
+      "es-ES",
+      "La versión 2, programada para el 8 oct 2026, 08:00, debe publicarse antes. Cancélala o adelántala y vuelve a intentarlo.",
+      "Corrige los campos marcados para continuar.",
+    ],
+  ])(
+    "names the version in the way under the time field when a schedule would overtake it (%s)",
+    async (locale, sentence, fix) => {
+      setLocale(locale);
+      const api = stubApi({
+        scheduleMenuPublication: vi.fn().mockRejectedValue({
+          code: OVERTAKES,
+          params: { menuId: "menu-lunch", overtaken: [V2_IN_THE_WAY] },
+        }),
+      });
+      const el = await scheduleAt(api, "2026-10-08", "08:00");
+      expect(api.scheduleMenuPublication).toHaveBeenCalledTimes(1);
+      expect(api.getMenuPublications).toHaveBeenCalledTimes(2);
+      expect(field(el, "time").error).toBe(sentence);
+      expect(field(el, "date").error).toBe("");
+      expect(await bottom(el)).toBe(fix);
+      expect(field(el, "date").value).toBe("2026-10-08");
+      expect(field(el, "time").value).toBe("08:00");
+      expect(scheduleDialog(el).open).toBe(true);
+      expect(submitButton(el).disabled).toBe(false);
+      expect(api.cancelMenuPublication).not.toHaveBeenCalled();
+      expect(
+        [...scheduleDialog(el).querySelectorAll("wt-button")].map((button) =>
+          button.getAttribute("data-test"),
+        ),
+      ).toEqual(["schedule-close", "schedule-submit"]);
+      await enter(el, "time", "07:00");
+      expect(field(el, "time").error).toBe("");
+      expect(await bottom(el)).toBe("");
+    },
+  );
+
+  it("names every version in the way in one sentence when there are several", async () => {
+    const listed = queue();
+    listed.editions[2] = { ...listed.editions[2]!, state: "queued", cancelledAt: null };
+    const api = stubApi({
+      getMenuPublications: vi.fn(async () => listed),
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: OVERTAKES,
+        params: { menuId: "menu-lunch", overtaken: [V2_IN_THE_WAY, V3_IN_THE_WAY] },
+      }),
+    });
+    const el = await scheduleAt(api, "2026-10-08", "07:00");
+    expect(field(el, "time").error).toBe(
+      "Versions 2 (8 Oct 2026, 08:00) and 3 (9 Oct 2026, 08:00) must go live first. Cancel them or move them earlier, then try again.",
+    );
+  });
+
+  it("falls back to the code's sentence when the list cannot be read after the refusal", async () => {
+    const api = stubApi({
+      getMenuPublications: vi
+        .fn()
+        .mockResolvedValueOnce(queue())
+        .mockRejectedValue({ code: "connection.failed" }),
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: OVERTAKES,
+        params: { menuId: "menu-lunch", overtaken: [V2_IN_THE_WAY] },
+      }),
+    });
+    const el = await scheduleAt(api, "2026-10-08", "08:00");
+    expect(api.getMenuPublications).toHaveBeenCalledTimes(2);
+    expect(field(el, "time").error).toBe(codeMessage(OVERTAKES));
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(submitButton(el).disabled).toBe(false);
+  });
+
+  it("falls back to the code's sentence when the list read after the refusal no longer has the version", async () => {
+    const changed = queue();
+    changed.editions.shift();
+    const api = stubApi({
+      getMenuPublications: vi.fn().mockResolvedValueOnce(queue()).mockResolvedValue(changed),
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: OVERTAKES,
+        params: { menuId: "menu-lunch", overtaken: [V2_IN_THE_WAY] },
+      }),
+    });
+    const el = await scheduleAt(api, "2026-10-08", "08:00");
+    expect(field(el, "time").error).toBe(codeMessage(OVERTAKES));
+  });
+
+  it.each([
+    ["en", "The clock skips 02:30 on 28 Mar 2027. Choose another time."],
+    ["es-ES", "El reloj se salta las 02:30 el 28 mar 2027. Elige otra hora."],
+  ])("says under the time field when the venue clock skips it (%s)", async (locale, sentence) => {
+    setLocale(locale);
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: "menu_publication.time_skipped",
+        params: { date: "2027-03-28", time: "02:30" },
+      }),
+    });
+    const el = await scheduleAt(api, "2027-03-28", "02:30");
+    expect(field(el, "time").error).toBe(sentence);
+    expect(submitButton(el).disabled).toBe(false);
+  });
+
+  it("says under the time field when the time has passed", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: "menu_publication.time_past",
+        params: { activatesAt: "2026-10-07T07:59:00.000Z" },
+      }),
+    });
+    const el = await scheduleAt(api, "2026-10-07", "09:59");
+    expect(field(el, "time").error).toBe(codeMessage("menu_publication.time_past"));
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(submitButton(el).disabled).toBe(false);
+  });
+
+  it.each(["menu.changed_since_preview", "menu_publication.unchanged"])(
+    "shows a %s refusal in the bottom message alone",
+    async (code) => {
+      const api = stubApi({
+        scheduleMenuPublication: vi.fn().mockRejectedValue({ code, params: {} }),
+      });
+      const el = await scheduleAt(api, "2026-10-10", "12:00");
+      expect(field(el, "date").error).toBe("");
+      expect(field(el, "time").error).toBe("");
+      expect(await bottom(el)).toBe(codeMessage(code));
+      expect(scheduleDialog(el).open).toBe(true);
+      expect(submitButton(el).disabled).toBe(false);
+    },
+  );
+
+  it("asks which of a repeated time, holds the action until one is chosen, and sends the choice", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValueOnce(REPEATED)
+        .mockResolvedValue({ versionId: "v-lunch-5", number: 5, activatesAt: "x" }),
+    });
+    const el = await scheduleAt(api, "2026-10-25", "02:30");
+    const choice = occurrence(el)!;
+    expect(choice).not.toBeNull();
+    expect(choice.required).toBe(true);
+    expect(choice.options).toEqual([
+      { value: "earlier", label: "First 02:30 (UTC+02:00)" },
+      { value: "later", label: "Second 02:30 (UTC+01:00)" },
+    ]);
+    expect(choice.error).toBe(
+      "02:30 happens twice on 25 Oct 2026, because the clocks go back. Choose which.",
+    );
+    expect(field(el, "time").error).toBe("");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(submitButton(el).disabled).toBe(true);
+    await chooseOption(choice, "later");
+    await flush(el);
+    expect(occurrence(el)!.error).toBe("");
+    expect(await bottom(el)).toBe("");
+    expect(submitButton(el).disabled).toBe(false);
+    await submit(el);
+    expect(api.scheduleMenuPublication.mock.calls[1]).toEqual([
+      "menu-lunch",
+      {
+        expectedHash: DRAFT_HASH,
+        activatesAt: { date: "2026-10-25", time: "02:30", occurrence: "later" },
+      },
+    ]);
+    expect(scheduleDialog(el).open).toBe(false);
+  });
+
+  it.each(["date", "time"] as const)(
+    "removes the choice of a repeated time when the %s changes",
+    async (name) => {
+      const api = stubApi({ scheduleMenuPublication: vi.fn().mockRejectedValue(REPEATED) });
+      const el = await scheduleAt(api, "2026-10-25", "02:30");
+      expect(occurrence(el)).not.toBeNull();
+      await enter(el, name, name === "date" ? "2026-10-26" : "03:30");
+      expect(occurrence(el)).toBeNull();
+      expect(submitButton(el).disabled).toBe(false);
+      await submit(el);
+      expect(api.scheduleMenuPublication.mock.calls[1]![1].activatesAt).not.toHaveProperty(
+        "occurrence",
+      );
+    },
+  );
+
+  it("offers the repeated time's two choices in Spanish", async () => {
+    setLocale("es-ES");
+    const api = stubApi({ scheduleMenuPublication: vi.fn().mockRejectedValue(REPEATED) });
+    const el = await scheduleAt(api, "2026-10-25", "02:30");
+    expect(occurrence(el)!.options.map((option) => option.label)).toEqual([
+      "Primera 02:30 (UTC+02:00)",
+      "Segunda 02:30 (UTC+01:00)",
+    ]);
+  });
+
+  it("offers no schedule without a preview, while the preview has clashes, or when the draft is the latest edition", async () => {
+    const offered = async (preview: MenuPreview | null, listed = queue()) => {
+      const el = await mount(stubApi({ getMenuPublications: vi.fn(async () => listed) }), {
+        preview,
+      });
+      const found = inShadow(el, "schedule-open") !== null;
+      cleanupWidgets();
+      return found;
+    };
+    expect(await offered(draftPreview())).toBe(true);
+    expect(await offered(null)).toBe(false);
+    expect(await offered(draftPreview({ clashes: [{}] as MenuPreview["clashes"] }))).toBe(false);
+    expect(await offered(draftPreview({ hash: "4".repeat(64) }))).toBe(false);
+    // v2 is queued, but v4 follows it, so a draft like v2 is a change from v4.
+    expect(await offered(draftPreview({ hash: "2".repeat(64) }))).toBe(true);
+    const nothingQueued = { ...queue(), editions: queue().editions.slice(2) };
+    expect(await offered(draftPreview({ hash: "1".repeat(64) }), nothingQueued)).toBe(false);
+    expect(await offered(draftPreview(), nothingQueued)).toBe(true);
+  });
+});
+
+describe("overtakeSentence", () => {
+  it("asks for a lower-numbered version to be cancelled or moved earlier", () => {
+    expect(overtakeSentence([V2_IN_THE_WAY], 3, queue())).toBe(
+      "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
+    );
+  });
+
+  it("asks for a higher-numbered version to be cancelled or moved later", () => {
+    expect(overtakeSentence([V3_IN_THE_WAY], 2, queue())).toBe(
+      "Version 3, scheduled for 9 Oct 2026, 08:00, must go live after this one. Cancel it or move it later, then try again.",
+    );
+  });
+
+  it("treats every version as lower when nothing is being moved", () => {
+    expect(overtakeSentence([V4_IN_THE_WAY], null, queue())).toBe(
+      "Version 4, scheduled for 25 Oct 2026, 02:30 (UTC+01:00), must go live first. Cancel it or move it earlier, then try again.",
+    );
+  });
+
+  it("gives a repeated local time its offset", () => {
+    expect(overtakeSentence([V4_IN_THE_WAY], 3, queue())).toBe(
+      "Version 4, scheduled for 25 Oct 2026, 02:30 (UTC+01:00), must go live after this one. Cancel it or move it later, then try again.",
+    );
+  });
+
+  it("names several versions on each side, the lower ones first", () => {
+    expect(overtakeSentence([V4_IN_THE_WAY, V3_IN_THE_WAY, V2_IN_THE_WAY], 1, queue())).toBe(
+      "Versions 2 (8 Oct 2026, 08:00), 3 (9 Oct 2026, 08:00) and 4 (25 Oct 2026, 02:30 (UTC+01:00)) must go live after this one. Cancel them or move them later, then try again.",
+    );
+    expect(overtakeSentence([V4_IN_THE_WAY, V2_IN_THE_WAY], 3, queue())).toBe(
+      "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again. " +
+        "Version 4, scheduled for 25 Oct 2026, 02:30 (UTC+01:00), must go live after this one. Cancel it or move it later, then try again.",
+    );
+    expect(overtakeSentence([V3_IN_THE_WAY, V2_IN_THE_WAY], null, queue())).toBe(
+      "Versions 2 (8 Oct 2026, 08:00) and 3 (9 Oct 2026, 08:00) must go live first. Cancel them or move them earlier, then try again.",
+    );
+  });
+
+  it("names them in Spanish", () => {
+    setLocale("es-ES");
+    expect(overtakeSentence([V2_IN_THE_WAY, V3_IN_THE_WAY], null, queue())).toBe(
+      "Las versiones 2 (8 oct 2026, 08:00) y 3 (9 oct 2026, 08:00) deben publicarse antes. Cancélalas o adelántalas y vuelve a intentarlo.",
+    );
+    expect(overtakeSentence([V3_IN_THE_WAY], 2, queue())).toBe(
+      "La versión 3, programada para el 9 oct 2026, 08:00, debe publicarse después de esta. Cancélala o retrásala y vuelve a intentarlo.",
+    );
+    expect(overtakeSentence([V3_IN_THE_WAY, V4_IN_THE_WAY], 2, queue())).toBe(
+      "Las versiones 3 (9 oct 2026, 08:00) y 4 (25 oct 2026, 02:30 (UTC+01:00)) deben publicarse después de esta. Cancélalas o retrásalas y vuelve a intentarlo.",
+    );
+  });
+
+  it("answers null when a version the refusal names is not in the list", () => {
+    const missing = { versionId: "v-lunch-9", number: 9, activatesAt: "2026-11-01T09:00:00.000Z" };
+    expect(overtakeSentence([V2_IN_THE_WAY, missing], null, queue())).toBeNull();
+    expect(overtakeSentence([], null, queue())).toBeNull();
+  });
+});
+
+describe("placing a schedule refusal by what it carries", () => {
+  it("puts a refused date under the date field", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "activatesAt.date" },
+      }),
+    });
+    const el = await scheduleAt(api, "2026-10-10", "12:00");
+    expect(field(el, "date").error).toBe(codeMessage("management.request_invalid"));
+    expect(field(el, "time").error).toBe("");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "date"));
+    await enter(el, "date", "2026-10-11");
+    expect(field(el, "date").error).toBe("");
+  });
+
+  it("puts a refused body that names no field of the form, or no params, in the bottom message", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValueOnce({
+          code: "management.request_invalid",
+          params: { field: "activatesAt" },
+        })
+        .mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await scheduleAt(api, "2026-10-10", "12:00");
+    expect(field(el, "date").error).toBe("");
+    expect(field(el, "time").error).toBe("");
+    expect(await bottom(el)).toBe(codeMessage("management.request_invalid"));
+    await submit(el);
+    expect(await bottom(el)).toBe(codeMessage("connection.failed"));
+  });
+
+  it("puts a refused choice of a time the form does not show in the bottom message", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "activatesAt.occurrence" },
+      }),
+    });
+    const el = await scheduleAt(api, "2026-10-10", "12:00");
+    expect(field(el, "time").error).toBe("");
+    expect(await bottom(el)).toBe(codeMessage("management.request_invalid"));
+  });
+
+  it("puts a refused choice of a repeated time under that choice", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValueOnce(REPEATED)
+        .mockRejectedValue({
+          code: "management.request_invalid",
+          params: { field: "activatesAt.occurrence" },
+        }),
+    });
+    const el = await scheduleAt(api, "2026-10-25", "02:30");
+    await chooseOption(occurrence(el)!, "earlier");
+    await submit(el);
+    expect(occurrence(el)!.error).toBe(codeMessage("management.request_invalid"));
+    await chooseOption(occurrence(el)!, "later");
+    await flush(el);
+    expect(occurrence(el)!.error).toBe("");
+  });
+
+  it("keeps a refusal that names no field until the next submission, beside a marked field", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValue({ code: "menu.changed_since_preview", params: {} }),
+    });
+    const el = await scheduleAt(api, "2026-10-10", "12:00");
+    await enter(el, "time", "");
+    expect(await bottom(el)).toBe(
+      `${codeMessage("menu.changed_since_preview")} Correct the highlighted fields to continue.`,
+    );
+    expect(field(el, "time").error).toBe("Choose a time.");
+  });
+
+  it("falls back without reading the list when the refusal names no editions", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValue({ code: OVERTAKES, params: { menuId: "menu-lunch" } }),
+    });
+    const el = await scheduleAt(api, "2026-10-08", "08:00");
+    expect(api.getMenuPublications).toHaveBeenCalledTimes(1);
+    expect(field(el, "time").error).toBe(codeMessage(OVERTAKES));
+  });
+
+  it("falls back to the code's sentence for a repeated or skipped time it cannot read", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "menu_publication.time_repeated", params: {} })
+        .mockRejectedValueOnce({
+          code: "menu_publication.time_repeated",
+          params: { date: "2026-10-25", time: "02:30", occurrences: [{ at: "x" }] },
+        })
+        .mockRejectedValue({ code: "menu_publication.time_skipped", params: {} }),
+    });
+    const el = await scheduleAt(api, "2026-10-25", "02:30");
+    expect(occurrence(el)).toBeNull();
+    expect(await bottom(el)).toBe(codeMessage("menu_publication.time_repeated"));
+    await submit(el);
+    expect(occurrence(el)).toBeNull();
+    expect(await bottom(el)).toBe(codeMessage("menu_publication.time_repeated"));
+    await submit(el);
+    expect(field(el, "time").error).toBe(codeMessage("menu_publication.time_skipped"));
+  });
+
+  it("closes a clean form on Cancel, sending nothing, and hands focus back to its button", async () => {
+    const api = stubApi();
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    inShadow(el, "schedule-close")!.click();
+    await flush(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(scheduleDialog(el).open).toBe(false);
+    expect(api.scheduleMenuPublication).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.activeElement).toBe(inShadow(el, "schedule-open"));
+  });
+
+  it("hands focus to the heading when the schedule leaves nothing more to schedule", async () => {
+    const scheduled = queue();
+    scheduled.editions.splice(2, 0, {
+      ...scheduled.editions[1]!,
+      versionId: "v-lunch-5",
+      number: 5,
+      contentHash: DRAFT_HASH,
+    });
+    const read = vi.fn().mockResolvedValueOnce(queue()).mockResolvedValue(scheduled);
+    const el = await scheduleAt(stubApi({ getMenuPublications: read }), "2026-10-26", "12:00");
+    await flush(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(scheduleDialog(el).open).toBe(false);
+    expect(inShadow(el, "schedule-open")).toBeNull();
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h2"));
+  });
+
+  it("drops the form, and a refusal that arrives later, when it follows another menu", async () => {
+    let refuse!: (reason: unknown) => void;
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+    });
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-10");
+    await enter(el, "time", "12:00");
+    submitButton(el).click();
+    await flush(el);
+    el.menuId = "menu-dinner";
+    await flush(el);
+    expect(scheduleDialog(el).open).toBe(false);
+    refuse({ code: "menu_publication.time_past", params: {} });
+    await flush(el);
+    expect(field(el, "time").error).toBe("");
   });
 });

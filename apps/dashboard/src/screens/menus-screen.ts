@@ -2235,7 +2235,7 @@ export class MenusScreen extends LitElement {
         .api=${this.api}
         menuId=${this.menuId!}
         menuName=${this.#menuName()}
-        .preview=${this.preview}
+        .preview=${this.previewError ? null : this.preview}
       ></dashboard-menu-publications
     ></dashboard-menu-preview>`;
   }

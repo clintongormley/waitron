@@ -1,14 +1,26 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  submitOnEnter,
+  type DataTableColumn,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
+  ActivationTime,
   DashboardApi,
   LocalTime,
   MenuPreview,
@@ -32,16 +44,25 @@ function fill(key: StringKey, values: Record<string, string>): string {
   return t(key).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
 
-/** A venue-local time in the screen language ("8 Oct 2026, 08:00"), its offset added only when the
- * venue clock shows that minute twice. */
-export function localTimeWords(local: LocalTime): string {
-  const [year, month, day] = local.date.split("-").map(Number) as [number, number, number];
-  const date = new Intl.DateTimeFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
+function screenLocale(): string {
+  return currentLocale().startsWith("es") ? "es-ES" : "en-GB";
+}
+
+/** A venue-local `YYYY-MM-DD` in the screen language ("8 Oct 2026"). */
+function localDateWords(value: string): string {
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  return new Intl.DateTimeFormat(screenLocale(), {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+/** A venue-local time in the screen language ("8 Oct 2026, 08:00"), its offset added only when the
+ * venue clock shows that minute twice. */
+export function localTimeWords(local: LocalTime): string {
+  const date = localDateWords(local.date);
   const words = fill("menu_publications.time", { date, time: local.time });
   return local.repeated
     ? fill("menu_publications.repeated_time", { time: words, offset: local.offset })
@@ -50,6 +71,88 @@ export function localTimeWords(local: LocalTime): string {
 
 function versionWords(edition: Edition): string {
   return fill("menu_publications.version", { number: String(edition.number) });
+}
+
+const IN_THE_WAY = {
+  earlier: ["menu_publications.in_the_way_earlier", "menu_publications.in_the_way_earlier_many"],
+  later: ["menu_publications.in_the_way_later", "menu_publications.in_the_way_later_many"],
+} as const satisfies Record<string, readonly [StringKey, StringKey]>;
+
+/**
+ * What to do about the editions an `overtakes_queued` refusal names, one sentence for those that
+ * must go live first and one for those that must go live after. `placed` is the number of the
+ * edition being moved, or null for one not yet numbered. Null when the list read after the refusal
+ * lacks a named edition.
+ */
+export function overtakeSentence(
+  overtaken: readonly { versionId: string }[],
+  placed: number | null,
+  answer: MenuPublicationsAnswer,
+): string | null {
+  const named: Edition[] = [];
+  for (const { versionId } of overtaken) {
+    const edition = answer.editions.find((listed) => listed.versionId === versionId);
+    if (edition === undefined) return null;
+    named.push(edition);
+  }
+  named.sort((a, b) => a.number - b.number);
+  const groups = [
+    [named.filter((edition) => placed === null || edition.number < placed), IN_THE_WAY.earlier],
+    [named.filter((edition) => placed !== null && edition.number > placed), IN_THE_WAY.later],
+  ] as const;
+  const sentences = groups.flatMap(([group, [one, many]]) => {
+    if (group.length === 0) return [];
+    if (group.length === 1)
+      return [
+        fill(one, { number: String(group[0]!.number), time: localTimeWords(group[0]!.local) }),
+      ];
+    const items = group.map((edition) =>
+      fill("menu_publications.in_the_way_item", {
+        number: String(edition.number),
+        time: localTimeWords(edition.local),
+      }),
+    );
+    return [
+      fill(many, {
+        list: new Intl.ListFormat(screenLocale(), { type: "conjunction" }).format(items),
+      }),
+    ];
+  });
+  return sentences.length === 0 ? null : sentences.join(" ");
+}
+
+interface ScheduleDraft {
+  date: string;
+  time: string;
+  occurrence: string;
+}
+
+/** A refusal placed under the field it names, or in the bottom message when `field` is null. */
+interface ScheduleRefusal {
+  field: "date" | "time" | "occurrence" | null;
+  message: string;
+}
+
+/** The two instants a repeated venue-local minute names, earlier first, as the route lists them. */
+interface RepeatedTime {
+  date: string;
+  time: string;
+  offsets: [string, string];
+}
+
+const REQUEST_FIELDS: Record<string, ScheduleRefusal["field"]> = {
+  "activatesAt.date": "date",
+  "activatesAt.time": "time",
+  "activatesAt.occurrence": "occurrence",
+};
+
+function repeatedTime(params: Record<string, unknown>): RepeatedTime | null {
+  const { date, time, occurrences } = params;
+  if (typeof date !== "string" || typeof time !== "string" || !Array.isArray(occurrences))
+    return null;
+  const offsets = occurrences.map((occurrence: { offset?: unknown }) => occurrence?.offset);
+  if (offsets.length !== 2 || !offsets.every((offset) => typeof offset === "string")) return null;
+  return { date, time, offsets: offsets as [string, string] };
 }
 
 /**
@@ -83,6 +186,17 @@ export class MenuPublicationsPanel extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
+      .schedule {
+        display: flex;
+      }
+      .intro {
+        margin: 0 0 var(--wt-space-4);
+        color: var(--wt-color-text);
+      }
+      .field {
+        display: block;
+        margin-bottom: var(--wt-space-4);
+      }
     `,
   ];
 
@@ -98,11 +212,26 @@ export class MenuPublicationsPanel extends LitElement {
   @state() private cancelling: Edition | null = null;
   @state() private cancelError: string | null = null;
   @state() private busy = false;
+  @state() private scheduling = false;
+  @state() private scheduleBusy = false;
+  @state() private date = "";
+  @state() private time = "";
+  @state() private occurrence = "";
+  @state() private repeated: RepeatedTime | null = null;
+  @state() private attempted = false;
+  @state() private scheduleRefusal: ScheduleRefusal | null = null;
 
   /** The menu whose editions are followed. */
   #watching: string | null = null;
   /** A row menu's popover closes on the click, so the dialog hands focus back to its trigger. */
   #focusTarget: HTMLElement | null = null;
+  /** Replaced at each opening of the schedule form, so a late answer cannot reach a later one. */
+  #opening = {};
+  #scope?: DraftScope<ScheduleDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.scheduleBusy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
   readonly #queries = new DashboardQueries(
     this,
@@ -126,6 +255,7 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#disposeDraft();
     super.disconnectedCallback();
     // The query controller releases every observation when its host leaves the page.
     this.#watching = null;
@@ -140,6 +270,9 @@ export class MenuPublicationsPanel extends LitElement {
     this.answer = null;
     this.cancelling = null;
     this.cancelError = null;
+    this.#opening = {};
+    this.#disposeDraft();
+    this.scheduling = false;
     void this.#load();
   }
 
@@ -213,6 +346,183 @@ export class MenuPublicationsPanel extends LitElement {
     this.#focusTarget = null;
     this.#close();
     await this.#refresh();
+  }
+
+  /** Not while the draft cannot be published, nor when it is the edition it would follow. */
+  #canSchedule(): boolean {
+    const { preview, answer } = this;
+    if (preview === null || preview.clashes.length > 0 || answer === null) return false;
+    const { status } = preview;
+    let latest =
+      status.state === "unpublished" ? null : { number: status.version, hash: status.hash };
+    for (const edition of answer.editions)
+      if (edition.state === "queued" && (latest === null || edition.number > latest.number))
+        latest = { number: edition.number, hash: edition.contentHash };
+    return latest?.hash !== preview.hash;
+  }
+
+  #draft(): ScheduleDraft {
+    return { date: this.date, time: this.time, occurrence: this.occurrence };
+  }
+
+  #disposeDraft(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+  }
+
+  #openSchedule(): void {
+    this.#opening = {};
+    this.date = "";
+    this.time = "";
+    this.occurrence = "";
+    this.repeated = null;
+    this.attempted = false;
+    this.scheduleRefusal = null;
+    this.#disposeDraft();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<ScheduleDraft>({
+      id: this,
+      current: () => this.#draft(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.date === b.date && a.time === b.time && a.occurrence === b.occurrence,
+      restore: (value) => {
+        this.date = value.date;
+        this.time = value.time;
+        this.occurrence = value.occurrence;
+      },
+    });
+    this.scheduling = true;
+  }
+
+  #scheduleClosed(): void {
+    this.#opening = {};
+    this.#disposeDraft();
+    this.scheduling = false;
+    requestAnimationFrame(() => {
+      const opener = this.renderRoot.querySelector<HTMLElement>('[data-test="schedule-open"]');
+      (opener ?? this.renderRoot.querySelector<HTMLElement>("h2"))?.focus();
+    });
+  }
+
+  #scheduleDialog(): HTMLElementTagNameMap["wt-dialog"] {
+    return this.renderRoot.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+      'wt-dialog[data-test="schedule-dialog"]',
+    )!;
+  }
+
+  /** A changed date or time is a different instant, so what was said about the old one goes. */
+  #changeWhen(field: "date" | "time", event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this[field] = event.detail.value;
+    this.repeated = null;
+    this.occurrence = "";
+    if (this.scheduleRefusal?.field != null) this.scheduleRefusal = null;
+    this.#scope?.changed();
+  }
+
+  #changeOccurrence(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.occurrence = event.detail.value;
+    if (this.scheduleRefusal?.field === "occurrence") this.scheduleRefusal = null;
+    this.#scope?.changed();
+  }
+
+  #ownErrors(): Partial<Record<"date" | "time" | "occurrence", string>> {
+    const errors: Partial<Record<"date" | "time" | "occurrence", string>> = {};
+    if (this.date === "") errors.date = t("menu_publications.date_required");
+    if (this.time === "") errors.time = t("menu_publications.time_required");
+    if (this.repeated !== null && this.occurrence === "")
+      errors.occurrence = fill("menu_publications.time_repeated", {
+        time: this.repeated.time,
+        date: localDateWords(this.repeated.date),
+      });
+    return errors;
+  }
+
+  async #submitSchedule(): Promise<void> {
+    const preview = this.preview;
+    if (this.scheduleBusy || preview === null) return;
+    this.attempted = true;
+    this.scheduleRefusal = null;
+    if (Object.keys(this.#ownErrors()).length > 0) {
+      await this.updateComplete;
+      await focusFirstInvalid(this.#scheduleDialog());
+      return;
+    }
+    const activatesAt: ActivationTime = { date: this.date, time: this.time };
+    if (this.repeated !== null) activatesAt.occurrence = this.occurrence as "earlier" | "later";
+    const submitted = this.#draft();
+    const opening = this.#opening;
+    const menuId = this.menuId;
+    this.scheduleBusy = true;
+    try {
+      await this.api.scheduleMenuPublication(menuId, { expectedHash: preview.hash, activatesAt });
+    } catch (error) {
+      await this.#placeRefusal(error, menuId, opening);
+      return;
+    } finally {
+      this.scheduleBusy = false;
+    }
+    if (opening !== this.#opening) return;
+    this.#scope?.commit(submitted);
+    this.#scheduleDialog().closeAfter("saved");
+    this.#scheduleClosed();
+    await this.#refresh();
+  }
+
+  async #placeRefusal(error: unknown, menuId: string, opening: object): Promise<void> {
+    const code = codeOf(error);
+    const params = (error as { params?: Record<string, unknown> }).params ?? {};
+    let refusal: ScheduleRefusal = { field: null, message: codeMessage(code) };
+    if (code === "menu_publication.time_repeated") {
+      const repeated = repeatedTime(params);
+      if (opening === this.#opening && repeated !== null) {
+        this.repeated = repeated;
+        this.occurrence = "";
+        await this.updateComplete;
+        await focusFirstInvalid(this.#scheduleDialog());
+        return;
+      }
+    } else if (code === "menu_publication.overtakes_queued") {
+      refusal = { field: "time", message: await this.#overtakeMessage(params, menuId) };
+    } else if (code === "menu_publication.time_past") {
+      refusal.field = "time";
+    } else if (code === "menu_publication.time_skipped") {
+      refusal.field = "time";
+      if (typeof params.date === "string" && typeof params.time === "string")
+        refusal.message = fill("menu_publications.time_skipped", {
+          time: params.time,
+          date: localDateWords(params.date),
+        });
+    } else if (code === "management.request_invalid" && typeof params.field === "string") {
+      const field = REQUEST_FIELDS[params.field] ?? null;
+      refusal.field = field === "occurrence" && this.repeated === null ? null : field;
+    }
+    if (opening !== this.#opening) return;
+    this.scheduleRefusal = refusal;
+    if (refusal.field !== null) {
+      await this.updateComplete;
+      await focusFirstInvalid(this.#scheduleDialog());
+    }
+  }
+
+  /** Reads the list once more to name each edition in the way, as it now stands. */
+  async #overtakeMessage(params: Record<string, unknown>, menuId: string): Promise<string> {
+    const fallback = codeMessage("menu_publication.overtakes_queued");
+    if (!Array.isArray(params.overtaken)) return fallback;
+    try {
+      const answer = await this.api.getMenuPublications(menuId);
+      if (menuId === this.menuId) {
+        this.answer = answer;
+        this.readError = null;
+      }
+      return (
+        overtakeSentence(params.overtaken as { versionId: string }[], null, answer) ?? fallback
+      );
+    } catch {
+      return fallback;
+    }
   }
 
   #columns(): DataTableColumn<Edition>[] {
@@ -307,8 +617,122 @@ export class MenuPublicationsPanel extends LitElement {
     </wt-dialog>`;
   }
 
+  #renderSchedule(): TemplateResult {
+    const own = this.attempted ? this.#ownErrors() : {};
+    const refusal = this.scheduleRefusal;
+    const errors = { ...own };
+    if (refusal?.field != null) errors[refusal.field] ??= refusal.message;
+    const marked = Object.values(errors).some(Boolean);
+    const bottom = [
+      ...(refusal !== null && refusal.field === null ? [refusal.message] : []),
+      ...(marked ? [t("form.fix_fields")] : []),
+    ].join(" ");
+    const invalid = Object.keys(own).length > 0;
+    const repeated = this.repeated;
+    return html`<wt-dialog
+      data-test="schedule-dialog"
+      heading=${fill("menu_publications.schedule_heading", { menu: this.menuName })}
+      .open=${this.scheduling}
+      .dismissible=${!this.scheduleBusy}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.scheduling) this.#scheduleClosed();
+      }}
+      @keydown=${(event: KeyboardEvent) =>
+        submitOnEnter(
+          event,
+          this.renderRoot.querySelector<HTMLElement>('[data-test="schedule-submit"]'),
+        )}
+    >
+      <p class="intro" data-test="schedule-intro">
+        ${fill("menu_publications.schedule_intro", { zone: this.answer?.timeZone ?? "" })}
+      </p>
+      <wt-input
+        class="field"
+        name="date"
+        type="date"
+        required
+        label=${t("menu_publications.date_label")}
+        error=${errors.date ?? ""}
+        .value=${this.date}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeWhen("date", event)}
+      ></wt-input>
+      <wt-input
+        class="field"
+        name="time"
+        type="time"
+        required
+        label=${t("menu_publications.time_label")}
+        error=${errors.time ?? ""}
+        .value=${this.time}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeWhen("time", event)}
+      ></wt-input>
+      ${
+        repeated === null
+          ? nothing
+          : html`<wt-combobox
+              class="field"
+              name="occurrence"
+              required
+              search="never"
+              label=${fill("menu_publications.occurrence_label", { time: repeated.time })}
+              .options=${[
+                {
+                  value: "earlier",
+                  label: fill("menu_publications.occurrence_earlier", {
+                    time: repeated.time,
+                    offset: repeated.offsets[0],
+                  }),
+                },
+                {
+                  value: "later",
+                  label: fill("menu_publications.occurrence_later", {
+                    time: repeated.time,
+                    offset: repeated.offsets[1],
+                  }),
+                },
+              ]}
+              .value=${this.occurrence}
+              error=${errors.occurrence ?? ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeOccurrence(event)}
+            ></wt-combobox>`
+      }
+      <wt-form-actions slot="footer" .error=${this.scheduling ? bottom : ""}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="schedule-close"
+          ?disabled=${this.scheduleBusy}
+          @click=${() => void this.#scheduleDialog().requestClose("cancel")}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-test="schedule-submit"
+          .loading=${this.scheduleBusy}
+          ?disabled=${invalid}
+          @click=${() => void this.#submitSchedule()}
+          >${t("menu_publications.schedule_action")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
+  }
+
   override render(): TemplateResult {
     return html`<h2 tabindex="-1">${t("menu_publications.heading")}</h2>
+      ${
+        this.#canSchedule()
+          ? html`<div class="schedule">
+              <wt-button
+                variant="secondary"
+                data-test="schedule-open"
+                @click=${() => this.#openSchedule()}
+                >${t("menu_publications.schedule")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
       <wt-data-table
         data-test="editions"
         aria-label=${t("menu_publications.heading")}
@@ -333,7 +757,7 @@ export class MenuPublicationsPanel extends LitElement {
               >
             </div>`
       }
-      ${this.#renderDialog()}`;
+      ${this.#renderDialog()} ${this.#renderSchedule()}`;
   }
 }
 

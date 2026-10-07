@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./menu-publications.js";
 import type { MenuPublicationsPanel } from "./menu-publications.js";
-import type { DashboardApi, MenuPublicationsAnswer } from "../api/client.js";
+import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 
 afterEach(() => {
@@ -39,6 +40,46 @@ const LISTED: MenuPublicationsAnswer = {
 
 const states = ["empty", "loading", "failed", "listed", "cancel dialog", "cancel refused"] as const;
 type State = (typeof states)[number];
+
+const PREVIEW = {
+  clashes: [],
+  hash: "d".repeat(64),
+  changes: [],
+  warnings: [],
+  status: {
+    state: "changed",
+    clashes: 0,
+    version: 1,
+    publishedAt: "2026-10-07T08:00:00.000Z",
+    hash: "1".repeat(64),
+  },
+  document: {},
+  live: null,
+} as unknown as MenuPreview;
+
+const scheduleStates = {
+  "schedule form": null,
+  "schedule field errors": null,
+  "schedule overtaken": {
+    code: "menu_publication.overtakes_queued",
+    params: {
+      menuId: "menu-lunch",
+      overtaken: [{ versionId: "v-lunch-2", number: 2, activatesAt: "2026-10-08T06:00:00.000Z" }],
+    },
+  },
+  "schedule occurrence": {
+    code: "menu_publication.time_repeated",
+    params: {
+      date: "2026-10-25",
+      time: "02:30",
+      occurrences: [
+        { at: "2026-10-25T00:30:00.000Z", offset: "+02:00" },
+        { at: "2026-10-25T01:30:00.000Z", offset: "+01:00" },
+      ],
+    },
+  },
+} as const;
+type ScheduleState = keyof typeof scheduleStates;
 
 function stubApi(state: State): DashboardApi {
   return {
@@ -101,4 +142,64 @@ describe.each(["light", "dark"] as const)("menu publications (%s)", (theme) => {
     }
     await expectNoA11yViolations(host);
   });
+});
+
+describe.each(["light", "dark"] as const)("the schedule form (%s)", (theme) => {
+  it.each(Object.keys(scheduleStates) as ScheduleState[])(
+    "renders %s accessibly",
+    async (state) => {
+      setLocale("en");
+      const refusal = scheduleStates[state];
+      const api = {
+        getMenuPublications: vi.fn().mockResolvedValue(LISTED),
+        scheduleMenuPublication: vi.fn().mockRejectedValue(refusal),
+      } as unknown as DashboardApi;
+      const { el, host } = await mountWidget<MenuPublicationsPanel>(
+        "dashboard-menu-publications",
+        { api, menuId: "menu-lunch", menuName: "Lunch Menu", preview: PREVIEW },
+        theme,
+      );
+      await settle(el);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="schedule-open"]')!.click();
+      await settle(el);
+      const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+        '[data-test="schedule-dialog"]',
+      )!;
+      expect(dialog.open).toBe(true);
+      const submit = dialog.querySelector<HTMLElement>('[data-test="schedule-submit"]')!;
+      if (refusal !== null) {
+        const [date, time] =
+          state === "schedule occurrence" ? ["2026-10-25", "02:30"] : ["2026-10-08", "08:00"];
+        for (const [name, value] of [
+          ["date", date],
+          ["time", time],
+        ] as const) {
+          const input = dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(
+            `[name="${name}"]`,
+          )!;
+          await userEvent.fill(
+            page.elementLocator(input.shadowRoot!.querySelector("input")!),
+            value,
+          );
+        }
+      }
+      if (state !== "schedule form") {
+        submit.click();
+        await vi.waitFor(() =>
+          expect(
+            dialog.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+              .error,
+          ).not.toBe(""),
+        );
+      }
+      if (state === "schedule occurrence")
+        expect(dialog.querySelector('wt-combobox[name="occurrence"]')).not.toBeNull();
+      if (state === "schedule overtaken")
+        expect(
+          dialog.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="time"]')!.error,
+        ).toContain("Version 2");
+      await settle(el);
+      await expectNoA11yViolations(host);
+    },
+  );
 });
