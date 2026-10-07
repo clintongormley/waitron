@@ -4834,7 +4834,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     must both allow what the device does".
   - **Handed on.** The [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md)
     replaces A261 step 2's Task 8 (zone-by-zone menus, the interim path) on
-    `feat/department-menu-timetable`, in pull request #1331, awaiting landing: a menu is offered to
+    W98 (#1331, landed 2026-10-07): a menu is offered to
     a department by its own list, and `zone_menus` and the per-zone menu editor are gone. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
     must define portable assignment, Use default, busy-terminal protection and a drawer
     independent of receipt printers before it removes today's printer choice, which a switch keeps
@@ -6895,8 +6895,7 @@ bump it when a fixed version is published, and run the certificate suites in tho
   as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
   exceptions and watcher zones stay gone (a profile's starting zone is kept since W97, 2026-10-06:
   `readProfileZones` falls back to the profile's first usable zone while it is disabled). A282 is DONE:
-  moving,
-  creating or placing an active table requires an active zone and an active department;
+  moving, creating or placing an active table requires an active zone and an active department;
   enabling a zone requires an active department. Disabled tables can move into disabled zones.
   `POST /management-api/zones` and the old dashboard creation method are retired; the demo seed
   and creation fixtures use `createServiceZone`, which writes the zone and its department policy
