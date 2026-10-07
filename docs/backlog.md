@@ -1026,8 +1026,8 @@ pre-publish changes list (W51) — DONE (#1160).** The core `working_order_lines
 Reset retained pre-live venues before installing core `0092`, which rebuilds both tables.
 
 **Department menu timetables and queued publication (A204, owner 2026-10-02; refined
-2026-10-04) — department menus and timetable (W98) IN PROGRESS on `feat/department-menu-timetable`,
-in pull request #1331, awaiting landing; queued publication not implemented.**
+2026-10-04) — department menus and timetable (W98) DONE (#1331, 2026-10-07); queued publication not
+implemented.**
 Departments own the available-menu list and the only timetable; zones override defaults within its shared periods.
 An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
 still order from breakfast after it stops being the default. Several future menu editions can be
@@ -1036,14 +1036,15 @@ explicit cancellation or replacement.
 [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the approved details in §9;
 [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md);
 [publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
-W98 on that branch: each department holds an ordered menu list, an all-day menu and named periods
+W98: each department holds an ordered menu list, an all-day menu and named periods
 placed on a normal week and on special dates; a zone may choose its own menu for a period or for
 the all-day gaps. Managers edit it on a new Menu timetable page (`/manage/menu-timetable`, in the
 "Products and menus" navigation group); Departments and zones no longer edits menus per zone, and its
 "needs a default menu" line links there. Its menu participant is in
 `VENUE_SERVICE_CALENDAR_PARTICIPANTS`. **Installing it needs every populated venue reset**: it
 drops `zone_menus` and rebuilds `zone_service_policies`, and nothing carries the old per-zone menus
-across; the shared dev venue needs `wa-wt reset demo <name>` once it lands.
+across. The shared dev venue was reset when it landed (2026-10-07); the owner's box needs a reset
+too.
 
 **The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
@@ -4710,8 +4711,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   month calendar; routing reads the same schedules. The old station and department hours editors
   and their two tables are gone (venue-service `0022_retire_legacy_hours`); a pre-live venue is
   reset rather than carrying old hours over. Separate dependencies it leaves open:
-  - **W98's participant wiring** — done on `feat/department-menu-timetable` (in pull request
-    #1331, awaiting landing): the menu timetable is the entry in
+  - **W98's participant wiring** — done (#1331): the menu timetable is the entry in
     `VENUE_SERVICE_CALENDAR_PARTICIPANTS` (`packages/venue-service/src/calendar-participants.ts`),
     and its day rows hold a cascading foreign key to `special_dates`.
   - **Step 6 public holidays** — done (#1305, below): the Hours page reads holidays
