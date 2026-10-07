@@ -3408,7 +3408,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
         have it too: after hold, mark collected, hand over, moving a bill or a held order, cancel
         and credit, and a counter bill payment. A read still out after the till's request
         limit (`TABLE_REQUEST_LIMIT_MS`) is cancelled and counts as failed: the list's existing
-        could-not-refresh notice shows and its countdown retries. **Done by A318 (2026-10-07):** Hold frees its basket once the save
+        could-not-refresh notice shows and its countdown retries.
+        **Done by A318 (2026-10-07):** Hold frees its basket once the save
         answers, then refreshes the held list in the background. Automatic retries and "Try now"
         use the same 150-second limit: an unanswered attempt returns to the list's notice and
         countdown. Chromium cases cover both retry triggers and parking a second basket while

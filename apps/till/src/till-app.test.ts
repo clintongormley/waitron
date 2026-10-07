@@ -12865,6 +12865,21 @@ describe("a failed list refresh after a successful write", () => {
               const { el } = await mountApp(
                 {
                   listWorkingOrders,
+                  listProducts: vi.fn().mockResolvedValue({
+                    menus: [defaultMenu],
+                    products: [
+                      {
+                        ...cafe,
+                        unit: {
+                          id: "unit-each",
+                          name: { en: "Each", es: "Unidad" },
+                          abbreviation: { en: "ea", es: "ud" },
+                          precision: 0,
+                          hardwareUnit: null,
+                        },
+                      },
+                    ],
+                  }),
                   getTill: vi.fn().mockResolvedValue({ ...till, locale }),
                 },
                 theme,
