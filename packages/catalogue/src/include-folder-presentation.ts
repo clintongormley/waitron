@@ -44,3 +44,11 @@ export function folderOverridesFrom(
     ...(shown.color !== own.color ? { color: shown.color } : {}),
   };
 }
+
+/** The name languages an include fixes in any of `folders`: the rest of its names follow the
+ * included menu. */
+export function fixedNameLanguages(
+  ...folders: readonly (IncludeFolderOverrides | undefined)[]
+): Set<string> {
+  return new Set(folders.flatMap((fixed) => Object.keys(fixed?.names ?? {})));
+}

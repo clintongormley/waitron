@@ -60,14 +60,23 @@ async function namesOf(
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new AppError("menu_section.invalid", { field: "names" });
   const names = value as Record<string, string>;
-  if (Object.keys(names).length === 0) return names;
+  await requireDefaultLanguageName(tx, names, fallbackLanguage);
+  return names;
+}
+
+/** Refuses a names map that has entries but no text in the venue's default content language. */
+export async function requireDefaultLanguageName(
+  tx: Transaction,
+  names: Record<string, string>,
+  fallbackLanguage: string,
+): Promise<void> {
+  if (Object.keys(names).length === 0) return;
   const gap = await findContentTranslationGap(tx, [names], fallbackLanguage);
   if (gap !== null)
     throw new AppError("menu_section.translation_required", {
       field: "names",
       language: gap.language,
     });
-  return names;
 }
 
 /** Does the media library hold this file? Never, where the media module is not installed. */

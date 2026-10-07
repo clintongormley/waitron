@@ -2,12 +2,16 @@ import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
 import { isStoredColor } from "./color-inheritance.js";
-import { findContentTranslationGap } from "./content-languages.js";
 import { folderPresentation } from "./include-folder-presentation.js";
 import { sectionMembers } from "./schema/sections.js";
 import { loadSectionGraph } from "./section-graph.js";
 import type { IncludeFolder, IncludeFolderInput, IncludeFolderOverrides } from "./section-types.js";
-import { sectionColorOf, sectionImageOf, writableMember } from "./sections.js";
+import {
+  requireDefaultLanguageName,
+  sectionColorOf,
+  sectionImageOf,
+  writableMember,
+} from "./sections.js";
 import "./errors.js";
 
 type Rows = readonly Record<string, unknown>[];
@@ -87,14 +91,7 @@ export async function setIncludeFolder(
       { names: own.names!, image: own.image!, color: own.color! },
       { showAsFolder: true, overrides },
     );
-    if (Object.keys(names).length > 0) {
-      const gap = await findContentTranslationGap(tx, [names], fallbackLanguage);
-      if (gap !== null)
-        throw new AppError("menu_section.translation_required", {
-          field: "names",
-          language: gap.language,
-        });
-    }
+    await requireDefaultLanguageName(tx, names, fallbackLanguage);
   }
   await tx
     .update(sectionMembers)

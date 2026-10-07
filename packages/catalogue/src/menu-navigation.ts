@@ -1,4 +1,5 @@
 import { HOME_DISPLAY_DEFAULTS } from "./device-home.js";
+import { fixedNameLanguages } from "./include-folder-presentation.js";
 import type {
   DocumentMember,
   FrozenOffer,
@@ -7,6 +8,7 @@ import type {
   FrozenOfferedModifier,
   MenuChange,
   MenuChangeBody,
+  MenuChangeSource,
   ProductChangeField,
   MenuDocument,
   MenuField,
@@ -369,6 +371,8 @@ function extraFields(
   return result;
 }
 
+export const pathKey = (path: readonly string[]): string => JSON.stringify(path);
+
 export function navigateMenuChanges(
   live: MenuDocument | null,
   proposed: MenuDocument,
@@ -376,6 +380,13 @@ export function navigateMenuChanges(
 ): MenuChange[] {
   const beforeOccurrences = live === null ? [] : indexMenuOccurrences(live).map((o) => o.target);
   const afterOccurrences = indexMenuOccurrences(proposed).map((o) => o.target);
+  const sectionSources = new Map<string, Set<MenuChangeSource>>();
+  for (const change of changes)
+    if (change.kind === "section_changed")
+      sectionSources.set(
+        change.sectionId,
+        (sectionSources.get(change.sectionId) ?? new Set()).add(change.source),
+      );
   return changes.map((change) => {
     const targets: { before: MenuTarget[]; after: MenuTarget[] } = { before: [], after: [] };
     const productTargets = (
@@ -491,21 +502,13 @@ export function navigateMenuChanges(
           );
         const before = copies(beforeOccurrences),
           after = copies(afterOccurrences);
-        const split = changes.some(
-          (other) =>
-            other.kind === "section_changed" &&
-            other.sectionId === change.sectionId &&
-            other.source !== change.source,
-        );
+        const split = sectionSources.get(change.sectionId)!.size > 1;
         const compare = (from: string[], to: string[], parent?: readonly string[]) => {
           const was = sectionAt(live, from),
             node = sectionAt(proposed, to);
           // An include's names changed by both menus are two events: the languages the include
           // fixes are this menu's, the rest the included menu's.
-          const fixed = new Set([
-            ...Object.keys(was.fixed?.names ?? {}),
-            ...Object.keys(node.fixed?.names ?? {}),
-          ]);
+          const fixed = fixedNameLanguages(was.fixed, node.fixed);
           const ownName = (name: MenuField) =>
             !split ||
             (name.kind === "name" && name.audience === "customer" && fixed.has(name.language!)) ===
@@ -528,8 +531,8 @@ export function navigateMenuChanges(
                 sections(side, change.sectionId, value as MenuField, parent);
           }
         };
-        const held = new Set(before.map((path) => JSON.stringify(path)));
-        const paired = after.filter((path) => held.has(JSON.stringify(path)));
+        const held = new Set(before.map(pathKey));
+        const paired = after.filter((path) => held.has(pathKey(path)));
         for (const path of paired) compare(path, path, path.slice(0, -1));
         // A section that moved holds no path it held before: its first copies are compared.
         if (paired.length === 0 && before[0] !== undefined && after[0] !== undefined)

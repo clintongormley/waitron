@@ -99,8 +99,14 @@ export async function readContentTranslationCandidates(
   // because switching the folder back on restores the fixed names. An include fixing no name
   // patches with null, which `json_patch` answers with null, so it is left to the included menu's
   // own row. A map that is blank throughout shows no customer name, so like an absent one it is no
-  // gap.
+  // gap. `materialized` makes the engine patch each include's names once: a plain subquery is
+  // flattened, which writes the patch out again in the filter.
   const result = await tx.execute<ContentTranslationCandidate>(sql`
+    with include_folders as materialized (
+      select m.id, json_patch(s.names, json_extract(m.folder_overrides, '$.names')) as translations
+        from section_members m join sections s on s.id = m.child_section_id
+        where s.role = 'menu_root'
+    )
     select 'product' as kind, id, null as product_id, customer_name as translations from products
       where parent_id is null and customer_name is not null and customer_name <> '{}'
     union all select 'unit' as kind, id, null, name as translations from units
@@ -115,14 +121,8 @@ export async function readContentTranslationCandidates(
       from extra_lists where customer_name is not null and customer_name <> '{}'
     union all select 'menu_section' as kind, id, null, names as translations
       from sections where role in ('section', 'menu_root') and names <> '{}'
-    union all select 'menu_include' as kind, m.id, null,
-        json_patch(s.names, json_extract(m.folder_overrides, '$.names')) as translations
-      from section_members m join sections s on s.id = m.child_section_id
-      where s.role = 'menu_root'
-        and exists (
-          select 1 from json_each(json_patch(s.names, json_extract(m.folder_overrides, '$.names')))
-          where trim(value) <> ''
-        )
+    union all select 'menu_include' as kind, id, null, translations from include_folders
+      where exists (select 1 from json_each(translations) where trim(value) <> '')
   `);
   return result.rows;
 }

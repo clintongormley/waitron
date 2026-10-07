@@ -1,4 +1,4 @@
-import { navigateMenuChanges } from "./menu-navigation.js";
+import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
 import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
@@ -12,7 +12,11 @@ import type { CombinedOffer, MenuClash, ValueSource } from "./menu-combine-types
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { homeDisplaysOf } from "./menu-home.js";
-import { FOLLOWING_FOLDER, folderPresentation } from "./include-folder-presentation.js";
+import {
+  FOLLOWING_FOLDER,
+  fixedNameLanguages,
+  folderPresentation,
+} from "./include-folder-presentation.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels } from "./schema/options.js";
 import { sections } from "./schema/sections.js";
@@ -651,7 +655,6 @@ export function removedExtraOnlyProducts(
 }
 
 const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
-const pathKey = (path: readonly string[]): string => JSON.stringify(path);
 const memberKey = (member: DocumentMember): string =>
   member.kind === "product" ? `p:${member.productId}` : `s:${member.sectionId}`;
 
@@ -696,10 +699,7 @@ function changedSectionFields(
     after = node.fixed ?? {};
   const changes: { field: SectionChangeField; path: readonly string[] }[] = [];
   if (!same(before.names, after.names)) changes.push({ field: "names", path: parent });
-  const fixedLanguages = new Set([
-    ...Object.keys(before.names ?? {}),
-    ...Object.keys(after.names ?? {}),
-  ]);
+  const fixedLanguages = fixedNameLanguages(before, after);
   const followed = (names: Record<string, string>) =>
     Object.fromEntries(Object.entries(names).filter(([language]) => !fixedLanguages.has(language)));
   if (was.internalName !== node.internalName || !same(followed(was.names), followed(node.names)))

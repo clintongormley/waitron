@@ -1,4 +1,5 @@
 import { catalogues, type Transaction } from "@waitron/db";
+import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import type {
   IncludeFolder,
@@ -101,7 +102,7 @@ export function buildSectionGraph(
     parents: (sectionId) => [...(parents.get(sectionId) ?? [])],
     role: (sectionId) => byId.get(sectionId)?.role,
     ownerMenu: (sectionId) => byId.get(sectionId)?.ownerMenuId ?? null,
-    folder: (memberId) => folders.get(memberId) ?? { showAsFolder: true, overrides: {} },
+    folder: (memberId) => folders.get(memberId) ?? FOLLOWING_FOLDER,
   };
 }
 
