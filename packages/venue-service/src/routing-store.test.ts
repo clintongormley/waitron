@@ -1354,6 +1354,13 @@ describe("routing previews", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       const half = await breadVariant(tx, f);
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: { kind: "all" }, zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      const categorised = [f.mojito, f.variant];
       const address: CellAddress = { row: noCategoryRow, zoneId: f.terrace };
       const before = await storedCells(tx);
       const set = await previewRoutingChange(tx, f.cfg, {
@@ -1367,7 +1374,7 @@ describe("routing previews", () => {
           productName: "Bread",
           zoneId: f.terrace,
           zoneName: "Terrace",
-          from: station(f.bar),
+          from: station(f.terraceBar),
           to: noPrep,
           toNoReplacement: false,
         },
@@ -1376,11 +1383,12 @@ describe("routing previews", () => {
           productName: "Half",
           zoneId: f.terrace,
           zoneName: "Terrace",
-          from: station(f.bar),
+          from: station(f.terraceBar),
           to: noPrep,
           toNoReplacement: false,
         },
       ]);
+      expect(set.filter((m) => categorised.includes(m.productId))).toEqual([]);
       expect(await storedCells(tx)).toEqual(before);
       await setRoutingCell(tx, f.cfg, address, noPrep);
       const stored = await storedCells(tx);
@@ -1390,9 +1398,10 @@ describe("routing previews", () => {
         target: null,
       });
       expect(cleared).toEqual([
-        expect.objectContaining({ productId: f.bread, from: noPrep, to: station(f.bar) }),
-        expect.objectContaining({ productId: half, from: noPrep, to: station(f.bar) }),
+        expect.objectContaining({ productId: f.bread, from: noPrep, to: station(f.terraceBar) }),
+        expect.objectContaining({ productId: half, from: noPrep, to: station(f.terraceBar) }),
       ]);
+      expect(cleared.filter((m) => categorised.includes(m.productId))).toEqual([]);
       expect(await storedCells(tx)).toEqual(stored);
     }));
   it("previews a no-change write as no moves", async () =>

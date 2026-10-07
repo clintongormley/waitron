@@ -474,8 +474,8 @@ function validateDepartmentTransfers(tables: Tables): void {
  * Refuses (`setup.request_invalid`, `field` naming `routing_cells.<column>`) routing cells a save
  * could not have written: a bad coordinate or target shape, the All categories × Every zone cell, a
  * second cell at one coordinate, a variant or a product, category, zone or station the bundle does
- * not hold, and a zone that is switched off or has no service configuration. A zone whose department is switched off is accepted, because
- * `configureZone` moves a zone holding cells into one.
+ * not hold, and a zone that is switched off or has no service configuration. A zone whose
+ * department is switched off is not refused.
  */
 export function validateRoutingConfiguration(tables: Tables): void {
   const categories = ids(tables.categories);

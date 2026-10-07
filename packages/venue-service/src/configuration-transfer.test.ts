@@ -1321,7 +1321,7 @@ describe("validateRoutingConfiguration", () => {
     expect(() => validateRoutingConfiguration({})).not.toThrow();
   });
 
-  it("accepts a cell for a zone whose department is switched off, as a zone can be moved there", () => {
+  it("accepts a cell for a zone whose department is switched off", () => {
     const tables = routingTables();
     expect(tables.routing_cells!.some((row) => row.zone_id === INSIDE)).toBe(true);
     expect(() => validateRoutingConfiguration(tables)).not.toThrow();

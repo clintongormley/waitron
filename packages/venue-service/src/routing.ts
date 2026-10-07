@@ -129,8 +129,9 @@ function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCe
 
 /**
  * Row order decides before zone: the product, its category, each parent (or No category when the
- * effective category is null), All categories, and within each row its zone cell before Every zone. All categories × Every zone is the implicit
- * default station, never a stored cell. A product row's `categoryId` is its effective category.
+ * effective category is null), All categories, and within each row its zone cell before Every
+ * zone. All categories × Every zone is the implicit default station, never a stored cell. A
+ * product row's `categoryId` is its effective category.
  */
 export function selectRoutingCell(
   rules: RoutingSelectionRules,
