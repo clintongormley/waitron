@@ -5694,6 +5694,23 @@ describe("Routing grid", () => {
     },
   );
 
+  it.each(["Cheese $&", "Cheese {dish}"])(
+    "the preview shows an extra named %s as written",
+    async (name) => {
+      setLocale("en");
+      const extraMove = {
+        ...breadMove,
+        productId: "cheese",
+        productName: name,
+        dish: { productId: "burger", productName: "Burger" },
+      };
+      const { el } = await mountGrid({ preview: vi.fn().mockResolvedValue([extraMove]) });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      const cell = q(el, '[data-test="routing-preview"]')!.querySelector("tbody td");
+      expect(cell!.textContent!.trim()).toBe(`${name} — with Burger`);
+    },
+  );
+
   it("after a save, the cell shows what the refresh read rather than the written choice", async () => {
     const saved = gridView();
     saved.routing.cells = [

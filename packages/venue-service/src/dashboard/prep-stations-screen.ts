@@ -67,9 +67,8 @@ type StationAction =
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
   | { kind: "switch_on"; stationId: string };
 const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {}) =>
-  Object.entries(values).reduce(
-    (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
-    t(key) as string,
+  (t(key) as string).replace(/\{(\w+)\}/g, (whole, name: string) =>
+    Object.hasOwn(values, name) ? values[name]! : whole,
   );
 
 type Editor = { kind: "station" };
