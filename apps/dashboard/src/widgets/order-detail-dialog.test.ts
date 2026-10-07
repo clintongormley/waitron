@@ -288,13 +288,13 @@ it("clears a failed load's message once the server answers again", async () => {
 });
 
 it.each([
-  ["en-GB", ["1", "0.5", "1.25", "0.125"]],
-  ["es-ES", ["1", "0,5", "1,25", "0,125"]],
+  ["en-GB", ["1", "0.5", "1.25", "0.125", "10", "100"]],
+  ["es-ES", ["1", "0,5", "1,25", "0,125", "10", "100"]],
 ])("shows quantities without trailing zeros in %s", async (locale, quantities) => {
   setLocale(locale);
   const shown = {
     ...detail,
-    lines: ["1.000", "0.500", "1.250", "0.125"].map((quantity, index) => ({
+    lines: ["1.000", "0.500", "1.250", "0.125", "10.000", "100"].map((quantity, index) => ({
       ...detail.lines[0]!,
       lineNo: index + 1,
       quantity,
@@ -309,7 +309,7 @@ it.each([
     orderId: "bill-1",
   });
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelectorAll("section:first-of-type li")).toHaveLength(4),
+    expect(el.shadowRoot!.querySelectorAll("section:first-of-type li")).toHaveLength(6),
   );
   const lines = [...el.shadowRoot!.querySelectorAll("section:first-of-type li")];
   quantities.forEach((quantity, index) =>
