@@ -6896,7 +6896,9 @@ bump it when a fixed version is published, and run the certificate suites in tho
   exceptions and watcher zones stay gone (a profile's starting zone is kept since W97, 2026-10-06:
   `readProfileZones` falls back to the profile's first usable zone while it is disabled). A282 is DONE:
   moving, creating or placing an active table requires an active zone and an active department;
-  enabling a zone requires an active department. Disabled tables can move into disabled zones.
+  enabling a zone requires an active department, and moving an active zone to a disabled
+  department is refused. Disabled tables can move into disabled zones; disabled zones can move
+  to a disabled department.
   `POST /management-api/zones` and the old dashboard creation method are retired; the demo seed
   and creation fixtures use `createServiceZone`, which writes the zone and its department policy
   in one transaction. You create zones through Departments and zones. The Enable refusal tells

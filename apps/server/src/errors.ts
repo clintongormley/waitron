@@ -614,7 +614,6 @@ declare module "@waitron/shared" {
     "zone.not_found": { zoneId: string };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
-    "zone.department_inactive": { zoneId: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
     /** The effective late thresholds would be unordered for this station. */

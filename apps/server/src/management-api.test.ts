@@ -505,6 +505,49 @@ describe("/management-api/zones", () => {
     expect(list.some((z) => z.name === name)).toBe(false);
   });
 
+  it.each([-2_147_483_648, -1, 2_147_483_647])(
+    "zone creation keeps the signed displayOrder %s",
+    async (displayOrder) => {
+      const response = await req(
+        "/venue-service/zones",
+        {
+          method: "POST",
+          body: JSON.stringify({ name: unique("Signed order"), displayOrder }),
+        },
+        managerCookie,
+      );
+      expect(response.status).toBe(201);
+      const { id } = (await response.json()) as { id: string };
+      const zones = (await (await req("/zones", { method: "GET" }, managerCookie)).json()) as {
+        id: string;
+        displayOrder: number;
+      }[];
+      expect(zones.find((zone) => zone.id === id)?.displayOrder).toBe(displayOrder);
+    },
+  );
+  it.each([-2_147_483_649, 2_147_483_648, 1e300])(
+    "zone creation refuses out-of-range displayOrder %s",
+    async (displayOrder) => {
+      const name = unique("Order refused");
+      const response = await req(
+        "/venue-service/zones",
+        {
+          method: "POST",
+          body: JSON.stringify({ name, displayOrder }),
+        },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "displayOrder" } },
+      });
+      const zones = (await (await req("/zones", { method: "GET" }, managerCookie)).json()) as {
+        name: string;
+      }[];
+      expect(zones.some((zone) => zone.name === name)).toBe(false);
+    },
+  );
+
   it("POST creates (201 { id }) + GET lists it (manager)", async () => {
     const name = unique("Comedor");
     const create = await req(
@@ -1384,6 +1427,99 @@ describe("/management-api/tables", () => {
         await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
       ).json()) as { id: string; active: boolean }[];
       expect(list.find((z) => z.id === zoneId)).toMatchObject({ active: false });
+    });
+
+    it("refuses enabling a zone without a department", async () => {
+      const [zone] = await withTransaction(suite.db, (tx) =>
+        tx
+          .insert(floorZones)
+          .values({
+            locationId: venue.locationId,
+            name: unique("Unassigned disabled"),
+            active: false,
+          })
+          .returning({ id: floorZones.id }),
+      );
+      const response = await req(
+        `/zones/${zone!.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ active: true }),
+        },
+        managerCookie,
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        error: { code: "zone.department_inactive", params: { zoneId: zone!.id } },
+      });
+      const [stored] = await suite.db
+        .select({ active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, zone!.id));
+      expect(stored).toEqual({ active: false });
+    });
+
+    it.each(["active", "disabled"])(
+      "judges the department when moving an %s zone",
+      async (state) => {
+        const source = await tableInServiceZone();
+        const destination = await tableInServiceZone();
+        await withTransaction(suite.db, (tx) =>
+          deactivateDepartment(tx, tillConfigFromVenue(venue), destination.departmentId),
+        );
+        if (state === "disabled")
+          expect(
+            (await req(`/zones/${source.zoneId}`, { method: "DELETE" }, managerCookie)).status,
+          ).toBe(204);
+        const response = await req(
+          `/venue-service/zones/${source.zoneId}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({ departmentId: destination.departmentId }),
+          },
+          managerCookie,
+        );
+        expect(response.status).toBe(state === "active" ? 409 : 204);
+        if (state === "active")
+          expect(await response.json()).toMatchObject({
+            error: { code: "zone.department_inactive", params: { zoneId: source.zoneId } },
+          });
+        const stored = await suite.db.execute<{ department_id: string; active: number }>(
+          sql`select p.department_id, z.active from zone_service_policies p join floor_zones z on z.id = p.zone_id where z.id = ${source.zoneId}`,
+        );
+        expect(stored.rows).toEqual([
+          {
+            department_id: state === "active" ? source.departmentId : destination.departmentId,
+            active: state === "active" ? 1 : 0,
+          },
+        ]);
+        expect((await listAll()).find((table) => table.id === source.tableId)).toMatchObject({
+          active: state === "active",
+          zoneId: source.zoneId,
+        });
+      },
+    );
+
+    it("allows moving an active zone to an active department", async () => {
+      const source = await tableInServiceZone();
+      const destination = await tableInServiceZone();
+      const response = await req(
+        `/venue-service/zones/${source.zoneId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ departmentId: destination.departmentId }),
+        },
+        managerCookie,
+      );
+      expect(response.status).toBe(204);
+      const stored = await suite.db.execute<{ department_id: string }>(
+        sql`select department_id from zone_service_policies where zone_id = ${source.zoneId}`,
+      );
+      expect(stored.rows).toEqual([{ department_id: destination.departmentId }]);
+      expect((await listAll()).find((table) => table.id === source.tableId)).toMatchObject({
+        active: true,
+        zoneId: source.zoneId,
+      });
     });
 
     it("allows enabling a zone under an active department without enabling its tables", async () => {

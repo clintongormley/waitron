@@ -182,7 +182,7 @@ export async function seedFloor(
     }
   }
 
-  const { id: deliZoneId } = await createServiceZone(tx, cfg, {
+  await createServiceZone(tx, cfg, {
     departmentId: deliDepartmentId,
     name: floor.deliCounterZone[locale],
     displayOrder: 4,

@@ -102,6 +102,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.not_found": 404,
   "department.last_active": 409,
   "zone.table_in_use": 409,
+  "zone.department_inactive": 409,
   "service_zone.not_found": 404,
   "department_menu.not_found": 404,
   "department_menu.in_use": 409,
@@ -166,7 +167,12 @@ function requireMode(value: unknown, field: string): ServiceMode {
 }
 
 function requireDisplayOrder(value: unknown): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < -2_147_483_648 ||
+    value > 2_147_483_647
+  ) {
     throw new AppError("management.request_invalid", { field: "displayOrder" });
   }
   return value;
