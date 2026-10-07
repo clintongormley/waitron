@@ -1,13 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { toDataURL } from "qrcode";
 import { formatEquipmentCode } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { decodeQrImage } from "../testing/decode-qr.js";
 import { printEquipmentLabel, type EquipmentLabel } from "./equipment-label.js";
 import { t } from "../i18n/t.js";
-
-// Spied, not replaced: every QR is drawn for real unless a test holds one back.
-vi.mock("qrcode", { spy: true });
 
 afterEach(cleanupWidgets);
 
@@ -72,13 +68,14 @@ describe("dashboard-equipment-label", () => {
 
   it("never shows the QR of an item it was moved off while that QR was still being drawn", async () => {
     const { el } = await mount("printer");
-    const { toDataURL: draw } = await vi.importActual<typeof import("qrcode")>("qrcode");
+    const draw = el.drawQr;
     let finishFirst!: () => void;
     const held = new Promise<void>((resolve) => (finishFirst = resolve));
-    vi.mocked(toDataURL).mockImplementationOnce((async (text: string) => {
-      await held;
-      return draw(text, { margin: 2, width: 320 });
-    }) as typeof toDataURL);
+    let drawings = 0;
+    el.drawQr = async (code) => {
+      if (drawings++ === 0) await held;
+      return draw(code);
+    };
     const middle = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";
     const last = "3e9a1c55-0f2b-4d7c-9e81-6a5b4c3d2e1f";
     const shownCode = async () => {
