@@ -2,6 +2,8 @@
 
 > **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](../plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
 
+> **2026-10-07 — A343:** the Price overrides tab no longer shows a count of the menu's own prices; the owner removed it.
+
 **Status:** owner decisions of 2026-09-30, from one brainstorm covering categories, menu sections,
 labels and kitchen routing together, so the four agree with each other. The owner reviewed and
 approved this document the same day, including §7's defaults. Not built. It is built in

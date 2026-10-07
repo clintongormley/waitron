@@ -665,7 +665,7 @@ export class MenusScreen extends LitElement {
   readonly #writes = new ListWriteQueue();
   readonly #priceWrites = new ListWriteQueue();
   #priceSavesMade = 0;
-  /** Fields whose save was stored while a later save waited behind it. They stay marked saving
+  /** Fields whose save was stored while a later save waited behind it. They stay listed as saving
    * until the last save made ends, after the re-read that carries their prices when one runs. */
   readonly #pricesUnread = new Set<string>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
@@ -1674,12 +1674,12 @@ export class MenusScreen extends LitElement {
   }
 
   /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
-   * said in the tab's status line, and under the field when it names the price; once the menu,
+   * said in the tab's floating outcome message, and under the field when it names the price; once the menu,
    * the tab or the row has gone, it is named beside the list instead. The prices are read again
    * only after the last save made, and only when it or an earlier one was stored. A success is said
    * only for the last save made, so its Undo never reaches past a later write; never over a refusal
-   * said since it was made, which would hide that refusal; and not over a failed re-read, which
-   * the list reports as a load failure. */
+   * said since it was made and not yet closed, which would hide that refusal; and not over a
+   * failed re-read, which the list reports as a load failure. */
   #savePrice(save: PriceSave): void {
     const menuId = this.menuId;
     if (menuId === null) return;
@@ -2197,7 +2197,6 @@ export class MenusScreen extends LitElement {
 
   #renderPrices() {
     return html`<dashboard-menu-prices-table
-        .nodes=${this.structure?.nodes ?? []}
         .rows=${this.prices ?? []}
         .loading=${this.prices === null && !this.pricesError}
         .failed=${this.pricesError}
@@ -2211,6 +2210,10 @@ export class MenusScreen extends LitElement {
         @wt-price-save=${(event: CustomEvent<PriceSave>) => {
           event.stopPropagation();
           this.#savePrice(event.detail);
+        }}
+        @wt-price-outcome-close=${(event: Event) => {
+          event.stopPropagation();
+          this.priceOutcome = null;
         }}
       ></dashboard-menu-prices-table>
       ${

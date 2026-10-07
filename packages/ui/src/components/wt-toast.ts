@@ -49,6 +49,9 @@ export class WtToast extends LitElement {
         padding: 0 var(--wt-space-2);
         text-align: start;
       }
+      ::slotted([slot="action"]) {
+        align-self: center;
+      }
     `,
   ];
 
@@ -74,16 +77,25 @@ export class WtToast extends LitElement {
     if (changed.has("open") || changed.has("message") || changed.has("duration")) this.#schedule();
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#schedule();
+  }
+
   override disconnectedCallback(): void {
+    // Leaving the page takes it from under the pointer without a mouseleave.
+    this.#hovered = false;
     clearTimeout(this.#timer);
     super.disconnectedCallback();
   }
 
-  /** The one place a countdown starts: never while the pointer or keyboard focus is on it. */
+  /** The one place a countdown starts: never off the page, where an update already queued still
+   * runs, nor while the pointer or keyboard focus is on it. */
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
-    if (!this.open || this.duration <= 0 || this.#hovered || this.matches(":focus-within")) return;
+    if (!this.isConnected || !this.open || this.duration <= 0) return;
+    if (this.#hovered || this.matches(":focus-within")) return;
     this.#timer = setTimeout(() => this.#close(), this.duration);
   }
 
@@ -132,6 +144,7 @@ export class WtToast extends LitElement {
           @focusout=${this.#onFocusChange}
         >
           <button class="message" type="button" @click=${this.#onMessage}>${this.message}</button>
+          <slot name="action"></slot>
           <button class="close" type="button" aria-label=${this.closeLabel} @click=${this.#onClose}>
             <wt-icon name="close"></wt-icon>
           </button>

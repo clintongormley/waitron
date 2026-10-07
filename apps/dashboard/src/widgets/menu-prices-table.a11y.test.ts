@@ -2,6 +2,7 @@ import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -159,7 +160,6 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
         `wt-price-input[data-row="${key}"]`,
       )!;
     expect(field("mi-lemonade").error).toBe("Refused");
-    expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="saving"]')).not.toBeNull();
     expect(field("mi-lemonade:v-small")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
@@ -178,10 +178,36 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
         },
       },
     });
-    expect(el.shadowRoot!.querySelector('[data-test="price-outcome"]')!.textContent).toBe(
+    const toast = el.shadowRoot!.querySelector<WtToast>('[data-test="price-outcome"]')!;
+    await toast.updateComplete;
+    expect(toast.open).toBe(true);
+    expect(toast.shadowRoot!.querySelector('[role="status"] .message')!.textContent).toBe(
       t("menu_prices.saved").replace("{name}", "Burger").replace("{price}", "11,00\u00a0€"),
     );
-    expect(el.shadowRoot!.querySelector('[data-test="price-undo"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="price-undo"]')!.parentElement).toBe(toast);
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible refused outcome", async () => {
+    const { el, host } = await mount(theme, {
+      outcome: {
+        kind: "refused",
+        reason: "Refused",
+        save: {
+          key: "mi-burger",
+          menuItemId: "mi-burger",
+          variantId: null,
+          name: "Burger",
+          price: "11.00",
+          previous: null,
+        },
+      },
+    });
+    const toast = el.shadowRoot!.querySelector<WtToast>('[data-test="price-outcome"]')!;
+    await toast.updateComplete;
+    expect(toast.shadowRoot!.querySelector('[role="status"] .message')!.textContent).toBe(
+      t("menus.change_not_saved").replace("{name}", "Burger").replace("{reason}", "Refused"),
+    );
     await expectNoA11yViolations(host);
   });
 
