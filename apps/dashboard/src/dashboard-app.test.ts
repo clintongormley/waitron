@@ -4027,6 +4027,80 @@ it("keeps the phone drawer within the window inside the real page", async () => 
   }
 });
 
+/**
+ * The part of the sidebar the window shows, as the browser's own intersection observer reports it:
+ * that clips by every scrolling or clipping ancestor, where the sidebar's own box does not, and an
+ * inert sidebar is still observed, where hit-testing skips it.
+ */
+/** Presses Tab `presses` times from the top of the page and reports whether focus ever landed in the sidebar. */
+async function tabReachesSidebar(el: DashboardApp, presses: number): Promise<boolean> {
+  const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+  (document.activeElement as HTMLElement | null)?.blur();
+  for (let i = 0; i < presses; i++) {
+    await userEvent.tab();
+    let focused: Element | null = document.activeElement;
+    while (focused?.shadowRoot?.activeElement) {
+      if (sidebar.contains(focused)) return true;
+      focused = focused.shadowRoot.activeElement;
+    }
+    if (focused && sidebar.contains(focused)) return true;
+  }
+  return false;
+}
+
+async function sidebarInWindow(el: DashboardApp): Promise<DOMRectReadOnly> {
+  const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+  return new Promise((resolve) => {
+    const observer = new IntersectionObserver((entries) => {
+      observer.disconnect();
+      resolve(entries.at(-1)!.intersectionRect);
+    });
+    observer.observe(sidebar);
+  });
+}
+
+it("shows no part of the closed phone drawer inside the real page, and all of the open one", async () => {
+  const { el, unmount } = await mountInRealPage(stubApi(), 390, 844);
+  try {
+    const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+    expect(sidebar.hasAttribute("inert")).toBe(true);
+    expect((await sidebarInWindow(el)).width).toBeLessThan(1);
+    expect(await tabReachesSidebar(el, 30)).toBe(false);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await flush(el);
+    await vi.waitFor(async () => {
+      const box = sidebar.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      expect((await sidebarInWindow(el)).width).toBeCloseTo(box.width, 0);
+    });
+    expect(await tabReachesSidebar(el, 30)).toBe(true);
+
+    el.shadowRoot!.querySelector<HTMLElement>(".scrim")!.click();
+    await flush(el);
+    await vi.waitFor(async () => expect((await sidebarInWindow(el)).width).toBeLessThan(1));
+  } finally {
+    await unmount();
+  }
+});
+
+it("keeps the desktop sidebar in the page beside the content", async () => {
+  const { el, unmount } = await mountInRealPage(stubApi(), 1280, 844);
+  try {
+    const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+    const box = sidebar.getBoundingClientRect();
+    expect(sidebar.hasAttribute("inert")).toBe(false);
+    expect(box.left).toBe(el.shadowRoot!.querySelector(".layout")!.getBoundingClientRect().left);
+    expect(box.right).toBeLessThanOrEqual(
+      el.shadowRoot!.querySelector(".main")!.getBoundingClientRect().left,
+    );
+    expect((await sidebarInWindow(el)).width).toBeCloseTo(box.width, 0);
+  } finally {
+    await unmount();
+  }
+});
+
 const signedOut = () =>
   stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) });
 
