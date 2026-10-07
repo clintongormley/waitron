@@ -4806,8 +4806,11 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   detail without granting ordinary cross-department browsing. The server now streams authenticated
   reload signals for committed transfer changes to tills, rechecks access on signals and heartbeats,
   and leaves device sightings unchanged. Signals carry no request or tab identity; durable reads
-  remain the queue authority. Till notification/count presentation, lifecycle integration and
-  receiving/sending screens remain to build. Party-linked bills are
+  remain the queue authority. The till client now provides the transfer reads/writes and consumes
+  authenticated reload frames. Its transfer monitor reloads on reconnect, polls durable reads,
+  separates notification dismissal from the pending queue and forgets the watched source tab at
+  session end. The monitor is not yet connected to the till app; notification/count presentation,
+  lifecycle integration and receiving/sending screens remain to build. Party-linked bills are
   refused by the service rather than moving shared table/group links.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
