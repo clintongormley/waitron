@@ -51,6 +51,14 @@ describe("joinCustomerPresentationText", () => {
       es: "Café recién hecho (Taza grande)",
     });
   });
+  test.each([{}, { en: " " }])(
+    "keeps a variant readable when the frozen product map has no text: %j",
+    (product) => {
+      expect(joinCustomerPresentationText(product, { en: "Double" }, "Double")).toEqual({
+        en: "Double",
+      });
+    },
+  );
   test("a line naming no variant keeps the product map unchanged", () => {
     const { product, variant } = customerPresentationText({ ...full, variantName: null }, "en");
     expect(variant).toBeNull();

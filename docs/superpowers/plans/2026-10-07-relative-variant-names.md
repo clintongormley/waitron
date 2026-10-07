@@ -56,14 +56,14 @@ Files selected by `rg 'staffPresentationName|kitchenPresentationName|joinCustome
   order detail and reprint. Add failing behavioral cases for uncovered standalone readers.
 - [x] Use shared staff resolver for standalone order detail; leave nested top-seller variants
   relative. Verify parent grouping distinguishes both gin products through real database tests.
-- [ ] Run each affected screen in Chromium, including axe where markup changes, with different
+- [x] Run each affected screen in Chromium, including axe where markup changes, with different
   audience fixtures. Update demo seeds and fixtures from full to relative names.
 
 ## 4. Documentation, rendering and gates
 
 - [x] Rewrite `docs/developers/products.md` and audit old-rule paraphrases in docs and comments.
   Update `docs/backlog.md` with precise completion status. Keep historical docs with dated pointers.
-- [ ] Render long paired receipt/kitchen labels at 58/80 mm; inspect wrapping. Inspect till,
+- [x] Render long paired receipt/kitchen labels at 58/80 mm; inspect wrapping. Inspect till,
   order detail and relevant reports in EN/ES, both themes, 390/1280. Add FYI image references
   to campaign questions and changed-check inventory to PR.
 - [ ] Rebase, full review path per queue; triage findings test-first, normal pre-push hook,
