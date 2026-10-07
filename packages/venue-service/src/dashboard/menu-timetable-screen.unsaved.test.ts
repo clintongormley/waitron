@@ -89,14 +89,18 @@ let app: MenuLeaveApp;
 afterEach(() => app?.remove());
 
 /** `write` answers every write in turn; `refreshFails` refuses every read after the first. */
-async function mount(write: () => Promise<void> = async () => {}, refreshFails = false) {
+async function mount(
+  write: () => Promise<void> = async () => {},
+  refreshFails = false,
+  initial: MenuTimetableModel = model,
+) {
   setLocale("en");
   const writes: unknown[] = [];
   let reads = 0;
   const request = async (path: string, method: string, body?: unknown) => {
     if (method === "GET") {
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
-      return structuredClone(model);
+      return structuredClone(initial);
     }
     writes.push([method, path, body]);
     await write();
@@ -393,6 +397,43 @@ describe.each(KINDS)("Menu timetable: $name", (kind) => {
     expect(kind.value(screen)).toBe(kind.edited);
     expect(unload()).toBe(true);
     await kind.revert(screen);
+    expect(unload()).toBe(false);
+  });
+});
+
+describe("Menu timetable: what an editor compares", () => {
+  it("a period whose menu alone is changed is edited, and choosing its menu again is not", async () => {
+    const { screen } = await mount();
+    await rowAction(screen, "periods", "Noches", "edit-period");
+    await setField(screen, "menuId", "m-Café");
+    expect(unload()).toBe(true);
+    await setField(screen, "menuId", "m-Cena");
+    expect(unload()).toBe(false);
+  });
+
+  it("a special date on the normal week counts as having no timetable, whatever slots were drafted", async () => {
+    const reyes = { id: "reyes", date: "2027-01-06", name: "Reyes", timetables: [] };
+    const { screen } = await mount(undefined, false, {
+      ...model,
+      specialDates: [...model.specialDates, reyes],
+    });
+    await rowAction(screen, "menu-dates", "Wed, 6 Jan 2027", "edit-date-menus");
+    expect(fieldValue(screen, "date.mode")).toBe("");
+    await setField(screen, "date.mode", "all_day");
+    expect(unload()).toBe(true);
+    await setField(screen, "date.mode", "periods");
+    await setField(screen, "date.periods.0.opensAt", "10:00");
+    expect(unload()).toBe(true);
+    await setField(screen, "date.mode", "");
+    expect(unload()).toBe(false);
+    await press(screen, "cancel-editor");
+    await expect.poll(() => modal(screen)).toBeNull();
+    expect((await question()).open).toBe(false);
+
+    await rowAction(screen, "menu-dates", "Fri, 25 Dec 2026", "edit-date-menus");
+    await setField(screen, "date.mode", "");
+    expect(unload()).toBe(true);
+    await setField(screen, "date.mode", "periods");
     expect(unload()).toBe(false);
   });
 });
