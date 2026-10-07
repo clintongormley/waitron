@@ -181,11 +181,11 @@ When you park or complete an order, Waitron saves the chosen product and variant
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
-The demo venue includes a bilingual coffee with a custom unit, two variants, a separate kitchen name
-and direct dietary declarations. Casa Delgado and Menú del Día include a
-**Drinks** menu as a folder. Drinks prices Caña at 3.00 instead of its product price of 2.80; both
-including menus inherit that price. Menú del Día sets its own Negroni price of 9.00. The coffee
-variants keep their own prices. The demo sirloin carries a seeded options
-list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras list, so
-nothing in it shows an extra being added to a dish.
+The demo venue includes a coffee named in each of the venue's content languages, with two variants,
+a separate kitchen name and direct dietary declarations; the Mixed salad has a custom unit. Casa
+Delgado and Menú del Día include a **Drinks** menu as a folder. Drinks prices Caña at 3.00 instead
+of its product price of 2.80; both including menus inherit that price. Menú del Día sets its own
+Negroni price of 9.00. The coffee variants keep their own prices. The demo sirloin carries a seeded
+options list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras
+list, so nothing in it shows an extra being added to a dish.
 

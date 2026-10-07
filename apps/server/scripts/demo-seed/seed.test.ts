@@ -15,7 +15,9 @@ import {
   createProduct,
   listAccessibleCatalogues,
   listAvailableProducts,
+  listTranslationGapReport,
   menuStatus,
+  readContentLanguages,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readWeekHours, resolveMakers, setClaim } from "@waitron/venue-service";
@@ -581,5 +583,62 @@ describe("seedDemoRestaurant", () => {
     });
     expect(imageRows.length).toBe(1);
     expect(imageRows[0]!.image).toMatch(/^[0-9a-f]{64}\.webp$/);
+  });
+
+  it.each([
+    ["Barcelona", "08001", "ca-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
+    ["Valencia", "46001", "es-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
+    ["A Coruña", "15001", "es-ES", { defaultLanguage: "gl", languages: ["gl", "es", "en"] }],
+    ["Illes Balears", "07001", "es-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
+    ["Madrid", "28013", "es-ES", { defaultLanguage: "es", languages: ["es", "en"] }],
+  ])(
+    "a demo in %s takes the area's languages and misses no translation",
+    async (province, postalCode, invoiceLocale, expected) => {
+      const venue = await createDemoVenueProvisioner(() => suite.db, {
+        nifBase: 91_000_000,
+        invoiceLocale,
+        nifFormat: "calculated",
+        province,
+        postalCode,
+        city: province,
+      })();
+      await seedDemoRestaurant(suite.db, {
+        venue,
+        locale: "es",
+        salesDays: 0,
+        departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
+
+      const read = await withTransaction(suite.db, async (tx) => {
+        const languages = await readContentLanguages(tx, "es");
+        const gaps = await listTranslationGapReport(tx, languages);
+        const { rows } = await tx.execute<{ customer_name: string }>(
+          sql`select customer_name from products where name = 'Bravas'`,
+        );
+        return { languages, gaps, customerName: JSON.parse(rows[0]!.customer_name) as object };
+      });
+      expect(read.languages).toEqual(expected);
+      expect(read.gaps.flatMap((language) => language.gaps)).toEqual([]);
+      expect(Object.keys(read.customerName).sort()).toEqual([...expected.languages].sort());
+    },
+  );
+
+  it("seeds a Madrid demo in English staff names under the area's Spanish default", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: "en",
+      salesDays: 0,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+
+    const read = await withTransaction(suite.db, async (tx) => ({
+      languages: await readContentLanguages(tx, "en"),
+      products: (await listAvailableProducts(tx, venue.locationId)).products,
+    }));
+    expect(read.languages).toEqual({ defaultLanguage: "es", languages: ["es", "en"] });
+    expect(read.products.some((product) => product.name === "Mixed salad")).toBe(true);
   });
 });

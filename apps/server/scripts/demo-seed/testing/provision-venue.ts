@@ -12,6 +12,9 @@ export function createDemoVenueProvisioner(
     invoiceLocale: string;
     adminPin?: string;
     adminEmail?: string;
+    province?: string;
+    postalCode?: string;
+    city?: string;
   },
 ) {
   let nifCounter = 0;
@@ -35,9 +38,9 @@ export function createDemoVenueProvisioner(
             operationDescription: "Venta en establecimiento",
             addressLine1: "Calle Mayor 1",
             addressLine2: null,
-            postalCode: "28013",
-            city: "Madrid",
-            province: "Madrid",
+            postalCode: options.postalCode ?? "28013",
+            city: options.city ?? "Madrid",
+            province: options.province ?? "Madrid",
             timeZone: "Europe/Madrid",
             dayCutover: "05:00",
           },
