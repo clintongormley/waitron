@@ -403,7 +403,7 @@ describe("then upgrading to the end of media's folder", () => {
     expect(untouched(latest)).toEqual(untouched(after.triggers));
   });
 
-  it("keeps a photo a live version names and adds a queued edition's to the two rewritten", () => {
+  it("gives each of the two rewritten triggers the live join, the queued join and the queued-state filter", () => {
     for (const name of REWRITTEN) {
       const trigger = latest.find((each) => each.name === name);
       expect(trigger?.sql).toContain(LIVE_CLAUSE);

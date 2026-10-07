@@ -61,7 +61,10 @@ export type ImageUsage =
     }
   /** A menu's LIVE version; a version another has replaced holds no use. */
   | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number }
-  /** A menu edition still queued to go live at `activatesAt`. */
+  /**
+   * A menu edition whose schedule row is still queued to go live at `activatesAt`; it may already
+   * be due, until `settleDue` marks it activated.
+   */
   | {
       kind: "scheduled_menu_version";
       id: string;
@@ -191,7 +194,7 @@ async function listImageUsagesForFilename(
         or(isNotNull(menuPublications.versionId), isNotNull(menuScheduledPublications.versionId)),
       ),
     )
-    .orderBy(catalogues.name, menuVersions.id);
+    .orderBy(catalogues.name, menuVersions.menuId, menuVersions.number);
   const receiptRows = await tx
     .select({ id: tenantReceipts.id })
     .from(tenantReceipts)

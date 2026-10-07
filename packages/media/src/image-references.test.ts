@@ -430,7 +430,53 @@ describe("an image a queued menu edition names", () => {
     );
     await renameImage(ABSENT);
     expect(await filenames()).toEqual([PRESENT, RENAMED]);
-    await removeImage(RENAMED);
+    await suite.db.execute(
+      sql`update media_images set filename = ${ABSENT} where filename = ${RENAMED}`,
+    );
+    expect(await filenames()).toEqual([PRESENT, ABSENT]);
+    await removeImage(ABSENT);
+    expect(await filenames()).toEqual([PRESENT]);
+  });
+
+  it("can be renamed to itself while queued", async () => {
+    const { menuId, productId } = await liveWithAbsentInLibrary();
+    await queueWithAbsent(menuId, productId, new Date());
+    await suite.db.execute(
+      sql`update media_images set filename = filename where filename = ${ABSENT}`,
+    );
+    expect(await filenames()).toEqual([PRESENT, ABSENT]);
+  });
+
+  it("can be deleted once a later edition that does not name it has also gone live", async () => {
+    const { menuId, productId } = await liveWithAbsentInLibrary();
+    const at = new Date();
+    await queueWithAbsent(menuId, productId, at);
+    await withTransaction(suite.db, async (tx) => {
+      // Back to PRESENT, so the third edition differs from the second and does not name ABSENT.
+      await updateProduct(tx, productId, { image: PRESENT });
+      const { hash } = await previewMenu(tx, menuId);
+      await queueMenuPublication(
+        tx,
+        menuId,
+        hash,
+        new Date(at.getTime() + 2 * HOUR),
+        "manager-ana",
+        {
+          at,
+        },
+      );
+      await updateProduct(tx, productId, { image: null });
+    });
+    const { activated } = await withTransaction(suite.db, (tx) =>
+      activateDueMenuPublications(tx, new Date(at.getTime() + 3 * HOUR)),
+    );
+    // Both editions are marked activated; the pointer moves once, straight to the third.
+    expect(activated.map((each) => each.number)).toEqual([3]);
+    const states = await suite.db
+      .select({ state: menuScheduledPublications.state })
+      .from(menuScheduledPublications);
+    expect(states).toEqual([{ state: "activated" }, { state: "activated" }]);
+    await removeImage(ABSENT);
     expect(await filenames()).toEqual([PRESENT]);
   });
 
