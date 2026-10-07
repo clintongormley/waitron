@@ -841,6 +841,20 @@
       "when": 1791384532634,
       "tag": "0119_invoice_receipt_optional_issuer",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "6",
+      "when": 1791391802340,
+      "tag": "0120_invoice_page_printers",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "6",
+      "when": 1791391821046,
+      "tag": "0121_invoice_page_printer_key",
+      "breakpoints": true
     }
   ]
 }

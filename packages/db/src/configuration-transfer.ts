@@ -55,6 +55,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
       omit: ["poll_token_hash"],
       reconnect: true,
     },
+    { name: "page_printers", locationColumns: ["location_id"], reconnect: true },
     { name: "device_profile_printers" },
     { name: "station_printers" },
     { name: "watcher_printers" },

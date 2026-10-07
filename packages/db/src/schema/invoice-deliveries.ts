@@ -14,6 +14,7 @@ import {
 } from "./columns.js";
 import { printAgents } from "./print-agents.js";
 import { printJobs } from "./print-jobs.js";
+import { pagePrinters } from "./page-printers.js";
 import { sales } from "./sales.js";
 
 export type InvoiceEmailConsent = {
@@ -36,6 +37,9 @@ export const invoiceDeliveries = table(
     /* v8 ignore start */
     printJobId: id("print_job_id").references(() => printJobs.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
+    pagePrinterId: id("page_printer_id").references(() => pagePrinters.id, {
+      onDelete: "restrict",
+    }),
     requestKey: label("request_key").notNull(),
     medium: invoiceDeliveryMedium("medium").notNull(),
     designation: invoiceDeliveryDesignation("designation").notNull(),
