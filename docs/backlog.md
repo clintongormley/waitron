@@ -2342,6 +2342,19 @@ cases switch single-alert and batch pop-ups and open/reopened bell lists between
 Spanish in both themes without another alert read; dismissal clears the pop-up message.
 Screenshots: `~/waitron-campaign/w109-4-shots/`.
 
+**A364 DONE: the till has no technical clock notices (owner, 2026-10-07).**
+The till no longer polls for an authority comparison. Measured drift remains an administrator
+alert, `fiscal.clock_drift`, for people with `fiscal.view`. The existing drift-alert test and the
+independent real-database cash-sale check pass in `apps/server/src/time-health.test.ts`.
+**Open verification gap found by A364's review:** removing
+`authorityClockAlertSource(authorityClock.read)` from boot still left `boot.test.ts`,
+`alert-sources.test.ts`, `alerts-api.test.ts` and `alerts.test.ts` passing (178 tests in the
+installed review candidate). The isolated alert-source tests do not check its boot wiring.
+Add a boot-level check that feeds an authority sample and reads the resulting alert; this
+review recorded the gap without changing the filing observer or widening A364.
+A364's synthetic shell captures show the pricing-unit UUID below Café in Spanish, while English
+shows `/ea`. This is an uninvestigated fixture or translation issue; no live-stack check was made.
+
 **Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not
 checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-shots/`.
 - **Tablet widths (641–1024 px): the counter basket's remove button is still cut off.** A310 changed
@@ -2351,8 +2364,9 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   at the basket's edge.
 - **Desktop till, 1280 px: the total and the Cash/Card/Hold buttons sit below a large empty area**
   and need scrolling. Harness screenshots are identical before and after A310, so A310 did not cause it.
-- **Phone till: the top bar (clock notice and about eight buttons) keeps about 440 of 844 px**,
-  leaving roughly 400 px for selling.
+- **Phone till: the top bar keeps too much space for its buttons (A378, queued).**
+  A310 measured about 440 of 844 px before A364 removed the clock notices. Re-measure the
+  remaining controls for A378; the earlier capture was described as including a clock notice.
 - **Spanish till: the tab buttons still read "Counter" and "Floor"**, the service-area label is cut
   to "Zona de servi…", and some demo dish names ("Spanish omelette", "House bread") stay English.
 - **Dashboard at 1280 px: the overview's top-row cards have uneven heights.**
@@ -5858,6 +5872,12 @@ approved.
   child exit code when available, whether the restore was abandoned, and whatever Litestream
   output was captured; output may be empty on abandonment. The cause of the one-off failure remains
   open. Next action: inspect those details from any new failing run before choosing a repair.
+  **Observed again during A364, 2026-10-07:** PR #1386, run `37690377712`, job
+  `113028865726`, final restore at step 10. The retained log now reports
+  `exitCode=null, abandoned=true`, empty Litestream output and `diskFull=false`,
+  about 31 seconds after resuming. The earlier frozen/pause sale timings passed.
+  Cause remains open; inspect the waiting restore process and bucket requests in a retained
+  reproduction before choosing a repair. A364 changes no restore or stream-loop code.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
   container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner

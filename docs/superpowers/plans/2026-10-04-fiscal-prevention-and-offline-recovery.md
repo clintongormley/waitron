@@ -372,6 +372,9 @@ stream `pointer.ts`/`supervisor.ts`; till receipt-result handling and durable de
   malformed, unzoned or ambiguous samples mean unknown. The banner describes the last comparison;
   no freshness guarantee or extra time-source request is added. Cash-sale tests cover warning
   and unavailable reads. Lane A's receipt overlap is explicitly waived by the campaign queue.
+**A364 update, 2026-10-07:** the owner removes the till's authority-clock notices.
+Measured drift remains an administrator alert; the till does not poll for it.
+
 - [x] W41s-10c implementation checkpoint, 2026-10-05 (not landed): show saved AEAT rejection
   codes and messages, including a repeated readiness attempt while the refusal is still saved.
   Explain that acceptance does not verify the registered name: W41s-1's §7.1 receipt retained the

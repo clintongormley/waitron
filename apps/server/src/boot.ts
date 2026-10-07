@@ -1,8 +1,4 @@
-import {
-  createAuthorityClockStatus,
-  authorityClockAlertSource,
-  mountAuthorityClockApi,
-} from "./time-health.js";
+import { createAuthorityClockStatus, authorityClockAlertSource } from "./time-health.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
@@ -1407,17 +1403,6 @@ async function bootServer(
     incidents: recordIncidentOnce,
   });
   const tillClock = systemClock();
-  mountAuthorityClockApi(
-    app,
-    {
-      db,
-      read: () =>
-        enabledFiscal.activationReadiness === "not-applicable"
-          ? { state: "not-applicable" }
-          : authorityClock.read(),
-    },
-    log,
-  );
   mountTillApi(
     app,
     {

@@ -362,6 +362,9 @@ Each fix names the test that holds it; each guard is proven by deletion when bui
   (CLAUDE.md §5), and in Veri\*Factu mode Orden art. 3 switches off the art. 7.f clock duty. Tests:
   "a clock a day ahead raises the alert and the sale goes through"; "the readiness test reports a
   name mismatch".
+  **A364 update, 2026-10-07:** the owner removes the till's authority-clock notices.
+  Measured drift remains an administrator alert; the till does not poll for it.
+
   - **The setup wizard's fiscal test shows AEAT's reason when it is refused** (owner, 2026-10-03).
     Today its screen (`apps/setup/src/screens/fiscal-test-screen.ts`) receives only accepted,
     rejected or uncertain, and a refusal reads "Correct the certificate or restaurant details". It

@@ -1,4 +1,3 @@
-import type { AuthorityClockStatus } from "./api/client.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import { defaultMenu, type DietPredicate } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
@@ -1336,7 +1335,6 @@ export class TillApp extends LitElement {
     this.#invoiceRecipientLifetime = {};
     this.invoiceRecipientSaving = false;
     this.#battery?.stop();
-    this.#stopClockStatus();
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
     this.#draftSync?.drop();
@@ -2410,7 +2408,6 @@ export class TillApp extends LitElement {
     this.#menuPoll.start();
     this.#equipmentPoll.start();
     void this.#readEquipment();
-    this.#startClockStatus();
     const firstTab = this.canvas?.tabs[0];
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData(replaced);
@@ -7639,44 +7636,8 @@ export class TillApp extends LitElement {
     await this.#refreshFloor();
   }
 
-  @state() private authorityClockStatus: AuthorityClockStatus | null = null;
-  #clockStatusTimer?: ReturnType<typeof setInterval>;
-  #clockStatusRead?: AbortController;
-
-  #stopClockStatus(): void {
-    clearInterval(this.#clockStatusTimer);
-    this.#clockStatusTimer = undefined;
-    this.#clockStatusRead?.abort();
-    this.#clockStatusRead = undefined;
-    this.authorityClockStatus = null;
-  }
-
-  #startClockStatus(): void {
-    this.#stopClockStatus();
-    void this.#readClockStatus();
-    this.#clockStatusTimer = setInterval(() => void this.#readClockStatus(), 60_000);
-  }
-
-  async #readClockStatus(): Promise<void> {
-    this.#clockStatusRead?.abort();
-    const read = new AbortController();
-    this.#clockStatusRead = read;
-    const session = this.#operatorSession;
-    const current = () =>
-      this.isConnected && session === this.#operatorSession && !read.signal.aborted;
-    try {
-      const status = await this.api.clockStatus({
-        signal: AbortSignal.any([read.signal, AbortSignal.timeout(25_000)]),
-      });
-      if (current()) this.authorityClockStatus = status;
-    } catch {
-      if (current()) this.authorityClockStatus = { state: "unknown" };
-    }
-  }
-
   #endOperatorSession(): void {
     this.#stopDepartmentTransfers();
-    this.#stopClockStatus();
     this.#resetPartylessDraft();
     this.leave.forceReset();
     this.#partylessScope = undefined;
@@ -8858,17 +8819,6 @@ export class TillApp extends LitElement {
         }
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
         ${this.#renderRefreshNotice("waiting")}
-        ${
-          this.#inShell() && this.authorityClockStatus?.state === "warning"
-            ? html`<p class="banner" role="alert" data-test="clock-warning">
-                ${t("clock.warning")}
-              </p>`
-            : this.#inShell() && this.authorityClockStatus?.state === "unknown"
-              ? html`<p class="banner" role="status" data-test="clock-unknown">
-                  ${t("clock.unknown")}
-                </p>`
-              : nothing
-        }
         <!-- The waiting-for-promotion banner. On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
              server.waiting_promotion copy compactly here while the router reports no server is accepting

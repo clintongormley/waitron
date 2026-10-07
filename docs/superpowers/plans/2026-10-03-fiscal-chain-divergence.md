@@ -405,6 +405,9 @@ Review: FULL. Ends `needs-owner-review` (it can start a chain).
 - [ ] **Failing case**: with the box's clock more than one minute (D8) away from AEAT's response
   timestamps, an alert is raised and the till shows a banner; **the sale goes through**. An
   unreachable AEAT raises nothing and blocks nothing.
+**A364 update, 2026-10-07:** the owner removes the till's authority-clock notices.
+Measured drift remains an administrator alert; the till does not poll for it.
+
 - [ ] **Failing case**: the readiness test reports a legal-name or tax-id mismatch from AEAT's answer
   as its own outcome.
 - [ ] **Failing case**: a refused readiness test carries AEAT's code and message to the setup wizard's

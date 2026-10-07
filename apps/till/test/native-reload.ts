@@ -98,7 +98,6 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]
         }),
         setServiceZone: () => {},
         listStaff: async () => [{ personId: "p1", displayName: "Ana" }],
-        clockStatus: async () => ({ state: "not-applicable" }),
         reportBattery: async () => {},
         listMyShifts: empty,
         listMySwaps: empty,
