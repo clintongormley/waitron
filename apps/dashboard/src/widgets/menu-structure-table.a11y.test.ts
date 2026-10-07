@@ -5,6 +5,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { MenuStructureTable } from "./menu-structure-table.js";
 import type { CategorySummary, MenuHome, MenuStructureNode, Product } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
+import { t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -132,6 +133,16 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
       await table.updateComplete;
     }
     expect(table.shadowRoot!.querySelectorAll('[part~="color-swatch"]').length).toBe(8);
+    await expectNoA11yViolations(host);
+    const link = table.shadowRoot!.querySelector<HTMLAnchorElement>(
+      'a[data-test="color-m-burger"]',
+    )!;
+    expect(link.getAttribute("aria-label")).toBe(
+      t("product.edit_named").replace("{name}", "Burger"),
+    );
+    link.focus();
+    expect(table.shadowRoot!.activeElement).toBe(link);
+    expect(getComputedStyle(link).outlineStyle).not.toBe("none");
     await expectNoA11yViolations(host);
   });
 

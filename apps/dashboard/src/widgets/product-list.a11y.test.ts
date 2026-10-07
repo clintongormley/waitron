@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -400,9 +400,9 @@ describe.each(["light", "dark"] as const)("product made-at link a11y (%s)", (the
   });
 });
 
-describe.each(["light", "dark"] as const)("product media menu a11y (%s)", (theme) => {
+describe.each(["light", "dark"] as const)("product media link a11y (%s)", (theme) => {
   it.each([null, "soup.webp"])(
-    "names the closed and open colour/photo controls with image %s",
+    "names the swatch link to the product's Edit, at rest and focused, with image %s",
     async (image) => {
       await page.viewport(1280, 844);
       const { el, host } = await mountWidget<ProductList>(
@@ -416,16 +416,15 @@ describe.each(["light", "dark"] as const)("product media menu a11y (%s)", (theme
       );
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       await table.updateComplete;
-      const media =
-        table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-          '[data-test="color-p1"]',
-        )!;
-      await media.updateComplete;
+      const media = table.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="color-p1"]')!;
+      expect(media.tagName).toBe("A");
+      expect(media.getAttribute("aria-label")).toBe(
+        t("product.edit_named").replace("{name}", products[0]!.name),
+      );
       await expectNoA11yViolations(host);
-      media.show();
-      expect(media.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      expect(media.querySelector('[data-test="media-colour"]')!.textContent).toContain("…");
-      expect(media.querySelector('[data-test="media-photo"]')!.textContent).toContain("…");
+      media.focus();
+      expect(table.shadowRoot!.activeElement).toBe(media);
+      expect(getComputedStyle(media).outlineStyle).not.toBe("none");
       await expectNoA11yViolations(host);
     },
   );
