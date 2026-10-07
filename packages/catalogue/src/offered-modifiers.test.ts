@@ -17,7 +17,7 @@ import { createExtraList, updateExtraList } from "./extras.js";
 import { createOptionList, updateOptionList } from "./options.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { setProductVariants } from "./variants.js";
-import { readOfferedModifiers } from "./offered-modifiers.js";
+import { readOfferedExtraItemIds, readOfferedModifiers } from "./offered-modifiers.js";
 import * as extraProjection from "./extra-projection.js";
 import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
@@ -456,6 +456,70 @@ describe("an extra that is a parent with Active variants", () => {
         ids.olives,
       ]);
     }
+  });
+});
+
+describe("the extras items' product ids alone", () => {
+  // Bacon is Unavailable, which a published document still lists; cheese is Inactive and olives
+  // has an Active variant, which it does not.
+  it("are the items a published document lists, keyed as readOfferedModifiers keys them", async () => {
+    await run(async (tx) => {
+      await attach(tx, ["options", "extras"]);
+      await updateProduct(tx, ids.bacon, { available: false });
+      await updateProduct(tx, ids.cheese, { active: false });
+      const [large] = await setProductVariants(
+        tx,
+        ids.olives,
+        [
+          {
+            name: "Large olives",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "1.00",
+            available: true,
+            active: false,
+          },
+        ],
+        "en",
+      );
+      await tx.update(productRows).set({ active: true }).where(eq(productRows.id, large!.id));
+    });
+    const dishes = [
+      { productId: ids.burger, menuItemId: null },
+      { productId: ids.burger, menuItemId: offerId },
+      { productId: ids.cheese, menuItemId: null },
+    ];
+
+    const [itemIds, offered] = await run(async (tx) => [
+      await readOfferedExtraItemIds(tx, dishes),
+      await readOfferedModifiers(tx, dishes, { includeEveryModifierItem: true }),
+    ]);
+
+    expect(itemIds).toEqual(
+      new Map([
+        [ids.burger, [ids.bacon]],
+        [offerId, [ids.bacon]],
+        [ids.cheese, []],
+      ]),
+    );
+    expect(
+      new Map(
+        [...offered].map(([holder, entries]) => [
+          holder,
+          entries.flatMap((entry) =>
+            entry.kind === "extras" ? entry.items.map((item) => item.productId) : [],
+          ),
+        ]),
+      ),
+    ).toEqual(itemIds);
+  });
+
+  it("gives a dish with no extras list no items", async () => {
+    const itemIds = await run((tx) =>
+      readOfferedExtraItemIds(tx, [{ productId: ids.burger, menuItemId: null }]),
+    );
+    expect(itemIds).toEqual(new Map([[ids.burger, []]]));
   });
 });
 
