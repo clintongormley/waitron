@@ -77,25 +77,41 @@ export function fallbackSentences(answer: Answer, names: ExplanationNames): stri
   return hops(answer.fallbacks, answer.noReplacement ? null : stationOf(answer.route), names);
 }
 
+/**
+ * Where an extra goes, naming the station its own cell chose: a fallback that moved the extra
+ * is told as hops, and the cell is never credited with the station that received the work.
+ */
 export function extraSentence(
   extra: ExtraExplanation,
   dish: Pick<RouteExplanation, "route">,
   names: ExplanationNames,
 ): string {
   const name = names.product(extra.productId);
-  const outcome = extra.outcome;
-  if (outcome.kind === "follows_dish") {
-    const dishStation = stationOf(dish.route);
-    return format(`prep.test_extra_${outcome.why}`, {
-      name,
-      station: extra.fallbacks[0] ? names.station(extra.fallbacks[0].stationId) : "",
-      dishStation: dishStation === null ? "" : names.station(dishStation),
-    });
+  const { outcome, decidedBy, fallbacks } = extra;
+  if (outcome.kind === "follows_dish" && outcome.why === "no_rule") {
+    const key =
+      decidedBy?.kind === "default" ? "prep.test_extra_no_rule" : "prep.test_extra_no_cover";
+    return format(key, { name });
   }
-  const made = format("prep.test_extra_made", {
-    name,
-    station: names.station(outcome.stationId),
-    place: cellPlace(isCell(extra.decidedBy) ? extra.decidedBy.address : ALL_EVERY_ZONE, names),
-  });
-  return [...hops(extra.fallbacks, outcome.stationId, names), made].join(" ");
+  const place = isCell(decidedBy) ? cellPlace(decidedBy.address, names) : null;
+  const chosen = fallbacks[0] === undefined ? null : names.station(fallbacks[0].stationId);
+  if (outcome.kind === "follows_dish" && outcome.why === "no_replacement") {
+    const station = chosen ?? "";
+    return place === null
+      ? format("prep.test_extra_no_replacement", { name, station })
+      : format("prep.test_extra_no_replacement_sent", { name, station, place });
+  }
+  const end = outcome.kind === "made" ? outcome.stationId : stationOf(dish.route);
+  const endName = end === null ? "" : names.station(end);
+  const sentence =
+    outcome.kind === "made"
+      ? format("prep.test_extra_made", { name, station: endName })
+      : format(`prep.test_extra_${outcome.why}`, { name, dishStation: endName });
+  const told =
+    place === null
+      ? sentence
+      : chosen === null
+        ? format("prep.test_extra_as_set", { sentence, place })
+        : format("prep.test_extra_sent", { sentence, place, station: chosen });
+  return [...hops(fallbacks, end, names), told].join(" ");
 }

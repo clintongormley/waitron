@@ -215,12 +215,18 @@ const en = {
   "prep.test_choose_extra": "Choose an extra",
   "prep.test_remove_extra": "Remove {name}",
   "prep.test_extras_wait": "Extras: decided once the dish has a station to go to",
-  "prep.test_extra_made": "{name}: made separately at {station}, as set for {place}",
+  "prep.test_extra_made": "{name}: made separately at {station}",
+  "prep.test_extra_as_set": "{sentence}, as set for {place}",
+  "prep.test_extra_sent": "{sentence} — {place}, sends it to {station}",
   "prep.test_extra_no_rule": "{name}: follows the dish — only the default station covers it",
+  "prep.test_extra_no_cover":
+    "{name}: follows the dish — nothing covers it and no default station is active",
   "prep.test_extra_no_preparation":
     "{name}: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket",
   "prep.test_extra_no_replacement":
     "{name}: follows the dish — {station} is closed and nothing can replace it",
+  "prep.test_extra_no_replacement_sent":
+    "{name}: follows the dish — {place}, sends it to {station}, which is closed, and nothing can replace it",
   "prep.test_extra_same_station":
     "{name}: follows the dish — it is made at {dishStation}, where the dish is",
   "prep.test_product": "Product",
@@ -947,12 +953,18 @@ const es: Record<keyof typeof en, string> = {
   "prep.test_choose_extra": "Elige un extra",
   "prep.test_remove_extra": "Quitar {name}",
   "prep.test_extras_wait": "Extras: se deciden cuando el plato tenga una estación de destino",
-  "prep.test_extra_made": "{name}: se prepara aparte en {station}, como está indicado para {place}",
+  "prep.test_extra_made": "{name}: se prepara aparte en {station}",
+  "prep.test_extra_as_set": "{sentence}, como está indicado para {place}",
+  "prep.test_extra_sent": "{sentence} — {place}, lo envía a {station}",
   "prep.test_extra_no_rule": "{name}: sigue al plato — solo lo cubre la estación predeterminada",
+  "prep.test_extra_no_cover":
+    "{name}: sigue al plato — nada lo cubre y no hay ninguna estación predeterminada activa",
   "prep.test_extra_no_preparation":
     "{name}: sigue al plato — lo que lo cubre no necesita preparación, así que queda en el pedido del plato",
   "prep.test_extra_no_replacement":
     "{name}: sigue al plato — {station} está cerrada y nada puede sustituirla",
+  "prep.test_extra_no_replacement_sent":
+    "{name}: sigue al plato — {place}, lo envía a {station}, que está cerrada, y nada puede sustituirla",
   "prep.test_extra_same_station":
     "{name}: sigue al plato — se prepara en {dishStation}, donde se prepara el plato",
   "prep.test_product": "Producto",

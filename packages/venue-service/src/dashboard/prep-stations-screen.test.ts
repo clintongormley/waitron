@@ -836,7 +836,10 @@ it.each(["en", "es"])(
           {
             productId: "sauce",
             outcome: { kind: "follows_dish", why: "no_preparation" },
-            decidedBy: null,
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [],
           },
           {
@@ -851,7 +854,10 @@ it.each(["en", "es"])(
           {
             productId: "pickles",
             outcome: { kind: "follows_dish", why: "same_station" },
-            decidedBy: null,
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [],
           },
         ],
@@ -878,8 +884,8 @@ it.each(["en", "es"])(
     for (const name of names) expect(answer).toContain(`${name}:`);
     expect(answer).toContain(
       locale === "en"
-        ? "Chips: made separately at Fryer, as set for Food › Sides, in every zone"
-        : "Chips: se prepara aparte en Fryer, como está indicado para Food › Sides, en todas las zonas",
+        ? "Closed is closed by hand today, so its work goes to Fryer. Chips: made separately at Fryer — Food › Sides, in every zone, sends it to Closed"
+        : "Closed se ha cerrado a mano hoy, por lo que su trabajo va a Fryer. Chips: se prepara aparte en Fryer — Food › Sides, en todas las zonas, lo envía a Closed",
     );
     expect(answer).toContain(locale === "en" ? "follows the dish" : "sigue al plato");
     expect(answer).toContain(
@@ -888,15 +894,15 @@ it.each(["en", "es"])(
     for (const sentence of locale === "en"
       ? [
           "Cheese: follows the dish — only the default station covers it",
-          "Sauce: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket",
-          "Olives: follows the dish — Closed is closed and nothing can replace it",
-          "Pickles: follows the dish — it is made at Bar, where the dish is",
+          "Sauce: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket, as set for Food › Sides, in every zone",
+          "Olives: follows the dish — Food › Sides, in every zone, sends it to Closed, which is closed, and nothing can replace it",
+          "Pickles: follows the dish — it is made at Bar, where the dish is, as set for Food › Sides, in every zone",
         ]
       : [
           "Cheese: sigue al plato — solo lo cubre la estación predeterminada",
-          "Sauce: sigue al plato — lo que lo cubre no necesita preparación",
-          "Olives: sigue al plato — Closed está cerrada y nada puede sustituirla",
-          "Pickles: sigue al plato — se prepara en Bar, donde se prepara el plato",
+          "Sauce: sigue al plato — lo que lo cubre no necesita preparación, así que queda en el pedido del plato, como está indicado para Food › Sides, en todas las zonas",
+          "Olives: sigue al plato — Food › Sides, en todas las zonas, lo envía a Closed, que está cerrada, y nada puede sustituirla",
+          "Pickles: sigue al plato — se prepara en Bar, donde se prepara el plato, como está indicado para Food › Sides, en todas las zonas",
         ])
       expect(answer).toContain(sentence);
     q(el, '[data-test="remove-extra-chips"]')!.click();
@@ -5827,7 +5833,7 @@ it("describes extras with default, category-cell and product-cell decisions acro
   expect(answer).toContain("closed is closed outside its opening hours");
   expect(answer).toContain("disabled is disabled, so its work goes to Bar.");
   expect(answer).toContain(
-    "unknown-product: made separately at Bar, as set for unknown-product, in every zone",
+    "closed is closed outside its opening hours, so its work goes to disabled. disabled is disabled, so its work goes to Bar. unknown-product: made separately at Bar — unknown-product, in every zone, sends it to closed",
   );
 });
 
