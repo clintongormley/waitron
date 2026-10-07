@@ -190,6 +190,13 @@ function item(el: MenuStructureTable, test: string): HTMLElement {
   return inTable(el, `[data-test="${CSS.escape(test)}"]`)!;
 }
 
+/** The notes under a row's name, as their text. */
+function notesOf(el: MenuStructureTable, key: string): string[] {
+  return [...row(el, key)!.querySelectorAll('[part~="note"]')].map((note) =>
+    note.textContent!.trim(),
+  );
+}
+
 function listen(el: MenuStructureTable, name: string): unknown[] {
   const seen: unknown[] = [];
   el.addEventListener(name, (event) => seen.push((event as CustomEvent).detail));
@@ -343,7 +350,8 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
   const removes = listen(el, "wt-member-remove");
   const edits = listen(el, "wt-structure-edit");
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
-  expect(item(el, "read-only-included-wine").textContent!.trim()).toBe(t("menus.read_only_here"));
+  expect(item(el, "read-only-included-wine")).toBeNull();
+  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_as_folder")]);
   expect(menuItems(el, "included-wine")).toEqual([
     "source-included-wine",
     "edit-included-wine",
@@ -442,7 +450,8 @@ it("the row says whether the include is a folder or shown directly", async () =>
     t("menus.include_direct"),
   );
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
-  expect(item(el, "read-only-included-wine").textContent!.trim()).toBe(t("menus.read_only_here"));
+  expect(item(el, "read-only-included-wine")).toBeNull();
+  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_direct")]);
   // An include inside an included menu belongs to that menu's page, so it says nothing here.
   await toggle(el, "included-wine");
   expect(nameOf(el, "included-wine/wine-cava")).toBe(menuLabel("Cava"));

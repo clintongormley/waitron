@@ -899,9 +899,9 @@ is the member ids from the top level down to it, so a section shown in two place
 of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
 section from whichever place it was chosen, and makes that row the current one, whose name is drawn
 bold and underlined with `aria-current="true"`. A product's ⋮ holds "Remove from <list>", naming the
-list that holds it. An included menu's row reads "Menu: <name>" with "Read-only here" under it, then
-"Shown as a folder" or "Sections shown directly". Its ⋮ holds "Open <name>", a link to that menu's
-own Structure tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
+list that holds it. An included menu's row reads "Menu: <name>" with "Shown as a folder" or
+"Sections shown directly" under it. Its ⋮ holds "Open <name>", a link to that menu's own Structure
+tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
 "Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
 and photo, each following the included menu until it is changed; and "Remove from this menu". The
 rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in

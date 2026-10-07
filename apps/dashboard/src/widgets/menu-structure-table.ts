@@ -748,15 +748,13 @@ export class MenuStructureTable extends LitElement {
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
       >${this.#nameSpan(row)}${
         node.includedMenuId && !row.readOnly
-          ? html`<span part="note" data-test=${`read-only-${key}`}
-                >${t("menus.read_only_here")}</span
-              ><span part="note" data-test=${`folder-setting-${key}`}
-                >${t(
-                  (node.folder ?? FOLLOWING_FOLDER).showAsFolder
-                    ? "menus.include_as_folder"
-                    : "menus.include_direct",
-                )}</span
-              >`
+          ? html`<span part="note" data-test=${`folder-setting-${key}`}
+              >${t(
+                (node.folder ?? FOLLOWING_FOLDER).showAsFolder
+                  ? "menus.include_as_folder"
+                  : "menus.include_direct",
+              )}</span
+            >`
           : nothing
       }</span
     >`;
