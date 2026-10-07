@@ -128,6 +128,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("print_jobs", "state", STATE),
   classify(
+    "invoice_deliveries",
+    "state",
+    "mutable delivery queue for issued core invoices; copied to a standby, never drained back",
+  ),
+  classify(
     "kitchen_print_job_lines",
     "state",
     "which order lines each kitchen ticket carried; copied to a standby, never drained back",

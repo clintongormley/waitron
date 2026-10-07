@@ -277,3 +277,10 @@ export { CORE_CHANGE_SOURCES } from "./classification.js";
 // rows over are `withTransaction`'s own two steps, and a caller doing either itself would take the
 // changes away from the listeners or announce a change that has not committed.
 export { subscribeToChanges } from "./change-log.js";
+export {
+  invoiceDeliveries,
+  invoiceDeliveryMedium,
+  invoiceDeliveryDesignation,
+  invoiceDeliveryStatus,
+  type InvoiceEmailConsent,
+} from "./schema/invoice-deliveries.js";
