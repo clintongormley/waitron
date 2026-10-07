@@ -135,7 +135,7 @@ export class CatalogueBrowser extends LitElement {
   @state() private summaries: FolderSummary[] = [];
   @state() private summaryLoading = false;
   @state() private summaryFailed = false;
-  /** How many Active menus the products alone being disabled are on; null while unread or unreadable. */
+  /** How many Active menus the directly picked products being disabled are on; null while unread or unreadable. */
   @state() private disablingMenus: number | null = null;
   #disablingRead = 0;
   @state() private operationBusy = false;
@@ -315,10 +315,8 @@ export class CatalogueBrowser extends LitElement {
     this.summaryFailed = false;
     this.operationError = "";
     this.operation = selection.productIds.length ? "delete" : null;
-    if (!selection.categoryIds.length) {
-      void this.#readDisablingMenus(selection.productIds);
-      return;
-    }
+    if (selection.productIds.length) void this.#readDisablingMenus(selection.productIds);
+    if (!selection.categoryIds.length) return;
     this.summaryLoading = true;
     try {
       const summaries = await this.api.summariseFolders(selection.categoryIds);
@@ -642,7 +640,7 @@ export class CatalogueBrowser extends LitElement {
                           selection.productIds.length === 1
                             ? "product.off_menus"
                             : "folders.off_menus",
-                          selection.categoryIds.length ? null : this.disablingMenus,
+                          this.disablingMenus,
                         )}
                       </p>`
                     : nothing

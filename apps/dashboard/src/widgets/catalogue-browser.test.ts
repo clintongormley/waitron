@@ -2984,31 +2984,58 @@ it("says nothing about menus when a deleted category's contents disable no produ
   await el.updateComplete;
   expect(dialog(el)!.textContent).not.toContain("come off every menu");
 });
+const DISABLE_ONE_PRODUCT =
+  "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.";
 it.each([
   [
     ["bread"],
-    "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off every menu it is on.",
+    `${DISABLE_ONE_PRODUCT} It comes off every menu it is on.`,
+    `${DISABLE_ONE_PRODUCT} It comes off the 2 menus it is on, which then show unpublished changes.`,
   ],
-  [["bread", "burger"], `${DISABLE_PRODUCTS} They come off every menu they are on.`],
+  [
+    ["bread", "burger"],
+    `${DISABLE_PRODUCTS} They come off every menu they are on.`,
+    `${DISABLE_PRODUCTS} They come off the 2 menus they are on, which then show unpublished changes.`,
+  ],
 ] as const)(
-  "says products %j picked beside a category come off every menu, whichever way its contents go",
-  async (productIds, body) => {
+  "counts the menus products %j picked beside a category come off, whichever way its contents go",
+  async (productIds, unknown, counted) => {
     const el = await mountBrowser();
+    let answer!: (menus: number) => void;
+    vi.mocked(el.api.countProductMenus).mockImplementation(
+      () => new Promise<number>((resolve) => (answer = resolve)),
+    );
     await toggleCategory(el, "f");
     await selectKeys(el, [...productIds, "folder:d"]);
     await press(el, "delete");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
     );
-    expect(disableBody(el)).toBe(body);
+    expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith([...productIds]);
+    expect(disableBody(el)).toBe(unknown);
+    answer(2);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(disableBody(el)).toBe(counted);
     for (const contents of ["delete", "move_up"]) {
       el.shadowRoot!.querySelector<HTMLInputElement>(`input[value=${contents}]`)!.click();
       await el.updateComplete;
-      expect(disableBody(el)).toBe(body);
+      expect(disableBody(el)).toBe(counted);
     }
-    expect(el.api.countProductMenus).not.toHaveBeenCalled();
   },
 );
+it("says products picked beside a category come off every menu when their count cannot be read", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.countProductMenus).mockRejectedValue({ code: "server.internal" });
+  await selectKeys(el, ["bread", "folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(disableBody(el)).toBe(`${DISABLE_ONE_PRODUCT} It comes off every menu it is on.`);
+});
 it("says Disable for products alone in Spanish, and Delete once a category is selected", async () => {
   setLocale("es");
   const el = await mountBrowser();
