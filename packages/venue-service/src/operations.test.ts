@@ -1631,7 +1631,7 @@ describe("retired and moved zones", () => {
     ).toEqual({ workingOrderId: orderId });
   });
 
-  it("moves a zone between departments without changing its tables or menu", async () => {
+  it("moves a zone between departments, keeping its tables and dropping its own all-day menu", async () => {
     const venue = await seedSellingVenue();
     const [table] = await db
       .insert(diningTables)
