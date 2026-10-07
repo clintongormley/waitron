@@ -58,10 +58,6 @@ const model: VenueServiceView = {
     },
   ],
   salePolicies: { departments: [], zones: [] },
-  menus: [
-    { id: "m1", name: "Casa Delgado", active: true },
-    { id: "m2", name: "Deli takeaway", active: true },
-  ],
   floorZones: [
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
@@ -3330,10 +3326,6 @@ describe("the venue tables at phone width", () => {
     floorZones: [
       { id: "z1", name: "Comedor principal junto a la terraza del jardín" },
       model.floorZones[1]!,
-    ],
-    menus: [
-      { id: "m1", name: "Carta de temporada de la casa con maridajes y postres", active: true },
-      model.menus[1]!,
     ],
   };
   const tables: { name: string; tab: string; open?: string; rows: number }[] = [

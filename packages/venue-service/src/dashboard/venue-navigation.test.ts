@@ -12,7 +12,6 @@ const model: VenueServiceView = {
   departments: [],
   zones: [],
   salePolicies: { departments: [], zones: [] },
-  menus: [],
   floorZones: [],
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
