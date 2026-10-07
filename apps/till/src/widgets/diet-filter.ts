@@ -55,7 +55,7 @@ export class TillDietFilter extends LitElement {
 
   override render() {
     return html`
-      <div class="filter" role="group" aria-label=${t("diet.filter.label")}>
+      <div class="filter" part="options" role="group" aria-label=${t("diet.filter.label")}>
         ${OPTIONS.map(
           (opt) =>
             html`<button

@@ -1,20 +1,31 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, describe } from "vitest";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { page } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabDef } from "../layout.js";
 import type { Station, TillProduct, TillZoneMenu } from "../api/client.js";
-import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  servedMenus,
+  expectNoA11yViolations,
+} from "../widgets/test-helpers.js";
 import "./till-counter-screen.js";
+import "../widgets/tab-shell.js";
+import type { TillTabShell } from "../widgets/tab-shell.js";
 import indexHtml from "../../index.html?raw";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 
 // Vitest's own default frame, which every other case runs in.
 const DEFAULT_FRAME = [414, 896] as const;
 
+const originalLocale = currentLocale();
+
 let pageStyle: HTMLStyleElement | undefined;
 
 afterEach(async () => {
   cleanupWidgets();
+  setLocale(originalLocale);
   pageStyle?.remove();
   pageStyle = undefined;
   await page.viewport(...DEFAULT_FRAME);
@@ -196,4 +207,178 @@ it("stacks the basket when a till narrows to a phone's width while open", async 
   await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(box(el, "till-basket").left).toBe(box(el, "till-menu-browser").left);
   expect(await placement(el)).toEqual(allWhole);
+});
+
+it.each([390, 720, 1024, 1280, 1920])(
+  "keeps a three-digit line's remove control inside its basket at %i px",
+  async (width) => {
+    const el = await mountCounter(width, 800);
+    const store = (el as HTMLElement & { store: WorkingOrderStore }).store;
+    for (const quantity of ["1", "2", "15"]) {
+      store.addProduct(
+        product(`long-${quantity}`, "A dish with a very long unbrokennameandmoretext", "7.80"),
+        quantity,
+      );
+    }
+    const basket = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-basket",
+    )!;
+    await basket.updateComplete;
+    const edge = basket.getBoundingClientRect();
+    for (const remove of basket.shadowRoot!.querySelectorAll<HTMLElement>(".remove")) {
+      const rect = remove.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(edge.left);
+      expect(rect.right).toBeLessThanOrEqual(edge.right);
+    }
+  },
+);
+
+describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
+  describe.each(["en-GB", "es-ES"])("sale rail in %s", (locale) => {
+    it.each([
+      [1280, 800],
+      [1024, 768],
+    ])(
+      "keeps total and payment controls visible while a long basket scrolls at %i × %i",
+      async (width, height) => {
+        const grid = await mountCounter(width, height);
+        const screen = grid.getRootNode() as ShadowRoot;
+        const counter = screen.host as TillCounterScreen;
+        setLocale(locale);
+        counter.embedded = true;
+        counter.serviceZones = [
+          {
+            id: "bar",
+            name: "Downstairs bar",
+            departmentId: "bar",
+            departmentName: "Bar",
+            serviceMode: "prepay",
+          },
+        ];
+        counter.selectedServiceZoneId = "bar";
+        counter.cardProvider = "simulator";
+        counter.menus = [
+          { ...menus[0]!, name: "Casa Delgado" },
+          { ...menus[0]!, id: "lunch", name: "Menú del Día", isDefault: false },
+          { ...menus[0]!, id: "dinner", name: "Dinner and special occasions", isDefault: false },
+          { ...menus[0]!, id: "drinks-extra", name: "Drinks and cocktails", isDefault: false },
+        ];
+        counter.products = [
+          { ...cafe, diet: { vegan: "yes", vegetarian: "yes", contains: [] } },
+          croquetasDish,
+        ];
+        const { el: shell, host } = await mountWidget<TillTabShell>(
+          "till-tab-shell",
+          {
+            tabs: [counterTab, { ...counterTab, key: "floor", title: "Floor", cards: [] }],
+            transferAvailable: true,
+            canSwitchProfile: true,
+            activeTabKey: "counter",
+            operatorName: "Administradora",
+            affordances: ["station", "expo", "schedule", "find-bill"],
+          },
+          theme,
+        );
+        host.style.height = `${height - 109}px`;
+        host.style.marginTop = "61px";
+        shell.style.height = "100%";
+        shell.append(counter);
+        for (let i = 0; i < 25; i++) {
+          counter.store.addProduct(product(`long-${i}`, `Long dish name ${i}`, "117.00"), "1");
+        }
+        await counter.updateComplete;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const controls = sellingControls(grid);
+        for (const name of ["total", "cash button", "card button", "hold button"]) {
+          const [control] = controls[name]!;
+          const rect = control.getBoundingClientRect();
+          expect(rect.top, name).toBeGreaterThanOrEqual(0);
+          expect(rect.bottom, name).toBeLessThanOrEqual(height);
+        }
+        const basket = grid.shadowRoot!.querySelector<HTMLElement>("till-basket")!;
+        const scroller = basket.parentElement!;
+        expect(scroller.clientHeight).toBeGreaterThanOrEqual(44);
+        expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+        scroller.scrollTop = scroller.scrollHeight;
+        expect(scroller.scrollTop).toBeGreaterThan(0);
+        const lastRemove = [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".remove")].at(-1)!;
+        expect(lastRemove.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          scroller.getBoundingClientRect().bottom,
+        );
+        await expectNoA11yViolations(host);
+      },
+    );
+  });
+});
+
+it.each([
+  {
+    name: "reordered cards",
+    cards: [counterTab.cards[1]!, counterTab.cards[0]!, counterTab.cards[2]!, counterTab.cards[3]!],
+  },
+  {
+    name: "a menu narrower than its configured row",
+    cards: [{ ...counterTab.cards[0]!, colSpan: 7 }, ...counterTab.cards.slice(1)],
+  },
+  {
+    name: "a wider total",
+    cards: counterTab.cards.map((card) => (card.type === "total" ? { ...card, colSpan: 5 } : card)),
+  },
+  {
+    name: "a wider payment card",
+    cards: counterTab.cards.map((card) =>
+      card.type === "tender-pay" ? { ...card, colSpan: 5 } : card,
+    ),
+  },
+  { name: "an extra total card", cards: [...counterTab.cards, counterTab.cards[2]!] },
+])("preserves configured row spans for $name", async ({ cards }) => {
+  const grid = await mountCounter(1280, 800);
+  const screen = (grid.getRootNode() as ShadowRoot).host as TillCounterScreen;
+  screen.counterTab = { ...counterTab, cards };
+  await screen.updateComplete;
+  await (grid as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  const basket = grid.shadowRoot!.querySelector("till-basket")!;
+  expect(getComputedStyle(basket.parentElement!).gridRowStart).toBe("span 4");
+});
+
+it("keeps a usable basket and payment controls when the default canvas has many held orders", async () => {
+  const grid = await mountCounter(1280, 800);
+  const counter = (grid.getRootNode() as ShadowRoot).host as TillCounterScreen;
+  counter.embedded = true;
+  counter.counterTab = {
+    ...counterTab,
+    cards: [
+      ...counterTab.cards,
+      { type: "held-orders", colSpan: 8, rowSpan: 2, config: {}, visibleWhen: ["has-parked"] },
+    ],
+  };
+  counter.heldOrders = Array.from({ length: 20 }, (_, i) => ({
+    id: `held-${i}`,
+    orderNumber: i + 1,
+    label: `Order ${i + 1}`,
+    itemCount: 1,
+    total: "7.80",
+    outstanding: "7.80",
+    hasPayments: false,
+    partyId: null,
+    openedAt: "2026-10-08T12:00:00.000Z",
+    signals: [],
+  }));
+  const { el: shell, host } = await mountWidget<TillTabShell>("till-tab-shell", {
+    tabs: [counterTab],
+    activeTabKey: "counter",
+    operatorName: "Ana",
+  });
+  host.style.height = "752px";
+  shell.style.height = "100%";
+  shell.append(counter);
+  await counter.updateComplete;
+  await (grid as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  const basket = grid.shadowRoot!.querySelector("till-basket")!;
+  expect(basket.parentElement!.clientHeight).toBeGreaterThanOrEqual(44);
+  expect(
+    inShadow(grid.shadowRoot!.querySelector("till-tender-pay"), ".hold").getBoundingClientRect()
+      .bottom,
+  ).toBeLessThanOrEqual(800);
+  expect(grid.shadowRoot!.querySelector("till-held-orders")).not.toBeNull();
 });

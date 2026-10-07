@@ -52,7 +52,7 @@ export class TillMenuSwitcher extends LitElement {
   override render() {
     if (this.menus.length <= 1) return nothing;
     return html`
-      <div class="switcher" role="group" aria-label=${t("menu.switcher")}>
+      <div class="switcher" part="options" role="group" aria-label=${t("menu.switcher")}>
         ${this.menus.map(
           (menu) =>
             html`<button

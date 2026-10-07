@@ -2374,13 +2374,16 @@ shows `/ea`. This is an uninvestigated fixture or translation issue; no live-sta
 
 **Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not
 checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-shots/`.
-- **Tablet widths (641–1024 px): the counter basket's remove button is still cut off.** A310 changed
-  only widths below 40rem. In the test harness the × was 0% on screen at 720 px and 75% at 1024 px.
-- **At 1280 px a three-digit line total pushes the × about 11 px past the basket** (harness only).
-  On CI's Linux runner a two-digit total (2 × 7.80) put it 11 px past too; on a Mac it sits exactly
-  at the basket's edge.
-- **Desktop till, 1280 px: the total and the Cash/Card/Hold buttons sit below a large empty area**
-  and need scrolling. Harness screenshots are identical before and after A310, so A310 did not cause it.
+- **A377 DONE: basket rows wrap their controls within the card.** The unchanged demo reproduced
+  the spill at 720 px; Chromium cases keep one-, two- and three-digit totals and long names inside
+  the basket at 390, 720, 1024, 1280 and 1920 px.
+- **A377 DONE: the standard counter canvas keeps Total, Cash, Card and Hold above the fold.**
+  The menu controls, products and held orders share the menu side's scroll area; the basket scrolls
+  separately, and total and payment cards take their content height.
+  Chromium cases cover a long basket at 1280×800 and 1024×768, English and Spanish, both themes,
+  including the demo banner's space, operator controls and simulator reader. Other card arrangements
+  retain their configured row spans. Full invoice and Hold share a row; Cash, Card and Hold use
+  the shared medium button size. Phone cards remain stacked in their configured order.
 - **Phone till: the top bar keeps too much space for its buttons (A378, queued).**
   A310 measured about 440 of 844 px before A364 removed the clock notices. Re-measure the
   remaining controls for A378; the earlier capture was described as including a clock notice.

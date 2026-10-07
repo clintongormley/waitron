@@ -99,12 +99,18 @@ export class TillBasket extends LitElement {
       }
 
       .line {
-        display: grid;
-        grid-template-columns: 1fr auto auto auto auto;
+        display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-3);
         padding: var(--wt-space-2) 0;
         border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      .line .name {
+        flex: 1;
+        min-width: min(100%, calc(var(--wt-tap-min) * 3));
+        overflow-wrap: anywhere;
       }
 
       /* The name, or what is slotted in its place, on a row of its own above the line's controls,

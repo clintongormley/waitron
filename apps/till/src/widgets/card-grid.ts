@@ -83,6 +83,33 @@ export class TillCardGrid extends LitElement {
         grid-row: auto !important;
       }
     }
+    .sale-grid {
+      grid-template-rows: minmax(0, 1fr) auto auto;
+      grid-auto-rows: auto;
+    }
+    .sale-grid .cell[data-card="product-grid"] {
+      grid-row: 1 / span 3 !important;
+      overflow: auto;
+    }
+    .sale-grid .cell[data-card="basket"] {
+      grid-row: 1 !important;
+      overflow: auto;
+    }
+    .sale-grid .cell[data-card="total"] {
+      grid-row: 2 !important;
+    }
+    .sale-grid .cell[data-card="tender-pay"] {
+      grid-row: 3 !important;
+    }
+    @media ${unsafeCSS(PHONE_WIDTH)} {
+      .sale-grid {
+        grid-template-rows: none;
+      }
+      .sale-grid .cell[data-card] {
+        grid-row: auto !important;
+        overflow: visible;
+      }
+    }
     .pay-rest {
       display: flex;
       flex-direction: column;
@@ -99,6 +126,7 @@ export class TillCardGrid extends LitElement {
   `;
 
   @property({ attribute: false }) tab?: TabDef;
+  @property({ type: Boolean }) fitSale = false;
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
@@ -202,9 +230,28 @@ export class TillCardGrid extends LitElement {
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
     if (tab === undefined) return nothing;
-    return html`<div class="grid" style="grid-template-columns: repeat(${tab.columns}, 1fr)">
-      ${tab.cards.filter((card) => this.#capable(card) && this.#visible(card)).map((card) => this.#cell(card))}
-    </div>`;
+    const [menu, basket, total, pay, ...rest] = tab.cards;
+    const saleGrid =
+      this.fitSale &&
+      menu?.type === "product-grid" &&
+      basket?.type === "basket" &&
+      total?.type === "total" &&
+      pay?.type === "tender-pay" &&
+      menu.colSpan + basket.colSpan === tab.columns &&
+      total.colSpan === basket.colSpan &&
+      pay.colSpan === basket.colSpan &&
+      rest.every((card) => card.type === "held-orders" && card.colSpan === menu.colSpan);
+    const cards = tab.cards.filter((card) => this.#capable(card) && this.#visible(card));
+    const groupHeld = saleGrid && !this.phone;
+    const heldCards = groupHeld ? cards.filter((card) => card.type === "held-orders") : [];
+    const gridCards = groupHeld ? cards.filter((card) => card.type !== "held-orders") : cards;
+    return html`${saleGrid ? nothing : html`<slot name="menu-controls"></slot>`}
+      <div
+        class="grid ${saleGrid ? "sale-grid" : ""}"
+        style="grid-template-columns: repeat(${tab.columns}, 1fr)"
+      >
+        ${gridCards.map((card) => this.#cell(card, saleGrid, card.type === "product-grid" ? heldCards : []))}
+      </div>`;
   }
 
   /**
@@ -223,17 +270,23 @@ export class TillCardGrid extends LitElement {
     return required !== undefined && !this.permissions.includes(required);
   }
 
-  #cell(card: CardInstance): TemplateResult | typeof nothing {
+  #cell(
+    card: CardInstance,
+    saleGrid: boolean,
+    following: CardInstance[],
+  ): TemplateResult | typeof nothing {
     const element = this.#element(card);
     if (element === nothing) return nothing;
     const locked = this.#locked(card);
     return html`<div
       class="cell ${locked ? "locked" : ""}"
+      data-card=${card.type}
       ?inert=${locked}
       aria-disabled=${locked ? "true" : nothing}
       style="grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}"
     >
-      ${element}
+      ${saleGrid && card.type === "product-grid" ? html`<slot name="menu-controls"></slot>` : nothing}
+      ${element} ${following.map((card) => this.#cell(card, false, []))}
     </div>`;
   }
 
