@@ -335,6 +335,20 @@ export function chooseExtraMaker(
   return { outcome, decidedBy: choice.decidedBy, fallbacks: choice.fallbacks };
 }
 
+/** Where an extra goes beside a dish routed as `dish`, or null while the dish has no route: its
+ * extras then wait on it. */
+export function chooseExtraMakerBeside(
+  rules: RoutingRules,
+  dish: MakerChoice,
+  extra: ProductFacts,
+  zoneId: string | null,
+  moment: RoutingMoment | null,
+): ExtraChoice | null {
+  if (dish.route === null) return null;
+  const dishStationId = dish.route.kind === "station" ? dish.route.stationId : null;
+  return chooseExtraMaker(rules, extra, zoneId, moment, dishStationId);
+}
+
 /** The cells are copied and frozen so `selectRoutingCell` can cache its index for them. */
 export function selectionRulesFromModel(model: RoutingModel): RoutingSelectionRules {
   return {

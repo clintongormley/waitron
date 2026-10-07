@@ -4,6 +4,7 @@ import {
   cellKey,
   chooseMaker,
   chooseExtraMaker,
+  chooseExtraMakerBeside,
   closedSendsTo,
   followFallbacks,
   folderAncestors,
@@ -1179,6 +1180,35 @@ const extrasRules: RoutingRules = {
 const chips = { productId: "chips", routedProductId: "chips", categoryId: "sides" };
 const cheese = { productId: "cheese", routedProductId: "cheese", categoryId: "toppings" };
 const sauce = { productId: "sauce", routedProductId: "sauce", categoryId: "sauces" };
+
+describe("chooseExtraMakerBeside", () => {
+  const dishAt = (route: RouteTarget | null) => ({
+    route,
+    decidedBy: null,
+    fallbacks: [],
+    noReplacement: route === null,
+  });
+  it("gives no extra a maker while its dish has no route", () => {
+    expect(chooseExtraMakerBeside(extrasRules, dishAt(null), chips, null, null)).toBeNull();
+  });
+  it("compares the extra's station with its dish's", () => {
+    expect(
+      chooseExtraMakerBeside(extrasRules, dishAt(station("fryer")), chips, null, null)?.outcome,
+    ).toEqual({ kind: "follows_dish", why: "same_station" });
+    expect(
+      chooseExtraMakerBeside(extrasRules, dishAt(station("grill")), chips, null, null),
+    ).toEqual({
+      outcome: { kind: "made", stationId: "fryer" },
+      decidedBy: decidedByCell(category("sides"), null),
+      fallbacks: [],
+    });
+  });
+  it("makes an extra at its own station beside a dish with no preparation", () => {
+    expect(
+      chooseExtraMakerBeside(extrasRules, dishAt(noPreparation), chips, null, null)?.outcome,
+    ).toEqual({ kind: "made", stationId: "fryer" });
+  });
+});
 
 describe("chooseExtraMaker", () => {
   it("splits an extra off when its category's cell names another station", () => {

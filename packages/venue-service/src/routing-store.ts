@@ -2,23 +2,27 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { categories, floorZones, kitchenStations, products, type Transaction } from "@waitron/db";
 import {
   categoryDetails,
+  documentOffers,
   effectiveProductColumns,
   parentJoin,
   parentProducts,
   productWithId,
-  readOfferedModifiers,
+  readOfferedExtraItemIds,
   staffPresentationName,
 } from "@waitron/catalogue";
 import { AppError, normaliseUuid } from "@waitron/shared";
-import { publishedOffersByZone, resolveZoneContext, type VenueScope } from "./operations.js";
+import { liveDocumentsByZone, resolveZoneContext, type VenueScope } from "./operations.js";
 import {
   cellKey,
   chooseMaker,
   chooseExtraMaker,
+  chooseExtraMakerBeside,
   closedSendsTo,
   stationDayHours,
   stationStatus,
   targetKey,
+  type MakerChoice,
+  type ProductFacts,
   type RouteTarget,
   type RoutingRules,
   type RoutingMoment,
@@ -368,9 +372,9 @@ export async function explainRoute(
       .where(eq(products.id, extraId));
     if (extra === undefined)
       throw new AppError("route.subject_not_found", { subject: "product", id });
-    if (extrasWaitOnDish) continue;
-    const result = chooseExtraMaker(
+    const result = chooseExtraMakerBeside(
       rules,
+      choice,
       {
         productId: extraId,
         routedProductId: storedUuid(extra.routedId),
@@ -378,8 +382,8 @@ export async function explainRoute(
       },
       zoneId,
       moment,
-      choice.route.kind === "station" ? choice.route.stationId : null,
     );
+    if (result === null) continue;
     extras.push({
       productId: id,
       outcome: result.outcome,
@@ -422,17 +426,19 @@ export async function previewRoutingChange(
     .where(eq(products.active, true));
   const zoneList = zones.length ? zones : [{ id: null, name: null }];
   const moves: RoutingMove[] = [];
+  const dishChoices = new Map<string, { before: MakerChoice; after: MakerChoice }>();
   for (const product of productsToCheck)
     for (const zone of zoneList) {
       const facts = {
-        productId: product.id,
-        routedProductId: product.routedId,
+        productId: storedUuid(product.id),
+        routedProductId: storedUuid(product.routedId),
         categoryId: product.categoryId,
       };
       const previous = chooseMaker(rules, facts, zone.id, null);
       const from = previous.route;
       const next = chooseMaker(after, facts, zone.id, null);
       const to = next.route;
+      dishChoices.set(choiceKey(product.id, zone.id), { before: previous, after: next });
       if (!sameRoute(from, to) || previous.noReplacement !== next.noReplacement)
         moves.push({
           productId: product.id,
@@ -444,7 +450,16 @@ export async function previewRoutingChange(
           toNoReplacement: next.noReplacement,
         });
     }
-  moves.push(...(await extraMoves(tx, cfg, rules, after, productsToCheck, zoneList)));
+  moves.push(
+    ...(await extraMoves(
+      tx,
+      cfg,
+      { before: rules, after },
+      productsToCheck,
+      zoneList,
+      dishChoices,
+    )),
+  );
   return moves.sort(
     (a, b) =>
       a.productName.localeCompare(b.productName) ||
@@ -455,11 +470,12 @@ export async function previewRoutingChange(
   );
 }
 
+const choiceKey = (productId: string, zoneId: string | null) =>
+  `${storedUuid(productId)}\u0000${zoneId ?? ""}`;
+
 /**
- * Where each offered extra is made before and after a change, mirroring an order's routing: an
- * extra whose dish has no route waits on the dish, and an extra `chooseExtraMaker` does not make
- * goes wherever its dish goes. An extra that follows its dish in both states is left out, since the
- * dish's own move already says where it goes.
+ * Where each offered extra is made before and after a change. An extra that follows its dish in
+ * both states is left out, since the dish's own move already says where it goes.
  *
  * A dish offers an extra when the live catalogue attaches it, in every zone, or when a published
  * menu a zone serves offers it with the dish, in that zone: an order sells from the published
@@ -468,8 +484,7 @@ export async function previewRoutingChange(
 async function extraMoves(
   tx: Transaction,
   cfg: VenueScope,
-  before: RoutingRules,
-  after: RoutingRules,
+  rules: { before: RoutingRules; after: RoutingRules },
   dishes: readonly {
     id: string;
     name: string;
@@ -478,82 +493,49 @@ async function extraMoves(
     categoryId: string | null;
   }[],
   zones: readonly { id: string | null; name: string | null }[],
+  dishChoices: ReadonlyMap<string, { before: MakerChoice; after: MakerChoice }>,
 ): Promise<RoutingMove[]> {
-  /** By dish, then extra: the zones the pairing applies in, or null for every zone. */
-  const extrasByDish = new Map<string, Map<string, Set<string | null> | null>>();
-  const offer = (dishId: string, extraId: string, zoneId: string | null) => {
+  const extrasByDish = new Map<string, Map<string, Set<string | null>>>();
+  const offer = (dishId: string, extraId: string, zoneIds: readonly (string | null)[]) => {
     const dish = storedUuid(dishId);
     const extra = storedUuid(extraId);
     let extras = extrasByDish.get(dish);
     if (extras === undefined) extrasByDish.set(dish, (extras = new Map()));
-    const inZones = extras.get(extra);
-    if (zoneId === null) extras.set(extra, null);
-    else if (inZones === undefined) extras.set(extra, new Set([zoneId]));
-    else inZones?.add(zoneId);
+    let inZones = extras.get(extra);
+    if (inZones === undefined) extras.set(extra, (inZones = new Set()));
+    for (const zoneId of zoneIds) inZones.add(zoneId);
   };
-  const live = await readOfferedModifiers(
+  const everyZone = zones.map((zone) => zone.id);
+  // A variant's own attachments are never offered: a menu refuses a variant
+  // (`menu_item.variant_not_allowed`) and `listAvailableProducts` lists top-level products alone.
+  const live = await readOfferedExtraItemIds(
     tx,
-    dishes.map((dish) => ({ productId: dish.id, menuItemId: null })),
-    { includeEveryModifierItem: true },
+    dishes.flatMap((dish) =>
+      dish.parentName === null ? [{ productId: dish.id, menuItemId: null }] : [],
+    ),
   );
-  for (const dish of dishes)
-    for (const modifier of live.get(dish.id.toLowerCase()) ?? [])
-      if (modifier.kind === "extras")
-        for (const item of modifier.items) offer(dish.id, item.productId, null);
+  for (const [dishId, itemIds] of live)
+    for (const itemId of itemIds) offer(dishId, itemId, everyZone);
   // A variant is never an offer of its own, and routes exactly as its parent, the offer's product.
-  for (const [zoneId, offers] of await publishedOffersByZone(tx, cfg))
-    for (const served of offers)
+  for (const [zoneId, menus] of await liveDocumentsByZone(tx, cfg))
+    for (const served of menus.flatMap((menu) => documentOffers(menu.document)))
       for (const modifier of served.offeredModifiers)
         if (modifier.kind === "extras")
-          for (const item of modifier.items) offer(served.productId, item.productId, zoneId);
-  if (!extrasByDish.size) return [];
-  const extraIds = [...new Set([...extrasByDish.values()].flatMap((extras) => [...extras.keys()]))];
-  // An Inactive extra cannot be picked, whatever a published menu still lists.
-  const extraRows = await tx
-    .select({
-      id: products.id,
-      name: products.name,
-      parentName: parentProducts.name,
-      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-      categoryId: effectiveProductColumns.categoryId,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(and(inArray(products.id, extraIds), eq(products.active, true)));
-  const extraFacts = new Map(
-    extraRows.map((row) => [
-      storedUuid(row.id),
-      {
-        name: staffName(row),
-        facts: { productId: row.id, routedProductId: row.routedId, categoryId: row.categoryId },
-      },
-    ]),
-  );
+          for (const item of modifier.items) offer(served.productId, item.productId, [zoneId]);
+  // Every Active product is a dish here, so an Inactive extra, which cannot be picked whatever a
+  // published menu still lists, is not found.
+  const active = new Map(dishes.map((dish) => [storedUuid(dish.id), dish]));
   const placeIn = (
     rules: RoutingRules,
-    dish: { routedId: string; id: string; categoryId: string | null },
-    extra: { productId: string; routedProductId: string; categoryId: string | null },
+    dishChoice: MakerChoice,
+    extra: ProductFacts,
     zoneId: string | null,
   ): { follows: boolean; target: RouteTarget | null; noReplacement: boolean } => {
-    const dishChoice = chooseMaker(
-      rules,
-      { productId: dish.id, routedProductId: dish.routedId, categoryId: dish.categoryId },
-      zoneId,
-      null,
-    );
-    if (dishChoice.route === null)
-      return { follows: true, target: null, noReplacement: dishChoice.noReplacement };
-    const { outcome } = chooseExtraMaker(
-      rules,
-      extra,
-      zoneId,
-      null,
-      dishChoice.route.kind === "station" ? dishChoice.route.stationId : null,
-    );
-    return outcome.kind === "made"
+    const made = chooseExtraMakerBeside(rules, dishChoice, extra, zoneId, null)?.outcome;
+    return made?.kind === "made"
       ? {
           follows: false,
-          target: { kind: "station", stationId: outcome.stationId },
+          target: { kind: "station", stationId: made.stationId },
           noReplacement: false,
         }
       : { follows: true, target: dishChoice.route, noReplacement: dishChoice.noReplacement };
@@ -561,21 +543,27 @@ async function extraMoves(
   const moves: RoutingMove[] = [];
   for (const dish of dishes) {
     for (const [extraId, inZones] of extrasByDish.get(storedUuid(dish.id)) ?? []) {
-      const extra = extraFacts.get(extraId);
+      const extra = active.get(extraId);
       if (extra === undefined) continue;
+      const facts = {
+        productId: extraId,
+        routedProductId: storedUuid(extra.routedId),
+        categoryId: extra.categoryId,
+      };
       for (const zone of zones) {
-        if (inZones !== null && !inZones.has(zone.id)) continue;
-        const from = placeIn(before, dish, extra.facts, zone.id);
-        const to = placeIn(after, dish, extra.facts, zone.id);
+        if (!inZones.has(zone.id)) continue;
+        const dishChoice = dishChoices.get(choiceKey(dish.id, zone.id))!;
+        const from = placeIn(rules.before, dishChoice.before, facts, zone.id);
+        const to = placeIn(rules.after, dishChoice.after, facts, zone.id);
         if ((from.follows && to.follows) || sameRoute(from.target, to.target)) continue;
         moves.push({
-          productId: extra.facts.productId,
-          productName: extra.name,
+          productId: extra.id,
+          productName: staffName(extra),
           zoneId: zone.id,
           zoneName: zone.name,
           from: from.target,
           to: to.target,
-          toNoReplacement: to.follows && to.noReplacement,
+          toNoReplacement: to.noReplacement,
           dish: { productId: dish.id, productName: staffName(dish) },
         });
       }

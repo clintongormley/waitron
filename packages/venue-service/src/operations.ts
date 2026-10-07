@@ -392,25 +392,21 @@ export async function listVenueReadiness(
       zone.departmentId !== null && zone.departmentActive === true && zone.defaultMenuId !== null,
   );
   if (ready.length === 0) return issues;
-  const menusOf = await zoneMenuIdsByZone(tx, cfg);
-  const live = await readLiveDocuments(tx, [...new Set([...menusOf.values()].flat())]);
+  const liveByZone = await liveDocumentsByZone(tx, cfg);
   for (const zone of ready) {
-    const published = (menusOf.get(zone.id) ?? []).flatMap((menuId) => {
-      const version = live.get(menuId);
-      return version === undefined ? [] : [{ menuId, offers: documentOffers(version.document) }];
-    });
+    const published = liveByZone.get(zone.id) ?? [];
     if (published.length === 0) {
       issues.push({ code: "zone.menu_unpublished", zoneId: zone.id, zoneName: zone.name });
       continue;
     }
-    for (const { menuId, offers } of published) {
-      if (offers.length === 0) {
+    for (const { menuId, document } of published) {
+      if (documentOffers(document).length === 0) {
         issues.push({
           code: "zone.menu_empty",
           zoneId: zone.id,
           zoneName: zone.name,
           menuId,
-          menuName: live.get(menuId)!.document.menuName,
+          menuName: document.menuName,
         });
       }
     }
@@ -744,13 +740,13 @@ async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<
 }
 
 /**
- * Each zone's offers from the live versions of its active menus, the documents `listZoneOffers`
- * serves the zone from, without the live fields put back. Read for every zone at once.
+ * Each zone's active menus that have a live version, in its department's order, with that
+ * version's document: what `listZoneOffers` serves the zone from, without the live fields put back.
  */
-export async function publishedOffersByZone(
+export async function liveDocumentsByZone(
   tx: Transaction,
   cfg: VenueScope,
-): Promise<Map<string, ReturnType<typeof documentOffers>>> {
+): Promise<Map<string, { menuId: string; document: MenuDocument }[]>> {
   const menusOf = await zoneMenuIdsByZone(tx, cfg);
   const live = await readLiveDocuments(tx, [...new Set([...menusOf.values()].flat())]);
   return new Map(
@@ -758,7 +754,7 @@ export async function publishedOffersByZone(
       zoneId,
       menuIds.flatMap((menuId) => {
         const version = live.get(menuId);
-        return version === undefined ? [] : documentOffers(version.document);
+        return version === undefined ? [] : [{ menuId, document: version.document }];
       }),
     ]),
   );
