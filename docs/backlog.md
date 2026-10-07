@@ -1873,6 +1873,14 @@ Left open:
 and the staff-facing names — is one data set, `casa-delgado-es`, which Spain's pack names; nothing
 a demo seeds changes.
 
+**A demo's staff-facing names follow the language of the person setting it up, and its practice
+sales are written in the venue's receipt language (W109-5, Task 5 of the same plan) — DONE
+(2026-10-07).** `demoSeedLocale` (`apps/server/src/demo-seed.ts`) reads the setup person's language
+(`admin.locale`) — Spanish when it is Spanish, English otherwise — instead of the receipt language,
+and `seedSales` (`apps/server/scripts/demo-seed/seed-sales.ts`) takes the location's first receipt
+language, so a Barcelona demo set up in Spanish gets Spanish staff-facing names and Catalan practice
+sales. The plan's last step, Task 2 (W109-2, a country with no demo data), is still to come.
+
 **The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the
 text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
 in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
