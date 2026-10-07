@@ -187,9 +187,9 @@ A4 references and transport remain. It does not complete Tasks 2 or 4.
 **2026-10-07 A4 destination checkpoint.** Separate `page_printers` rows now store the
 IPP endpoint, selected PDF/PWG/URF format, advertised formats, media and resolution.
 Delivery metadata references that table; receipt-printer enums and payloads are unchanged.
-The reservation helper refuses a receipt-printer id, a disabled page printer or one outside
-the sale node's location before writing metadata. A replay returns the reserved row even
-if the destination was subsequently disabled. Configuration transfer preserves the saved
+For a new delivery action, the reservation helper refuses a receipt-printer id, a disabled
+page printer or one outside the sale node's location before writing metadata. A replay returns
+the reserved row even if the destination was subsequently disabled. Configuration transfer preserves the saved
 capabilities, remaps the location and id, and imports the printer disabled with a reconnect
 notice. Synthetic database cases exercise these paths. Generated migrations 0120 and 0121
 add the column before adding its restrictive key; core schema conformance and stepwise
@@ -221,6 +221,22 @@ attribution despite client-forged values, SMTP removal without restart, and acti
 selection versus disabled, absent or other-location printers. No issuance or public F1 gate
 changed. Issuance reservation, receipt suppression, SMTP setup/settings, printer registration,
 location selection and delivery UI remain pending.
+
+**2026-10-07 paid-issuance checkpoint.** The existing automatic sale-receipt hook now
+reserves a saved email/A4 original against the sale id and returns before fiscal receipt
+printing. It keeps collection-ticket enqueue before that choice. Its per-sale issuance key
+replays the same metadata after both queued and completed states. Synthetic paid-bill tests
+exercise reservation in the issuance transaction, rollback of the sale/number/payment and
+reservation together, and replay without a second delivery. An accepted A4 choice survives
+printer disablement before captured-bill completion, so this configuration change does not
+refuse issuance; fresh requests still check active destinations. Task 5 must report a queued
+A4 delivery whose destination is disabled without sending it. Receipt tests cover a separate
+prepaid collection ticket, explicit paper choice, an unattributed email's recorded consent
+staff, refusal of an unattributed A4 fixture, and a synthetic F2's stale draft. Public F1
+refusals remain closed. The unpaid-issuance function still has its existing F1 refusal and
+has not been wired to this helper; no claim that every issuance path has been integrated.
+SMTP setup/settings, office registration/transport, delivery UI and final integration
+remain. This does not complete Tasks 2 or 4.
 
 ## 3. Set up email for a live venue, without a terminal
 

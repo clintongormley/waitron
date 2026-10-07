@@ -2207,7 +2207,7 @@ before normal shutdown or failed-start cleanup closes the store. Real local SMTP
 exercise a queued duplicate's saved invoice facts, a held acceptance during normal close,
 a later failed startup, and queued-email controls on a local secondary and a read-only mirror.
 The separate page-printer schema now records IPP endpoints, supported and selected formats,
-media and resolution. An A4 reservation stores its page-printer reference and refuses a
+media and resolution. A new A4 delivery request stores its page-printer reference and refuses a
 receipt-printer id, a disabled page printer or one outside the sale node's location. Replayed
 reservations retain their row after printer disablement. Configuration transfer preserves the
 capabilities, remaps the id/location and imports the page printer disabled with a reconnect
@@ -2223,8 +2223,15 @@ route now forwards the delivery choice, stamps consent with the authenticated st
 server clock, and asks the current invoice-mail resolver whether email is available. Real boot
 cases cover demo, prepare, development and live SMTP, with unconfigured live email refused.
 Bill reads return a saved delivery draft. Null choices and unavailable A4 destinations are refused
-without advancing the bill. Issuance reservation and receipt suppression remain open, along with
-email setup/settings and the delivery UI; no Task 4 completion claim.
+without advancing the bill. The automatic sale-receipt hook now reserves the saved email/A4
+original against the issued sale, using the existing caller transaction, and suppresses its
+fiscal receipt. Synthetic paid-bill cases check that a rollback removes both the sale and the
+reservation, and a replay preserves the reservation. An A4 destination disabled after its
+accepted choice does not refuse captured-bill completion; new delivery requests still require
+an active destination. Receipt cases keep a prepaid collection ticket separate, retain explicit paper originals and ignore a synthetic F2's stale email draft.
+The unpaid-issuance path remains publicly closed and has not been wired to this helper.
+Email setup/settings, printer registration/transport and the delivery UI remain open; no Task 4
+completion claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain

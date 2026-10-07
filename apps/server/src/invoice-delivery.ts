@@ -40,6 +40,7 @@ export async function reserveInvoiceDelivery(
   tx: Transaction,
   saleId: string,
   input: EmailDeliveryRequest | ReceiptDeliveryRequest | A4DeliveryRequest,
+  options: { allowInactivePagePrinter?: boolean } = {},
 ): Promise<InvoiceDelivery> {
   const [sale] = await tx
     .select({ recipient: sales.counterpartyTaxId, nodeId: sales.nodeId })
@@ -63,7 +64,7 @@ export async function reserveInvoiceDelivery(
         and(
           eq(nodes.id, sale.nodeId),
           eq(pagePrinters.id, input.pagePrinterId),
-          eq(pagePrinters.active, true),
+          options.allowInactivePagePrinter === true ? undefined : eq(pagePrinters.active, true),
         ),
       );
     if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});

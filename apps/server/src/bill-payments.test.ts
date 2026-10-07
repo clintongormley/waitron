@@ -18,6 +18,7 @@ import {
   saleSettlements,
   sales,
   invoiceSeries,
+  invoiceDeliveries,
   pagePrinters,
   locations,
   tenders,
@@ -2241,6 +2242,162 @@ describe("the invoice at full payment", () => {
     );
     expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
   });
+
+  it.each(["email", "a4", "disabled-a4"] as const)(
+    "associates the staged %s original with paid-bill issuance and rolls it back with the sale",
+    async (kind) => {
+      const medium = kind === "email" ? "email" : "a4";
+      const billId = await tabWith("Caña");
+      const [originalContact] = await inTx((tx) => tx.select().from(tenantReceipts));
+      const pagePrinterId = randomUUID();
+      try {
+        await inTx(async (tx) => {
+          await tx
+            .insert(tenantReceipts)
+            .values({ receipt: { email: "venue@example.test" } })
+            .onConflictDoUpdate({
+              target: tenantReceipts.id,
+              set: { receipt: { email: "venue@example.test" } },
+            });
+          await tx.insert(pagePrinters).values({
+            id: pagePrinterId,
+            locationId: venue.cfg.locationId,
+            name: "Invoice",
+            host: pagePrinterId,
+            port: 631,
+            resourcePath: "/ipp/print",
+            documentFormat: "application/pdf",
+            supportedFormats: ["application/pdf"],
+            media: "iso_a4_210x297mm",
+            resolutionDpi: 300,
+          });
+        });
+        await setOrderInvoiceChoice(
+          suite.db,
+          backend,
+          venue.cfg,
+          billId,
+          {
+            revision: 0,
+            invoiceType: "F1",
+            recipient: {
+              taxId: "B12345674",
+              legalName: "Cliente SL",
+              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              countryCode: "ES",
+            },
+            delivery:
+              medium === "email"
+                ? {
+                    medium,
+                    recipient: "customer@example.test",
+                    consent: {
+                      accepted: true,
+                      statementVersion: "invoice-email-v1",
+                      language: LOCALE,
+                      contactEmail: "venue@example.test",
+                    },
+                  }
+                : { medium, pagePrinterId },
+          },
+          { personId: OPERATOR, emailAvailable: true, now: new Date("2026-10-07T17:00:00Z") },
+        );
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        if (kind === "disabled-a4") {
+          await inTx((tx) =>
+            tx
+              .update(pagePrinters)
+              .set({ active: false })
+              .where(eq(pagePrinters.id, pagePrinterId)),
+          );
+        }
+        const paymentId = await insertPayment(billId, { applied: 300 });
+        const before = await inTx(async (tx) => ({
+          sales: await tx.select().from(sales),
+          series: await tx.select().from(invoiceSeries),
+          deliveries: await tx.select().from(invoiceDeliveries),
+          jobs: await tx.select().from(printJobs),
+          payment: await tx.select().from(billPayments).where(eq(billPayments.id, paymentId)),
+        }));
+        const rollback = new Error("synthetic rollback after issue");
+        await expect(
+          inTx(async (tx) => {
+            const result = await completeBillPayment(
+              tx,
+              fiscal(),
+              venue.cfg,
+              paymentId,
+              new Date(),
+            );
+            expect(result.invoice).toMatchObject({ invoiceType: "F1" });
+            const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+            const rows = await tx
+              .select()
+              .from(invoiceDeliveries)
+              .where(eq(invoiceDeliveries.saleId, sale!.id));
+            expect(rows).toEqual([
+              expect.objectContaining({
+                saleId: sale!.id,
+                medium,
+                status: "queued",
+                designation: "original",
+                personId: OPERATOR,
+                ...(medium === "email"
+                  ? {
+                      recipient: "customer@example.test",
+                      consent:
+                        saved!.invoiceDelivery!.medium === "email"
+                          ? saved!.invoiceDelivery!.consent
+                          : null,
+                    }
+                  : { pagePrinterId }),
+              }),
+            ]);
+            expect(await tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))).toEqual(
+              [],
+            );
+            throw rollback;
+          }),
+        ).rejects.toBe(rollback);
+        expect(
+          await inTx(async (tx) => ({
+            sales: await tx.select().from(sales),
+            series: await tx.select().from(invoiceSeries),
+            deliveries: await tx.select().from(invoiceDeliveries),
+            jobs: await tx.select().from(printJobs),
+            payment: await tx.select().from(billPayments).where(eq(billPayments.id, paymentId)),
+          })),
+        ).toEqual(before);
+        const result = await inTx((tx) =>
+          completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+        );
+        expect(result.invoice).toMatchObject({ invoiceType: "F1", total: "3.00" });
+        const [sale] = await inTx((tx) =>
+          tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
+        );
+        const deliveries = await inTx((tx) =>
+          tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.saleId, sale!.id)),
+        );
+        expect(deliveries).toHaveLength(1);
+        expect(deliveries[0]).toMatchObject({ medium, status: "queued", designation: "original" });
+        await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+        expect(
+          await inTx((tx) =>
+            tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.saleId, sale!.id)),
+          ),
+        ).toEqual(deliveries);
+        expect(
+          await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
+        ).toEqual([]);
+      } finally {
+        if (originalContact === undefined) await inTx((tx) => tx.delete(tenantReceipts));
+        else
+          await inTx((tx) => tx.update(tenantReceipts).set({ receipt: originalContact.receipt }));
+      }
+    },
+  );
 
   it("files a saved full-invoice choice through the full series when its bill is paid", async () => {
     const billId = await tabWith("Caña");
