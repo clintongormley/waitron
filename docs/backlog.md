@@ -2590,6 +2590,16 @@ Left open:
   naming the photo, so deleting or renaming a photo that nothing uses reads both tables in full.
   The folder photo's own lookup has an index (`section_members_folder_image_idx`). Its own item: a
   performance fix with a media migration.
+
+**An included menu's row and Edit dialog read right — DONE (A380, #1385, 2026-10-07).** The owner's
+answers to A322's three look points. In the include's Edit dialog an emptied name now hints what
+the customer menu would show: the default language's name, or the staff name when every name is
+blank, and no hint when the save would be refused (a blank default-language name while another
+language has one). The "Read-only here" note left the include's row. A link in any ⋮ menu
+(`wt-row-actions`) now looks like the outlined button entries beside it, so "Open <menu>" matches
+Edit and Remove. Left open: a link marked `aria-disabled="true"` in a ⋮ menu looks greyed out but
+still opens its page when clicked (no screen marks one disabled yet; W88's busy-tree point above
+would be the first).
 - A configuration import stores a fixed folder name as given, spaces included, where a save
   through the dialog or the route trims it. A name of spaces only shows as no name either way.
 - After browser Back to another menu with no edits made, the include's Edit dialog stays open over
