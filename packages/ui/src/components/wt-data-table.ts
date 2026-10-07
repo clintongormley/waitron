@@ -77,7 +77,6 @@ function repeatKeys(keys: readonly string[]): (_item: unknown, index: number) =>
  * the rows beside it stay wider than NARROW_TREE_WIDTH at the default tokens. */
 const SIDE_FILTERS_WIDTH = 768;
 
-/** A filter's choice: one value for a single-choice filter, a list for a multi-select one. */
 type FilterChoice = string | string[];
 
 function isFilterChoice(value: unknown): value is FilterChoice {
