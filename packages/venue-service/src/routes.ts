@@ -89,6 +89,10 @@ import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } 
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { RoutingChange } from "./routing-types.js";
 import { setStationFallback, setStationToday } from "./station-times.js";
+import {
+  readDepartmentTransferSettings,
+  setDepartmentTransferSettings,
+} from "./department-transfers.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
@@ -103,6 +107,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.name_disabled": 409,
   "zone.name_disabled": 409,
   "department.not_found": 404,
+  "department_transfer.settings_invalid": 400,
   "department.last_active": 409,
   "zone.table_in_use": 409,
   "zone.department_inactive": 409,
@@ -954,6 +959,42 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             );
           else throw new AppError("management.request_invalid", { field });
         });
+        return c.body(null, 204);
+      }),
+    );
+
+    const transferSettingsPath =
+      "/management-api/venue-service/departments/:departmentId/transfers";
+    app.get(transferSettingsPath, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        return c.json(
+          await gated(sessionId, (tx) => readDepartmentTransferSettings(tx, ctx.cfg, departmentId)),
+        );
+      }),
+    );
+    app.put(transferSettingsPath, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["receivingProfileId", "destinationDepartmentIds"]);
+        const receivingProfileId = requireNullableBodyUuid(
+          body.receivingProfileId,
+          "receivingProfileId",
+        );
+        if (!Array.isArray(body.destinationDepartmentIds))
+          throw new AppError("management.request_invalid", { field: "destinationDepartmentIds" });
+        const destinationDepartmentIds = body.destinationDepartmentIds.map((value) =>
+          requireBodyUuid(value, "destinationDepartmentIds"),
+        );
+        await gated(sessionId, (tx) =>
+          setDepartmentTransferSettings(tx, ctx.cfg, departmentId, {
+            receivingProfileId,
+            destinationDepartmentIds,
+          }),
+        );
         return c.body(null, 204);
       }),
     );

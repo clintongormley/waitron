@@ -13,6 +13,15 @@ declare module "@waitron/shared" {
     "department.name_taken": { name: string };
     "department.name_disabled": { name: string; departmentId: string };
     "zone.name_disabled": { name: string; zoneId: string };
+    "department_transfer.settings_invalid": {
+      field: "receivingProfileId" | "destinationDepartmentIds";
+    };
+    "department_transfer.not_allowed": Record<string, never>;
+    "department_transfer.desk_unavailable": { departmentId: string };
+    "department_transfer.pending": { tabId: string };
+    "department_transfer.not_found": { requestId: string };
+    "department_transfer.not_pending": { requestId: string };
+    "department_transfer.tab_unavailable": { tabId: string };
     "department.not_found": { departmentId: string };
     "department.last_active": { departmentId: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };

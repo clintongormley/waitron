@@ -4794,8 +4794,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
-  action flags); equipment LANDED except NFC (W100, #1332); transfers queued in
-  lane D, not implemented.**
+  action flags); equipment LANDED except NFC (W100, #1332); transfers IN PROGRESS
+  in lane D on `feat/departmental-tab-transfers`. The branch has request storage, directional
+  settings, withdrawal and manager settings routes; acceptance, lifecycle integration and screens
+  remain to build.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt

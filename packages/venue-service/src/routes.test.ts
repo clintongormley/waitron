@@ -171,6 +171,73 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("saves directional transfer settings only for a manager", async () => {
+    const fx = await fixture();
+    const { source, destination } = await withTransaction(db, async (tx) => ({
+      source: await createDepartment(tx, fx, { name: "Deli", defaultServiceMode: "table_tab" }),
+      destination: await createDepartment(tx, fx, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      }),
+    }));
+    const path = `/management-api/venue-service/departments/${source.id}/transfers`;
+    expect((await send(fx.app, "GET", path)).status).toBe(401);
+    expect(
+      (
+        await send(fx.app, "PUT", path, fx.staffCookie, {
+          receivingProfileId: null,
+          destinationDepartmentIds: [destination.id],
+        })
+      ).status,
+    ).toBe(403);
+    const saved = await send(fx.app, "PUT", path, fx.managerCookie, {
+      receivingProfileId: null,
+      destinationDepartmentIds: [destination.id],
+    });
+    expect(saved.status).toBe(204);
+    const read = await send(fx.app, "GET", path, fx.managerCookie);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual({
+      departmentId: source.id,
+      receivingProfileId: null,
+      destinationDepartmentIds: [destination.id],
+    });
+    const reverse = await send(
+      fx.app,
+      "GET",
+      `/management-api/venue-service/departments/${destination.id}/transfers`,
+      fx.managerCookie,
+    );
+    expect(await reverse.json()).toEqual({
+      departmentId: destination.id,
+      receivingProfileId: null,
+      destinationDepartmentIds: [],
+    });
+  });
+
+  it.each([
+    [{ destinationDepartmentIds: [] }, "receivingProfileId"],
+    [{ receivingProfileId: null }, "destinationDepartmentIds"],
+    [{ receivingProfileId: [], destinationDepartmentIds: [] }, "receivingProfileId"],
+    [{ receivingProfileId: null, destinationDepartmentIds: null }, "destinationDepartmentIds"],
+    [
+      { receivingProfileId: null, destinationDepartmentIds: ["invalid"] },
+      "destinationDepartmentIds",
+    ],
+    [{ receivingProfileId: null, destinationDepartmentIds: [], surprise: true }, "surprise"],
+  ])("refuses malformed transfer settings %j", async (body, field) => {
+    const fx = await fixture();
+    const source = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Deli", defaultServiceMode: "table_tab" }),
+    );
+    const path = `/management-api/venue-service/departments/${source.id}/transfers`;
+    const response = await send(fx.app, "PUT", path, fx.managerCookie, body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+
   it("refuses the retired invoice-first style without changing departments or zones", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
