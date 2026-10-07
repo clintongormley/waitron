@@ -688,8 +688,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ya hay otro producto o variante activo con este nombre.",
   },
   "product.variant_not_found": {
-    en: "This variant was disabled or removed. Refresh and try again.",
-    es: "Esta variante se ha deshabilitado o eliminado. Actualiza y vuelve a intentarlo.",
+    en: "This variant can no longer be used here. Refresh the page and try again.",
+    es: "Esta variante ya no se puede usar aquí. Actualiza la página y vuelve a intentarlo.",
   },
   // The screen shows the names of the lists after this sentence.
   "product.offered_as_extra": {

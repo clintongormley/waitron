@@ -603,16 +603,12 @@ describe("catalogue-screen", () => {
       const api = stubApi({ countProductMenus: vi.fn().mockResolvedValue(2) });
       const el = await openDisable(api);
       expect(api.countProductMenus).toHaveBeenCalledWith(["p1"]);
-      expect(bodyOf(el)).toBe(
-        `${warning} It comes off the 2 menus it is on, which then show unpublished changes.`,
-      );
+      expect(bodyOf(el)).toBe(`${warning} It comes off the 2 menus it is on.`);
     });
 
     it("says the one menu it comes off in the singular", async () => {
       const el = await openDisable(stubApi({ countProductMenus: vi.fn().mockResolvedValue(1) }));
-      expect(bodyOf(el)).toBe(
-        `${warning} It comes off the one menu it is on, which then shows unpublished changes.`,
-      );
+      expect(bodyOf(el)).toBe(`${warning} It comes off the one menu it is on.`);
     });
 
     it("adds nothing when the product is on no menu", async () => {
@@ -627,7 +623,7 @@ describe("catalogue-screen", () => {
         "es",
       );
       expect(bodyOf(el)).toBe(
-        "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan. Sale de las 3 cartas en las que está, que pasan a tener cambios sin publicar.",
+        "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan. Sale de las 3 cartas en las que está.",
       );
     });
 
@@ -2763,7 +2759,7 @@ describe("catalogue-screen", () => {
       expect(api.countProductMenus).toHaveBeenCalledWith(["v1"]);
       const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
       expect(dialog.querySelector("p")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-        "This disables the variant: the till stops offering it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on, which then show unpublished changes.",
+        "This disables the variant: the till stops offering it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on.",
       );
     });
 

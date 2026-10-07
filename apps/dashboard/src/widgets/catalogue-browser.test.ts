@@ -2885,14 +2885,8 @@ async function openDisableProducts(keys: string[], menus: () => Promise<number>)
   return el;
 }
 it.each([
-  [
-    3,
-    `${DISABLE_PRODUCTS} They come off the 3 menus they are on, which then show unpublished changes.`,
-  ],
-  [
-    1,
-    `${DISABLE_PRODUCTS} They come off the one menu they are on, which then shows unpublished changes.`,
-  ],
+  [3, `${DISABLE_PRODUCTS} They come off the 3 menus they are on.`],
+  [1, `${DISABLE_PRODUCTS} They come off the one menu they are on.`],
   [0, DISABLE_PRODUCTS],
 ] as const)(
   "says how many menus the products come off when they are on %i",
@@ -2905,7 +2899,7 @@ it.each([
 it("says the menus one selected product comes off with the product as the subject", async () => {
   const el = await openDisableProducts(["bread"], () => Promise.resolve(2));
   expect(disableBody(el)).toBe(
-    "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on, which then show unpublished changes.",
+    "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept. It comes off the 2 menus it is on.",
   );
 });
 it("says every menu while the products' count loads and when it cannot be read, and Disable still works", async () => {
@@ -2970,7 +2964,7 @@ it("in Spanish, says how many cartas the products come off", async () => {
   setLocale("es");
   const el = await openDisableProducts(["bread", "cola"], () => Promise.resolve(2));
   expect(disableBody(el)).toBe(
-    "Esto deshabilita los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlos, y sus ventas anteriores se conservan. Salen de las 2 cartas en las que están, que pasan a tener cambios sin publicar.",
+    "Esto deshabilita los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlos, y sus ventas anteriores se conservan. Salen de las 2 cartas en las que están.",
   );
 });
 it("says products a category's deletion disables come off every menu, only once its contents are to be deleted", async () => {
@@ -3010,12 +3004,12 @@ it.each([
   [
     ["bread"],
     `${DISABLE_ONE_PRODUCT} It comes off every menu it is on.`,
-    `${DISABLE_ONE_PRODUCT} It comes off the 2 menus it is on, which then show unpublished changes.`,
+    `${DISABLE_ONE_PRODUCT} It comes off the 2 menus it is on.`,
   ],
   [
     ["bread", "burger"],
     `${DISABLE_PRODUCTS} They come off every menu they are on.`,
-    `${DISABLE_PRODUCTS} They come off the 2 menus they are on, which then show unpublished changes.`,
+    `${DISABLE_PRODUCTS} They come off the 2 menus they are on.`,
   ],
 ] as const)(
   "counts the menus products %j picked beside a category come off, whichever way its contents go",
