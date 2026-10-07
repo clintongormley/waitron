@@ -6076,6 +6076,11 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
   cancelled it, rather than failing it when the run ends. Written up in
   [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
   the job log on the next sighting — it is the cheapest evidence there is.
+- **A seventh: `apps/server/src/adjustments-apply.test.ts` → "applies it with a manager's PIN"
+  failed the CI run on main that merged #1325 (W69), 2026-10-07 — FIXED (A308).** It searched the
+  whole stored command row for the PIN `7777`, and that run's random submission id contained
+  `7777`. The check now walks the row: no value may be the PIN, and only a generated id, digest or
+  timestamp, in a field whose name marks it as one, may contain its digits.
 - **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
   `scripts/write-path-tables.test.ts` (#430) covers the tables request code may read and never
   write — those `scripts/write-path-tables.json` lists, `tenants`, `nodes`, `deployment`,
