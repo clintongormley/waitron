@@ -1873,7 +1873,7 @@ Left open:
 and the staff-facing names — is one data set, `casa-delgado-es`, which Spain's pack names; nothing
 a demo seeds changes.
 
-**The demo data carries Catalan and Galician text (W109-3, Task 3 of the same plan) — DONE; the
+**The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the
 text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
 in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
 `data-sets/casa-delgado-es.ts`) has a Catalan and a Galician value, written by Claude; nothing
