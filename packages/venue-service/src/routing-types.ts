@@ -1,13 +1,44 @@
 import type {
   FallbackStep,
-  RouteException,
   RouteTarget,
-  RoutingDecision,
+  RoutingRules,
   StationStatus,
   StationTransition,
   WeeklyInterval,
 } from "./routing.js";
 import type { ExtraMakerOutcome } from "@waitron/module";
+
+export type RoutingRow =
+  | { kind: "all" }
+  | { kind: "category"; categoryId: string }
+  | { kind: "product"; productId: string };
+
+/** `zoneId: null` is Every zone. */
+export type CellAddress = { row: RoutingRow; zoneId: string | null };
+
+export type RoutingCell = CellAddress & { target: RouteTarget };
+
+export type RoutingDecision = { kind: "cell"; address: CellAddress } | { kind: "default" };
+
+export type SelectedCell = { target: RouteTarget | null; decidedBy: RoutingDecision | null };
+
+export type RoutingSelectionRules = Pick<
+  RoutingRules,
+  "cells" | "parentOf" | "activeStationIds" | "defaultStationId"
+>;
+
+export type GridProduct = { id: string; name: string; categoryId: string | null };
+
+export type GridCategory = { id: string; name: string; parentId: string | null };
+
+export type GridRow = {
+  row: RoutingRow;
+  name: string;
+  path: string[];
+  depth: number;
+  hiddenProducts: number;
+  hiddenCategories: number;
+};
 
 export interface StationTimes {
   stationId: string;
@@ -46,6 +77,7 @@ export interface ExtraExplanation {
   fallbacks: FallbackStep[];
 }
 
+/** @deprecated Used only by the old exception routes; delete with them. */
 export interface ExceptionInput {
   zoneId: string | null;
   categoryId: string | null;
@@ -53,12 +85,8 @@ export interface ExceptionInput {
   target: RouteTarget;
 }
 
-export type RoutingChange =
-  | { kind: "claim"; categoryId: string; target: RouteTarget | null }
-  | { kind: "exception"; id: string | null; input: ExceptionInput }
-  | { kind: "exception_delete"; id: string }
-  | { kind: "exception_order"; ids: string[] }
-  | { kind: "assignment"; productId: string; target: RouteTarget };
+/** `target: null` clears the cell; No preparation is an explicit saved value. */
+export type RoutingChange = { kind: "cell"; address: CellAddress; target: RouteTarget | null };
 
 export interface RoutingMove {
   productId: string;
@@ -75,7 +103,16 @@ export interface RoutingModel {
   todayEnds: { timeOfDay: string; tomorrow: boolean } | null;
   clockReadable: boolean;
   claims: { categoryId: string; target: RouteTarget; stationOff: boolean }[];
-  exceptions: (RouteException & { neverMatches: boolean; stationOff: boolean })[];
+  exceptions: {
+    id: string;
+    position: number;
+    zoneId: string | null;
+    categoryId: string | null;
+    productId: string | null;
+    target: RouteTarget;
+    neverMatches: boolean;
+    stationOff: boolean;
+  }[];
   unassigned: { folders: { id: string; name: string }[]; products: { id: string; name: string }[] };
   defaultStationId: string | null;
   /** Includes referenced inactive stations, which the active-station management list omits. */
