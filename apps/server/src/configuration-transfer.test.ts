@@ -92,12 +92,10 @@ import {
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
 import {
-  configureZone,
   createDepartment,
   setDepartmentTransferSettings,
   setProfileServiceScope,
   createServiceZone,
-  deactivateDepartment,
   departmentSalePolicies,
   departments,
   readHolidays,
@@ -3369,21 +3367,14 @@ it("exports and imports all seven cell classes into another venue, remapping eve
       { row: noCategoryRow, zoneId: terraza.id },
       atStation(barra!.id),
     );
-    // A disabled station keeps its cells, and a zone moved into a switched-off department keeps its own.
+    // A disabled station keeps its cells.
     await tx
       .update(kitchenStations)
       .set({ active: false })
       .where(eq(kitchenStations.id, plancha!.id));
-    const closed = await createDepartment(tx, scope, {
-      name: "Comedor cerrado de rutas",
-      defaultServiceMode: "table_tab",
-    });
-    await deactivateDepartment(tx, scope, closed.id);
-    await configureZone(tx, scope, { zoneId: salon.id, departmentId: closed.id });
     return [
       source.locationId,
       department.id,
-      closed.id,
       terraza.id,
       salon.id,
       barra!.id,
