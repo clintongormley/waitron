@@ -10,6 +10,7 @@ import {
   nodes,
   printJobs,
   printAgents,
+  printers,
   tenants,
   withTransaction,
 } from "@waitron/db";
@@ -24,7 +25,14 @@ import {
   runAgentOnce,
   MAX_DELIVERY_ATTEMPTS,
 } from "@waitron/printing";
-import { hashSecret } from "@waitron/identity";
+import {
+  hashSecret,
+  hashPin,
+  persons,
+  startManagementSession,
+  IDENTITY_MIGRATIONS,
+} from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createClient, createAgent, FakeSink } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import { recordSale } from "@waitron/core";
@@ -42,7 +50,7 @@ import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 const clock: TrustedClock = {
   now: () => ({
     instant: new Date("2026-10-07T12:00:00.000Z"),
@@ -110,7 +118,8 @@ async function issue(full = true) {
 
 type ClaimWire = { deliveryId: string; generation: number; token: string };
 const inventory = { visible: [], scanned: [], pairedBluetooth: [], bluetoothOutcomes: [] };
-async function setup() {
+const MAC = "5A:4A:45:D4:FB:BB";
+async function setup(bluetooth = false) {
   const sale = await issue();
   const [location] = await suite.db.select().from(locations);
   const [node] = await suite.db.select().from(nodes);
@@ -128,7 +137,9 @@ async function setup() {
     createPrinter(
       tx,
       { locationId: location!.id },
-      { name: "Receipt", transport: "network_tcp", host: "printer.test" },
+      bluetooth
+        ? { name: "Receipt", transport: "bluetooth", localKey: MAC }
+        : { name: "Receipt", transport: "network_tcp", host: "printer.test" },
     ),
   );
   const job = await withTransaction(suite.db, (tx) =>
@@ -619,5 +630,254 @@ describe("invoice receipt API attempt boundary", () => {
     );
     expect(await ctx.row()).toEqual(delivery);
     expect(await ctx.jobRow()).toEqual(job);
+  });
+});
+
+async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
+  const session = await withTransaction(suite.db, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({
+        displayName: "Printer manager",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      })
+      .returning();
+    return startManagementSession(tx, { personId: person!.id });
+  });
+  return async (path: string, body: unknown, method = "POST") =>
+    ctx.app.request(path, {
+      method,
+      headers: {
+        cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+}
+async function bluetoothPull(
+  ctx: Awaited<ReturnType<typeof setup>>,
+  extra: Record<string, unknown> = {},
+) {
+  const response = await ctx.app.request("/print-api/agent/jobs", {
+    method: "POST",
+    headers: { authorization: `Bearer ${ctx.token}`, "content-type": "application/json" },
+    body: JSON.stringify({ pairedBluetooth: [{ localKey: MAC }], ...extra }),
+  });
+  expect(response.status).toBe(200);
+  return (await response.json()) as { jobs: { id: string; invoiceClaim?: ClaimWire }[] };
+}
+async function forget(
+  ctx: Awaited<ReturnType<typeof setup>>,
+  command: Awaited<ReturnType<typeof manager>>,
+) {
+  const response = await command(`/management-api/print-agents/${ctx.agentId}/bluetooth/forget`, {
+    address: MAC,
+  });
+  expect(response.status).toBe(202);
+  const { command: queued } = (await response.json()) as { command: { id: string } };
+  return bluetoothPull(ctx, {
+    bluetoothOutcomes: [{ id: queued.id, ok: true }],
+    pairedBluetooth: [],
+  });
+}
+async function emailRetry(ctx: Awaited<ReturnType<typeof setup>>) {
+  return withTransaction(suite.db, (tx) =>
+    reserveInvoiceDelivery(tx, ctx.sale.saleId, {
+      medium: "email",
+      requestKey: randomUUID(),
+      personId: "staff",
+      recipient: "customer@example.test",
+      consent: {
+        statementVersion: "1",
+        language: "es-ES",
+        recordedAt: ctx.now().toISOString(),
+        personId: "staff",
+        contactEmail: "venue@example.test",
+      },
+    }),
+  );
+}
+
+describe("invoice receipt terminal Bluetooth endings", () => {
+  it("leaves an invoice available when another agent can still print the Bluetooth device", async () => {
+    const ctx = await setup(true);
+    const response = await ctx.app.request("/print-api/agent/jobs", {
+      method: "POST",
+      headers: { authorization: `Bearer ${ctx.otherToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ visible: [{ transport: "bluetooth", localKey: MAC }] }),
+    });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { jobs: unknown[] }).jobs).toHaveLength(1);
+    expect((await bluetoothPull(ctx, { bluetoothPrinting: false })).jobs).toEqual([]);
+    expect(await ctx.row()).toMatchObject({
+      status: "sending",
+      failureCode: null,
+      expiredAt: null,
+    });
+    expect(await ctx.jobRow()).toMatchObject({ status: "printing", lastError: null });
+  });
+
+  it("accepts authenticated late success after unpairing before a retry and makes the next delivery a duplicate", async () => {
+    const ctx = await setup(true);
+    const command = await manager(ctx);
+    const pulled = await bluetoothPull(ctx, {
+      visible: [{ transport: "bluetooth", localKey: MAC }],
+    });
+    const claim = pulled.jobs[0]!.invoiceClaim!;
+    await forget(ctx, command);
+    expect(await ctx.row()).toMatchObject({ status: "unknown" });
+    expect(
+      (await ctx.result({ status: "done", invoiceClaim: { ...claim, token: randomUUID() } }))
+        .status,
+    ).toBe(204);
+    expect(await ctx.row()).toMatchObject({ status: "unknown", reportedAt: null });
+    expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
+    expect(await ctx.row()).toMatchObject({
+      status: "sent",
+      reportedOutcome: "sent",
+      completedAt: ctx.now().toISOString(),
+      failureCode: null,
+    });
+    expect(await ctx.jobRow()).toMatchObject({ status: "done", lastError: null });
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
+  });
+
+  it("keeps a completed invoice unchanged when the printer is later unpaired", async () => {
+    const ctx = await setup(true);
+    const command = await manager(ctx);
+    const pulled = await bluetoothPull(ctx, {
+      visible: [{ transport: "bluetooth", localKey: MAC }],
+    });
+    expect(
+      (await ctx.result({ status: "done", invoiceClaim: pulled.jobs[0]!.invoiceClaim })).status,
+    ).toBe(204);
+    const completed = await ctx.row();
+    await forget(ctx, command);
+    expect(await ctx.row()).toEqual(completed);
+    expect(await ctx.jobRow()).toMatchObject({ status: "done" });
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
+  });
+
+  it("releases a queued invoice when Bluetooth printing is unavailable and leaves it ended after recovery", async () => {
+    const ctx = await setup(true);
+    const otherSale = await issue();
+    const unrelated = await withTransaction(suite.db, async (tx) => {
+      const usb = await createPrinter(
+        tx,
+        { locationId: ctx.locationId },
+        {
+          name: "Other invoice printer",
+          transport: "usb",
+          localKey: "other-usb",
+        },
+      );
+      const job = await enqueuePrintJob(
+        tx,
+        { locationId: ctx.locationId },
+        usb.id,
+        new Uint8Array([27, 64]),
+        "document",
+        { saleId: otherSale.saleId, receiptCopy: false },
+      );
+      return reserveInvoiceDelivery(tx, otherSale.saleId, {
+        requestKey: randomUUID(),
+        personId: "staff",
+        medium: "receipt",
+        printJobId: job.jobId,
+      });
+    });
+    expect((await bluetoothPull(ctx, { bluetoothPrinting: false })).jobs).toEqual([]);
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(invoiceDeliveries)
+          .where(eq(invoiceDeliveries.id, unrelated.id))
+      )[0],
+    ).toEqual(unrelated);
+    expect(await ctx.jobRow()).toMatchObject({
+      status: "failed",
+      lastError: "printer.bluetooth_printing_unavailable",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+    });
+    expect(await ctx.row()).toMatchObject({
+      status: "failed",
+      failureCode: "transport_failed",
+      completedAt: null,
+      claimTokenHash: null,
+    });
+    const retry = await emailRetry(ctx);
+    expect(retry).toMatchObject({ status: "queued", designation: "original", generation: 2 });
+    expect(
+      (
+        await bluetoothPull(ctx, {
+          bluetoothPrinting: true,
+          visible: [{ transport: "bluetooth", localKey: MAC }],
+        })
+      ).jobs,
+    ).toEqual([]);
+    expect(await ctx.row()).toMatchObject({ status: "failed" });
+  });
+
+  it("releases a queued invoice after confirmed unpairing and does not print it on reactivation", async () => {
+    const ctx = await setup(true);
+    const command = await manager(ctx);
+    expect((await bluetoothPull(ctx)).jobs).toEqual([]);
+    expect((await forget(ctx, command)).jobs).toEqual([]);
+    expect(await ctx.jobRow()).toMatchObject({
+      status: "failed",
+      lastError: "printer.unpaired",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+    });
+    expect(await ctx.row()).toMatchObject({
+      status: "failed",
+      failureCode: "transport_failed",
+      expiredAt: null,
+    });
+    expect(
+      (await command(`/management-api/printers/${ctx.printer.id}`, { active: true }, "PATCH"))
+        .status,
+    ).toBe(204);
+    expect(
+      (await suite.db.select().from(printers).where(eq(printers.id, ctx.printer.id)))[0],
+    ).toMatchObject({ active: true });
+    expect(
+      (await bluetoothPull(ctx, { visible: [{ transport: "bluetooth", localKey: MAC }] })).jobs,
+    ).toEqual([]);
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "original" });
+  });
+
+  it("keeps a claimed invoice unknown after unpairing and fences its late success behind a newer attempt", async () => {
+    const ctx = await setup(true);
+    const command = await manager(ctx);
+    const pulled = await bluetoothPull(ctx, {
+      visible: [{ transport: "bluetooth", localKey: MAC }],
+    });
+    expect(pulled.jobs).toHaveLength(1);
+    const claim = pulled.jobs[0]!.invoiceClaim!;
+    expect(claim).toBeDefined();
+    const tokenHash = (await ctx.row()).claimTokenHash;
+    await forget(ctx, command);
+    expect(await ctx.row()).toMatchObject({
+      status: "unknown",
+      failureCode: "transport_failed",
+      expiredAt: ctx.now().toISOString(),
+      claimTokenHash: tokenHash,
+    });
+    const retry = await emailRetry(ctx);
+    expect(retry).toMatchObject({ designation: "original" });
+    expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
+    expect(await ctx.row()).toMatchObject({
+      status: "unknown",
+      reportedOutcome: "sent",
+      completedAt: null,
+    });
+    expect(
+      (
+        await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry.id))
+      )[0],
+    ).toMatchObject({ status: "queued", designation: "original" });
+    expect(await ctx.jobRow()).toMatchObject({ status: "failed", lastError: "printer.unpaired" });
   });
 });

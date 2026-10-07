@@ -97,8 +97,13 @@
 uses the real print agent/client and the demo printer. Generic local claim/report paths leave
 these correlated jobs to the adapter. Its tests cover due-time eligibility, lost claims,
 authenticated latest/historical outcomes, same-agent receipt retries, ordinary job controls
-and claim rollback. Original/resend enrollment, unpairing/unavailable-Bluetooth projection,
-bill staging, A4 references and restart/retry workers remain. No Task 2 completion claim.
+and claim rollback. For enrolled receipts, the pull projects confirmed unpairing and
+unavailable-Bluetooth endings in the same transaction. Queued receipts become failed;
+handed-out receipts become unknown and keep their claim hash for authenticated late results.
+The API tests cover printer reactivation without replay, the other-agent printable control,
+completed originals and late success before and after a newer attempt. Original/resend
+enrollment, bill staging, A4 references and restart/retry workers remain. No Task 2 completion
+claim.
 
 ## 3. Set up email for a live venue, without a terminal
 
