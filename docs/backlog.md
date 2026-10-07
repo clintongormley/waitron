@@ -1181,6 +1181,13 @@ cases cover edited/reverted/clean values, stale answers, native Escape and focus
 the dated audit records the failing tests, installed deletion controls and inspected captures.
 The final advancing-owner/context/link audit and branch review remain unfinished.
 
+The dashboard shell now lets fragment-only login links run their form actions. Real reset-link
+cases first failed because the shell consumed the click; Keep now retains the password, and
+Discard sends the reset once without changing the hash. Clean and reverted passwords reset directly.
+The bill-payment consumer suite now accepts the leave warning before its existing late-response
+assertions; payment/refund amounts, permissions and operator boundaries stay checked unchanged.
+The dated audit records this fixture change and the broader run's failures and focused rerun.
+
 The till's profile switch now protects an edited Schedule request before changing context.
 Keep retains its note and chooser; Discard switches once without submitting. An order filled
 while the question is open still refuses the switch. Clean/reverted requests switch directly,

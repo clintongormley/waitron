@@ -1515,6 +1515,7 @@ export class DashboardApp extends LitElement {
     if (
       !anchor ||
       anchor.hasAttribute("download") ||
+      anchor.getAttribute("href")?.startsWith("#") ||
       (anchor.target !== "" && anchor.target !== "_self")
     )
       return;

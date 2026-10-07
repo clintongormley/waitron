@@ -24,7 +24,7 @@ afterEach(() => {
   sessionStorage.clear();
   setLocale("en-GB");
 });
-async function mount(path = "/manage/") {
+async function mount(path = "/manage/", overrides: Partial<DashboardApi> = {}) {
   history.replaceState({ external: "preserved" }, "", path);
   const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
     api: {
@@ -46,6 +46,7 @@ async function mount(path = "/manage/") {
         email: "new@example.test",
         purpose,
       }),
+      ...overrides,
     } as unknown as DashboardApi,
   });
   await expect
@@ -86,6 +87,56 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+
+it("the real login reset link protects a password and runs its local action after Discard", async () => {
+  const requestPasswordReset = vi.fn().mockResolvedValue(undefined);
+  const app = await mount("/manage/", { requestPasswordReset });
+  await enter(app, "email", "ada@example.test");
+  login(app).shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+  await expect.poll(() => field(app, "password")).not.toBeNull();
+  const password = await enter(app, "password", "synthetic password");
+  const link = login(app).shadowRoot!.querySelector<HTMLAnchorElement>(
+    "[data-test=reset-by-email]",
+  )!;
+  await userEvent.click(link);
+  await choose(app, "keep");
+  expect(password.value).toBe("synthetic password");
+  expect(requestPasswordReset).not.toHaveBeenCalled();
+  expect(location.hash).toBe("");
+  await userEvent.click(link);
+  await choose(app, "discard");
+  await expect
+    .poll(() => login(app).shadowRoot!.querySelector("[data-test=reset-sent]"))
+    .not.toBeNull();
+  expect(requestPasswordReset).toHaveBeenCalledExactlyOnceWith("ada@example.test");
+  expect(location.hash).toBe("");
+  expect(unload()).toBe(false);
+});
+
+it.each(["clean", "reverted"])(
+  "the real %s login reset link acts without a warning",
+  async (state) => {
+    const requestPasswordReset = vi.fn().mockResolvedValue(undefined);
+    const app = await mount("/manage/", { requestPasswordReset });
+    await enter(app, "email", "ada@example.test");
+    login(app).shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+    await expect.poll(() => field(app, "password")).not.toBeNull();
+    if (state === "reverted") {
+      await enter(app, "password", "synthetic password");
+      await enter(app, "password", "");
+    }
+    await userEvent.click(
+      login(app).shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=reset-by-email]")!,
+    );
+    await expect
+      .poll(() => login(app).shadowRoot!.querySelector("[data-test=reset-sent]"))
+      .not.toBeNull();
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(requestPasswordReset).toHaveBeenCalledExactlyOnceWith("ada@example.test");
+    expect(location.hash).toBe("");
+    expect(unload()).toBe(false);
+  },
+);
 
 it("the dashboard's login action URL remains until Cancel is accepted", async () => {
   const app = await mount("/manage/account?token=synthetic&purpose=invitation");

@@ -1527,7 +1527,9 @@ On the W69 branch, the dashboard installs the shared accepted-history adapter. I
 callback receives the destination URL so Account settings can retain the underlying page's
 drafts. Sidebar and product-link requests defer screen changes until acceptance. Plain same-app
 anchors use the dispatched click's composed path; modified clicks, new-tab targets and downloads
-keep browser handling. The profile shell tests cover Keep/Discard through sidebar, links and
+keep browser handling. Fragment-only form links keep their target's click handler, which owns
+any leave request; the dashboard shell does not turn them into page navigation. The profile shell
+tests cover Keep/Discard through sidebar, links and
 indexed Back/Forward. Other application shells, direct history writers and individual page/tab
 owners remain part of the rollout.
 

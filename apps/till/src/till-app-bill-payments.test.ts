@@ -47,6 +47,15 @@ import type {
 // A table's bill paid in parts through the bill payment dialog (plan Task 15, design §12): the
 // dialog asks the server for each allocation, shows it, takes it, and the bill's balance follows.
 
+async function discardUnsavedLeave(el: TillApp): Promise<void> {
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await flush(el);
+}
+
 const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
 
 function partyOf(over: Partial<TableParty> = {}): TableParty {
@@ -1301,6 +1310,7 @@ describe("till-app: the bill payment dialog's own steps", () => {
       const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
 
       emit(tableOrder(el), "logout");
+      await discardUnsavedLeave(el);
       await flush(el);
       if (settle === "resolve") answer.resolve(cash("40.00", "10.00"));
       else answer.reject({ code: "bill.nothing_outstanding" });
@@ -1328,6 +1338,7 @@ describe("till-app: the bill payment dialog's own steps", () => {
     await press(el, "[data-pay-confirm]");
 
     emit(tableOrder(el), "back-to-floor");
+    await discardUnsavedLeave(el);
     await flush(el);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
@@ -1967,6 +1978,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(takeBillPayment).toHaveBeenCalledOnce();
 
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     const orderReads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
     answer(
@@ -1989,6 +2001,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
@@ -2017,6 +2030,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
@@ -2061,6 +2075,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
@@ -2103,6 +2118,7 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
     emit(counter(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     failEarlier(new TypeError("Failed to fetch"));
     // The send waits one retry pause, then sees the session has ended and gives up.
@@ -3543,6 +3559,7 @@ describe("till-app: giving back a bill payment", () => {
       const reads = getBillBalance.mock.calls.length;
 
       emit(tableOrder(el), "logout");
+      await discardUnsavedLeave(el);
       await flush(el);
       if (settle === "resolve")
         answer.resolve(request === "approvers" ? manager : givenBack(cashPaid, refundOf()));
@@ -3564,6 +3581,7 @@ describe("till-app: giving back a bill payment", () => {
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await askRefund({ refundBillPayment }, cashPaid);
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     await signInAndAskRefund(el, cashPaid);
     await expect
@@ -3594,6 +3612,7 @@ describe("till-app: giving back a bill payment", () => {
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await askRefund({ refundBillPayment }, cashPaid);
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     await signInAndAskRefund(el, cashPaid);
     const [earlier, next] = refunds().map(({ request }) => request.submissionId);
@@ -3622,6 +3641,7 @@ describe("till-app: giving back a bill payment", () => {
       .mockResolvedValue(givenBack(cashPaid, refundOf()));
     const el = await askRefund({ refundBillPayment }, cashPaid);
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     failEarlier(new TypeError("Failed to fetch"));
     // The send waits one retry pause, then sees the session has ended and gives up.
@@ -3641,6 +3661,7 @@ describe("till-app: giving back a bill payment", () => {
     const el = await askRefund({ refundBillPayment }, cashPaid);
 
     emit(tableOrder(el), "logout");
+    await discardUnsavedLeave(el);
     await flush(el);
     refuse(notPermitted);
     await flush(el);

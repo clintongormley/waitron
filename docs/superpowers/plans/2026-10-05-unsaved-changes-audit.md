@@ -3825,3 +3825,63 @@ This checkpoint covers the measured unassigned table owner. The final advancing-
 remaining context/link acceptance, reconciliation with main, whole-branch review and current-head
 CI remain outstanding. Tasks 2/3 stay complete; Tasks 1/4/5/6 stay partial. W69 is not ready for
 finish-branch or landing.
+
+
+## Dashboard local links and bill-payment consumers, 2026-10-07
+
+The branch was rebased from `f88398265c3b546b429c2e674a76473762fe3d52` onto
+`5839b1e4b57a2608ff4621f2b6a37c4c35aa1ce7`, without conflicts. All 109 entries in
+`git range-diff` report unchanged patches. Main adds the actionable `device.profile_changed`
+refusal to the till, alongside new tests; the combined tree retains it. The locked dependency
+install and dashboard/till/setup typechecks passed after the rebase.
+
+A source inventory of application/contributed links found the login's `#fieldLink` family.
+The dashboard capture handler treated those fragment-only form actions as ordinary page links,
+preventing their target handlers from running. Three actual-dashboard reset-link cases failed:
+Dirty/Keep/Discard never reached the reset notice, and clean/reverted resets never reached it
+either. The handler now leaves fragment-only links to their target. The login still owns its
+shared leave request; ordinary same-app URLs with fragments still use the shell's navigation gate.
+The new cases assert the retained password on Keep, one reset for the entered email on Discard,
+no hash change and clean/revert exemptions. Existing assertions are unchanged. The login fixture
+accepts optional API overrides for the new reset command.
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.login-unsaved.test.ts -t 'the real .*login reset link'
+# before the fix: 3 failed
+pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.login-unsaved.test.ts src/dashboard-app.unsaved-changes.test.ts src/dashboard-app.profile-unsaved.test.ts src/screens/login-screen.unsaved.test.ts src/screens/login-screen.test.ts
+# after the fix: 337 passed
+```
+
+In an independently installed detached candidate, deleting only the fragment exemption failed
+all three new cases. Both ordinary same-app anchor controls passed, including full paths with
+query strings and fragments. Restoring the exemption passed all five selected cases. Three
+candidate source/test files were compared with the feature tree before removing the owned
+measuring checkout and its empty parent. Receipts: `link-deletion.log`, `link-restored.log`,
+`link-candidate-comparison.txt` and `link-candidate-cleanup.txt` under the same local receipt directory.
+
+The broader rebased till command added `src/till-app-bill-payments.test.ts` to the earlier
+three-file family. It reported 16 failures and 1064 passes; its other three files passed.
+The failed cases attempted voluntary signout or Back from an edited payment/refund form without
+accepting W69's leave warning. Twelve leave sites now explicitly assert the question is open
+and choose Discard before continuing those cases. Their payment/refund values, permission,
+idempotency, operator-boundary and late-response assertions are unchanged. This follows the
+design's Leaving a page rule requiring a question before voluntary signout or navigation, while
+forced exits stay separate. The cases are listed for the eventual PR's Changed test checks FYI.
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts
+# after the leave-step updates: 109 passed
+```
+
+Those failures are retained in `rebased-family.log`; this is no package-wide or CI green claim.
+The focused payment-consumer rerun is `bill-pay-consumers.log`. The login family, scoped lint,
+source formatting and dashboard/till typechecks pass. No fiscal golden data, money calculation,
+permission or guard assertion was changed.
+
+The inventory also locates contributed image-usage, routing, receipt-context, menu and product
+links, the demo bar, setup help/cloud/done links, and till enrolment's approval guide. It is a
+source candidate list, including a few test helpers, not runtime acceptance for all those paths.
+Finish that route/context matrix and the final full owner/exemption audit against this base,
+retire current rollout wording in the shared contract/backlog where the evidence supports it,
+then perform the one whole-branch run-it review, normal hook and current-head CI. W69 remains
+in progress and is not ready to finish or land.
