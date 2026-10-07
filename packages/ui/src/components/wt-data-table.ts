@@ -948,7 +948,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   /** Below the side width the panel is a full-screen popover, shown once it is rendered as one. */
-  #placeLeadingFilters(): void {
+  #placeFilters(): void {
     const panel = this.filtersPanel;
     if (!panel || !this.isConnected) return;
     panel.toggleAttribute("data-fullscreen", !this.sideFilters);
@@ -987,7 +987,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (changed.has("searchable") && !this.searchable) this.removeAttribute("stacked-search");
     if (changed.has("columns") || changed.has("searchable")) this.#observeHost();
     if (changed.has("filtersOpen") || changed.has("sideFilters") || changed.has("columns"))
-      this.#placeLeadingFilters();
+      this.#placeFilters();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -1409,7 +1409,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (!this.#watchesHost()) this.#hostObserver.disconnect();
   }
 
-  async #toggleLeadingFilters(event: MouseEvent): Promise<void> {
+  async #toggleFilters(event: MouseEvent): Promise<void> {
     event.preventDefault();
     if (this.filtersOpen) {
       this.#hideFilters();
@@ -1984,7 +1984,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (!this.searchable && !hasFilters && !chooser && !start && !end && expandAll === nothing)
       return nothing;
     return html`<div class="table-toolbar">
-      ${hasFilters ? this.#renderLeadingTrigger(activeCount) : nothing}
+      ${hasFilters ? this.#renderFiltersTrigger(activeCount) : nothing}
       <slot name="toolbar-start"></slot>
       ${
         this.searchable
@@ -2014,7 +2014,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </div>`;
   }
 
-  #renderLeadingTrigger(activeCount: number) {
+  #renderFiltersTrigger(activeCount: number) {
     return html`<button
       type="button"
       class="filters-trigger icon-button"
@@ -2023,7 +2023,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       aria-controls="filters-panel"
       aria-describedby=${activeCount ? "filters-count" : nothing}
       popovertarget="filters-panel"
-      @click=${this.#toggleLeadingFilters}
+      @click=${this.#toggleFilters}
       @pointerenter=${trackIconTooltip}
       @pointerleave=${trackIconTooltip}
       @focus=${trackIconTooltip}

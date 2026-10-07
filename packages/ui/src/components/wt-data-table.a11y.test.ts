@@ -607,7 +607,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  async function leadingTable(): Promise<WtDataTable<Row>> {
+  async function filteredTable(): Promise<WtDataTable<Row>> {
     const el = (await mountThemed(
       `<wt-data-table aria-label="Users" style="width: 900px"
         ><input slot="toolbar-start" type="search" aria-label="Search users"
@@ -635,8 +635,8 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     return el;
   }
 
-  test("a leading Filters button with a count, its tooltip shown on keyboard focus", async () => {
-    const el = await leadingTable();
+  test("a Filters button with a count, its tooltip shown on keyboard focus", async () => {
+    const el = await filteredTable();
     const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
     (document.activeElement as HTMLElement | null)?.blur();
     await userEvent.tab();
@@ -646,12 +646,12 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("a leading Filters panel open beside the rows", async () => {
+  test("a Filters panel open beside the rows", async () => {
     const width = innerWidth,
       height = innerHeight;
     await page.viewport(1280, 900);
     try {
-      const el = await leadingTable();
+      const el = await filteredTable();
       const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
       await userEvent.click(trigger);
       await el.updateComplete;

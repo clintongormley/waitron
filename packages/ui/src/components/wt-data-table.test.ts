@@ -3293,7 +3293,6 @@ test("a long filter's search box and empty list read English wording by default"
   expect(await filterSearchWording(statusSelect(el))).toEqual(["Search", "No results"]);
 });
 
-/** Opens the filter's list and clicks the row labelled `label`, as a person would. */
 /** Presses Filters and waits until the panel is open, beside the rows or over the screen. */
 async function openFilters(el: WtDataTable<RowS>): Promise<void> {
   const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
@@ -3302,6 +3301,7 @@ async function openFilters(el: WtDataTable<RowS>): Promise<void> {
   await el.updateComplete;
 }
 
+/** Opens the filter's list and clicks the row labelled `label`, as a person would. */
 async function clickFilterRow(filter: WtCombobox, label: string): Promise<void> {
   const root = filter.getRootNode() as ShadowRoot;
   if (root.querySelector(".filters-trigger")!.getAttribute("aria-expanded") !== "true")
@@ -6597,7 +6597,7 @@ test("rows that share a key three at a time are each drawn, through a reorder", 
 
 /** A table with a control a screen slots at the toolbar's start, and the given
  * width, in a 1280×900 window unless the test changes it. */
-async function leadingTable<R>(
+async function filteredTable<R>(
   width: number,
   props: Partial<WtDataTable<R>>,
 ): Promise<{
@@ -6635,7 +6635,7 @@ async function inWindow(width: number, height: number, body: () => Promise<void>
   }
 }
 
-const leadingSticky = {
+const stickyTree = {
   rows: stickyRows,
   columns: stickyColumns,
   rowKey: (r: StickyRow) => r.id,
@@ -6661,7 +6661,7 @@ async function pickInOpenPanel(filter: WtCombobox, label: string): Promise<void>
 
 test("Filters is drawn first, as an icon button named by its label, with its count and the panel it controls", async () => {
   const status = withStatus[1]!;
-  const { el, root, trigger } = await leadingTable<RowS>(900, {
+  const { el, root, trigger } = await filteredTable<RowS>(900, {
     rows: rowsS,
     rowKey: (r: RowS) => r.id,
     columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
@@ -6729,7 +6729,7 @@ test("a table with a filter column and no other setting draws the Filters icon b
 
 test("a table taken off the page with its full-screen Filters open accepts new columns", async () => {
   await inWindow(390, 844, async () => {
-    const { el, trigger, panel } = await leadingTable<StickyRow>(390, leadingSticky);
+    const { el, trigger, panel } = await filteredTable<StickyRow>(390, stickyTree);
     trigger.click();
     await el.updateComplete;
     expect(panel.matches(":popover-open")).toBe(true);
@@ -6742,7 +6742,7 @@ test("a table taken off the page with its full-screen Filters open accepts new c
 test("a table put back on the page after leaving with its full-screen Filters open shows Filters closed, and one click opens them", async () => {
   onTestFinished(() => commands.parkPointer());
   await inWindow(390, 844, async () => {
-    const { el, trigger, panel } = await leadingTable<StickyRow>(390, leadingSticky);
+    const { el, trigger, panel } = await filteredTable<StickyRow>(390, stickyTree);
     const parent = el.parentElement!;
     trigger.click();
     await el.updateComplete;
@@ -6762,10 +6762,10 @@ test("a table put back on the page after leaving with its full-screen Filters op
   });
 });
 
-test("the leading Filters button's tooltip shows on hover and on keyboard focus, over the sticky headings, and Escape hides it", async () => {
+test("the Filters button's tooltip shows on hover and on keyboard focus, over the sticky headings, and Escape hides it", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, root, trigger } = await leadingTable<StickyRow>(900, {
-      ...leadingSticky,
+    const { el, root, trigger } = await filteredTable<StickyRow>(900, {
+      ...stickyTree,
       filtersLabel: "Show only some rows",
     });
     el.style.height = "560px";
@@ -6812,9 +6812,9 @@ test("the leading Filters button's tooltip shows on hover and on keyboard focus,
   });
 });
 
-test("a click on the leading Filters button's tooltip, where it lies over the headings, leaves Filters closed; a click on its icon opens it", async () => {
+test("a click on the Filters button's tooltip, where it lies over the headings, leaves Filters closed; a click on its icon opens it", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, root, trigger } = await leadingTable<StickyRow>(900, leadingSticky);
+    const { el, root, trigger } = await filteredTable<StickyRow>(900, stickyTree);
     el.style.height = "560px";
     await settle();
     const tooltip = trigger.querySelector<HTMLElement>(".icon-tooltip")!;
@@ -6831,9 +6831,9 @@ test("a click on the leading Filters button's tooltip, where it lies over the he
   });
 });
 
-test("a wide leading Filters panel opens in the flow at the rows' leading side, with the rows visible beside it, and closing gives the rows back the width", async () => {
+test("a wide Filters panel opens in the flow at the rows' leading side, with the rows visible beside it, and closing gives the rows back the width", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, root, trigger, panel } = await leadingTable<StickyRow>(900, leadingSticky);
+    const { el, root, trigger, panel } = await filteredTable<StickyRow>(900, stickyTree);
     el.style.height = "560px";
     await settle();
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
@@ -6887,7 +6887,7 @@ test("a wide leading Filters panel opens in the flow at the rows' leading side, 
 
 test("a filter chosen in the side panel does not hold the rows at the narrower width once it closes", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, root, trigger, panel } = await leadingTable<RowS>(900, {
+    const { el, root, trigger, panel } = await filteredTable<RowS>(900, {
       rows: rowsS,
       rowKey: (r: RowS) => r.id,
       columns: withStatus,
@@ -6912,10 +6912,10 @@ test.each([
   [390, 390],
   [1280, 500],
 ])(
-  "in a %i px window a %i px leading table opens Filters full screen, keeping Tab inside",
+  "in a %i px window a %i px table opens Filters full screen, keeping Tab inside",
   async (windowWidth, width) => {
     await inWindow(windowWidth, 900, async () => {
-      const { el, root, trigger, panel } = await leadingTable<RowS>(width, {
+      const { el, root, trigger, panel } = await filteredTable<RowS>(width, {
         rows: rowsS,
         rowKey: (r: RowS) => r.id,
         columns: [...withStatus, { ...withStatus[1]!, key: "other-status" }],
@@ -6948,9 +6948,9 @@ test.each([
   },
 );
 
-test("an open leading Filters panel moves between the side and full screen as the table's width crosses the threshold, keeping its choices", async () => {
+test("an open Filters panel moves between the side and full screen as the table's width crosses the threshold, keeping its choices", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, root, trigger, panel } = await leadingTable<RowS>(900, {
+    const { el, root, trigger, panel } = await filteredTable<RowS>(900, {
       rows: rowsS,
       rowKey: (r: RowS) => r.id,
       columns: withStatus,
@@ -6981,7 +6981,7 @@ test("an open leading Filters panel moves between the side and full screen as th
 test("when the filters hide every row, the side panel stays open beside the no-matches message", async () => {
   await inWindow(1280, 900, async () => {
     const status = withStatus[1]!;
-    const { el, root, trigger, panel } = await leadingTable<RowS>(900, {
+    const { el, root, trigger, panel } = await filteredTable<RowS>(900, {
       rows: [rowsS[1]!],
       rowKey: (r: RowS) => r.id,
       columns: [withStatus[0]!, { ...status, filter: { ...status.filter!, initial: "active" } }],
@@ -7006,7 +7006,7 @@ test("when the filters hide every row, the side panel stays open beside the no-m
 
 test("under stickyHeader the side panel fills the rows' height and it and its trigger stay put while the rows scroll", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, root, trigger, panel } = await leadingTable<StickyRow>(900, leadingSticky);
+    const { el, root, trigger, panel } = await filteredTable<StickyRow>(900, stickyTree);
     el.style.height = "560px";
     await userEvent.click(trigger);
     await el.updateComplete;
@@ -7032,9 +7032,9 @@ test("under stickyHeader the side panel fills the rows' height and it and its tr
   });
 });
 
-test("the leading Filters button paints its open state and its tooltip from theme tokens", async () => {
+test("the Filters button paints its open state and its tooltip from theme tokens", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, trigger } = await leadingTable<RowS>(900, {
+    const { el, trigger } = await filteredTable<RowS>(900, {
       rows: rowsS,
       rowKey: (r: RowS) => r.id,
       columns: withStatus,
@@ -7057,9 +7057,9 @@ test("the leading Filters button paints its open state and its tooltip from them
   });
 });
 
-test("from 768 px a leading tree opens Filters beside rows that keep their wide indent, and below it full screen", async () => {
+test("from 768 px a tree opens Filters beside rows that keep their wide indent, and below it full screen", async () => {
   await inWindow(1280, 900, async () => {
-    const wide = await leadingTable<StickyRow>(768, leadingSticky);
+    const wide = await filteredTable<StickyRow>(768, stickyTree);
     wide.el.style.height = "560px";
     await userEvent.click(wide.trigger);
     await wide.el.updateComplete;
@@ -7069,16 +7069,16 @@ test("from 768 px a leading tree opens Filters beside rows that keep their wide 
     expect(wide.panel.matches(":popover-open")).toBe(false);
     expect(wide.el.hasAttribute("narrow")).toBe(false);
     cleanup();
-    const narrow = await leadingTable<StickyRow>(767, leadingSticky);
+    const narrow = await filteredTable<StickyRow>(767, stickyTree);
     await userEvent.click(narrow.trigger);
     await narrow.el.updateComplete;
     expect(narrow.panel.matches(":popover-open")).toBe(true);
   });
 });
 
-test("Escape with focus outside a full-screen leading Filters panel closes it and reports it closed, and Filters opens it again", async () => {
+test("Escape with focus outside a full-screen Filters panel closes it and reports it closed, and Filters opens it again", async () => {
   await inWindow(1280, 900, async () => {
-    const { el, root, trigger, panel } = await leadingTable<RowS>(500, {
+    const { el, root, trigger, panel } = await filteredTable<RowS>(500, {
       rows: rowsS,
       rowKey: (r: RowS) => r.id,
       columns: withStatus,
@@ -7106,10 +7106,10 @@ async function chooseByKeys(steps: number): Promise<void> {
 }
 
 test.each([[900], [500]])(
-  "in a %i px leading table, a keyboard choice that empties the rows and one that brings them back leave focus on the filter, and Escape still closes",
+  "in a %i px table, a keyboard choice that empties the rows and one that brings them back leave focus on the filter, and Escape still closes",
   async (width) => {
     await inWindow(1280, 900, async () => {
-      const { el, root, trigger, panel } = await leadingTable<RowS>(width, {
+      const { el, root, trigger, panel } = await filteredTable<RowS>(width, {
         rows: [rowsS[0]!],
         rowKey: (r: RowS) => r.id,
         columns: withStatus,
@@ -7147,9 +7147,9 @@ test.each([[900], [500]])(
   },
 );
 
-test("the leading Filters button's tooltip stays shown while the pointer moves from the button across the gap onto it, and once hidden it takes no pointer", async () => {
+test("the Filters button's tooltip stays shown while the pointer moves from the button across the gap onto it, and once hidden it takes no pointer", async () => {
   await inWindow(1280, 900, async () => {
-    const { root, trigger } = await leadingTable<RowS>(900, {
+    const { root, trigger } = await filteredTable<RowS>(900, {
       rows: rowsS,
       rowKey: (r: RowS) => r.id,
       columns: withStatus,
