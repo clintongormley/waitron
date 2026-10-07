@@ -606,3 +606,44 @@ describe("a link entry", () => {
     }
   });
 });
+
+test("reinserted after removal while open reports closed and opens normally again", async () => {
+  const { el, trigger, popup } = await mountActions();
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+  expect(popup.matches(":popover-open")).toBe(true);
+
+  el.remove();
+  host.append(el);
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("removal during opening does not let a pending toggle report a closed popup as open", async () => {
+  const { el, trigger, popup } = await mountActions();
+  const toggled = new Promise<void>((resolve) =>
+    popup.addEventListener("toggle", () => resolve(), { once: true }),
+  );
+  trigger.click();
+  expect(popup.matches(":popover-open")).toBe(true);
+  el.remove();
+  await toggled;
+
+  host.append(el);
+  await el.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  await userEvent.click(trigger);
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+});

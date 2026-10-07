@@ -64,8 +64,8 @@ export class WtHelpTooltip extends LitElement {
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
 
-  private onToggle(event: ToggleEvent): void {
-    this.open = event.newState === "open";
+  private onToggle(): void {
+    this.open = this.popup.matches(":popover-open");
     if (this.open) {
       document.addEventListener("keydown", this.onDocumentKeydown, { capture: true });
       document.addEventListener("focusin", this.onDocumentFocusin, { capture: true });
@@ -76,6 +76,7 @@ export class WtHelpTooltip extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.open = false;
     document.removeEventListener("keydown", this.onDocumentKeydown, { capture: true });
     document.removeEventListener("focusin", this.onDocumentFocusin, { capture: true });
     super.disconnectedCallback();

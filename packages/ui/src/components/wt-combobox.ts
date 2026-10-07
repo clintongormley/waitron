@@ -828,6 +828,11 @@ export class WtCombobox extends LitElement {
     this.trigger.focus();
   }
 
+  override disconnectedCallback(): void {
+    this.expanded = false;
+    super.disconnectedCallback();
+  }
+
   private onToggle(event: ToggleEvent): void {
     this.expanded = event.newState === "open";
   }
