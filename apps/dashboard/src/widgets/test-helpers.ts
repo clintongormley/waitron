@@ -24,8 +24,7 @@ beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", 
 
 /**
  * The cursor belongs to the shared page, not to the test that moved it, and it outlives the file that
- * moved it. Without this an a11y scan can catch a button dimmed by `wt-button`'s hover rule and report
- * a colour-contrast violation nobody can see in the app.
+ * moved it.
  */
 beforeEach(() => commands.parkPointer());
 

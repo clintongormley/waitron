@@ -10,7 +10,6 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 
 afterEach(cleanupWidgets);
 
-// The secondary variant is one that `wt-button`'s hover rule dims.
 const BUTTON_PROPS = { variant: "secondary", textContent: "Add" };
 
 it("parks the cursor on a button, so the next test starts with a stale hover to clear", async () => {
@@ -25,7 +24,7 @@ it("parks the cursor on a button, so the next test starts with a stale hover to 
   expect(inner.matches(":hover")).toBe(true);
 });
 
-it("starts with no element hovered, so an a11y scan sees undimmed colours", async () => {
+it("starts with no element hovered", async () => {
   const { el, host } = await mountWidget<HTMLElement & { shadowRoot: ShadowRoot }>(
     "wt-button",
     BUTTON_PROPS,

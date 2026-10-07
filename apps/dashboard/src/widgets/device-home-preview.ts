@@ -196,6 +196,10 @@ export class DeviceHomePreview extends LitElement {
         color: var(--tile-ink);
       }
 
+      wt-button.tile[data-painted]::part(button):hover:not(:disabled) {
+        border-color: var(--tile-ink);
+      }
+
       .tile[data-painted] .price,
       .tile[data-painted] .kind,
       .tile[data-painted] wt-icon {

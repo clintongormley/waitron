@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi } from "../api/client.js";
 import type { AddContentLanguageDialog } from "../widgets/add-content-language.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { page, userEvent } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import "./content-languages-screen.js";
 import type { ContentLanguagesScreen } from "./content-languages-screen.js";
 
@@ -44,6 +46,42 @@ async function flush(el: ContentLanguagesScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s theme)", (theme) => {
+  it.each([
+    ["en-GB", 390],
+    ["en-GB", 1280],
+    ["es-ES", 390],
+    ["es-ES", 1280],
+  ] as const)("hovered language actions are accessible in %s at %i px", async (locale, width) => {
+    const previous = currentLocale();
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    setLocale(locale);
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el, host } = await mountWidget<ContentLanguagesScreen>(
+        "dashboard-content-languages-screen",
+        { api: stubApi(LOADED) },
+        theme,
+      );
+      await flush(el);
+      const actions = el.shadowRoot!.querySelectorAll(".card-action");
+      expect(actions.length).toBeGreaterThan(0);
+      for (const action of actions) {
+        const inner = action.shadowRoot!.querySelector("button")!;
+        await userEvent.hover(inner);
+        expect(inner.matches(":hover")).toBe(true);
+        await expectNoA11yViolations(host);
+      }
+      await page.screenshot({
+        element: host,
+        path: `__screenshots__/look/a319-languages-${locale}-${theme}-${width}.png`,
+      });
+    } finally {
+      setLocale(previous);
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
   it.each([
     ["loaded", LOADED],
     ["loading", () => new Promise(() => {})],

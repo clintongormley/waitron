@@ -45,11 +45,9 @@ export class WtButton extends LitElement {
         ${disabledStyles}
       }
 
-      /* Secondary and ghost dip in opacity on hover. Primary and danger swap to their hover fill
-         instead (below): a dip fades a filled button and its label toward what is behind them,
-         which took axe's contrast reading below 4.5:1 (wt-button.a11y.test.ts, wt-modal's). */
-      button:hover:not(:disabled) {
-        opacity: var(--wt-opacity-hover);
+      :host([variant="secondary"]) button:hover:not(:disabled),
+      :host([variant="ghost"]) button:hover:not(:disabled) {
+        border-color: var(--wt-color-primary-text);
       }
 
       :host([size="sm"]) button {

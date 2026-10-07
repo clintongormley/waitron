@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { page, userEvent } from "vitest/browser";
 import "./image-upload.js";
 // The app registers `media-image-picker` through the module registry, as dashboard-app.ts does.
 import "@waitron/dashboard-modules";
@@ -29,6 +30,24 @@ function stubLibraryApi(): DashboardApi {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme) => {
+  it("an invalid image choice keeps visible, accessible hover feedback", async () => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), invalid: true },
+      theme,
+    );
+    const inner = el
+      .shadowRoot!.querySelector("[data-test=choose-image]")!
+      .shadowRoot!.querySelector("button")!;
+    const shadow = getComputedStyle(inner).boxShadow;
+    await userEvent.hover(inner);
+    expect(inner.matches(":hover")).toBe(true);
+    expect(getComputedStyle(inner).opacity).toBe("1");
+    expect(getComputedStyle(inner).boxShadow).not.toBe(shadow);
+    await expectNoA11yViolations(host);
+    await page.screenshot({ element: host, path: `__screenshots__/look/a319-image-${theme}.png` });
+  });
+
   it("renders accessibly with a preview", async () => {
     const { host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",

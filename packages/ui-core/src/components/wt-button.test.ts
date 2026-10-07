@@ -159,24 +159,38 @@ test("exposes its inner button as a CSS part, so a consumer can layer its own ho
   expect(getComputedStyle(inner).color).toBe("rgb(9, 9, 9)");
 });
 
-test("dims on hover via the hover-opacity token, and stops dimming on unhover", async () => {
-  const el = await mount("<wt-button>x</wt-button>");
-  host.style.setProperty("--wt-opacity-hover", "0.6");
-  const inner = el.shadowRoot!.querySelector("button")!;
-  expect(getComputedStyle(inner).opacity).toBe("1");
-  await userEvent.hover(inner);
-  expect(getComputedStyle(inner).opacity).toBe("0.6");
-  await userEvent.unhover(inner);
-  expect(getComputedStyle(inner).opacity).toBe("1");
-});
+test.each(["secondary", "ghost"] as const)(
+  "%s hover keeps text opaque and paints the border from the primary-text token",
+  async (variant) => {
+    const el = await mount(`<wt-button variant="${variant}">x</wt-button>`);
+    host.style.setProperty("--wt-color-primary-text", "rgb(9, 19, 29)");
+    const inner = el.shadowRoot!.querySelector("button")!;
+    const restingBorder = getComputedStyle(inner).borderTopColor;
+    await userEvent.hover(inner);
+    expect(inner.matches(":hover")).toBe(true);
+    expect(getComputedStyle(inner).opacity).toBe("1");
+    expect(getComputedStyle(inner).borderTopColor).toBe("rgb(9, 19, 29)");
+    await userEvent.unhover(inner);
+    expect(getComputedStyle(inner).opacity).toBe("1");
+    expect(getComputedStyle(inner).borderTopColor).toBe(restingBorder);
+  },
+);
 
-test("does not dim on hover while disabled", async () => {
-  const el = await mount("<wt-button disabled>x</wt-button>");
-  host.style.setProperty("--wt-opacity-hover", "0.6");
-  const inner = el.shadowRoot!.querySelector("button")!;
-  await userEvent.hover(inner);
-  expect(getComputedStyle(inner).opacity).not.toBe("0.6");
-});
+test.each(["secondary", "ghost"] as const)(
+  "%s stays unchanged on hover while disabled",
+  async (variant) => {
+    const el = await mount(`<wt-button variant="${variant}" disabled>x</wt-button>`);
+    host.style.setProperty("--wt-opacity-hover", "0.6");
+    const inner = el.shadowRoot!.querySelector("button")!;
+    const border = getComputedStyle(inner).borderTopColor;
+    const opacity = getComputedStyle(inner).opacity;
+    await userEvent.hover(inner);
+    expect(inner.matches(":hover")).toBe(true);
+    expect(getComputedStyle(inner).borderTopColor).toBe(border);
+    expect(getComputedStyle(inner).opacity).toBe(opacity);
+    expect(getComputedStyle(inner).opacity).not.toBe("0.6");
+  },
+);
 
 test("loading disables the button, marks it busy and shows a spinner", async () => {
   const el = await mount("<wt-button loading>Scan</wt-button>");

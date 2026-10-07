@@ -14,8 +14,7 @@ declare module "vitest/browser" {
 /**
  * Starts every a11y test with the mouse cursor off the page, so nothing inherits a `:hover` that an
  * earlier test's click or hover left behind — the cursor belongs to the shared page, not to the test
- * that moved it, and it outlives the file that moved it. Without this an a11y scan can catch a button
- * dimmed by `wt-button`'s hover rule and report a colour-contrast violation nobody can see in the app.
+ * that moved it, and it outlives the file that moved it.
  * This module is imported by the suites that run `expectNoA11yViolations`, so the hook covers exactly
  * the tests that scan.
  */

@@ -192,11 +192,14 @@ export class TillMenuBrowser extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      /* Only background, border and ink: wt-button's hover feedback is its opacity. */
       .tile[data-painted]::part(button) {
         background: var(--tile-fill);
         border-color: var(--tile-fill);
         color: var(--tile-ink);
+      }
+
+      .tile[data-painted]::part(button):hover:not(:disabled) {
+        border-color: var(--tile-ink);
       }
 
       /* wt-icon sets its own text colour on its host, so it is named here as the labels are. */

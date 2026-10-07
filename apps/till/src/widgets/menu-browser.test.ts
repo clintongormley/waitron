@@ -1754,15 +1754,21 @@ describe("till-menu-browser", () => {
       });
 
       // wt-button has no pressed style of its own, so there is none here to keep.
-      it("keeps the hover dip on a painted tile", async () => {
+      it("keeps hovered plain and painted tiles opaque", async () => {
         const el = await mountPainted(theme);
         await userEvent.hover(entry(el, "structure", "Bare"));
         const neutral = opacity(entry(el, "structure", "Bare"));
-        await userEvent.hover(entry(el, "structure", "Blue"));
-        const blueHovered = opacity(entry(el, "structure", "Blue"));
-        expect(neutral).toBeLessThan(1);
+        const blue = entry(el, "structure", "Blue");
+        const border = getComputedStyle(inner(blue)).borderTopColor;
+        await userEvent.hover(blue);
+        const blueHovered = opacity(blue);
+        expect(getComputedStyle(inner(blue)).borderTopColor).toBe(ink(blue, ".name"));
+        expect(getComputedStyle(inner(blue)).borderTopColor).not.toBe(border);
+        expect(neutral).toBe(1);
         expect(blueHovered).toBe(neutral);
         expect(opacity(entry(el, "structure", "Bare"))).toBe(1);
+        await userEvent.unhover(inner(blue));
+        expect(getComputedStyle(inner(blue)).borderTopColor).toBe(border);
       });
 
       it("draws a sold-out tile, painted or not, unfaded and still disabled, saying Sold out in the body colour", async () => {

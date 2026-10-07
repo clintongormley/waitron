@@ -45,6 +45,10 @@ export class ImageUpload extends LitElement {
       wt-button[aria-invalid="true"]::part(button) {
         border-color: var(--wt-color-danger);
       }
+      wt-button[aria-invalid="true"]::part(button):hover:not(:disabled) {
+        box-shadow: inset 0 0 0 1px var(--wt-color-danger);
+      }
+
       .preview {
         display: block;
         margin-top: var(--wt-space-3);
