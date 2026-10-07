@@ -155,9 +155,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut. Since C107 (#974) every printout
    is drawn as pictures, and none of them (the ruler page, the sample receipt, a receipt, a kitchen
-   ticket) has been photographed or recorded as printed; the owner's box will not start on this version
-   until its venue is reset, read from the code and not run on a box (A3, "Upgrading a
-   venue that has used its printers refuses to start"). A real sale's slip, the duplicates, the
+   ticket) has been photographed or recorded as printed. A real sale's slip, the duplicates, the
    cash-settlement drawer job and the feed-before-cut are still unwalked.
 
 7. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
@@ -2253,16 +2251,6 @@ How it works: [product-categories.md](developers/product-categories.md), _Device
 [products.md](developers/products.md), _On the till_; and
 [design-system.md](developers/design-system.md), the Structure tab and the Device Home Page
 drawing.
-**Upgrading:** one migration, catalogue `0026_device_home_page.sql`, drops the
-`device_profile_home_layouts` table (each profile's layout choices) and adds six columns to
-`menu_details`, each required with a default, with no table rebuild, so a venue migrates in place.
-Published menus move to document format 3. **A291 DONE (2026-10-06): reset the venue if it holds
-a live menu in an older format.** Status, preview, publish and serving refuse it with
-`menu.reset_required`; republishing format 2 is no longer an upgrade path. A venue that made extra
-named layouts keeps their sections, which the menu no longer reads; a reset clears them. Export a
-configuration bundle again after upgrading: one exported before W93 records an older catalogue
-schema version, which the import refuses (`validateConfigurationBundle`,
-`apps/server/src/configuration-transfer.ts`; read, not run).
 **Looked at (2026-10-06):** on the demo venue, reset rather than republished (the upgrade-path
 item below): the Structure tab's Device Home Page row and its add-shortcut picker, the Home page tab's
 controls and preview, and the till's home at a phone's width and on the counter at 1280 px.
@@ -2629,19 +2617,11 @@ The original walkthrough is retained under _Detail → Setup wizard_.
 
 **Owed at the box — nothing here has run on real hardware:**
 
-- **Upgrading a venue that has used its printers refuses to start.** C107's generated migration
-  (`packages/db/drizzle/0055_drop_printer_character_set.sql`) rebuilds the `printers` table; with
-  one row in any of `print_jobs`, `station_printers`, `tills`, `devices` or `drawer_opens` pointing
-  at a printer, `applyMigrations` throws `migrations.apply_failed` at ``DROP TABLE `printers` ``
-  with "FOREIGN KEY constraint failed" and the whole core step rolls back. A box applies migrations
-  as it starts (`apps/server/src/boot.ts`), so a box whose venue has printed anything will not start
-  on this version until its venue is reset (read from the code, not run on a box). Pre-live, there
-  is no data migration (CLAUDE.md §3); the owner's box has printers. Anything the box timings or
-  photographs show wrong becomes a new item.
 - **Photographs and timings of pictures on paper.** The owner's photographs of a receipt, a kitchen
   ticket, the ruler page, a sample receipt and the test page (C108) on both printers are owed, and
   so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How long a job of
-  pictures takes to print on the box is not measured").
+  pictures takes to print on the box is not measured"). Anything the timings or photographs show
+  wrong becomes a new item.
 - **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
   reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
   discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
