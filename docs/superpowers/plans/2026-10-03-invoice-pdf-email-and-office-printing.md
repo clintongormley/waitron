@@ -294,6 +294,17 @@ intended failures. Its SMTP stub also needed an explicit STARTTLS refusal instea
 success reply. Neither result is used as evidence of production failure. Live setup/provisioning,
 the dashboard editor, restore checks and all browser/visual checks in this task remain pending.
 
+**2026-10-07 wizard SMTP test route checkpoint.** `mountSetup` now registers
+POST `/setup-api/email-test`. A Live request carries structured `email` settings and
+`venue.admin.email`; the handler normalises the administrator's address and ignores a separate
+caller-supplied recipient. It invokes the shared bounded sender without database dependencies.
+The 21 new route cases first failed with 404 and then passed. Real TLS SMTP fixtures cover
+acceptance, recipient/data refusals, a lost acknowledgement and an unanswered exchange;
+responses and captured logs omit proposed settings and the fixture's secret refusal text.
+The default sender refuses a plaintext server when STARTTLS is required. The related six-file
+run passed 381 cases. This endpoint does not yet provide the wizard screen or seal credentials
+at provisioning; those, the dashboard editor and restore checks remain pending.
+
 ## 4. Email the PDF
 
 **2026-10-07 transport checkpoint.** `resolveInvoiceEmailDelivery` applies the mode rules below

@@ -41,6 +41,8 @@ import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { FiscalReadinessResult } from "./fiscal-readiness.js";
+import { mountSetupEmailTest } from "./setup-email-api.js";
+import type { sendSmtpTestMessage } from "./smtp-test-message.js";
 import "./errors.js";
 
 /** What the owner sends to rebuild this box from their bucket. */
@@ -60,6 +62,7 @@ export interface BucketRestoreInput {
  */
 export interface SetupDeps {
   environment: DeploymentEnvironment;
+  sendEmailTest?: typeof sendSmtpTestMessage;
   /** Keeps a developer Live walkthrough on preproduction transports after restart. */
   devMode?: boolean;
   /** Plaintext admin secrets never reach it — the provision route hashes them at the boundary. */
@@ -532,6 +535,7 @@ function directError(
  * nothing else claimed.
  */
 export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
+  mountSetupEmailTest(app, log, deps.sendEmailTest);
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 
