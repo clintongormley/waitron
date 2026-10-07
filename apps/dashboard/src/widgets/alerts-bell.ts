@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage } from "../i18n/codes.js";
 import { alertMessage, hasAlertMessage } from "../i18n/alerts.js";
 import type { AlertView } from "../api/client.js";
@@ -21,6 +22,11 @@ export const PANEL_LIMIT = 5;
 
 @customElement("dashboard-alerts-bell")
 export class AlertsBell extends LitElement {
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   static override styles = [
     baseStyles,
     css`

@@ -4815,6 +4815,49 @@ describe("alerts in the shell", () => {
   });
 
   describe.each(["light", "dark"] as const)("alert language switching (%s theme)", (theme) => {
+    it.each([false, true])(
+      "retranslates the bell list with close-before-switch=%s",
+      async (closeFirst) => {
+        const listAlerts = vi
+          .fn()
+          .mockResolvedValue({ visible: true, alerts: [alert("1", "error")] });
+        const { el } = await mountWidget<DashboardApp>(
+          "dashboard-app",
+          { api: alertsApi({ listAlerts }), request: stubRequest },
+          theme,
+        );
+        await flush(el);
+        const widget = bell(el) as AlertsBell;
+        widget.open();
+        await flush(el);
+        const item = () => widget.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-item]")!;
+        expect(item().textContent).toContain("A card payment of €12.50 taken while offline");
+        if (closeFirst) {
+          widget
+            .shadowRoot!.querySelector<import("@waitron/ui").WtRowActions>("wt-row-actions")!
+            .hide();
+        }
+        emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });
+        await flush(el);
+        if (closeFirst) widget.open();
+        await widget.updateComplete;
+        expect(panel(el).matches(":popover-open")).toBe(true);
+        expect(item().textContent).toContain(
+          "Un pago con tarjeta de 12,50\u00a0€ cobrado sin conexión",
+        );
+        expect(item().textContent).toContain("Problema");
+        expect(item().textContent).toContain("Pagos con tarjeta");
+        expect(item().querySelector("[data-test=alert-handle]")!.textContent).toBe(
+          "Marcar como resuelto",
+        );
+        emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
+        await flush(el);
+        expect(item().textContent).toContain("A card payment of €12.50 taken while offline");
+        expect(item().querySelector("[data-test=alert-handle]")!.textContent).toBe("Mark handled");
+        expect(listAlerts).toHaveBeenCalledTimes(1);
+      },
+    );
+
     it.each([1, 2])(
       "retranslates a visible %i-alert pop-up without a new arrival",
       async (count) => {
@@ -4859,6 +4902,7 @@ describe("alerts in the shell", () => {
         emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });
         await flush(el);
         expect(toast(el).open).toBe(false);
+        expect(toast(el).message).toBe("");
         expect(toastButton(el, "message")).toBeNull();
       },
     );
