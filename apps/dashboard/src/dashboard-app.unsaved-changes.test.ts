@@ -664,6 +664,40 @@ it.each([
   },
 );
 
+it.each([
+  ["plain", false],
+  ["shift", true],
+] as const)(
+  "a %s click on a same-app anchor two shadow roots deep is handled like one a single root deep",
+  async (kind, toBrowser) => {
+    const m = await mount();
+    const cell = document.createElement("div");
+    cell.attachShadow({ mode: "open" });
+    const anchor = document.createElement("a");
+    anchor.href = "/manage/orders";
+    cell.shadowRoot!.append(anchor);
+    m.screen.shadowRoot!.append(cell);
+    let reachedBrowser = false;
+    const blockDefault = (event: MouseEvent) => {
+      reachedBrowser = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", blockDefault, { once: true });
+    anchor.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        shiftKey: kind === "shift",
+      }),
+    );
+    document.removeEventListener("click", blockDefault);
+    expect(reachedBrowser).toBe(toBrowser);
+    if (toBrowser) expect(location.pathname).toBe("/manage/profile");
+    else await expect.poll(() => location.pathname).toBe("/manage/orders");
+  },
+);
+
 it("an encoded Account settings link retains the edited underlying page", async () => {
   const m = await mount();
   const departing = pageDraft(m);

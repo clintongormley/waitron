@@ -438,6 +438,40 @@ describe("venue operations screen", () => {
     expect(modal(el)).toBeNull();
   });
 
+  it.each(["shift", "alt"] as const)(
+    "leaves a click with %s held on the menu timetable link to the browser",
+    async (kind) => {
+      const el = await mount({
+        load: vi.fn().mockResolvedValue({
+          ...model,
+          readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+        }),
+      } as unknown as VenueServiceApi);
+      const tree = table(el, "policy-tree").shadowRoot!;
+      const action = tree.querySelector<HTMLAnchorElement>('[data-test="zone-readiness-action"]')!;
+      const before = location.href;
+      let reachedBrowser = false;
+      const blockDefault = (event: MouseEvent) => {
+        reachedBrowser = !event.defaultPrevented;
+        event.preventDefault();
+      };
+      document.addEventListener("click", blockDefault, { once: true });
+      action.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+          shiftKey: kind === "shift",
+          altKey: kind === "alt",
+        }),
+      );
+      document.removeEventListener("click", blockDefault);
+      await settle(el);
+      expect(reachedBrowser).toBe(true);
+      expect(location.href).toBe(before);
+    },
+  );
+
   it("renames a department from its table cell", async () => {
     const updateDepartment = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

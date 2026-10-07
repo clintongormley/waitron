@@ -936,11 +936,6 @@ export class VenueOperationsScreen extends LitElement {
                             part="zone-readiness-action"
                             data-test="zone-readiness-action"
                             href=${menuTimetablePath(row.departmentId)}
-                            @click=${(event: MouseEvent) => {
-                              if (event.button !== 0 || event.metaKey || event.ctrlKey) return;
-                              event.preventDefault();
-                              openPage(menuTimetablePath(row.departmentId));
-                            }}
                             >${t("venue.set_up_menus")}</a
                           >`
                         : nothing
