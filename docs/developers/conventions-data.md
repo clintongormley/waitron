@@ -393,12 +393,16 @@ boundaries and a menu, and opening hours never stop a sale. What they share with
 calendar.
 
 - A special date's menu timetable hangs off `special_dates` with a cascading key, so deleting the
-  date on Hours deletes its timetables and slots. Hours hands every duplicate, date move and delete
-  to `MENU_TIMETABLE_CALENDAR_PARTICIPANT` (`packages/venue-service/src/menu-timetable.ts`) through
-  `VENUE_SERVICE_CALENDAR_PARTICIPANTS`; it copies a date's timetables to each target and refuses,
-  with `menu_timetable.invalid`, a copy, move or delete that would leave a slot overlapping a
-  neighbouring day's across a midnight, or a copied or moved slot opening or closing at a minute the
-  clock skips there.
+  date deletes its timetables and slots. `duplicateSpecialDate`, `saveSpecialDate` and
+  `deleteSpecialDate` (`packages/venue-service/src/hours.ts`) hand a date to a participant only
+  when their caller passes one: the special-date routes in `packages/venue-service/src/routes.ts`
+  (the PUT, the duplicate and the DELETE) pass `VENUE_SERVICE_CALENDAR_PARTICIPANTS`, whose one
+  member is `MENU_TIMETABLE_CALENDAR_PARTICIPANT` (`packages/venue-service/src/menu-timetable.ts`),
+  and nothing checks that a new caller does. Handed one, the participant copies a date's timetables
+  to each target and refuses, with `menu_timetable.invalid` and a `reason`, a copy, move or delete
+  that would leave a slot overlapping a neighbouring day's across a midnight (`overlap`), or a copied
+  or moved slot opening or closing at a minute the clock skips there (`clock_skips`). A duplicate's
+  copies are checked together, after every target exists.
 - "No row" carries meaning twice, as for hours: a weekday with no `menu_day_timetables` row has no
   slots (the all-day menu all day), and a special date with no row for a department follows that
   department's week. A row with no slots on a special date replaces the week with the all-day menu.

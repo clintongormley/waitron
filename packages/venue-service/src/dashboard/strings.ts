@@ -455,6 +455,10 @@ const en = {
     "Deleting this date would leave the standard hours overlapping the hours on {date}.",
   "hours.menu_clash":
     "{department}'s menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
+  "hours.menu_overlap":
+    "{department}'s menu timetable would overlap a neighbouring date's menus here.",
+  "hours.menu_clock_skips":
+    "{department}'s menu timetable uses a time the clock skips on this date.",
   "hours.menu_delete_clash":
     "Deleting this date would leave {department}'s normal menu week overlapping the menu timetable on {date}.",
   "hours.field_refused": "Check this value.",
@@ -1048,6 +1052,10 @@ const es: Record<keyof typeof en, string> = {
     "Borrar esta fecha haría que el horario habitual se solapara con el del {date}.",
   "hours.menu_clash":
     "El horario de cartas de {department} se solaparía aquí con las cartas de una fecha vecina, o usaría una hora que el reloj se salta.",
+  "hours.menu_overlap":
+    "El horario de cartas de {department} se solaparía aquí con las cartas de una fecha vecina.",
+  "hours.menu_clock_skips":
+    "El horario de cartas de {department} usa una hora que el reloj se salta en esta fecha.",
   "hours.menu_delete_clash":
     "Borrar esta fecha haría que la semana normal de cartas de {department} se solapara con el horario de cartas del {date}.",
   "hours.field_refused": "Revisa este valor.",

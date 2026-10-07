@@ -82,13 +82,18 @@ async function assertOwnPeriods(
     });
 }
 
-async function venueToday(tx: Transaction, cfg: VenueScope, at: Date): Promise<LocalDate | null> {
-  return venueLocalMoment(at, await readLocationClock(tx, cfg.locationId))?.civilDate ?? null;
+/** The venue's date at `at` and its time zone, each null when the clock cannot be read. */
+interface VenueClock {
+  today: LocalDate | null;
+  zone: string | null;
 }
 
-async function readableZone(tx: Transaction, cfg: VenueScope): Promise<string | null> {
+async function readVenueClock(tx: Transaction, cfg: VenueScope, at: Date): Promise<VenueClock> {
   const clock = await readLocationClock(tx, cfg.locationId);
-  return isReadableClock(clock) ? clock.timeZone : null;
+  return {
+    today: venueLocalMoment(at, clock)?.civilDate ?? null,
+    zone: isReadableClock(clock) ? clock.timeZone : null,
+  };
 }
 
 /** Each listed timetable's slots in start order, wire times. */
@@ -166,13 +171,12 @@ async function assertBesideNeighbours(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  at: Date,
+  today: LocalDate | null,
   proposed: ReadonlyMap<LocalDate, Interval[]>,
   touched: readonly LocalDate[],
   exceptDateId: string | null,
   clash: (date: LocalDate, other: LocalDate) => never,
 ): Promise<void> {
-  const today = await venueToday(tx, cfg, at);
   const neighbours = touched.flatMap((date) => [addDays(date, -1), addDays(date, 1)]);
   const stored = await readDepartmentDays(
     tx,
@@ -189,13 +193,11 @@ async function assertBesideNeighbours(
 
 /** The first slot that opens or closes at a minute the clock skips on `date`, or null; null too when
  * the clock cannot be read. */
-async function skippedSlot(
-  tx: Transaction,
-  cfg: VenueScope,
+function skippedSlot(
+  zone: string | null,
   date: LocalDate,
   slots: readonly MenuSlot[],
-): Promise<{ position: number; end: "startsAt" | "endsAt" } | null> {
-  const zone = await readableZone(tx, cfg);
+): { position: number; end: "startsAt" | "endsAt" } | null {
   if (zone === null) return null;
   const skipped = skippedEndpoint(date, [{ cell: slotCell(slots) }], zone);
   if (skipped === null) return null;
@@ -468,7 +470,7 @@ export async function replaceMenuWeek(
     departmentId,
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
-  const today = await venueToday(tx, cfg, at);
+  const { today } = await readVenueClock(tx, cfg, at);
   const stored = await readDepartmentDays(
     tx,
     cfg,
@@ -479,7 +481,7 @@ export async function replaceMenuWeek(
   const intervals = week.slots.map((slots) => slotIntervals(slots));
   for (const date of [...stored.dates.keys()].sort())
     if (firstMenuClash(stored.dates, intervals, [date], today, true) !== null)
-      invalidTimetable("date", { date, departmentId });
+      invalidTimetable("date", { date, departmentId, reason: "overlap" });
 
   const existing = await tx
     .select({ id: menuDayTimetables.id, weekday: menuDayTimetables.weekday })
@@ -515,17 +517,18 @@ export async function saveSpecialDateMenus(
   const special = await requireSpecialDate(tx, cfg, specialDateId);
   await assertDepartment(tx, cfg, departmentId);
   await assertOwnPeriods(tx, departmentId, [{ field: "slots", slots: parsed }]);
-  const skipped = await skippedSlot(tx, cfg, special.date, parsed);
+  const clock = await readVenueClock(tx, cfg, at);
+  const skipped = skippedSlot(clock.zone, special.date, parsed);
   if (skipped !== null) invalidTimetable(`slots.${skipped.position}.${skipped.end}`);
   await assertBesideNeighbours(
     tx,
     cfg,
     departmentId,
-    at,
+    clock.today,
     new Map([[special.date, slotIntervals(parsed)]]),
     [special.date],
     specialDateId,
-    (_, other) => invalidTimetable("slots", { date: other, departmentId }),
+    (_, other) => invalidTimetable("slots", { date: other, departmentId, reason: "overlap" }),
   );
   const [existing] = await tx
     .select({ id: menuDayTimetables.id })
@@ -566,11 +569,11 @@ export async function clearSpecialDateMenus(
     tx,
     cfg,
     departmentId,
-    at,
+    (await readVenueClock(tx, cfg, at)).today,
     new Map(),
     [special.date],
     specialDateId,
-    (_, other) => invalidTimetable("date", { date: other, departmentId }),
+    (_, other) => invalidTimetable("date", { date: other, departmentId, reason: "overlap" }),
   );
   await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.id, existing.id));
 }
@@ -630,62 +633,80 @@ async function dateTimetables(tx: Transaction, specialDateId: string) {
 }
 
 /**
- * Refuses placing `timetables` on `date` (`field` `date`, naming `date` and the department) when a
- * slot opens or closes at a minute the clock skips there, or overlaps a neighbour's across a
- * midnight. With `leaving`, that date's timetables go back to the week too, and an overlap there
- * names the neighbour.
+ * Refuses placing `timetables` on each of `dates` (`field` `date`, naming that date, the department
+ * and the `reason`) when a slot opens or closes at a minute the clock skips there, or overlaps a
+ * neighbour's across a midnight, the other dates included. With `leaving`, that date's timetables go
+ * back to the week too, and an overlap there names the neighbour.
  */
 async function assertPlaced(
   tx: Transaction,
   cfg: VenueScope,
-  at: Date,
-  specialDateId: string,
+  clock: VenueClock,
+  exceptDateId: string | null,
   timetables: readonly { departmentId: string; slots: MenuSlot[] }[],
-  date: LocalDate,
+  dates: readonly LocalDate[],
   leaving: LocalDate | null,
 ): Promise<void> {
   for (const { departmentId, slots } of timetables) {
-    if ((await skippedSlot(tx, cfg, date, slots)) !== null)
-      invalidTimetable("date", { date, departmentId });
+    for (const date of dates)
+      if (skippedSlot(clock.zone, date, slots) !== null)
+        invalidTimetable("date", { date, departmentId, reason: "clock_skips" });
     await assertBesideNeighbours(
       tx,
       cfg,
       departmentId,
-      at,
-      new Map([[date, slotIntervals(slots)]]),
-      leaving === null ? [date] : [date, leaving],
-      specialDateId,
+      clock.today,
+      new Map(dates.map((date) => [date, slotIntervals(slots)])),
+      leaving === null ? dates : [...dates, leaving],
+      exceptDateId,
       (touched, other) =>
-        invalidTimetable("date", { date: touched === date ? date : other, departmentId }),
+        invalidTimetable("date", {
+          date: dates.includes(touched) ? touched : other,
+          departmentId,
+          reason: "overlap",
+        }),
     );
   }
 }
 
-/** Hours hands this every duplicate, move and delete of a special date, in its transaction. */
+/**
+ * Hours hands this every duplicate, move and delete of a special date, in its transaction. A
+ * duplicate's copies are written target by target and checked together once all exist.
+ */
 export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
-  async copy(tx, cfg, sourceId, targetId, at) {
-    const target = await requireSpecialDate(tx, cfg, targetId);
-    const timetables = await dateTimetables(tx, sourceId);
-    await assertPlaced(tx, cfg, at, targetId, timetables, target.date, null);
-    for (const { departmentId, slots } of timetables)
+  async copy(tx, _cfg, sourceId, targetId) {
+    for (const { departmentId, slots } of await dateTimetables(tx, sourceId))
       await writeDay(tx, undefined, { departmentId, specialDateId: targetId }, slots);
+  },
+  async afterCopies(tx, cfg, sourceId, targets, at) {
+    await assertPlaced(
+      tx,
+      cfg,
+      await readVenueClock(tx, cfg, at),
+      null,
+      await dateTimetables(tx, sourceId),
+      targets.map((target) => target.date),
+      null,
+    );
   },
   async beforeMove(tx, cfg, id, toDate, at) {
     const from = await requireSpecialDate(tx, cfg, id);
-    await assertPlaced(tx, cfg, at, id, await dateTimetables(tx, id), toDate, from.date);
+    const clock = await readVenueClock(tx, cfg, at);
+    await assertPlaced(tx, cfg, clock, id, await dateTimetables(tx, id), [toDate], from.date);
   },
   async beforeDelete(tx, cfg, id, at) {
     const special = await requireSpecialDate(tx, cfg, id);
+    const { today } = await readVenueClock(tx, cfg, at);
     for (const { departmentId } of await dateTimetables(tx, id))
       await assertBesideNeighbours(
         tx,
         cfg,
         departmentId,
-        at,
+        today,
         new Map(),
         [special.date],
         id,
-        (_, other) => invalidTimetable("date", { date: other, departmentId }),
+        (_, other) => invalidTimetable("date", { date: other, departmentId, reason: "overlap" }),
       );
   },
 };

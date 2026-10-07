@@ -783,10 +783,11 @@ export async function renameSpecialDate(
 
 /**
  * A module that keeps its own rows per special date, such as a menu timetable. It works inside the
- * caller's transaction and never opens its own, and `at` is the caller's "now". `copy` runs after
- * the target date and its hours are written; `beforeMove` runs before a date's new date is
- * written; `beforeDelete` may only refuse, since the date's own foreign keys remove what hangs
- * from it.
+ * caller's transaction and never opens its own, and `at` is the caller's "now". `copy` runs once per
+ * target, after that target date and its hours are written; `afterCopies` runs once per duplicate,
+ * after every target and every participant's copies exist, so a check can see all the targets at
+ * once; `beforeMove` runs before a date's new date is written; `beforeDelete` may only refuse,
+ * since the date's own foreign keys remove what hangs from it.
  */
 export interface SpecialDateParticipant {
   copy(
@@ -794,6 +795,13 @@ export interface SpecialDateParticipant {
     cfg: VenueScope,
     sourceId: string,
     targetId: string,
+    at: Date,
+  ): Promise<void>;
+  afterCopies?(
+    tx: Transaction,
+    cfg: VenueScope,
+    sourceId: string,
+    targets: readonly { id: string; date: LocalDate }[],
     at: Date,
   ): Promise<void>;
   beforeMove?(
@@ -898,6 +906,14 @@ export async function duplicateSpecialDate(
     for (const participant of participants) await participant.copy(tx, cfg, sourceId, targetId, at);
     copies.push({ id: targetId, date, ...values });
   }
+  for (const participant of participants)
+    await participant.afterCopies?.(
+      tx,
+      cfg,
+      sourceId,
+      copies.map(({ id, date }) => ({ id, date })),
+      at,
+    );
   return copies;
 }
 

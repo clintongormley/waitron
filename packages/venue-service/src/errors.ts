@@ -22,10 +22,16 @@ declare module "@waitron/shared" {
     /** Deleting a named period that `uses` still place, past special dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /**
-     * `field` is the request path of the refused value, as for `hours.invalid`. A clash with the
-     * menu timetable either side also names the date and the department.
+     * `field` is the request path of the refused value, as for `hours.invalid`. A refusal naming a
+     * date also names the department, and whether slots would overlap a neighbouring day's across a
+     * midnight (`overlap`) or open or close at a minute the clock skips there (`clock_skips`).
      */
-    "menu_timetable.invalid": { field: string; date?: string; departmentId?: string };
+    "menu_timetable.invalid": {
+      field: string;
+      date?: string;
+      departmentId?: string;
+      reason?: "overlap" | "clock_skips";
+    };
     "zone.name_taken": { name: string };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };

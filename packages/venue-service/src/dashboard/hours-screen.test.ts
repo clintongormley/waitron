@@ -1586,6 +1586,32 @@ describe("Hours: special dates", () => {
       "department.restaurant.mode",
       "Check the highlighted hours: periods must not overlap, including past midnight.",
     ],
+    [
+      {
+        code: "menu_timetable.invalid",
+        params: {
+          field: "date",
+          date: "2026-10-20",
+          departmentId: "restaurant",
+          reason: "overlap",
+        },
+      },
+      "date",
+      "Restaurant's menu timetable would overlap a neighbouring date's menus here.",
+    ],
+    [
+      {
+        code: "menu_timetable.invalid",
+        params: {
+          field: "date",
+          date: "2026-10-20",
+          departmentId: "restaurant",
+          reason: "clock_skips",
+        },
+      },
+      "date",
+      "Restaurant's menu timetable uses a time the clock skips on this date.",
+    ],
   ])("puts a refusal beside the field it names: %j", async (refusal, name, message) => {
     const { api, state, calls } = server();
     const el = await mount(api);
@@ -1702,6 +1728,32 @@ describe("Hours: special dates", () => {
       },
       "dates.1",
       "Restaurant's menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
+    ],
+    [
+      {
+        code: "menu_timetable.invalid",
+        params: {
+          field: "date",
+          date: "2026-11-09",
+          departmentId: "restaurant",
+          reason: "overlap",
+        },
+      },
+      "dates.1",
+      "Restaurant's menu timetable would overlap a neighbouring date's menus here.",
+    ],
+    [
+      {
+        code: "menu_timetable.invalid",
+        params: {
+          field: "date",
+          date: "2026-11-02",
+          departmentId: "restaurant",
+          reason: "clock_skips",
+        },
+      },
+      "dates.0",
+      "Restaurant's menu timetable uses a time the clock skips on this date.",
     ],
   ])(
     "puts a duplicate's refusal beside the target date it names: %j",
