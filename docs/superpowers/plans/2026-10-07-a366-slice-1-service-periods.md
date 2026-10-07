@@ -48,14 +48,16 @@ and menu-state answers).
 
 The owner confirms or overrides these when reviewing the plan.
 
-1. **Items added before a period ended.** The till's basket stays on the till until it is sent,
-   so the server cannot know when an item was added. Spec §5 says such items "can still be sent
-   after it", with no limit. This plan accepts a new line whose menu belongs to the period that
-   ended within the last **30 minutes** (`PERIOD_GRACE_MINUTES`), across the changeover too, and
-   refuses it after that. With no limit, the server could not refuse anything from an earlier
-   period. Lines already stored are never re-checked.
-2. **Raising the quantity of a stored line counts as new items**, checked like a new line. Any
-   other edit of a stored line is not checked.
+1. **Items added before a period ended can be sent at any time after it** (owner, 2026-10-07: the
+   kitchen should see what is left to cook). The till's basket stays on the till until it is sent,
+   so the server cannot know when an item was added: it accepts a new line whose menu belongs to
+   the current period or to any period that has already ended this business day or ran on the one
+   before, and refuses a menu whose period has not started yet, or anything when no period has
+   run. The till offers no new items from a period that has ended. Lines already stored are never
+   re-checked.
+2. **Asking for more of a stored line after its period has ended is refused** (owner, 2026-10-07),
+   until slice 3's manager extension can keep the period open. Raising a stored line's quantity
+   is checked against the current period only. Any other edit of a stored line is not checked.
 3. **A slot stores clock times read inside the business day.** `starts_at` and `ends_at` stay
    `HH:MM`. A time earlier than the changeover belongs to the next calendar morning, so with a
    06:00 changeover "21:00–03:00" is one range; an end equal to the changeover is the end of the
@@ -71,10 +73,11 @@ The owner confirms or overrides these when reviewing the plan.
    catalogue as its menu, 09:00–17:00 Monday to Friday, only when the department has no periods
    (provisioning may run again). A department added from the dashboard gets the same when the
    location has a catalogue, otherwise no periods.
-8. **The demo venue's Restaurant is open all day** (one "Open" period, changeover to changeover,
-   every day), so a dev stack can sell at any hour; the deli keeps today's demo hours, 09:00–18:00
-   Monday to Saturday, as "Open".
-9. **On the Day tab, editing a date that is not a special date edits that weekday** of the normal
+8. **The demo venue's Restaurant is open 09:00–24:00 every day** (one "Open" period, stored as
+   `09:00`–`00:00`; owner, 2026-10-07); the deli keeps today's demo hours, 09:00–18:00 Monday to
+   Saturday, as "Open".
+9. **On the Day tab, editing a date that is not a special date edits that weekday** (owner
+   approved 2026-10-07) of the normal
    week, with a note saying so. Spec §9.2 says the Day view is editable; one-off dates arrive with
    named days in slice 2.
 10. **Until slice 2, the old Hours screen is named "Station hours"** and keeps station hours,
@@ -132,9 +135,10 @@ has its test in the task named.
    morning is Friday's Night (Tasks 1 and 4).
 2. **A boundary minute.** Lunch 12:00–14:00 then Afternoon 14:00–19:00: 14:00 is Afternoon; 13:59
    is Lunch (Task 1).
-3. **The allowance.** A Lunch item sent at 14:20 is accepted; at 14:31 refused with
-   `menu_period.not_running`; raising a stored Lunch line's quantity at 15:00 is refused the same
-   way; the till's basket keeps a Lunch line after the period changes (Tasks 8 and 9).
+3. **After a period ends.** A Lunch item left in the basket and sent at 17:00 is accepted; a
+   Dinner item sent during Lunch is refused with `menu_period.not_running`; raising a stored Lunch
+   line's quantity at 14:05 is refused the same way; the till's basket keeps a Lunch line after
+   the period changes (Tasks 8 and 9).
 4. **No period at all.** A department with nothing running: the till says it is closed and the
    server refuses any new line (Tasks 8 and 9).
 5. **A special date.** A row with ranges replaces that business day; a row with no ranges closes
@@ -158,7 +162,6 @@ has its test in the task named.
 export interface ServiceRange { periodId: string; startsAt: string; endsAt: string } // "HH:MM"
 export interface ServiceMoment { businessDay: string; weekday: number; minute: number } // minute since the changeover, 0..1439; weekday of the business day
 export const SERVICE_STEP_MINUTES = 15;
-export const PERIOD_GRACE_MINUTES = 30;
 export function minuteOfServiceDay(time: string, cutover: string): number;
 export function rangeSpan(range: Pick<ServiceRange, "startsAt" | "endsAt">, cutover: string): { start: number; end: number }; // end 1..1440
 export function parseServiceDay(value: unknown, field: string, cutover: string): ServiceRange[];
@@ -372,7 +375,7 @@ export interface DepartmentService {
   periodName: string | null;
   customerMenuId: string | null;
   orderableMenuIds: readonly string[]; // customer first, then staff, in order; every period's menus when the clock cannot be read
-  previous: { periodId: string; orderableMenuIds: readonly string[]; endedMinutesAgo: number } | null; // the range that ended most recently, this business day or the one before
+  endedMenuIds: readonly string[]; // menus of every range that has ended this business day or ran on the one before, not already orderable
 }
 export async function resolveDepartmentService(tx: Transaction, cfg: VenueScope, departmentId: string, at: Date): Promise<DepartmentService>;
 
@@ -407,10 +410,9 @@ Routes: `GET /management-api/venue-service/opening-hours` → `readOpeningHoursM
 - [ ] **Step 1: Failing tests.** In `menu-timetable.test.ts`, with the clock `Europe/Madrid`,
 cutover `06:00`, Lunch 12:00–14:00 (menu L, staff menu D), Afternoon 14:00–19:00 (A), Night
 21:00–03:00 on Friday (N):
-  - Friday 13:59 → Lunch, `[L, D]`; 14:00 → Afternoon `[A]`, `previous` Lunch, 0 minutes; 14:31 →
-    `previous.endedMinutesAgo` 31.
-  - Saturday 02:30 → Friday's Night `[N]`. Saturday 06:10 → `previous` is Friday's Night, 190
-    minutes.
+  - Friday 13:59 → Lunch, `[L, D]`; 14:00 → Afternoon `[A]`, with L and D in `endedMenuIds`.
+  - Saturday 02:30 → Friday's Night `[N]`. Saturday 06:10 → nothing running, N in `endedMenuIds`
+    (it ran on the business day before).
   - Friday 20:00 → `open: false`, `[]`.
   - A special date on that Friday with only Lunch 13:00–16:00 → 12:30 closed, 15:00 Lunch; a row
     with no slots → closed all day; no row → the week; "Close the whole venue" → closed even with
@@ -540,7 +542,7 @@ venue-service and server.
 
 ---
 
-### Task 8: The server refuses new items outside the current period
+### Task 8: The server refuses items from a period that has not started, and repeats after one has ended
 
 **Files:**
 - Modify: `apps/server/src/working-order.ts` (`readBasketOffers :347`, `priceOrderLines :399-466`,
@@ -551,21 +553,22 @@ venue-service and server.
 **Interfaces:** error `menu_period.not_running`, params `{ departmentId, menuId }`, registered in
 `packages/venue-service/src/errors.ts` (a refusal, not a recorded incident: no alert wording).
 
-Rule: a line the request adds, or the added quantity of a stored line, is accepted when its menu is
-in `orderableMenuIds`, or in `previous.orderableMenuIds` with `previous.endedMinutesAgo <=
-PERIOD_GRACE_MINUTES`. Anything else about stored lines is not checked. An item on no menu of the
+Rule: a line the request adds is accepted when its menu is in `orderableMenuIds` or
+`endedMenuIds`. The added quantity of a stored line is accepted only when its menu is in
+`orderableMenuIds`. Anything else about stored lines is not checked. An item on no menu of the
 department's periods stays `service_zone.offer_not_allowed`.
 
 - [ ] **Step 1: Failing tests** through the real routes with `vi.setSystemTime`: a Lunch item sent
-at 13:50 → accepted; at 14:20 → accepted; at 14:31 → `menu_period.not_running`; a Lunch line stored
-at 13:50, quantity raised at 14:20 → accepted, at 15:00 → `menu_period.not_running`; that stored
-line's note edited at 15:00 → accepted; at 20:00 any new line → `menu_period.not_running`; an item
-on no period's menu → `service_zone.offer_not_allowed`.
+at 13:50 → accepted; sent at 17:00 → accepted; a Dinner item sent at 13:00 →
+`menu_period.not_running`; a Lunch line stored at 13:50, quantity raised at 13:55 → accepted, at
+14:05 → `menu_period.not_running`; that stored line's note edited at 15:00 → accepted; on a day with
+no periods, any new line → `menu_period.not_running`; an item on no period's menu →
+`service_zone.offer_not_allowed`.
 - [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.service-periods.test.ts`.
 - [ ] **Step 3: Implement:** resolve the department service once per request; check only added
 lines and added quantities.
 - [ ] **Step 4: Run; see them pass;** run `working-order.test.ts` and `order-drafts.db.test.ts`.
-- [ ] **Step 5: Commit** — `feat(server): refuse new items outside the current period, with a 30-minute allowance (A366)`.
+- [ ] **Step 5: Commit** — `feat(server): refuse items from a period that has not started, and repeats after one has ended (A366)`.
 
 ---
 
@@ -729,7 +732,7 @@ row's "Hours" action and the readiness link open `/manage/opening-hours?departme
 
 **Behaviour:** the summary shows "Opening hours: Monday to Friday, 09:00–17:00" with a link to
 Opening hours when provisioning placed the "Open" period. The docs describe periods, the business
-day, a closed special date and the allowance, and retire the all-day menu, zone menus and
+day, a closed special date and sending items after their period, and retire the all-day menu, zone menus and
 department hours (dated pointer where a document is historical).
 
 - [ ] Steps: failing test for the summary; watch it fail; implement; pass; commit
