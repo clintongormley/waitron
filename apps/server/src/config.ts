@@ -418,6 +418,12 @@ export function loadConfig(
 ): ServerConfig {
   const minTickMs = positiveInt(env, "WAITRON_MIN_TICK_MS", DEFAULT_MIN_TICK_MS);
   const maxTickMs = positiveInt(env, "WAITRON_MAX_TICK_MS", DEFAULT_MAX_TICK_MS);
+  if (maxTickMs > 2_147_483_647) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_MAX_TICK_MS",
+      reason: "above_timer_limit",
+    });
+  }
   // Checked here because the sleep clamp would silently resolve an impossible range. All three
   // tick-cadence guards name both variables, since the operator may have set only the other one.
   if (minTickMs > maxTickMs) {
