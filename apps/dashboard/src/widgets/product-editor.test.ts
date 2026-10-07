@@ -3404,6 +3404,29 @@ it("adds the first variant as one row of its own, with no Regular variant made f
   expect(variantTable(el)!.variants).toHaveLength(1);
 });
 
+it("names the product in the variant window as its form holds the name now, unsaved", async () => {
+  setLocale("en-GB");
+  try {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: product,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+    });
+    await input(el, "name", "Cortado");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+    await el.updateComplete;
+    const form = variantForm(el);
+    await form.updateComplete;
+    const modal = form.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector("h2")!.textContent).toBe("Add variant to: Cortado");
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
 it("adds nothing when the first Add variant is cancelled", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,

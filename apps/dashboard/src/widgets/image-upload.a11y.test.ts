@@ -48,6 +48,21 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     await page.screenshot({ element: host, path: `__screenshots__/look/a319-image-${theme}.png` });
   });
 
+  it("renders accessibly with Remove disabled beside an inherited photo", async () => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), inheritedImage: "parent.png" },
+      theme,
+    );
+    const remove = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=remove-image]",
+    )!;
+    // Without this the scan could pass on a widget that drew no disabled Remove.
+    expect(remove.disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-test=remove-image-hint]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with a preview", async () => {
     const { host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",

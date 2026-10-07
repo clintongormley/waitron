@@ -1320,7 +1320,9 @@ primitive that can otherwise end up with no accessible name explicitly forwards 
   onto the inner `<button>`. This matters most for icon-only buttons — `<wt-button
 aria-label="Cerrar"><wt-icon name="close"></wt-icon></wt-button>` — where `wt-icon`'s own SVG is
   `aria-hidden` and there is no text content to fall back on.
-- `wt-dialog`: gives its `<h2>` a unique id (`wt-dialog-heading-N`, same per-instance-counter
+- `wt-dialog`: wraps a heading too long for the dialog, breaking inside a word where it must
+  (`overflow-wrap: anywhere`), so a long name in a heading never runs past the dialog's edge. It
+  gives its `<h2>` a unique id (`wt-dialog-heading-N`, same per-instance-counter
   pattern as `wt-input`/`wt-switch`) and points the inner `<dialog>`'s `aria-labelledby` at it
   whenever `heading` is set. When there is no `heading` (so no `<h2>` exists to point at), it falls
   back to the same forwarded-`aria-label` pattern as `wt-button` — set `aria-label` directly on
@@ -1740,8 +1742,11 @@ shows a product description today (the reader check in A220, `docs/backlog.md`).
   parent has not had reviewed, "Not yet reviewed" (`editor.allergens_unreviewed`) — never "None",
   which would claim a reviewed empty set. A variant's price in the variant table, where it has none of
   its own, is the product's price in the same grey italic. An image shows the fallback picture itself
-  (`dashboard-image-upload`'s `inheritedImage`) without a Remove action. In the variant form it has no
-  caption, and its alt text names the main product's photo (`editor.inherited_image_alt`); in the
+  (`dashboard-image-upload`'s `inheritedImage`). In the variant form it has no visible caption, and
+  its alt text names the main product's photo (`editor.inherited_image_alt`); Remove sits beside
+  Choose image where it would for a photo of the variant's own, disabled, and a screen reader reads
+  "Uses the product's image" (`image.remove_inherited_hint`, hidden from sight) straight after it.
+  With no photo at all, own or inherited, there is no Remove. In the
   product editor, where the photo is a thumbnail beside Name, it has a dashed border, and that same
   text, hidden from sight, describes the photo button to a screen reader. A control whose empty state could also mean "none" (an allergen set,
   a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which

@@ -1899,6 +1899,7 @@ export class ProductEditor extends LitElement {
         unitLabel=${this.unitShortLabel}
         basePrice=${this.draft.unitPrice ?? ""}
         .inheritedImage=${this.draft.image}
+        .productName=${this.draft.name}
         .api=${this.api}
         @wt-submit=${this.submitVariant}
         @wt-cancel=${(event: Event) => {

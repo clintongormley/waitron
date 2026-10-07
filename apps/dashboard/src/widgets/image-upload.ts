@@ -217,7 +217,13 @@ export class ImageUpload extends LitElement {
                 @click=${() => this.#remove()}
                 >${t("image.remove")}</wt-button
               >`
-            : nothing
+            : this.inheritedImage
+              ? html`<wt-button data-test="remove-image" variant="secondary" disabled
+                    >${t("image.remove")}</wt-button
+                  ><span class="caption" data-test="remove-image-hint"
+                    >${t("image.remove_inherited_hint")}</span
+                  >`
+              : nothing
         }
       </div>
       ${this.image ? html`<img class="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.selectedNames : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}

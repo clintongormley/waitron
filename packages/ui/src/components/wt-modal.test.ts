@@ -873,3 +873,21 @@ test("a modal inherits the guarded Cancel path and saved-close bypass", async ()
   expect(dialogOf(modal).open).toBe(false);
   expect(modal.beforeClose).toHaveBeenCalledExactlyOnceWith("cancel");
 });
+
+test("wraps a long unbroken heading inside the modal at phone width", async () => {
+  await page.viewport(390, 844);
+  try {
+    const modal = await openModal();
+    modal.heading = `Add variant to: ${"Tortilla".repeat(12)}`;
+    await modal.updateComplete;
+    const dialog = modal.shadowRoot!.querySelector("dialog")!;
+    const heading = modal.shadowRoot!.querySelector("h2")!;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(heading.textContent).toContain("TortillaTortilla");
+    expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+    expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});

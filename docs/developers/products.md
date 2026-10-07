@@ -573,7 +573,11 @@ shows the same setting as a column with a filter (`apps/dashboard/src/widgets/pr
 The editor allows any number of variants, one included (`apps/dashboard/src/widgets/product-editor.ts`):
 
 - **Add variant** opens the Add window for one variant, and saving that window adds one row.
-  Cancelling it adds nothing.
+  Cancelling it adds nothing. The window's heading names the product by its staff name as the form
+  holds it, saved or not: "Add variant to: Coffee", or "Edit variant of: Coffee" for an existing
+  variant (`editor.add_variant_to`, `editor.edit_variant_of`). While that name is blank it reads
+  plain "Add variant" or "Edit variant". A variant's own page keeps the plain "Edit variant",
+  because its read carries none of the parent's names.
 - The Pricing section holds the price field and then VAT. While at least one variant is Active the
   price's label reads "Base price per" and the unit (`editor.base_price_unit`), or "Base price"
   alone (`editor.base_price`) for a product with no unit, a variant with no price of its own shows
