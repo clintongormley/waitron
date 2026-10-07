@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -938,12 +938,14 @@ export async function typeSearch(el: CatalogueBrowser, value: string) {
   );
   await el.updateComplete;
 }
-export async function chooseFilter(el: CatalogueBrowser, column: string, value: string) {
+/** A list is every value ticked in a multi-select filter; a string is a single-choice filter's. */
+export async function chooseFilter(el: CatalogueBrowser, column: string, value: string | string[]) {
   const table = await tableOf(el);
   const select = table.shadowRoot!.querySelector<HTMLElement>(
     `wt-combobox[data-filter="${column}"]`,
   )!;
-  await chooseOption(select, value);
+  if (typeof value === "string") await chooseOption(select, value);
+  else await chooseOptions(select, value);
   await table.updateComplete;
 }
 it("shows top-level folders before unfiled products", async () => {
@@ -972,7 +974,7 @@ it("keeps every category through both product filters", async () => {
   await toggleCategory(el, "d");
   await chooseFilter(el, "active", "inactive");
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
-  await chooseFilter(el, "ordering", "staff_only");
+  await chooseFilter(el, "ordering", ["staff_only"]);
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "folder:f"]);
 });
 it("sorts a numbered folder before products", async () => {

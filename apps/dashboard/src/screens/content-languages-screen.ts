@@ -434,6 +434,9 @@ export class ContentLanguagesScreen extends LitElement {
         filter: {
           label: t("content_gaps.kind"),
           allLabel: t("content_gaps.kind_all"),
+          multiple: {
+            countLabel: (count) => t("content_gaps.kind_count").replace("{count}", String(count)),
+          },
           value: (gap) => gap.kind,
           options: kinds.map((kind) => ({ value: kind, label: t(`content_gaps.kind_${kind}`) })),
         },
@@ -447,6 +450,9 @@ export class ContentLanguagesScreen extends LitElement {
         filter: {
           label: t("content_gaps.reason"),
           allLabel: t("content_gaps.reason_all"),
+          multiple: {
+            countLabel: (count) => t("content_gaps.reason_count").replace("{count}", String(count)),
+          },
           value: (gap) => gap.reason,
           options: reasons.map((reason) => ({ value: reason, label: t(`content_gaps.${reason}`) })),
         },

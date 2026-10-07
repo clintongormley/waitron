@@ -895,6 +895,9 @@ export class MenuPricesTable extends LitElement {
         filter: {
           label: t("menu_prices.section_filter"),
           allLabel: t("menu_prices.all_sections"),
+          multiple: {
+            countLabel: (count) => t("menu_prices.section_count").replace("{count}", String(count)),
+          },
           value: ({ item }) => this.#reached.get(item)!,
           options: sectionOptions,
         },
@@ -909,6 +912,10 @@ export class MenuPricesTable extends LitElement {
         filter: {
           label: t("menu_prices.category_filter"),
           allLabel: t("menu_prices.all_categories"),
+          multiple: {
+            countLabel: (count) =>
+              t("menu_prices.category_count").replace("{count}", String(count)),
+          },
           value: ({ item }) =>
             item.categoryId === null ? [] : (this.#categoryChains.get(item.categoryId) ?? []),
           options: categoryOptions,
