@@ -28,15 +28,10 @@ import type {
   VenueServiceApi,
   VenueServiceView,
 } from "./client.js";
+import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-
-const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
-  Object.entries(values).reduce(
-    (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
-    t(key) as string,
-  );
 
 function openPage(path: string): void {
   const guard = navigationGuardFor(window);

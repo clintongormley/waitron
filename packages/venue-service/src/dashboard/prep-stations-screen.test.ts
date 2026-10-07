@@ -5662,6 +5662,51 @@ describe("Routing grid", () => {
     expect(q(el, '[data-test="routing-preview"]')).toBeNull();
   });
 
+  it.each([
+    ["en", "Cheese — with Burger"],
+    ["es", "Cheese — con Burger"],
+  ] as const)(
+    "the preview names an extra's dish beside the extra (%s)",
+    async (locale, extraCell) => {
+      setLocale(locale);
+      const dishMove = { ...breadMove, productId: "burger", productName: "Burger" };
+      const extraMove = {
+        ...breadMove,
+        productId: "cheese",
+        productName: "Cheese",
+        dish: { productId: "burger", productName: "Burger" },
+      };
+      const { el } = await mountGrid({
+        preview: vi.fn().mockResolvedValue([dishMove, extraMove]),
+      });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      const rows = [...q(el, '[data-test="routing-preview"]')!.querySelectorAll("tbody tr")].map(
+        (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent!.trim()),
+      );
+      expect(rows.map((row) => [row[0], row[2], row[3]])).toEqual([
+        ["Burger", "Bar", "Kitchen"],
+        [extraCell, "Bar", "Kitchen"],
+      ]);
+    },
+  );
+
+  it.each(["Cheese $&", "Cheese {dish}"])(
+    "the preview shows an extra named %s as written",
+    async (name) => {
+      setLocale("en");
+      const extraMove = {
+        ...breadMove,
+        productId: "cheese",
+        productName: name,
+        dish: { productId: "burger", productName: "Burger" },
+      };
+      const { el } = await mountGrid({ preview: vi.fn().mockResolvedValue([extraMove]) });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      const cell = q(el, '[data-test="routing-preview"]')!.querySelector("tbody td");
+      expect(cell!.textContent!.trim()).toBe(`${name} — with Burger`);
+    },
+  );
+
   it("after a save, the cell shows what the refresh read rather than the written choice", async () => {
     const saved = gridView();
     saved.routing.cells = [

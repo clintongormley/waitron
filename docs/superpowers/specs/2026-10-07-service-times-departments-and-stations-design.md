@@ -229,9 +229,12 @@ Watchers tabs go.
 - **Routing:** the grid of #1363, with section 8's period choices in a cell. The "Where is this
   made?" tester goes (owner, 2026-10-07): the grid lays out every answer, and the station-closed
   explanations it gave no longer arise. The one thing only the tester showed is how extras are
-  routed (`chooseExtraMaker`, `packages/venue-service/src/routing.ts`): an extra whose cell
-  resolves to the default station, or to No preparation, is made with its dish instead. Such a
-  cell says so, for example "Downstairs bar (default) — as an extra, follows its dish".
+  routed (`chooseExtraMaker`, `packages/venue-service/src/routing.ts`): an extra with no cell of
+  its own or above it, which therefore falls through to the default station, is made with its dish
+  instead, and so is an extra whose cell says No preparation. A cell that names a station, even the
+  default one, sends the extra to that station (owner, 2026-10-07, A371). Only such an empty cell,
+  and a No preparation cell, say so, for example "Downstairs bar (default) — as an extra, follows
+  its dish"; a cell that names the default station does not.
 
 ### 9.4 Device profiles and devices
 

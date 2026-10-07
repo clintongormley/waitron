@@ -30,8 +30,8 @@ export interface ModifierHolder {
 
 /**
  * Every extras and options definition a set of dishes attaches, read together, with each product's
- * ordered attachment list keyed by the LOWER-CASED product id, which {@link readOfferedModifiers}
- * walks to interleave extras and options. A bounded number of queries whatever the number of
+ * ordered attachment list keyed by the LOWER-CASED product id, which `walkOfferedLists` walks to
+ * interleave extras and options. A bounded number of queries whatever the number of
  * dishes, and never one per dish (CLAUDE.md §3). INACTIVE lists come back too; the walk filters
  * them.
  */
@@ -84,6 +84,19 @@ type OfferedExtraItemFacts = Omit<
 
 const activeVariant = alias(products, "active_variant");
 
+const offerableItems = (tx: Transaction, productIds: string[], includeEveryModifierItem: boolean) =>
+  and(
+    inArray(products.id, productIds),
+    eq(products.active, true),
+    includeEveryModifierItem ? undefined : eq(products.available, true),
+    notExists(
+      tx
+        .select({ one: sql`1` })
+        .from(activeVariant)
+        .where(and(eq(activeVariant.parentId, products.id), eq(activeVariant.active, true))),
+    ),
+  );
+
 /** One query for every product any offered list names, and none at all when no list names one.
  * With `includeEveryModifierItem`, an Unavailable product is read too, but never an Inactive one:
  * availability must not change the document a publish would write, and deleting a product must. */
@@ -108,19 +121,7 @@ async function readExtraProducts(
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .where(
-      and(
-        inArray(products.id, productIds),
-        eq(products.active, true),
-        includeEveryModifierItem ? undefined : eq(products.available, true),
-        notExists(
-          tx
-            .select({ one: sql`1` })
-            .from(activeVariant)
-            .where(and(eq(activeVariant.parentId, products.id), eq(activeVariant.active, true))),
-        ),
-      ),
-    );
+    .where(offerableItems(tx, productIds, includeEveryModifierItem));
   const { defaultLanguage } = await readContentLanguages(tx, "en");
   return new Map(
     rows.map((row) => {
@@ -181,11 +182,64 @@ export async function readOfferedModifiers(
   options: { includeEveryModifierItem?: boolean } = {},
 ): Promise<Map<string, OfferedModifier[]>> {
   const includeEveryModifierItem = options.includeEveryModifierItem === true;
+  const walked = await walkOfferedLists(tx, dishes);
+  const facts = await readExtraProducts(tx, extraItemIds(walked), includeEveryModifierItem);
+  return offeredFrom(walked, facts, includeEveryModifierItem);
+}
+
+/**
+ * The product ids of the extras items {@link readOfferedModifiers} offers each dish with
+ * `includeEveryModifierItem`, keyed the same way, without reading what a till shows of them.
+ */
+export async function readOfferedExtraItemIds(
+  tx: Transaction,
+  dishes: readonly ModifierHolder[],
+): Promise<Map<string, string[]>> {
+  const walked = await walkOfferedLists(tx, dishes);
+  const ids = extraItemIds(walked);
+  const offerable = new Set(
+    ids.length === 0
+      ? []
+      : (
+          await tx
+            .select({ id: products.id })
+            .from(products)
+            .where(offerableItems(tx, ids, true))
+        ).map((row) => row.id),
+  );
+  return new Map(
+    [...walked].map(([holder, entries]) => [
+      holder,
+      entries.flatMap((entry) =>
+        entry.kind === "extras"
+          ? entry.list.items.flatMap((item) =>
+              offerable.has(item.productId) ? [item.productId] : [],
+            )
+          : [],
+      ),
+    ]),
+  );
+}
+
+const extraItemIds = (walked: ReadonlyMap<string, WalkedList[]>) => [
+  ...new Set(
+    [...walked.values()].flatMap((entries) =>
+      entries.flatMap((entry) =>
+        entry.kind === "extras" ? entry.list.items.map((item) => item.productId) : [],
+      ),
+    ),
+  ),
+];
+
+/** Each dish's ACTIVE lists, in its attachment order. */
+async function walkOfferedLists(
+  tx: Transaction,
+  dishes: readonly ModifierHolder[],
+): Promise<Map<string, WalkedList[]>> {
   const { attachments, extrasByProduct, optionsByProduct } = await walkAttachedModifiers(
     tx,
     dishes,
   );
-
   const walked = new Map<string, WalkedList[]>();
   for (const dish of dishes) {
     const productId = dish.productId.toLowerCase();
@@ -205,21 +259,14 @@ export async function readOfferedModifiers(
       }),
     );
   }
+  return walked;
+}
 
-  const facts = await readExtraProducts(
-    tx,
-    [
-      ...new Set(
-        [...walked.values()].flatMap((entries) =>
-          entries.flatMap((entry) =>
-            entry.kind === "extras" ? entry.list.items.map((item) => item.productId) : [],
-          ),
-        ),
-      ),
-    ],
-    includeEveryModifierItem,
-  );
-
+function offeredFrom(
+  walked: ReadonlyMap<string, WalkedList[]>,
+  facts: ReadonlyMap<string, OfferedExtraItemFacts>,
+  includeEveryModifierItem: boolean,
+): Map<string, OfferedModifier[]> {
   const offered = new Map<string, OfferedModifier[]>();
   for (const [holder, entries] of walked) {
     offered.set(

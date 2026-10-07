@@ -14,10 +14,9 @@ import type {
 import { weekdayOf } from "../hours-rules.js";
 import { t } from "./strings.js";
 
-export function format(key: Parameters<typeof t>[0], values: Record<string, string>): string {
-  return Object.entries(values).reduce(
-    (text, [name, value]) => text.replaceAll(`{${name}}`, value),
-    t(key),
+export function format(key: Parameters<typeof t>[0], values: Record<string, string> = {}): string {
+  return t(key).replace(/\{(\w+)\}/g, (whole, name: string) =>
+    Object.hasOwn(values, name) ? values[name]! : whole,
   );
 }
 

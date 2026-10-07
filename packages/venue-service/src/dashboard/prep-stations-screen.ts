@@ -38,7 +38,7 @@ import {
   type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
-import { formatDate } from "./hours-view.js";
+import { format, formatDate } from "./hours-view.js";
 import {
   decisionSentence,
   extraSentence,
@@ -66,11 +66,6 @@ type StationAction =
   | { kind: "today"; stationId: string; state: "open" | "closed" | null }
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
   | { kind: "switch_on"; stationId: string };
-const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {}) =>
-  Object.entries(values).reduce(
-    (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
-    t(key) as string,
-  );
 
 type Editor = { kind: "station" };
 const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
@@ -3176,7 +3171,9 @@ export class PrepStationsScreen extends LitElement {
                     ${pending.moves.map(
                       (move) =>
                         html`<tr>
-                          <td>${move.productName}</td>
+                          <td>
+                            ${move.dish ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName }) : move.productName}
+                          </td>
                           <td>${move.zoneName ?? t("prep.any_zone")}</td>
                           <td>${move.from ? this.#targetName(move.from) : t("prep.no_station")}</td>
                           <td>

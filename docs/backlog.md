@@ -5138,13 +5138,17 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       dropped, so if its zone and its category both go and only the zone comes back, the message
       still names the zone; and only a returning zone or product has a test that the message
       clears — a returning category or No category row has none.
-    - **A routing preview can miss an extra that stops following its dish.** The preview compares
-      where each product would be made on its own (`previewRoutingChange`,
-      `packages/venue-service/src/routing-store.ts`), as it did before A261-4. Giving an extra a
-      cell that names the default station, while its dish is made elsewhere, moves that extra off
-      its dish's station, yet the preview lists no move, so the screen saves without asking; clearing
-      that cell is missed the same way. Both run-it reviews of the A261-4 branch reproduced it against
-      the real migrations. What the preview should say about an extra is for the owner.
+    - **Done by A371 (owner answer, 2026-10-07): a routing preview lists an extra that stops or
+      starts following its dish.** A cell that names a station, even the default one, sends an
+      extra there (the owner kept that rule). The preview now also works out, for every dish and
+      every extra it offers, where the extra is made before and after the change, through
+      `chooseExtraMaker`, and lists the extra when that place changes, naming its
+      dish ("Cheese — with Burger"); the grid then asks before saving. An extra that follows its
+      dish both before and after lists nothing. A dish offers an extra when the catalogue attaches
+      it (in every zone) or when a published menu a zone serves offers it with the dish (in that
+      zone) (`extraMoves`, `packages/venue-service/src/routing-store.ts`;
+      `liveDocumentsByZone`, `packages/venue-service/src/operations.ts`). Like a dish's own
+      move, an extra's move ignores opening hours and stations opened or closed by hand.
     - **Done by A372 (owner answer, 2026-10-07): the No category row shows while it holds a saved
       cell.** It used to be hidden, with its saved cells, while no active product was uncategorised,
       so those cells could not be seen or cleared. The row now shows whenever it holds a saved cell,
@@ -5153,8 +5157,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       (`visibleRoutingRows` and `rowInModel`,
       `packages/venue-service/src/dashboard/routing-grid-model.ts`). An inactive product's cells
       stay out of sight until it is active again, as before.
-    - **A routing preview works out every active product in every active zone twice**, whatever the
-      change; only products under the changed row can move, and a change to one zone's cell moves
+    - **A routing preview works out every active product in every active zone twice, and every
+      extra each one offers there (`extraMoves`)**, whatever the change; only products under the
+      changed row, and the extras those products offer, can move, and a change to one zone's cell moves
       products in that zone only. The preview before A261-4 looped the same way.
     - **Owner question: should a configuration import refuse a routing cell on a zone in a
       switched-off department, as a save would?** Since main's A282 (#1339) no product path leaves
