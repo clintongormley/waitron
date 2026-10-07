@@ -469,11 +469,11 @@ it("explains that unsupported published menus require a venue reset in both lang
   );
 });
 
-it("tells a person whose variant was disabled under them to reload, in English and Spanish", () => {
+it("tells a person whose variant was disabled under them to refresh and try again, in English and Spanish", () => {
   expect(codeMessage("product.variant_not_found", "en")).toBe(
-    "This variant is disabled or no longer exists. Reload the page to see the current variants.",
+    "This variant was disabled or removed. Refresh and try again.",
   );
   expect(codeMessage("product.variant_not_found", "es")).toBe(
-    "Esta variante está deshabilitada o ya no existe. Recarga la página para ver las variantes actuales.",
+    "Esta variante se ha deshabilitado o eliminado. Actualiza y vuelve a intentarlo.",
   );
 });
