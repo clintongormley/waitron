@@ -1401,8 +1401,7 @@ export class MenusScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /** Waits for the write out to be read back: the tree's rows are not keyed, so a ⋮ focused
-   * before the read lands can end up on another row. */
+  /** Waits for the write out to be read back: the row whose ⋮ had focus may be gone after it. */
   #returnFocus(): void {
     const target = this.#focusReturn;
     if (!target || !this.#windowShut || this.busy) return;

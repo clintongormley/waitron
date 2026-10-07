@@ -247,9 +247,15 @@ the fallback to the staff name happens, so a missing one still is not a gap. An 
 name reaches no order or receipt surface at all — a pick becomes its own line carrying the picked
 PRODUCT's names, and nothing copies the list's name onto it. A menu section's customer-facing names
 (`sections.names`, kind `menu_section`) are optional too, and only a partly filled map is reported.
-The report reads owned sections and menu roots; a menu's customer-facing names are its root's. The
-other kind the query reports, `unit`, has no optional customer-facing name to fall back from and
-stays required. A category has one plain internal name and is not in the report. An options list
+The report reads owned sections and menu roots; a menu's customer-facing names are its root's. It
+also reads each include of a menu (kind `menu_include`, listed as `included_menu`, "Included menu
+folder"): the names that include's folder shows, which are the included menu's own names with the
+ones the include fixes laid over them (`readContentTranslationCandidates`,
+`packages/catalogue/src/content-languages.ts`). As for a section, only a partly filled map is a gap.
+It is counted while the include shows its sections directly too, because switching the folder back
+on shows those names again. Its row shows the included menu root's staff name, under the menu that
+includes it. One kind the query reports, `unit`, has no optional customer-facing name to fall back
+from and stays required. A category has one plain internal name and is not in the report. An options list
 contributes two of the report's kinds and not one, both
 of them in the optional group: the list's own name (`option_list`) and each of its labels
 (`option_label`), each with its own table. An extras list contributes one kind, `extra_list`, and no

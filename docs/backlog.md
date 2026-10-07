@@ -2521,10 +2521,11 @@ Left open:
 - A fixed value that happens to equal the included menu's value when the dialog opens is saved
   back as "follow" the next time the dialog is saved: the dialog compares with the included
   menu's value and cannot tell the two apart.
-- The older photo triggers for products and sections (media `0002` and `0005` to `0007`) look up
-  `products.image` and `sections.image`, which no index covers, so every photo delete or rename
-  reads both tables in full. The folder photo's own lookup has an index
-  (`section_members_folder_image_idx`). Its own item: a performance fix with a media migration.
+- The live photo triggers for products and sections (media `0005` to `0007`) look up
+  `products.image` and `sections.image`, which no index covers. The lookup stops at the first row
+  naming the photo, so deleting or renaming a photo that nothing uses reads both tables in full.
+  The folder photo's own lookup has an index (`section_members_folder_image_idx`). Its own item: a
+  performance fix with a media migration.
 - A configuration import stores a fixed folder name as given, spaces included, where a save
   through the dialog or the route trims it. A name of spaces only shows as no name either way.
 - After browser Back to another menu with no edits made, the include's Edit dialog stays open over
