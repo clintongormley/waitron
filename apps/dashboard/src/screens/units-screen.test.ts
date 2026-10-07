@@ -310,7 +310,7 @@ describe("units-screen", () => {
     setLocale("es-ES");
     const el = await mount();
     const root = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
-    expect(root.querySelector(".filters-trigger")!.textContent).toContain("Filtros");
+    expect(root.querySelector(".filters-trigger")!.getAttribute("aria-label")).toBe("Filtros");
     expect(root.querySelector(".filters-clear-all")!.textContent).toContain("Borrar todo");
     expect(root.querySelector(".filter-section h3")!.textContent).toBe("Precisión");
     expect(root.querySelector("wt-combobox.table-filter")!.getAttribute("placeholder")).toBe(
