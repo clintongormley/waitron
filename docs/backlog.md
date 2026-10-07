@@ -1691,6 +1691,18 @@ same tax id collides silently. A review seat also found that a cancellation sent
 invoice cancels the other copy's record (measured on the fake AEAT; AEAT keys a cancellation by
 invoice alone); the design never sends one. The 2026-10-03
 [plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) is replaced by the revised plan above.
+_2026-10-07 (A286), checked against `packages/fiscal-verifactu/src/drain.ts` on `main`: three
+statements above are out of date. Since W41s-2 (#1213), `claimBatch` sends no record while an
+earlier record of its chain is `enviando` or waits for a retry, and claims a cancellation only once
+its original's envío is `aceptado`, `aceptado_con_errores`, `rechazado` or `detenido` (one whose
+original was refused or held is then held, not sent), so the outage ordering ranked first should no
+longer file a void before its sale (read, not run; nearest case: `drain.ordering.test.ts`, "does
+not submit a due successor before its earlier retry"). Also since #1213, a duplicate AEAT reports
+as `Correcta` is looked up and its fingerprint compared rather than taken as ours (same file, "does
+not accept a Correcta duplicate whose stored fingerprint belongs to another record"). Since W41s-3
+(#1289), a refused record no longer stops its chain; three refusals in a row with one code still do
+(W41s-3b, #1303). A conflict still holds the chain's later unsent records, as before, now with a
+filing case; the alert wording is unchanged, and nothing releases a hold until Tasks 8–9._
 
 ### A2. The setup wizard
 
@@ -2049,20 +2061,6 @@ against the other states.
 
 **A menu no longer switches a product or size off on its own — DONE (W90, #1216, 2026-10-05;
 owner 2026-10-04).**
-**Upgrading:** a venue whose database holds a size row with an on/off choice and no menu price
-cannot migrate: migrating it fails on
-`CHECK constraint failed: menu_item_variant_overrides_overrides_ck`. Reset a dev venue with
-`wa-wt reset demo <name>`; reset any other venue, or clear those choices before upgrading. After
-upgrading, a size switched off on a menu is sold, published again or not (read, not run:
-`applyLiveFields` sets a size's `available` from its Active and Available state alone); make it
-Unavailable or Inactive if it must not sell. Publish every menu again: a menu with products on it,
-or one that includes another menu, reads as changed until it is (seen 2026-10-05 by the pre-merge
-review for a populated menu, which read as changed, and an empty menu that includes nothing, which
-stayed current; the included-menu case is read, not run). A configuration bundle exported before
-W90 must be exported again after upgrading: one exported just before W90 is refused
-`setup.request_invalid` with `field: "module:catalogue"`, because its catalogue migration count is
-one short (seen 2026-10-05 in a throwaway test, not kept); an older one is refused at the first
-module, in the order they are checked, whose count differs.
 
 **A menu's prices are one editable Price overrides field per row — DONE (W89, #1239,
 2026-10-05; owner 2026-10-04).** Not checked:
@@ -2088,22 +2086,6 @@ boundary if required. No change to decimal parsing is included in A280.
 
 **A product has one colour everywhere, taken from its category unless it has its own — DONE (W92, #1250,
 2026-10-05).**
-**Upgrading:** two migrations, core `0101_product_color.sql` and catalogue
-`0025_category_color.sql`, each add one nullable column (`products.color`,
-`category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
-
-> **2026-10-06, A291:** old-format live menus now require a venue reset. W92's republish advice
-> below applies only to a live document already in format 3.
-
-Republish every menu after upgrading: a version published before W92 carries no product colours,
-so its product tiles stay plain, and a menu with products on it reads as changed until it is
-published again (the document format number is unchanged, so such a version is still sold from;
-_2026-10-06: since W93 a version in an earlier document format is no longer sold from_).
-A section's colour was already in such a version, and the till now paints it on the section's
-tile. Export a configuration bundle again
-after upgrading: one exported before W92 records older schema versions for core and catalogue,
-which the import refuses (`validateConfigurationBundle`,
-`apps/server/src/configuration-transfer.ts`; read, not run).
 Left open:
 
 - In the Structure tree, closing the section form opened from a section's swatch puts focus on the
@@ -3289,7 +3271,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
         say), so the dialog says the cancel may have been made and to check the waiting orders (a
         new sentence, `cancel_credit.unconfirmed_counter`). The dialog shows this first, and then the
         till reads the waiting list again.
-      - **Done by A234: the named counter actions check their starting operator session before a later list read.**
+      - **Done by A234 (#1100, 2026-10-03): the named counter actions check their starting operator session before a later list read.**
       - **The busy-state defect in these counter paths remains open.** `#onConfirmPayment`,
         `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay` wait for their list
         reads before clearing the flag that marks the basket busy (`submitting` or `placing`), and
@@ -4463,6 +4445,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     staff name stands as that language's text — so in a new Barcelona venue (default Catalan) a
     Spanish staff name with no customer name is not flagged under Catalan.
   - Open: a section's own form has no address, so a section links to its menu's Structure tab.
+- **Fill in every missing translation in one place — OPEN, unqueued (owner 2026-10-06 ~17:23).**
+  The Missing translations section (#1006) lists each gap and links it to the screen where it is
+  edited (for an option, a section or a unit, the screen that holds it);
+  the owner wants one screen where every missing customer-facing name can be filled in directly, so
+  they can all be dealt with in one sitting.
+- **A "Translate all" service from Waitron Cloud — OPEN, unqueued (owner 2026-10-06 ~17:23).** A
+  paid subscriber service in Waitron Cloud (the separate service, not this repository) that
+  translates every missing customer-facing name in one go; this repository would only call it,
+  behind the subscription. A machine translation needs the venue's review before a diner sees it.
 - **A customer-facing name with no text in the default language prints a blank goods line — OPEN
   (found 2026-10-01 by C122).** Under default Catalan, a customer name holding only Spanish printed
   `1 u` and the price with no name on the receipt, and stored `{"ca-ES":""}` on the sale line
