@@ -1190,7 +1190,7 @@ each version in the way; nothing offers to cancel it from there. The menus list 
 of the publication plan).
 **Left open after W99 (#1358), each an owner question asked in the PR:**
 
-- **DONE (A376):** a refused Publish advised "Cancel it or move it earlier, then try again", but
+- **DONE (A376, #1377):** a refused Publish advised "Cancel it or move it earlier, then try again", but
   moving a version can never let an immediate publish through (a move must land after now). It
   now says "Cancel it, or publish once it is live." ("Cancélala o publica cuando ya esté
   publicada."); the schedule and Change time forms keep their move-earlier and move-later advice
@@ -1202,7 +1202,7 @@ of the publication plan).
   serve the previous version again until the clock catches up. A Codex review reproduced it against
   the real migrations. Closing it means reads recording what they serve, or a never-decreasing
   clock in the process.
-- **DONE (A376):** the schedule and Change time forms closed with "Cancel" / "Cancelar" directly
+- **DONE (A376, #1377):** the schedule and Change time forms closed with "Cancel" / "Cancelar" directly
   under a sentence that says "Cancel it…" / "Cancélala…", which in Spanish could read as
   cancelling the version in the way. The button now reads "Close" / "Cerrar".
 - **DONE (A365, 2026-10-07):** `loadConfig` refuses `WAITRON_MAX_TICK_MS` above
