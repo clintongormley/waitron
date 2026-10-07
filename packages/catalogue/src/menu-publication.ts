@@ -411,12 +411,11 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     const reached = new Set(reachableProducts(graph, rootSectionId));
     for (const entry of list) {
       const { change } = entry;
+      if (change.kind !== "product_removed") continue;
       // Disabling a product takes it off every list, so its removal is the product's change.
-      if (
-        change.kind === "product_removed" &&
-        (deleted.has(change.productId) || reached.has(change.productId))
-      ) {
-        change.source = deleted.has(change.productId) ? "shared_product" : "this_menu";
+      const disabled = deleted.has(change.productId);
+      if (disabled || reached.has(change.productId)) {
+        change.source = disabled ? "shared_product" : "this_menu";
         delete change.includedMenu;
         delete entry.section;
       }

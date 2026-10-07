@@ -36,7 +36,7 @@ import {
 import { batches } from "./batches.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
-import { takeOffMenus } from "./menu-removal.js";
+import { dropMenuPrices, takeOffMenus } from "./menu-removal.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
@@ -1123,7 +1123,7 @@ async function patchProduct(
   checkNames: boolean,
 ): Promise<void> {
   const namesChange = checkNames && (patch.name !== undefined || patch.active !== undefined);
-  const row = patch.active === true || namesChange ? await readUpdatedName(tx, id) : undefined;
+  const row = patch.active !== undefined || namesChange ? await readUpdatedName(tx, id) : undefined;
   if (patch.active === true && row?.parentId != null)
     await assertNotOfferedAsExtra(tx, row.parentId, "active");
   if (namesChange && row !== undefined)
@@ -1213,9 +1213,13 @@ async function patchProduct(
       allergens: allergens !== undefined,
       diet: dietOverride !== undefined,
     });
-  if (patch.active === false) await takeOffMenus(tx, [id]);
+  // One Inactive already is on no menu and holds no menu price: the editor resends `active` on
+  // every save.
+  if (patch.active === false && row?.active === true)
+    await (row.parentId === null ? takeOffMenus : dropMenuPrices)(tx, [id]);
 }
 
+/** Sets a product with no parent Inactive and takes it off every menu. */
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
   await markInactive(tx, [id]);
   await takeOffMenus(tx, [id]);

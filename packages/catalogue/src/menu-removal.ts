@@ -1,23 +1,30 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { batches } from "./batches.js";
-import { syncMenuOffers } from "./menu-structure.js";
+import { onStructureChanged } from "./section-structure.js";
 import { sectionMembers } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { loadSectionGraph, menusContaining, reachableProducts } from "./section-graph.js";
 import { renumber } from "./section-members.js";
 
-/**
- * Takes the products off every menu, deleted menus included, as a staff removal from each list
- * would: each list renumbers and each menu that reached it resets the product's settings. A Device
- * Home Page shortcut to one becomes a missing tile in its place, so the grid does not move. An id
- * that is a variant loses its price on every menu; it is listed only under its product.
- */
-export async function takeOffMenus(tx: Transaction, productIds: readonly string[]): Promise<void> {
-  for (const batch of batches(productIds))
+/** Deletes the variants' prices on every menu. */
+export async function dropMenuPrices(
+  tx: Transaction,
+  variantIds: readonly string[],
+): Promise<void> {
+  for (const batch of batches(variantIds))
     await tx
       .delete(menuItemVariantOverrides)
       .where(inArray(menuItemVariantOverrides.variantId, batch));
+}
+
+/**
+ * Takes the products off every menu, deleted menus included, as a staff removal from each list
+ * would: each list renumbers and each menu that reached it resets the product's settings. A Device
+ * Home Page shortcut to one becomes a missing tile in its place, so the grid does not move. Only a
+ * product with no parent is a list member; a variant's menu prices go through {@link dropMenuPrices}.
+ */
+export async function takeOffMenus(tx: Transaction, productIds: readonly string[]): Promise<void> {
   const held: { id: string; sectionId: string; productId: string }[] = [];
   for (const batch of batches(productIds))
     for (const row of await tx
@@ -47,12 +54,14 @@ export async function takeOffMenus(tx: Transaction, productIds: readonly string[
         .from(products)
         .where(inArray(products.id, batch)))
         names.set(row.id, row.name);
-    for (const { id, sectionId, productId } of held)
-      if (homes.has(sectionId))
+    for (const productId of shortcutProducts)
+      for (const batch of batches([...homes]))
         await tx
           .update(sectionMembers)
           .set({ productId: null, childSectionId: null, missingName: names.get(productId)! })
-          .where(eq(sectionMembers.id, id));
+          .where(
+            and(eq(sectionMembers.productId, productId), inArray(sectionMembers.sectionId, batch)),
+          );
   }
   const listRows = held.filter((row) => lists.has(row.sectionId)).map((row) => row.id);
   for (const batch of batches(listRows))
@@ -68,7 +77,7 @@ export async function takeOffMenus(tx: Transaction, productIds: readonly string[
     );
   }
   // A Device Home Page writes no `menu_items` rows, so only the menus reaching a list are synced.
-  await syncMenuOffers(tx, [...menus].sort(), before);
+  await onStructureChanged(tx, [...menus].sort(), before);
 }
 
 /** How many Active menus' structures reach any of the products; a variant counts by its product. */

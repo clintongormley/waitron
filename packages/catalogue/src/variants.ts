@@ -5,7 +5,7 @@ import type { ContentLanguages, Decimal } from "@waitron/shared";
 import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
 import { reachableMenuItem } from "./menu-structure.js";
 import { batches } from "./batches.js";
-import { takeOffMenus } from "./menu-removal.js";
+import { dropMenuPrices } from "./menu-removal.js";
 import { menuItems } from "./schema/menu.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
@@ -272,7 +272,7 @@ async function writeProductVariants(
       })
       .where(and(eq(products.parentId, productId), eq(products.id, variant.id)));
   }
-  if (madeInactive.length > 0) await takeOffMenus(tx, madeInactive);
+  if (madeInactive.length > 0) await dropMenuPrices(tx, madeInactive);
   return listProductVariants(tx, productId);
 }
 

@@ -1117,9 +1117,9 @@ unused `units` property is gone (it closes W75's leftover).
   its prices on every menu, so each menu's next publish leaves it out; a Device Home Page shortcut
   to it becomes a missing tile, and enabling it again does not put it back on any menu. Disabling a
   size deletes its price on every menu; enabled again, it follows its product back with no menu
-  price of its own. Every writer does it (`takeOffMenus`, `packages/catalogue/src/menu-removal.ts`:
-  the product save and editor, the Products list's Disable, a category deleted with its contents, a
-  variant save); the list writers refuse an Inactive product, the size-price route refuses a
+  price of its own. Every writer does it (`takeOffMenus` for a product and `dropMenuPrices` for a
+  size, `packages/catalogue/src/menu-removal.ts`: the product save and editor, the Products list's
+  Disable, a category deleted with its contents, a variant save); the list writers refuse an Inactive product, the size-price route refuses a
   Disabled size, and a configuration import refuses either on a menu (`setup.request_invalid`).
   `GET /management-api/products/menus` counts the menus the products are on, and the Disable
   dialogs say "They come off the N menus they are on…" (or "every menu" while the count is

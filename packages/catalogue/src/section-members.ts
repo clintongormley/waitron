@@ -68,13 +68,15 @@ export function requirePosition(position: number | undefined): void {
   if (position !== undefined) requireIndex(position, "position");
 }
 
-/** Home tiles may target owned sections or menu roots; reach is checked by the shortcut writer. */
+/** Home tiles may target owned sections or menu roots; reach is checked by the shortcut writer. A
+ * product must be Active too when `active`. */
 export async function checkRef(
   tx: Transaction,
   graph: SectionGraph,
   sectionId: string,
   ref: MemberRef,
   replacing?: SectionMember<TileRef>,
+  { active = false }: { active?: boolean } = {},
 ): Promise<void> {
   if (ref?.kind === "section" && typeof ref.sectionId === "string") {
     const role = graph.role(ref.sectionId);
@@ -82,7 +84,10 @@ export async function checkRef(
       throw new AppError("menu_section.not_found", { sectionId: ref.sectionId });
     if (role === "home_layout")
       throw new AppError("menu_section.wrong_role", { sectionId: ref.sectionId, role });
-  } else if (ref?.kind !== "product" || !(await allTopLevelProducts(tx, [ref.productId]))) {
+  } else if (
+    ref?.kind !== "product" ||
+    !(await allTopLevelProducts(tx, [ref.productId], { active }))
+  ) {
     throw new AppError("menu_section.membership_invalid", {});
   }
   if (graph.tiles(sectionId).some((member) => member !== replacing && sameRef(member.ref, ref)))

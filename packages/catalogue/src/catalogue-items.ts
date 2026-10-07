@@ -145,31 +145,30 @@ export async function deleteCatalogueItems(
   if (shown !== undefined) await assertContentsAsShown(tx, tree, selection.categoryIds, shown);
   if (contents === "move_up") await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
   await markInactive(tx, selection.productIds);
+  const deactivated = [...selection.productIds];
   if (contents === "move_up") {
     for (const id of tree.byDepth(selection.categoryIds, "deepest"))
       await removeFolder(tx, id, tree.parent(id));
-    await takeOffMenus(tx, selection.productIds);
-    return;
-  }
-  const deactivated = [...selection.productIds];
-  const gone = new Set<string>();
-  for (const id of tree.byDepth(selection.categoryIds, "shallowest")) {
-    if (gone.has(id)) continue; // inside a selected folder already deleted with its contents
-    const parent = tree.parent(id);
-    const subtree = tree.subtree(id);
-    for (const batch of batches(subtree)) {
-      const inside = await tx
-        .select({ id: products.id })
-        .from(products)
-        .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
-      const ids = inside.map((product) => product.id);
-      await markInactive(tx, ids);
-      deactivated.push(...ids);
-      await vacateCategories(tx, batch, parent);
-    }
-    for (const folder of tree.byDepth(subtree, "deepest")) {
-      await removeFolder(tx, folder, tree.parent(folder));
-      gone.add(folder);
+  } else {
+    const gone = new Set<string>();
+    for (const id of tree.byDepth(selection.categoryIds, "shallowest")) {
+      if (gone.has(id)) continue; // inside a selected folder already deleted with its contents
+      const parent = tree.parent(id);
+      const subtree = tree.subtree(id);
+      for (const batch of batches(subtree)) {
+        const inside = await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
+        const ids = inside.map((product) => product.id);
+        await markInactive(tx, ids);
+        deactivated.push(...ids);
+        await vacateCategories(tx, batch, parent);
+      }
+      for (const folder of tree.byDepth(subtree, "deepest")) {
+        await removeFolder(tx, folder, tree.parent(folder));
+        gone.add(folder);
+      }
     }
   }
   await takeOffMenus(tx, deactivated);

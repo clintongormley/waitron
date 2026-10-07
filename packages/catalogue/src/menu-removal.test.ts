@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, section } from "../test/menus-fixture.js";
@@ -7,6 +7,7 @@ import { createCategory } from "./categories.js";
 import { deleteCatalogueItems } from "./catalogue-items.js";
 import { addShortcut, readMenuHome } from "./menu-home.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
+import * as menuRemoval from "./menu-removal.js";
 import { menusHolding, takeOffMenus } from "./menu-removal.js";
 import { readMenuStructure } from "./menu-structure.js";
 import {
@@ -530,6 +531,50 @@ describe("a variant made Inactive loses its price on every menu", () => {
       ),
     ).toBe("product.variant_not_found");
     expect(await menusPricing(r.tortillaHalf)).toEqual([]);
+  });
+});
+
+describe("saving a product or variant that was Inactive already", () => {
+  it("runs no removal, where saving an Active one Inactive runs the one its kind needs", async () => {
+    const r = await variantFixture();
+    const lists = vi.spyOn(menuRemoval, "takeOffMenus");
+    const prices = vi.spyOn(menuRemoval, "dropMenuPrices");
+    try {
+      const editorSave = (id: string) =>
+        app(async (tx) => {
+          const value = await readProductEditor(tx, id);
+          await saveProductEditor(tx, id, r.tapas, { ...value, active: false }, "en");
+        });
+      const keepOnlyWhole = () =>
+        app(async (tx) => {
+          const whole = (await listProductVariants(tx, r.tortilla)).find(
+            (variant) => variant.id === r.tortillaWhole,
+          );
+          await setProductVariants(tx, r.tortilla, [whole!], "en");
+        });
+
+      await editorSave(r.croquetas);
+      await editorSave(r.croquetasHalf);
+      await keepOnlyWhole();
+      expect(lists.mock.calls.map(([, ids]) => ids)).toEqual([[r.croquetas]]);
+      expect(prices.mock.calls.map(([, ids]) => ids)).toEqual([
+        [r.croquetasHalf],
+        [r.tortillaHalf],
+      ]);
+
+      lists.mockClear();
+      prices.mockClear();
+      await editorSave(r.croquetas);
+      await app((tx) => updateProduct(tx, r.croquetas, { active: false }));
+      await editorSave(r.croquetasHalf);
+      await app((tx) => updateProduct(tx, r.croquetasHalf, { active: false }));
+      await keepOnlyWhole();
+      expect(lists).not.toHaveBeenCalled();
+      expect(prices).not.toHaveBeenCalled();
+    } finally {
+      lists.mockRestore();
+      prices.mockRestore();
+    }
   });
 });
 
