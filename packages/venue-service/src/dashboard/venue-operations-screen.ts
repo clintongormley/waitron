@@ -125,8 +125,12 @@ export class VenueOperationsScreen extends LitElement {
         gap: var(--wt-space-2);
       }
       wt-data-table::part(inactive-department-label),
-      wt-data-table::part(inactive-zone-label) {
+      wt-data-table::part(inactive-zone-label),
+      wt-data-table::part(unconfigured-zone-label) {
         margin-inline-start: var(--wt-space-2);
+      }
+      wt-data-table::part(unconfigured-zone-label) {
+        color: var(--wt-color-text-muted);
       }
       wt-data-table::part(inherited-value) {
         color: var(--wt-color-text-muted);
@@ -943,7 +947,7 @@ export class VenueOperationsScreen extends LitElement {
                   >
                     ${row.zone.name}
                   </button>`
-            }${row.zone.active === false ? html`<span part="inactive-zone-label">${t("venue.zone_disabled")}</span>` : row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
+            }${row.zone.active === false ? html`<span part="inactive-zone-label">${t("venue.zone_disabled")}</span>` : row.departmentId === null ? html`<span part="unconfigured-zone-label">${t("venue.unconfigured")}</span>` : nothing}${model.readiness
               .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
               .map(
                 (issue) =>
@@ -1462,7 +1466,11 @@ export class VenueOperationsScreen extends LitElement {
           row.kind === "department" || row.departmentId === null
             ? null
             : `department-${row.departmentId}`}
-        .rowCollapsible=${() => false}
+        .rowCollapsible=${(row: PolicyRow) => row.kind === "department"}
+        .rowToggleLabel=${(row: PolicyRow, expanded: boolean) =>
+          format(expanded ? "venue.collapse_department" : "venue.expand_department", {
+            name: row.kind === "department" ? row.department.name : row.zone.name,
+          })}
         .rowActivation=${() => "none" as const}
         .emptyMessage=${t("venue.no_departments")}
         .noMatchesMessage=${tableNoMatches()}
