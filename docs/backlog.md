@@ -949,7 +949,7 @@ unused `units` property is gone (it closes W75's leftover).
   included-menu name and note.
 
 **A menu's prices table puts the Price column straight after the product's name (A302, owner
-2026-10-06) — DONE:** the columns read Product, Price override, Appears under, Main category,
+2026-10-06) — DONE (#1327):** the columns read Product, Price override, Appears under, Main category,
 Status, and the Filters panel, which lists filters in the order the table defines its columns, now
 lists the price filter first. The table keeps its column choices under a new key,
 `waitron.menus.menu-prices.table`, so an order saved before (the old order, with Price override
