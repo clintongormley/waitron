@@ -1,8 +1,10 @@
 import { LitElement, css, html, nothing } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
+import { formatDecimalInput, readDecimalInput } from "../decimal-input.js";
 
 @customElement("wt-input")
 export class WtInput extends LitElement {
@@ -45,6 +47,7 @@ export class WtInput extends LitElement {
   @property() label = "";
   @property() name = "";
   @property() type = "text";
+  @property({ attribute: "decimal-locale" }) decimalLocale = "";
   @property() autocomplete = "";
   @property() placeholder = "";
   @property({ type: Number }) maxlength?: number;
@@ -69,7 +72,9 @@ export class WtInput extends LitElement {
   private readonly hintId = uniqueId("wt-input-hint");
 
   private onInput(event: Event): void {
-    this.value = (event.target as HTMLInputElement).value;
+    const input = event.target as HTMLInputElement;
+    this.value = this.decimalLocale ? readDecimalInput(input, this.decimalLocale) : input.value;
+    if (this.decimalLocale) this.requestUpdate();
     dispatchWtChange(this, event, { value: this.value });
   }
 
@@ -104,8 +109,9 @@ export class WtInput extends LitElement {
             class="field-control"
             id=${inputId}
             name=${this.name || nothing}
-            .value=${this.value}
-            type=${this.type}
+            .value=${this.decimalLocale ? live(formatDecimalInput(this.value, this.decimalLocale)) : this.value}
+            type=${this.decimalLocale ? "text" : this.type}
+            inputmode=${this.decimalLocale ? "decimal" : nothing}
             autocomplete=${this.autocomplete || nothing}
             placeholder=${this.placeholder || this.hint}
             maxlength=${this.maxlength ?? nothing}

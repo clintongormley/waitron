@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
+import { formatDecimalInput, readDecimalInput } from "@waitron/ui-core";
 import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
@@ -150,6 +152,7 @@ export class WtPriceInput extends LitElement {
   @property({ type: Boolean, attribute: "fixed-unit" }) fixedUnit = false;
   /** Draws the euro sign in the amount box as this locale writes it; empty draws none. */
   @property() locale = "";
+  @property({ attribute: "decimal-locale" }) decimalLocale = "";
 
   private readonly generatedInputId = uniqueId("wt-price-input");
   private readonly errorId = uniqueId("wt-price-input-error");
@@ -193,7 +196,11 @@ export class WtPriceInput extends LitElement {
   }
 
   private onInput(event: Event): void {
-    this.value = (event.target as HTMLInputElement).value;
+    this.value = readDecimalInput(
+      event.target as HTMLInputElement,
+      this.decimalLocale || this.locale || "en",
+    );
+    this.requestUpdate();
     dispatchWtChange(this, event, { value: this.value });
   }
 
@@ -259,9 +266,9 @@ export class WtPriceInput extends LitElement {
             id=${inputId}
             part="amount"
             name=${this.name || nothing}
-            .value=${this.value}
+            .value=${live(formatDecimalInput(this.value, this.decimalLocale || this.locale || "en"))}
             inputmode="decimal"
-            placeholder=${this.placeholder || this.hint || nothing}
+            placeholder=${formatDecimalInput(this.placeholder || this.hint, this.decimalLocale || this.locale || "en") || nothing}
             ?required=${this.required}
             ?disabled=${this.disabled}
             aria-label=${this.hideLabel && this.label ? this.label : nothing}

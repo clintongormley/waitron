@@ -34,9 +34,9 @@ async function mount() {
   return el;
 }
 function input(el: TillFindBillDialog, name: string) {
-  return el.shadowRoot!.querySelector<HTMLElement & { value: string; error: string }>(
-    `[name="${name}"]`,
-  )!;
+  return el.shadowRoot!.querySelector<
+    HTMLElement & { value: string; error: string; updateComplete: Promise<unknown> }
+  >(`[name="${name}"]`)!;
 }
 async function type(el: TillFindBillDialog, name: string, value: string) {
   input(el, name).shadowRoot!.querySelector<HTMLInputElement>("input")!.value = value;
@@ -294,4 +294,30 @@ describe("Find a bill", () => {
       await page.viewport(1280, 720);
     }
   });
+});
+
+it("decimal input cash collection shows Spanish and refuses grouped or over-precision text", async () => {
+  setLocale("es");
+  const el = await mount();
+  const paid: unknown[] = [];
+  el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
+  await type(el, "bill-search", "A/12");
+  await click(el, "[data-search]");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
+  await click(el, "[data-bill]");
+  const control = input(el, "cash-received");
+  await control.updateComplete;
+  const native = control.shadowRoot!.querySelector("input")!;
+  expect(native.value).toBe("30,00");
+  for (const bad of ["40,123", "1,234.56", "1.234,56", "1 234,56"]) {
+    await type(el, "cash-received", bad);
+    await click(el, "[data-collect]");
+    expect(paid).toEqual([]);
+    expect(control.error).not.toBe("");
+  }
+  await type(el, "cash-received", "40,80");
+  await click(el, "[data-collect]");
+  expect(paid).toEqual([
+    { workingOrderId: "wo-1", tender: { method: "cash", amount: "40.80" }, invoiced: true },
+  ]);
 });

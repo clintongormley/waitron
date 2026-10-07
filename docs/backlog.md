@@ -2213,11 +2213,11 @@ row's Resolve menu. Blank or invalid text and Escape leave the saved clash avail
 and size rows have regression checks; no existing test check changed. A valid draft still hides
 Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list.
 
-**Price overrides reject a comma decimal separator (A280 visual follow-up, 2026-10-06).**
-Typing `2,80` through the native input in Spanish left Resolve visible in all four mounted-widget
-checks; `2.80` hid it. The field forwards its raw text, and the row uses `isProductPrice`.
-Confirm the desired input convention, then accept a localized decimal separator at the input
-boundary if required. No change to decimal parsing is included in A280.
+**Price overrides accept either decimal mark — DONE (A284, A280 visual follow-up).**
+The shared price field converts comma or point to an exact dot-decimal draft and displays the
+screen's decimal mark. The row's `isProductPrice` check receives the canonical draft; invalid
+multiple marks and grouping spaces remain available to the row's existing refusal. A284 adds
+native-input EN/ES regressions to `wt-price-input.test.ts` and runs the menu-prices-table suite.
 
 **A product has one colour everywhere, taken from its category unless it has its own — DONE (W92, #1250,
 2026-10-05).**
@@ -4024,14 +4024,20 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   field's refusal); and the two staff forms turn the refusal into a field message inside the form,
   where other dashboard forms receive field messages from their parent screen.
 
-- **Money in the dashboard shows its currency sign (C43, #830) — left open:** (1) the catalogue,
-  menu and purchase price fields accept and show a dot decimal only, so a Spanish field shows `9.00`
-  with the sign after it while the same amount displayed beside it reads `9,00 €` (the adjustments
-  limit field shows its saved value with a comma); (2) the alert check that every money slot is
-  marked looks only at slots named `amount`, `captured` and `expected`, so a new money slot under
-  another name is seen by nothing; (3) the purchase form's VAT line still lets its other fields
-  shrink to `min-width: 5rem` (`apps/dashboard/src/widgets/purchase-form.ts`), a `rem` the
-  design-token rule forbids.
+- **Money in the dashboard shows its currency sign (C43, #830).** Decimal entry consistency is
+  DONE (A284): shared exact string parsing and display in `ui-core`, consumed by `wt-price-input`
+  and the decimal mode of `wt-input`. Catalogue/product/variant and menu prices, extras prices and
+  portions, purchases (amounts and percentages), adjustment limits, fractional profile logout
+  minutes, till discounts, bill
+  contributions/cash/tips, partial refunds, finding and collecting a debt, measured bill splits,
+  and the cash/weight keypad display use the screen's decimal mark and accept comma or point.
+  Multiple marks and grouping spaces are refused by the form's own checks. The cents conversion
+  and server request contracts are unchanged. `payments-screen.ts` was surveyed: its inputs on this tree
+  are reader names, an attestation note and PIN, with no decimal entry. Browser regressions live
+  beside the shared controls and the purchase, extras, adjustment and till consumers.
+  Left open: (1) the alert check that every money slot is marked looks only at slots named `amount`,
+  `captured` and `expected`, so a new money slot under another name is unseen; (2) the purchase VAT
+  line's other fields still use `min-width: 5rem`, which the design-token rule forbids.
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
   (1) tables inside a dialog or picker offer no chooser, by choice; (2) the servers list

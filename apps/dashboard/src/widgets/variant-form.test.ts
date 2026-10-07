@@ -155,7 +155,7 @@ it.each([
     expect(sign.textContent).toBe("€");
     const signBox = sign.getBoundingClientRect();
     const amount = price.shadowRoot!.querySelector("input")!;
-    expect(amount.value).toBe("6.50");
+    expect(amount.value).toBe(locale.startsWith("es") ? "6,50" : "6.50");
     const box = amount.getBoundingClientRect();
     const middle = (box.left + box.right) / 2;
     if (side === "before") expect(signBox.right).toBeLessThan(middle);

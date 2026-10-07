@@ -72,9 +72,9 @@ const confirmButton = (el: TillAdjustmentDialog) =>
 const actions = (el: TillAdjustmentDialog) =>
   root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
 const field = (el: TillAdjustmentDialog, name: string) =>
-  root(el).querySelector<HTMLElement & { error: string; required: boolean }>(
-    `wt-input[name="${name}"]`,
-  )!;
+  root(el).querySelector<
+    HTMLElement & { error: string; required: boolean; updateComplete: Promise<unknown> }
+  >(`wt-input[name="${name}"]`)!;
 const fieldsetError = (el: TillAdjustmentDialog, which: string) =>
   root(el).querySelector(`[data-error-for="${which}"]`)?.textContent?.trim() ?? "";
 
@@ -698,3 +698,26 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(refusalField("bill.line_paid", "comp", false)).toBeNull();
   });
 });
+
+for (const locale of ["en", "es"]) {
+  it(`decimal input in a till discount follows ${locale}`, async () => {
+    setLocale(locale);
+    const el = await mount({ kind: "discount", reasons: [staffMeal] });
+    const asked = capture<AdjustmentChoice>(el, "adjust-preview");
+    await chooseReason(el, "Staff meal");
+    const control = field(el, "amount") as HTMLElement & { updateComplete: Promise<unknown> };
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector("input")!;
+    for (const separator of [".", ","]) {
+      native.value = `2${separator}80`;
+      native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      await control.updateComplete;
+      expect(native.value).toBe(locale === "es" ? "2,80" : "2.80");
+    }
+    await press(continueButton(el), el);
+    expect(asked).toEqual([
+      { action: "discount_amount", reasonId: "Staff meal", note: null, amount: "2.80" },
+    ]);
+  });
+}

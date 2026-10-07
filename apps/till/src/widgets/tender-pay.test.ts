@@ -1658,3 +1658,52 @@ it("rings a weighed dish up unasked when it offers neither a variant nor a list"
   expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
   expect(store.lines).toHaveLength(1);
 });
+
+for (const locale of ["en", "es"]) {
+  it(`decimal input card tip accepts both marks and displays ${locale}`, async () => {
+    setLocale(locale);
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider: "stripe_on_device",
+      tipsEnabled: true,
+    });
+    const sent: unknown[] = [];
+    el.addEventListener("collect-card", (event) => sent.push((event as CustomEvent).detail));
+    for (const separator of [".", ","]) {
+      await typeTip(el, `2${separator}80`);
+      const native = query(el, ".tip-input")!.shadowRoot!.querySelector("input")!;
+      await (query(el, ".tip-input") as HTMLElement & { updateComplete: Promise<unknown> })
+        .updateComplete;
+      expect(native.value).toBe(locale === "es" ? "2,80" : "2.80");
+    }
+    click(el, ".pay-card");
+    expect(sent).toEqual([{ tip: "2.80" }]);
+  });
+}
+
+it("decimal input refuses a grouped card tip beside its field until corrected", async () => {
+  setLocale("es");
+  const store = new WorkingOrderStore();
+  store.addProduct(cafe, "1");
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+    store,
+    cardProvider: "stripe_on_device",
+    tipsEnabled: true,
+  });
+  const sent: unknown[] = [];
+  el.addEventListener("collect-card", (event) => sent.push((event as CustomEvent).detail));
+  await typeTip(el, "1.234,56");
+  click(el, ".pay-card");
+  await el.updateComplete;
+  expect(sent).toEqual([]);
+  expect((query(el, ".tip-input") as HTMLElement & { error: string }).error).toBe(
+    t("bill_pay.tip_invalid"),
+  );
+  expect((query(el, ".pay-card") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+  await typeTip(el, "2,80");
+  expect((query(el, ".tip-input") as HTMLElement & { error: string }).error).toBe("");
+  click(el, ".pay-card");
+  expect(sent).toEqual([{ tip: "2.80" }]);
+});

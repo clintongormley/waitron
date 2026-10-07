@@ -15,6 +15,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { BillLookupRow, InvoiceLookupRow, Tender, TillApi } from "../api/client.js";
+import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
@@ -229,7 +230,8 @@ export class TillFindBillDialog extends LitElement {
     if (this.method === "cash") {
       let enough = false;
       try {
-        enough = stringToCents(this.cash) >= stringToCents(bill.stillOwed);
+        const amount = typedAmount(this.cash);
+        enough = amount !== null && stringToCents(amount) >= stringToCents(bill.stillOwed);
       } catch {
         /* invalid amount */
       }
@@ -399,6 +401,7 @@ export class TillFindBillDialog extends LitElement {
                   this.method === "cash"
                     ? html`<wt-price-input
                         name="cash-received"
+                        decimal-locale=${currentLocale()}
                         .label=${t("find_bill.cash_received")}
                         unit="€"
                         .fixedUnit=${true}

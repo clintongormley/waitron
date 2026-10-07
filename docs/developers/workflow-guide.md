@@ -330,3 +330,13 @@ probe that informed the Codex seat (2026-09-05, #242) planted three defects in o
 Fable, Opus and `gpt-6-astra` the same run-it brief: all three found every planted defect and
 refused the merge, and Astra took 14 minutes to their 5.5 but was billed to the ChatGPT plan, not
 to Claude.
+
+
+### Read the review report before treating it as complete
+
+On 2026-10-07, A284's first `claude-seat.sh review-run` exited 0 after 539 seconds and wrote a
+49-byte report: “Still running. I'll pick it up when it finishes.” Its nonempty report and usage
+receipt did not contain findings or the running checks' results. After checking that those
+subprocesses had exited, the driver retried the incomplete dispatch in the same installed
+candidate with synchronous bounded checks. The retry published completed findings in 81 seconds.
+Keep both reports and their timing/usage receipts; a pending response is no approval to push or land.

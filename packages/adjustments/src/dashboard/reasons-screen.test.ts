@@ -1818,3 +1818,25 @@ describe("the bill discount limit", () => {
     expect(saved(el)).toBe("");
   });
 });
+
+for (const locale of ["en", "es"]) {
+  it(`decimal input percentage limits follow ${locale}`, async () => {
+    setLocale(locale);
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    const control = field(el, "maxPercent") as Named & { updateComplete: Promise<unknown> };
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector("input")!;
+    for (const separator of [".", ","]) {
+      await type(el, "maxPercent", `12${separator}50`);
+      await control.updateComplete;
+      expect(native.value).toBe(locale === "es" ? "12,50" : "12.50");
+    }
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledWith(
+      "c",
+      expect.objectContaining({ maxPercentBp: 1250 }),
+    );
+  });
+}

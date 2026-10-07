@@ -3,6 +3,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   submitOnEnter,
+  parseDecimalInput,
   baseStyles,
   formMessage,
   formMessageStyles,
@@ -20,7 +21,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
 import { ROLES, printerLabel, roleName } from "../i18n/domain.js";
@@ -72,6 +73,7 @@ interface ProfileDraft {
   capabilities: CapabilityFlag[];
   formFactor: FormFactor;
   inactivityMinutes: number | null;
+  invalidInactivityText: string | null;
   printerLists: PrinterDraft;
   kitchenLists: ProfileKitchenLists;
   departmentId: string;
@@ -460,8 +462,8 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftCanvasId: string | null = null;
   @state() private draftCapabilities: CapabilityFlag[] = [];
   @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
-  // In whole MINUTES (`null` = never); the wire value is SECONDS.
   @state() private draftInactivityMinutes: number | null = null;
+  @state() private invalidInactivityText: string | null = null;
   @state() private draftPrinterLists: PrinterDraft = NO_PRINTER_LISTS;
   /** The drawer list and defaults as opened, so a save sends only the ones it changed. */
   #loadedEquipment: ProfileEquipmentDefaults | null = null;
@@ -513,6 +515,7 @@ export class DeviceProfilesScreen extends LitElement {
         .sort(),
       formFactor: this.draftFormFactor,
       inactivityMinutes: ordering ? this.draftInactivityMinutes : null,
+      invalidInactivityText: ordering ? this.invalidInactivityText : null,
       printerLists: structuredClone(this.draftPrinterLists),
       kitchenLists: ordering
         ? { stationIds: [], watcherIds: [] }
@@ -548,6 +551,7 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftCapabilities = [...value.capabilities];
         this.draftFormFactor = value.formFactor;
         this.draftInactivityMinutes = value.inactivityMinutes;
+        this.invalidInactivityText = value.invalidInactivityText;
         this.draftPrinterLists = structuredClone(value.printerLists);
         this.draftKitchenLists = structuredClone(value.kitchenLists);
         this.draftDepartmentId = value.departmentId;
@@ -709,6 +713,8 @@ export class DeviceProfilesScreen extends LitElement {
     const errors: FieldErrors = {};
     if (this.draftName.trim() === "") errors.name = t("form.name_required");
     if (this.#ordering()) {
+      if (this.invalidInactivityText !== null)
+        errors.inactivity = t("device_profiles.err_inactivity");
       if (this.#decidesScope()) {
         if (this.draftDepartmentId === "")
           errors.department = t("device_profiles.err_department_required");
@@ -865,6 +871,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
+    this.invalidInactivityText = null;
     this.draftPrinterLists = NO_PRINTER_LISTS;
     this.#loadedEquipment = null;
     this.readerState = "loading";
@@ -945,6 +952,7 @@ export class DeviceProfilesScreen extends LitElement {
         profile.capabilities.includes(flag),
       );
       this.draftFormFactor = profile.formFactor;
+      this.invalidInactivityText = null;
       this.draftInactivityMinutes =
         profile.inactivityTimeoutSeconds == null ? null : profile.inactivityTimeoutSeconds / 60;
       const equipment = equipmentOf(profile);
@@ -1044,8 +1052,10 @@ export class DeviceProfilesScreen extends LitElement {
   #onInactivity(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const raw = event.detail.value.trim();
-    const minutes = Number(raw);
-    this.draftInactivityMinutes = raw === "" || Number.isNaN(minutes) ? null : minutes;
+    const parsed = parseDecimalInput(raw);
+    this.invalidInactivityText = parsed === null && /[\d.,]/.test(raw) ? raw : null;
+    if (this.invalidInactivityText === null)
+      this.draftInactivityMinutes = parsed === null ? null : Number(parsed);
     this.#clearRefusal("inactivity");
     this.#draftScope?.changed();
   }
@@ -2102,12 +2112,11 @@ export class DeviceProfilesScreen extends LitElement {
             ? html`<wt-input
                 @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
                 class="field"
-                type="number"
-                min="1"
+                decimal-locale=${currentLocale()}
                 data-test="profile-inactivity"
                 name="inactivityTimeout"
                 label=${t("device_profiles.inactivity_timeout_label")}
-                .value=${this.draftInactivityMinutes == null ? "" : String(this.draftInactivityMinutes)}
+                .value=${this.invalidInactivityText ?? (this.draftInactivityMinutes == null ? "" : String(this.draftInactivityMinutes))}
                 .error=${errors.inactivity ?? ""}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInactivity(e)}
               ></wt-input>`

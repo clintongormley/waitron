@@ -828,6 +828,7 @@ export class ExtraListForm extends LitElement {
           this.#asksPortion(item)
             ? html`<wt-input
                 name=${`item-${index}-portion`}
+                decimal-locale=${currentLocale()}
                 label=${t("extras.portion")}
                 hide-label
                 required

@@ -1789,6 +1789,8 @@ export const en = {
   "device_profiles.form_factor.tablet-landscape": "Handheld tablet",
   "device_profiles.form_factor.kds": "Kitchen display",
   "device_profiles.inactivity_timeout_label": "Auto-logout after (minutes)",
+  "device_profiles.err_inactivity":
+    "Enter minutes with one decimal mark, or leave blank for never.",
   "device_profiles.where_heading": "Where it serves",
   "device_profiles.department": "Department",
   "device_profiles.department_hint": "Orders taken on this profile belong to this department",
@@ -4179,6 +4181,8 @@ export const es: Record<StringKey, string> = {
   "device_profiles.form_factor.tablet-landscape": "Tableta de mano",
   "device_profiles.form_factor.kds": "Pantalla de cocina",
   "device_profiles.inactivity_timeout_label": "Cierre de sesión automático (minutos)",
+  "device_profiles.err_inactivity":
+    "Introduce minutos con un solo separador decimal, o deja el campo vacío para nunca.",
   "device_profiles.where_heading": "Dónde sirve",
   "device_profiles.department": "Departamento",
   "device_profiles.department_hint": "Los pedidos tomados con este perfil son de este departamento",

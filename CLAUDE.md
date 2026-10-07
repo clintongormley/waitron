@@ -285,6 +285,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   is unseen; the files it exempts are not read at all, so a field added inside one passes; and the files it allows by name are held only to how many lines draw a
   field, so a field swapped for another, a hidden input made visible, or one added on a line that
   already has one passes. See [conventions-ui.md](docs/developers/conventions-ui.md).
+- **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
+  try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;
+  receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
+- **Normalising a field while typing preserves the native selection.** Cost: A284's decimal-mark
+  conversion moved the cursor to the end during a middle edit. Guards: the EN/ES caret cases in
+  `wt-input.test.ts` and `wt-price-input.test.ts`; see [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
@@ -874,6 +880,8 @@ browser test** — most of these rules exist because a test passed while proving
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
   every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
   `GIT_DIR` before trusting it.
+- **A test that changes the screen's global language restores it before the next case.** Cost:
+  A284's split test changed the labels in later transfer cases; receipt: [testing-guide.md](docs/developers/testing-guide.md).
 - **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A module
   mock cannot replace an already-loaded browser ES module.
 - **Browser recovery tests read the native control inside a shared component.** A host's `checked`
@@ -1088,6 +1096,8 @@ before treating an implementation as a rule violation.
   _Dependabot pull requests_. Config: `.github/dependabot.yml`.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
   approval; nothing else is.
+- **Read a review report for completed findings, not just a successful wrapper exit.** Cost: A284's
+  first report was only pending prose. Receipt: [workflow-guide.md](docs/developers/workflow-guide.md).
 - **Merging requires resolved conversations.** Copilot is off here; the second model on the diff is
   Codex in `/finish-branch`'s run-it seat, before the PR exists. Verify CI runs belong to the current
   head SHA.

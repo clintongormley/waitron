@@ -16,7 +16,7 @@ import type {
   Station,
   Watcher,
 } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
@@ -2403,4 +2403,82 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     expect(api.setProfileReaders).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
+});
+
+for (const locale of ["en", "es"]) {
+  for (const separator of [".", ","]) {
+    it(`decimal input inactivity accepts ${separator} and displays ${locale}`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const phone: DeviceProfile = {
+          ...profiles[0]!,
+          formFactor: "phone-portrait",
+          inactivityTimeoutSeconds: 90,
+        };
+        const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
+        const el = await mount(api);
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+        await flush(el);
+        const control = el.shadowRoot!.querySelector<
+          HTMLElement & { updateComplete: Promise<unknown> }
+        >("[data-test=profile-inactivity]")!;
+        await control.updateComplete;
+        const native = control.shadowRoot!.querySelector("input")!;
+        expect(native.value).toBe(locale === "es" ? "1,5" : "1.5");
+        native.value = `2${separator}5`;
+        native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await el.updateComplete;
+        await control.updateComplete;
+        expect(native.value).toBe(locale === "es" ? "2,5" : "2.5");
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+        await flush(el);
+        expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+          "p1",
+          "Front counter",
+          "c1",
+          ["integrated-card-payment", "open-cash-drawer"],
+          "phone-portrait",
+          150,
+          NO_PRINTERS,
+        );
+      } finally {
+        setLocale(previous);
+      }
+    });
+  }
+}
+
+it("decimal input inactivity refuses ambiguous marks without clearing the timeout", async () => {
+  const phone: DeviceProfile = {
+    ...profiles[0]!,
+    formFactor: "phone-portrait",
+    inactivityTimeoutSeconds: 90,
+  };
+  const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
+  const el = await mount(api);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await flush(el);
+  const control = el.shadowRoot!.querySelector<
+    HTMLElement & { error: string; updateComplete: Promise<unknown> }
+  >("[data-test=profile-inactivity]")!;
+  const save = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    "[data-test=profile-save]",
+  )!;
+  for (const bad of ["1,2,3", "1.234,5", "1 234,5"]) {
+    const native = control.shadowRoot!.querySelector("input")!;
+    native.value = bad;
+    native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    save.click();
+    await el.updateComplete;
+    expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+    expect(control.error).not.toBe("");
+    expect(save.disabled).toBe(true);
+    expect(native.value).toBe(bad);
+  }
+  change(el, "profile-inactivity", "2.5");
+  await el.updateComplete;
+  expect(control.error).toBe("");
+  expect(save.disabled).toBe(false);
 });

@@ -129,10 +129,6 @@ export function purchaseRefusalErrors(error: unknown): PurchaseFormErrors {
  */
 const DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
-/**
- * The `DECIMAL` test runs BEFORE the range test so an empty, whitespace or comma-decimal amount is
- * rejected here (`Number("")` and `Number("  ")` are both `0`, which would otherwise pass the range).
- */
 function inRange(value: string, min: number, max: number): boolean {
   if (!DECIMAL.test(value)) return false;
   const n = Number(value);
@@ -472,6 +468,7 @@ export class PurchaseForm extends LitElement {
         class="line-field"
         ?disabled=${this.busy}
         name=${`line-${index}-rate`}
+        decimal-locale=${currentLocale()}
         data-test=${`line-rate-${index}`}
         label=${t("purchase.line_rate")}
         required
@@ -635,6 +632,7 @@ export class PurchaseForm extends LitElement {
           class="field"
           ?disabled=${this.busy}
           name="deductible-proportion"
+          decimal-locale=${currentLocale()}
           data-test="deductible-proportion"
           required
           error=${errors["deductible-proportion"] ?? ""}

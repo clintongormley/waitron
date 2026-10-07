@@ -490,6 +490,7 @@ export class TillBillRefundDialog extends LitElement {
         this.howMuch === "part"
           ? html`<wt-input
               name="amount"
+              decimal-locale=${currentLocale()}
               autocomplete="off"
               .disabled=${this.busy}
               .label=${t("bill_refund.amount")}

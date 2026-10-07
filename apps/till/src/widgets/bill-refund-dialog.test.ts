@@ -52,9 +52,9 @@ const root = (el: TillBillRefundDialog) => el.shadowRoot!;
 const text = (node: Element | null) => (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const money = (amount: string) => formatMoney(amount, currentLocale());
 const field = (el: TillBillRefundDialog, name: string) =>
-  root(el).querySelector<HTMLElement & { error: string; required: boolean }>(
-    `wt-input[name="${name}"]`,
-  );
+  root(el).querySelector<
+    HTMLElement & { error: string; required: boolean; updateComplete: Promise<unknown> }
+  >(`wt-input[name="${name}"]`);
 const actions = (el: TillBillRefundDialog) =>
   root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
 const button = (el: TillBillRefundDialog, selector: string) =>
@@ -334,3 +334,19 @@ describe("till-bill-refund-dialog: a card keyed on a separate terminal", () => {
     expect(text(button(el, "[data-refund-terminal-done]"))).toBe(t("bill_refund.terminal_done"));
   });
 });
+
+for (const locale of ["en", "es"]) {
+  it(`decimal input amount follows ${locale}`, async () => {
+    setLocale(locale);
+    const el = await mount();
+    await pick(el, "part");
+    const control = field(el, "amount")!;
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector("input")!;
+    for (const separator of [".", ","]) {
+      await type(el, "amount", `2${separator}80`);
+      await control.updateComplete;
+      expect(native.value).toBe(locale === "es" ? "2,80" : "2.80");
+    }
+  });
+}

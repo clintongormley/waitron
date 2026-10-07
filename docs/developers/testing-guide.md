@@ -1310,3 +1310,13 @@ Both call sites now take one module-level list (`SUPPORTED_ALGORITHM_IDS` in
 the offered `pubKeyCredParams` and the argument handed to the verifier. `verifyAuthenticationResponse`
 takes no such parameter (it verifies against the stored public key), so the assertion ceremony has
 nothing equivalent to pin.
+
+
+### Restore the screen language after a test
+
+Restore the previous language in `finally` when a single case changes the global screen locale.
+On 2026-10-07, A284's new Spanish split case passed with the name-filtered split cases, then the
+full `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.test.ts`
+reported four failures and 219 passes: later transfer cases received Spanish labels instead of
+the English labels their existing assertions required. Restoring `currentLocale()` in the new
+case's `finally` left those assertions unchanged and produced 223 passes in the full file.

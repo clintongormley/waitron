@@ -4904,6 +4904,7 @@ export class TillTableOrderScreen extends LitElement {
                 class="split-quantity"
                 data-split-quantity=${line.lineNo}
                 name=${`split-quantity-${line.lineNo}`}
+                decimal-locale=${currentLocale()}
                 required
                 .label=${t("table.split_quantity")}
                 .value=${quantity}

@@ -1363,6 +1363,21 @@ worse than no property at all. Full form association via `ElementInternals`
 if a screen needs form-like behaviour, wire it up in JS: listen for `wt-change` on each field and
 call your own submit handler on the triggering `wt-button`'s `click` event.
 
+For a price, amount, percentage or measured quantity, accept either `2.80` or `2,80` in every
+screen language. Show the decimal mark of the screen language, including when you fill or restore
+an input: English `2.80`, Spanish `2,80`. Keep digits and trailing zeros; do not add thousands
+separators to editable values. A single comma or point is a decimal mark. Multiple marks or spaces
+inside the number are refused beside the field, with a localized message, rather than interpreted
+as grouping. Keep the field's existing limits on sign, precision and range.
+
+Use `wt-price-input` with `locale` for money. For a decimal without a currency sign, give
+`wt-input` or `wt-price-input` `decimal-locale=${currentLocale()}`. The controls forward a valid
+entry as an exact dot-decimal string in `wt-change.detail.value`; invalid text stays available to
+your form's checks. Decimal mode uses a text control with a decimal keyboard. Preserve the native
+selection when converting a mark during typing. `parseDecimalInput` and `formatDecimalInput` from `@waitron/ui-core` (also
+exported by `@waitron/ui`) share this conversion. The server still receives its exact dot-decimal
+format. Keep the conversion in the browser so a Spanish keyboard does not change the amount stored.
+
 A form says nothing about errors until the operator first presses its primary action (owner rule,
 2026-09-28). There is no error summary at the top of a form: it makes the page jump when it clears.
 Only the form's own checks ever disable the action; an error that comes back from a request never
