@@ -821,13 +821,16 @@ it.each(["en", "es"])(
           {
             productId: "chips",
             outcome: { kind: "made", stationId: "fryer" },
-            decidedBy: { kind: "claim", categoryId: "sides" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
           },
           {
             productId: "cheese",
             outcome: { kind: "follows_dish", why: "no_rule" },
-            decidedBy: null,
+            decidedBy: { kind: "default" },
             fallbacks: [],
           },
           {
@@ -839,7 +842,10 @@ it.each(["en", "es"])(
           {
             productId: "olives",
             outcome: { kind: "follows_dish", why: "no_replacement" },
-            decidedBy: { kind: "claim", categoryId: "sides" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
           },
           {
@@ -872,8 +878,8 @@ it.each(["en", "es"])(
     for (const name of names) expect(answer).toContain(`${name}:`);
     expect(answer).toContain(
       locale === "en"
-        ? "Closed claims Food › Sides"
-        : "Closed tiene asignada la categoría Food › Sides",
+        ? "Chips: made separately at Fryer, as set for Food › Sides, in every zone"
+        : "Chips: se prepara aparte en Fryer, como está indicado para Food › Sides, en todas las zonas",
     );
     expect(answer).toContain(locale === "en" ? "follows the dish" : "sigue al plato");
     expect(answer).toContain(
@@ -881,13 +887,13 @@ it.each(["en", "es"])(
     );
     for (const sentence of locale === "en"
       ? [
-          "Cheese: follows the dish — no exception or claim covers it",
+          "Cheese: follows the dish — only the default station covers it",
           "Sauce: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket",
           "Olives: follows the dish — Closed is closed and nothing can replace it",
           "Pickles: follows the dish — it is made at Bar, where the dish is",
         ]
       : [
-          "Cheese: sigue al plato — ninguna excepción ni asignación lo cubre",
+          "Cheese: sigue al plato — solo lo cubre la estación predeterminada",
           "Sauce: sigue al plato — lo que lo cubre no necesita preparación",
           "Olives: sigue al plato — Closed está cerrada y nada puede sustituirla",
           "Pickles: sigue al plato — se prepara en Bar, donde se prepara el plato",
@@ -936,61 +942,52 @@ it.each(["en", "es"])(
   },
 );
 
-it.each(["en", "es"])("names the exception that sends an extra elsewhere in %s", async (locale) => {
-  setLocale(locale);
-  const a = api({
-    load: vi.fn().mockResolvedValue({
-      ...view,
-      products: [...view.products, { id: "chips", name: "Chips" }],
-      testProducts: [...view.testProducts, { id: "chips", name: "Chips" }],
-      routing: {
-        ...view.routing,
-        exceptions: [
+it.each(["en", "es"])(
+  "names the product cell that sends an extra elsewhere in %s",
+  async (locale) => {
+    setLocale(locale);
+    const a = api({
+      load: vi.fn().mockResolvedValue({
+        ...view,
+        products: [...view.products, { id: "chips", name: "Chips" }],
+        testProducts: [...view.testProducts, { id: "chips", name: "Chips" }],
+      }),
+      explain: vi.fn().mockResolvedValue({
+        route: { kind: "no_preparation" },
+        decidedBy: null,
+        fallbacks: [],
+        noReplacement: false,
+        clockReadable: true,
+        stations: [{ id: "bar", name: "Bar", active: true }],
+        extrasWaitOnDish: false,
+        extras: [
           {
-            id: "extra-rule",
-            position: 0,
-            zoneId: null,
-            categoryId: null,
             productId: "chips",
-            target: { kind: "station", stationId: "bar" },
-            neverMatches: false,
-            stationOff: false,
+            outcome: { kind: "made", stationId: "bar" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "product", productId: "chips" }, zoneId: null },
+            },
+            fallbacks: [],
           },
         ],
-      },
-    }),
-    explain: vi.fn().mockResolvedValue({
-      route: { kind: "no_preparation" },
-      decidedBy: null,
-      fallbacks: [],
-      noReplacement: false,
-      clockReadable: true,
-      stations: [{ id: "bar", name: "Bar", active: true }],
-      extrasWaitOnDish: false,
-      extras: [
-        {
-          productId: "chips",
-          outcome: { kind: "made", stationId: "bar" },
-          decidedBy: { kind: "exception", exceptionId: "extra-rule" },
-          fallbacks: [],
-        },
-      ],
-    }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  q(el, '[data-test="test-extra"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "chips" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    locale === "en"
-      ? "Chips: made at Bar, because of the exception 'Chips → Bar'"
-      : "Chips: se prepara en Bar, porque lo indica la excepción «Chips → Bar»",
-  );
-});
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="test-product"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "bread" } }),
+    );
+    q(el, '[data-test="test-extra"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "chips" } }),
+    );
+    await settle(el);
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+      locale === "en"
+        ? "Chips: made separately at Bar, as set for Chips, in every zone"
+        : "Chips: se prepara aparte en Bar, como está indicado para Chips, en todas las zonas",
+    );
+  },
+);
 
 it("opens a product tester link with its product selected", async () => {
   setLocale("en");
@@ -3082,7 +3079,10 @@ it.each([
     api({
       explain: vi.fn().mockResolvedValue({
         route: { kind: "station", stationId: "downstairs" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        },
         fallbacks: [{ stationId: "upstairs", why }],
         noReplacement: false,
         clockReadable: true,
@@ -3099,7 +3099,7 @@ it.each([
   await settle(el);
   const answer = q(el, '[data-test="test-answer"]')!.textContent!;
   expect(answer).toContain(sentence);
-  expect(answer).toContain("Because: Upstairs bar claims Cocktails");
+  expect(answer).toContain("Because: Upstairs bar: Drinks › Cocktails, in every zone");
   expect(answer.indexOf(sentence)).toBeLessThan(answer.indexOf("Made at:"));
 });
 it("explains each fallback and the final dead end without saying no rule matched", async () => {
