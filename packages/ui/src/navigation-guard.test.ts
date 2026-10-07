@@ -439,3 +439,20 @@ it("accepting an entry with a copied position retires the old history epoch", as
   history.forward();
   await expect.poll(() => location.pathname).toBe("/guarded/external");
 });
+
+it("unguarded observers receive the actual traversal event while accepted writes are restores", async () => {
+  const reports: (Event | undefined)[] = [];
+  stop = observeNavigation(window, (event) => reports.push(event));
+  const traversal = new PopStateEvent("popstate");
+  window.dispatchEvent(traversal);
+  expect(reports).toEqual([traversal]);
+  guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async (proceed) => {
+      await proceed();
+      return "proceeded";
+    },
+  });
+  await guard.write("/guarded/accepted-observer");
+  expect(reports).toEqual([traversal, undefined]);
+});

@@ -7036,6 +7036,11 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     await typeReason(el, "Wrong table");
     await confirmCancel(el);
     emit(tableOrder(el)!, "logout");
+    const warning = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => warning.open).toBe(true);
+    await warning.updateComplete;
+    warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => warning.open).toBe(false);
     await flush(el);
     expect(dialog(el)).toBeNull();
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });

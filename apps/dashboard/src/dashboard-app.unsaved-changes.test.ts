@@ -588,7 +588,7 @@ it("a guarded product deep link accepts the product and screen in one history st
     }),
   });
   change(m, "123456");
-  const length = history.length;
+  const pushed = vi.spyOn(history, "pushState");
   const request = () =>
     m.app.shadowRoot!.querySelector(".body")!.firstElementChild!.dispatchEvent(
       new CustomEvent("wt-edit-product", {
@@ -606,7 +606,7 @@ it("a guarded product deep link accepts the product and screen in one history st
   await expect.poll(() => m.question.open).toBe(true);
   await choose(m, "discard");
   await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/product-1");
-  expect(history.length).toBe(length + 1);
+  expect(pushed).toHaveBeenCalledTimes(1);
   expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
   expect(unload()).toBe(false);
 });

@@ -2485,6 +2485,7 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     expect(sent()[0]!.lines).toEqual([{ lineNo: 6 }]);
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="6"]')).toBeNull();
     await press(el, "[data-pay-close]");
+    await expect.poll(() => dialog(el)).toBeNull();
     const group = tableOrder(el).shadowRoot!.querySelector<HTMLElement>('[data-group="g-2"]')!;
     expect(group.dataset.groupState).toBe("held");
     expect(text(group.querySelector(`[data-group-line="${tiramisu.id}"] [data-line-paid]`))).toBe(

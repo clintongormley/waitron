@@ -4045,3 +4045,45 @@ local receipt folder. No previous behavioral assertion was changed by these corr
 
 Current-head push-hook and CI results still belong to the delivery checkpoint; this review
 receipt does not claim full-package coverage, live venue writes or all-platform native prompts.
+
+
+## CI repairs and incomplete inline printer owners, 2026-10-07
+
+PR #1325's first head, `ee2cfb0652a06689182ccc7e90c71d08518cf19a`, passed the normal
+126-second push hook (5,207 root tests), licence checks and CodeQL. CI run `37564044959`
+finished with dashboard and till failures: 19 jobs succeeded, three failed including the
+summary, and six were skipped. PR #1325 is now a draft; it cannot be landed on these results.
+
+Five till failures reproduced locally. Two lock tests now invoke the injected session activity's
+idle callback, because voluntary logout must ask about an edited form while forced lock must
+clear it. The original absence, no-banner and no-late-read assertions remain. Two voluntary
+leave tests explicitly answer Discard before their original assertions. The paid held-item test
+awaits the completed dialog's removal before reopening Items; its payment and no-sale assertions
+remain. The five corrected cases pass. `pnpm --filter @waitron/till test:coverage` passes
+5,394 tests and the unchanged thresholds: statements 98.04%, branches 95.71%, functions 99.03%
+and lines 99.40%.
+
+Five printer failures reproduced because the shared navigation observer stopped forwarding the
+native popstate event to an unguarded legacy consumer. The observer now forwards that event;
+an accepted guarded write calls the restore callback without an event. The new regression failed
+before the fix. In an independent frozen-installed copy, deleting event forwarding produced
+one failure beside one passing indexed-history control; restoring it passed both cases. Seven
+changed files matched before that copy was removed. All 44 shared navigation cases pass.
+The dashboard history test now counts its one push directly: Chromium's capped history length
+cannot distinguish that push when the suite already has 50 entries. The complete printer and
+app-unsaved suites pass 469 tests; UI, dashboard and till typechecks pass.
+
+These printer failures also exposed unfinished W69 scope. The inline detail name and network
+connection editors still use armed local discard prompts, visible in
+`apps/dashboard/src/screens/printers-screen.ts` at the detail save, breadcrumb and input handlers.
+The inventory's protected printer row requires the shared question. The earlier final-audit
+completion statement is superseded: these two owners still need dirty/revert/unload, Keep/Discard,
+context/history, independent-save, failed-save, newer-input, stale-reply and forced-teardown
+acceptance. Modal printer owners' earlier receipts do not establish this inline behavior.
+
+Exact failed CI logs, local red/green output, full till coverage, observer deletion controls and
+changed-test notes are retained under Lane E `receipts/w69-final-audit-20261007/` as
+`ci-*-failure.log`, `ci-till-repro.log`, `ci-till-corrected.log`, `ci-till-coverage.log`,
+`ci-printer-repro.log`, `ci-observer-*.log`, `ci-observer-control.json` and
+`ci-dashboard-corrected.log`. No fiscal, root guard or coverage threshold was changed.
+Keep the single completed Claude review; do not repeat it solely for these fixes or a rebase.

@@ -33,7 +33,7 @@ export class UrlStateController implements ReactiveController {
   private ownedGuard?: NavigationGuard;
   constructor(
     private readonly host: ReactiveControllerHost & HTMLElement,
-    private readonly restore: () => void,
+    private readonly restore: (event?: Event) => void,
     private readonly config: UrlPathConfig,
   ) {
     host.addController(this);

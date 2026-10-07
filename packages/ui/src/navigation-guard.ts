@@ -46,15 +46,16 @@ export function navigationGuardFor(target: Window): NavigationGuard | undefined 
   return guards.get(target);
 }
 
-export function observeNavigation(target: Window, restore: () => void): () => void {
-  const pop = () => {
-    if (!guards.has(target)) restore();
+export function observeNavigation(target: Window, restore: (event?: Event) => void): () => void {
+  const pop = (event: Event) => {
+    if (!guards.has(target)) restore(event);
   };
+  const accepted = () => restore();
   target.addEventListener("popstate", pop);
-  target.addEventListener(acceptedEvent, restore);
+  target.addEventListener(acceptedEvent, accepted);
   return () => {
     target.removeEventListener("popstate", pop);
-    target.removeEventListener(acceptedEvent, restore);
+    target.removeEventListener(acceptedEvent, accepted);
   };
 }
 

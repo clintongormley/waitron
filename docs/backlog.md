@@ -1186,8 +1186,14 @@ records the original failing tests, deliberate fixture changes, deletion control
 language/theme/width checks for each rollout checkpoint. Earlier rollout-status paragraphs are
 superseded by its dated receipts. The whole-branch Claude review found stale URL query writes, a copied Hours history position,
 a reused history epoch and a retained PIN owner after a forced server switch. Those findings
-have focused regression tests and installed deletion controls. The normal push hook and required
-CI on the current head remain outstanding.
+have focused regression tests and installed deletion controls. PR #1325 is a draft. Its first
+push hook passed, but CI run `37564044959` failed in dashboard and till tests. The repairs pass
+locally; the next pushed head still needs its normal hook and required CI.
+
+The CI investigation also found two unfinished owners: the printer detail's inline name and
+network connection forms still use local discard prompts. They need the shared warning and
+browser-leaving protection before W69 can finish. The earlier final-audit completion claim was
+too broad; the dated audit records this correction and the remaining acceptance work.
 
 Activated desktop Chromium checks cover reload, external navigation and closing with the
 Schedule owner; the implementation does not promise prompts on every browser or after mobile
