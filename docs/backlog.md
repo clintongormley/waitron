@@ -5052,7 +5052,7 @@ till → a recorded preproduction sale.
 One guard here is narrower than its name. `scripts/trust-page-logo.test.ts` checks that the logo
 pasted into the server's source still matches the brand lockup — the two drawings agree, and nothing
 else. It does not check that the page renders, that either theme is readable, or that the logo is
-visible at all. **Done 2026-10-07** by branch `chore/claude-md-contained`: the guard and its hedge are named in
+visible at all. **Done 2026-10-07** by #1337: the guard and its hedge are named in
 `docs/developers/testing-guide.md`, in the section on pages asserted as a string.
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it
@@ -6028,7 +6028,7 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
     without a null check, so a thrown `null` would raise a `TypeError` (the driver throws real
     errors). Done: the read-routing rule's sentence that a read-only connection does not refuse an
     `ATTACH` now lives in `docs/developers/conventions-data.md`, and was narrowed on 2026-10-07 by
-    branch `chore/claude-md-contained` — #568's probe (Node v26.7.0) found one naming a file that
+    #1337 — #568's probe (Node v26.7.0) found one naming a file that
     does not exist IS refused there (errcode 14, no file created), while an existing file and
     `:memory:` attach.
   - `packages/payments-stripe`, found by #570 and not changed (each a code or config change, not a
@@ -6912,10 +6912,11 @@ bump it when a fixed version is published, and run the certificate suites in tho
 
 **House rules and their guards:**
 
-- **Keep an eye on `CLAUDE.md`'s size over time — it is not gated** (owner, 2026-09-14). Add rules
-  freely; if it drifts well past ~45.5 KB, move the receipts into the matching `docs/developers/`
-  topic file and leave the rule plus its one-line pointer behind, per `CLAUDE.md` §7. A periodic
-  housekeeping check, not a blocker.
+- **`CLAUDE.md` stays contained through regular housekeeping — it is not gated** (owner, 2026-09-14
+  and 2026-10-07). #1337 (2026-10-07) moved the receipts into the `docs/developers/` topic files and
+  took it from about 102 KB to about 71 KB. Add rules freely; prune when touching an entry, and sweep
+  when the file has grown well past about 71 KB, per `CLAUDE.md` §7. The campaign watcher checks it on
+  its 3-hourly evaluation. A housekeeping check, never a blocker.
 - **The pointers guard is deliberately narrower than "every pointer"** (#337): it does not check a
   root-level filename such as `eslint.config.js`, nor a bare directory. `CLAUDE.md` §7 says so;
   widen the guard if that gap ever costs something.
