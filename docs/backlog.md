@@ -1830,7 +1830,12 @@ F1 paper jobs with the requesting staff member, in the same transaction as the j
 copy audit. Synthetic tests cover replayed original requests, paper copies after completed
 email, active-email refusal with no job/audit left behind, expiry before a paper original,
 and the F2/no-printer controls. Eight independent deletions fail the intended case beside
-a valid passing control. Automatic issuance still needs enrollment; no whole-Task-2 claim.
+a valid passing control. The automatic receipt hook now enrolls F1 originals using the
+operator recorded on the sale, including when optional receipt printing is off. Synthetic
+cases cover replay, cross-medium refusal and rollback, absent printers, and sales with no
+recorded operator. Removing the forwarded operator makes the attributed-original test fail
+while the unattributed-sale control still passes. Sales without a recorded operator continue
+to print without delivery metadata; their enrollment is still open. No whole-Task-2 claim.
 For enrolled receipts, the real pull now projects
 confirmed unpairing and unavailable-Bluetooth endings onto delivery metadata in the same
 transaction. Queued receipts become failed; handed-out receipts become unknown and retain
