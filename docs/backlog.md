@@ -2488,9 +2488,48 @@ controller to the table and checks after every table update whether the current 
 shown. An event from the table for "these branches changed" would be cleaner; it means a change in
 `packages/ui`.
 
-**"Edit <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
+**"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
 other items in the tree's row menus are greyed out while a change is out; the link to the included
-menu's own editor is a link, which has no greyed-out state, so it stays live.
+menu's own editor is a link, which has no greyed-out state, so it stays live. (A322 renamed it from
+"Edit <menu>", so that the include's own Edit could sit beside it.)
+
+**An included menu can show its sections directly instead of as one folder — DONE (A322, this PR,
+2026-10-07).** Each include of a menu has its own setting. On the Menus screen the include's row
+says "Shown as a folder" or "Sections shown directly", and its ⋮ holds "Open <menu>" (the included
+menu's own Structure tab), Edit and "Remove from this menu". Edit opens a dialog with a "Show as a
+folder" switch and, while the switch is on, the folder's customer-facing names, colour and photo.
+Each of those follows the included menu until the manager changes it here; a changed one is fixed
+for this include only. With the switch off, the included menu's own sections and products appear in
+the include's place, in their own order, on the till, in the Menus preview and on the device home
+page; an include inside them keeps its own setting. The setting and the fixed values live on the
+include's row (`section_members.show_as_folder` and `folder_overrides`, catalogue migrations `0028`
+and `0029`), a folder's fixed photo is protected like a section's (media `0009`), and the route is
+`PUT /management-api/sections/:id/members/:memberId/folder`. The menu document gains `direct` and
+`fixed` on an include, so a published edition keeps the setting. How it works:
+[design-system.md](developers/design-system.md) (the Structure tab, and Forms on a switch that hides
+fields), [product-categories.md](developers/product-categories.md) (the route) and the dated A322
+notes in the [menus design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
+Left open:
+
+- A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
+- A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
+  else the copy indexed last.
+- Renaming or clearing the included menu's own customer names is not checked against the folders
+  that fix some languages, so a folder can end up with no name in the default language. The
+  missing-translations report lists it, and changing the default language is refused while it
+  lasts, but the write that caused it is allowed.
+- A fixed value that happens to equal the included menu's value when the dialog opens is saved
+  back as "follow" the next time the dialog is saved: the dialog compares with the included
+  menu's value and cannot tell the two apart.
+- The older photo triggers for products and sections (media `0002` and `0005` to `0007`) look up
+  `products.image` and `sections.image`, which no index covers, so every photo delete or rename
+  reads both tables in full. The folder photo's own lookup has an index
+  (`section_members_folder_image_idx`). Its own item: a performance fix with a media migration.
+- A configuration import stores a fixed folder name as given, spaces included, where a save
+  through the dialog or the route trims it. A name of spaces only shows as no name either way.
+- After browser Back to another menu with no edits made, the include's Edit dialog stays open over
+  that menu, as the section Edit dialog does: choosing another menu does not close either
+  (read in `menus-screen.ts`, not run).
 
 **Inspect the proposed menu and follow every change — DONE (W95, #1302, 2026-10-06).**
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
