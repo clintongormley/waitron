@@ -1,5 +1,6 @@
 import {
   checkedInvoiceChoiceDelivery,
+  reserveStagedInvoiceDelivery,
   type InvoiceChoiceDeliveryContext,
 } from "./invoice-choice-delivery.js";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
@@ -5598,7 +5599,6 @@ export interface IssuedInvoice {
  * File the priced invoice with no tender and no settlement until `collectOrder` settles it, and,
  * on an order still open, save the label it was issued under. A placed order's label can change
  * only in the update that moves it to settled or abandoned (`working_orders_enforce_transition`).
- * Prints nothing.
  */
 export async function issueUnpaidInvoice(
   tx: Transaction,
@@ -5631,6 +5631,7 @@ export async function issueUnpaidInvoice(
     .update(workingOrders)
     .set({ label: order.orderLabel })
     .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
+  await reserveStagedInvoiceDelivery(tx, saleId);
   return { saleId, fiscal, locale: language.locale, ...order };
 }
 

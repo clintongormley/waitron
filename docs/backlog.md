@@ -1888,7 +1888,10 @@ fiscal receipt. Synthetic paid-bill cases check that a rollback removes both the
 reservation, and a replay preserves the reservation. An A4 destination disabled after its
 accepted choice does not refuse captured-bill completion; new delivery requests still require
 an active destination. Receipt cases keep a prepaid collection ticket separate, retain explicit paper originals and ignore a synthetic F2's stale email draft.
-The unpaid-issuance path remains publicly closed and has not been wired to this helper.
+The internal unpaid-issuance function now reserves the saved email/A4 choice in its existing
+transaction after the sale is written. Synthetic selection fixtures exercise real core invoice
+writes, consent/staff snapshots, rollback, accepted A4 disablement and unchanged paper/F2
+controls. Separate cases keep the public F1 refusal ahead of both sale and delivery writes.
 Email setup/settings, printer registration/transport and the delivery UI remain open; no Task 4
 completion claim.
 For enrolled receipts, the real pull now projects
