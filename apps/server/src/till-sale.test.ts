@@ -242,7 +242,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       select zone_id, department_id, ${cat.id} from zone_service_policies
       where zone_id = ${zone.rows[0]!.id}`);
     await tx.execute(sql`
-      insert into station_claims (id, location_id, category_id, station_id)
+      insert into routing_cells (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},
         (select id from kitchen_stations
          where location_id = ${cfg.locationId} and is_default))`);

@@ -85,13 +85,24 @@ describe("DashboardApi", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
-  it("reads the current folder routing claims", async () => {
+  it("reads the current routing model", async () => {
     const routing = {
-      claims: [],
-      exceptions: [],
-      unassigned: { folders: [], products: [] },
+      stationTimes: [],
+      todayEnds: null,
+      clockReadable: true,
+      zones: [{ id: "terrace", name: "Terrace" }],
+      categories: [{ id: "drinks", name: "Drinks", parentId: null }],
+      products: [{ id: "cola", name: "Cola", categoryId: "drinks" }],
+      cells: [
+        {
+          row: { kind: "category", categoryId: "drinks" },
+          zoneId: null,
+          target: { kind: "station", stationId: "bar" },
+        },
+      ],
       defaultStationId: null,
-      stations: [],
+      stations: [{ id: "bar", name: "Bar", active: true }],
+      canMakeDefault: false,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(routing));
     const api = new DashboardApi("", fetchImpl);

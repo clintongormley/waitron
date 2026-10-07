@@ -27,7 +27,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { stationClaims } from "@waitron/venue-service";
+import { routingCells } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   locationId as brandLocationId,
@@ -345,10 +345,10 @@ async function placeTable(shop: Shop): Promise<void> {
     await tx.execute(sql`
       insert into zone_all_day_menus (zone_id, department_id, menu_id)
       values (${zone.id}, ${departmentId}, ${shop.menuId})`);
-    // Through the table definition: `stationClaims.id`
+    // Through the table definition: `routingCells.id`
     // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.
-    await tx.insert(stationClaims).values({
+    await tx.insert(routingCells).values({
       locationId: shop.cfg.locationId,
       categoryId: shop.categoryId,
       stationId: null,

@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { floorZones, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { createOptionList } from "@waitron/catalogue";
-import { routeExceptions, stationClaims } from "@waitron/venue-service";
+import { routingCells } from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -29,7 +29,35 @@ const suite = useVenueDb({
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-it("folder summaries count claims and exceptions in the subtree and deletion removes them", async () => {
+/** Stores No preparation in the category's Every zone cell and, given a zone, its cell there. */
+async function routeCategory(locationId: string, categoryId: string, zoneId?: string) {
+  await suite.db
+    .insert(routingCells)
+    .values([
+      { locationId, categoryId, noPreparation: true },
+      ...(zoneId === undefined ? [] : [{ locationId, categoryId, zoneId, noPreparation: true }]),
+    ]);
+}
+
+async function seedZone(locationId: string): Promise<string> {
+  const [zone] = await suite.db
+    .insert(floorZones)
+    .values({ locationId, name: "Terrace" })
+    .returning({ id: floorZones.id });
+  return zone!.id;
+}
+
+const cellCategories = async (categoryIds: string[]) =>
+  (
+    await suite.db.execute<{ category_id: string }>(
+      sql`select category_id from routing_cells where category_id in (${sql.join(
+        categoryIds.map((id) => sql`${id}`),
+        sql`, `,
+      )}) order by category_id`,
+    )
+  ).rows.map((row) => row.category_id);
+
+it("folder summaries count routing cells in the subtree and deletion removes them", async () => {
   const v = await setupVenue();
   const app = mountApp();
   const parent = await createCategory(app, v.managerCookie, "Drinks");
@@ -41,12 +69,7 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
       })
     ).status,
   ).toBe(200);
-  await suite.db
-    .insert(stationClaims)
-    .values({ locationId: v.locationId, categoryId: child, noPreparation: true });
-  await suite.db
-    .insert(routeExceptions)
-    .values({ locationId: v.locationId, categoryId: child, position: 0, noPreparation: true });
+  await routeCategory(v.locationId, child, await seedZone(v.locationId));
   const summary = await send(
     app,
     "GET",
@@ -70,13 +93,7 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
       })
     ).status,
   ).toBe(204);
-  expect(
-    (await suite.db.execute(sql`select id from station_claims where category_id = ${child}`)).rows,
-  ).toEqual([]);
-  expect(
-    (await suite.db.execute(sql`select id from route_exceptions where category_id = ${child}`))
-      .rows,
-  ).toEqual([]);
+  expect(await cellCategories([child, parent])).toEqual([]);
 });
 
 it("moving a category's contents up removes only its own routing rules, which its summary counts apart", async () => {
@@ -91,13 +108,8 @@ it("moving a category's contents up removes only its own routing rules, which it
       })
     ).status,
   ).toBe(200);
-  await suite.db.insert(stationClaims).values([
-    { locationId: v.locationId, categoryId: parent, noPreparation: true },
-    { locationId: v.locationId, categoryId: child, noPreparation: true },
-  ]);
-  await suite.db
-    .insert(routeExceptions)
-    .values({ locationId: v.locationId, categoryId: child, position: 0, noPreparation: true });
+  await routeCategory(v.locationId, parent);
+  await routeCategory(v.locationId, child, await seedZone(v.locationId));
   const summary = await send(
     app,
     "GET",
@@ -120,29 +132,14 @@ it("moving a category's contents up removes only its own routing rules, which it
       })
     ).status,
   ).toBe(204);
-  expect(
-    (
-      await suite.db.execute<{ category_id: string }>(
-        sql`select category_id from station_claims where category_id in (${parent}, ${child})`,
-      )
-    ).rows.map((row) => row.category_id),
-  ).toEqual([child]);
-  expect(
-    (
-      await suite.db.execute<{ category_id: string }>(
-        sql`select category_id from route_exceptions where category_id in (${parent}, ${child})`,
-      )
-    ).rows.map((row) => row.category_id),
-  ).toEqual([child]);
+  expect(await cellCategories([parent, child])).toEqual([child, child]);
 });
 
 it("refuses a category delete with 409 when a routing rule was added since the counts were shown", async () => {
   const v = await setupVenue();
   const app = mountApp();
   const drinks = await createCategory(app, v.managerCookie, "Drinks");
-  await suite.db
-    .insert(stationClaims)
-    .values({ locationId: v.locationId, categoryId: drinks, noPreparation: true });
+  await routeCategory(v.locationId, drinks);
   const response = await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
     productIds: [],
     categoryIds: [drinks],
@@ -153,9 +150,7 @@ it("refuses a category delete with 409 when a routing rule was added since the c
   expect(await response.json()).toMatchObject({
     error: { code: "category.contents_changed", params: { categoryId: drinks } },
   });
-  expect(
-    (await suite.db.execute(sql`select id from station_claims where category_id = ${drinks}`)).rows,
-  ).toHaveLength(1);
+  expect(await cellCategories([drinks])).toEqual([drinks]);
 });
 
 it("refuses a category delete with 409 when a routing rule was added to one of its subcategories since the counts were shown", async () => {
@@ -170,9 +165,7 @@ it("refuses a category delete with 409 when a routing rule was added to one of i
       })
     ).status,
   ).toBe(200);
-  await suite.db
-    .insert(stationClaims)
-    .values({ locationId: v.locationId, categoryId: beer, noPreparation: true });
+  await routeCategory(v.locationId, beer);
   const response = await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
     productIds: [],
     categoryIds: [drinks],
@@ -190,9 +183,7 @@ it("refuses a category delete with 409 when a routing rule was added to one of i
       )
     ).rows.map((row) => row.id),
   ).toEqual([beer, drinks]);
-  expect(
-    (await suite.db.execute(sql`select id from station_claims where category_id = ${beer}`)).rows,
-  ).toHaveLength(1);
+  expect(await cellCategories([beer])).toEqual([beer]);
 });
 
 interface Venue {
@@ -471,26 +462,21 @@ describe("sections and the reporting and routing they do not touch", () => {
         })
       ).status,
     ).toBe(204);
-    await suite.db.insert(stationClaims).values({
+    await routeCategory(v.locationId, categoryId);
+    await suite.db.insert(routingCells).values({
       locationId: v.locationId,
-      categoryId,
-      noPreparation: true,
-    });
-    await suite.db.insert(routeExceptions).values({
-      locationId: v.locationId,
-      position: 0,
       productId,
       noPreparation: true,
     });
     const rules = async () => ({
-      claims: (
+      categoryCells: (
         await suite.db.execute(
-          sql`select id, category_id from station_claims where category_id = ${categoryId}`,
+          sql`select id, category_id from routing_cells where category_id = ${categoryId}`,
         )
       ).rows,
-      exceptions: (
+      productCells: (
         await suite.db.execute(
-          sql`select id, product_id from route_exceptions where product_id = ${productId}`,
+          sql`select id, product_id from routing_cells where product_id = ${productId}`,
         )
       ).rows,
     });
@@ -501,8 +487,8 @@ describe("sections and the reporting and routing they do not touch", () => {
         )
       ).rows[0]!.category_id;
     const before = await rules();
-    expect(before.claims).toHaveLength(1);
-    expect(before.exceptions).toHaveLength(1);
+    expect(before.categoryCells).toHaveLength(1);
+    expect(before.productCells).toHaveLength(1);
 
     const root = (
       (await (

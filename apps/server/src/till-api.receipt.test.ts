@@ -32,7 +32,7 @@ import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/iden
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { createPrinter, textGrid, updatePrinter } from "@waitron/printing";
-import { departmentSalePolicies, departments, stationClaims } from "@waitron/venue-service";
+import { departmentSalePolicies, departments, routingCells } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -206,7 +206,7 @@ async function setupVenue(): Promise<{
       where location_id = ${cfg.locationId}
         and is_counter_default`);
     await publishWorkingMenu(tx, cat.id);
-    await tx.insert(stationClaims).values({
+    await tx.insert(routingCells).values({
       locationId: cfg.locationId,
       categoryId: bebidas.id,
       stationId: null,

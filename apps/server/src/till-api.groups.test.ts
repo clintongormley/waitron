@@ -1,4 +1,4 @@
-import { createException, deleteException } from "@waitron/venue-service";
+import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -1241,20 +1241,14 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
     const [pulpo] = await inTx(venue, (tx) =>
       tx.select({ id: products.id }).from(products).where(eq(products.name, "Pulpo")),
     );
-    const exceptionId = await inTx(venue, (tx) =>
-      createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: pulpo!.id,
-        target: { kind: "no_preparation" },
-      }),
-    );
+    const pulpoCell = { row: { kind: "product" as const, productId: pulpo!.id }, zoneId: null };
+    await inTx(venue, (tx) => setRoutingCell(tx, venue.cfg, pulpoCell, { kind: "no_preparation" }));
     try {
       await inTx(venue, (tx) =>
         addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Pulpo"), hold: true }]),
       );
     } finally {
-      await inTx(venue, (tx) => deleteException(tx, venue.cfg, exceptionId));
+      await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, pulpoCell));
     }
     const [line] = await inTx(venue, (tx) =>
       tx

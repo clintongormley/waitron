@@ -1,5 +1,5 @@
 import { createZone } from "./testing/service-zone.js";
-import { createException } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -17,12 +17,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  departments,
-  listStationNotices,
-  stationClaims,
-  writeEditSentLines,
-} from "@waitron/venue-service";
+import { departments, listStationNotices, writeEditSentLines } from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -350,7 +345,7 @@ describe("addTabRound (append-only, no re-price)", () => {
     ]);
   });
 
-  it("appends a round with unclaimed extras as parent + child lines, firing only the parent", async () => {
+  it("appends a round with extras no cell decides as parent + child lines, firing only the parent", async () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     // Two different products, so an assertion about which one a row carries can fail.
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
@@ -685,7 +680,7 @@ describe("readTabLines", () => {
     expect(agua.state).toBe("queued");
   });
 
-  it("carries state: null for an unclaimed extra's child line", async () => {
+  it("carries state: null for the child line of an extra no cell decides", async () => {
     // Distinct from a held parent, which has a ticket item in state "queued".
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
@@ -1016,12 +1011,12 @@ describe("listTablesWithState (occupancy)", () => {
       await tx.execute(sql`
         insert into zone_all_day_menus (zone_id, department_id, menu_id)
         values (${zone.id}, ${department!.id}, ${menuId})`);
-      await tx.insert(stationClaims).values({
-        locationId: cfg.locationId,
-        categoryId,
-        stationId: null,
-        noPreparation: true,
-      });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId }, zoneId: null },
+        { kind: "no_preparation" },
+      );
     });
     const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));
     await asApp(cfg, (tx) => updateTable(tx, cfg, tableId, { zoneId: zone.id }));
@@ -1173,12 +1168,12 @@ it("returns a tab line's stored staff names and options answers", async () => {
 /** Route `productId` to no station: a bottled drink handed over at the bar. */
 async function routeToNoPreparation(cfg: OriginConfig, productId: string): Promise<void> {
   await withTransaction(db, (tx) =>
-    createException(tx, cfg, {
-      zoneId: null,
-      categoryId: null,
-      productId,
-      target: { kind: "no_preparation" },
-    }),
+    setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "product", productId }, zoneId: null },
+      { kind: "no_preparation" },
+    ),
   );
 }
 

@@ -29,15 +29,12 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       ["special_date_hours_periods", "state"],
     ]);
   });
-  it("copies stored claims and exceptions as replicated state", () => {
+  it("classifies routing_cells as replicated state", () => {
     expect(
-      VENUE_SERVICE_CLASSIFICATION.filter((entry) =>
-        ["station_claims", "route_exceptions"].includes(entry.table),
-      ).map((entry) => [entry.table, entry.class]),
-    ).toEqual([
-      ["station_claims", "state"],
-      ["route_exceptions", "state"],
-    ]);
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "routing_cells").map(
+        (entry) => [entry.table, entry.class],
+      ),
+    ).toEqual([["routing_cells", "state"]]);
   });
   it("classifies the service settings and kitchen notices as replicated state", () => {
     expect(

@@ -11,7 +11,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setClaim, setStationToday, writePrintHeldWork } from "@waitron/venue-service";
+import { setRoutingCell, setStationToday, writePrintHeldWork } from "@waitron/venue-service";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
@@ -203,17 +203,27 @@ describe("editing split-off extras", () => {
   it("prints HOLD CHANGED when a prior inline extra gains its first station record on an edit", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      await setClaim(tx, venue.cfg, venue.folders.sides, { kind: "no_preparation" });
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "category", categoryId: venue.folders.sides }, zoneId: null },
+        { kind: "no_preparation" },
+      );
       await writePrintHeldWork(tx, true);
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
       });
       expect(await slips(tx, venue.printers.fryer)).toHaveLength(0);
-      await setClaim(tx, venue.cfg, venue.folders.sides, {
-        kind: "station",
-        stationId: venue.stations.fryer,
-      });
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "category", categoryId: venue.folders.sides }, zoneId: null },
+        {
+          kind: "station",
+          stationId: venue.stations.fryer,
+        },
+      );
       await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1, 1).extras });
       const chipsLine = (await state(tx, venue.party.tabId)).lines.find(
         (row) => row.productId === venue.products.chips,

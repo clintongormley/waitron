@@ -1,27 +1,36 @@
 import type { ExtraMakerOutcome, PreparationRoute } from "@waitron/module";
 import { addDays } from "./hours-rules.js";
-export type { ExceptionInput, RoutingModel, RouteExplanation } from "./routing-types.js";
+import type {
+  CellAddress,
+  RoutingCell,
+  RoutingDecision,
+  RoutingModel,
+  RoutingRow,
+  RoutingSelectionRules,
+  SelectedCell,
+} from "./routing-types.js";
+export type {
+  CellAddress,
+  GridCategory,
+  GridProduct,
+  GridRow,
+  RouteExplanation,
+  RoutingCell,
+  RoutingChange,
+  RoutingDecision,
+  RoutingModel,
+  RoutingRow,
+  RoutingSelectionRules,
+  RoutingView,
+  SelectedCell,
+} from "./routing-types.js";
 
-/** What a claim or an exception sends work to. */
+/** What a routing cell sends work to. */
 export type RouteTarget = PreparationRoute; // { kind: "station"; stationId } | { kind: "no_preparation" }
 
-export interface StationClaim {
-  readonly categoryId: string;
-  readonly target: RouteTarget;
-}
-
-export interface RouteException {
-  readonly id: string;
-  readonly position: number;
-  readonly zoneId: string | null; // null: any service zone
-  readonly categoryId: string | null; // a folder, including its subfolders
-  readonly productId: string | null; // a top-level product, including its variants
-  readonly target: RouteTarget;
-}
-
 export interface RoutingRules {
-  readonly exceptions: readonly RouteException[]; // any order; sorted by (position, id) inside
-  readonly claims: ReadonlyMap<string, RouteTarget>; // categoryId → target
+  /** At most one cell per coordinate; the list's order decides nothing. */
+  readonly cells: readonly RoutingCell[];
   readonly parentOf: ReadonlyMap<string, string | null>; // categoryId → parent categoryId
   readonly activeStationIds: ReadonlySet<string>;
   readonly defaultStationId: string | null; // the active default, or null
@@ -71,11 +80,6 @@ export interface ProductFacts {
   readonly categoryId: string | null; // the EFFECTIVE category (a variant's is its parent's)
 }
 
-export type RoutingDecision =
-  | { readonly kind: "exception"; readonly exceptionId: string }
-  | { readonly kind: "claim"; readonly categoryId: string }
-  | { readonly kind: "default" };
-
 export interface FallbackStep {
   readonly stationId: string;
   readonly why: "switched_off" | "closed_by_hand" | "out_of_hours";
@@ -103,8 +107,87 @@ export function folderAncestors(
   return ancestors;
 }
 
-function orderedExceptions(rules: RoutingRules): RouteException[] {
-  return [...rules.exceptions].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+/** The grid's `data-row` and `data-zone` attributes show these keys. */
+export function rowKey(row: RoutingRow): string {
+  return row.kind === "all"
+    ? "all"
+    : row.kind === "no_category"
+      ? "no_category"
+      : row.kind === "category"
+        ? `c:${row.categoryId}`
+        : `p:${row.productId}`;
+}
+
+export const zoneKey = (zoneId: string | null): string => zoneId ?? "every";
+
+export const cellKey = ({ row, zoneId }: CellAddress): string =>
+  `${rowKey(row)}|${zoneKey(zoneId)}`;
+
+export function targetKey(target: RouteTarget | null): string {
+  if (target === null) return "";
+  return target.kind === "no_preparation" ? "no_preparation" : `station:${target.stationId}`;
+}
+
+const cellIndexes = new WeakMap<readonly RoutingCell[], ReadonlyMap<string, RoutingCell>>();
+
+/** Only a frozen list is cached: a cached index would go stale if the list changed. */
+function cellIndex(cells: readonly RoutingCell[]): ReadonlyMap<string, RoutingCell> {
+  const cached = cellIndexes.get(cells);
+  if (cached !== undefined) return cached;
+  const index = new Map(cells.map((cell) => [cellKey(cell), cell]));
+  if (Object.isFrozen(cells)) cellIndexes.set(cells, index);
+  return index;
+}
+
+/**
+ * Row order decides before zone: the product, its category, each parent (or No category when the
+ * effective category is null), All categories, and within each row its zone cell before Every
+ * zone. All categories × Every zone is the implicit default station, never a stored cell. A
+ * product row's `categoryId` is its effective category. `skipOwn` ignores the cell at exactly the
+ * asked coordinate: what that coordinate shows with no setting of its own.
+ */
+export function selectRoutingCell(
+  rules: RoutingSelectionRules,
+  row: RoutingRow,
+  zoneId: string | null,
+  categoryId: string | null = null,
+  { skipOwn = false }: { readonly skipOwn?: boolean } = {},
+): SelectedCell {
+  const lineage: RoutingRow[] = row.kind === "product" ? [row] : [];
+  if (row.kind === "no_category" || (row.kind === "product" && categoryId === null)) {
+    lineage.push({ kind: "no_category" });
+  } else if (row.kind !== "all") {
+    const leaf = row.kind === "category" ? row.categoryId : categoryId;
+    for (const id of folderAncestors(rules.parentOf, leaf)) {
+      lineage.push({ kind: "category", categoryId: id });
+    }
+  }
+  lineage.push({ kind: "all" });
+  const byCoordinate = cellIndex(rules.cells);
+  const own = skipOwn ? cellKey({ row, zoneId }) : null;
+  const at = (address: CellAddress) => {
+    const key = cellKey(address);
+    return key === own ? undefined : byCoordinate.get(key);
+  };
+  let best: RoutingCell | undefined;
+  for (const candidate of lineage) {
+    if (zoneId !== null) best = at({ row: candidate, zoneId });
+    if (best === undefined && candidate.kind !== "all") best = at({ row: candidate, zoneId: null });
+    if (best !== undefined) break;
+  }
+  if (best !== undefined) {
+    return {
+      target: best.target,
+      decidedBy: { kind: "cell", address: { row: best.row, zoneId: best.zoneId } },
+    };
+  }
+  if (rules.defaultStationId !== null && rules.activeStationIds.has(rules.defaultStationId)) {
+    return {
+      target: { kind: "station", stationId: rules.defaultStationId },
+      decidedBy: { kind: "default" },
+    };
+  }
+  return { target: null, decidedBy: null };
 }
 
 export function stationStatus(
@@ -204,45 +287,25 @@ export function chooseMaker(
   zoneId: string | null,
   moment: RoutingMoment | null,
 ): MakerChoice {
-  const ancestors = folderAncestors(rules.parentOf, product.categoryId);
-  const accept = (target: RouteTarget, decision: RoutingDecision): MakerChoice => {
-    if (target.kind === "no_preparation")
-      return { route: target, decidedBy: decision, fallbacks: [], noReplacement: false };
-    const { stationId, steps } = followFallbacks(rules, target.stationId, moment);
-    return {
-      route: stationId === null ? null : { kind: "station", stationId },
-      decidedBy: decision,
-      fallbacks: steps,
-      noReplacement: stationId === null,
-    };
+  const { target, decidedBy } = selectRoutingCell(
+    rules,
+    { kind: "product", productId: product.routedProductId },
+    zoneId,
+    product.categoryId,
+  );
+  if (target === null || decidedBy === null || decidedBy.kind === "default") {
+    return { route: target, decidedBy, fallbacks: [], noReplacement: false };
+  }
+  if (target.kind === "no_preparation") {
+    return { route: target, decidedBy, fallbacks: [], noReplacement: false };
+  }
+  const { stationId, steps } = followFallbacks(rules, target.stationId, moment);
+  return {
+    route: stationId === null ? null : { kind: "station", stationId },
+    decidedBy,
+    fallbacks: steps,
+    noReplacement: stationId === null,
   };
-
-  for (const exception of orderedExceptions(rules)) {
-    if (
-      (exception.zoneId !== null && exception.zoneId !== zoneId) ||
-      (exception.productId !== null && exception.productId !== product.routedProductId) ||
-      (exception.categoryId !== null && !ancestors.includes(exception.categoryId))
-    ) {
-      continue;
-    }
-    const choice = accept(exception.target, { kind: "exception", exceptionId: exception.id });
-    return choice;
-  }
-  for (const categoryId of ancestors) {
-    const target = rules.claims.get(categoryId);
-    if (target === undefined) continue;
-    const choice = accept(target, { kind: "claim", categoryId });
-    return choice;
-  }
-  if (rules.defaultStationId !== null && rules.activeStationIds.has(rules.defaultStationId)) {
-    return {
-      route: { kind: "station", stationId: rules.defaultStationId },
-      decidedBy: { kind: "default" },
-      fallbacks: [],
-      noReplacement: false,
-    };
-  }
-  return { route: null, decidedBy: null, fallbacks: [], noReplacement: false };
 }
 
 export interface ExtraChoice {
@@ -272,20 +335,14 @@ export function chooseExtraMaker(
   return { outcome, decidedBy: choice.decidedBy, fallbacks: choice.fallbacks };
 }
 
-export function unreachableExceptions(rules: RoutingRules): Set<string> {
-  const exceptions = orderedExceptions(rules);
-  const unreachable = new Set<string>();
-  for (const [i, candidate] of exceptions.entries()) {
-    const covered = exceptions.slice(0, i).some((earlier) => {
-      if (earlier.zoneId !== null && earlier.zoneId !== candidate.zoneId) return false;
-      if (earlier.categoryId === null && earlier.productId === null) return true;
-      if (earlier.productId !== null) return earlier.productId === candidate.productId;
-      return (
-        candidate.categoryId !== null &&
-        folderAncestors(rules.parentOf, candidate.categoryId).includes(earlier.categoryId!)
-      );
-    });
-    if (covered) unreachable.add(candidate.id);
-  }
-  return unreachable;
+/** The cells are copied and frozen so `selectRoutingCell` can cache its index for them. */
+export function selectionRulesFromModel(model: RoutingModel): RoutingSelectionRules {
+  return {
+    cells: Object.freeze([...model.cells]),
+    parentOf: new Map(model.categories.map((category) => [category.id, category.parentId])),
+    activeStationIds: new Set(
+      model.stations.filter((station) => station.active).map((station) => station.id),
+    ),
+    defaultStationId: model.defaultStationId,
+  };
 }

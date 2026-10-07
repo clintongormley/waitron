@@ -1,4 +1,4 @@
-import { configureZone, createDepartment, createException } from "@waitron/venue-service";
+import { configureZone, createDepartment, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -100,12 +100,12 @@ useVenueDb({
     counterCaña = await pricedInZone(v, v.counter.zoneId, "Caña", "3.50");
     // Agua is handed over at the bar, so it is never sent to the kitchen.
     await inTx(v, (tx) =>
-      createException(tx, v.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: v.productId("Agua"),
-        target: { kind: "no_preparation" },
-      }),
+      setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId("Agua") }, zoneId: null },
+        { kind: "no_preparation" },
+      ),
     );
   },
 });

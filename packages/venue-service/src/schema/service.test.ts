@@ -17,7 +17,7 @@ import {
 import { departmentAllDayMenus, departmentMenus, zoneAllDayMenus } from "./menus.js";
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
-import { routeExceptions, stationClaims } from "./routing.js";
+import { routingCells } from "./routing.js";
 import { stationDayStates, stationFallbacks } from "./station-times.js";
 
 /**
@@ -148,18 +148,6 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: ["device_profile_watchers_pk"],
   },
-  station_claims: {
-    table: stationClaims,
-    foreignKeys: [
-      "station_claims_location_fk",
-      "station_claims_category_fk",
-      "station_claims_station_fk",
-    ],
-    checks: ["station_claims_target_ck"],
-    indexes: ["station_claims_folder_key"],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
   station_fallbacks: {
     table: stationFallbacks,
     foreignKeys: ["station_fallbacks_station_fk", "station_fallbacks_fallback_fk"],
@@ -176,21 +164,30 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: [],
   },
-  route_exceptions: {
-    table: routeExceptions,
+  routing_cells: {
+    table: routingCells,
     foreignKeys: [
-      "route_exceptions_location_fk",
-      "route_exceptions_zone_fk",
-      "route_exceptions_category_fk",
-      "route_exceptions_product_fk",
-      "route_exceptions_station_fk",
+      "routing_cells_location_fk",
+      "routing_cells_category_fk",
+      "routing_cells_product_fk",
+      "routing_cells_zone_fk",
+      "routing_cells_station_fk",
     ],
     checks: [
-      "route_exceptions_what_ck",
-      "route_exceptions_condition_ck",
-      "route_exceptions_target_ck",
+      "routing_cells_subject_ck",
+      "routing_cells_coordinate_ck",
+      "routing_cells_target_ck",
+      "routing_cells_no_category_ck",
     ],
-    indexes: ["route_exceptions_order_idx"],
+    indexes: [
+      "routing_cells_category_every_zone_key",
+      "routing_cells_category_zone_key",
+      "routing_cells_product_every_zone_key",
+      "routing_cells_product_zone_key",
+      "routing_cells_all_zone_key",
+      "routing_cells_no_category_every_zone_key",
+      "routing_cells_no_category_zone_key",
+    ],
     uniqueConstraints: [],
     primaryKeys: [],
   },
@@ -250,8 +247,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers the twenty tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(20);
+  it("covers the nineteen tables it lists", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(19);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {
@@ -275,11 +272,19 @@ describe("venue-service schema", () => {
       ...getTableConfig(departments).indexes,
       ...getTableConfig(zoneServicePolicies).indexes,
       ...getTableConfig(kitchenNotices).indexes,
+      ...getTableConfig(routingCells).indexes,
     ].filter((index) => index.config.where !== undefined);
     expect(partial.map((index) => [index.config.name, index.config.unique])).toEqual([
       ["departments_one_default_per_location_key", true],
       ["zone_service_policies_one_counter_default_key", true],
       ["kitchen_notices_open_idx", false],
+      ["routing_cells_category_every_zone_key", true],
+      ["routing_cells_category_zone_key", true],
+      ["routing_cells_product_every_zone_key", true],
+      ["routing_cells_product_zone_key", true],
+      ["routing_cells_all_zone_key", true],
+      ["routing_cells_no_category_every_zone_key", true],
+      ["routing_cells_no_category_zone_key", true],
     ]);
   });
 });

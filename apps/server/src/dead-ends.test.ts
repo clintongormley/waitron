@@ -4,7 +4,7 @@ import { kitchenStations } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createException, setStationFallback, setStationToday } from "@waitron/venue-service";
+import { setRoutingCell, setStationFallback, setStationToday } from "@waitron/venue-service";
 import { findDeadEnds } from "./dead-ends.js";
 import { inTx, setupPartyVenue } from "./testing/party-venue.js";
 
@@ -26,12 +26,12 @@ describe("findDeadEnds", () => {
       .returning({ id: kitchenStations.id });
     const at = new Date();
     await inTx(v, async (tx) => {
-      await createException(tx, v.cfg, {
-        productId: v.productId("Caña"),
-        zoneId: null,
-        categoryId: null,
-        target: { kind: "station", stationId: bar!.id },
-      });
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId("Caña") }, zoneId: null },
+        { kind: "station", stationId: bar!.id },
+      );
       await setStationToday(tx, v.cfg, bar!.id, "closed", at);
     });
     const answer = await inTx(v, (tx) =>

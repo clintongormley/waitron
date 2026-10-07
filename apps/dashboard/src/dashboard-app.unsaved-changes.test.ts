@@ -900,9 +900,11 @@ it.each([
           return { images: [image], total: 1 } as never;
         if (url === "/management-api/venue-service/routing")
           return {
-            claims: [],
-            exceptions: [],
-            unassigned: { folders: [], products: [] },
+            zones: [],
+            categories: [],
+            products: [],
+            cells: [],
+            canMakeDefault: false,
             defaultStationId: "bar",
             stations: [{ id: "bar", name: "Bar", active: true }],
             stationTimes: [],

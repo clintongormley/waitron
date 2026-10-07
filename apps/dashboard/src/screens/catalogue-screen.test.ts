@@ -249,11 +249,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       stationTimes: [],
       todayEnds: null,
       clockReadable: true,
-      claims: [],
-      exceptions: [],
-      unassigned: { folders: [], products: [] },
+      zones: [],
+      categories: [],
+      products: [],
+      cells: [],
       defaultStationId: null,
       stations: [],
+      canMakeDefault: false,
     }),
     getProductEditor: vi.fn().mockResolvedValue(value),
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
@@ -315,7 +317,7 @@ describe("catalogue-screen", () => {
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
     expect(api.listMadeAt).toHaveBeenCalledOnce();
     expect(api.getFolderRouting).toHaveBeenCalledOnce();
-    expect(list(el).routing).toMatchObject({ claims: [], defaultStationId: null });
+    expect(list(el).routing).toMatchObject({ cells: [], defaultStationId: null });
     expect(list(el).madeAt[products[0]!.id]?.stationName).toBe("Bar");
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();

@@ -630,7 +630,7 @@ declare module "@waitron/shared" {
      */
     "kitchen_notice.not_found": { noticeId: string };
     /**
-     * A line was fired but no active exception or claim applies and the venue has no
+     * A line was fired but no routing cell applies and the venue has no active
      * default station. Firing fails loud rather than silently dropping food from the kitchen.
      * `locationId` names the misconfigured venue.
      */

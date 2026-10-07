@@ -1,20 +1,44 @@
 import { describe, expect, it } from "vitest";
 import { getCountryPack } from "@waitron/country-packs";
 import {
+  cellKey,
   chooseMaker,
   chooseExtraMaker,
   closedSendsTo,
   followFallbacks,
   folderAncestors,
+  rowKey,
+  selectRoutingCell,
   stationStatus,
-  unreachableExceptions,
+  targetKey,
   type RouteTarget,
+  type RoutingCell,
   type RoutingMoment,
+  type RoutingRow,
   type RoutingRules,
   type StationTiming,
 } from "./routing.js";
 
 const station = (stationId: string) => ({ kind: "station" as const, stationId });
+const noPreparation = { kind: "no_preparation" as const };
+const all: RoutingRow = { kind: "all" };
+const category = (categoryId: string): RoutingRow => ({ kind: "category", categoryId });
+const product = (productId: string): RoutingRow => ({ kind: "product", productId });
+/** Each cell names its own coordinate; the order of the list never decides anything. */
+const cells = (
+  ...entries: readonly (readonly [RoutingRow, string | null, RouteTarget])[]
+): RoutingCell[] => entries.map(([row, zoneId, target]) => ({ row, zoneId, target }));
+const decidedByCell = (row: RoutingRow, zoneId: string | null) => ({
+  kind: "cell" as const,
+  address: { row, zoneId },
+});
+const without = (rules: RoutingRules, row: RoutingRow, zoneId: string | null): RoutingRules => ({
+  ...rules,
+  cells: rules.cells.filter(
+    (cell) => !(JSON.stringify(cell.row) === JSON.stringify(row) && cell.zoneId === zoneId),
+  ),
+});
+
 const parentOf = new Map<string, string | null>([
   ["drinks", null],
   ["cocktails", "drinks"],
@@ -22,11 +46,10 @@ const parentOf = new Map<string, string | null>([
   ["food", null],
 ]);
 const base: RoutingRules = {
-  exceptions: [],
-  claims: new Map([
-    ["drinks", station("bar")],
-    ["cocktails", station("cocktailBar")],
-  ]),
+  cells: cells(
+    [category("drinks"), null, station("bar")],
+    [category("cocktails"), null, station("cocktailBar")],
+  ),
   parentOf,
   activeStationIds: new Set(["bar", "cocktailBar", "mainBar", "terraceBar", "kitchen"]),
   defaultStationId: "kitchen",
@@ -37,17 +60,16 @@ const lager = { productId: "lager", routedProductId: "lager", categoryId: "beer"
 const bread = { productId: "bread", routedProductId: "bread", categoryId: null };
 
 describe("chooseMaker", () => {
-  it("gives the nearest claimed folder, and an unclaimed subfolder its parent's claim", () => {
+  it("gives the nearest category's Every zone cell, and an unset subcategory its parent's", () => {
     expect(chooseMaker(base, mojito, null, null)).toEqual({
       route: station("cocktailBar"),
-      decidedBy: { kind: "claim", categoryId: "cocktails" },
+      decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [],
       noReplacement: false,
     });
-    expect(chooseMaker(base, lager, "indoors", null).decidedBy).toEqual({
-      kind: "claim",
-      categoryId: "drinks",
-    });
+    expect(chooseMaker(base, lager, "indoors", null).decidedBy).toEqual(
+      decidedByCell(category("drinks"), null),
+    );
     expect(chooseMaker(base, bread, "indoors", null)).toEqual({
       route: station("kitchen"),
       decidedBy: { kind: "default" },
@@ -56,66 +78,317 @@ describe("chooseMaker", () => {
     });
   });
 
-  it("tries exceptions first, in position order, and the first match wins", () => {
+  describe("row-first selection", () => {
+    const drinksCategoryId = "0b8f2a52-6c1e-4f0e-9a51-2d7c1f3e9a01";
+    const cocktailsCategoryId = "0b8f2a52-6c1e-4f0e-9a51-2d7c1f3e9a02";
+    const coffeeCategoryId = "0b8f2a52-6c1e-4f0e-9a51-2d7c1f3e9a03";
+    const terraceId = "5d1a7c40-8e2b-4b7a-a3f6-0c9e4d2b7f11";
+    const barId = "a7e3c1d9-2f4b-4e8a-9c6d-1b0f5e7a3c21";
+    const terraceBarId = "a7e3c1d9-2f4b-4e8a-9c6d-1b0f5e7a3c22";
+    const kitchenId = "a7e3c1d9-2f4b-4e8a-9c6d-1b0f5e7a3c23";
     const rules: RoutingRules = {
-      ...base,
-      exceptions: [
-        {
-          id: "e2",
-          position: 2,
-          zoneId: "terrace",
-          categoryId: "drinks",
-          productId: null,
-          target: station("terraceBar"),
-        },
-        {
-          id: "e1",
-          position: 1,
-          zoneId: "terrace",
-          categoryId: "cocktails",
-          productId: null,
-          target: station("mainBar"),
-        },
-      ],
+      cells: cells(
+        [category(drinksCategoryId), null, station(barId)],
+        [category(drinksCategoryId), terraceId, station(terraceBarId)],
+        [category(coffeeCategoryId), null, station(kitchenId)],
+      ),
+      parentOf: new Map([
+        [drinksCategoryId, null],
+        [cocktailsCategoryId, drinksCategoryId],
+        [coffeeCategoryId, drinksCategoryId],
+      ]),
+      activeStationIds: new Set([barId, terraceBarId, kitchenId]),
+      defaultStationId: null,
+      timing: new Map(),
     };
-    expect(chooseMaker(rules, mojito, "terrace", null).route).toEqual(station("mainBar"));
-    expect(chooseMaker(rules, lager, "terrace", null).route).toEqual(station("terraceBar"));
-    expect(chooseMaker(rules, mojito, "indoors", null).decidedBy).toEqual({
-      kind: "claim",
-      categoryId: "cocktails",
+    const coffee = {
+      productId: "flat-white",
+      routedProductId: "flat-white",
+      categoryId: coffeeCategoryId,
+    };
+    const cocktail = {
+      productId: "mojito",
+      routedProductId: "mojito",
+      categoryId: cocktailsCategoryId,
+    };
+
+    it("a category's own Every zone beats its parent's zone cell; an unset child inherits the parent's zone cell", () => {
+      expect(chooseMaker(rules, coffee, terraceId, null)).toEqual({
+        route: { kind: "station", stationId: kitchenId },
+        decidedBy: {
+          kind: "cell",
+          address: {
+            row: { kind: "category", categoryId: coffeeCategoryId },
+            zoneId: null,
+          },
+        },
+        fallbacks: [],
+        noReplacement: false,
+      });
+      expect(chooseMaker(rules, cocktail, terraceId, null)).toEqual({
+        route: { kind: "station", stationId: terraceBarId },
+        decidedBy: decidedByCell(category(drinksCategoryId), terraceId),
+        fallbacks: [],
+        noReplacement: false,
+      });
+      const reversed = { ...rules, cells: [...rules.cells].reverse() };
+      expect(chooseMaker(reversed, coffee, terraceId, null)).toEqual(
+        chooseMaker(rules, coffee, terraceId, null),
+      );
+      expect(chooseMaker(reversed, cocktail, terraceId, null)).toEqual(
+        chooseMaker(rules, cocktail, terraceId, null),
+      );
     });
-    expect(chooseMaker(rules, mojito, null, null).decidedBy).toEqual({
-      kind: "claim",
-      categoryId: "cocktails",
+
+    it("leaves a product outside the conflicting category on its own row's cells", () => {
+      const water = { productId: "water", routedProductId: "water", categoryId: drinksCategoryId };
+      expect(chooseMaker(rules, water, null, null).decidedBy).toEqual(
+        decidedByCell(category(drinksCategoryId), null),
+      );
+      expect(chooseMaker(rules, water, terraceId, null).route).toEqual(station(terraceBarId));
     });
   });
 
-  it("matches an exception with no zone on any order, and one naming a product on its variants", () => {
+  it("a product's Every zone beats its category's zone cell", () => {
     const rules: RoutingRules = {
       ...base,
-      exceptions: [
-        {
-          id: "e1",
-          position: 1,
-          zoneId: null,
-          categoryId: null,
-          productId: "lager",
-          target: { kind: "no_preparation" },
-        },
-      ],
+      cells: cells(
+        [category("cocktails"), "terrace", station("terraceBar")],
+        [product("mojito"), null, station("mainBar")],
+      ),
     };
-    const lagerPint = { productId: "lager-pint", routedProductId: "lager", categoryId: "beer" };
-    expect(chooseMaker(rules, lagerPint, null, null)).toEqual({
-      route: { kind: "no_preparation" },
-      decidedBy: { kind: "exception", exceptionId: "e1" },
+    expect(chooseMaker(rules, mojito, "terrace", null)).toEqual({
+      route: station("mainBar"),
+      decidedBy: decidedByCell(product("mojito"), null),
       fallbacks: [],
       noReplacement: false,
     });
   });
 
+  it("a product's zone cell beats its own Every zone cell", () => {
+    const rules: RoutingRules = {
+      ...base,
+      cells: cells(
+        [product("mojito"), null, station("mainBar")],
+        [product("mojito"), "terrace", station("terraceBar")],
+      ),
+    };
+    expect(chooseMaker(rules, mojito, "terrace", null)).toEqual({
+      route: station("terraceBar"),
+      decidedBy: decidedByCell(product("mojito"), "terrace"),
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseMaker(rules, mojito, "indoors", null).decidedBy).toEqual(
+      decidedByCell(product("mojito"), null),
+    );
+  });
+
+  it("clearing the winning cell exposes the next exact coordinate", () => {
+    const ladder: [RoutingRow, string | null][] = [
+      [product("mojito"), "terrace"],
+      [product("mojito"), null],
+      [category("cocktails"), "terrace"],
+      [category("cocktails"), null],
+      [category("drinks"), "terrace"],
+      [category("drinks"), null],
+      [all, "terrace"],
+    ];
+    let rules: RoutingRules = {
+      ...base,
+      cells: cells(...ladder.map(([row, zoneId]) => [row, zoneId, station("bar")] as const)),
+    };
+    for (const [row, zoneId] of ladder) {
+      expect(chooseMaker(rules, mojito, "terrace", null).decidedBy).toEqual(
+        decidedByCell(row, zoneId),
+      );
+      rules = without(rules, row, zoneId);
+    }
+    expect(chooseMaker(rules, mojito, "terrace", null).decidedBy).toEqual({ kind: "default" });
+  });
+
+  it("walks five category depths in order", () => {
+    const depths = ["l1", "l2", "l3", "l4", "l5"];
+    const deep: RoutingRules = {
+      ...base,
+      parentOf: new Map(depths.map((id, i) => [id, i === 0 ? null : depths[i - 1]!])),
+      cells: cells(
+        [category("l1"), "terrace", station("terraceBar")],
+        [category("l2"), null, station("bar")],
+        [category("l4"), "terrace", station("mainBar")],
+      ),
+    };
+    const shot = { productId: "shot", routedProductId: "shot", categoryId: "l5" };
+    expect(chooseMaker(deep, shot, "terrace", null).decidedBy).toEqual(
+      decidedByCell(category("l4"), "terrace"),
+    );
+    expect(chooseMaker(deep, shot, "indoors", null).decidedBy).toEqual(
+      decidedByCell(category("l2"), null),
+    );
+    const l2Cleared = without(deep, category("l2"), null);
+    expect(chooseMaker(l2Cleared, shot, "indoors", null).decidedBy).toEqual({ kind: "default" });
+    expect(
+      chooseMaker(without(deep, category("l4"), "terrace"), shot, "terrace", null).decidedBy,
+    ).toEqual(decidedByCell(category("l2"), null));
+    expect(
+      chooseMaker(without(l2Cleared, category("l4"), "terrace"), shot, "terrace", null).decidedBy,
+    ).toEqual(decidedByCell(category("l1"), "terrace"));
+  });
+
+  it("terminates on a category cycle", () => {
+    const loop: RoutingRules = {
+      ...base,
+      parentOf: new Map([
+        ["a", "b"],
+        ["b", "a"],
+      ]),
+      cells: cells([category("b"), null, station("bar")]),
+    };
+    const item = { productId: "item", routedProductId: "item", categoryId: "a" };
+    expect(chooseMaker(loop, item, "terrace", null).decidedBy).toEqual(
+      decidedByCell(category("b"), null),
+    );
+    expect(chooseMaker({ ...loop, cells: [] }, item, "terrace", null).decidedBy).toEqual({
+      kind: "default",
+    });
+  });
+
+  it("routes a variant by its parent's product cell and its effective category", () => {
+    const rules: RoutingRules = {
+      ...base,
+      cells: cells(
+        [product("lager"), "terrace", noPreparation],
+        [product("lager-pint"), null, station("mainBar")],
+      ),
+    };
+    const lagerPint = { productId: "lager-pint", routedProductId: "lager", categoryId: "beer" };
+    expect(chooseMaker(rules, lagerPint, "terrace", null)).toEqual({
+      route: noPreparation,
+      decidedBy: decidedByCell(product("lager"), "terrace"),
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(
+      chooseMaker({ ...rules, cells: [...rules.cells, ...base.cells] }, lagerPint, "indoors", null)
+        .decidedBy,
+    ).toEqual(decidedByCell(category("drinks"), null));
+    expect(chooseMaker(rules, lagerPint, "indoors", null).decidedBy).toEqual({ kind: "default" });
+  });
+
   it("routes by the category the facts carry, not by the routed product's", () => {
     const mocktail = { productId: "virgin", routedProductId: "mojito", categoryId: "food" };
     expect(chooseMaker(base, mocktail, null, null).decidedBy).toEqual({ kind: "default" });
+  });
+
+  it("a null-category product tries its product cells, then All categories × the zone, then the default", () => {
+    const rules: RoutingRules = {
+      ...base,
+      cells: cells(
+        [product("bread"), "terrace", station("bar")],
+        [all, "terrace", station("terraceBar")],
+        [all, "indoors", station("mainBar")],
+      ),
+    };
+    expect(chooseMaker(rules, bread, "terrace", null).decidedBy).toEqual(
+      decidedByCell(product("bread"), "terrace"),
+    );
+    expect(
+      chooseMaker(without(rules, product("bread"), "terrace"), bread, "terrace", null),
+    ).toEqual({
+      route: station("terraceBar"),
+      decidedBy: decidedByCell(all, "terrace"),
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseMaker(rules, bread, "garden", null)).toEqual({
+      route: station("kitchen"),
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+      noReplacement: false,
+    });
+  });
+
+  it("a null zone tries only Every zone cells", () => {
+    const rules: RoutingRules = {
+      ...base,
+      cells: cells(
+        [product("mojito"), "terrace", station("terraceBar")],
+        [category("cocktails"), "terrace", station("mainBar")],
+        [category("drinks"), null, station("bar")],
+        [all, "terrace", station("terraceBar")],
+      ),
+    };
+    expect(chooseMaker(rules, mojito, null, null).decidedBy).toEqual(
+      decidedByCell(category("drinks"), null),
+    );
+    expect(chooseMaker(rules, bread, null, null).decidedBy).toEqual({ kind: "default" });
+  });
+
+  it("explicit No preparation stops the walk with no fallback", () => {
+    const rules: RoutingRules = {
+      ...base,
+      cells: cells(
+        [category("cocktails"), null, noPreparation],
+        [category("drinks"), null, station("bar")],
+        [all, "terrace", noPreparation],
+      ),
+    };
+    expect(chooseMaker(rules, mojito, "terrace", null)).toEqual({
+      route: noPreparation,
+      decidedBy: decidedByCell(category("cocktails"), null),
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseMaker(rules, bread, "terrace", null)).toEqual({
+      route: noPreparation,
+      decidedBy: decidedByCell(all, "terrace"),
+      fallbacks: [],
+      noReplacement: false,
+    });
+  });
+
+  it("a closed or disabled chosen station follows its fallback chain, never the next routing row", () => {
+    const rules: RoutingRules = {
+      ...base,
+      activeStationIds: new Set(["bar", "mainBar", "kitchen"]),
+      cells: cells(
+        [category("cocktails"), null, station("cocktailBar")],
+        [category("drinks"), null, noPreparation],
+      ),
+    };
+    expect(chooseMaker(rules, mojito, null, null)).toEqual({
+      route: null,
+      decidedBy: decidedByCell(category("cocktails"), null),
+      fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
+      noReplacement: true,
+    });
+    const withFallback = {
+      ...rules,
+      timing: new Map([["cocktailBar", { fallbackId: "mainBar", hours: [], today: null }]]),
+    };
+    expect(chooseMaker(withFallback, mojito, null, null)).toEqual({
+      route: station("mainBar"),
+      decidedBy: decidedByCell(category("cocktails"), null),
+      fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
+      noReplacement: false,
+    });
+    const closedByHand: RoutingRules = {
+      ...rules,
+      activeStationIds: new Set(["bar", "cocktailBar", "mainBar", "kitchen"]),
+      timing: new Map([
+        ["cocktailBar", { fallbackId: "mainBar", hours: [], today: "closed" as const }],
+        ["mainBar", { fallbackId: "cocktailBar", hours: [], today: "closed" as const }],
+      ]),
+    };
+    expect(chooseMaker(closedByHand, mojito, null, at(FRI, "20:00"))).toEqual({
+      route: null,
+      decidedBy: decidedByCell(category("cocktails"), null),
+      fallbacks: [
+        { stationId: "cocktailBar", why: "closed_by_hand" },
+        { stationId: "mainBar", why: "closed_by_hand" },
+      ],
+      noReplacement: true,
+    });
   });
 
   it("follows a switched-off station's fallback", () => {
@@ -126,21 +399,21 @@ describe("chooseMaker", () => {
     };
     expect(chooseMaker(rules, mojito, null, null)).toEqual({
       route: station("mainBar"),
-      decidedBy: { kind: "claim", categoryId: "cocktails" },
+      decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
       noReplacement: false,
     });
     expect(chooseMaker({ ...rules, timing: new Map() }, mojito, null, null)).toEqual({
       route: null,
-      decidedBy: { kind: "claim", categoryId: "cocktails" },
+      decidedBy: decidedByCell(category("cocktails"), null),
       fallbacks: [{ stationId: "cocktailBar", why: "switched_off" }],
       noReplacement: true,
     });
   });
 
   it("never walks a no-preparation target", () => {
-    const rules = { ...base, claims: new Map([["drinks", { kind: "no_preparation" as const }]]) };
-    expect(chooseMaker(rules, lager, null, null).route).toEqual({ kind: "no_preparation" });
+    const rules = { ...base, cells: cells([category("drinks"), null, noPreparation]) };
+    expect(chooseMaker(rules, lager, null, null).route).toEqual(noPreparation);
   });
 
   it("returns no route when nothing matches and there is no active default", () => {
@@ -149,6 +422,309 @@ describe("chooseMaker", () => {
       decidedBy: null,
       fallbacks: [],
       noReplacement: false,
+    });
+  });
+});
+
+describe("selectRoutingCell", () => {
+  const rules: RoutingRules = {
+    ...base,
+    cells: cells(
+      [category("drinks"), "terrace", station("terraceBar")],
+      [category("cocktails"), null, station("cocktailBar")],
+      [all, "garden", station("mainBar")],
+    ),
+  };
+
+  it("reads the cell list once per rules object, however many products and zones it routes", () => {
+    let scans = 0;
+    // Every scan of a non-empty list reads its first element; a lookup by coordinate does not.
+    const counted = new Proxy(Object.freeze([...rules.cells]), {
+      get(target, property, receiver) {
+        if (property === "0") scans++;
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const countedRules: RoutingRules = { ...rules, cells: counted };
+    const routed = [mojito, lager, bread].flatMap((facts) =>
+      ["terrace", "garden", "indoors", null].map(
+        (zoneId) => chooseMaker(countedRules, facts, zoneId, null).route,
+      ),
+    );
+    expect(routed).toEqual(
+      [mojito, lager, bread].flatMap((facts) =>
+        ["terrace", "garden", "indoors", null].map(
+          (zoneId) => chooseMaker(rules, facts, zoneId, null).route,
+        ),
+      ),
+    );
+    expect(scans).toBe(1);
+  });
+
+  it("routes a list changed in place by the cells it holds now", () => {
+    const list = cells([category("beer"), null, station("bar")]);
+    const changing: RoutingRules = { ...base, cells: list };
+    const route = () => selectRoutingCell(changing, product("lager"), null, "beer").target;
+    expect(route()).toEqual(station("bar"));
+    list.push({ row: product("lager"), zoneId: null, target: station("mainBar") });
+    expect(route()).toEqual(station("mainBar"));
+    list[1] = { row: product("lager"), zoneId: null, target: noPreparation };
+    expect(route()).toEqual(noPreparation);
+    list.splice(1, 1);
+    expect(route()).toEqual(station("bar"));
+    list.splice(0, 1);
+    expect(route()).toEqual(station("kitchen"));
+  });
+
+  it("selects All categories × the zone, then the implicit default, for the All row", () => {
+    expect(selectRoutingCell(rules, all, "garden")).toEqual({
+      target: station("mainBar"),
+      decidedBy: decidedByCell(all, "garden"),
+    });
+    expect(selectRoutingCell(rules, all, "terrace")).toEqual({
+      target: station("kitchen"),
+      decidedBy: { kind: "default" },
+    });
+    expect(selectRoutingCell({ ...rules, defaultStationId: null }, all, "terrace")).toEqual({
+      target: null,
+      decidedBy: null,
+    });
+    expect(
+      selectRoutingCell({ ...rules, activeStationIds: new Set(["bar"]) }, all, "terrace"),
+    ).toEqual({ target: null, decidedBy: null });
+  });
+
+  it("never treats a supplied All categories × Every zone cell as a stored cell", () => {
+    const stray = { ...rules, cells: cells([all, null, station("bar")]) };
+    expect(selectRoutingCell(stray, all, null)).toEqual({
+      target: station("kitchen"),
+      decidedBy: { kind: "default" },
+    });
+    expect(selectRoutingCell(stray, category("food"), "terrace").decidedBy).toEqual({
+      kind: "default",
+    });
+  });
+
+  it("selects for a category row with no product, falling to All categories × the zone", () => {
+    expect(selectRoutingCell(rules, category("food"), "garden")).toEqual({
+      target: station("mainBar"),
+      decidedBy: decidedByCell(all, "garden"),
+    });
+    expect(selectRoutingCell(rules, category("food"), "terrace").decidedBy).toEqual({
+      kind: "default",
+    });
+  });
+
+  it("prefers the same row's Every zone over an ancestor's zone cell", () => {
+    expect(selectRoutingCell(rules, category("cocktails"), "terrace")).toEqual({
+      target: station("cocktailBar"),
+      decidedBy: decidedByCell(category("cocktails"), null),
+    });
+  });
+
+  it("takes an ancestor's zone cell when the row has no cell of its own", () => {
+    expect(selectRoutingCell(rules, category("beer"), "terrace")).toEqual({
+      target: station("terraceBar"),
+      decidedBy: decidedByCell(category("drinks"), "terrace"),
+    });
+    expect(selectRoutingCell(rules, category("beer"), "indoors").decidedBy).toEqual({
+      kind: "default",
+    });
+  });
+
+  it("selects for a product row through the effective category it is given", () => {
+    expect(selectRoutingCell(rules, product("mojito"), "terrace", "cocktails").decidedBy).toEqual(
+      decidedByCell(category("cocktails"), null),
+    );
+    expect(selectRoutingCell(rules, product("mojito"), "terrace").decidedBy).toEqual({
+      kind: "default",
+    });
+  });
+
+  it("reports the target before any fallback walk", () => {
+    const off = { ...rules, activeStationIds: new Set(["kitchen"]) };
+    expect(selectRoutingCell(off, category("cocktails"), null)).toEqual({
+      target: station("cocktailBar"),
+      decidedBy: decidedByCell(category("cocktails"), null),
+    });
+  });
+});
+
+describe("selectRoutingCell with skipOwn", () => {
+  const noCategory: RoutingRow = { kind: "no_category" };
+  const rules: RoutingRules = {
+    ...base,
+    cells: cells(
+      [product("mojito"), "terrace", station("terraceBar")],
+      [product("mojito"), null, station("mainBar")],
+      [category("cocktails"), "terrace", station("cocktailBar")],
+      [category("drinks"), null, station("bar")],
+      [noCategory, "terrace", station("terraceBar")],
+      [all, "terrace", station("mainBar")],
+    ),
+  };
+  const skipOwn = (from: RoutingRules, row: RoutingRow, zoneId: string | null) =>
+    selectRoutingCell(from, row, zoneId, row.kind === "product" ? "cocktails" : null, {
+      skipOwn: true,
+    });
+
+  it("skips the cell at the asked coordinate, then finds Every zone, parent rows and the default", () => {
+    const walk: [RoutingRow, string | null][] = [
+      [product("mojito"), null],
+      [category("cocktails"), "terrace"],
+      [category("drinks"), null],
+      [all, "terrace"],
+    ];
+    let remaining = rules;
+    for (const [row, zoneId] of walk) {
+      expect(skipOwn(remaining, product("mojito"), "terrace").decidedBy).toEqual(
+        decidedByCell(row, zoneId),
+      );
+      remaining = without(remaining, row, zoneId);
+    }
+    expect(skipOwn(remaining, product("mojito"), "terrace")).toEqual({
+      target: station("kitchen"),
+      decidedBy: { kind: "default" },
+    });
+  });
+
+  it("answers what plain selection gives once the coordinate's own cell is gone", () => {
+    const rows = [product("mojito"), category("cocktails"), category("drinks"), noCategory, all];
+    for (const row of rows) {
+      for (const zoneId of ["terrace", "garden", null]) {
+        const plain = selectRoutingCell(
+          without(rules, row, zoneId),
+          row,
+          zoneId,
+          row.kind === "product" ? "cocktails" : null,
+        );
+        expect(skipOwn(rules, row, zoneId)).toEqual(plain);
+        expect(skipOwn(without(rules, row, zoneId), row, zoneId)).toEqual(plain);
+      }
+    }
+  });
+
+  it("reads a frozen cell list once, however many coordinates it skips", () => {
+    let scans = 0;
+    const counted = new Proxy(Object.freeze([...rules.cells]), {
+      get(target, property, receiver) {
+        if (property === "0") scans++;
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const countedRules: RoutingRules = { ...rules, cells: counted };
+    for (const row of [product("mojito"), category("cocktails"), category("drinks")]) {
+      for (const zoneId of ["terrace", null]) skipOwn(countedRules, row, zoneId);
+    }
+    expect(scans).toBe(1);
+  });
+});
+
+describe("the No category row", () => {
+  const noCategory: RoutingRow = { kind: "no_category" };
+  const rules: RoutingRules = {
+    ...base,
+    cells: cells(
+      [product("bread"), "terrace", station("bar")],
+      [noCategory, "terrace", station("terraceBar")],
+      [noCategory, null, station("mainBar")],
+      [all, "terrace", station("cocktailBar")],
+      [all, "inside", station("cocktailBar")],
+    ),
+  };
+
+  it("an uncategorised product tries its product row, then No category, then All categories, zone before Every zone at each row", () => {
+    const walk: [RoutingRow, string | null][] = [
+      [product("bread"), "terrace"],
+      [noCategory, "terrace"],
+      [noCategory, null],
+      [all, "terrace"],
+    ];
+    let remaining = rules;
+    for (const [row, zoneId] of walk) {
+      expect(chooseMaker(remaining, bread, "terrace", null).decidedBy).toEqual(
+        decidedByCell(row, zoneId),
+      );
+      remaining = without(remaining, row, zoneId);
+    }
+    expect(chooseMaker(remaining, bread, "terrace", null)).toEqual({
+      route: station("kitchen"),
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseMaker(rules, bread, "inside", null)).toEqual({
+      route: station("mainBar"),
+      decidedBy: decidedByCell(noCategory, null),
+      fallbacks: [],
+      noReplacement: false,
+    });
+  });
+
+  it("a variant of an uncategorised product follows No category, not the category it stores", () => {
+    const withStored: RoutingRules = {
+      ...rules,
+      cells: [...rules.cells, ...cells([category("drinks"), null, station("bar")])],
+    };
+    const roll = { productId: "bread-roll", routedProductId: "bread", categoryId: null };
+    expect(chooseMaker(withStored, roll, "inside", null).decidedBy).toEqual(
+      decidedByCell(noCategory, null),
+    );
+    expect(chooseMaker(withStored, roll, "terrace", null).decidedBy).toEqual(
+      decidedByCell(product("bread"), "terrace"),
+    );
+  });
+
+  it("a No category cell never decides for a categorised product, nor for a category row", () => {
+    const drinksOnly: RoutingRules = { ...rules, cells: rules.cells.slice(1) };
+    for (const zoneId of ["terrace", "inside"]) {
+      expect(chooseMaker(drinksOnly, lager, zoneId, null).decidedBy).toEqual(
+        decidedByCell(all, zoneId),
+      );
+      expect(selectRoutingCell(drinksOnly, category("food"), zoneId).decidedBy).toEqual(
+        decidedByCell(all, zoneId),
+      );
+    }
+    expect(chooseMaker(drinksOnly, lager, null, null).decidedBy).toEqual({ kind: "default" });
+  });
+
+  it("selectRoutingCell for the No category row: its zone cell, its Every zone, then All × zone, then the default", () => {
+    const row = rules.cells.slice(1);
+    expect(selectRoutingCell({ ...rules, cells: row }, noCategory, "terrace")).toEqual({
+      target: station("terraceBar"),
+      decidedBy: decidedByCell(noCategory, "terrace"),
+    });
+    const noZoneCell = without({ ...rules, cells: row }, noCategory, "terrace");
+    expect(selectRoutingCell(noZoneCell, noCategory, "terrace")).toEqual({
+      target: station("mainBar"),
+      decidedBy: decidedByCell(noCategory, null),
+    });
+    const noRowCells = without(noZoneCell, noCategory, null);
+    expect(selectRoutingCell(noRowCells, noCategory, "terrace")).toEqual({
+      target: station("cocktailBar"),
+      decidedBy: decidedByCell(all, "terrace"),
+    });
+    expect(selectRoutingCell(noRowCells, noCategory, "garden")).toEqual({
+      target: station("kitchen"),
+      decidedBy: { kind: "default" },
+    });
+  });
+
+  it("explicit No preparation on No category × Every zone stops the walk", () => {
+    const stops: RoutingRules = {
+      ...extrasRules,
+      cells: cells([noCategory, null, noPreparation], [all, "terrace", station("fryer")]),
+    };
+    expect(chooseMaker(stops, bread, "terrace", null)).toEqual({
+      route: noPreparation,
+      decidedBy: decidedByCell(noCategory, null),
+      fallbacks: [],
+      noReplacement: false,
+    });
+    expect(chooseExtraMaker(stops, bread, "terrace", null, "grill")).toEqual({
+      outcome: { kind: "follows_dish", why: "no_preparation" },
+      decidedBy: decidedByCell(noCategory, null),
+      fallbacks: [],
     });
   });
 });
@@ -165,235 +741,36 @@ describe("folderAncestors", () => {
   });
 });
 
-describe("unreachableExceptions", () => {
-  it("flags an exception an earlier, wider one always catches", () => {
-    const rules: RoutingRules = {
-      ...base,
-      exceptions: [
-        {
-          id: "wide",
-          position: 1,
-          zoneId: "terrace",
-          categoryId: "drinks",
-          productId: null,
-          target: station("terraceBar"),
-        },
-        {
-          id: "narrow",
-          position: 2,
-          zoneId: "terrace",
-          categoryId: "cocktails",
-          productId: null,
-          target: station("mainBar"),
-        },
-        {
-          id: "other-zone",
-          position: 3,
-          zoneId: "indoors",
-          categoryId: "cocktails",
-          productId: null,
-          target: station("mainBar"),
-        },
-        {
-          id: "any-zone",
-          position: 4,
-          zoneId: null,
-          categoryId: "cocktails",
-          productId: null,
-          target: station("mainBar"),
-        },
-      ],
-    };
-    expect(unreachableExceptions(rules)).toEqual(new Set(["narrow"]));
+describe("the text keys", () => {
+  const rows: RoutingRow[] = [
+    { kind: "all" },
+    { kind: "no_category" },
+    { kind: "category", categoryId: "x" },
+    { kind: "product", productId: "x" },
+  ];
+
+  it("gives every row kind its own key, No category apart from All categories, and keeps the grid's spellings", () => {
+    expect(rows.map(rowKey)).toEqual(["all", "no_category", "c:x", "p:x"]);
   });
 
-  it("flags a duplicate product exception, and everything after a catch-all for its zone", () => {
-    const rules: RoutingRules = {
-      ...base,
-      exceptions: [
-        {
-          id: "all-terrace",
-          position: 1,
-          zoneId: "terrace",
-          categoryId: null,
-          productId: null,
-          target: station("terraceBar"),
-        },
-        {
-          id: "p1",
-          position: 2,
-          zoneId: "terrace",
-          categoryId: null,
-          productId: "lager",
-          target: station("bar"),
-        },
-        {
-          id: "p2",
-          position: 3,
-          zoneId: null,
-          categoryId: null,
-          productId: "lager",
-          target: station("bar"),
-        },
-        {
-          id: "p3",
-          position: 4,
-          zoneId: null,
-          categoryId: null,
-          productId: "lager",
-          target: station("mainBar"),
-        },
-      ],
-    };
-    expect(unreachableExceptions(rules)).toEqual(new Set(["p1", "p3"]));
+  it("gives every row in Every zone and in a zone its own cell key", () => {
+    const keys = rows.flatMap((row) => [null, "z"].map((zoneId) => cellKey({ row, zoneId })));
+    expect(new Set(keys).size).toBe(8);
+    expect(cellKey({ row: { kind: "all" }, zoneId: null })).toBe("all|every");
+    expect(cellKey({ row: { kind: "category", categoryId: "x" }, zoneId: "z" })).toBe("c:x|z");
   });
 
-  it("flags an exception behind one whose station is switched off", () => {
-    const rules: RoutingRules = {
-      ...base,
-      activeStationIds: new Set(["bar", "mainBar", "kitchen"]),
-      exceptions: [
-        {
-          id: "off",
-          position: 1,
-          zoneId: "terrace",
-          categoryId: "drinks",
-          productId: null,
-          target: station("terraceBar"),
-        },
-        {
-          id: "on",
-          position: 2,
-          zoneId: "terrace",
-          categoryId: "cocktails",
-          productId: null,
-          target: station("mainBar"),
-        },
-      ],
-    };
-    expect(unreachableExceptions(rules)).toEqual(new Set(["on"]));
-  });
-});
-
-describe("the design's terrace example, written in the wrong order", () => {
-  it("flags the cocktails exception and sends a terrace mojito to the terrace bar", () => {
-    const rules: RoutingRules = {
-      ...base,
-      exceptions: [
-        {
-          id: "drinks",
-          position: 1,
-          zoneId: "terrace",
-          categoryId: "drinks",
-          productId: null,
-          target: station("terraceBar"),
-        },
-        {
-          id: "cocktails",
-          position: 2,
-          zoneId: "terrace",
-          categoryId: "cocktails",
-          productId: null,
-          target: station("mainBar"),
-        },
-      ],
-    };
-    expect(unreachableExceptions(rules)).toEqual(new Set(["cocktails"]));
-    expect(chooseMaker(rules, mojito, "terrace", null).route).toEqual(station("terraceBar"));
+  it("gives no target, No preparation and each station its own key", () => {
+    expect([null, noPreparation, station("a"), station("b")].map(targetKey)).toEqual([
+      "",
+      "no_preparation",
+      "station:a",
+      "station:b",
+    ]);
   });
 });
 
 describe("routing edge cases", () => {
-  it("breaks equal positions by id without changing the supplied exceptions", () => {
-    const exceptions = [
-      {
-        id: "z",
-        position: 1,
-        zoneId: null,
-        categoryId: null,
-        productId: null,
-        target: station("bar"),
-      },
-      {
-        id: "a",
-        position: 1,
-        zoneId: null,
-        categoryId: null,
-        productId: null,
-        target: station("mainBar"),
-      },
-    ];
-    const rules = { ...base, exceptions };
-    expect(chooseMaker(rules, bread, null, null).decidedBy).toEqual({
-      kind: "exception",
-      exceptionId: "a",
-    });
-    expect(unreachableExceptions(rules)).toEqual(new Set(["z"]));
-    expect(exceptions.map(({ id }) => id)).toEqual(["z", "a"]);
-  });
-
-  it("requires both product and folder when an exception gives both", () => {
-    const rules = {
-      ...base,
-      exceptions: [
-        {
-          id: "both",
-          position: 1,
-          zoneId: null,
-          categoryId: "cocktails",
-          productId: "mojito",
-          target: station("mainBar"),
-        },
-      ],
-    };
-    expect(chooseMaker(rules, mojito, null, null).decidedBy).toEqual({
-      kind: "exception",
-      exceptionId: "both",
-    });
-    expect(chooseMaker(rules, { ...mojito, categoryId: "food" }, null, null).decidedBy).toEqual({
-      kind: "default",
-    });
-    expect(
-      chooseMaker(rules, { ...mojito, routedProductId: "different" }, null, null).decidedBy,
-    ).toEqual({ kind: "claim", categoryId: "cocktails" });
-    expect(chooseMaker(rules, bread, null, null).decidedBy).toEqual({ kind: "default" });
-  });
-
-  it("keeps the first switched-off exception even when later rules say no preparation", () => {
-    const rules = {
-      ...base,
-      activeStationIds: new Set<string>(),
-      claims: new Map<string, RouteTarget>([
-        ["cocktails", station("cocktailBar")],
-        ["drinks", { kind: "no_preparation" as const }],
-      ]),
-      exceptions: [
-        {
-          id: "second",
-          position: 2,
-          zoneId: null,
-          categoryId: null,
-          productId: null,
-          target: station("bar"),
-        },
-        {
-          id: "first",
-          position: 1,
-          zoneId: null,
-          categoryId: null,
-          productId: null,
-          target: station("mainBar"),
-        },
-      ],
-    };
-    expect(chooseMaker(rules, mojito, null, null)).toEqual({
-      route: null,
-      decidedBy: { kind: "exception", exceptionId: "first" },
-      fallbacks: [{ stationId: "mainBar", why: "switched_off" }],
-      noReplacement: true,
-    });
-  });
-
   it("rejects a switched-off default instead of routing work to it", () => {
     expect(chooseMaker({ ...base, activeStationIds: new Set() }, bread, null, null)).toEqual({
       route: null,
@@ -409,91 +786,6 @@ describe("routing edge cases", () => {
     expect(folderAncestors(new Map([["self", "self"]]), "self")).toEqual(["self"]);
     expect(folderAncestors(new Map([["", null]]), "")).toEqual([""]);
   });
-
-  it.each([
-    {
-      name: "different products",
-      aCategory: null,
-      aProduct: "mojito",
-      bCategory: null,
-      bProduct: "lager",
-      unreachable: false,
-    },
-    {
-      name: "product before folder",
-      aCategory: null,
-      aProduct: "mojito",
-      bCategory: "cocktails",
-      bProduct: null,
-      unreachable: false,
-    },
-    {
-      name: "folder before product of unknown folder",
-      aCategory: "drinks",
-      aProduct: null,
-      bCategory: null,
-      bProduct: "mojito",
-      unreachable: false,
-    },
-    {
-      name: "different folders",
-      aCategory: "food",
-      aProduct: null,
-      bCategory: "drinks",
-      bProduct: null,
-      unreachable: false,
-    },
-    {
-      name: "narrow folder before parent",
-      aCategory: "cocktails",
-      aProduct: null,
-      bCategory: "drinks",
-      bProduct: null,
-      unreachable: false,
-    },
-    {
-      name: "folder before catch-all",
-      aCategory: "drinks",
-      aProduct: null,
-      bCategory: null,
-      bProduct: null,
-      unreachable: false,
-    },
-    {
-      name: "same folder",
-      aCategory: "drinks",
-      aProduct: null,
-      bCategory: "drinks",
-      bProduct: null,
-      unreachable: true,
-    },
-  ])(
-    "detects coverage accurately for $name",
-    ({ aCategory, aProduct, bCategory, bProduct, unreachable }) => {
-      const rules = {
-        ...base,
-        exceptions: [
-          {
-            id: "a",
-            position: 1,
-            zoneId: null,
-            categoryId: aCategory,
-            productId: aProduct,
-            target: { kind: "no_preparation" as const },
-          },
-          {
-            id: "b",
-            position: 2,
-            zoneId: "terrace",
-            categoryId: bCategory,
-            productId: bProduct,
-            target: station("bar"),
-          },
-        ],
-      };
-      expect(unreachableExceptions(rules)).toEqual(new Set(unreachable ? ["b"] : []));
-    },
-  );
 });
 
 const at = (weekday: number, timeOfDay: string): RoutingMoment => ({ weekday, timeOfDay });
@@ -773,7 +1065,7 @@ describe("opening hours by calendar date", () => {
 describe("fallbacks", () => {
   const rules: RoutingRules = {
     ...base,
-    claims: new Map([["drinks", station("upstairs")]]),
+    cells: cells([category("drinks"), null, station("upstairs")]),
     activeStationIds: new Set(["upstairs", "downstairs", "kitchen", "a", "b"]),
     timing: new Map([
       [
@@ -793,7 +1085,7 @@ describe("fallbacks", () => {
   it("sends work from an out-of-hours station to its first open fallback", () => {
     expect(chooseMaker(rules, lager, null, at(FRI, "22:00"))).toEqual({
       route: station("downstairs"),
-      decidedBy: { kind: "claim", categoryId: "drinks" },
+      decidedBy: decidedByCell(category("drinks"), null),
       fallbacks: [{ stationId: "upstairs", why: "out_of_hours" }],
       noReplacement: false,
     });
@@ -810,7 +1102,7 @@ describe("fallbacks", () => {
     };
     expect(chooseMaker(closed, lager, null, at(FRI, "22:00"))).toEqual({
       route: null,
-      decidedBy: { kind: "claim", categoryId: "drinks" },
+      decidedBy: decidedByCell(category("drinks"), null),
       fallbacks: [
         { stationId: "upstairs", why: "out_of_hours" },
         { stationId: "downstairs", why: "closed_by_hand" },
@@ -852,10 +1144,10 @@ describe("fallbacks", () => {
   });
 
   it("does not walk a no-preparation route", () => {
-    const np = { ...rules, claims: new Map([["drinks", { kind: "no_preparation" as const }]]) };
+    const np = { ...rules, cells: cells([category("drinks"), null, noPreparation]) };
     expect(chooseMaker(np, lager, null, at(FRI, "22:00"))).toEqual({
       route: { kind: "no_preparation" },
-      decidedBy: { kind: "claim", categoryId: "drinks" },
+      decidedBy: decidedByCell(category("drinks"), null),
       fallbacks: [],
       noReplacement: false,
     });
@@ -879,24 +1171,24 @@ const extrasRules: RoutingRules = {
     ["sauces", "extras"],
   ]),
   activeStationIds: new Set([...base.activeStationIds, "grill", "fryer", "terraceKitchen"]),
-  claims: new Map<string, RouteTarget>([
-    ["sides", station("fryer")],
-    ["sauces", { kind: "no_preparation" }],
-  ]),
+  cells: cells(
+    [category("sides"), null, station("fryer")],
+    [category("sauces"), null, noPreparation],
+  ),
 };
 const chips = { productId: "chips", routedProductId: "chips", categoryId: "sides" };
 const cheese = { productId: "cheese", routedProductId: "cheese", categoryId: "toppings" };
 const sauce = { productId: "sauce", routedProductId: "sauce", categoryId: "sauces" };
 
 describe("chooseExtraMaker", () => {
-  it("splits an extra off when its folder's claim names another station", () => {
+  it("splits an extra off when its category's cell names another station", () => {
     expect(chooseExtraMaker(extrasRules, chips, null, null, "grill")).toEqual({
       outcome: { kind: "made", stationId: "fryer" },
-      decidedBy: { kind: "claim", categoryId: "sides" },
+      decidedBy: decidedByCell(category("sides"), null),
       fallbacks: [],
     });
   });
-  it("keeps an unclaimed extra with its dish with or without an active default", () => {
+  it("keeps an extra no cell decides with its dish, with or without an active default", () => {
     expect(chooseExtraMaker(extrasRules, cheese, null, null, "grill").outcome).toEqual({
       kind: "follows_dish",
       why: "no_rule",
@@ -918,23 +1210,51 @@ describe("chooseExtraMaker", () => {
       why: "same_station",
     });
   });
-  it("lets an exception decide for an extra as for a dish", () => {
+  it("lets an All categories × zone cell decide for an extra as for a dish", () => {
     const rules = {
       ...extrasRules,
-      exceptions: [
-        {
-          id: "t",
-          position: 1,
-          zoneId: "terrace",
-          categoryId: null,
-          productId: null,
-          target: station("terraceKitchen"),
-        },
-      ],
+      cells: cells([all, "terrace", station("terraceKitchen")]),
     };
     expect(chooseExtraMaker(rules, chips, "terrace", null, "terraceKitchen")).toEqual({
       outcome: { kind: "follows_dish", why: "same_station" },
-      decidedBy: { kind: "exception", exceptionId: "t" },
+      decidedBy: decidedByCell(all, "terrace"),
+      fallbacks: [],
+    });
+  });
+  it("makes an extra where an All categories × zone cell names the default station", () => {
+    const rules = { ...extrasRules, cells: cells([all, "terrace", station("kitchen")]) };
+    expect(chooseExtraMaker(rules, cheese, "terrace", null, "grill")).toEqual({
+      outcome: { kind: "made", stationId: "kitchen" },
+      decidedBy: decidedByCell(all, "terrace"),
+      fallbacks: [],
+    });
+    expect(chooseExtraMaker(rules, cheese, "indoors", null, "grill")).toEqual({
+      outcome: { kind: "follows_dish", why: "no_rule" },
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+    });
+  });
+  it("keeps a category or product cell that names the default station a cell decision", () => {
+    const byCategory = {
+      ...extrasRules,
+      cells: cells([category("toppings"), null, station("kitchen")]),
+    };
+    expect(chooseExtraMaker(byCategory, cheese, null, null, "grill")).toEqual({
+      outcome: { kind: "made", stationId: "kitchen" },
+      decidedBy: decidedByCell(category("toppings"), null),
+      fallbacks: [],
+    });
+    expect(chooseExtraMaker(byCategory, cheese, null, null, "kitchen").outcome).toEqual({
+      kind: "follows_dish",
+      why: "same_station",
+    });
+    const byProduct = {
+      ...extrasRules,
+      cells: cells([product("cheese"), "terrace", station("kitchen")]),
+    };
+    expect(chooseExtraMaker(byProduct, cheese, "terrace", null, "grill")).toEqual({
+      outcome: { kind: "made", stationId: "kitchen" },
+      decidedBy: decidedByCell(product("cheese"), "terrace"),
       fallbacks: [],
     });
   });
@@ -945,7 +1265,7 @@ describe("chooseExtraMaker", () => {
     };
     expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "grill")).toEqual({
       outcome: { kind: "made", stationId: "kitchen" },
-      decidedBy: { kind: "claim", categoryId: "sides" },
+      decidedBy: decidedByCell(category("sides"), null),
       fallbacks: [{ stationId: "fryer", why: "closed_by_hand" }],
     });
     expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "kitchen").outcome).toEqual({
@@ -960,11 +1280,11 @@ describe("chooseExtraMaker", () => {
     };
     expect(chooseExtraMaker(rules, chips, null, at(FRI, "20:00"), "grill")).toEqual({
       outcome: { kind: "follows_dish", why: "no_replacement" },
-      decidedBy: { kind: "claim", categoryId: "sides" },
+      decidedBy: decidedByCell(category("sides"), null),
       fallbacks: [{ stationId: "fryer", why: "closed_by_hand" }],
     });
   });
-  it("splits a claimed extra off a dish that needs no preparation", () => {
+  it("splits an extra off a dish that needs no preparation when its category's cell names a station", () => {
     expect(chooseExtraMaker(extrasRules, chips, null, null, null).outcome).toEqual({
       kind: "made",
       stationId: "fryer",

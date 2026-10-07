@@ -1,4 +1,4 @@
-import { createException } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, asc, eq } from "drizzle-orm";
@@ -380,12 +380,12 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     await writeProductModifiers(tx, productIds.get("Pizza")!, [{ kind: "extras", id: extras.id }]);
     await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
     const tables = await offerProducts(tx, cfg, { zone: "tables" });
-    await createException(tx, cfg, {
-      zoneId: null,
-      categoryId: null,
-      productId: productIds.get("Coffee")!,
-      target: { kind: "no_preparation" },
-    });
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "product", productId: productIds.get("Coffee")! }, zoneId: null },
+      { kind: "no_preparation" },
+    );
     const people = await tx
       .insert(persons)
       .values([

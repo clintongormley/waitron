@@ -89,14 +89,14 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import {
-  claimFolderFor,
+  routeCategoryTo,
   routeProductTo,
   offerProducts,
   type ZoneOffers,
 } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createException, setClaim, writePrintHeldWork } from "@waitron/venue-service";
+import { setRoutingCell, writePrintHeldWork, type RouteTarget } from "@waitron/venue-service";
 import {
   WEEK_DISPLAY_ORDER,
   departments,
@@ -1164,12 +1164,12 @@ describe("openTab service context", () => {
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
-      await createException(tx, cfg, {
-        zoneId,
-        productId: cafeId,
-        categoryId: null,
-        target: { kind: "no_preparation" },
-      });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "product", productId: cafeId }, zoneId },
+        { kind: "no_preparation" },
+      );
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Deli shelf', ${zoneId}, ${nowIso()})
@@ -2530,7 +2530,7 @@ const stubBackend = {} as unknown as FiscalBackend;
 /** A basket line for a product at quantity 1 — the shape createOpenOrder/fireLines consume. */
 const line = (productId: string) => ({ productId, quantity: "1" });
 
-/** Create a sellable product, optionally filed in a category or routed by a product exception. */
+/** Create a sellable product, optionally filed in a category or routed by a product cell. */
 async function makeProduct(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -2963,7 +2963,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: bar.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: bar.id });
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const { id } = await fireContextless(tx, cfg, [product]);
       expect(byProduct(await ticketItemsFor(tx, id), product).stationId).toBe(bar.id);
@@ -3006,7 +3006,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const drinks = await createCategory(tx, { name: "Bottles" });
-      await setClaim(tx, cfg, drinks.id, { kind: "no_preparation" });
+      await routeCategory(tx, cfg, drinks.id, { kind: "no_preparation" });
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const course = await createCourse(tx, cfg, { name: "Bottles" });
       const id = randomUUID();
@@ -3036,13 +3036,13 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("routes exceptions before folder claims and the default and snapshots the station at fire time", async () => {
+  it("routes a product cell before its category cell and the default and snapshots the station at fire time", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const drinks = await createCategory(tx, { name: "Copas" });
-      await claimFolderFor(tx, cfg, drinks.id, barra.id);
+      await routeCategoryTo(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
         categoryId: drinks.id,
@@ -3057,7 +3057,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
 
       // Re-route the category AFTER firing. The already-fired item is SNAPSHOTTED, so it does NOT move —
       // the rule (re-categorising a product later never reroutes food already sent).
-      await claimFolderFor(tx, cfg, drinks.id, cocina.id);
+      await routeCategoryTo(tx, cfg, drinks.id, cocina.id);
       const after = await ticketItemsFor(tx, orderId);
       expect(byProduct(after, cana).stationId).toBe(barra.id);
     });
@@ -3070,8 +3070,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const food = await createCategory(tx, { name: "Food" });
-      await claimFolderFor(tx, cfg, drinks.id, bar.id);
-      await claimFolderFor(tx, cfg, food.id, kitchen.id);
+      await routeCategoryTo(tx, cfg, drinks.id, bar.id);
+      await routeCategoryTo(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
 
       // The raw unzoned order checks routing; the offered order freezes the sale category.
@@ -3224,7 +3224,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where id = ${cafeId}`);
-      await claimFolderFor(tx, cfg, product.rows[0]!.category_id, bar.id);
+      await routeCategoryTo(tx, cfg, product.rows[0]!.category_id, bar.id);
       await routeProductTo(tx, cfg, aguaId, kitchen.id);
       const aguaOffer = await addProductToMenu(tx, {
         menuId: catalogueId,
@@ -3271,7 +3271,7 @@ describe("opening hours", () => {
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       await tx.insert(stationFallbacks).values([
         { stationId: upstairs.id, fallbackStationId: downstairs.id },
         { stationId: downstairs.id, fallbackStationId: upstairs.id },
@@ -3310,7 +3310,7 @@ describe("opening hours", () => {
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -3338,7 +3338,7 @@ describe("opening hours", () => {
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 5, opensAt: "19:00", closesAt: "23:00" },
@@ -3386,7 +3386,7 @@ describe("opening hours", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const departmentRows = await tx
         .select({ id: departments.id })
@@ -3422,7 +3422,7 @@ describe("opening hours", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -3448,7 +3448,7 @@ describe("opening hours", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
@@ -3519,7 +3519,7 @@ describe("opening hours", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
@@ -3572,7 +3572,7 @@ describe("opening hours", () => {
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -3616,7 +3616,7 @@ describe("opening hours", () => {
     await withTransaction(db, async (tx) => {
       const station = await createStation(tx, cfg, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Bottles" });
-      await setClaim(tx, cfg, drinks.id, { kind: "no_preparation" });
+      await routeCategory(tx, cfg, drinks.id, { kind: "no_preparation" });
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
@@ -3652,7 +3652,7 @@ describe("opening hours", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
@@ -3728,7 +3728,7 @@ describe("a sale on a Spanish public holiday", () => {
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
-      await setClaim(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
+      await routeCategory(tx, cfg, drinks.id, { kind: "station", stationId: upstairs.id });
       await setStationFallback(tx, cfg, upstairs.id, downstairs.id);
       await seedStationWeek(tx, cfg, upstairs.id, [
         { weekday: 1, opensAt: "19:00", closesAt: "23:00" },
@@ -4240,7 +4240,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("attaches unclaimed extras as sub-items on listStationQueue and listExpoQueue", async () => {
+  it("attaches extras no cell decides as sub-items on listStationQueue and listExpoQueue", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6008,7 +6008,10 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         "P-Emplatado",
       );
       const extrasCategory = await createCategory(tx, { name: "Extras" });
-      await setClaim(tx, cfg, extrasCategory.id, { kind: "station", stationId: extrasStation.id });
+      await routeCategory(tx, cfg, extrasCategory.id, {
+        kind: "station",
+        stationId: extrasStation.id,
+      });
       const extra = await createProduct(tx, {
         catalogueId,
         categoryId: extrasCategory.id,
@@ -6104,7 +6107,10 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const extrasStation = await createStation(tx, cfg, { name: "Emplatado" });
       const extrasCategory = await createCategory(tx, { name: "Extras" });
-      await setClaim(tx, cfg, extrasCategory.id, { kind: "station", stationId: extrasStation.id });
+      await routeCategory(tx, cfg, extrasCategory.id, {
+        kind: "station",
+        stationId: extrasStation.id,
+      });
       const extra = await createProduct(tx, {
         catalogueId,
         categoryId: extrasCategory.id,
@@ -8435,12 +8441,28 @@ async function insertRoute(
   cfg: DeviceRequestConfig,
   route: { zoneId?: string; productId?: string; categoryId?: string; stationId: string },
 ): Promise<void> {
-  await createException(tx, cfg, {
-    zoneId: route.zoneId ?? null,
-    productId: route.productId ?? null,
-    categoryId: route.categoryId ?? null,
-    target: { kind: "station", stationId: route.stationId },
-  });
+  const row =
+    route.productId !== undefined
+      ? { kind: "product" as const, productId: route.productId }
+      : route.categoryId !== undefined
+        ? { kind: "category" as const, categoryId: route.categoryId }
+        : { kind: "all" as const };
+  await setRoutingCell(
+    tx,
+    cfg,
+    { row, zoneId: route.zoneId ?? null },
+    { kind: "station", stationId: route.stationId },
+  );
+}
+
+/** Routes a category in every zone. */
+async function routeCategory(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  categoryId: string,
+  target: RouteTarget,
+): Promise<void> {
+  await setRoutingCell(tx, cfg, { row: { kind: "category", categoryId }, zoneId: null }, target);
 }
 
 describe("a variant is sold as the product it is", () => {
@@ -8649,16 +8671,16 @@ describe("a variant is sold as the product it is", () => {
     }
   });
 
-  it("fires variants by their product's folder claim, never a stored category of their own", async () => {
+  it("fires variants by their product's category cell, never a stored category of their own", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const copas = await createStation(tx, cfg, { name: "Copas" });
-      await claimFolderFor(tx, cfg, wine.vinosId, barra.id);
-      await claimFolderFor(tx, cfg, wine.copasId, copas.id);
-      // Both lines name variants; each takes its product's folder, so Copas's claim takes neither.
+      await routeCategoryTo(tx, cfg, wine.vinosId, barra.id);
+      await routeCategoryTo(tx, cfg, wine.copasId, copas.id);
+      // Both lines name variants; each takes its product's category cell, so Copas's cell takes neither.
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -8677,15 +8699,15 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("fires variants by their inherited folder claim", async () => {
+  it("fires variants by their inherited category cell", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const bodega = await createStation(tx, cfg, { name: "Bodega" });
       const terraza = await createStation(tx, cfg, { name: "Terraza" });
-      await claimFolderFor(tx, cfg, wine.vinosId, bodega.id);
-      await claimFolderFor(tx, cfg, wine.copasId, terraza.id);
+      await routeCategoryTo(tx, cfg, wine.vinosId, bodega.id);
+      await routeCategoryTo(tx, cfg, wine.copasId, terraza.id);
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [], null);
       await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
@@ -8704,15 +8726,14 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("takes the parent-product exception past an earlier exception on a variant's stored category", async () => {
+  it("takes the parent's product cell past a cell on a variant's stored category", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
-      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
       const terraza = await createStation(tx, cfg, { name: "Terraza" });
-      // The earlier zoned exception names Wine 175's stored category, which no variant reads, so both
-      // variants take the parent-product exception.
       await insertRoute(tx, cfg, { zoneId, categoryId: wine.copasId, stationId: terraza.id });
       await insertRoute(tx, cfg, { productId: wine.parentId, stationId: barra.id });
       await createOpenOrder(
@@ -8733,7 +8754,7 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("takes the parent's category exception for both variants, past one on a variant's stored category", async () => {
+  it("takes the parent's category cell for both variants, past one on a variant's stored category", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {

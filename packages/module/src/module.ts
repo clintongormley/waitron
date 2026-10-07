@@ -298,7 +298,7 @@ export type ExtraMakerOutcome =
   | { readonly kind: "made"; readonly stationId: string }
   | {
       readonly kind: "follows_dish";
-      /** no_rule: no exception or claim covers it; no_preparation: it needs no preparation;
+      /** no_rule: no saved routing cell covers it; no_preparation: it needs no preparation;
        *  no_replacement: its station and every fallback are closed; same_station: made with its dish. */
       readonly why: "no_rule" | "no_preparation" | "no_replacement" | "same_station";
     };
@@ -476,7 +476,7 @@ export interface VenueServiceContribution {
   ): Promise<
     ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
   >;
-  /** Base maker for active products and variants, plus whether a zone-specific exception matches. */
+  /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
   describeMakers(
     tx: Transaction,
     cfg: { locationId: LocationId },

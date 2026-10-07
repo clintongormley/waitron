@@ -6,7 +6,6 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-  deleteCatalogueItems,
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -22,28 +21,31 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { chooseMaker, type RouteTarget, type RoutingMoment } from "./routing.js";
+import {
+  selectRoutingCell,
+  selectionRulesFromModel,
+  type RouteTarget,
+  type RoutingModel,
+  type RoutingMoment,
+  type RoutingRow,
+} from "./routing.js";
 import {
   describeMakers,
-  createException,
-  deleteException,
   explainRoute,
   loadRoutingRules,
   previewRoutingChange,
-  removeClaim,
   resolveMakers,
   resolveExtraMakers,
   routingAt,
   stationStates,
-  reorderExceptions,
   routingModel,
-  setClaim,
-  updateException,
-  validateRoutingInput,
+  setRoutingCell,
+  clearRoutingCell,
 } from "./routing-store.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { routeExceptions } from "./schema/routing.js";
+import { routingCells } from "./schema/routing.js";
+import type { CellAddress, RoutingCell } from "./routing-types.js";
 import { setStationFallback, setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/station-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
@@ -58,6 +60,15 @@ beforeAll(() => {
   db = suite.db;
 });
 const noPrep: RouteTarget = { kind: "no_preparation" };
+const station = (stationId: string): RouteTarget => ({ kind: "station", stationId });
+const categoryRow = (categoryId: string) => ({ kind: "category" as const, categoryId });
+const productRow = (productId: string) => ({ kind: "product" as const, productId });
+const setCategoryCell = (
+  tx: Transaction,
+  cfg: { locationId: string },
+  categoryId: string,
+  target: RouteTarget,
+) => setRoutingCell(tx, cfg as never, { row: categoryRow(categoryId), zoneId: null }, target);
 
 /** `suffix` tells apart the names of a second fixture in one database, where root categories and
  * Active products may not share a name with the first's. */
@@ -109,14 +120,9 @@ async function fixture(tx: Transaction, suffix = "") {
     .insert(products)
     .values({ catalogueId: menu.id, parentId: mojito, name: "Large", categoryId: null })
     .returning();
-  const input = {
-    zoneId: terrace!.id,
-    categoryId: drinks,
-    productId: null,
-    target: { kind: "station", stationId: bar } as RouteTarget,
-  };
   return {
     cfg,
+    department: department.id,
     terrace: terrace!.id,
     bar,
     terraceBar,
@@ -128,16 +134,43 @@ async function fixture(tx: Transaction, suffix = "") {
     mojito,
     bread,
     variant: variant!.id,
-    input,
   };
 }
 const scoped = (fn: (tx: Transaction) => Promise<void>) => withTransaction(db, fn);
+const noCategoryRow = { kind: "no_category" as const };
+/** A variant of the uncategorised bread that stores a category of its own (Food). */
+async function breadVariant(tx: Transaction, f: { bread: string; food: string }) {
+  const [bread] = await tx
+    .select({ catalogueId: products.catalogueId })
+    .from(products)
+    .where(eq(products.id, f.bread));
+  const [half] = await tx
+    .insert(products)
+    .values({
+      catalogueId: bread!.catalogueId,
+      parentId: f.bread,
+      name: "Half",
+      categoryId: f.food,
+    })
+    .returning();
+  return half!.id;
+}
+const cellKey = (cell: RoutingCell) =>
+  `${cell.row.kind}:${cell.row.kind === "category" ? cell.row.categoryId : cell.row.kind === "product" ? cell.row.productId : ""}:${cell.zoneId ?? ""}`;
+const sortCells = (cells: readonly RoutingCell[]) =>
+  [...cells].sort((a, b) => cellKey(a).localeCompare(cellKey(b)));
 
 describe("route explanation", () => {
+  it("loads a frozen cell list, so routing a whole catalogue indexes it once", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setCategoryCell(tx, f.cfg, f.cocktails, station(f.bar));
+      expect(Object.isFrozen((await loadRoutingRules(tx, f.cfg, null)).cells)).toBe(true);
+    }));
   it("names the unavailable station when an inactive maker has no fallback", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.cocktails, {
+      await setCategoryCell(tx, f.cfg, f.cocktails, {
         kind: "station",
         stationId: f.terraceBar,
       });
@@ -183,13 +216,13 @@ describe("route explanation", () => {
   it("describes active variants and zone-sensitive rules without a service zone", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
-      await createException(tx, f.cfg, {
-        zoneId: f.terrace,
-        categoryId: f.cocktails,
-        productId: null,
-        target: { kind: "station", stationId: f.terraceBar },
-      });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.cocktails), zoneId: f.terrace },
+        station(f.terraceBar),
+      );
       const makers = await describeMakers(tx, f.cfg);
       expect(makers.get(f.mojito)).toEqual({
         route: { kind: "station", stationId: f.bar },
@@ -210,51 +243,208 @@ describe("route explanation", () => {
         unavailableStationId: null,
       });
     }));
-  it("names a matching exception, including a variant's parent product", async () =>
+  it("varies by zone when an All categories × zone cell changes the outcome", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      const id = await createException(tx, f.cfg, {
-        zoneId: f.terrace,
-        categoryId: null,
-        productId: f.mojito,
-        target: { kind: "station", stationId: f.terraceBar },
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: { kind: "all" }, zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      const makers = await describeMakers(tx, f.cfg);
+      for (const id of [f.mojito, f.variant, f.bread])
+        expect(makers.get(id)).toEqual({
+          route: station(f.bar),
+          variesByZone: true,
+          noReplacement: false,
+          unavailableStationId: null,
+        });
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.terrace));
+      expect((await describeMakers(tx, f.cfg)).get(f.bread)).toMatchObject({
+        variesByZone: false,
       });
-      expect(
-        await explainRoute(tx, f.cfg, f.variant, f.terrace, {
-          kind: "now",
-          at: new Date("2026-10-02T22:00:00Z"),
-        }),
-      ).toMatchObject({
+    }));
+  it("does not vary when a zone cell names the same station as Every zone", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setCategoryCell(tx, f.cfg, f.cocktails, station(f.terraceBar));
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.cocktails), zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      expect((await describeMakers(tx, f.cfg)).get(f.mojito)).toEqual({
+        route: station(f.terraceBar),
+        variesByZone: false,
+        noReplacement: false,
+        unavailableStationId: null,
+      });
+    }));
+  it("does not vary for a shadowed parent zone cell under the child's own Every zone", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.drinks), zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      await setCategoryCell(tx, f.cfg, f.cocktails, station(f.bar));
+      const makers = await describeMakers(tx, f.cfg);
+      expect(makers.get(f.mojito)).toEqual({
+        route: station(f.bar),
+        variesByZone: false,
+        noReplacement: false,
+        unavailableStationId: null,
+      });
+      const lager = await createProduct(tx, {
+        catalogueId: (await createCatalogue(tx, { name: "Beers" })).id,
+        name: "Lager",
+        categoryId: f.beer,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      expect((await describeMakers(tx, f.cfg)).get(lager.id)).toMatchObject({
+        variesByZone: true,
+      });
+    }));
+  it("varies when a zone's station fails with no replacement", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.cocktails), zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(inArray(kitchenStations.id, [f.bar, f.terraceBar]));
+      const makers = await describeMakers(tx, f.cfg);
+      expect(makers.get(f.mojito)).toEqual({
+        route: null,
+        variesByZone: true,
+        noReplacement: false,
+        unavailableStationId: null,
+      });
+      expect(makers.get(f.bread)).toMatchObject({ route: null, variesByZone: false });
+    }));
+  it("an uncategorised product varies by zone when a No category × zone cell changes its outcome; a categorised product does not", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const half = await breadVariant(tx, f);
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: noCategoryRow, zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      const makers = await describeMakers(tx, f.cfg);
+      for (const id of [f.bread, half])
+        expect(makers.get(id), id).toEqual({
+          route: station(f.bar),
+          variesByZone: true,
+          noReplacement: false,
+          unavailableStationId: null,
+        });
+      for (const id of [f.mojito, f.variant])
+        expect(makers.get(id), id).toEqual({
+          route: station(f.bar),
+          variesByZone: false,
+          noReplacement: false,
+          unavailableStationId: null,
+        });
+    }));
+  it("decides varies-by-zone among several zones where only some have cells, an inactive one ignored", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const zone = async (name: string) => {
+        const [row] = await tx
+          .insert(floorZones)
+          .values({ ...f.cfg, name })
+          .returning();
+        await configureZone(tx, f.cfg, { zoneId: row!.id, departmentId: f.department });
+        return row!.id;
+      };
+      const patio = await zone("Patio");
+      await zone("Hall");
+      const old = await zone("Old");
+      const soup = (
+        await createProduct(tx, {
+          catalogueId: (await createCatalogue(tx, { name: "Kitchen" })).id,
+          name: "Soup",
+          categoryId: f.food,
+          pricingUnit: "each",
+          unitPrice: "3.00",
+          vatClass: "general",
+        })
+      ).id;
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: { kind: "all" }, zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.cocktails), zoneId: patio },
+        station(f.terraceBar),
+      );
+      await setCategoryCell(tx, f.cfg, f.food, station(f.bar));
+      await setRoutingCell(tx, f.cfg, { row: categoryRow(f.food), zoneId: old }, noPrep);
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, old));
+      const makers = await describeMakers(tx, f.cfg);
+      const expected = (variesByZone: boolean) => ({
+        route: station(f.bar),
+        variesByZone,
+        noReplacement: false,
+        unavailableStationId: null,
+      });
+      expect(makers.get(f.mojito)).toEqual(expected(true));
+      expect(makers.get(f.variant)).toEqual(expected(true));
+      expect(makers.get(f.bread)).toEqual(expected(true));
+      expect(makers.get(soup)).toEqual(expected(false));
+    }));
+  it("names the matching cell, including a variant's parent product cell", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const address: CellAddress = { row: productRow(f.mojito), zoneId: f.terrace };
+      await setRoutingCell(tx, f.cfg, address, station(f.terraceBar));
+      const explained = await explainRoute(tx, f.cfg, f.variant, f.terrace, {
+        kind: "now",
+        at: new Date("2026-10-02T22:00:00Z"),
+      });
+      expect(explained.decidedBy).toEqual({ kind: "cell", address });
+      expect(explained).toMatchObject({
         route: { kind: "station", stationId: f.terraceBar },
-        decidedBy: { kind: "exception", exceptionId: id },
         fallbacks: [],
         noReplacement: false,
         stations: expect.arrayContaining([{ id: f.terraceBar, name: "Terrace Bar", active: true }]),
       });
     }));
 
-  it("names a switched-off exception as a dead end", async () =>
+  it("names a cell whose station is switched off as a dead end", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
-      const id = await createException(tx, f.cfg, {
-        zoneId: f.terrace,
-        categoryId: f.cocktails,
-        productId: null,
-        target: { kind: "station", stationId: f.terraceBar },
-      });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
+      const address: CellAddress = { row: categoryRow(f.cocktails), zoneId: f.terrace };
+      await setRoutingCell(tx, f.cfg, address, station(f.terraceBar));
       await tx
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
-      expect(
-        await explainRoute(tx, f.cfg, f.mojito, f.terrace, {
-          kind: "now",
-          at: new Date("2026-10-02T22:00:00Z"),
-        }),
-      ).toMatchObject({
+      const explained = await explainRoute(tx, f.cfg, f.mojito, f.terrace, {
+        kind: "now",
+        at: new Date("2026-10-02T22:00:00Z"),
+      });
+      expect(explained.decidedBy).toEqual({ kind: "cell", address });
+      expect(explained).toMatchObject({
         route: null,
-        decidedBy: { kind: "exception", exceptionId: id },
         fallbacks: [{ stationId: f.terraceBar, why: "switched_off" }],
         noReplacement: true,
         stations: expect.arrayContaining([
@@ -289,309 +479,175 @@ describe("route explanation", () => {
 });
 
 describe("stored preparation rules", () => {
-  it("moves a claim from one station to another and removes it idempotently", async () =>
+  it("routingModel returns active-zone columns in display order, the category tree, active top-level products by main category, explicit cells and referenced inactive station names", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims).toEqual([
-        {
-          categoryId: f.drinks,
-          target: { kind: "station", stationId: f.terraceBar },
-          stationOff: false,
-        },
+      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await tx.update(floorZones).set({ displayOrder: 2 }).where(eq(floorZones.id, f.terrace));
+      const [inside, garden] = await tx
+        .insert(floorZones)
+        .values([
+          { ...f.cfg, name: "Upstairs", displayOrder: 1 },
+          { ...f.cfg, name: "Garden", displayOrder: 0, active: false },
+        ])
+        .returning();
+      await configureZone(tx, f.cfg, { zoneId: inside!.id, departmentId: f.department });
+      const [plain] = await tx.insert(categories).values({ name: "Plain" }).returning();
+      const written: RoutingCell[] = [
+        { row: categoryRow(f.drinks), zoneId: null, target: station(f.bar) },
+        { row: categoryRow(f.cocktails), zoneId: f.terrace, target: station(f.terraceBar) },
+        { row: productRow(f.mojito), zoneId: null, target: noPrep },
+        { row: { kind: "all" }, zoneId: inside!.id, target: station(f.terraceBar) },
+      ];
+      for (const { target, ...address } of written)
+        await setRoutingCell(tx, f.cfg, address, target);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      expect(model.zones.some((zone) => zone.id === garden!.id)).toBe(false);
+      expect({ ...model, cells: sortCells(model.cells) }).toEqual({
+        zones: [
+          { id: inside!.id, name: "Upstairs" },
+          { id: f.terrace, name: "Terrace" },
+        ],
+        categories: [
+          { id: f.beer, name: "Beer", parentId: f.drinks },
+          { id: f.cocktails, name: "Cocktails", parentId: f.drinks },
+          { id: f.drinks, name: "Drinks", parentId: null },
+          { id: f.food, name: "Food", parentId: null },
+          { id: plain!.id, name: "Plain", parentId: null },
+        ],
+        products: [
+          { id: f.bread, name: "Bread", categoryId: null },
+          { id: f.mojito, name: "Mojito", categoryId: f.cocktails },
+        ],
+        cells: sortCells(written),
+        defaultStationId: f.bar,
+        stations: [
+          { id: f.bar, name: "Bar", active: true },
+          { id: f.switchedOff, name: "Off", active: false },
+          { id: f.terraceBar, name: "Terrace Bar", active: false },
+        ],
+        stationTimes: model.stationTimes,
+        todayEnds: model.todayEnds,
+        clockReadable: true,
+      });
+      expect(model.stationTimes.map((times) => times.stationId)).toEqual([
+        f.bar,
+        f.switchedOff,
+        f.terraceBar,
       ]);
-      await setClaim(tx, f.cfg, f.drinks, noPrep);
-      expect((await loadRoutingRules(tx, f.cfg, null)).claims.get(f.drinks)).toEqual(noPrep);
-      await removeClaim(tx, f.cfg, f.drinks);
-      await removeClaim(tx, f.cfg, f.drinks);
-      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims).toEqual([]);
     }));
 
-  it("refuses inactive stations, missing folders, missing products, variants and missing zones", async () =>
+  it("routingModel lists stored No category cells, and keeps one when no product is uncategorised", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await expect(
-        setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.switchedOff }),
-      ).rejects.toMatchObject({ code: "route.station_inactive" });
-      await expect(setClaim(tx, f.cfg, randomUUID(), noPrep)).rejects.toMatchObject({
-        code: "route.subject_not_found",
-        params: { subject: "category" },
-      });
-      for (const productId of [randomUUID(), f.variant])
-        await expect(
-          createException(tx, f.cfg, { zoneId: null, categoryId: null, productId, target: noPrep }),
-        ).rejects.toMatchObject({
-          code: "route.subject_not_found",
-          params: { subject: "product" },
-        });
-      await expect(
-        createException(tx, f.cfg, { ...f.input, zoneId: randomUUID() }),
-      ).rejects.toMatchObject({ code: "service_zone.not_found" });
-      await expect(
-        createException(tx, f.cfg, { ...f.input, categoryId: randomUUID() }),
-      ).rejects.toMatchObject({ code: "route.subject_not_found", params: { subject: "category" } });
-      await expect(
-        createException(tx, f.cfg, {
-          ...f.input,
-          target: { kind: "station", stationId: f.switchedOff },
-        }),
-      ).rejects.toMatchObject({ code: "route.station_inactive" });
+      const written: RoutingCell[] = [
+        { row: noCategoryRow, zoneId: null, target: noPrep },
+        { row: noCategoryRow, zoneId: f.terrace, target: station(f.terraceBar) },
+        { row: { kind: "all" }, zoneId: f.terrace, target: station(f.bar) },
+      ];
+      for (const { target, ...address } of written)
+        await setRoutingCell(tx, f.cfg, address, target);
+      const at = new Date("2026-10-02T18:00:00Z");
+      const model = await routingModel(tx, f.cfg, at);
+      expect(sortCells(model.cells)).toEqual(sortCells(written));
+      expect(model.products.filter((product) => product.categoryId === null)).toEqual([
+        { id: f.bread, name: "Bread", categoryId: null },
+      ]);
+      await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.bread));
+      const categorised = await routingModel(tx, f.cfg, at);
+      expect(categorised.products.filter((product) => product.categoryId === null)).toEqual([]);
+      expect(sortCells(categorised.cells)).toEqual(sortCells(written));
     }));
 
-  it("refuses dual subjects and empty conditions before storage", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      await expect(
-        validateRoutingInput(tx, f.cfg, { ...f.input, productId: f.mojito }),
-      ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "subject" } });
-      await expect(
-        createException(tx, f.cfg, {
-          zoneId: null,
-          categoryId: null,
-          productId: null,
-          target: noPrep,
-        }),
-      ).rejects.toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "condition" },
-      });
-    }));
-
-  it("appends exceptions and reorders only an exact full list without changing rejected orders", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      const a = await createException(tx, f.cfg, f.input);
-      const b = await createException(tx, f.cfg, { ...f.input, categoryId: f.cocktails });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
-          e.id,
-          e.position,
-          e.neverMatches,
-        ]),
-      ).toEqual([
-        [a, 0, false],
-        [b, 1, true],
-      ]);
-      await reorderExceptions(tx, f.cfg, [b, a]);
-      for (const ids of [[b], [b, b], [b, a, randomUUID()], [b, randomUUID()]])
-        await expect(reorderExceptions(tx, f.cfg, ids)).rejects.toMatchObject({
-          code: "management.request_invalid",
-          params: { field: "ids" },
-        });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
-          e.id,
-          e.position,
-          e.neverMatches,
-        ]),
-      ).toEqual([
-        [b, 0, false],
-        [a, 1, false],
-      ]);
-      await deleteException(tx, f.cfg, a);
-      const c = await createException(tx, f.cfg, { ...f.input, target: noPrep });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
-          e.id,
-          e.position,
-        ]),
-      ).toEqual([
-        [b, 0],
-        [c, 1],
-      ]);
-      await updateException(tx, f.cfg, b, {
-        zoneId: null,
-        categoryId: null,
-        productId: f.mojito,
-        target: noPrep,
-      });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions[0],
-      ).toMatchObject({
-        id: b,
-        position: 0,
-        zoneId: null,
-        categoryId: null,
-        productId: f.mojito,
-        target: noPrep,
-      });
-      await expect(deleteException(tx, f.cfg, a)).rejects.toMatchObject({
-        code: "route.not_found",
-      });
-      await expect(updateException(tx, f.cfg, a, f.input)).rejects.toMatchObject({
-        code: "route.not_found",
-      });
-    }));
-
-  it("scopes reads and every write to its location", async () =>
+  it("reads the cells and zones of its own location only", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx),
         other = await fixture(tx, " (other venue)");
-      await setClaim(tx, f.cfg, f.drinks, noPrep);
-      await removeClaim(tx, other.cfg, f.drinks);
-      const ownRules = await loadRoutingRules(tx, f.cfg, null);
-      const otherRules = await loadRoutingRules(tx, other.cfg, null);
-      expect(ownRules.claims.get(f.drinks)).toEqual(noPrep);
-      expect(otherRules.claims.size).toBe(0);
-      expect(ownRules.activeStationIds).toEqual(new Set([f.bar, f.terraceBar]));
-      expect(otherRules.activeStationIds).toEqual(new Set([other.bar, other.terraceBar]));
-      expect(ownRules.defaultStationId).toBe(f.bar);
-      expect(otherRules.defaultStationId).toBe(other.bar);
-      for (const input of [
-        { ...f.input, zoneId: other.terrace },
-        { ...f.input, target: { kind: "station", stationId: other.bar } as RouteTarget },
-      ])
-        await expect(createException(tx, f.cfg, input)).rejects.toMatchObject({
-          code:
-            input.zoneId === other.terrace ? "service_zone.not_found" : "route.station_inactive",
-        });
-      await expect(
-        setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: other.bar }),
-      ).rejects.toMatchObject({ code: "route.station_inactive" });
-      const a = await createException(tx, f.cfg, f.input);
-      const b = await createException(tx, other.cfg, other.input);
-      await expect(updateException(tx, other.cfg, a, other.input)).rejects.toMatchObject({
-        code: "route.not_found",
-      });
-      await expect(deleteException(tx, other.cfg, a)).rejects.toMatchObject({
-        code: "route.not_found",
-      });
-      await expect(reorderExceptions(tx, f.cfg, [b])).rejects.toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "ids" },
-      });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map((e) => [
-          e.id,
-          e.position,
-        ]),
-      ).toEqual([[a, 0]]);
-      expect(
-        (await routingModel(tx, other.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map(
-          (e) => [e.id, e.position],
-        ),
-      ).toEqual([[b, 0]]);
-    }));
-
-  it("flags a product caught with all variants, a variant's stored category of its own included", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      const earlier = await createException(tx, f.cfg, f.input);
-      const product = await createException(tx, f.cfg, {
-        ...f.input,
-        categoryId: null,
-        productId: f.mojito,
-      });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
-          (e) => e.id === product,
-        )?.neverMatches,
-      ).toBe(true);
-      await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.variant));
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
-          (e) => e.id === product,
-        )?.neverMatches,
-      ).toBe(true);
-      await tx.update(products).set({ categoryId: null }).where(eq(products.id, f.variant));
-      await updateException(tx, f.cfg, earlier, { ...f.input, zoneId: null, target: noPrep });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
-          (e) => e.id === product,
-        )?.neverMatches,
-      ).toBe(true);
-      await updateException(tx, f.cfg, product, {
-        ...f.input,
-        zoneId: null,
-        categoryId: null,
-        productId: f.mojito,
-      });
-      await updateException(tx, f.cfg, earlier, f.input);
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.find(
-          (e) => e.id === product,
-        )?.neverMatches,
-      ).toBe(false);
-      await updateException(tx, f.cfg, product, {
-        ...f.input,
-        categoryId: null,
-        productId: f.mojito,
-      });
-      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
-      expect(model.exceptions.find((e) => e.id === product)).toMatchObject({
-        neverMatches: true,
-        stationOff: true,
-      });
-      expect(model.defaultStationId).toBeNull();
-    }));
-
-  it("lists unclaimed top-level folders including those without details, and active unfiled top-level products", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      const [plain] = await tx.insert(categories).values({ name: "Plain" }).returning();
-      await setClaim(tx, f.cfg, f.drinks, noPrep);
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
-      expect(model.unassigned.folders).toContainEqual({ id: f.food, name: "Food" });
-      expect(model.unassigned.folders).toContainEqual({ id: plain!.id, name: "Plain" });
-      expect(
-        model.unassigned.folders.some((c) => [f.drinks, f.beer, f.cocktails].includes(c.id)),
-      ).toBe(false);
-      expect(model.unassigned.products).toContainEqual({ id: f.bread, name: "Bread" });
-      expect(model.unassigned.products.some((p) => [f.mojito, f.variant].includes(p.id))).toBe(
-        false,
+      await setCategoryCell(tx, f.cfg, f.drinks, noPrep);
+      await setRoutingCell(
+        tx,
+        other.cfg,
+        { row: categoryRow(other.drinks), zoneId: other.terrace },
+        station(other.bar),
       );
-      await tx.update(products).set({ active: false }).where(eq(products.id, f.bread));
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).unassigned.products.some(
-          (p) => p.id === f.bread,
-        ),
-      ).toBe(false);
-      expect(model.defaultStationId).toBe(f.bar);
-      expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: true });
-      expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
+      const own = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      expect(own.cells).toEqual([{ row: categoryRow(f.drinks), zoneId: null, target: noPrep }]);
+      expect(own.zones).toEqual([{ id: f.terrace, name: "Terrace" }]);
+      expect((await loadRoutingRules(tx, other.cfg, null)).cells).toEqual([
+        { row: categoryRow(other.drinks), zoneId: other.terrace, target: station(other.bar) },
+      ]);
     }));
 
-  it("cascades folder rules and moves its product to the nearest surviving claim", async () =>
+  it("variants are not grid products, even with a stored category of their own", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
-      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await createException(tx, f.cfg, { ...f.input, categoryId: f.cocktails });
-      await deleteCatalogueItems(tx, { productIds: [], categoryIds: [f.cocktails] }, "move_up");
+      await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.variant));
       const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
-      expect(model.claims.some((c) => c.categoryId === f.cocktails)).toBe(false);
-      expect(model.exceptions).toEqual([]);
-      const [moved] = await tx
-        .select({ categoryId: products.categoryId })
-        .from(products)
-        .where(eq(products.id, f.mojito));
-      expect(moved!.categoryId).toBe(f.drinks);
-      expect(
-        chooseMaker(
-          await loadRoutingRules(tx, f.cfg, null),
-          { productId: f.mojito, routedProductId: f.mojito, categoryId: moved!.categoryId },
-          f.terrace,
-          null,
-        ),
-      ).toMatchObject({ decidedBy: { kind: "claim", categoryId: f.drinks } });
+      expect(model.products.map((product) => product.id)).toEqual([f.bread, f.mojito]);
     }));
 
-  it("names an inactive station still referenced by a claim or exception", async () =>
+  it("lists a sold-out product and an extras-only product as grid products", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.beer, { kind: "station", stationId: f.bar });
-      await createException(tx, f.cfg, {
-        ...f.input,
-        target: { kind: "station", stationId: f.terraceBar },
-      });
+      await tx.update(products).set({ available: false }).where(eq(products.id, f.bread));
+      await tx
+        .update(products)
+        .set({ ordering: "not_sold_separately" })
+        .where(eq(products.id, f.mojito));
+      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      expect(model.products).toEqual([
+        { id: f.bread, name: "Bread", categoryId: null },
+        { id: f.mojito, name: "Mojito", categoryId: f.cocktails },
+      ]);
+    }));
+
+  it("keeps a disabled product's cells stored but out of the model, and shows them again when the product is enabled", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const cells: RoutingCell[] = [
+        { row: productRow(f.mojito), zoneId: f.terrace, target: station(f.terraceBar) },
+        { row: productRow(f.bread), zoneId: null, target: noPrep },
+      ];
+      for (const { target, ...address } of cells) await setRoutingCell(tx, f.cfg, address, target);
+      const at = new Date("2026-10-02T18:00:00Z");
+      const before = await routingModel(tx, f.cfg, at);
+      expect(sortCells(before.cells)).toEqual(sortCells(cells));
+      const storedMojito = () =>
+        tx
+          .select({ stationId: routingCells.stationId, zoneId: routingCells.zoneId })
+          .from(routingCells)
+          .where(eq(routingCells.productId, f.mojito));
+      await tx.update(products).set({ active: false }).where(eq(products.id, f.mojito));
+      expect(await storedMojito()).toEqual([{ stationId: f.terraceBar, zoneId: f.terrace }]);
+      const hidden = await routingModel(tx, f.cfg, at);
+      expect(hidden.products.map((product) => product.id)).toEqual([f.bread]);
+      expect(hidden.cells).toEqual([cells[1]]);
+      await tx.update(products).set({ active: true }).where(eq(products.id, f.mojito));
+      const shown = await routingModel(tx, f.cfg, at);
+      expect(shown.products.map((product) => product.id)).toEqual([f.bread, f.mojito]);
+      expect(sortCells(shown.cells)).toEqual(sortCells(cells));
+    }));
+
+  it("names an inactive station still referenced by a cell", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setCategoryCell(tx, f.cfg, f.beer, { kind: "station", stationId: f.bar });
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.drinks), zoneId: f.terrace },
+        station(f.terraceBar),
+      );
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
       const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
-      expect(model.claims).toContainEqual({
-        categoryId: f.beer,
+      expect(model.cells).toContainEqual({
+        row: categoryRow(f.beer),
+        zoneId: null,
         target: { kind: "station", stationId: f.bar },
-        stationOff: true,
       });
       expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
       expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
@@ -608,18 +664,14 @@ describe("stored preparation rules", () => {
       });
     }));
 
-  it("exports both rule tables with their location columns", () => {
+  it("exports routing cells with their location column", () => {
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
-      name: "station_claims",
-      locationColumns: ["location_id"],
-    });
-    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
-      name: "route_exceptions",
+      name: "routing_cells",
       locationColumns: ["location_id"],
     });
   });
 
-  it("names the default even when switched off without a claim or exception", async () =>
+  it("names the default even when switched off without a cell", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
@@ -628,28 +680,155 @@ describe("stored preparation rules", () => {
       expect(model.stations).toContainEqual({ id: f.bar, name: "Bar", active: false });
       expect(model.stations).toContainEqual({ id: f.switchedOff, name: "Off", active: false });
     }));
+});
 
-  it("permits a service-zone-only exception and keeps its no-preparation target", async () =>
+describe("the browser's selection rules", () => {
+  it("choose the cell the server's rules choose, for every row and zone, after a trip over the wire", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      const id = await createException(tx, f.cfg, {
-        zoneId: f.terrace,
-        categoryId: null,
-        productId: null,
-        target: noPrep,
+      const [upstairs] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Upstairs" })
+        .returning();
+      await configureZone(tx, f.cfg, { zoneId: upstairs!.id, departmentId: f.department });
+      const written: RoutingCell[] = [
+        { row: productRow(f.mojito), zoneId: null, target: station(f.terraceBar) },
+        { row: categoryRow(f.cocktails), zoneId: f.terrace, target: station(f.bar) },
+        { row: categoryRow(f.drinks), zoneId: upstairs!.id, target: station(f.terraceBar) },
+        { row: categoryRow(f.food), zoneId: f.terrace, target: noPrep },
+        { row: productRow(f.bread), zoneId: f.terrace, target: station(f.terraceBar) },
+        { row: { kind: "all" }, zoneId: upstairs!.id, target: noPrep },
+      ];
+      for (const { target, ...address } of written)
+        await setRoutingCell(tx, f.cfg, address, target);
+      const rows: [RoutingRow, string | null][] = [
+        [{ kind: "all" }, null],
+        [categoryRow(f.drinks), null],
+        [categoryRow(f.beer), null],
+        [categoryRow(f.cocktails), null],
+        [categoryRow(f.food), null],
+        [productRow(f.mojito), f.cocktails],
+        [productRow(f.bread), null],
+      ];
+      const zones = [null, f.terrace, upstairs!.id];
+      const at = new Date("2026-10-02T18:00:00Z");
+      const compare = async () => {
+        const server = await loadRoutingRules(tx, f.cfg, null);
+        const model: RoutingModel = JSON.parse(JSON.stringify(await routingModel(tx, f.cfg, at)));
+        const browser = selectionRulesFromModel(model);
+        const categoryOf = new Map(
+          model.products.map((product) => [product.id, product.categoryId]),
+        );
+        const chosen = new Map<string, ReturnType<typeof selectRoutingCell>>();
+        for (const [row, categoryId] of rows) {
+          const browserCategory = row.kind === "product" ? categoryOf.get(row.productId)! : null;
+          for (const zoneId of zones) {
+            const expected = selectRoutingCell(server, row, zoneId, categoryId);
+            expect(
+              selectRoutingCell(browser, row, zoneId, browserCategory),
+              `${JSON.stringify(row)} × ${zoneId}`,
+            ).toEqual(expected);
+            chosen.set(JSON.stringify([row, zoneId]), expected);
+          }
+        }
+        return (row: RoutingRow, zoneId: string | null) =>
+          chosen.get(JSON.stringify([row, zoneId]));
+      };
+      const decided = (row: RoutingRow, zoneId: string | null) => ({
+        kind: "cell",
+        address: { row, zoneId },
       });
-      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions).toEqual([
-        {
-          id,
-          position: 0,
-          zoneId: f.terrace,
-          categoryId: null,
-          productId: null,
-          target: noPrep,
-          neverMatches: false,
-          stationOff: false,
-        },
-      ]);
+      const active = await compare();
+      // Same-row Every zone beats the parent's Terrace cell.
+      expect(active(productRow(f.mojito), f.terrace)?.decidedBy).toEqual(
+        decided(productRow(f.mojito), null),
+      );
+      // An ancestor's zone cell.
+      expect(active(categoryRow(f.beer), upstairs!.id)?.decidedBy).toEqual(
+        decided(categoryRow(f.drinks), upstairs!.id),
+      );
+      expect(active(categoryRow(f.food), f.terrace)?.target).toEqual(noPrep);
+      // A product with no category: its own cell, then All categories, then the default.
+      expect(active(productRow(f.bread), f.terrace)?.decidedBy).toEqual(
+        decided(productRow(f.bread), f.terrace),
+      );
+      expect(active(productRow(f.bread), upstairs!.id)?.target).toEqual(noPrep);
+      expect(active(productRow(f.bread), null)).toEqual({
+        target: station(f.bar),
+        decidedBy: { kind: "default" },
+      });
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
+      const inactiveDefault = await compare();
+      expect(inactiveDefault(productRow(f.bread), null)).toEqual({ target: null, decidedBy: null });
+    }));
+
+  it("match the server's for the No category row and an uncategorised product", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const [upstairs] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Upstairs" })
+        .returning();
+      await configureZone(tx, f.cfg, { zoneId: upstairs!.id, departmentId: f.department });
+      const [inside] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Inside" })
+        .returning();
+      await configureZone(tx, f.cfg, { zoneId: inside!.id, departmentId: f.department });
+      const written: RoutingCell[] = [
+        { row: productRow(f.bread), zoneId: inside!.id, target: station(f.bar) },
+        { row: noCategoryRow, zoneId: f.terrace, target: station(f.terraceBar) },
+        { row: noCategoryRow, zoneId: null, target: noPrep },
+        { row: { kind: "all" }, zoneId: f.terrace, target: station(f.bar) },
+        { row: { kind: "all" }, zoneId: upstairs!.id, target: station(f.terraceBar) },
+      ];
+      for (const { target, ...address } of written)
+        await setRoutingCell(tx, f.cfg, address, target);
+      const rows: [RoutingRow, string | null][] = [
+        [{ kind: "all" }, null],
+        [noCategoryRow, null],
+        [categoryRow(f.drinks), null],
+        [productRow(f.bread), null],
+        [productRow(f.mojito), f.cocktails],
+      ];
+      const zones = [null, f.terrace, upstairs!.id, inside!.id];
+      const server = await loadRoutingRules(tx, f.cfg, null);
+      const model: RoutingModel = JSON.parse(
+        JSON.stringify(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))),
+      );
+      const browser = selectionRulesFromModel(model);
+      const categoryOf = new Map(model.products.map((product) => [product.id, product.categoryId]));
+      const chosen = new Map<string, ReturnType<typeof selectRoutingCell>>();
+      for (const [row, categoryId] of rows) {
+        const browserCategory = row.kind === "product" ? categoryOf.get(row.productId)! : null;
+        for (const zoneId of zones) {
+          const expected = selectRoutingCell(server, row, zoneId, categoryId);
+          expect(
+            selectRoutingCell(browser, row, zoneId, browserCategory),
+            `${JSON.stringify(row)} × ${zoneId}`,
+          ).toEqual(expected);
+          chosen.set(JSON.stringify([row, zoneId]), expected);
+        }
+      }
+      const pick = (row: RoutingRow, zoneId: string | null) =>
+        chosen.get(JSON.stringify([row, zoneId]))?.decidedBy;
+      const cellAt = (row: RoutingRow, zoneId: string | null) => ({
+        kind: "cell",
+        address: { row, zoneId },
+      });
+      expect(pick(productRow(f.bread), inside!.id)).toEqual(
+        cellAt(productRow(f.bread), inside!.id),
+      );
+      expect(pick(productRow(f.bread), f.terrace)).toEqual(cellAt(noCategoryRow, f.terrace));
+      // No category × Every zone beats All categories × Upstairs.
+      expect(pick(productRow(f.bread), upstairs!.id)).toEqual(cellAt(noCategoryRow, null));
+      expect(pick(noCategoryRow, upstairs!.id)).toEqual(cellAt(noCategoryRow, null));
+      // A categorised product and a category row never read a No category cell.
+      expect(pick(productRow(f.mojito), f.terrace)).toEqual(cellAt({ kind: "all" }, f.terrace));
+      expect(pick(categoryRow(f.drinks), null)).toEqual({ kind: "default" });
+      expect(pick(categoryRow(f.drinks), upstairs!.id)).toEqual(
+        cellAt({ kind: "all" }, upstairs!.id),
+      );
     }));
 });
 
@@ -661,7 +840,7 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -691,7 +870,7 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       await setStationToday(tx, f.cfg, f.terraceBar, "closed", new Date("2026-10-02T18:00:00Z"));
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
@@ -706,7 +885,7 @@ describe("resolveMakers", () => {
   it("sends a switched-off station's work to its fallback", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       await tx
         .update(kitchenStations)
@@ -728,7 +907,7 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
@@ -769,7 +948,7 @@ describe("resolveMakers", () => {
   it("keeps the database read count constant as a batch grows", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       const session = (
         tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
       ).session;
@@ -811,10 +990,10 @@ describe("resolveMakers", () => {
       }
     }));
 
-  it("routes an order with no service zone by claims and the default", async () =>
+  it("routes an order with no service zone by cells and the default", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       const made = await resolveMakers(
         tx,
         f.cfg,
@@ -858,7 +1037,7 @@ describe("resolveMakers", () => {
   it("routes a variant holding a stored category of its own by its product's folder", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.variant));
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.variant], new Date("2026-10-02T18:30:00Z"))).get(
@@ -869,7 +1048,7 @@ describe("resolveMakers", () => {
   it("keeps the first caller spelling and the effective variant folder", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
       const upper = f.variant.toUpperCase();
       expect(
         await resolveMakers(tx, f.cfg, null, [upper, f.variant], new Date("2026-10-02T18:30:00Z")),
@@ -885,306 +1064,261 @@ describe("resolveMakers", () => {
       );
     }));
 });
-describe("assigning an unfiled product from Prep stations", () => {
-  it("rejects products that are absent, filed, or variants", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      const { assignUnfiledProduct } = await import("./routing-store.js");
-      for (const productId of [randomUUID(), f.mojito, f.variant])
-        await expect(assignUnfiledProduct(tx, f.cfg, productId, noPrep)).rejects.toMatchObject({
-          code: "route.subject_not_found",
-          params: { subject: "product" },
-        });
-      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions).toEqual(
-        [],
-      );
-    }));
-
-  it("collapses repeated product assignments to one effective rule", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      await tx.insert(routeExceptions).values([
-        {
-          locationId: f.cfg.locationId,
-          position: 2,
-          zoneId: null,
-          categoryId: null,
-          productId: f.bread,
-          stationId: f.bar,
-          noPreparation: false,
-        },
-        {
-          locationId: f.cfg.locationId,
-          position: 3,
-          zoneId: null,
-          categoryId: null,
-          productId: f.bread,
-          stationId: null,
-          noPreparation: true,
-        },
-      ]);
-      const { assignUnfiledProduct } = await import("./routing-store.js");
-      await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
-      ).toMatchObject([
-        { productId: f.bread, target: { kind: "station", stationId: f.terraceBar } },
-      ]);
-    }));
-
-  it("makes repeated assignments effective before an earlier broad exception without duplicating the product rule", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      const broad = await createException(tx, f.cfg, {
-        zoneId: f.terrace,
-        categoryId: null,
-        productId: null,
-        target: noPrep,
-      });
-      const unrelated = await createException(tx, f.cfg, {
-        zoneId: null,
-        categoryId: f.drinks,
-        productId: null,
-        target: { kind: "station", stationId: f.bar },
-      });
-      const product = { productId: f.bread, routedProductId: f.bread, categoryId: null };
-      expect(
-        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
-      ).toEqual(noPrep);
-      const { assignUnfiledProduct } = await import("./routing-store.js");
-      await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.terraceBar });
-      expect(
-        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
-      ).toEqual({
-        kind: "station",
-        stationId: f.terraceBar,
-      });
-      await assignUnfiledProduct(tx, f.cfg, f.bread, { kind: "station", stationId: f.bar });
-      expect(
-        chooseMaker(await loadRoutingRules(tx, f.cfg, null), product, f.terrace, null).route,
-      ).toEqual({
-        kind: "station",
-        stationId: f.bar,
-      });
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
-      expect(
-        model.exceptions.filter((e) => e.productId === f.bread && e.zoneId === null),
-      ).toHaveLength(1);
-      expect(
-        model.exceptions.filter((e) => e.id === broad || e.id === unrelated).map((e) => e.id),
-      ).toEqual([broad, unrelated]);
-    }));
-});
-
 describe("routing previews", () => {
-  it("marks a preview that exposes a switched-off rule as no replacement", async () =>
+  const storedCells = (tx: Transaction) => tx.select().from(routingCells).orderBy(routingCells.id);
+  const allCategories = { kind: "all" as const };
+
+  it("marks a preview that exposes a disabled station with no fallback as no replacement", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.terraceBar });
-      const id = await createException(tx, f.cfg, {
-        zoneId: null,
-        categoryId: f.drinks,
-        productId: null,
-        target: { kind: "station", stationId: f.bar },
-      });
+      await setCategoryCell(tx, f.cfg, f.drinks, station(f.terraceBar));
+      await setCategoryCell(tx, f.cfg, f.cocktails, station(f.bar));
       await tx
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
-      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
-      expect(moves).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ productId: f.mojito, to: null, toNoReplacement: true }),
-        ]),
-      );
+      const before = await storedCells(tx);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: { row: categoryRow(f.cocktails), zoneId: null },
+        target: null,
+      });
+      expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
+        {
+          productId: f.mojito,
+          productName: "Mojito",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: station(f.bar),
+          to: null,
+          toNoReplacement: true,
+        },
+      ]);
+      expect(await storedCells(tx)).toEqual(before);
     }));
   it("reports a preview from no replacement to no default station", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      const id = await createException(tx, f.cfg, {
-        zoneId: null,
-        categoryId: f.drinks,
-        productId: null,
-        target: { kind: "station", stationId: f.terraceBar },
-      });
+      await setCategoryCell(tx, f.cfg, f.drinks, station(f.terraceBar));
       await tx
         .update(kitchenStations)
         .set({ active: false })
         .where(inArray(kitchenStations.id, [f.bar, f.terraceBar]));
-      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
-      expect(moves).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            productId: f.mojito,
-            from: null,
-            to: null,
-            toNoReplacement: false,
-          }),
-        ]),
-      );
-    }));
-  it("previews an appended exception over a saved broader rule without saving it", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      await createException(tx, f.cfg, {
-        zoneId: null,
-        categoryId: f.food,
-        productId: null,
-        target: noPrep,
-      });
-      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
       const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "exception",
-        id: null,
-        input: {
-          zoneId: f.terrace,
-          categoryId: f.cocktails,
-          productId: null,
-          target: noPrep,
-        },
+        kind: "cell",
+        address: { row: categoryRow(f.drinks), zoneId: null },
+        target: null,
       });
       expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
         expect.objectContaining({
           zoneId: f.terrace,
-          from: { kind: "station", stationId: f.bar },
-          to: noPrep,
+          from: null,
+          to: null,
+          toNoReplacement: false,
         }),
       ]);
-      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
     }));
-
-  it("previews a revised assignment ahead of broader exceptions without saving it", async () =>
+  it("previews a zone cell over a saved broader cell without writing it", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      const { assignUnfiledProduct } = await import("./routing-store.js");
-      await assignUnfiledProduct(tx, f.cfg, f.bread, noPrep);
-      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      await setCategoryCell(tx, f.cfg, f.food, noPrep);
+      const before = await storedCells(tx);
       const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "assignment",
-        productId: f.bread,
-        target: { kind: "station", stationId: f.terraceBar },
+        kind: "cell",
+        address: { row: categoryRow(f.cocktails), zoneId: f.terrace },
+        target: noPrep,
+      });
+      expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
+        expect.objectContaining({
+          zoneId: f.terrace,
+          from: station(f.bar),
+          to: noPrep,
+          toNoReplacement: false,
+        }),
+      ]);
+      expect(await storedCells(tx)).toEqual(before);
+    }));
+
+  it("previews a revised product cell without writing it", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const address: CellAddress = { row: productRow(f.bread), zoneId: null };
+      await setRoutingCell(tx, f.cfg, address, noPrep);
+      const before = await storedCells(tx);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address,
+        target: station(f.terraceBar),
       });
       expect(moves.filter((move) => move.productId === f.bread)).toEqual([
         expect.objectContaining({
           zoneId: f.terrace,
           from: noPrep,
-          to: { kind: "station", stationId: f.terraceBar },
+          to: station(f.terraceBar),
           toNoReplacement: false,
         }),
       ]);
-      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
+      expect(await storedCells(tx)).toEqual(before);
     }));
 
-  it("previews replacing duplicate product assignments as one rule", async () =>
+  it("previews a product cell in place of its stored value, as one cell", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx.insert(routeExceptions).values([
-        {
-          locationId: f.cfg.locationId,
-          position: 2,
-          zoneId: null,
-          categoryId: null,
-          productId: f.bread,
-          stationId: f.bar,
-          noPreparation: false,
-        },
-        {
-          locationId: f.cfg.locationId,
-          position: 3,
-          zoneId: null,
-          categoryId: null,
-          productId: f.bread,
-          stationId: null,
-          noPreparation: true,
-        },
-      ]);
-      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: productRow(f.bread), zoneId: f.terrace },
+        station(f.bar),
+      );
+      const before = await storedCells(tx);
       const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "assignment",
-        productId: f.bread,
-        target: { kind: "station", stationId: f.terraceBar },
+        kind: "cell",
+        address: { row: productRow(f.bread.toUpperCase()), zoneId: f.terrace.toUpperCase() },
+        target: station(f.terraceBar.toUpperCase()),
       });
       expect(moves.filter((move) => move.productId === f.bread)).toEqual([
         expect.objectContaining({
-          from: { kind: "station", stationId: f.bar },
-          to: { kind: "station", stationId: f.terraceBar },
+          zoneId: f.terrace,
+          from: station(f.bar),
+          to: station(f.terraceBar),
           toNoReplacement: false,
         }),
       ]);
-      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
+      expect(before).toHaveLength(1);
+      expect(await storedCells(tx)).toEqual(before);
     }));
 
-  it("shows the fallback after removing a claim without removing the stored claim", async () =>
+  it("shows the default after clearing a category cell without removing the stored cell", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await setClaim(tx, f.cfg, f.drinks, noPrep);
+      await setCategoryCell(tx, f.cfg, f.drinks, noPrep);
+      const before = await storedCells(tx);
       const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "claim",
-        categoryId: f.drinks,
+        kind: "cell",
+        address: { row: categoryRow(f.drinks), zoneId: null },
         target: null,
       });
       expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
         expect.objectContaining({
           zoneId: f.terrace,
           from: noPrep,
-          to: { kind: "station", stationId: f.bar },
+          to: station(f.bar),
         }),
       ]);
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).claims,
-      ).toMatchObject([{ categoryId: f.drinks, target: noPrep }]);
+      expect(await storedCells(tx)).toEqual(before);
     }));
 
-  it("shows the fallback after deleting an exception and rejects unknown exception ids", async () =>
+  it("previews clearing a cell, exposing the parent's zone cell", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      const id = await createException(tx, f.cfg, {
-        zoneId: f.terrace,
-        categoryId: f.cocktails,
-        productId: null,
-        target: noPrep,
+      const [inside] = await tx
+        .insert(floorZones)
+        .values({ ...f.cfg, name: "Inside" })
+        .returning();
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.drinks), zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      const productEveryZone: CellAddress = { row: productRow(f.mojito), zoneId: null };
+      await setRoutingCell(tx, f.cfg, productEveryZone, noPrep);
+      const before = await storedCells(tx);
+      const moves = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address: productEveryZone,
+        target: null,
       });
-      const moves = await previewRoutingChange(tx, f.cfg, { kind: "exception_delete", id });
-      expect(moves.filter((move) => move.productId === f.mojito)).toEqual([
-        expect.objectContaining({
-          zoneId: f.terrace,
+      expect(moves).toEqual([
+        {
+          productId: f.variant,
+          productName: "Large",
+          zoneId: inside!.id,
+          zoneName: "Inside",
           from: noPrep,
-          to: { kind: "station", stationId: f.bar },
-        }),
+          to: station(f.bar),
+          toNoReplacement: false,
+        },
+        {
+          productId: f.variant,
+          productName: "Large",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: noPrep,
+          to: station(f.terraceBar),
+          toNoReplacement: false,
+        },
+        {
+          productId: f.mojito,
+          productName: "Mojito",
+          zoneId: inside!.id,
+          zoneName: "Inside",
+          from: noPrep,
+          to: station(f.bar),
+          toNoReplacement: false,
+        },
+        {
+          productId: f.mojito,
+          productName: "Mojito",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: noPrep,
+          to: station(f.terraceBar),
+          toNoReplacement: false,
+        },
       ]);
+      expect(await storedCells(tx)).toEqual(before);
       expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
-      ).toMatchObject([{ id }]);
-      for (const change of [
-        { kind: "exception_delete", id: randomUUID() } as const,
-        { kind: "exception", id: randomUUID(), input: f.input } as const,
-      ])
-        await expect(previewRoutingChange(tx, f.cfg, change)).rejects.toMatchObject({
-          code: "route.not_found",
-        });
+        await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: productRow(f.bread), zoneId: null },
+          target: null,
+        }),
+      ).toEqual([]);
     }));
 
-  it("rejects invalid preview orders and missing unfiled products without writing", async () =>
+  it("refuses the All categories × Every zone address, a variant and an unknown subject, writing nothing", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      const id = await createException(tx, f.cfg, f.input);
-      for (const ids of [[], [id, id], [randomUUID()]])
+      await setCategoryCell(tx, f.cfg, f.drinks, noPrep);
+      const before = await storedCells(tx);
+      for (const target of [station(f.terraceBar), null])
         await expect(
-          previewRoutingChange(tx, f.cfg, { kind: "exception_order", ids }),
-        ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "ids" } });
-      for (const productId of [randomUUID(), f.mojito, f.variant])
+          previewRoutingChange(tx, f.cfg, {
+            kind: "cell",
+            address: { row: allCategories, zoneId: null },
+            target,
+          }),
+        ).rejects.toMatchObject({
+          code: "management.request_invalid",
+          params: { field: "address" },
+        });
+      for (const productId of [randomUUID(), f.variant])
         await expect(
-          previewRoutingChange(tx, f.cfg, { kind: "assignment", productId, target: noPrep }),
+          previewRoutingChange(tx, f.cfg, {
+            kind: "cell",
+            address: { row: productRow(productId), zoneId: null },
+            target: noPrep,
+          }),
         ).rejects.toMatchObject({
           code: "route.subject_not_found",
-          params: { subject: "product" },
+          params: { subject: "product", id: productId },
         });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
-      ).toMatchObject([{ id }]);
+      const categoryId = randomUUID();
+      await expect(
+        previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: categoryRow(categoryId), zoneId: null },
+          target: null,
+        }),
+      ).rejects.toMatchObject({
+        code: "route.subject_not_found",
+        params: { subject: "category", id: categoryId },
+      });
+      expect(await storedCells(tx)).toEqual(before);
     }));
 
-  it("shows a claim move in every active zone without writing it", async () =>
+  it("previews setting a cell in every active zone without writing it", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       const [inside] = await tx
@@ -1200,12 +1334,12 @@ describe("routing previews", () => {
         unitPrice: "3.00",
         vatClass: "general",
       });
-      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
-      const before = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      await setCategoryCell(tx, f.cfg, f.drinks, station(f.bar));
+      const before = await storedCells(tx);
       const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "claim",
-        categoryId: f.drinks,
-        target: { kind: "station", stationId: f.terraceBar },
+        kind: "cell",
+        address: { row: categoryRow(f.drinks), zoneId: null },
+        target: station(f.terraceBar),
       });
       expect(moves.filter((m) => m.productId === f.mojito && m.zoneId === f.terrace)).toEqual([
         {
@@ -1213,8 +1347,8 @@ describe("routing previews", () => {
           productName: "Mojito",
           zoneId: f.terrace,
           zoneName: "Terrace",
-          from: { kind: "station", stationId: f.bar },
-          to: { kind: "station", stationId: f.terraceBar },
+          from: station(f.bar),
+          to: station(f.terraceBar),
           toNoReplacement: false,
         },
       ]);
@@ -1225,8 +1359,8 @@ describe("routing previews", () => {
           productName: "Lager",
           zoneId: inside!.id,
           zoneName: "Inside",
-          from: { kind: "station", stationId: f.bar },
-          to: { kind: "station", stationId: f.terraceBar },
+          from: station(f.bar),
+          to: station(f.terraceBar),
           toNoReplacement: false,
         },
         {
@@ -1234,30 +1368,89 @@ describe("routing previews", () => {
           productName: "Lager",
           zoneId: f.terrace,
           zoneName: "Terrace",
-          from: { kind: "station", stationId: f.bar },
-          to: { kind: "station", stationId: f.terraceBar },
+          from: station(f.bar),
+          to: station(f.terraceBar),
           toNoReplacement: false,
         },
       ]);
-      expect(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toEqual(before);
+      expect(moves.some((m) => m.productId === f.bread)).toBe(false);
+      expect(await storedCells(tx)).toEqual(before);
     }));
   it("rejects an inactive destination with the write code", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
       await expect(
         previewRoutingChange(tx, f.cfg, {
-          kind: "claim",
-          categoryId: f.drinks,
-          target: { kind: "station", stationId: f.switchedOff },
+          kind: "cell",
+          address: { row: categoryRow(f.drinks), zoneId: null },
+          target: station(f.switchedOff),
         }),
-      ).rejects.toMatchObject({ code: "route.station_inactive" });
+      ).rejects.toMatchObject({
+        code: "route.station_inactive",
+        params: { stationId: f.switchedOff },
+      });
     }));
-  it("previews a no-change edit as no moves", async () =>
+  it("previews setting and clearing a No category cell: only uncategorised products and their variants move", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      const id = await createException(tx, f.cfg, f.input);
+      const half = await breadVariant(tx, f);
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: { kind: "all" }, zoneId: f.terrace },
+        station(f.terraceBar),
+      );
+      const categorised = [f.mojito, f.variant];
+      const address: CellAddress = { row: noCategoryRow, zoneId: f.terrace };
+      const before = await storedCells(tx);
+      const set = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address,
+        target: noPrep,
+      });
+      expect(set).toEqual([
+        {
+          productId: f.bread,
+          productName: "Bread",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: station(f.terraceBar),
+          to: noPrep,
+          toNoReplacement: false,
+        },
+        {
+          productId: half,
+          productName: "Half",
+          zoneId: f.terrace,
+          zoneName: "Terrace",
+          from: station(f.terraceBar),
+          to: noPrep,
+          toNoReplacement: false,
+        },
+      ]);
+      expect(set.filter((m) => categorised.includes(m.productId))).toEqual([]);
+      expect(await storedCells(tx)).toEqual(before);
+      await setRoutingCell(tx, f.cfg, address, noPrep);
+      const stored = await storedCells(tx);
+      const cleared = await previewRoutingChange(tx, f.cfg, {
+        kind: "cell",
+        address,
+        target: null,
+      });
+      expect(cleared).toEqual([
+        expect.objectContaining({ productId: f.bread, from: noPrep, to: station(f.terraceBar) }),
+        expect.objectContaining({ productId: half, from: noPrep, to: station(f.terraceBar) }),
+      ]);
+      expect(cleared.filter((m) => categorised.includes(m.productId))).toEqual([]);
+      expect(await storedCells(tx)).toEqual(stored);
+    }));
+  it("previews a no-change write as no moves", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const address: CellAddress = { row: categoryRow(f.drinks), zoneId: f.terrace };
+      await setRoutingCell(tx, f.cfg, address, station(f.bar));
       expect(
-        await previewRoutingChange(tx, f.cfg, { kind: "exception", id, input: f.input }),
+        await previewRoutingChange(tx, f.cfg, { kind: "cell", address, target: station(f.bar) }),
       ).toEqual([]);
     }));
   it("uses one zone-less comparison when every service zone is off", async () =>
@@ -1265,72 +1458,13 @@ describe("routing previews", () => {
       const f = await fixture(tx);
       await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.terrace));
       const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "claim",
-        categoryId: f.drinks,
-        target: { kind: "station", stationId: f.terraceBar },
+        kind: "cell",
+        address: { row: categoryRow(f.drinks), zoneId: null },
+        target: station(f.terraceBar),
       });
       expect(moves.filter((m) => m.productId === f.mojito)).toEqual([
         expect.objectContaining({ productId: f.mojito, zoneId: null, zoneName: null }),
       ]);
-    }));
-  it("reorders terrace exceptions and moves Mojito there only", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      const [inside] = await tx
-        .insert(floorZones)
-        .values({ ...f.cfg, name: "Inside" })
-        .returning();
-      const first = await createException(tx, f.cfg, {
-        ...f.input,
-        target: { kind: "station", stationId: f.bar },
-      });
-      const second = await createException(tx, f.cfg, {
-        ...f.input,
-        target: { kind: "station", stationId: f.terraceBar },
-      });
-      const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "exception_order",
-        ids: [second, first],
-      });
-      expect(moves.filter((m) => m.productId === f.mojito)).toEqual([
-        {
-          productId: f.mojito,
-          productName: "Mojito",
-          zoneId: f.terrace,
-          zoneName: "Terrace",
-          from: { kind: "station", stationId: f.bar },
-          to: { kind: "station", stationId: f.terraceBar },
-          toNoReplacement: false,
-        },
-      ]);
-      expect(moves.some((m) => m.zoneId === inside!.id)).toBe(false);
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions.map(
-          (e) => e.id,
-        ),
-      ).toEqual([first, second]);
-    }));
-  it("puts an unfiled assignment before a broader zone exception", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      await createException(tx, f.cfg, {
-        zoneId: f.terrace,
-        categoryId: null,
-        productId: null,
-        target: noPrep,
-      });
-      const moves = await previewRoutingChange(tx, f.cfg, {
-        kind: "assignment",
-        productId: f.bread,
-        target: { kind: "station", stationId: f.terraceBar },
-      });
-      expect(moves.find((m) => m.productId === f.bread && m.zoneId === f.terrace)).toMatchObject({
-        from: noPrep,
-        to: { kind: "station", stationId: f.terraceBar },
-      });
-      expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).exceptions,
-      ).toHaveLength(1);
     }));
 });
 
@@ -1339,7 +1473,7 @@ describe("timed routing explanation", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
-      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
@@ -1380,7 +1514,7 @@ describe("timed routing explanation", () => {
         .update(locations)
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
-      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
@@ -1402,7 +1536,7 @@ it("explains now with today's manual closure", async () =>
     const f = await fixture(tx);
     const at = new Date("2026-10-02T22:00:00Z");
     await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
-    await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+    await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
     await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
     await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
     expect(await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at })).toMatchObject({
@@ -1443,9 +1577,10 @@ async function extrasFixture(tx: Transaction) {
     .insert(products)
     .values({ catalogueId: menu.id, parentId: chips, name: "Large chips", categoryId: null })
     .returning();
-  await setClaim(tx, f.cfg, sides, { kind: "station", stationId: fryer!.id });
+  await setCategoryCell(tx, f.cfg, sides, { kind: "station", stationId: fryer!.id });
   return {
     ...f,
+    extras,
     sides,
     chips,
     cheese,
@@ -1456,10 +1591,10 @@ async function extrasFixture(tx: Transaction) {
 }
 
 describe("extra maker resolution", () => {
-  it("explains each chosen extra against the dish's final station and names its claim", async () =>
+  it("explains each chosen extra against the dish's final station and names its cell", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
-      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
+      await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
       const result = await explainRoute(
         tx,
         f.cfg,
@@ -1472,7 +1607,7 @@ describe("extra maker resolution", () => {
         {
           productId: f.chips,
           outcome: { kind: "made", stationId: f.fryer },
-          decidedBy: { kind: "claim", categoryId: f.sides },
+          decidedBy: { kind: "cell", address: { row: categoryRow(f.sides), zoneId: null } },
           fallbacks: [],
         },
         {
@@ -1485,10 +1620,10 @@ describe("extra maker resolution", () => {
       expect(result.extrasWaitOnDish).toBe(false);
       expect(result.stations).toContainEqual({ id: f.fryer, name: "Fryer", active: true });
     }));
-  it("waits for the dish's station before explaining extras when its claimed station is closed", async () =>
+  it("waits for the dish's station before explaining extras when its cell's station is closed", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
-      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
+      await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.grill });
       await setStationToday(tx, f.cfg, f.grill, "closed", fixedInstant);
       expect(
         await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [f.chips]),
@@ -1504,7 +1639,7 @@ describe("extra maker resolution", () => {
   it("treats a dish with no preparation as having no station when explaining an extra", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
-      await setClaim(tx, f.cfg, f.cocktails, noPrep);
+      await setCategoryCell(tx, f.cfg, f.cocktails, noPrep);
       expect(
         await explainRoute(tx, f.cfg, f.mojito, null, { kind: "now", at: fixedInstant }, [f.chips]),
       ).toMatchObject({
@@ -1513,7 +1648,7 @@ describe("extra maker resolution", () => {
         extras: [{ productId: f.chips, outcome: { kind: "made", stationId: f.fryer } }],
       });
     }));
-  it("splits claimed extras while unclaimed extras follow their dish", async () =>
+  it("splits extras with a cell of their own while extras without one follow their dish", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
       expect(
@@ -1605,6 +1740,186 @@ describe("extra maker resolution", () => {
     }));
 });
 
+describe("routing from cells", () => {
+  it("with no cells, routes to the implicit default, and with no active default reports no route rather than inventing one", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const resolver = await routingAt(tx, f.cfg, fixedInstant);
+      expect(await resolver.makers(f.terrace, [f.mojito, f.bread, f.variant])).toEqual(
+        new Map([
+          [f.mojito, { kind: "made", route: station(f.bar) }],
+          [f.bread, { kind: "made", route: station(f.bar) }],
+          [f.variant, { kind: "made", route: station(f.bar) }],
+        ]),
+      );
+      expect(
+        await explainRoute(tx, f.cfg, f.mojito, f.terrace, { kind: "now", at: fixedInstant }),
+      ).toMatchObject({ route: station(f.bar), decidedBy: { kind: "default" }, fallbacks: [] });
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
+      expect(
+        await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, [f.mojito, f.bread]),
+      ).toEqual(
+        new Map([
+          [f.mojito, { kind: "no_station" }],
+          [f.bread, { kind: "no_station" }],
+        ]),
+      );
+      const explained = await explainRoute(tx, f.cfg, f.mojito, f.terrace, {
+        kind: "now",
+        at: fixedInstant,
+      });
+      expect(explained).toMatchObject({ route: null, decidedBy: null, noReplacement: false });
+    }));
+
+  it("a product's Every zone cell beats its parent category's Terrace cell, and clearing it shows the Terrace cell with its origin", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const terraceCell: CellAddress = { row: categoryRow(f.cocktails), zoneId: f.terrace };
+      await setRoutingCell(tx, f.cfg, terraceCell, station(f.terraceBar));
+      const productCell: CellAddress = { row: productRow(f.mojito), zoneId: null };
+      await setRoutingCell(tx, f.cfg, productCell, station(f.bar));
+      const when = { kind: "now", at: fixedInstant } as const;
+      for (const id of [f.mojito, f.variant])
+        expect(await explainRoute(tx, f.cfg, id, f.terrace, when)).toMatchObject({
+          route: station(f.bar),
+          decidedBy: { kind: "cell", address: productCell },
+        });
+      await clearRoutingCell(tx, f.cfg, productCell);
+      for (const id of [f.mojito, f.variant]) {
+        const explained = await explainRoute(tx, f.cfg, id, f.terrace, when);
+        expect(explained.route).toEqual(station(f.terraceBar));
+        expect(explained.decidedBy).toEqual({ kind: "cell", address: terraceCell });
+      }
+      expect(
+        await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, [f.mojito]),
+      ).toEqual(new Map([[f.mojito, { kind: "made", route: station(f.terraceBar) }]]));
+    }));
+
+  it("an uncategorised product and a variant of it route by stored No category cells, after their own product cells and before All categories", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const half = await breadVariant(tx, f);
+      const when = { kind: "now", at: fixedInstant } as const;
+      const allTerrace: CellAddress = { row: { kind: "all" }, zoneId: f.terrace };
+      await setRoutingCell(tx, f.cfg, allTerrace, station(f.terraceBar));
+      // Half stores Food; a Food cell must not decide for it.
+      await setRoutingCell(
+        tx,
+        f.cfg,
+        { row: categoryRow(f.food), zoneId: f.terrace },
+        station(f.bar),
+      );
+      const routed = async (
+        ids: readonly string[],
+        route: RouteTarget,
+        decidedBy: unknown,
+      ): Promise<void> => {
+        for (const id of ids)
+          expect(await explainRoute(tx, f.cfg, id, f.terrace, when), id).toMatchObject({
+            route,
+            decidedBy,
+          });
+        const makers = await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, ids);
+        expect(makers).toEqual(new Map(ids.map((id) => [id, { kind: "made", route }])));
+      };
+      const cell = (address: CellAddress) => ({ kind: "cell", address });
+      await routed([f.bread, half], station(f.terraceBar), cell(allTerrace));
+
+      const noCategoryTerrace: CellAddress = { row: noCategoryRow, zoneId: f.terrace };
+      await setRoutingCell(tx, f.cfg, noCategoryTerrace, noPrep);
+      await routed([f.bread, half], noPrep, cell(noCategoryTerrace));
+      await routed([f.mojito, f.variant], station(f.terraceBar), cell(allTerrace));
+
+      const breadEvery: CellAddress = { row: productRow(f.bread), zoneId: null };
+      await setRoutingCell(tx, f.cfg, breadEvery, station(f.bar));
+      await routed([f.bread, half], station(f.bar), cell(breadEvery));
+      await clearRoutingCell(tx, f.cfg, breadEvery);
+
+      await clearRoutingCell(tx, f.cfg, noCategoryTerrace);
+      const noCategoryEvery: CellAddress = { row: noCategoryRow, zoneId: null };
+      await setRoutingCell(tx, f.cfg, noCategoryEvery, station(f.bar));
+      await routed([f.bread, half], station(f.bar), cell(noCategoryEvery));
+      await routed([f.mojito, f.variant], station(f.terraceBar), cell(allTerrace));
+      await clearRoutingCell(tx, f.cfg, noCategoryEvery);
+      await routed([f.bread, half], station(f.terraceBar), cell(allTerrace));
+    }));
+
+  it("explains a variant and an extra by the parent-owned cell and its category path", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const variantCell: CellAddress = { row: productRow(f.chips), zoneId: f.terrace };
+      await setRoutingCell(tx, f.cfg, variantCell, station(f.grill));
+      const extrasCell: CellAddress = { row: categoryRow(f.extras), zoneId: null };
+      await setRoutingCell(tx, f.cfg, extrasCell, station(f.terraceBar));
+      const explained = await explainRoute(
+        tx,
+        f.cfg,
+        f.chipsVariant,
+        f.terrace,
+        { kind: "now", at: fixedInstant },
+        [f.chipsVariant, f.cheese],
+      );
+      expect(explained.route).toEqual(station(f.grill));
+      expect(explained.decidedBy).toEqual({ kind: "cell", address: variantCell });
+      expect(explained.extras).toEqual([
+        {
+          productId: f.chipsVariant,
+          outcome: { kind: "follows_dish", why: "same_station" },
+          decidedBy: { kind: "cell", address: variantCell },
+          fallbacks: [],
+        },
+        {
+          productId: f.cheese,
+          outcome: { kind: "made", stationId: f.terraceBar },
+          decidedBy: { kind: "cell", address: extrasCell },
+          fallbacks: [],
+        },
+      ]);
+      const elsewhere = await explainRoute(tx, f.cfg, f.chipsVariant, null, {
+        kind: "now",
+        at: fixedInstant,
+      });
+      expect(elsewhere.route).toEqual(station(f.fryer));
+      expect(elsewhere.decidedBy).toEqual({
+        kind: "cell",
+        address: { row: categoryRow(f.sides), zoneId: null },
+      });
+    }));
+
+  it("keeps an explicit cell's origin when its fallback lands on the default station", async () =>
+    scoped(async (tx) => {
+      const f = await extrasFixture(tx);
+      const address: CellAddress = { row: categoryRow(f.sides), zoneId: null };
+      await setRoutingCell(tx, f.cfg, address, station(f.terraceBar));
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      await setStationToday(tx, f.cfg, f.terraceBar, "closed", fixedInstant);
+      const explained = await explainRoute(tx, f.cfg, f.chips, null, {
+        kind: "now",
+        at: fixedInstant,
+      });
+      expect(explained.route).toEqual(station(f.bar));
+      expect(explained.decidedBy).toEqual({ kind: "cell", address });
+      expect(explained.fallbacks).toEqual([{ stationId: f.terraceBar, why: "closed_by_hand" }]);
+      expect(
+        await resolveExtraMakers(
+          tx,
+          f.cfg,
+          null,
+          [
+            { key: "a", productId: f.chips, dishStationId: f.grill },
+            { key: "b", productId: f.cheese, dishStationId: f.grill },
+          ],
+          fixedInstant,
+        ),
+      ).toEqual(
+        new Map([
+          ["a", { kind: "made", stationId: f.bar }],
+          ["b", { kind: "follows_dish", why: "no_rule" }],
+        ]),
+      );
+    }));
+});
+
 describe("routingAt", () => {
   it("answers station state from the snapshot opened before a hand closure", async () =>
     scoped(async (tx) => {
@@ -1640,7 +1955,7 @@ describe("routingAt", () => {
         .update(locations)
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
-      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
       ]);
@@ -1680,11 +1995,11 @@ describe("routingAt", () => {
         resolver.extraMakers(zone, [{ key: "a", productId, dishStationId: f.grill }]),
       ).rejects.toMatchObject({ code: "service_zone.not_found" });
     }));
-  it("keeps the opening rules for both questions after a claim changes", async () =>
+  it("keeps the opening rules for both questions after a cell changes", async () =>
     scoped(async (tx) => {
       const f = await extrasFixture(tx);
       const resolver = await routingAt(tx, f.cfg, fixedInstant);
-      await setClaim(tx, f.cfg, f.sides, { kind: "station", stationId: f.grill });
+      await setCategoryCell(tx, f.cfg, f.sides, { kind: "station", stationId: f.grill });
       const extras = [{ key: "a", productId: f.chips, dishStationId: f.grill }];
       expect(await resolver.extraMakers(null, extras)).toEqual(
         new Map([["a", { kind: "made", stationId: f.fryer }]]),
@@ -1733,7 +2048,7 @@ describe("hours from special dates", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      await setClaim(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
+      await setCategoryCell(tx, f.cfg, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
       await seedStationWeek(tx, f.cfg, f.terraceBar, [
         { weekday: 5, opensAt: "18:00", closesAt: "23:00" },

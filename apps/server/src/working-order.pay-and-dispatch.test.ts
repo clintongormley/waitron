@@ -66,7 +66,7 @@ import {
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
-import { createException } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -2614,12 +2614,12 @@ describe("markCollected (the counter handover)", () => {
     // Paying sends the walk-up's dishes, but a no-preparation dish is given no ticket item, so an
     // order of it alone has nothing on any station display to hand over.
     await withTransaction(suite.db, (tx) =>
-      createException(tx, cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: cafe.id,
-        target: { kind: "no_preparation" },
-      }),
+      setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "product", productId: cafe.id }, zoneId: null },
+        { kind: "no_preparation" },
+      ),
     );
     await payWorkingOrder(
       { db: suite.db, backend, clock },

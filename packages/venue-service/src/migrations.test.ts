@@ -40,10 +40,9 @@ const TABLES = [
   "device_profile_zones",
   "device_profile_stations",
   "device_profile_watchers",
-  "station_claims",
   "station_fallbacks",
   "station_day_states",
-  "route_exceptions",
+  "routing_cells",
   "order_service_contexts",
   "working_line_contexts",
   "service_settings",
@@ -215,14 +214,6 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(watcher_id) -> watchers(id)",
         ],
       },
-      station_claims: {
-        primaryKey: ["id"],
-        foreignKeys: [
-          "(category_id) -> categories(id) on delete cascade",
-          "(location_id) -> locations(id)",
-          "(station_id) -> kitchen_stations(id)",
-        ],
-      },
       station_fallbacks: {
         primaryKey: ["station_id"],
         foreignKeys: [
@@ -234,7 +225,7 @@ describe("the venue-service migration set carries no tenant column", () => {
         primaryKey: ["id"],
         foreignKeys: ["(station_id) -> kitchen_stations(id)"],
       },
-      route_exceptions: {
+      routing_cells: {
         primaryKey: ["id"],
         foreignKeys: [
           "(category_id) -> categories(id) on delete cascade",
@@ -279,12 +270,8 @@ describe("the venue-service migration set carries no tenant column", () => {
     const columns = (name: string) => defs[name]?.columns;
     // No PRAGMA reports a partial index's `WHERE`, so it is read off the stored statement.
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
-    expect(columns("station_claims_folder_key")).toEqual(["location_id", "category_id"]);
     expect(columns("station_day_states_day_key")).toEqual(["station_id", "business_day"]);
     expect(defs["station_day_states_day_key"]?.unique).toBe(true);
-    expect(defs["station_claims_folder_key"]?.unique).toBe(true);
-    expect(columns("route_exceptions_order_idx")).toEqual(["location_id", "position"]);
-    expect(defs["route_exceptions_order_idx"]?.unique).toBe(false);
     expect(columns("department_menus_order_idx")).toEqual(["department_id", "display_order"]);
     expect(columns("kitchen_notices_open_idx")).toEqual(["station_id", "created_at"]);
     expect(predicate("kitchen_notices_open_idx")).toBe(

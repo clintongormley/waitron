@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
-import { stationClaims } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
+import { locationId as brandLocationId } from "@waitron/shared";
 import {
   addCatalogueToLocation,
   addMember,
@@ -129,12 +130,14 @@ export async function seedCatalogues(
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, { name: cat.categoryName ?? cat.name.en });
-      await tx.insert(stationClaims).values({
-        locationId,
-        categoryId: category.id,
-        stationId: cat.station === null ? null : stationIds[cat.station],
-        noPreparation: cat.station === null,
-      });
+      await setRoutingCell(
+        tx,
+        { locationId: brandLocationId(locationId) },
+        { row: { kind: "category", categoryId: category.id }, zoneId: null },
+        cat.station === null
+          ? { kind: "no_preparation" }
+          : { kind: "station", stationId: stationIds[cat.station] },
+      );
       const section = await createSectionIn(
         tx,
         rootSectionId,

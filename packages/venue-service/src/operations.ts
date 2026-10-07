@@ -44,7 +44,7 @@ import {
   zonePeriodMenus,
 } from "./schema/menus.js";
 import { resolveZoneMenus, servedDefault } from "./menu-timetable.js";
-import { routeExceptions } from "./schema/routing.js";
+import { routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
 
@@ -316,7 +316,7 @@ export async function deactivateServiceZone(
     throw new AppError("zone.table_in_use", { zoneId, ...occupied });
   }
 
-  await tx.delete(routeExceptions).where(eq(routeExceptions.zoneId, zoneId));
+  await tx.delete(routingCells).where(eq(routingCells.zoneId, zoneId));
   await tx.delete(watcherZones).where(eq(watcherZones.zoneId, zoneId));
   await tx.update(diningTables).set({ active: false }).where(eq(diningTables.zoneId, zoneId));
   await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zoneId));

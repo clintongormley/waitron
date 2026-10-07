@@ -4,14 +4,17 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { PrepStationsApi } from "./routing-client.js";
+import type { RouteExplanation } from "../routing-types.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
 afterEach(cleanup);
 const empty = {
   routing: {
-    claims: [],
-    exceptions: [],
-    unassigned: { folders: [], products: [] },
+    zones: [],
+    categories: [],
+    products: [],
+    cells: [],
+    canMakeDefault: true,
     defaultStationId: null,
     stations: [],
     stationTimes: [],
@@ -44,11 +47,11 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "station",
     "station-rest-on",
     "editor",
-    "claim",
     "invalid",
-    "exception",
-    "exception-editor",
-    "exception-delete",
+    "grid",
+    "grid-preview",
+    "grid-refusal",
+    "grid-disabled-target",
     "watcher",
     "watcher-rename",
     "watcher-remove",
@@ -62,6 +65,17 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
     el.api = {
       updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
+      preview: vi.fn().mockResolvedValue([
+        {
+          productId: "cola",
+          productName: "Cola",
+          zoneId: "terrace",
+          zoneName: "Terrace",
+          from: { kind: "station", stationId: "bar" },
+          to: { kind: "no_preparation" },
+        },
+      ]),
+      setCell: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
       enableWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
       readStationHealth: vi.fn().mockResolvedValue({
         capturedAt: "2026-10-05T12:00:00Z",
@@ -73,22 +87,27 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
           ? empty
           : {
               ...empty,
-              routing: state.startsWith("exception")
+              routing: state.startsWith("grid")
                 ? {
                     ...empty.routing,
-                    exceptions: [
+                    zones: [{ id: "terrace", name: "Terrace" }],
+                    categories: [{ id: "drinks", name: "Drinks", parentId: null }],
+                    products: [{ id: "cola", name: "Cola", categoryId: "drinks" }],
+                    cells: [
                       {
-                        id: "e1",
-                        position: 1,
-                        zoneId: "terrace",
-                        categoryId: null,
-                        productId: null,
-                        target: { kind: "station", stationId: "bar" },
-                        neverMatches: true,
-                        stationOff: false,
+                        row: { kind: "category", categoryId: "drinks" },
+                        zoneId: null,
+                        target: {
+                          kind: "station",
+                          stationId: state === "grid-disabled-target" ? "old" : "bar",
+                        },
                       },
                     ],
-                    stations: [{ id: "bar", name: "Bar", active: true }],
+                    defaultStationId: "bar",
+                    stations: [
+                      { id: "bar", name: "Bar", active: true },
+                      { id: "old", name: "Old bar", active: false },
+                    ],
                     stationTimes: [
                       {
                         stationId: "bar",
@@ -167,17 +186,40 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-station"]')!.click();
       await el.updateComplete;
     }
-    if (state === "claim") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="claim-bar"]')!.click();
+    if (state.startsWith("grid")) {
+      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+        new CustomEvent("wt-tab-change", { detail: { value: "routing" } }),
+      );
       await el.updateComplete;
-    }
-    if (state === "exception-editor") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-exception-e1"]')!.click();
-      await el.updateComplete;
-    }
-    if (state === "exception-delete") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-e1"]')!.click();
-      await el.updateComplete;
+      const grid = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "venue-routing-grid",
+      )!;
+      await grid.updateComplete;
+      if (state === "grid-disabled-target")
+        expect(grid.shadowRoot!.querySelector('[data-test="disabled-target"]')).not.toBeNull();
+      if (state === "grid-preview" || state === "grid-refusal") {
+        grid.dispatchEvent(
+          new CustomEvent("routing-cell-change", {
+            detail: {
+              address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
+              target: { kind: "no_preparation" },
+            },
+          }),
+        );
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector('[data-test="routing-preview"]')).not.toBeNull(),
+        );
+      }
+      if (state === "grid-refusal") {
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-routing"]')!.click();
+        await vi.waitFor(() =>
+          expect(
+            grid.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+              .error,
+          ).toContain("This station is disabled"),
+        );
+        await grid.updateComplete;
+      }
     }
     if (state === "invalid") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="overdue"]')!.dispatchEvent(
@@ -489,10 +531,14 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
               { id: "mojito", name: "Mojito" },
               { id: "chips", name: "Chips" },
             ],
+            categories: [{ id: "sides", name: "Sides", parentId: null }],
           }),
           explain: vi.fn().mockResolvedValue({
             route: { kind: "station", stationId: "downstairs" },
-            decidedBy: { kind: "exception", exceptionId: "rule" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "product", productId: "mojito" }, zoneId: null },
+            },
             fallbacks: [{ stationId: "upstairs", why: "out_of_hours" }],
             noReplacement: false,
             clockReadable: true,
@@ -505,11 +551,14 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
               {
                 productId: "chips",
                 outcome: { kind: "made", stationId: "upstairs" },
-                decidedBy: { kind: "claim", categoryId: "sides" },
+                decidedBy: {
+                  kind: "cell",
+                  address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+                },
                 fallbacks: [],
               },
             ],
-          }),
+          } satisfies RouteExplanation),
         } as unknown as PrepStationsApi;
         host.append(el);
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -550,6 +599,16 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         const answer = root.querySelector('[data-test="test-answer"]')!.textContent!;
         expect(answer).toContain(
           locale === "en" ? "so its work goes to Downstairs bar" : "su trabajo va a Downstairs bar",
+        );
+        expect(answer).toContain(
+          locale === "en"
+            ? "Because: Upstairs bar: Mojito, in every zone"
+            : "Porque: Upstairs bar: Mojito, en todas las zonas",
+        );
+        expect(answer).toContain(
+          locale === "en"
+            ? "Chips: made separately at Upstairs bar, as set for Sides, in every zone"
+            : "Chips: se prepara aparte en Upstairs bar, como está indicado para Sides, en todas las zonas",
         );
         await expectNoA11yViolations(host);
         const time = root.querySelector('[data-test="test-time"]')!;

@@ -56,7 +56,7 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     const locationId = brandLocationId(loc!.id);
-    // The default station serves an item with no matching exception or claim.
+    // The default station serves an item no routing cell covers.
     stationId = await seedKitchenStation(db, { locationId });
     const nodeId = await seedNode(db, locationId);
     const [person] = await db
@@ -66,7 +66,7 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = makeCfg(loc!.id, nodeId);
 
-    // One sellable product with no claimed folder, routed to the default station.
+    // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Carta" });
       const cafe = await createProduct(tx, {

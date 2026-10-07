@@ -1,7 +1,7 @@
 import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
-import type { RoutingChange, RoutingMove } from "../routing-types.js";
+import type { RouteTarget, RoutingModel, RouteExplanation } from "../routing.js";
+import type { CellAddress, RoutingChange, RoutingMove, RoutingView } from "../routing-types.js";
 import type { RoutingMoment } from "../routing.js";
 import type { WatcherView } from "./watchers-seen.js";
 
@@ -59,7 +59,7 @@ export interface PrepStation {
   timingOverrides: { [Field in keyof StationThresholds]: number | null };
 }
 export interface PrepStationsView {
-  routing: RoutingModel;
+  routing: RoutingView;
   stations: PrepStation[];
   categories: { id: string; name: string; parentId: string | null }[];
   zones: { id: string; name: string; active?: boolean }[];
@@ -126,9 +126,11 @@ export class PrepStationsApi {
       return {
         routing: {
           ...overview,
-          claims: [],
-          exceptions: [],
-          unassigned: { folders: [], products: [] },
+          zones: [],
+          categories: [],
+          products: [],
+          cells: [],
+          canMakeDefault: false,
         },
         stations,
         categories: [],
@@ -144,7 +146,7 @@ export class PrepStationsApi {
     }
     const [routing, stations, categories, zones, products, printers, devices, watchers] =
       await Promise.all([
-        this.#read<RoutingModel>("/management-api/venue-service/routing"),
+        this.#read<RoutingView>("/management-api/venue-service/routing"),
         this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
         this.#read<PrepStationsView["categories"]>("/management-api/categories"),
         this.#read<PrepStationsView["zones"]>("/management-api/zones"),
@@ -279,41 +281,8 @@ export class PrepStationsApi {
   setDefaultStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}/default`, "POST");
   }
-  setClaim(categoryId: string, target: RouteTarget): Promise<void> {
-    return this.request(
-      `/management-api/venue-service/routing/claims/${categoryId}`,
-      "PUT",
-      target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true },
-    );
-  }
-  createException(input: ExceptionInput): Promise<void> {
-    const { target, ...condition } = input;
-    return this.request("/management-api/venue-service/routing/exceptions", "POST", {
-      ...condition,
-      ...(target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true }),
-    });
-  }
-  updateException(id: string, input: ExceptionInput): Promise<void> {
-    const { target, ...condition } = input;
-    return this.request(`/management-api/venue-service/routing/exceptions/${id}`, "PUT", {
-      ...condition,
-      ...(target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true }),
-    });
-  }
-  deleteException(id: string): Promise<void> {
-    return this.request(`/management-api/venue-service/routing/exceptions/${id}`, "DELETE");
-  }
-  reorderExceptions(ids: string[]): Promise<void> {
-    return this.request("/management-api/venue-service/routing/exception-order", "PUT", { ids });
-  }
-  assignProduct(productId: string, target: RouteTarget): Promise<void> {
-    return this.request(
-      `/management-api/venue-service/routing/products/${productId}/assignment`,
-      "PUT",
-      target.kind === "station" ? { stationId: target.stationId } : { noPreparation: true },
-    );
-  }
-  removeClaim(categoryId: string): Promise<void> {
-    return this.request(`/management-api/venue-service/routing/claims/${categoryId}`, "DELETE");
+  /** `target: null` clears the cell. */
+  setCell(address: CellAddress, target: RouteTarget | null): Promise<void> {
+    return this.request("/management-api/venue-service/routing/cell", "PUT", { address, target });
   }
 }

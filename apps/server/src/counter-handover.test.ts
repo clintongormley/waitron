@@ -1,4 +1,4 @@
-import { createException } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -60,12 +60,12 @@ useVenueDb({
           sql`select product_id from menu_items where id = ${venue.offerFor("Caña")}`,
         )
       ).rows;
-      await createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: item!.product_id,
-        target: { kind: "no_preparation" },
-      });
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "product", productId: item!.product_id }, zoneId: null },
+        { kind: "no_preparation" },
+      );
     });
   },
 });

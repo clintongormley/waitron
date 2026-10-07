@@ -11,11 +11,9 @@ import {
   ReorderController,
   reorder,
   UrlStateController,
-  type ReorderModel,
   type DataTableColumn,
 } from "@waitron/ui";
 import { holdPageCursor, releasePageCursor } from "@waitron/ui/src/reorder-table.js";
-import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -28,16 +26,25 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import type {
-  RouteTarget,
-  ExceptionInput,
-  RouteException,
-  RoutingDecision,
-  RouteExplanation,
+import {
+  cellKey,
+  selectRoutingCell,
+  selectionRulesFromModel,
+  targetKey,
+  type CellAddress,
+  type RouteTarget,
+  type RouteExplanation,
+  type RoutingModel,
+  type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
-import { exceptionSentence } from "./exception-sentence.js";
 import { formatDate } from "./hours-view.js";
+import {
+  decisionSentence,
+  extraSentence,
+  fallbackSentences,
+  type ExplanationNames,
+} from "./routing-explanation.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
   PrepStation,
@@ -48,6 +55,9 @@ import type {
   WatcherInput,
 } from "./routing-client.js";
 import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
+import "./routing-grid.js";
+import { rowInModel } from "./routing-grid-model.js";
+import type { RoutingCellChange, RoutingPending, RoutingRefusal } from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-health-table.js";
 import { watcherInputErrors, type WatcherForm } from "./watcher-form.js";
@@ -62,13 +72,7 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {
     t(key) as string,
   );
 
-type ExceptionDraft = { input: ExceptionInput; target: string };
-
-type Editor =
-  | { kind: "station" }
-  | { kind: "claim"; stationId: string | null }
-  | { kind: "exception"; id?: string }
-  | { kind: "exception_delete"; id: string };
+type Editor = { kind: "station" };
 const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
@@ -81,10 +85,6 @@ const TIMING_LABELS = {
 type WatcherCell = "follows" | "zones" | "pass";
 const EVERY_MEMBER = "__every__";
 
-const NO_PREPARATION = "no_preparation";
-const targetFor = (id: string): RouteTarget =>
-  id === NO_PREPARATION ? { kind: "no_preparation" } : { kind: "station", stationId: id };
-
 type SettingsDraft = {
   stationId: string;
   field: "rest" | "fallback" | TimingField;
@@ -94,6 +94,7 @@ type SettingsDraft = {
   confirming: boolean;
   attempted: boolean;
 };
+const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
 @customElement("dashboard-prep-stations-screen")
 export class PrepStationsScreen extends LitElement {
@@ -145,9 +146,7 @@ export class PrepStationsScreen extends LitElement {
         margin: 0;
       }
       .toolbar,
-      .actions,
-      .item,
-      .chip {
+      .actions {
         display: flex;
         align-items: center;
         flex-wrap: wrap;
@@ -193,56 +192,8 @@ export class PrepStationsScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .chip {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        padding: var(--wt-space-1) var(--wt-space-2);
-      }
-      .item {
-        justify-content: space-between;
-        margin-block: var(--wt-space-2);
-      }
       .form {
         padding-block: var(--wt-space-3);
-      }
-      .exception-layout {
-        display: grid;
-        gap: var(--wt-space-4);
-        margin-bottom: var(--wt-space-4);
-      }
-      .exception-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-        flex-wrap: wrap;
-      }
-      .exception-table {
-        table-layout: fixed;
-      }
-      .exception-table th:first-child,
-      .exception-table td:first-child,
-      .exception-table th:last-child,
-      .exception-table td:last-child {
-        width: var(--wt-tap-min);
-      }
-      .exception-table td:nth-child(2) {
-        overflow-wrap: anywhere;
-      }
-      .exception-table th:last-child,
-      .exception-table td:last-child {
-        position: sticky;
-        inset-inline-end: 0;
-        background: var(--wt-color-surface);
-      }
-      .warnings .chip {
-        border-color: var(--wt-color-warning);
-      }
-      .warnings {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-1);
-        margin-top: var(--wt-space-1);
       }
       .warning {
         color: var(--wt-color-warning);
@@ -296,19 +247,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private error = "";
   /** Whether `error` is a read's failure, the only message a read's success may clear. */
   #readErrorShown = false;
-  @state() private claimError = "";
-  @state() private claimField = "";
   @state() private busy = false;
-  @state() private exceptionOrder: string[] = [];
-  @state() private exceptionDraft: ExceptionInput = {
-    zoneId: null,
-    categoryId: null,
-    productId: null,
-    target: { kind: "no_preparation" },
-  };
-  @state() private exceptionTarget = "";
-  @state() private exceptionFieldError = "";
-  @state() private assignmentChoiceKey = 0;
   @state() private testProduct = "";
   @state() private testExtras: string[] = [];
   @state() private testZone = "";
@@ -360,34 +299,16 @@ export class PrepStationsScreen extends LitElement {
       children: { "*": { view: "view", test: "test" } },
     },
   );
+  /** A cell choice whose route-change preview is open. */
   @state() private pending?: {
     change: RoutingChange;
     moves: RoutingMove[];
     save: () => Promise<unknown>;
-    closeEditor: boolean;
-    field?: string;
     isCurrent: () => boolean;
   };
-  #pointerChanged = false;
-  readonly #reorder = new ReorderController(
-    this,
-    {
-      order: () => this.exceptionOrder,
-      move: (id, to, via) => this.#moveException(id, to, via),
-      drop: () => {
-        if (this.#pointerChanged) {
-          this.#pointerChanged = false;
-          void this.#saveExceptionOrder();
-        }
-      },
-      label: (id) => this.#exceptionText(this.view?.routing.exceptions.find((e) => e.id === id)),
-      busy: () => this.busy,
-      get reorderLabel() {
-        return t("prep.reorder_exception");
-      },
-    } satisfies ReorderModel,
-    { announce: () => t("prep.reordered") },
-  );
+  /** The grid shows this choice at its address until the preview or save settles. */
+  @state() private cellChoice: RoutingPending | null = null;
+  @state() private cellRefusal: RoutingRefusal | null = null;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -396,9 +317,13 @@ export class PrepStationsScreen extends LitElement {
       if (this.#readErrorShown) this.#showError("");
     },
   );
-  #exceptionScope?: DraftScope<ExceptionDraft>;
-  #exceptionIdentity?: object;
-  #exceptionRun = 0;
+  #cellScope?: DraftScope<string>;
+  #cellScopeOwner?: object;
+  /** A confirmed choice whose refresh is open: it keeps its committed scope until that settles. */
+  #cellRefreshing?: object;
+  /** A written choice the grid keeps showing until a read replaces the model. */
+  #writtenChoice?: RoutingPending;
+  #cellRun = 0;
   #stationScope?: DraftScope<StationInput>;
   #renameScope?: DraftScope<{ name: string }>;
   #stationIdentity?: object;
@@ -551,34 +476,6 @@ export class PrepStationsScreen extends LitElement {
           const current = this.stationAction;
           if (current?.kind === "fallback" || current?.kind === "switch_off")
             this.stationAction = { ...current, choice, confirming: false };
-        },
-      });
-    }
-    if (this.editor?.kind !== "exception") {
-      this.#exceptionScope?.dispose();
-      this.#exceptionScope = undefined;
-      this.#exceptionIdentity = undefined;
-    } else if (this.#exceptionIdentity !== this.editor) {
-      this.#exceptionScope?.dispose();
-      const id = (this.#exceptionIdentity = this.editor);
-      this.#leave ??= leaveCoordinatorFor(this);
-      this.#exceptionScope = this.#leave?.register({
-        id,
-        current: () => ({ input: this.exceptionDraft, target: this.exceptionTarget }),
-        snapshot: (value) => structuredClone(value),
-        equal: (a, b) =>
-          a.target === b.target &&
-          a.input.zoneId === b.input.zoneId &&
-          a.input.categoryId === b.input.categoryId &&
-          a.input.productId === b.input.productId &&
-          (a.target === "" ||
-            (a.input.target.kind === b.input.target.kind &&
-              (a.input.target.kind !== "station" ||
-                (b.input.target.kind === "station" &&
-                  a.input.target.stationId === b.input.target.stationId)))),
-        restore: (value) => {
-          this.exceptionDraft = structuredClone(value.input);
-          this.exceptionTarget = value.target;
         },
       });
     }
@@ -761,19 +658,61 @@ export class PrepStationsScreen extends LitElement {
     );
   }
 
-  readonly #beforeExceptionClose = async (reason: LeaveReason): Promise<boolean> => {
-    if (this.busy) return false;
-    const identity = this.#exceptionIdentity;
-    const scope = this.#exceptionScope;
-    if (!scope) return true;
-    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
-    return identity === this.#exceptionIdentity && outcome === "proceeded";
-  };
-
   readonly #beforeAddClose = (reason: LeaveReason) =>
     this.#beforeStationClose(reason, false, this.#stationIdentity);
   readonly #beforeRenameClose = (reason: LeaveReason) =>
     this.#beforeStationClose(reason, true, this.#renameIdentity);
+
+  /** Dirty from the moment a choice's preview opens until Confirm saves it or Cancel drops it. */
+  #syncCellDraft(): void {
+    const pending = this.pending;
+    if (!pending) {
+      if (this.#cellScopeOwner !== this.#cellRefreshing) this.#releaseCellScope();
+      return;
+    }
+    if (this.#cellScopeOwner === pending) return;
+    this.#releaseCellScope();
+    const saved = targetKey(this.#savedCell(pending.change.address));
+    const chosen = targetKey(pending.change.target);
+    let held = false;
+    this.#cellScopeOwner = pending;
+    this.#leave ??= leaveCoordinatorFor(this);
+    this.#cellScope = this.#leave?.register({
+      id: pending,
+      current: () => (held ? chosen : saved),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: () => {
+        held = false;
+        if (this.pending === pending) {
+          this.pending = undefined;
+          this.cellChoice = null;
+        }
+      },
+    });
+    held = true;
+    this.#cellScope?.changed();
+  }
+  #releaseCellScope(): void {
+    this.#cellScope?.dispose();
+    this.#cellScope = undefined;
+    this.#cellScopeOwner = undefined;
+  }
+  #leaveCell(reason: LeaveReason, proceed: () => void): void {
+    const scope = this.#cellScope;
+    if (this.busy) return;
+    if (!scope) {
+      proceed();
+      return;
+    }
+    void this.#leave!.request({
+      scopes: [scope.id],
+      reason,
+      proceed: () => {
+        if (this.isConnected && !this.busy) proceed();
+      },
+    });
+  }
 
   #loaded = false;
   #showError(message: string, fromRead = false): void {
@@ -785,10 +724,25 @@ export class PrepStationsScreen extends LitElement {
     if (this.error === "" || this.#readErrorShown) this.#showError(message, true);
   }
   protected override willUpdate(changed: PropertyValues<this>) {
+    if (
+      this.pending?.change.address.row.kind === "no_category" &&
+      !this.busy &&
+      !this.#addressShown(this.pending.change.address)
+    ) {
+      this.pending = undefined;
+      this.cellChoice = null;
+    }
     this.#syncStationDrafts();
     this.#syncWatcherInlineDrafts();
     this.#syncSettingsDraft();
     this.#syncPrinterDraft();
+    this.#syncCellDraft();
+    const changedState = changed as Map<PropertyKey, unknown>;
+    if (changedState.has("view") && this.#writtenChoice !== undefined) {
+      if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;
+      this.#writtenChoice = undefined;
+    }
+    if (changedState.has("tab")) this.cellRefusal = null;
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
       this.testProduct = "";
@@ -806,12 +760,12 @@ export class PrepStationsScreen extends LitElement {
     }
   }
   override disconnectedCallback() {
-    this.#exceptionRun++;
-    if (this.pending?.change.kind === "exception") this.pending = undefined;
+    this.#cellRun++;
     if (
       this.#stationIdentity ||
       this.#renameIdentity ||
-      this.#exceptionIdentity ||
+      this.pending !== undefined ||
+      this.cellChoice !== null ||
       this.stationAction !== undefined ||
       this.watcherEditor ||
       this.#watcherRenameIdentity
@@ -846,9 +800,12 @@ export class PrepStationsScreen extends LitElement {
     this.#watcherRenameIdentity = undefined;
     this.#stationScope?.dispose();
     this.#renameScope?.dispose();
-    this.#exceptionScope?.dispose();
-    this.#exceptionScope = undefined;
-    this.#exceptionIdentity = undefined;
+    this.pending = undefined;
+    this.cellChoice = null;
+    this.cellRefusal = null;
+    this.#writtenChoice = undefined;
+    this.#cellRefreshing = undefined;
+    this.#releaseCellScope();
     this.#stationScope = undefined;
     this.#renameScope = undefined;
     this.#stationIdentity = undefined;
@@ -902,10 +859,7 @@ export class PrepStationsScreen extends LitElement {
           ) {
             this.watcherPrinterEditor = { ...editor, fieldError: "", conflictPrinterId: undefined };
           }
-          this.exceptionOrder = [...value.routing.exceptions]
-            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
-            .map((e) => e.id);
-          if (this.testProduct) void this.#explain();
+          if (this.testProduct) void this.#explain(true);
         },
       );
     } catch {
@@ -938,20 +892,6 @@ export class PrepStationsScreen extends LitElement {
       ? t("prep.no_preparation")
       : this.#stationName(target.stationId);
   }
-  #claimOptions() {
-    return (
-      this.view?.categories.map((c) => ({
-        value: c.id,
-        label: `${this.#path(c.id)}${this.view?.routing.claims.find((cl) => cl.categoryId === c.id) ? ` (${this.#targetName(this.view.routing.claims.find((cl) => cl.categoryId === c.id)!.target)})` : ""}`,
-      })) ?? []
-    );
-  }
-  #targetOptions() {
-    return [
-      ...(this.view?.stations ?? []).map((s) => ({ value: s.id, label: s.name })),
-      { value: NO_PREPARATION, label: t("prep.no_preparation") },
-    ];
-  }
   /** Whether `run` succeeded. */
   async #act(
     run: () => Promise<unknown>,
@@ -982,80 +922,100 @@ export class PrepStationsScreen extends LitElement {
       { name, date: formatDate(params.date) },
     );
   }
-  async #preview(
-    change: RoutingChange,
-    save: () => Promise<unknown>,
-    closeEditor = false,
-    field?: string,
-    isCurrent: () => boolean = () => true,
-  ) {
+  async #makeDefault(stationId: string) {
+    const saved = await this.#act(
+      () => this.api.setDefaultStation(stationId),
+      (error) => this.#defaultRefusal(error),
+    );
+    if (saved && this.isConnected) this.cellRefusal = null;
+  }
+  /** Whether the grid still draws this coordinate: a refresh can remove its zone or its row. */
+  #addressShown({ row, zoneId }: CellAddress): boolean {
+    const model = this.view?.routing;
+    if (!model) return false;
+    if (zoneId !== null && !model.zones.some((zone) => zone.id === zoneId)) return false;
+    return rowInModel(model, row);
+  }
+  #savedCell(address: CellAddress): RouteTarget | null {
+    return this.view?.routing.cells.find((cell) => sameAddress(cell, address))?.target ?? null;
+  }
+  async #chooseCell({ address, target }: RoutingCellChange) {
     if (this.busy || this.pending) return;
+    const run = ++this.#cellRun;
+    const isCurrent = () => this.isConnected && this.#cellRun === run;
+    this.cellChoice = { address, target };
+    this.cellRefusal = null;
+    await this.#preview(
+      { kind: "cell", address, target },
+      () => this.api.setCell(address, target),
+      isCurrent,
+    );
+  }
+  /** A choice that moves nothing is saved at once; otherwise its preview asks first. */
+  async #preview(change: RoutingChange, save: () => Promise<unknown>, isCurrent: () => boolean) {
     this.busy = true;
     this.#showError("");
-    this.claimError = "";
+    let moves: RoutingMove[];
     try {
-      const moves = await this.api.preview(change);
+      moves = await this.api.preview(change);
+    } catch (error) {
       if (!isCurrent()) return;
-      this.pending = { change, moves, save, closeEditor, field, isCurrent };
-    } catch (e) {
-      if (!isCurrent()) return;
-      const rejectedField = (e as { params?: { field?: unknown } } | undefined)?.params?.field;
-      if (rejectedField === "condition") this.exceptionFieldError = t("prep.exception_condition");
-      else if (codeOf(e) === "route.station_inactive" && field) {
-        this.claimField = field;
-        this.claimError = t("prep.station_disabled");
-      } else if (codeOf(e) === "route.station_inactive")
-        this.#showError(t("prep.station_disabled"));
-      else this.#showError(t("prep.save_error"));
-      this.#restoreOrder();
-    } finally {
-      if (isCurrent()) this.busy = false;
+      this.#refuseCell(change.address, error);
+      this.busy = false;
+      return;
     }
+    if (!isCurrent()) return;
+    this.busy = false;
+    const pending = { change, moves, save, isCurrent };
+    if (moves.length > 0) this.pending = pending;
+    else if (this.#addressShown(change.address)) await this.#saveCell(pending);
+    else this.cellChoice = null;
   }
-  #restoreOrder() {
-    this.exceptionOrder = [...(this.view?.routing.exceptions ?? [])]
-      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
-      .map((e) => e.id);
+  #refuseCell(address: CellAddress, error: unknown): void {
+    this.cellChoice = null;
+    this.cellRefusal = {
+      address,
+      message: t(
+        codeOf(error) === "route.station_inactive" ? "prep.station_disabled" : "prep.save_error",
+      ),
+    };
   }
-  async #confirmRouting() {
-    const pending = this.pending;
-    if (!pending || this.busy) return;
+  async #saveCell(pending: NonNullable<PrepStationsScreen["pending"]>) {
+    if (this.busy) return;
     this.busy = true;
     try {
       await pending.save();
+    } catch (error) {
       if (!pending.isCurrent()) return;
+      this.#refuseCell(pending.change.address, error);
       this.pending = undefined;
-      if (pending.closeEditor) this.editor = undefined;
+      this.busy = false;
+      return;
+    }
+    if (!pending.isCurrent()) return;
+    if (this.#cellScopeOwner === pending) this.#cellScope?.commit(targetKey(pending.change.target));
+    this.#cellRefreshing = pending;
+    this.pending = undefined;
+    this.#writtenChoice = this.cellChoice ?? undefined;
+    try {
       await this.#load();
-    } catch (e) {
-      if (!pending.isCurrent()) return;
-      const rejectedField = (e as { params?: { field?: unknown } } | undefined)?.params?.field;
-      if (rejectedField === "condition") this.exceptionFieldError = t("prep.exception_condition");
-      else if (codeOf(e) === "route.station_inactive" && pending.field) {
-        this.claimField = pending.field;
-        this.claimError = t("prep.station_disabled");
-      } else if (codeOf(e) === "route.station_inactive") {
-        this.#showError(t("prep.station_disabled"));
-      } else this.#showError(t("prep.save_error"));
-      this.pending = undefined;
-      this.#restoreOrder();
     } finally {
+      if (this.#cellRefreshing === pending) {
+        this.#cellRefreshing = undefined;
+        if (this.#cellScopeOwner === pending) this.#releaseCellScope();
+      }
       if (pending.isCurrent()) this.busy = false;
     }
   }
+  async #confirmRouting() {
+    const pending = this.pending;
+    if (pending && this.#addressShown(pending.change.address)) await this.#saveCell(pending);
+  }
   #cancelRouting() {
     if (this.busy) return;
+    this.#releaseCellScope();
     this.pending = undefined;
-    this.#restoreOrder();
-    this.assignmentChoiceKey++;
-  }
-  async #setClaim(categoryId: string, target: RouteTarget, field = categoryId) {
-    await this.#preview(
-      { kind: "claim", categoryId, target },
-      () => this.api.setClaim(categoryId, target),
-      field === "claim",
-      field,
-    );
+    this.cellChoice = null;
   }
   #activeStationOrder() {
     return (
@@ -1353,16 +1313,9 @@ export class PrepStationsScreen extends LitElement {
         this.busy = false;
     }
   }
-  #exceptionText(exception?: RouteException): string {
-    if (!exception || !this.view) return "";
-    return exceptionSentence(exception, {
-      categories: this.view.categories.map((c) => ({ id: c.id, name: this.#path(c.id) })),
-      products: this.view.products,
-      zones: this.view.zones,
-      stations: this.view.routing.stations,
-    });
-  }
-  async #explain() {
+  /** `passive` when a read, not the person, asked: an unattended tester must not keep a session. */
+  async #explain(passive = false) {
+    const api = passive ? (this.api.background ?? this.api) : this.api;
     const request = ++this.#testRequest;
     this.explanation = undefined;
     this.testError = "";
@@ -1385,10 +1338,10 @@ export class PrepStationsScreen extends LitElement {
           : { weekday: this.testWeekday, timeOfDay: this.testTime };
     try {
       const explanation = this.testExtras.length
-        ? await this.api.explain(this.testProduct, this.testZone || null, moment, this.testExtras)
+        ? await api.explain(this.testProduct, this.testZone || null, moment, this.testExtras)
         : moment
-          ? await this.api.explain(this.testProduct, this.testZone || null, moment)
-          : await this.api.explain(this.testProduct, this.testZone || null);
+          ? await api.explain(this.testProduct, this.testZone || null, moment)
+          : await api.explain(this.testProduct, this.testZone || null);
       if (request === this.#testRequest) this.explanation = explanation;
     } catch (error) {
       if (request !== this.#testRequest) return;
@@ -1403,82 +1356,16 @@ export class PrepStationsScreen extends LitElement {
       this.explanation?.stations.find((station) => station.id === id)?.name ?? this.#stationName(id)
     );
   }
-  #testRule(decision: RoutingDecision): string {
-    if (decision.kind === "default") return t("prep.test_default");
-    if (decision.kind === "claim") {
-      const folder = this.#path(decision.categoryId).split(" › ").at(-1)!;
-      if (this.explanation?.route?.kind === "no_preparation")
-        return t("prep.test_no_prep_claim")
-          .replace("{folder}", folder)
-          .replace("{target}", t("prep.no_preparation"));
-      const claimed =
-        this.explanation?.fallbacks[0]?.stationId ??
-        (this.explanation?.route?.kind === "station" ? this.explanation.route.stationId : null);
-      const name = claimed === null ? t("prep.no_preparation") : this.#testStationName(claimed);
-      return t("prep.test_claim").replace("{station}", name).replace("{folder}", folder);
-    }
-    const exception = this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId);
-    return t("prep.test_exception").replace("{rule}", this.#exceptionText(exception));
-  }
-  #fallbackReason(step: RouteExplanation["fallbacks"][number]): string {
-    return format(step.why === "switched_off" ? "prep.test_disabled" : `prep.test_${step.why}`, {
-      station: this.#testStationName(step.stationId),
-    });
-  }
-  #testFallback(step: RouteExplanation["fallbacks"][number], index: number): string {
-    const explanation = this.explanation!;
-    const reason = this.#fallbackReason(step);
-    const next = explanation.fallbacks[index + 1]?.stationId;
-    if (next === undefined && explanation.noReplacement)
-      return format("prep.test_no_replacement", { reason });
-    const destination =
-      next ?? (explanation.route?.kind === "station" ? explanation.route.stationId : "");
-    return format("prep.test_fallback_step", {
-      reason,
-      destination: this.#testStationName(destination),
-    });
-  }
-  #extraSentence(extra: RouteExplanation["extras"][number]): string {
-    const name =
-      this.view?.testProducts.find((product) => product.id === extra.productId)?.name ??
-      extra.productId;
-    const outcome = extra.outcome;
-    if (outcome.kind === "follows_dish") {
-      const station = extra.fallbacks[0] ? this.#testStationName(extra.fallbacks[0].stationId) : "";
-      return format(`prep.test_extra_${outcome.why}`, {
-        name,
-        station,
-        dishStation:
-          this.explanation?.route?.kind === "station"
-            ? this.#testStationName(this.explanation.route.stationId)
-            : "",
-      });
-    }
-    const decision = extra.decidedBy;
-    const reason =
-      decision?.kind === "claim"
-        ? format("prep.test_extra_claim", {
-            station: this.#testStationName(extra.fallbacks[0]?.stationId ?? outcome.stationId),
-            folder: this.#path(decision.categoryId),
-          })
-        : decision?.kind === "exception"
-          ? format("prep.test_extra_exception", {
-              rule: this.#exceptionText(
-                this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId),
-              ),
-            })
-          : t("prep.test_default");
-    const fallbacks = extra.fallbacks
-      .map((step, index) =>
-        format("prep.test_fallback_step", {
-          reason: this.#fallbackReason(step),
-          destination: this.#testStationName(
-            extra.fallbacks[index + 1]?.stationId ?? outcome.stationId,
-          ),
-        }),
-      )
-      .join(" ");
-    return `${fallbacks}${fallbacks ? " " : ""}${format("prep.test_extra_made", { name, station: this.#testStationName(outcome.stationId), reason })}`;
+  #testNames(): ExplanationNames {
+    const named = (rows: readonly { id: string; name: string }[] | undefined, id: string) =>
+      rows?.find((row) => row.id === id)?.name ?? id;
+    return {
+      station: (id) => this.#testStationName(id),
+      product: (id) =>
+        named([...(this.view?.testProducts ?? []), ...(this.view?.products ?? [])], id),
+      category: (id) => this.#path(id),
+      zone: (id) => named(this.view?.zones, id),
+    };
   }
   #tester() {
     const explanation = this.explanation;
@@ -1644,7 +1531,7 @@ export class PrepStationsScreen extends LitElement {
       <div data-test="test-answer" aria-live="polite">
         ${this.testError ? html`<p class="error" role="alert">${this.testError}</p>` : nothing}
         ${explanation?.clockReadable === false ? html`<p>${t("prep.test_clock_unreadable")}</p>` : nothing}
-        ${explanation?.fallbacks.map((step, index) => html`<p>${this.#testFallback(step, index)}</p>`)}
+        ${explanation ? fallbackSentences(explanation, this.#testNames()).map((sentence) => html`<p>${sentence}</p>`) : nothing}
         ${explanation?.route === null && explanation.decidedBy === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
         ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
         ${
@@ -1661,181 +1548,11 @@ export class PrepStationsScreen extends LitElement {
               })()
             : nothing
         }
-        ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${this.#testRule(explanation.decidedBy)}</p>` : nothing}
+        ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${decisionSentence(explanation, this.#testNames())}</p>` : nothing}
         ${explanation?.extrasWaitOnDish && this.testExtras.length ? html`<p>${t("prep.test_extras_wait")}</p>` : nothing}
-        ${explanation?.extras?.map((extra) => html`<p>${this.#extraSentence(extra)}</p>`)}
+        ${explanation?.extras?.map((extra) => html`<p>${extraSentence(extra, explanation, this.#testNames())}</p>`)}
       </div>
     </wt-card>`;
-  }
-  #moveException(id: string, to: number, via: "key" | "pointer") {
-    const next = reorder(this.exceptionOrder, this.exceptionOrder.indexOf(id), to);
-    if (next.join() === this.exceptionOrder.join()) return;
-    this.exceptionOrder = next;
-    if (via === "key") void this.#saveExceptionOrder();
-    else this.#pointerChanged = true;
-  }
-  async #saveExceptionOrder() {
-    if (this.busy) return;
-    const order = [...this.exceptionOrder];
-    await this.#preview({ kind: "exception_order", ids: order }, () =>
-      this.api.reorderExceptions(order),
-    );
-  }
-  #openException(exception?: RouteException) {
-    this.#exceptionRun++;
-    this.exceptionDraft = exception
-      ? {
-          zoneId: exception.zoneId,
-          categoryId: exception.categoryId,
-          productId: exception.productId,
-          target: exception.target,
-        }
-      : { zoneId: null, categoryId: null, productId: null, target: { kind: "no_preparation" } };
-    this.exceptionTarget = exception
-      ? exception.target.kind === "station"
-        ? exception.target.stationId
-        : NO_PREPARATION
-      : "";
-    this.exceptionFieldError = "";
-    this.#showError("");
-    this.editor = { kind: "exception", id: exception?.id };
-  }
-  async #saveException() {
-    if (this.busy || this.editor?.kind !== "exception") return;
-    const scope = this.#exceptionScope;
-    const run = this.#exceptionRun;
-    const isCurrent = () => this.isConnected && this.#exceptionRun === run;
-    const input = structuredClone(this.exceptionDraft);
-    const target = this.exceptionTarget;
-    if (!input.zoneId && !input.categoryId && !input.productId) {
-      this.exceptionFieldError = t("prep.exception_condition");
-      this.#showError(t("prep.fix_fields"));
-      return;
-    }
-    if (!this.exceptionTarget) {
-      this.#showError(t("prep.exception_target_required"));
-      return;
-    }
-    const id = this.editor.id;
-    await this.#preview(
-      { kind: "exception", id: id ?? null, input },
-      async () => {
-        if (id) await this.api.updateException(id, input);
-        else await this.api.createException(input);
-        if (!isCurrent()) return;
-        scope?.commit({ input, target });
-        if (!scope?.isDirty()) this.editor = undefined;
-      },
-      false,
-      undefined,
-      isCurrent,
-    );
-  }
-  #exceptionTargetOptions() {
-    const active = (this.view?.stations ?? [])
-      .filter((station) => station.active)
-      .map((station) => ({ value: station.id, label: station.name }));
-    const selected = this.exceptionTarget;
-    const previous =
-      selected && selected !== NO_PREPARATION && !active.some((option) => option.value === selected)
-        ? [
-            {
-              value: selected,
-              label: `${this.#stationName(selected)} (${t("prep.disabled_station_label")})`,
-            },
-          ]
-        : [];
-    return [...active, ...previous, { value: NO_PREPARATION, label: t("prep.no_preparation") }];
-  }
-  #exceptionOptions() {
-    return [
-      { value: "", label: t("prep.everything") },
-      ...(this.view?.categories.map((c) => ({
-        value: `category:${c.id}`,
-        label: this.#path(c.id),
-      })) ?? []),
-      ...(this.view?.products.map((p) => ({ value: `product:${p.id}`, label: p.name })) ?? []),
-    ];
-  }
-  #exceptions() {
-    const byId = new Map(this.view!.routing.exceptions.map((e) => [e.id, e]));
-    return html`<wt-card data-test="exceptions" class="exception-layout">
-      <div class="exception-head">
-        <h2>${t("prep.exceptions")}</h2>
-        <wt-button data-test="add-exception" @click=${() => this.#openException()}
-          >${t("prep.add_exception")}</wt-button
-        >
-      </div>
-      <div class="table-wrap" tabindex="0">
-        <table class="exception-table">
-          <thead>
-            <tr>
-              <th scope="col">
-                <span class="visually-hidden">${t("prep.reorder_exception")}</span>
-              </th>
-              <th scope="col">${t("prep.exception_rule")}</th>
-              <th scope="col"><span class="visually-hidden">${t("prep.actions")}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${repeat(
-              this.exceptionOrder,
-              (id) => id,
-              (id) => {
-                const e = byId.get(id);
-                return e
-                  ? html`<tr data-id=${id}>
-                      <td class="handle-cell">${this.#reorder.handle(id)}</td>
-                      <td>
-                        ${this.#exceptionText(e)}
-                        <div class="warnings">
-                          ${e.neverMatches ? html`<span class="chip">${t("prep.never_used")}</span>` : nothing}${e.stationOff ? html`<span class="chip">${t("prep.exception_station_disabled")}</span>` : nothing}
-                        </div>
-                      </td>
-                      <td>
-                        <wt-row-actions
-                          align="end"
-                          label=${`${t("prep.actions")}: ${this.#exceptionText(e)}`}
-                          ><wt-button
-                            data-test=${`edit-exception-${id}`}
-                            variant="secondary"
-                            @click=${() => this.#openException(e)}
-                            >${t("prep.edit")}</wt-button
-                          ><wt-button
-                            data-test=${`delete-${id}`}
-                            variant="danger"
-                            @click=${() => {
-                              this.editor = { kind: "exception_delete", id };
-                              this.#showError("");
-                            }}
-                            >${t("prep.delete")}</wt-button
-                          ></wt-row-actions
-                        >
-                      </td>
-                    </tr>`
-                  : nothing;
-              },
-            )}
-          </tbody>
-        </table>
-      </div>
-      ${this.#reorder.liveRegion()}
-    </wt-card>`;
-  }
-  #claims(stationId: string | null) {
-    return (
-      this.view?.routing.claims.filter(
-        (c) =>
-          c.target.kind === (stationId === null ? "no_preparation" : "station") &&
-          (stationId === null || (c.target.kind === "station" && c.target.stationId === stationId)),
-      ) ?? []
-    );
-  }
-  #chips(stationId: string | null) {
-    return html`<p>${t("prep.claims")}</p>
-      <div class="actions">
-        ${this.#claims(stationId).map((c) => html`<span class="chip">${this.#path(c.categoryId)} <wt-button size="sm" variant="secondary" data-test=${`remove-${c.categoryId}`} aria-label=${`${t("prep.remove_claim")} ${this.#path(c.categoryId)}`} @click=${() => void this.#preview({ kind: "claim", categoryId: c.categoryId, target: null }, () => this.api.removeClaim(c.categoryId))}>×</wt-button></span>`)}
-      </div>`;
   }
   #times(id: string): StationTimes | undefined {
     return this.view?.routing.stationTimes.find((row) => row.stationId === id);
@@ -2018,18 +1735,6 @@ export class PrepStationsScreen extends LitElement {
       ><h2>
         ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
       </h2>
-      ${this.#chips(s.id)}
-      <div class="actions">
-        <wt-button
-          data-test=${`claim-${s.id}`}
-          variant="secondary"
-          @click=${() => {
-            this.editor = { kind: "claim", stationId: s.id };
-            this.#showError("");
-          }}
-          >${t("prep.claim_folder")}</wt-button
-        >
-      </div>
     </wt-card>`;
   }
   async #saveStationPrinters(identity: object | undefined) {
@@ -3315,40 +3020,6 @@ export class PrepStationsScreen extends LitElement {
         : nothing
     }`;
   }
-  #unassigned() {
-    const r = this.view!.routing;
-    const destination = r.defaultStationId
-      ? t("prep.fallback").replace("{name}", this.#stationName(r.defaultStationId))
-      : t("venue.readiness.default_station_missing");
-    return keyed(
-      this.assignmentChoiceKey,
-      html`<wt-card data-test="unassigned"
-        ><h2>${t("prep.unassigned")}</h2>
-        <p>${destination}</p>
-        ${r.unassigned.folders.map((f) => html`<div class="item"><span>${this.#path(f.id)}</span><wt-combobox data-test=${`assign-${f.id}`} label=${t("prep.assign_to")} .options=${this.#targetOptions()} @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#setClaim(f.id, targetFor(e.detail.value))}></wt-combobox>${this.claimError && this.claimField === f.id ? html`<p class="error" data-field-error=${f.id} role="alert">${this.claimError}</p>` : nothing}</div>`)}${r.unassigned.products.map(
-          (p) =>
-            html`<div class="item">
-              <span>${p.name}</span
-              ><wt-combobox
-                data-test=${`assign-${p.id}`}
-                label=${t("prep.assign_to")}
-                .options=${this.#targetOptions()}
-                @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                  const target = targetFor(e.detail.value);
-                  void this.#preview(
-                    { kind: "assignment", productId: p.id, target },
-                    () => this.api.assignProduct(p.id, target),
-                    false,
-                    p.id,
-                  );
-                }}
-              ></wt-combobox
-              >${this.claimError && this.claimField === p.id ? html`<p class="error" data-field-error=${p.id} role="alert">${this.claimError}</p>` : nothing}
-            </div>`,
-        )}</wt-card
-      >`,
-    );
-  }
   #field(field: keyof StationInput, label: string, type = "number") {
     const identity = this.#stationIdentity;
     return html`<div>
@@ -3373,119 +3044,20 @@ export class PrepStationsScreen extends LitElement {
     if (!this.editor || this.pending) return nothing;
     const editor = this.editor;
     return keyed(
-      editor.kind === "station" ? this.#stationIdentity : editor,
+      this.#stationIdentity,
       html`<wt-modal
-        .dismissible=${(editor.kind !== "station" && editor.kind !== "exception") || !this.busy}
-        .beforeClose=${editor.kind === "station" ? this.#beforeAddClose : editor.kind === "exception" ? this.#beforeExceptionClose : undefined}
-        size=${editor.kind === "claim" || editor.kind === "exception_delete" ? "compact" : "standard"}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#beforeAddClose}
+        size="standard"
         open
-        heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : t("prep.new_station")}
+        heading=${t("prep.new_station")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (this.editor === editor && (event.currentTarget as HTMLElement).isConnected)
             this.editor = undefined;
         }}
         ><div class="form">
-          ${
-            editor.kind === "exception_delete"
-              ? html`<p>
-                  ${this.#exceptionText(this.view?.routing.exceptions.find((e) => e.id === editor.id))}
-                </p>`
-              : editor.kind === "exception"
-                ? html`<div>
-                      <wt-combobox
-                        data-test="exception-what"
-                        name="what"
-                        label=${t("prep.what")}
-                        placeholder=${t("prep.everything")}
-                        .options=${this.#exceptionOptions()}
-                        .value=${this.exceptionDraft.categoryId ? `category:${this.exceptionDraft.categoryId}` : this.exceptionDraft.productId ? `product:${this.exceptionDraft.productId}` : ""}
-                        @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                          e.stopPropagation();
-                          if (
-                            !this.isConnected ||
-                            this.editor !== editor ||
-                            !(e.currentTarget as HTMLElement).isConnected
-                          )
-                            return;
-                          const value = e.detail.value;
-                          this.exceptionDraft = {
-                            ...this.exceptionDraft,
-                            categoryId: value.startsWith("category:") ? value.slice(9) : null,
-                            productId: value.startsWith("product:") ? value.slice(8) : null,
-                          };
-                          this.exceptionFieldError = "";
-                          this.#exceptionScope?.changed();
-                          this.#showError("");
-                        }}
-                      ></wt-combobox
-                      >${this.exceptionFieldError ? html`<p class="error" role="alert" data-field-error="condition">${this.exceptionFieldError}</p>` : nothing}
-                    </div>
-                    <wt-combobox
-                      data-test="exception-zone"
-                      name="zone"
-                      label=${t("prep.service_zone")}
-                      placeholder=${t("prep.any_zone")}
-                      .options=${[{ value: "", label: t("prep.any_zone") }, ...(this.view?.zones.filter((z) => z.active !== false).map((z) => ({ value: z.id, label: z.name })) ?? [])]}
-                      .value=${this.exceptionDraft.zoneId ?? ""}
-                      @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                        e.stopPropagation();
-                        if (
-                          !this.isConnected ||
-                          this.editor !== editor ||
-                          !(e.currentTarget as HTMLElement).isConnected
-                        )
-                          return;
-                        this.exceptionDraft = {
-                          ...this.exceptionDraft,
-                          zoneId: e.detail.value || null,
-                        };
-                        this.exceptionFieldError = "";
-                        this.#exceptionScope?.changed();
-                        this.#showError("");
-                      }}
-                    ></wt-combobox
-                    ><wt-combobox
-                      data-test="exception-target"
-                      name="target"
-                      label=${t("prep.made_at")}
-                      required
-                      .options=${this.#exceptionTargetOptions()}
-                      .value=${this.exceptionTarget}
-                      @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                        e.stopPropagation();
-                        if (
-                          !this.isConnected ||
-                          this.editor !== editor ||
-                          !(e.currentTarget as HTMLElement).isConnected
-                        )
-                          return;
-                        this.exceptionTarget = e.detail.value;
-                        this.exceptionDraft = {
-                          ...this.exceptionDraft,
-                          target: targetFor(e.detail.value),
-                        };
-                        this.#exceptionScope?.changed();
-                        this.#showError("");
-                      }}
-                    ></wt-combobox>`
-                : editor.kind === "claim"
-                  ? html`<wt-combobox
-                        data-test="claim-choice"
-                        label=${t("prep.folder")}
-                        .options=${this.#claimOptions()}
-                        @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                          const id = e.detail.value;
-                          void this.#setClaim(
-                            id,
-                            targetFor(editor.stationId ?? NO_PREPARATION),
-                            "claim",
-                          );
-                        }}
-                      ></wt-combobox
-                      >${this.claimError && this.claimField === "claim" ? html`<p class="error" data-field-error="claim" role="alert">${this.claimError}</p>` : nothing}`
-                  : html`${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}`
-          }
+          ${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer">
@@ -3494,44 +3066,57 @@ export class PrepStationsScreen extends LitElement {
             variant="secondary"
             @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.requestClose("cancel")}
             >${t("prep.cancel")}</wt-button
-          >${
-            editor.kind === "station"
-              ? html`<wt-button
-                  data-test="save-station"
-                  ?disabled=${this.busy}
-                  @click=${() => void this.#saveStation()}
-                  >${t("prep.save")}</wt-button
-                >`
-              : editor.kind === "exception"
-                ? html`<wt-button
-                    data-test="save-exception"
-                    ?disabled=${this.busy || !this.exceptionTarget}
-                    @click=${() => void this.#saveException()}
-                    >${t("prep.save")}</wt-button
-                  >`
-                : editor.kind === "exception_delete"
-                  ? html`<wt-button
-                      data-test="confirm-delete-exception"
-                      variant="danger"
-                      ?disabled=${this.busy}
-                      @click=${() => void this.#preview({ kind: "exception_delete", id: editor.id }, () => this.api.deleteException(editor.id), true)}
-                      >${t("prep.delete")}</wt-button
-                    >`
-                  : nothing
-          }
+          ><wt-button
+            data-test="save-station"
+            ?disabled=${this.busy}
+            @click=${() => void this.#saveStation()}
+            >${t("prep.save")}</wt-button
+          >
         </wt-form-actions></wt-modal
       >`,
     );
   }
+  #selection: { model: RoutingModel; rules: RoutingSelectionRules } | undefined;
+  /** "Drinks, Terrace: this changes Bar to Kitchen." — what the cell resolves to before and after. */
+  #cellSentence(change: RoutingChange): string {
+    const model = this.view!.routing;
+    if (this.#selection?.model !== model) {
+      this.#selection = { model, rules: selectionRulesFromModel(model) };
+    }
+    const { rules } = this.#selection;
+    const { row, zoneId } = change.address;
+    const product =
+      row.kind === "product" ? model.products.find((p) => p.id === row.productId) : undefined;
+    const categoryId = product?.categoryId ?? null;
+    const before = selectRoutingCell(rules, row, zoneId, categoryId).target;
+    const after =
+      change.target ?? selectRoutingCell(rules, row, zoneId, categoryId, { skipOwn: true }).target;
+    const name = (target: RouteTarget | null) =>
+      target === null ? t("routing.no_station") : this.#targetName(target);
+    return format("routing.preview_change", {
+      row:
+        row.kind === "all"
+          ? t("routing.all_categories")
+          : row.kind === "no_category"
+            ? t("routing.no_category")
+            : row.kind === "category"
+              ? this.#path(row.categoryId)
+              : [
+                  categoryId === null ? "" : `${this.#path(categoryId)} › `,
+                  product?.name ?? row.productId,
+                ].join(""),
+      zone:
+        zoneId === null
+          ? t("routing.every_zone")
+          : (model.zones.find((zone) => zone.id === zoneId)?.name ?? zoneId),
+      from: name(before),
+      to: name(after),
+    });
+  }
   #previewDialog() {
     const pending = this.pending;
     if (!pending) return nothing;
-    const claim = pending.change.kind === "claim" ? pending.change : null;
-    const oldClaim = claim?.target
-      ? this.view?.routing.claims.find((c) => c.categoryId === claim.categoryId)
-      : undefined;
-    const movedClaim =
-      oldClaim && claim?.target && JSON.stringify(oldClaim.target) !== JSON.stringify(claim.target);
+    const unavailable = !this.#addressShown(pending.change.address);
     return html`<wt-modal
       size="wide"
       open
@@ -3540,7 +3125,7 @@ export class PrepStationsScreen extends LitElement {
       heading=${t("prep.preview_title")}
       @wt-close=${() => this.#cancelRouting()}
     >
-      ${movedClaim && claim ? html`<p>${t("prep.claim_move").replace("{folder}", this.#path(claim.categoryId)).replace("{from}", this.#targetName(oldClaim.target)).replace("{to}", this.#targetName(claim.target!))}</p>` : nothing}
+      <p>${this.#cellSentence(pending.change)}</p>
       ${
         pending.moves.length
           ? html`<p>${t("prep.preview_moves")}</p>
@@ -3571,6 +3156,7 @@ export class PrepStationsScreen extends LitElement {
               </div>`
           : html`<p>${t("prep.preview_none")}</p>`
       }
+      ${unavailable ? html`<p class="error" role="alert" data-test="routing-unavailable">${t("routing.target_unavailable")}</p>` : nothing}
       <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
@@ -3581,7 +3167,7 @@ export class PrepStationsScreen extends LitElement {
           >${t("prep.cancel")}</wt-button
         ><wt-button
           data-test="confirm-routing"
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || unavailable}
           @click=${() => void this.#confirmRouting()}
           >${t("prep.confirm")}</wt-button
         ></wt-form-actions
@@ -3706,7 +3292,6 @@ export class PrepStationsScreen extends LitElement {
       view?.stations
         .filter((s) => s.active)
         .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)) ?? [];
-    const off = view?.routing.claims.filter((c) => c.stationOff) ?? [];
     const inactive = view?.stations.filter((station) => !station.active) ?? [];
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
@@ -3726,7 +3311,8 @@ export class PrepStationsScreen extends LitElement {
                   this.tab = tab;
                   this.#url.write({ dashboard: "prep-stations", view: tab });
                 };
-                if (this.tab === "settings" && this.settingsEditor)
+                if (this.pending) this.#leaveCell("navigation", proceed);
+                else if (this.tab === "settings" && this.settingsEditor)
                   this.#leaveSettings("navigation", this.#settingsIdentity, proceed);
                 else if (this.printerEditor)
                   this.#leavePrinters("navigation", this.#printerIdentity, () => {
@@ -3779,21 +3365,17 @@ export class PrepStationsScreen extends LitElement {
                 this.readOnly
                   ? nothing
                   : html`<div slot="routing">
-                        ${this.#tester()}${this.#exceptions()}
-                        <div class="cards">
-                          ${active.map((s) => this.#stationCard(s))}<wt-card
-                            data-test="no-preparation"
-                            ><h2>${t("prep.no_preparation")}</h2>
-                            ${this.#chips(null)}<wt-button
-                              variant="secondary"
-                              data-test="claim-no-preparation"
-                              @click=${() => {
-                                this.editor = { kind: "claim", stationId: null };
-                              }}
-                              >${t("prep.claim_folder")}</wt-button
-                            ></wt-card
-                          >${this.#unassigned()}
-                        </div>
+                        ${this.#tester()}
+                        <venue-routing-grid
+                          .model=${view.routing}
+                          .pending=${this.cellChoice}
+                          .refusal=${this.cellRefusal}
+                          @routing-cell-change=${(event: CustomEvent<RoutingCellChange>) =>
+                            void this.#chooseCell(event.detail)}
+                          @routing-make-default=${(event: CustomEvent<{ stationId: string }>) =>
+                            void this.#makeDefault(event.detail.stationId)}
+                        ></venue-routing-grid>
+                        <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
                         ${
                           inactive.length
                             ? html`<section>
@@ -3813,7 +3395,6 @@ export class PrepStationsScreen extends LitElement {
                               </section>`
                             : nothing
                         }
-                        ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}
                       </div>
                       <div slot="tickets">${this.#tickets()}</div>
                       <div slot="watchers">${this.#watchers()}</div>

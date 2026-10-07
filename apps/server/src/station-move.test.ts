@@ -24,11 +24,12 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import {
-  createException,
-  deleteException,
+  clearRoutingCell,
   listStationNotices,
   setStationToday,
   setStationFallback,
+  setRoutingCell,
+  type RouteTarget,
   writeEditSentLines,
   writePrintHeldWork,
 } from "@waitron/venue-service";
@@ -110,6 +111,13 @@ const splitJobs = (printerId: string) =>
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId)),
   );
+
+/** Routes a product in every zone and returns the cell's address, for clearing it afterwards. */
+async function routeProduct(tx: Transaction, productId: string, target: RouteTarget) {
+  const address = { row: { kind: "product" as const, productId }, zoneId: null };
+  await setRoutingCell(tx, venue.cfg, address, target);
+  return address;
+}
 
 async function jobs(printerId: string) {
   return inTx(venue, (tx) =>
@@ -440,16 +448,11 @@ describe("release", () => {
 
   it("prints FIRE for work kept at its station and From for work rerouted in the same group", async () => {
     const at = new Date("2026-10-02T18:45:00.000Z");
-    const routeId = await inTx(venue, async (tx) => {
+    const cell = await inTx(venue, async (tx) => {
       await setStationToday(tx, venue.cfg, bar, null, at);
       await setStationToday(tx, venue.cfg, grill, null, at);
       await writePrintHeldWork(tx, true);
-      return createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: venue.productId("Vino"),
-        target: { kind: "station", stationId: grill },
-      });
+      return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
     });
     const tableId = await venue.table(`F-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -514,7 +517,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await deleteException(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -717,13 +720,8 @@ describe("release", () => {
 
   it("keeps held work at an open station after the rules change", async () => {
     const group = await heldDish("Vino");
-    const routeId = await inTx(venue, (tx) =>
-      createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: venue.productId("Vino"),
-        target: { kind: "station", stationId: grill },
-      }),
+    const cell = await inTx(venue, (tx) =>
+      routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill }),
     );
     try {
       await fireHeldBurger(group);
@@ -732,7 +730,7 @@ describe("release", () => {
       );
       expect(item!.stationId).toBe(bar);
     } finally {
-      await inTx(venue, (tx) => deleteException(tx, venue.cfg, routeId));
+      await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, cell));
     }
   });
 
@@ -740,13 +738,8 @@ describe("release", () => {
     const group = await heldDish("Vino");
     const at = new Date("2026-10-02T18:45:00.000Z");
     await handleOpenReleaseAlerts(at);
-    const routeId = await inTx(venue, async (tx) => {
-      const id = await createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: venue.productId("Vino"),
-        target: { kind: "no_preparation" },
-      });
+    const cell = await inTx(venue, async (tx) => {
+      const id = await routeProduct(tx, venue.productId("Vino"), { kind: "no_preparation" });
       await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
       await tx
         .update(kitchenStations)
@@ -775,7 +768,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await deleteException(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -830,7 +823,7 @@ describe("release", () => {
   });
 
   it("leaves a made-here drink untouched beside a held dish that reroutes", async () => {
-    const { deviceId, routeId, watcherPrinter } = await inTx(venue, async (tx) => {
+    const { deviceId, cell, watcherPrinter } = await inTx(venue, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
@@ -846,11 +839,9 @@ describe("release", () => {
         .returning({ id: devices.id });
       await tx.insert(deviceMadeHereStations).values({ deviceId: device!.id, stationId: bar });
       await setStationToday(tx, venue.cfg, grill, null, new Date("2026-10-02T18:45:00.000Z"));
-      const routeId = await createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: venue.productId("Vino"),
-        target: { kind: "station", stationId: grill },
+      const cell = await routeProduct(tx, venue.productId("Vino"), {
+        kind: "station",
+        stationId: grill,
       });
       const watcher = await createWatcher(tx, venue.cfg, {
         name: `Every station ${randomUUID()}`,
@@ -871,7 +862,7 @@ describe("release", () => {
       );
       await setPrinterWatcher(tx, venue.cfg, printer.id, watcher.id);
       await writePrintHeldWork(tx, true);
-      return { deviceId: device!.id, routeId, watcherPrinter: printer.id };
+      return { deviceId: device!.id, cell, watcherPrinter: printer.id };
     });
     const tableId = await venue.table(`M-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -946,7 +937,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await deleteException(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await setStationFallback(tx, venue.cfg, grill, null);
       });
     }
@@ -1272,14 +1263,9 @@ describe("moveDishesToStation", () => {
       }
       return ids;
     });
-    const routeId = await inTx(venue, async (tx) => {
+    const cell = await inTx(venue, async (tx) => {
       await setStationToday(tx, venue.cfg, grill, null, new Date());
-      return createException(tx, venue.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: venue.productId("Vino"),
-        target: { kind: "station", stationId: grill },
-      });
+      return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
     });
     const tableId = await venue.table(`R-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -1339,7 +1325,7 @@ describe("moveDishesToStation", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await deleteException(tx, venue.cfg, routeId);
+        await clearRoutingCell(tx, venue.cfg, cell);
         await setStationFallback(tx, venue.cfg, bar, null);
         await tx
           .update(kitchenStations)

@@ -5,8 +5,8 @@ import { locations } from "./tenants.js";
 
 /**
  * A kitchen station: the routing target a fired line resolves to. The `is_default` station is the
- * fallback when no exception or claimed folder decides a line's station; `kitchen_stations_default_key` allows at
- * most one per venue.
+ * fallback when no routing cell decides a line's station; `kitchen_stations_default_key` allows at most
+ * one per venue.
  */
 export const kitchenStations = table(
   "kitchen_stations",

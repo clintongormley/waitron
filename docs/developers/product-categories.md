@@ -42,16 +42,17 @@ box and saves it; from the keyboard a category's colour is set from its row's sq
 
 A red asterisk beside a category means the route the Made at column shows for it reaches no
 active station, so it reads No replacement or Nowhere. That route is the category's baseline:
-Made at leaves out exceptions limited to one service zone or one product, so some of a marked
-category's dishes can still be made in a zone, or for a product, that such an exception covers. A
-rule naming a disabled station ends in No replacement unless that station's chain of fallbacks
-reaches a station that is active; the default station does not stand in for it. A category no
-rule covers is made at the default station while that station is active, and reads Nowhere
-when it is disabled or none is set. A route to No preparation carries no asterisk. The
-asterisk's tooltip explains the warning. To clear it, set a claim, or an exception that covers the
-category in every service zone, on Prep Stations; or enable the station its rule names or one in
-that station's chain of fallbacks; or, for a category no rule covers, enable the default station,
-or use Make default on Prep Stations when none is set.
+Made at reads only the routing grid's Every zone column, on the category's own row or the nearest
+parent's, so a cell in one service zone's column, or on a product's row, can still send some of a
+marked category's dishes somewhere else. A cell naming a disabled station ends in No replacement
+unless that station's chain of fallbacks reaches a station that is active; the default station
+does not stand in for it. A category with no Every zone cell on its own row or a parent's is made
+at the default station while that station is active, and reads Nowhere when it is disabled or
+none is set. A route to No preparation carries no asterisk. The asterisk's tooltip explains the
+warning. To clear it, set the Every zone cell of the category or one of its parents on Prep
+stations' Routing tab; or enable the station that cell names or one in that station's chain of
+fallbacks; or, for a category no cell covers, enable the default station, or use Make default on
+Prep stations when none is set.
 
 A variant is always in its product's reporting category. Its effective category
 (`effectiveProductColumns.categoryId`, `packages/catalogue/src/variant-fallback.ts`), which
@@ -66,9 +67,12 @@ Reports can use the classification recorded with each sale, or today's catalogue
 Moving a product or renaming a category does not rewrite recorded sale lines. See
 [the two report modes](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md#5-the-two-report-modes).
 
-The prep-station rules walk a product's category ancestors, using the nearest claimed category after
-ordered exceptions. See
-[the approved design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
+The routing grid walks a product's category ancestors. After the product's own row, the first
+category row up the chain with a cell for the order's service zone, or for Every zone, decides, and
+All categories comes last (`selectRoutingCell`, `packages/venue-service/src/routing.ts`). See
+[the routing grid plan](../superpowers/plans/2026-10-05-routing-grid.md), which replaced the
+claims and ordered exceptions of
+[the earlier design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
 
 ## Categories are not sections
 
@@ -367,12 +371,13 @@ sit under different parents.
   subcategories, which moves with them. Its subcategories that are not selected keep
   their routing rules.
 - "Also: deletes 1 category and 2 kitchen routing rules and disables 3 products. They move to
-  Drinks." removes the subtree and disables its products. The rules it lists are the category
-  claims and exceptions naming a subcategory that is not itself selected. Every product in the subtree,
+  Drinks." removes the subtree and disables its products. A routing rule here is a cell on a
+  category's row in the routing grid, and the rules it lists are the cells on the rows of
+  subcategories that are not themselves selected. Every product in the subtree,
   disabled ones included, is moved to the parent of the outermost selected category that holds it.
 
-When there are any, a paragraph below the question counts the routing rules naming a selected
-category itself, which go whichever answer is chosen.
+When there are any, a paragraph below the question counts the routing rules on a selected
+category's own row, which go whichever answer is chosen.
 
 A category is deleted without confirmation only when it holds no products (disabled ones
 included), no subcategories and no routing rules. When no selected category holds active products
@@ -383,7 +388,7 @@ If the summary cannot be read, deletion waits for a successful new attempt rathe
 to approve unknown contents. The dialog lists each category being deleted by its full path, adding
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
-naming the category itself) have changed, it deletes nothing, shows the new counts and asks you to
+on the category's own row) have changed, it deletes nothing, shows the new counts and asks you to
 confirm again. A change in disabled products alone never stops that check, whether or not the dialog
 asked about contents: the dialog neither counts those products nor asks about them. The delete
 request carries the counts
@@ -402,8 +407,8 @@ shows no counts of contents, asks nothing about contents, and its **Delete** mov
 products up.
 A refused action
 keeps its dialog open with a message at the bottom.
-Deleting a category removes its station claim and every exception naming it, because both tables
-have a cascading foreign key to `categories`. The dialog counts the routing rules each answer
+Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
+cascades. The dialog counts the routing rules each answer
 removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
 Prep Stations' tester after changing the category tree. A variant is routed by its product's
 category, and a variant still storing a deleted category has it cleared.
@@ -429,7 +434,7 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `PATCH /management-api/categories/:id` | supplied name, parent or colour fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
-| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the rules naming the category or any category below it, `ownRoutes` those naming the category itself |
+| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. `shown` is the counts the client read before deleting: one `{ id, folders, products, activeProducts, routes, ownRoutes }` per selected category,
@@ -458,7 +463,7 @@ is `category.parent_cycle` (409). A category name that would match a sibling's i
 repeated IDs are `management.request_invalid` (400), and a malformed UUID is `shared.invalid_id`
 (400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`.
 Category-summary counts cover each complete subtree, except `ownRoutes`, which counts only the
-routing rules naming the category itself. The browser counts the outermost selected categories when
+routing cells on the category's own row. The browser counts the outermost selected categories when
 ancestors and descendants are selected together, except that the routing-rule paragraph sums
 `ownRoutes` over every selected category. The rules the "Also: …" answer lists are the outermost
 categories' `routes` less that sum.

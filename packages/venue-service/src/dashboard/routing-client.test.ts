@@ -19,9 +19,11 @@ it("writes station fallback and today to venue service, and reads output failure
 it("loads the routing and station context, including each station printer assignment", async () => {
   const responses: Record<string, unknown> = {
     "/management-api/venue-service/routing": {
-      claims: [],
-      exceptions: [],
-      unassigned: { folders: [], products: [] },
+      zones: [],
+      categories: [],
+      products: [],
+      cells: [],
+      canMakeDefault: true,
       defaultStationId: null,
       stations: [],
     },
@@ -58,11 +60,13 @@ it("reads disabled watchers too, keeping them out of the watchers every other pa
       ? [old, pass]
       : path === "/management-api/venue-service/routing"
         ? {
-            claims: [],
-            exceptions: [],
-            unassigned: { folders: [], products: [] },
+            zones: [],
+            categories: [],
+            products: [],
+            cells: [],
             defaultStationId: null,
             stations: [],
+            canMakeDefault: true,
           }
         : [],
   );
@@ -100,7 +104,7 @@ it("creates, updates and removes watchers through management routes", async () =
   ]);
 });
 
-it("keeps top-level names for exceptions and offers active variants only to the tester", async () => {
+it("keeps top-level product names, and offers active variants only to the tester", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/products"
       ? [
@@ -117,11 +121,13 @@ it("keeps top-level names for exceptions and offers active variants only to the 
         ]
       : path === "/management-api/venue-service/routing"
         ? {
-            claims: [],
-            exceptions: [],
-            unassigned: { folders: [], products: [] },
+            zones: [],
+            categories: [],
+            products: [],
+            cells: [],
             defaultStationId: null,
             stations: [],
+            canMakeDefault: true,
           }
         : [],
   );
@@ -142,11 +148,13 @@ it("offers an active product to the tester when it has no variants", async () =>
       ? [{ id: "bread", name: "Bread", active: true }]
       : path === "/management-api/venue-service/routing"
         ? {
-            claims: [],
-            exceptions: [],
-            unassigned: { folders: [], products: [] },
+            zones: [],
+            categories: [],
+            products: [],
+            cells: [],
             defaultStationId: null,
             stations: [],
+            canMakeDefault: true,
           }
         : [],
   );
@@ -209,9 +217,11 @@ it("uses passive reads for the background routing refresh", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/venue-service/routing"
       ? {
-          claims: [],
-          exceptions: [],
-          unassigned: { folders: [], products: [] },
+          zones: [],
+          categories: [],
+          products: [],
+          cells: [],
+          canMakeDefault: true,
           defaultStationId: null,
           stations: [],
         }
@@ -229,7 +239,36 @@ it("uses passive reads for the background routing refresh", async () => {
   ).toBe(true);
 });
 
-it("writes station changes to core and claims to venue-service", async () => {
+it("loadRouting reads …/routing passively from the background client", async () => {
+  const routing = {
+    stationTimes: [],
+    todayEnds: null,
+    clockReadable: true,
+    zones: [{ id: "terrace", name: "Terrace" }],
+    categories: [{ id: "drinks", name: "Drinks", parentId: null }],
+    products: [{ id: "lager", name: "Lager", categoryId: "drinks" }],
+    cells: [
+      {
+        row: { kind: "category", categoryId: "drinks" },
+        zoneId: null,
+        target: { kind: "no_preparation" },
+      },
+    ],
+    defaultStationId: "bar",
+    stations: [{ id: "bar", name: "Bar", active: true }],
+    canMakeDefault: false,
+  };
+  const request = vi.fn(async (path: string) =>
+    path === "/management-api/venue-service/routing" ? routing : [],
+  );
+  const view = await new PrepStationsApi(request as DashboardRequest).background.load();
+  expect(view.routing).toEqual(routing);
+  expect(request).toHaveBeenCalledWith("/management-api/venue-service/routing", "GET", undefined, {
+    passive: true,
+  });
+});
+
+it("writes station changes to core and cells to venue-service", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/stations" ? { id: "new-bar" } : undefined,
   );
@@ -250,14 +289,17 @@ it("writes station changes to core and claims to venue-service", async () => {
   });
   await api.setDefaultStation("bar");
   await api.deactivateStation("bar");
-  await api.setClaim("drinks", { kind: "no_preparation" });
-  await api.removeClaim("drinks");
-  await api.createException({
-    zoneId: null,
-    categoryId: null,
-    productId: "bread",
-    target: { kind: "station", stationId: "bar" },
-  });
+  await api.setCell(
+    { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
+    {
+      kind: "no_preparation",
+    },
+  );
+  await api.setCell({ row: { kind: "category", categoryId: "drinks" }, zoneId: null }, null);
+  await api.setCell(
+    { row: { kind: "product", productId: "bread" }, zoneId: null },
+    { kind: "station", stationId: "bar" },
+  );
   expect(request.mock.calls).toEqual([
     [
       "/management-api/stations",
@@ -283,26 +325,45 @@ it("writes station changes to core and claims to venue-service", async () => {
     ],
     ["/management-api/stations/bar/default", "POST"],
     ["/management-api/stations/bar", "DELETE"],
-    ["/management-api/venue-service/routing/claims/drinks", "PUT", { noPreparation: true }],
-    ["/management-api/venue-service/routing/claims/drinks", "DELETE"],
     [
-      "/management-api/venue-service/routing/exceptions",
-      "POST",
-      { zoneId: null, categoryId: null, productId: "bread", stationId: "bar" },
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      {
+        address: { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
+        target: { kind: "no_preparation" },
+      },
+    ],
+    [
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      { address: { row: { kind: "category", categoryId: "drinks" }, zoneId: null }, target: null },
+    ],
+    [
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      {
+        address: { row: { kind: "product", productId: "bread" }, zoneId: null },
+        target: { kind: "station", stationId: "bar" },
+      },
     ],
   ]);
 });
-it("assigns an unfiled product through the prioritized assignment route", async () => {
+it("setCell sends PUT …/routing/cell with address and target (or null)", async () => {
   const request = vi.fn(async () => undefined);
-  const api = new PrepStationsApi(request as DashboardRequest);
-  await api.assignProduct("bread", { kind: "station", stationId: "bar" });
-  expect(request).toHaveBeenCalledWith(
-    "/management-api/venue-service/routing/products/bread/assignment",
-    "PUT",
-    { stationId: "bar" },
-  );
+  const api = new PrepStationsApi(request as DashboardRequest).background;
+  const address = { row: { kind: "product", productId: "bread" }, zoneId: "terrace" } as const;
+  await api.setCell(address, { kind: "station", stationId: "bar" });
+  await api.setCell(address, null);
+  expect(request.mock.calls).toEqual([
+    [
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      { address, target: { kind: "station", stationId: "bar" } },
+    ],
+    ["/management-api/venue-service/routing/cell", "PUT", { address, target: null }],
+  ]);
 });
-it("sends the assignment preview as a no-write request", async () => {
+it("preview sends POST with kind cell", async () => {
   const move = {
     productId: "bread",
     productName: "Bread",
@@ -312,21 +373,17 @@ it("sends the assignment preview as a no-write request", async () => {
     to: { kind: "station", stationId: "bar" },
   };
   const request = vi.fn(async () => [move]);
-  const api = new PrepStationsApi(request as DashboardRequest);
-  await expect(
-    api.preview({
-      kind: "assignment",
-      productId: "bread",
-      target: { kind: "station", stationId: "bar" },
-    }),
-  ).resolves.toEqual([move]);
-  expect(request).toHaveBeenCalledWith("/management-api/venue-service/routing/preview", "POST", {
-    kind: "assignment",
-    productId: "bread",
+  const api = new PrepStationsApi(request as DashboardRequest).background;
+  const change = {
+    kind: "cell",
+    address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
     target: { kind: "station", stationId: "bar" },
-  });
+  } as const;
+  await expect(api.preview(change)).resolves.toEqual([move]);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/venue-service/routing/preview", "POST", change],
+  ]);
 });
-
 it("creates station and its timing thresholds with one POST", async () => {
   const request = vi.fn(async () => ({ id: "new-bar" }));
   const api = new PrepStationsApi(request as DashboardRequest);
@@ -353,84 +410,66 @@ it("creates station and its timing thresholds with one POST", async () => {
     ],
   ]);
 });
-it("updates, deletes and reorders exceptions using the routing endpoints", async () => {
+it("clears a zone cell through the cell endpoint", async () => {
   const request = vi.fn(async () => undefined);
   const api = new PrepStationsApi(request as DashboardRequest);
-  await api.updateException("e1", {
-    zoneId: "terrace",
-    categoryId: null,
-    productId: "lager",
-    target: { kind: "no_preparation" },
-  });
-  await api.deleteException("e1");
-  await api.reorderExceptions(["e2", "e1"]);
+  await api.setCell({ row: { kind: "all" }, zoneId: "terrace" }, null);
   expect(request.mock.calls).toEqual([
     [
-      "/management-api/venue-service/routing/exceptions/e1",
+      "/management-api/venue-service/routing/cell",
       "PUT",
-      { zoneId: "terrace", categoryId: null, productId: "lager", noPreparation: true },
+      { address: { row: { kind: "all" }, zoneId: "terrace" }, target: null },
     ],
-    ["/management-api/venue-service/routing/exceptions/e1", "DELETE"],
-    ["/management-api/venue-service/routing/exception-order", "PUT", { ids: ["e2", "e1"] }],
   ]);
 });
-
-it("writes a no-preparation exception and product assignment without a station id", async () => {
+it("writes a no-preparation cell without a station id", async () => {
   const request = vi.fn(async () => undefined);
   const api = new PrepStationsApi(request as DashboardRequest);
-  await api.createException({
-    zoneId: "terrace",
-    categoryId: null,
-    productId: "bread",
-    target: { kind: "no_preparation" },
-  });
-  await api.assignProduct("bread", { kind: "no_preparation" });
+  await api.setCell(
+    { row: { kind: "product", productId: "bread" }, zoneId: "terrace" },
+    { kind: "no_preparation" },
+  );
   expect(request.mock.calls).toEqual([
     [
-      "/management-api/venue-service/routing/exceptions",
-      "POST",
-      {
-        zoneId: "terrace",
-        categoryId: null,
-        productId: "bread",
-        noPreparation: true,
-      },
-    ],
-    [
-      "/management-api/venue-service/routing/products/bread/assignment",
+      "/management-api/venue-service/routing/cell",
       "PUT",
       {
-        noPreparation: true,
+        address: { row: { kind: "product", productId: "bread" }, zoneId: "terrace" },
+        target: { kind: "no_preparation" },
       },
     ],
   ]);
 });
-
-it("writes station targets for a claim and an edited exception", async () => {
+it("writes station targets for a category cell and a category zone cell", async () => {
   const request = vi.fn(async () => undefined);
   const api = new PrepStationsApi(request as DashboardRequest);
-  await api.setClaim("drinks", { kind: "station", stationId: "bar" });
-  await api.updateException("rule-1", {
-    zoneId: null,
-    categoryId: "drinks",
-    productId: null,
-    target: { kind: "station", stationId: "bar" },
-  });
+  await api.setCell(
+    { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
+    { kind: "station", stationId: "bar" },
+  );
+  await api.setCell(
+    { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
+    { kind: "station", stationId: "bar" },
+  );
   expect(request.mock.calls).toEqual([
-    ["/management-api/venue-service/routing/claims/drinks", "PUT", { stationId: "bar" }],
     [
-      "/management-api/venue-service/routing/exceptions/rule-1",
+      "/management-api/venue-service/routing/cell",
       "PUT",
       {
-        zoneId: null,
-        categoryId: "drinks",
-        productId: null,
-        stationId: "bar",
+        address: { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
+        target: { kind: "station", stationId: "bar" },
+      },
+    ],
+    [
+      "/management-api/venue-service/routing/cell",
+      "PUT",
+      {
+        address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
+        target: { kind: "station", stationId: "bar" },
       },
     ],
   ]);
 });
-
 it("switches a station on through the core station PATCH", async () => {
   const request = vi.fn(async () => undefined);
   await new PrepStationsApi(request as DashboardRequest).activateStation("bar");
@@ -539,9 +578,11 @@ it("loads the supervisor overview without requesting management-only context, in
     stationTimes: [],
     todayEnds: { timeOfDay: "06:00", tomorrow: true },
     clockReadable: true,
-    claims: [],
-    exceptions: [],
-    unassigned: { folders: [], products: [] },
+    zones: [],
+    categories: [],
+    products: [],
+    cells: [],
+    canMakeDefault: false,
   });
   for (const key of [
     "categories",

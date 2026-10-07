@@ -26,8 +26,7 @@ import { mountCatalogueApi } from "./catalogue-api.js";
 import { createCourse } from "./kitchen.js";
 import {
   VENUE_SERVICE_MIGRATIONS,
-  createException,
-  setClaim,
+  setRoutingCell,
   createDepartment,
   configureZone,
 } from "@waitron/venue-service";
@@ -1370,7 +1369,12 @@ describe("mountCatalogueApi — products", () => {
           { locationId: cfg.locationId, name: "Cocktail bar" },
         ])
         .returning();
-      await setClaim(tx, cfg, drinks, { kind: "station", stationId: bar!.id });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: drinks }, zoneId: null },
+        { kind: "station", stationId: bar!.id },
+      );
       const [terrace] = await tx
         .insert(floorZones)
         .values({ locationId: cfg.locationId, name: "Terrace" })
@@ -1380,12 +1384,12 @@ describe("mountCatalogueApi — products", () => {
         defaultServiceMode: "table_tab",
       });
       await configureZone(tx, cfg, { zoneId: terrace!.id, departmentId: department.id });
-      await createException(tx, cfg, {
-        zoneId: terrace!.id,
-        categoryId: cocktails,
-        productId: null,
-        target: { kind: "station", stationId: cocktailBar!.id },
-      });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: cocktails }, zoneId: terrace!.id },
+        { kind: "station", stationId: cocktailBar!.id },
+      );
     });
     const response = await send(app, "GET", "/management-api/products/made-at");
     expect(response.status).toBe(200);
@@ -1404,7 +1408,12 @@ describe("mountCatalogueApi — products", () => {
             eq(kitchenStations.name, "Cocktail bar"),
           ),
         );
-      await setClaim(tx, cfg, drinks, { kind: "station", stationId: cocktailBar!.id });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: drinks }, zoneId: null },
+        { kind: "station", stationId: cocktailBar!.id },
+      );
       await tx
         .update(kitchenStations)
         .set({ active: false })

@@ -6,6 +6,7 @@ import {
   validateHolidayConfiguration,
   validateHoursConfiguration,
   validateMenuTimetables,
+  validateRoutingConfiguration,
 } from "./configuration-transfer.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -1234,4 +1235,186 @@ describe("department transfer settings in a configuration bundle", () => {
       );
     },
   );
+});
+
+describe("validateRoutingConfiguration", () => {
+  const TERRACE = "z-terrace";
+  const INSIDE = "z-inside"; // in the deli, which is switched off
+  const CLOSED_ZONE = "z-closed";
+  const BARE_ZONE = "z-bare"; // no service configuration
+  const DRINKS = "c-drinks";
+  const MOJITO = "p-mojito";
+  const LARGE = "p-mojito-large"; // a variant of the mojito
+  const OFF = "k-off"; // a disabled station
+
+  type CellSpec = {
+    category?: string | null;
+    product?: string | null;
+    zone?: string | null;
+    station?: string | null;
+    noPrep?: unknown;
+    noCategory?: unknown;
+  };
+  const cell = (spec: CellSpec) => {
+    const { category = null, product = null, zone = null, station = null, noCategory = 0 } = spec;
+    return {
+      id: randomUUID(),
+      location_id: "location",
+      category_id: category,
+      product_id: product,
+      zone_id: zone,
+      station_id: station,
+      no_preparation: "noPrep" in spec ? spec.noPrep : station === null ? 1 : 0,
+      no_category: noCategory,
+    };
+  };
+
+  /** One cell of each of the seven classes, an explicit No preparation and a disabled station. */
+  function routingTables(): Tables {
+    return {
+      departments: [
+        { id: RESTAURANT, active: 1 },
+        { id: DELI, active: 0 },
+      ],
+      floor_zones: [
+        { id: TERRACE, active: 1 },
+        { id: INSIDE, active: 1 },
+        { id: CLOSED_ZONE, active: 0 },
+        { id: BARE_ZONE, active: 1 },
+      ],
+      zone_service_policies: [
+        { zone_id: TERRACE, department_id: RESTAURANT },
+        { zone_id: INSIDE, department_id: DELI },
+        { zone_id: CLOSED_ZONE, department_id: RESTAURANT },
+      ],
+      kitchen_stations: [
+        { id: KITCHEN, is_default: 1, active: 1 },
+        { id: BAR, is_default: 0, active: 1 },
+        { id: OFF, is_default: 0, active: 0 },
+      ],
+      categories: [{ id: DRINKS }],
+      products: [
+        { id: MOJITO, parent_id: null },
+        { id: LARGE, parent_id: MOJITO },
+      ],
+      routing_cells: [
+        cell({ category: DRINKS, station: BAR }),
+        cell({ category: DRINKS, zone: TERRACE }),
+        cell({ product: MOJITO, station: OFF }),
+        cell({ product: MOJITO, zone: TERRACE, station: KITCHEN }),
+        cell({ zone: TERRACE, station: BAR }),
+        cell({ zone: INSIDE, station: KITCHEN }),
+        cell({ noCategory: 1 }),
+        cell({ noCategory: 1, zone: TERRACE, station: BAR }),
+      ],
+    };
+  }
+
+  function refusedFor(spec: CellSpec, field: string) {
+    const tables = routingTables();
+    tables.routing_cells!.push(cell(spec));
+    expect(() => validateRoutingConfiguration(tables)).toThrowError(refusal(field));
+  }
+
+  it("accepts all seven classes, explicit No preparation and a retained disabled-station target", () => {
+    expect(() => validateRoutingConfiguration(routingTables())).not.toThrow();
+    expect(() => validateRoutingConfiguration({})).not.toThrow();
+  });
+
+  it("accepts a cell for a zone whose department is switched off", () => {
+    const tables = routingTables();
+    expect(tables.routing_cells!.some((row) => row.zone_id === INSIDE)).toBe(true);
+    expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+  });
+
+  it("refuses a row naming both a category and a product", () => {
+    refusedFor(
+      { category: DRINKS, product: MOJITO, zone: INSIDE, station: BAR },
+      "routing_cells.category_id",
+    );
+  });
+
+  it("refuses the implicit All categories × Every zone cell", () => {
+    refusedFor({ station: BAR }, "routing_cells.zone_id");
+    refusedFor({}, "routing_cells.zone_id");
+  });
+
+  it("refuses a row with no target, both targets, or a No preparation value that is not 0 or 1", () => {
+    refusedFor({ category: DRINKS, zone: INSIDE, noPrep: 0 }, "routing_cells.station_id");
+    refusedFor(
+      { category: DRINKS, zone: INSIDE, station: BAR, noPrep: 1 },
+      "routing_cells.station_id",
+    );
+    refusedFor({ category: DRINKS, zone: INSIDE, noPrep: true }, "routing_cells.no_preparation");
+    refusedFor({ category: DRINKS, zone: INSIDE, noPrep: null }, "routing_cells.no_preparation");
+  });
+
+  it("refuses a second cell at a coordinate of each of the five classes", () => {
+    refusedFor({ category: DRINKS, station: KITCHEN }, "routing_cells.category_id");
+    refusedFor({ category: DRINKS, zone: TERRACE, station: BAR }, "routing_cells.category_id");
+    refusedFor({ product: MOJITO }, "routing_cells.product_id");
+    refusedFor({ product: MOJITO, zone: TERRACE }, "routing_cells.product_id");
+    refusedFor({ zone: TERRACE }, "routing_cells.zone_id");
+  });
+
+  it("refuses a No category flag that is not 0 or 1, including a row without one", () => {
+    refusedFor({ noCategory: 2, zone: INSIDE, station: BAR }, "routing_cells.no_category");
+    refusedFor({ noCategory: true, zone: INSIDE, station: BAR }, "routing_cells.no_category");
+    refusedFor({ noCategory: null, zone: INSIDE, station: BAR }, "routing_cells.no_category");
+    const tables = routingTables();
+    const withoutFlag: Record<string, unknown> = cell({ category: DRINKS, zone: INSIDE });
+    delete withoutFlag.no_category;
+    tables.routing_cells!.push(withoutFlag);
+    expect(() => validateRoutingConfiguration(tables)).toThrowError(
+      refusal("routing_cells.no_category"),
+    );
+  });
+
+  it("refuses a No category row that also names a category or a product", () => {
+    refusedFor({ noCategory: 1, category: DRINKS, zone: INSIDE }, "routing_cells.no_category");
+    refusedFor({ noCategory: 1, product: MOJITO, zone: INSIDE }, "routing_cells.no_category");
+  });
+
+  it("refuses a second No category cell at Every zone or at a zone", () => {
+    refusedFor({ noCategory: 1, station: KITCHEN }, "routing_cells.no_category");
+    refusedFor({ noCategory: 1, zone: TERRACE }, "routing_cells.no_category");
+  });
+
+  it("checks a No category cell's zone and station like any row's", () => {
+    refusedFor({ noCategory: 1, zone: CLOSED_ZONE, station: BAR }, "routing_cells.zone_id");
+    refusedFor({ noCategory: 1, zone: "z-missing", station: BAR }, "routing_cells.zone_id");
+    refusedFor({ noCategory: 1, zone: INSIDE, station: "k-missing" }, "routing_cells.station_id");
+    refusedFor({ noCategory: 1, zone: INSIDE, noPrep: 0 }, "routing_cells.station_id");
+  });
+
+  it("refuses a product the bundle does not hold, and a variant", () => {
+    refusedFor({ product: "p-missing", station: BAR }, "routing_cells.product_id");
+    refusedFor({ product: LARGE, station: BAR }, "routing_cells.product_id");
+    refusedFor({ product: LARGE, zone: INSIDE, station: BAR }, "routing_cells.product_id");
+  });
+
+  it("refuses a category the bundle does not hold", () => {
+    refusedFor({ category: "c-missing", station: BAR }, "routing_cells.category_id");
+  });
+
+  it("refuses a zone the bundle does not hold, a switched-off zone, and a zone with no service configuration", () => {
+    refusedFor({ category: DRINKS, zone: "z-missing", station: BAR }, "routing_cells.zone_id");
+    refusedFor({ category: DRINKS, zone: CLOSED_ZONE, station: BAR }, "routing_cells.zone_id");
+    refusedFor({ category: DRINKS, zone: BARE_ZONE, station: BAR }, "routing_cells.zone_id");
+  });
+
+  it("refuses a station the bundle does not hold", () => {
+    refusedFor(
+      { category: DRINKS, zone: INSIDE, station: "k-missing" },
+      "routing_cells.station_id",
+    );
+  });
+
+  it("is run by the venue-service transfer's validate callback", () => {
+    const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+    const tables = routingTables();
+    expect(() => validate(tables)).not.toThrow();
+    tables.routing_cells!.push(cell({ product: LARGE, station: BAR }));
+    expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));
+  });
 });

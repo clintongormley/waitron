@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -6,16 +6,26 @@ import {
   createCategory,
   createProduct,
   createUnit,
+  deleteCatalogueItems,
   deleteCategory,
   readCategory,
+  updateProduct,
 } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  kitchenStations,
+  locations,
+  products,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createException, setClaim } from "./routing-store.js";
+import { resolveMakers, setRoutingCell } from "./routing-store.js";
+import { routingCells } from "./schema/routing.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -30,33 +40,74 @@ async function venue() {
   return { locationId: location!.id as LocationId };
 }
 
-it("deleting a category removes its claim and exception with the category", async () => {
+it("deleting a category removes its own and its subtree's category cells and keeps product cells", async () => {
   const { locationId } = await venue();
+  const cfg = { locationId };
   await withTransaction(suite.db, async (tx) => {
-    const category = await createCategory(tx, { name: "Drinks" });
-    await setClaim(tx, { locationId }, category.id, { kind: "no_preparation" });
-    await createException(
+    const [kitchen, bar] = (
+      await tx
+        .insert(kitchenStations)
+        .values([
+          { locationId, name: "Kitchen" },
+          { locationId, name: "Bar" },
+        ])
+        .returning({ id: kitchenStations.id })
+    ).map((row) => row.id);
+    const catalogue = await createCatalogue(tx, { name: "Menu" });
+    const food = await createCategory(tx, { name: "Food" });
+    const drinks = await createCategory(tx, { name: "Drinks", parentId: food.id });
+    const cocktails = await createCategory(tx, { name: "Cocktails", parentId: drinks.id });
+    const negroni = await createProduct(tx, {
+      catalogueId: catalogue.id,
+      categoryId: cocktails.id,
+      name: "Negroni",
+      pricingUnit: "each",
+      unitPrice: "9.00",
+      vatClass: "general",
+    });
+    const category = (categoryId: string) => ({
+      row: { kind: "category" as const, categoryId },
+      zoneId: null,
+    });
+    await setRoutingCell(tx, cfg, category(food.id), { kind: "station", stationId: kitchen! });
+    await setRoutingCell(tx, cfg, category(drinks.id), { kind: "no_preparation" });
+    await setRoutingCell(tx, cfg, category(cocktails.id), { kind: "no_preparation" });
+    await setRoutingCell(
       tx,
-      { locationId },
-      {
-        zoneId: null,
-        categoryId: category.id,
-        productId: null,
-        target: { kind: "no_preparation" },
-      },
+      cfg,
+      { row: { kind: "product", productId: negroni.id }, zoneId: null },
+      { kind: "station", stationId: bar! },
     );
-    await expect(deleteCategory(tx, category.id)).resolves.toBeUndefined();
-    const claims = await tx.execute(
-      sql`select 1 from station_claims where category_id = ${category.id}`,
+
+    await expect(
+      deleteCatalogueItems(tx, { productIds: [], categoryIds: [drinks.id] }, "delete"),
+    ).resolves.toBeUndefined();
+
+    const cells = await tx
+      .select({ categoryId: routingCells.categoryId, productId: routingCells.productId })
+      .from(routingCells);
+    expect(cells).toEqual(
+      expect.arrayContaining([
+        { categoryId: food.id, productId: null },
+        { categoryId: null, productId: negroni.id },
+      ]),
     );
-    const exceptions = await tx.execute(
-      sql`select 1 from route_exceptions where category_id = ${category.id}`,
-    );
-    expect(claims.rows).toHaveLength(0);
-    expect(exceptions.rows).toHaveLength(0);
-    await expect(readCategory(tx, category.id)).rejects.toMatchObject({
+    expect(cells).toHaveLength(2);
+    await expect(readCategory(tx, drinks.id)).rejects.toMatchObject({
       code: "category.not_found",
     });
+    const [vacated] = await tx
+      .select({ categoryId: products.categoryId, active: products.active })
+      .from(products)
+      .where(eq(products.id, negroni.id));
+    expect(vacated).toEqual({ categoryId: food.id, active: false });
+
+    await updateProduct(tx, negroni.id, { active: true });
+    await expect(
+      resolveMakers(tx, cfg, null, [negroni.id], new Date("2026-10-02T18:30:00Z")),
+    ).resolves.toEqual(
+      new Map([[negroni.id, { kind: "made", route: { kind: "station", stationId: bar } }]]),
+    );
   });
 });
 

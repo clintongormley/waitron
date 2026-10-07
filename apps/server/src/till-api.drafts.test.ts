@@ -10,7 +10,7 @@ import {
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
-import { createException, routeExceptions, setStationToday } from "@waitron/venue-service";
+import { clearRoutingCell, setRoutingCell, setStationToday } from "@waitron/venue-service";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -312,12 +312,12 @@ describe("POST /api/dead-ends/draft", () => {
       tx.select({ id: products.id }).from(products).where(eq(products.name, "Caña")),
     );
     await inTx(venue, async (tx) => {
-      await createException(tx, venue.cfg, {
-        productId: beer!.id,
-        zoneId: null,
-        categoryId: null,
-        target: { kind: "station", stationId: bar!.id },
-      });
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "product", productId: beer!.id }, zoneId: null },
+        { kind: "station", stationId: bar!.id },
+      );
       await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
     });
     const response = await ana("POST", "/api/dead-ends/draft", {
@@ -341,7 +341,10 @@ describe("POST /api/dead-ends/draft", () => {
       stations: expect.arrayContaining([{ id: bar!.id, name: bar!.name, open: false }]),
     });
     await inTx(venue, async (tx) => {
-      await tx.delete(routeExceptions).where(eq(routeExceptions.productId, beer!.id));
+      await clearRoutingCell(tx, venue.cfg, {
+        row: { kind: "product", productId: beer!.id },
+        zoneId: null,
+      });
       await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
     });
   });
@@ -363,12 +366,12 @@ describe("a draft's chosen station at submission", () => {
       tx.select({ id: products.id }).from(products).where(eq(products.name, "Caña")),
     );
     await inTx(venue, async (tx) => {
-      await createException(tx, venue.cfg, {
-        productId: beer!.id,
-        zoneId: null,
-        categoryId: null,
-        target: { kind: "station", stationId: bar!.id },
-      });
+      await setRoutingCell(
+        tx,
+        venue.cfg,
+        { row: { kind: "product", productId: beer!.id }, zoneId: null },
+        { kind: "station", stationId: bar!.id },
+      );
       await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
     });
     const chosen = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
@@ -400,7 +403,10 @@ describe("a draft's chosen station at submission", () => {
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({ code: "station.no_replacement" });
     await inTx(venue, async (tx) => {
-      await tx.delete(routeExceptions).where(eq(routeExceptions.productId, beer!.id));
+      await clearRoutingCell(tx, venue.cfg, {
+        row: { kind: "product", productId: beer!.id },
+        zoneId: null,
+      });
       await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
     });
   });

@@ -4038,17 +4038,17 @@ describe("a category's Made at", () => {
   const detailOf = (root: ShadowRoot, key: string) =>
     madeAtCell(root, key).querySelector('[part~="maker-detail"]')?.textContent?.trim();
 
-  it("names the station a claim on the category sends it to, set on that category, linked to the routing screen", async () => {
+  it("names the station the category's cell sends it to, set on that category, linked to the Routing tab", async () => {
     const { root } = await mountMadeAt([
       ["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }],
     ]);
     const link = madeAtCell(root, "folder:d").querySelector("a")!;
     expect(link.textContent!.trim()).toBe("Bar");
-    expect(link.getAttribute("href")).toBe("/manage/prep-stations");
+    expect(link.getAttribute("href")).toBe("/manage/prep-stations/view/routing");
     expect(detailOf(root, "folder:d")).toBe("set on this category");
   });
 
-  it("names the category an inherited claim comes from", async () => {
+  it("names the category an inherited cell comes from", async () => {
     const { root } = await mountMadeAt([
       ["b", { maker: bar, source: { kind: "inherited", name: "Drinks" }, someElsewhere: false }],
     ]);
@@ -4078,11 +4078,13 @@ describe("a category's Made at", () => {
     expect(detailOf(root, "folder:f")).toBe("default station");
   });
 
-  it("marks a route an exception decides", async () => {
+  it("marks a route a cell decides by where the cell is, never as an exception", async () => {
     const { root } = await mountMadeAt([
-      ["f", { maker: bar, source: { kind: "exception" }, someElsewhere: false }],
+      ["d", { maker: bar, source: { kind: "own" }, someElsewhere: false }],
+      ["f", { maker: bar, source: { kind: "inherited", name: "Drinks" }, someElsewhere: false }],
     ]);
-    expect(detailOf(root, "folder:f")).toBe("by an exception");
+    expect(detailOf(root, "folder:d")).toBe("set on this category");
+    expect(detailOf(root, "folder:f")).toBe("from Drinks");
   });
 
   it("uses the product rows' words for no preparation, no replacement and nowhere", async () => {

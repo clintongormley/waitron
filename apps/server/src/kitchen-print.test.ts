@@ -443,7 +443,7 @@ async function makeWatcherPrinter(
 
 /**
  * Open an order with NO service context holding one dish line and one child line per pick, then FIRE
- * it, so the dish's zone-less product exception selects its station. The lines are written straight to the table
+ * it, so the dish's product cell for Every zone selects its station. The lines are written straight to the table
  * because pricing one needs a zone; the price and name columns are placeholders nothing here reads.
  */
 async function fireContextlessDish(
@@ -1460,13 +1460,13 @@ describe("dish extras on kitchen tickets", () => {
     expect(fryer).toContain("> para BURG en Grill");
   });
 
-  it("keeps two unclaimed extras on their dish's one kitchen record", async () => {
+  it("keeps two extras no cell decides on their dish's one kitchen record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
-      // Neither extra has a claim, so both follow their dish instead of the default.
+      // No cell decides for either extra, so both follow their dish instead of the default.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
       const { listId, productIds } = await addExtras(
         tx,

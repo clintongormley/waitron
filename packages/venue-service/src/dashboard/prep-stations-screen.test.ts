@@ -1,12 +1,12 @@
-import { page } from "vitest/browser";
-import { afterEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
-import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { WatcherView } from "./watchers-seen.js";
+import type { RouteExplanation, RoutingDecision } from "../routing-types.js";
 import "./prep-stations-screen.js";
 
 registerIcons({
@@ -21,14 +21,21 @@ afterEach(() => {
 });
 const view: PrepStationsView = {
   routing: {
-    claims: [
-      { categoryId: "cocktails", target: { kind: "station", stationId: "bar" }, stationOff: false },
+    zones: [],
+    categories: [
+      { id: "drinks", name: "Drinks", parentId: null },
+      { id: "cocktails", name: "Cocktails", parentId: "drinks" },
+      { id: "food", name: "Food", parentId: null },
     ],
-    exceptions: [],
-    unassigned: {
-      folders: [{ id: "food", name: "Food" }],
-      products: [{ id: "bread", name: "Bread" }],
-    },
+    products: [{ id: "bread", name: "Bread", categoryId: null }],
+    cells: [
+      {
+        row: { kind: "category", categoryId: "cocktails" },
+        zoneId: null,
+        target: { kind: "station", stationId: "bar" },
+      },
+    ],
+    canMakeDefault: true,
     defaultStationId: "bar",
     stations: [{ id: "bar", name: "Bar", active: true }],
     stationTimes: [
@@ -100,10 +107,6 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
         outputsDown: { printersDown: [], screensDark: [] },
       };
     }),
-    setClaim: vi.fn(),
-    createException: vi.fn(),
-    assignProduct: vi.fn(),
-    removeClaim: vi.fn(),
     preview: vi.fn().mockResolvedValue([]),
     explain: vi.fn().mockResolvedValue({
       route: null,
@@ -278,7 +281,10 @@ it("names no watcher for a routed dish and says nothing for no preparation", asy
       })
       .mockResolvedValueOnce({
         route: { kind: "no_preparation" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        } satisfies RoutingDecision,
         fallbacks: [],
         noReplacement: false,
         stations: [],
@@ -292,6 +298,9 @@ it("names no watcher for a routed dish and says nothing for no preparation", asy
   select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')?.textContent).not.toContain("watcher follows");
+  expect(q(el, '[data-test="test-answer"]')?.textContent).toContain(
+    "Because: No preparation: Drinks › Cocktails, in every zone",
+  );
   window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
 });
 async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<PrepStationsScreen> {
@@ -318,6 +327,17 @@ const q = (el: PrepStationsScreen, s: string) =>
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
   healthSummary(el)?.querySelector<HTMLElement>(s) ??
   null;
+async function routingGrid(el: PrepStationsScreen) {
+  const grid = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    '[slot="routing"] venue-routing-grid',
+  );
+  await grid?.updateComplete;
+  return grid;
+}
+const gridCombo = (grid: HTMLElement, row: string, zone: string) =>
+  grid.shadowRoot!.querySelector<WtCombobox>(
+    `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
+  );
 
 it.each([
   ['wt-switch[name="showsRestOfOrder"]', ""],
@@ -331,7 +351,8 @@ it.each([
     setLocale("en");
     const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-    expect(routing.querySelector('[data-test="claim-bar"]')).not.toBeNull();
+    expect(await routingGrid(el)).not.toBeNull();
+    expect(routing.querySelector('[data-test="station-bar"]')).not.toBeNull();
     expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
     if (selector) expect(routing.querySelector(selector)).toBeNull();
     else expect(routing.textContent).not.toContain(text);
@@ -339,14 +360,16 @@ it.each([
 );
 
 it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
-  "keeps fallback editing %s out of Routing while preserving category assignments",
+  "keeps fallback editing %s out of Routing while preserving category cells",
   async (selector) => {
     const next = withUpstairs({ open: false, why: "out_of_hours" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
     next.routing.stations.push({ id: "retired", name: "Retired", active: false });
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-    expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+    const grid = (await routingGrid(el))!;
+    expect(grid).not.toBeNull();
+    expect(gridCombo(grid, "c:cocktails", "every")!.value).toBe("station:bar");
     expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
     expect(routing.querySelector(selector)).toBeNull();
   },
@@ -367,7 +390,8 @@ it.each([
   next.routing.stations.push({ id: "retired", name: "Retired", active: false });
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-  expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+  expect(await routingGrid(el)).not.toBeNull();
+  expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
   expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
   expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
   const moved = action
@@ -519,9 +543,9 @@ it.each(
     document.documentElement.style.background = canvas;
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
     expect(tabs.value).toBe("routing");
-    expect(el.shadowRoot!.querySelector('[data-test="station-bar"]')!.textContent).toContain(
-      "Drinks › Cocktails",
-    );
+    const cocktails = gridCombo((await routingGrid(el))!, "c:cocktails", "every")!;
+    expect(cocktails.label).toContain("Drinks › Cocktails");
+    expect(cocktails.value).toBe("station:bar");
     await expectNoA11yViolations(el);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await page.screenshot({
@@ -731,39 +755,27 @@ it("shows no replacement in the confirmation when a closed station has no fallba
     "the till will ask where to send its dishes, until 06:00 today.",
   );
 });
-it("explains exceptions, claims, defaults and an unroutable product", async () => {
+it("explains product and category cells, defaults and an unroutable product", async () => {
   setLocale("en");
   const a = api({
-    load: vi.fn().mockResolvedValue({
-      ...view,
-      routing: {
-        ...view.routing,
-        exceptions: [
-          {
-            id: "ex",
-            position: 0,
-            zoneId: null,
-            categoryId: "cocktails",
-            productId: null,
-            target: { kind: "station", stationId: "bar" },
-            neverMatches: false,
-            stationOff: false,
-          },
-        ],
-      },
-    }),
     explain: vi
       .fn()
       .mockResolvedValueOnce({
         route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "exception", exceptionId: "ex" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "product", productId: "bread" }, zoneId: null },
+        },
         fallbacks: [],
         noReplacement: false,
         stations: [{ id: "bar", name: "Bar", active: true }],
       })
       .mockResolvedValueOnce({
         route: { kind: "station", stationId: "bar" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        },
         fallbacks: [],
         noReplacement: false,
         stations: [{ id: "bar", name: "Bar", active: true }],
@@ -786,9 +798,9 @@ it("explains exceptions, claims, defaults and an unroutable product", async () =
   const el = await mount(a);
   const select = q(el, '[data-test="test-product"]')!;
   for (const expected of [
-    "Because: the exception 'Cocktails → Bar'",
-    "Because: Bar claims Cocktails",
-    "Because: nothing else matched, so the default station takes it",
+    "Because: Bar: Bread, in every zone",
+    "Because: Bar: Drinks › Cocktails, in every zone",
+    "Because: Bar: All categories, in every zone — the default station",
     "Nothing can make this: no rule matched and no default station is active.",
   ]) {
     select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
@@ -833,31 +845,43 @@ it.each(["en", "es"])(
           {
             productId: "chips",
             outcome: { kind: "made", stationId: "fryer" },
-            decidedBy: { kind: "claim", categoryId: "sides" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
           },
           {
             productId: "cheese",
             outcome: { kind: "follows_dish", why: "no_rule" },
-            decidedBy: null,
+            decidedBy: { kind: "default" },
             fallbacks: [],
           },
           {
             productId: "sauce",
             outcome: { kind: "follows_dish", why: "no_preparation" },
-            decidedBy: null,
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [],
           },
           {
             productId: "olives",
             outcome: { kind: "follows_dish", why: "no_replacement" },
-            decidedBy: { kind: "claim", categoryId: "sides" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [{ stationId: "closed", why: "closed_by_hand" }],
           },
           {
             productId: "pickles",
             outcome: { kind: "follows_dish", why: "same_station" },
-            decidedBy: null,
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "category", categoryId: "sides" }, zoneId: null },
+            },
             fallbacks: [],
           },
         ],
@@ -884,8 +908,8 @@ it.each(["en", "es"])(
     for (const name of names) expect(answer).toContain(`${name}:`);
     expect(answer).toContain(
       locale === "en"
-        ? "Closed claims Food › Sides"
-        : "Closed tiene asignada la categoría Food › Sides",
+        ? "Closed is closed by hand today, so its work goes to Fryer. Chips: made separately at Fryer — Food › Sides, in every zone, sends it to Closed"
+        : "Closed se ha cerrado a mano hoy, por lo que su trabajo va a Fryer. Chips: se prepara aparte en Fryer — Food › Sides, en todas las zonas, lo envía a Closed",
     );
     expect(answer).toContain(locale === "en" ? "follows the dish" : "sigue al plato");
     expect(answer).toContain(
@@ -893,16 +917,16 @@ it.each(["en", "es"])(
     );
     for (const sentence of locale === "en"
       ? [
-          "Cheese: follows the dish — no exception or claim covers it",
-          "Sauce: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket",
-          "Olives: follows the dish — Closed is closed and nothing can replace it",
-          "Pickles: follows the dish — it is made at Bar, where the dish is",
+          "Cheese: follows the dish — only the default station covers it",
+          "Sauce: follows the dish — what covers it needs no preparation, so it stays on the dish's ticket, as set for Food › Sides, in every zone",
+          "Olives: follows the dish — Food › Sides, in every zone, sends it to Closed, which is closed, and nothing can replace it",
+          "Pickles: follows the dish — it is made at Bar, where the dish is, as set for Food › Sides, in every zone",
         ]
       : [
-          "Cheese: sigue al plato — ninguna excepción ni asignación lo cubre",
-          "Sauce: sigue al plato — lo que lo cubre no necesita preparación",
-          "Olives: sigue al plato — Closed está cerrada y nada puede sustituirla",
-          "Pickles: sigue al plato — se prepara en Bar, donde se prepara el plato",
+          "Cheese: sigue al plato — solo lo cubre la estación predeterminada",
+          "Sauce: sigue al plato — lo que lo cubre no necesita preparación, así que queda en el pedido del plato, como está indicado para Food › Sides, en todas las zonas",
+          "Olives: sigue al plato — Food › Sides, en todas las zonas, lo envía a Closed, que está cerrada, y nada puede sustituirla",
+          "Pickles: sigue al plato — se prepara en Bar, donde se prepara el plato, como está indicado para Food › Sides, en todas las zonas",
         ])
       expect(answer).toContain(sentence);
     q(el, '[data-test="remove-extra-chips"]')!.click();
@@ -948,61 +972,52 @@ it.each(["en", "es"])(
   },
 );
 
-it.each(["en", "es"])("names the exception that sends an extra elsewhere in %s", async (locale) => {
-  setLocale(locale);
-  const a = api({
-    load: vi.fn().mockResolvedValue({
-      ...view,
-      products: [...view.products, { id: "chips", name: "Chips" }],
-      testProducts: [...view.testProducts, { id: "chips", name: "Chips" }],
-      routing: {
-        ...view.routing,
-        exceptions: [
+it.each(["en", "es"])(
+  "names the product cell that sends an extra elsewhere in %s",
+  async (locale) => {
+    setLocale(locale);
+    const a = api({
+      load: vi.fn().mockResolvedValue({
+        ...view,
+        products: [...view.products, { id: "chips", name: "Chips" }],
+        testProducts: [...view.testProducts, { id: "chips", name: "Chips" }],
+      }),
+      explain: vi.fn().mockResolvedValue({
+        route: { kind: "no_preparation" },
+        decidedBy: null,
+        fallbacks: [],
+        noReplacement: false,
+        clockReadable: true,
+        stations: [{ id: "bar", name: "Bar", active: true }],
+        extrasWaitOnDish: false,
+        extras: [
           {
-            id: "extra-rule",
-            position: 0,
-            zoneId: null,
-            categoryId: null,
             productId: "chips",
-            target: { kind: "station", stationId: "bar" },
-            neverMatches: false,
-            stationOff: false,
+            outcome: { kind: "made", stationId: "bar" },
+            decidedBy: {
+              kind: "cell",
+              address: { row: { kind: "product", productId: "chips" }, zoneId: null },
+            },
+            fallbacks: [],
           },
         ],
-      },
-    }),
-    explain: vi.fn().mockResolvedValue({
-      route: { kind: "no_preparation" },
-      decidedBy: null,
-      fallbacks: [],
-      noReplacement: false,
-      clockReadable: true,
-      stations: [{ id: "bar", name: "Bar", active: true }],
-      extrasWaitOnDish: false,
-      extras: [
-        {
-          productId: "chips",
-          outcome: { kind: "made", stationId: "bar" },
-          decidedBy: { kind: "exception", exceptionId: "extra-rule" },
-          fallbacks: [],
-        },
-      ],
-    }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="test-product"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bread" } }),
-  );
-  q(el, '[data-test="test-extra"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "chips" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    locale === "en"
-      ? "Chips: made at Bar, because of the exception 'Chips → Bar'"
-      : "Chips: se prepara en Bar, porque lo indica la excepción «Chips → Bar»",
-  );
-});
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="test-product"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "bread" } }),
+    );
+    q(el, '[data-test="test-extra"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "chips" } }),
+    );
+    await settle(el);
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+      locale === "en"
+        ? "Chips: made separately at Bar, as set for Chips, in every zone"
+        : "Chips: se prepara aparte en Bar, como está indicado para Chips, en todas las zonas",
+    );
+  },
+);
 
 it("opens a product tester link with its product selected", async () => {
   setLocale("en");
@@ -1025,50 +1040,89 @@ it("opens a product tester link with its product selected", async () => {
   }
 });
 
-it("keeps inactive product names in retained exceptions without offering variants as exception subjects", async () => {
-  setLocale("en");
-  const named: PrepStationsView = {
-    ...view,
-    products: [
-      { id: "lager", name: "Lager" },
-      { id: "retired", name: "Retired lager" },
-    ],
-    testProducts: [
-      { id: "lager", name: "Lager" },
-      { id: "large", name: "Lager · Large" },
-    ],
-    routing: {
-      ...view.routing,
-      exceptions: [
-        {
-          id: "retained",
-          position: 0,
-          zoneId: null,
-          categoryId: null,
-          productId: "retired",
-          target: { kind: "no_preparation" },
-          stationOff: false,
-          neverMatches: false,
-        },
-      ],
+it.each([
+  ["en", "Made at: Terrace bar", "Because: Terrace bar: Drinks, on the Terrace"],
+  ["es", "Se prepara en: Terrace bar", "Porque: Terrace bar: Drinks, en la zona Terrace"],
+])("the tester names the winning cell in %s", async (locale, madeAt, because) => {
+  setLocale(locale);
+  const explain = vi.fn().mockResolvedValue({
+    route: { kind: "station", stationId: "terrace" },
+    decidedBy: {
+      kind: "cell",
+      address: { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" },
     },
-  };
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(named) }));
-  expect(q(el, '[data-test="exceptions"]')!.textContent).toContain(
-    "Retired lager → No preparation",
+    fallbacks: [],
+    noReplacement: false,
+    clockReadable: true,
+    stations: [{ id: "terrace", name: "Terrace bar", active: true }],
+    extras: [],
+    extrasWaitOnDish: false,
+  });
+  const el = await mount(
+    api({
+      load: vi.fn().mockResolvedValue({ ...view, zones: [{ id: "terrace", name: "Terrace" }] }),
+      explain,
+    }),
   );
-  q(el, '[data-test="add-exception"]')!.click();
+  q(el, '[data-test="test-zone"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
   await settle(el);
-  const options = (
-    q(el, '[data-test="exception-what"]') as HTMLElement & { options: { value: string }[] }
-  ).options.map((option) => option.value);
-  expect(options).toContain("product:retired");
-  expect(options).not.toContain("product:large");
-  expect(
-    (
-      q(el, '[data-test="test-product"]') as HTMLElement & { options: { value: string }[] }
-    ).options.map((option) => option.value),
-  ).toContain("large");
+  expect(explain).toHaveBeenLastCalledWith("bread", "terrace");
+  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
+  expect(answer).toContain(madeAt);
+  expect(answer).toContain(because);
+  expect(answer.indexOf(madeAt)).toBeLessThan(answer.indexOf(because));
+});
+
+it.each([
+  ["lager", "Lager"],
+  ["large", "Lager · Large"],
+])("a product tester link opens Routing with the product or variant selected (%s)", async (id) => {
+  setLocale("en");
+  const before = location.href;
+  history.replaceState(null, "", `/manage/prep-stations/test/${id}`);
+  try {
+    const explain = vi.fn().mockResolvedValue({
+      route: { kind: "station", stationId: "bar" },
+      decidedBy: {
+        kind: "cell",
+        address: { row: { kind: "product", productId: "lager" }, zoneId: null },
+      },
+      fallbacks: [],
+      noReplacement: false,
+      clockReadable: true,
+      stations: [{ id: "bar", name: "Bar", active: true }],
+      extras: [],
+      extrasWaitOnDish: false,
+    });
+    const el = await mount(
+      api({
+        load: vi.fn().mockResolvedValue({
+          ...view,
+          products: [{ id: "lager", name: "Lager" }],
+          testProducts: [
+            { id: "lager", name: "Lager" },
+            { id: "large", name: "Lager · Large" },
+          ],
+        }),
+        explain,
+      }),
+    );
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await tabs.updateComplete;
+    expect(tabs.value).toBe("routing");
+    expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe(id);
+    expect(explain).toHaveBeenLastCalledWith(id, null);
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+      "Because: Bar: Lager, in every zone",
+    );
+  } finally {
+    history.replaceState(null, "", before);
+  }
 });
 
 it("clears a completed tester answer when Back removes the product", async () => {
@@ -1129,22 +1183,16 @@ it("ignores a pending tester answer after Back removes the product", async () =>
   }
 });
 
-it("explains a no-preparation claim as an assignment", async () => {
+it("explains a No preparation cell as the category's chosen value", async () => {
   setLocale("en");
   const el = await mount(
     api({
-      load: vi.fn().mockResolvedValue({
-        ...view,
-        routing: {
-          ...view.routing,
-          claims: [
-            { categoryId: "cocktails", target: { kind: "no_preparation" }, stationOff: false },
-          ],
-        },
-      }),
       explain: vi.fn().mockResolvedValue({
         route: { kind: "no_preparation" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        },
         fallbacks: [],
         noReplacement: false,
         stations: [],
@@ -1156,86 +1204,31 @@ it("explains a no-preparation claim as an assignment", async () => {
   );
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    "Cocktails is assigned to No preparation",
+    "Because: No preparation: Drinks › Cocktails, in every zone",
   );
 });
-it("shows station claims by full folder path and unassigned work with default destination", async () => {
-  const el = await mount(api());
-  expect(q(el, '[data-test="station-bar"]')!.textContent).toContain("Drinks › Cocktails");
-  expect(q(el, '[data-test="unassigned"]')!.textContent).toContain("Food");
-  expect(q(el, '[data-test="unassigned"]')!.textContent).toContain("Bread");
-  expect(q(el, '[data-test="unassigned"]')!.textContent).toContain("Bar");
-});
-it("previews an assignment and saves only after confirmation", async () => {
-  const a = api({
-    preview: vi.fn().mockResolvedValue([
-      {
-        productId: "bread",
-        productName: "Bread",
-        zoneId: null,
-        zoneName: null,
-        from: { kind: "station", stationId: "bar" },
-        to: { kind: "no_preparation" },
-      },
-    ]),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
+it("the tester names a No category cell for an uncategorised product", async () => {
+  setLocale("en");
+  const el = await mount(
+    api({
+      explain: vi.fn().mockResolvedValue({
+        route: { kind: "station", stationId: "bar" },
+        decidedBy: { kind: "cell", address: { row: { kind: "no_category" }, zoneId: null } },
+        fallbacks: [],
+        noReplacement: false,
+        stations: [],
+      }),
+    }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
   );
   await settle(el);
-  expect(a.preview).toHaveBeenCalledWith({
-    kind: "assignment",
-    productId: "bread",
-    target: { kind: "no_preparation" },
-  });
-  expect(q(el, '[data-test="routing-preview"]')?.textContent).toContain("Bread");
-  expect(a.assignProduct).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.assignProduct).toHaveBeenCalledWith("bread", { kind: "no_preparation" });
-});
-it("cancels a claim preview without saving", async () => {
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="remove-cocktails"]')!.click();
-  await settle(el);
-  expect(a.removeClaim).not.toHaveBeenCalled();
-  q(el, '[data-test="cancel-routing"]')!.click();
-  await settle(el);
-  expect(a.removeClaim).not.toHaveBeenCalled();
-  expect(q(el, '[data-test="remove-cocktails"]')).not.toBeNull();
-});
-it("clears a cancelled unfiled product choice", async () => {
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+    "Because: Bar: No category, in every zone",
   );
-  await settle(el);
-  q(el, '[data-test="cancel-routing"]')!.click();
-  await settle(el);
-  expect((q(el, '[data-test="assign-bread"]') as HTMLElement & { value: string }).value).toBe("");
-  expect(a.assignProduct).not.toHaveBeenCalled();
 });
-it("assigns an unassigned folder and removes a claim", async () => {
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="assign-food"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  expect(a.setClaim).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.setClaim).toHaveBeenCalledWith("food", { kind: "station", stationId: "bar" });
-  q(el, '[data-test="remove-cocktails"]')!.click();
-  await settle(el);
-  expect(a.removeClaim).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.removeClaim).toHaveBeenCalledWith("cocktails");
-});
+
 it("keeps station status and output problems in Stations instead of repeating them in Routing", async () => {
   setLocale("en");
   const next = withUpstairs({ open: false, why: "out_of_hours" });
@@ -1264,7 +1257,7 @@ it("keeps station status and output problems in Stations instead of repeating th
   expect(healthRow(el, "upstairs").textContent).toContain("Printer Epson");
   expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
   expect(healthRow(el, "upstairs").textContent).toContain("Closed now");
-  expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+  expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
 });
 it("uses the health snapshot for output problems without a second management read", async () => {
   const a = api({
@@ -1301,12 +1294,12 @@ function healthRow(el: PrepStationsScreen, stationId: string) {
     .closest("tr")!;
 }
 
-it("keeps whole-station editing out of Routing while retaining category claims and creation", async () => {
+it("keeps whole-station editing out of Routing while showing the grid", async () => {
   const a = api();
   const el = await mount(a);
   const routing = q(el, '[slot="routing"]')!;
   expect(routing.querySelector('[data-test="edit-bar"]')).toBeNull();
-  expect(routing.querySelector('[data-test="claim-bar"]')).not.toBeNull();
+  expect(routing.querySelector("venue-routing-grid")).not.toBeNull();
   expect(q(el, '[data-test="rename-bar"]')).not.toBeNull();
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
@@ -1357,21 +1350,6 @@ it("rejects unordered thresholds beside overdue in Settings and retains station 
   expect(a.deactivateStation).toHaveBeenCalledWith("bar");
 });
 
-it("assigns an unassigned product through its effective route", async () => {
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  expect(a.assignProduct).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.assignProduct).toHaveBeenCalledWith("bread", {
-    kind: "station",
-    stationId: "bar",
-  });
-});
 it("shows linked printers and kitchen screens in Tickets", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue({
@@ -1396,39 +1374,6 @@ it("shows linked printers and kitchen screens in Tickets", async () => {
       .shadowRoot!.querySelector('[slot="routing"]')!
       .querySelector('a[href="/manage/printing-rules"]'),
   ).toBeNull();
-});
-it("puts an inactive-station refusal beside the claim choice", async () => {
-  const a = api({ preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
-  const el = await mount(a);
-  q(el, '[data-test="claim-bar"]')!.click();
-  await settle(el);
-  q(el, '[data-test="claim-choice"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "food" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-field-error="claim"]')).not.toBeNull();
-});
-it("keeps No preparation available and names claims on disabled stations", async () => {
-  const changed = {
-    ...view,
-    routing: {
-      ...view.routing,
-      claims: [
-        ...view.routing.claims,
-        {
-          categoryId: "food",
-          target: { kind: "station" as const, stationId: "old" },
-          stationOff: true,
-        },
-      ],
-      stations: [...view.routing.stations, { id: "old", name: "Old pass", active: false }],
-    },
-  };
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(changed) }));
-  expect(q(el, '[data-test="no-preparation"]')).not.toBeNull();
-  expect(q(el, '[data-test="station-old"]')).toBeNull();
-  expect(el.shadowRoot!.textContent).toContain("Old pass");
-  expect(el.shadowRoot!.textContent).toContain("Disabled: no replacement, the till asks");
 });
 it("creates a station from the modal with the chosen thresholds", async () => {
   const a = api();
@@ -1527,24 +1472,6 @@ it.each([
   await vi.waitFor(() =>
     expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe("The change could not be saved."),
   );
-});
-it("offers claimed folders by path and names their current station", async () => {
-  const el = await mount(api());
-  q(el, '[data-test="claim-bar"]')!.click();
-  await settle(el);
-  const choice = q(el, '[data-test="claim-choice"]') as HTMLElement & {
-    options: { label: string }[];
-  };
-  expect(choice.options.map((o) => o.label)).toContain("Drinks › Cocktails (Bar)");
-});
-it("puts an inactive-station refusal beside an unassigned product choice", async () => {
-  const a = api({ preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
-  const el = await mount(a);
-  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-field-error="bread"]')).not.toBeNull();
 });
 it("saves station name, order and thresholds through their individual controls", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
@@ -1746,532 +1673,6 @@ it("guards repeated Enter rename saves while a station write is pending and allo
   expect(updateStation).toHaveBeenLastCalledWith("bar", { name: "Bar" });
 });
 
-const exceptionView: PrepStationsView = {
-  ...view,
-  zones: [{ id: "terrace", name: "Terrace" }],
-  routing: {
-    ...view.routing,
-    stations: [...view.routing.stations, { id: "old", name: "Old bar", active: false }],
-    exceptions: [
-      {
-        id: "b",
-        position: 20,
-        zoneId: "terrace",
-        categoryId: "cocktails",
-        productId: null,
-        target: { kind: "station", stationId: "old" },
-        neverMatches: true,
-        stationOff: true,
-      },
-      {
-        id: "a",
-        position: 10,
-        zoneId: null,
-        categoryId: null,
-        productId: "bread",
-        target: { kind: "no_preparation" },
-        neverMatches: false,
-        stationOff: false,
-      },
-    ],
-  },
-};
-it("lists exceptions by position as sentences and identifies both warnings", async () => {
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
-  const rows = [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')];
-  expect(rows.map((row) => row.getAttribute("data-id"))).toEqual(["a", "b"]);
-  expect(rows[0]!.textContent).toContain("Bread → No preparation");
-  expect(rows[1]!.textContent).toContain("Cocktails from Terrace → Old bar");
-  expect(rows[1]!.textContent).toContain("Never used: an exception above always catches it first");
-  expect(rows[1]!.textContent).toContain("Its station is disabled");
-});
-it.each([
-  [1280, "light"],
-  [1280, "dark"],
-  [390, "light"],
-  [390, "dark"],
-] as const)(
-  "puts an exception's grip and row menu on the first line of a wrapping rule at %ipx (%s)",
-  async (frame, theme) => {
-    const width = window.innerWidth,
-      height = window.innerHeight;
-    await page.viewport(frame, 844);
-    try {
-      // Long enough to wrap even across a desktop-wide table.
-      const long = "Bread baked in the wood oven every morning and sliced at the pass, ".repeat(6);
-      const el = await mount(
-        api({
-          load: vi.fn().mockResolvedValue({
-            ...exceptionView,
-            products: [{ id: "bread", name: long }],
-          }),
-        }),
-        theme,
-      );
-      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
-      const row = q(el, '[data-test="exceptions"] tr[data-id="a"]')!;
-      const rule = row.children[1]!;
-      const handle = q(el, '[data-test="drag-a"]')!;
-
-      expect(window.innerWidth).toBe(frame);
-      expect(rule.textContent).toContain(long.trim());
-      expect(row.getBoundingClientRect().height).toBeGreaterThan(
-        handle.getBoundingClientRect().height * 1.5,
-      );
-      expect(textLines(rule).length, "the rule wraps").toBeGreaterThan(1);
-      const line = textLines(rule)[0]!;
-      const within = middleWithin(line);
-      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
-      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
-      expect(
-        { icon: within(icon), menu: within(menu) },
-        JSON.stringify({ line, icon, menu }),
-      ).toEqual({ icon: true, menu: true });
-    } finally {
-      await page.viewport(width, height);
-    }
-  },
-);
-it("sorts equal-position exceptions by id and restores that order after cancellation", async () => {
-  const tied = {
-    ...exceptionView,
-    routing: {
-      ...exceptionView.routing,
-      exceptions: exceptionView.routing.exceptions.map((row) => ({ ...row, position: 10 })),
-    },
-  };
-  const a = api({ load: vi.fn().mockResolvedValue(tied), reorderExceptions: vi.fn() });
-  const el = await mount(a);
-  const ids = () =>
-    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
-      row.getAttribute("data-id"),
-    );
-  expect(ids()).toEqual(["a", "b"]);
-  q(el, '[data-test="drag-b"]')!.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
-  );
-  await settle(el);
-  expect(ids()).toEqual(["b", "a"]);
-  q(el, '[data-test="cancel-routing"]')!.click();
-  await settle(el);
-  expect(ids()).toEqual(["a", "b"]);
-  expect(a.reorderExceptions).not.toHaveBeenCalled();
-});
-it("moves the second exception up by keyboard and sends the complete new order", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    reorderExceptions: vi.fn().mockResolvedValue(undefined),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="drag-b"]')!.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
-  );
-  await settle(el);
-  expect(a.reorderExceptions).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
-});
-it("refuses an exception without a subject or zone beside What", async () => {
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="add-exception"]')!.click();
-  await settle(el);
-  q(el, '[data-test="exception-target"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
-    "Choose a category or product, a service zone, or both",
-  );
-  expect(a.createException).not.toHaveBeenCalled();
-});
-it("confirms deletion before calling the exception endpoint", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    deleteException: vi.fn().mockResolvedValue(undefined),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="delete-a"]')!.click();
-  await settle(el);
-  expect(a.deleteException).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-delete-exception"]')!.click();
-  await settle(el);
-  expect(a.deleteException).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.deleteException).toHaveBeenCalledWith("a");
-});
-it("drags the second exception above the first and saves the complete order on release", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    reorderExceptions: vi.fn().mockResolvedValue(undefined),
-  });
-  const el = await mount(a);
-  const handle = q(el, '[data-test="drag-b"]')!;
-  const first = q(el, '[data-id="a"]')!.getBoundingClientRect();
-  handle.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 9, bubbles: true }));
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 9, clientY: first.top + first.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9 }));
-  await settle(el);
-  expect(a.reorderExceptions).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
-});
-it("restores the saved order when a dragged reorder preview is cancelled", async () => {
-  const a = api({ load: vi.fn().mockResolvedValue(exceptionView), reorderExceptions: vi.fn() });
-  const el = await mount(a);
-  const handle = q(el, '[data-test="drag-b"]')!;
-  const first = q(el, '[data-id="a"]')!.getBoundingClientRect();
-  handle.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 10, bubbles: true }));
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 10, clientY: first.top + first.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 10 }));
-  await settle(el);
-  expect(a.preview).toHaveBeenCalledWith({ kind: "exception_order", ids: ["b", "a"] });
-  expect(
-    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
-      row.getAttribute("data-id"),
-    ),
-  ).toEqual(["b", "a"]);
-  q(el, '[data-test="cancel-routing"]')!.click();
-  await settle(el);
-  expect(
-    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
-      row.getAttribute("data-id"),
-    ),
-  ).toEqual(["a", "b"]);
-  expect(a.reorderExceptions).not.toHaveBeenCalled();
-});
-it("writes a chosen folder and zone to the selected station", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    createException: vi.fn().mockResolvedValue(undefined),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="add-exception"]')!.click();
-  await settle(el);
-  q(el, '[data-test="exception-what"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "category:cocktails" } }),
-  );
-  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
-  );
-  q(el, '[data-test="exception-target"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  expect(a.createException).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.createException).toHaveBeenCalledWith({
-    zoneId: "terrace",
-    categoryId: "cocktails",
-    productId: null,
-    target: { kind: "station", stationId: "bar" },
-  });
-});
-it.each(["create", "update"] as const)(
-  "shows an inactive station refusal when an exception %s is rejected after preview",
-  async (operation) => {
-    setLocale("en");
-    const refusal = { code: "route.station_inactive" };
-    const a = api({
-      load: vi.fn().mockResolvedValue(exceptionView),
-      createException: vi.fn().mockRejectedValue(refusal),
-      updateException: vi.fn().mockRejectedValue(refusal),
-    });
-    const el = await mount(a);
-    q(
-      el,
-      operation === "create" ? '[data-test="add-exception"]' : '[data-test="edit-exception-a"]',
-    )!.click();
-    await settle(el);
-    if (operation === "create") {
-      q(el, '[data-test="exception-zone"]')!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "terrace" } }),
-      );
-    }
-    q(el, '[data-test="exception-target"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "bar" } }),
-    );
-    await settle(el);
-    q(el, '[data-test="save-exception"]')!.click();
-    await settle(el);
-    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
-    q(el, '[data-test="confirm-routing"]')!.click();
-    await settle(el);
-    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-    expect(q(el, '[role="alert"]')?.textContent).toContain("This station is disabled");
-    expect(q(el, '[role="alert"]')?.textContent).not.toContain("could not be saved");
-  },
-);
-it("keeps a dragged reorder pending while its confirmed save is in flight", async () => {
-  let finish!: () => void;
-  const saving = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  const reordered = {
-    ...exceptionView,
-    routing: {
-      ...exceptionView.routing,
-      exceptions: exceptionView.routing.exceptions.map((e) => ({
-        ...e,
-        position: e.id === "b" ? 0 : 1,
-      })),
-    },
-  };
-  const a = api({
-    load: vi.fn().mockResolvedValueOnce(exceptionView).mockResolvedValue(reordered),
-    reorderExceptions: vi.fn().mockReturnValue(saving),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="drag-b"]')!.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
-  );
-  await settle(el);
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  q(el, '[data-test="cancel-routing"]')!.click();
-  q(el, '[data-test="routing-preview"]')!.dispatchEvent(new CustomEvent("wt-close"));
-  await settle(el);
-  expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
-  expect(
-    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
-      row.getAttribute("data-id"),
-    ),
-  ).toEqual(["b", "a"]);
-  expect(a.reorderExceptions).toHaveBeenCalledWith(["b", "a"]);
-  finish();
-  await settle(el);
-  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-  expect(
-    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
-      row.getAttribute("data-id"),
-    ),
-  ).toEqual(["b", "a"]);
-});
-it("puts the server's condition refusal beside What", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    createException: vi
-      .fn()
-      .mockRejectedValue({ code: "management.request_invalid", params: { field: "condition" } }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="add-exception"]')!.click();
-  await settle(el);
-  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
-  );
-  q(el, '[data-test="exception-target"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
-    "Choose a category or product",
-  );
-});
-it("shows Everything and Any service zone as the form defaults", async () => {
-  setLocale("en");
-  const el = await mount(api());
-  q(el, '[data-test="add-exception"]')!.click();
-  await settle(el);
-  expect(
-    q(el, '[data-test="exception-what"]')!.shadowRoot!.querySelector(".trigger .value")!
-      .textContent,
-  ).toContain("Everything");
-  expect(
-    q(el, '[data-test="exception-zone"]')!.shadowRoot!.querySelector(".trigger .value")!
-      .textContent,
-  ).toContain("Any service zone");
-});
-it("restores the server order if reordering is refused", async () => {
-  setLocale("en");
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    preview: vi.fn().mockRejectedValue({ code: "management.request_invalid" }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="drag-b"]')!.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
-  );
-  await settle(el);
-  expect(
-    [...el.shadowRoot!.querySelectorAll('[data-test="exceptions"] tbody tr')].map((row) =>
-      row.getAttribute("data-id"),
-    ),
-  ).toEqual(["a", "b"]);
-  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
-});
-it("edits an existing exception without changing its position", async () => {
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    updateException: vi.fn().mockResolvedValue(undefined),
-    reorderExceptions: vi.fn(),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="edit-exception-a"]')!.click();
-  await settle(el);
-  q(el, '[data-test="exception-target"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  expect(a.updateException).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.updateException).toHaveBeenCalledWith("a", {
-    zoneId: null,
-    categoryId: null,
-    productId: "bread",
-    target: { kind: "station", stationId: "bar" },
-  });
-  expect(a.reorderExceptions).not.toHaveBeenCalled();
-});
-
-it("offers only active stations for a new exception and names a switched-off edit target", async () => {
-  const changed: PrepStationsView = {
-    ...exceptionView,
-    stations: [
-      ...view.stations,
-      { ...view.stations[0]!, id: "old", name: "Old bar", active: false, isDefault: false },
-    ],
-  };
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(changed) }));
-  q(el, '[data-test="add-exception"]')!.click();
-  await settle(el);
-  const choice = q(el, '[data-test="exception-target"]') as HTMLElement & {
-    options: { value: string; label: string }[];
-  };
-  expect(choice.options.map((o) => o.value)).toEqual(["bar", "no_preparation"]);
-  q(el, '[slot="cancel"]')!.click();
-  await settle(el);
-  const editEl = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
-  q(editEl, '[data-test="edit-exception-b"]')!.click();
-  await settle(editEl);
-  const edited = q(editEl, '[data-test="exception-target"]') as HTMLElement & {
-    options: { value: string; label: string }[];
-  };
-  expect(edited.options.map((o) => o.value)).toContain("old");
-  expect(edited.shadowRoot!.querySelector(".trigger .value")!.textContent).toContain("Old bar");
-});
-
-it("shows affected products and their old and new destinations before an assignment is saved", async () => {
-  setLocale("en");
-  const a = api({
-    preview: vi.fn().mockResolvedValue([
-      {
-        productId: "bread",
-        productName: "Bread",
-        zoneId: null,
-        zoneName: null,
-        from: null,
-        to: { kind: "no_preparation" },
-      },
-      {
-        productId: "bread",
-        productName: "Bread",
-        zoneId: "terrace",
-        zoneName: "Terrace",
-        from: { kind: "station", stationId: "bar" },
-        to: { kind: "station", stationId: "unknown" },
-      },
-    ]),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
-  );
-  await settle(el);
-  const rows = [...el.shadowRoot!.querySelectorAll('[data-test="routing-preview"] tbody tr')];
-  expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
-    "Bread Any service zone No station No preparation",
-    "Bread Terrace Bar unknown",
-  ]);
-  expect(a.assignProduct).not.toHaveBeenCalled();
-});
-
-it("shows No replacement for a previewed dead end", async () => {
-  setLocale("en");
-  const a = api({
-    preview: vi.fn().mockResolvedValue([
-      {
-        productId: "bread",
-        productName: "Bread",
-        zoneId: null,
-        zoneName: null,
-        from: { kind: "station", stationId: "bar" },
-        to: null,
-        toNoReplacement: true,
-      },
-    ]),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("No replacement");
-});
-
-it("shows a refused preview without opening confirmation or writing an exception", async () => {
-  setLocale("en");
-  const a = api({
-    preview: vi.fn().mockRejectedValue({
-      code: "management.request_invalid",
-      params: { field: "condition" },
-    }),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="add-exception"]')!.click();
-  await settle(el);
-  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
-  );
-  q(el, '[data-test="exception-target"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
-    "Choose a category or product",
-  );
-  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-  expect(a.createException).not.toHaveBeenCalled();
-});
-
-it("keeps an exception editable after its confirmed write fails", async () => {
-  setLocale("en");
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    updateException: vi.fn().mockRejectedValue(new Error("offline")),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="edit-exception-a"]')!.click();
-  await settle(el);
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-  expect(q(el, '[data-test="exception-what"]')).not.toBeNull();
-  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
-});
-
 it("shows a tester failure without inventing an answer", async () => {
   setLocale("en");
   const a = api({
@@ -2283,24 +1684,6 @@ it("shows a tester failure without inventing an answer", async () => {
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
   expect(q(el, '[data-test="test-answer"] [role="alert"]')).not.toBeNull();
-});
-
-it("previews a claimed folder moving from a station to No preparation", async () => {
-  setLocale("en");
-  const a = api();
-  const el = await mount(a);
-  q(el, '[data-test="claim-no-preparation"]')!.click();
-  await settle(el);
-  q(el, '[data-test="claim-choice"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "cocktails" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("Drinks › Cocktails");
-  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("Bar");
-  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("No preparation");
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.setClaim).toHaveBeenCalledWith("cocktails", { kind: "no_preparation" });
 });
 
 it("lets the tester change zones and clear the product without retaining a route", async () => {
@@ -2337,49 +1720,6 @@ it("lets the tester change zones and clear the product without retaining a route
   );
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
-});
-
-it("saves a product exception after changing its subject and clearing its zone", async () => {
-  const a = api({ load: vi.fn().mockResolvedValue(exceptionView) });
-  const el = await mount(a);
-  q(el, '[data-test="add-exception"]')!.click();
-  await settle(el);
-  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
-  );
-  q(el, '[data-test="exception-what"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "category:cocktails" } }),
-  );
-  q(el, '[data-test="exception-what"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "product:bread" } }),
-  );
-  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "" } }),
-  );
-  q(el, '[data-test="exception-target"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  expect(a.preview).toHaveBeenCalledWith({
-    kind: "exception",
-    id: null,
-    input: {
-      zoneId: null,
-      categoryId: null,
-      productId: "bread",
-      target: { kind: "no_preparation" },
-    },
-  });
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(a.createException).toHaveBeenCalledWith({
-    zoneId: null,
-    categoryId: null,
-    productId: "bread",
-    target: { kind: "no_preparation" },
-  });
 });
 
 it("refuses negative order and invalid warm and forgotten thresholds together when creating", async () => {
@@ -2456,57 +1796,6 @@ it("keeps a failed save's message through a later failed refresh and the recover
   await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(4));
   await settle(el);
   expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
-});
-
-it("shows an inactive station refusal from exception preview without calling its write", async () => {
-  setLocale("en");
-  const a = api({
-    load: vi.fn().mockResolvedValue(exceptionView),
-    preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
-    updateException: vi.fn(),
-  });
-  const el = await mount(a);
-  q(el, '[data-test="edit-exception-a"]')!.click();
-  await settle(el);
-  q(el, '[data-test="exception-target"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="save-exception"]')!.click();
-  await settle(el);
-  expect(q(el, '[role="alert"]')?.textContent).toContain("This station is disabled");
-  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-  expect(a.updateException).not.toHaveBeenCalled();
-});
-
-it("keeps a refused folder claim next to its choice after confirmation", async () => {
-  setLocale("en");
-  const a = api({ setClaim: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
-  const el = await mount(a);
-  q(el, '[data-test="claim-bar"]')!.click();
-  await settle(el);
-  q(el, '[data-test="claim-choice"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "food" } }),
-  );
-  await settle(el);
-  q(el, '[data-test="confirm-routing"]')!.click();
-  await settle(el);
-  expect(q(el, '[data-field-error="claim"]')?.textContent).toContain(
-    "This station is disabled. Choose an active station.",
-  );
-  expect(q(el, '[data-test="claim-choice"]')).not.toBeNull();
-  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-});
-it.each([
-  ["en", "Old bar (Disabled)"],
-  ["es-ES", "Old bar (Deshabilitada)"],
-] as const)("names a retained disabled exception station in %s", async (locale, expected) => {
-  setLocale(locale);
-  const el = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
-  q(el, '[data-test="edit-exception-b"]')!.click();
-  await settle(el);
-  const target = q(el, '[data-test="exception-target"]')!;
-  expect(target.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(expected);
 });
 
 it("retains a disabled fallback in its editor but clears it for Disable", async () => {
@@ -3015,7 +2304,10 @@ it.each([
     api({
       explain: vi.fn().mockResolvedValue({
         route: { kind: "station", stationId: "downstairs" },
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        },
         fallbacks: [{ stationId: "upstairs", why }],
         noReplacement: false,
         clockReadable: true,
@@ -3032,7 +2324,7 @@ it.each([
   await settle(el);
   const answer = q(el, '[data-test="test-answer"]')!.textContent!;
   expect(answer).toContain(sentence);
-  expect(answer).toContain("Because: Upstairs bar claims Cocktails");
+  expect(answer).toContain("Because: Upstairs bar: Drinks › Cocktails, in every zone");
   expect(answer.indexOf(sentence)).toBeLessThan(answer.indexOf("Made at:"));
 });
 it("explains each fallback and the final dead end without saying no rule matched", async () => {
@@ -3040,7 +2332,10 @@ it("explains each fallback and the final dead end without saying no rule matched
     api({
       explain: vi.fn().mockResolvedValue({
         route: null,
-        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        decidedBy: {
+          kind: "cell",
+          address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+        } satisfies RoutingDecision,
         fallbacks: [
           { stationId: "upstairs", why: "out_of_hours" },
           { stationId: "bar", why: "closed_by_hand" },
@@ -3066,6 +2361,7 @@ it("explains each fallback and the final dead end without saying no rule matched
     "Downstairs bar is closed by hand today, and it has no replacement, so the till asks the waiter where to make this.",
   );
   expect(answer).not.toContain("no rule matched");
+  expect(answer).toContain("Because: Upstairs bar: Drinks › Cocktails, in every zone");
   expect(answer).not.toContain("Made at:");
 });
 it("keeps the no-default explanation and reports unreadable opening hours", async () => {
@@ -3374,8 +2670,8 @@ it.each(["tickets", "watchers", "settings"])(
     expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/bread");
     expect(q(el, '[data-test="test-product"]')!.closest('[slot="routing"]')).not.toBeNull();
     expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe("bread");
-    expect(q(el, '[data-test="claim-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
-    expect(q(el, '[data-test="add-exception"]')!.closest('[slot="routing"]')).not.toBeNull();
+    expect(await routingGrid(el)).not.toBeNull();
+    expect(q(el, '[data-test="station-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
   },
 );
 
@@ -3476,21 +2772,21 @@ it("Today redraws the scheduled label when the next background read no longer ca
 it.each([
   {
     locale: "en",
-    claim: "Claim a category",
-    field: "Category",
+    heading: "Category or product",
+    field: "All categories, Every zone: Bar, the default station",
     disable: "Disable",
     enable: "Enable",
   },
   {
     locale: "es",
-    claim: "Asignar una categoría",
-    field: "Categoría",
+    heading: "Categoría o producto",
+    field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada",
     disable: "Deshabilitar",
     enable: "Habilitar",
   },
 ])(
   "uses category and Disable/Enable wording for retained stations and watchers ($locale)",
-  async ({ locale, claim, field, disable, enable }) => {
+  async ({ locale, heading, field, disable, enable }) => {
     setLocale(locale);
     const disabled = { ...upstairs, active: false };
     const pass = {
@@ -3513,13 +2809,12 @@ it.each([
           .mockResolvedValue({ ...view, stations: [...view.stations, disabled], watchers: [pass] }),
       }),
     );
-    expect(q(el, '[data-test="claim-bar"]')!.textContent!.trim()).toBe(claim);
+    const grid = (await routingGrid(el))!;
+    expect(grid.shadowRoot!.querySelector("thead th")!.textContent!.trim()).toBe(heading);
     expect(q(el, '[data-test="disable-bar"]')!.textContent!.trim()).toBe(disable);
     expect(q(el, '[data-test="enable-upstairs"]')!.textContent!.trim()).toBe(enable);
     expect(q(el, '[data-test="remove-watcher-pass"]')!.textContent!.trim()).toBe(disable);
-    q(el, '[data-test="claim-bar"]')!.click();
-    await settle(el);
-    expect((q(el, '[data-test="claim-choice"]') as WtCombobox).label).toBe(field);
+    expect(gridCombo(grid, "all", "every")!.label).toBe(field);
   },
 );
 
@@ -3938,7 +3233,7 @@ it("Stations row actions reuse default and retained disable/enable writes", asyn
   expect(a.activateStation).toHaveBeenCalledWith("upstairs");
 });
 
-it("reorders Stations with the keyboard, retains focus and leaves routing priorities unchanged", async () => {
+it("reorders Stations with the keyboard, retains focus and leaves routing cells unchanged", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
   const order = vi.fn().mockImplementation(async (ids: string[]) => {
     ids.forEach((id, index) => {
@@ -3958,8 +3253,8 @@ it("reorders Stations with the keyboard, retains focus and leaves routing priori
     ),
   ).toEqual(["station-menu-upstairs", "station-menu-bar"]);
   expect(healthSummary(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
-  expect(next.routing.claims).toEqual(view.routing.claims);
-  expect(next.routing.exceptions).toEqual([]);
+  expect(next.routing.cells).toEqual(view.routing.cells);
+  expect(next.routing.defaultStationId).toBe(view.routing.defaultStationId);
 });
 it("restores the Stations order after refusal and never moves disabled rows", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
@@ -5705,7 +5000,7 @@ it("a missing watcher refusal keeps the printer draft retryable", async () => {
   expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(false);
 });
 
-it("describes extras with default, claim and exception decisions across fallback hops", async () => {
+it("describes extras with default, category-cell and product-cell decisions across fallback hops", async () => {
   const a = api({
     explain: vi.fn().mockResolvedValue({
       route: { kind: "no_preparation" },
@@ -5717,20 +5012,26 @@ it("describes extras with default, claim and exception decisions across fallback
       extras: [
         {
           productId: "unknown-default",
-          outcome: { kind: "made", stationId: "bar" },
-          decidedBy: null,
+          outcome: { kind: "follows_dish", why: "no_rule" },
+          decidedBy: { kind: "default" },
           fallbacks: [],
         },
         {
-          productId: "unknown-claim",
+          productId: "unknown-category",
           outcome: { kind: "made", stationId: "bar" },
-          decidedBy: { kind: "claim", categoryId: "cocktails" },
+          decidedBy: {
+            kind: "cell",
+            address: { row: { kind: "category", categoryId: "cocktails" }, zoneId: null },
+          },
           fallbacks: [],
         },
         {
-          productId: "unknown-exception",
+          productId: "unknown-product",
           outcome: { kind: "made", stationId: "bar" },
-          decidedBy: { kind: "exception", exceptionId: "missing" },
+          decidedBy: {
+            kind: "cell",
+            address: { row: { kind: "product", productId: "unknown-product" }, zoneId: null },
+          },
           fallbacks: [
             { stationId: "closed", why: "out_of_hours" },
             { stationId: "disabled", why: "switched_off" },
@@ -5746,12 +5047,16 @@ it("describes extras with default, claim and exception decisions across fallback
   await settle(el);
   const answer = q(el, '[data-test="test-answer"]')!.textContent!;
   expect(answer).toContain(
-    "unknown-default: made at Bar, because nothing else matched, so the default station takes it",
+    "unknown-default: follows the dish — only the default station covers it",
   );
-  expect(answer).toContain("unknown-claim: made at Bar, because Bar claims Drinks › Cocktails");
+  expect(answer).toContain(
+    "unknown-category: made separately at Bar, as set for Drinks › Cocktails, in every zone",
+  );
   expect(answer).toContain("closed is closed outside its opening hours");
   expect(answer).toContain("disabled is disabled, so its work goes to Bar.");
-  expect(answer).toContain("unknown-exception: made at Bar, because of the exception");
+  expect(answer).toContain(
+    "closed is closed outside its opening hours, so its work goes to disabled. disabled is disabled, so its work goes to Bar. unknown-product: made separately at Bar — unknown-product, in every zone, sends it to closed",
+  );
 });
 
 it.each(["cancel", "dismiss"])("%s abandons watcher removal without writing", async (how) => {
@@ -5908,23 +5213,6 @@ it("Tickets names an unavailable watcher by its retained id when watcher metadat
     description: "Used by watcher missing-watcher",
   });
   expect(choice.values).toEqual(["old"]);
-});
-
-it("Routing puts a refused unassigned folder claim beside that folder without writing", async () => {
-  setLocale("en");
-  history.replaceState(null, "", "/manage/prep-stations/view/routing");
-  const a = api({ preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
-  const el = await mount(a);
-  q(el, '[data-test="assign-food"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bar" } }),
-  );
-  await settle(el);
-  expect(q(el, '[data-field-error="food"]')!.textContent).toBe(
-    "This station is disabled. Choose an active station.",
-  );
-  expect(q(el, '[data-field-error="cocktails"]')).toBeNull();
-  expect(a.setClaim).not.toHaveBeenCalled();
-  expect(q(el, '[data-test="preview"]')).toBeNull();
 });
 
 const watcherRow = (id: string, name: string, extra: Partial<WatcherView> = {}): WatcherView => ({
@@ -6258,4 +5546,791 @@ it("keeps a disabled watcher out of the stations' watcher lists, the route teste
   expect(watcherPicker.options.find((row) => row.value === "spare-printer")?.description).toBe(
     undefined,
   );
+});
+
+describe("Routing grid", () => {
+  const drinksTerrace = { row: { kind: "category", categoryId: "drinks" }, zoneId: "terrace" };
+  const kitchenTarget = { kind: "station", stationId: "kitchen" };
+  const breadMove = {
+    productId: "bread",
+    productName: "Bread",
+    zoneId: "terrace",
+    zoneName: "Terrace",
+    from: { kind: "station", stationId: "bar" },
+    to: { kind: "station", stationId: "kitchen" },
+  };
+  /** Drinks go to the Bar everywhere; Kitchen is a second active station. */
+  function gridView(): PrepStationsView {
+    return {
+      ...view,
+      routing: {
+        ...view.routing,
+        zones: [{ id: "terrace", name: "Terrace" }],
+        products: [
+          { id: "bread", name: "Bread", categoryId: "food" },
+          { id: "water", name: "Water", categoryId: null },
+        ],
+        cells: [
+          {
+            row: { kind: "category", categoryId: "drinks" },
+            zoneId: null,
+            target: { kind: "station", stationId: "bar" },
+          },
+        ],
+        stations: [
+          { id: "bar", name: "Bar", active: true },
+          { id: "kitchen", name: "Kitchen", active: true },
+        ],
+      },
+      zones: [{ id: "terrace", name: "Terrace" }],
+    };
+  }
+  async function mountGrid(overrides: Partial<PrepStationsApi> = {}) {
+    const a = api({
+      load: vi.fn().mockResolvedValue(gridView()),
+      setCell: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    });
+    const el = await mount(a);
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: "routing" } }),
+    );
+    await settle(el);
+    await gridOf(el).updateComplete;
+    return { a, el };
+  }
+  const gridOf = (el: PrepStationsScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "venue-routing-grid",
+    )!;
+  const cellCombo = (el: PrepStationsScreen, row: string, zone: string) =>
+    gridOf(el).shadowRoot!.querySelector<WtCombobox>(
+      `td[data-row="${row}"][data-zone="${zone}"] wt-combobox[name="routing-target"]`,
+    )!;
+  const shownText = (box: WtCombobox) =>
+    box.shadowRoot!.querySelector(".trigger .value")!.textContent!.trim();
+  const formActions = (el: PrepStationsScreen) =>
+    gridOf(el).shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("wt-form-actions")!;
+  async function chooseCell(el: PrepStationsScreen, row: string, zone: string, label: string) {
+    const box = cellCombo(el, row, zone);
+    await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    const option = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (o) => o.textContent!.trim() === label,
+    )!;
+    await userEvent.click(option);
+    await settle(el);
+  }
+
+  it("Routing shows the tester above the grid and no claims, exceptions or Unassigned card", async () => {
+    const { el } = await mountGrid();
+    const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
+    const tester = routing.querySelector('[data-test="route-tester"]')!;
+    const grid = routing.querySelector("venue-routing-grid")!;
+    expect(tester.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const old of [
+      '[data-test="exceptions"]',
+      '[data-test="unassigned"]',
+      '[data-test="no-preparation"]',
+      '[data-test^="remove-"]',
+      '[data-test^="assign-"]',
+      '[data-test^="claim-"]',
+      '[data-test="add-exception"]',
+    ])
+      expect(routing.querySelector(old)).toBeNull();
+  });
+
+  it("choosing a cell value previews the moves and saves only after confirmation", async () => {
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
+    const loads = vi.mocked(a.load).mock.calls.length;
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    expect(a.preview).toHaveBeenCalledWith({
+      kind: "cell",
+      address: drinksTerrace,
+      target: kitchenTarget,
+    });
+    const preview = q(el, '[data-test="routing-preview"]')!;
+    expect(preview.textContent).toContain("Bread");
+    expect(preview.textContent).toContain("Drinks, Terrace: this changes Bar to Kitchen.");
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+    expect(a.setCell).not.toHaveBeenCalled();
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, kitchenTarget);
+    await vi.waitFor(() => expect(vi.mocked(a.load).mock.calls.length).toBeGreaterThan(loads));
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  });
+
+  it("after a save, the cell shows what the refresh read rather than the written choice", async () => {
+    const saved = gridView();
+    saved.routing.cells = [
+      ...saved.routing.cells,
+      { row: drinksTerrace.row, zoneId: "terrace", target: { kind: "no_preparation" } },
+    ] as typeof saved.routing.cells;
+    const load = vi.fn().mockResolvedValueOnce(gridView()).mockResolvedValue(saved);
+    const { el } = await mountGrid({ load, preview: vi.fn().mockResolvedValue([breadMove]) });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(cellCombo(el, "c:drinks", "terrace").value).toBe("no_preparation");
+    });
+  });
+
+  it("a No category cell choice previews under the No category name and saves the no_category address", async () => {
+    setLocale("en");
+    const waterMove = { ...breadMove, productId: "water", productName: "Water" };
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([waterMove]) });
+    const address = { row: { kind: "no_category" }, zoneId: "terrace" };
+    await chooseCell(el, "no_category", "terrace", "Kitchen");
+    expect(a.preview).toHaveBeenCalledExactlyOnceWith({
+      kind: "cell",
+      address,
+      target: kitchenTarget,
+    });
+    const preview = q(el, '[data-test="routing-preview"]')!;
+    expect(preview.textContent).toContain("No category, Terrace: this changes Bar to Kitchen.");
+    expect(preview.textContent).toContain("Water");
+    expect(cellCombo(el, "no_category", "terrace").value).toBe("station:kitchen");
+    expect(cellCombo(el, "all", "terrace").value).toBe("");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(address, kitchenTarget);
+  });
+
+  it("Cancel on a pending No category choice restores its own saved value, not the All categories cell at the same zone", async () => {
+    const both = gridView();
+    both.routing.cells = [
+      ...both.routing.cells,
+      { row: { kind: "all" }, zoneId: "terrace", target: { kind: "no_preparation" } },
+      { row: { kind: "no_category" }, zoneId: "terrace", target: kitchenTarget },
+    ] as typeof both.routing.cells;
+    const { a, el } = await mountGrid({
+      load: vi.fn().mockResolvedValue(both),
+      preview: vi.fn().mockResolvedValue([breadMove]),
+    });
+    expect(shownText(cellCombo(el, "no_category", "terrace"))).toBe("Kitchen");
+    await chooseCell(el, "no_category", "terrace", "Clear setting");
+    expect(cellCombo(el, "no_category", "terrace").value).toBe("");
+    // Clearing exposes All categories × Terrace; it does not also drop that cell.
+    expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(
+      "No category, Terrace: this changes Kitchen to No preparation.",
+    );
+    q(el, '[data-test="cancel-routing"]')!.click();
+    await settle(el);
+    await gridOf(el).updateComplete;
+    const box = cellCombo(el, "no_category", "terrace");
+    await box.updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(box.value).toBe("station:kitchen");
+    expect(shownText(box)).toBe("Kitchen");
+    expect(cellCombo(el, "all", "terrace").value).toBe("no_preparation");
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("a zero-move choice saves directly", async () => {
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([]) });
+    await chooseCell(el, "c:drinks", "terrace", "No preparation");
+    await vi.waitFor(() =>
+      expect(a.setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, {
+        kind: "no_preparation",
+      }),
+    );
+    await chooseCell(el, "p:water", "every", "Kitchen");
+    await vi.waitFor(() =>
+      expect(a.setCell).toHaveBeenLastCalledWith(
+        { row: { kind: "product", productId: "water" }, zoneId: null },
+        kitchenTarget,
+      ),
+    );
+    await chooseCell(el, "c:drinks", "every", "Clear setting");
+    await vi.waitFor(() =>
+      expect(a.setCell).toHaveBeenLastCalledWith(
+        { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
+        null,
+      ),
+    );
+    expect(a.setCell).toHaveBeenCalledTimes(3);
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  });
+
+  it("the preview lists each moved product with its old and new destinations, and No replacement for a dead end", async () => {
+    setLocale("en");
+    const { a, el } = await mountGrid({
+      preview: vi.fn().mockResolvedValue([
+        {
+          productId: "bread",
+          productName: "Bread",
+          zoneId: null,
+          zoneName: null,
+          from: null,
+          to: { kind: "no_preparation" },
+        },
+        {
+          productId: "bread",
+          productName: "Bread",
+          zoneId: "terrace",
+          zoneName: "Terrace",
+          from: { kind: "station", stationId: "bar" },
+          to: { kind: "station", stationId: "unknown" },
+        },
+        {
+          productId: "bread",
+          productName: "Bread",
+          zoneId: "terrace",
+          zoneName: "Terrace",
+          from: { kind: "station", stationId: "bar" },
+          to: null,
+          toNoReplacement: true,
+        },
+      ]),
+    });
+    await chooseCell(el, "c:food", "every", "No preparation");
+    const rows = [...el.shadowRoot!.querySelectorAll('[data-test="routing-preview"] tbody tr')];
+    expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+      "Bread Any service zone No station No preparation",
+      "Bread Terrace Bar unknown",
+      "Bread Terrace Bar No replacement",
+    ]);
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("a preview refused for a disabled station shows beside the cell without opening confirmation or writing", async () => {
+    const message = "This station is disabled. Choose an active station.";
+    const { a, el } = await mountGrid({
+      preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
+    });
+    await chooseCell(el, "c:food", "terrace", "Kitchen");
+    await gridOf(el).updateComplete;
+    const box = cellCombo(el, "c:food", "terrace");
+    await vi.waitFor(() => expect(box.error).toBe(message));
+    expect(box.value).toBe("");
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("Cancel restores the saved cell value without writing", async () => {
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
+    await chooseCell(el, "c:drinks", "every", "Kitchen");
+    expect(cellCombo(el, "c:drinks", "every").value).toBe("station:kitchen");
+    q(el, '[data-test="cancel-routing"]')!.click();
+    await settle(el);
+    await gridOf(el).updateComplete;
+    const box = cellCombo(el, "c:drinks", "every");
+    await box.updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(box.value).toBe("station:bar");
+    expect(shownText(box)).toBe("Bar");
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("a write refused after the preview (station disabled meanwhile) shows beside the cell and once at the bottom; retry stays enabled", async () => {
+    const message = "This station is disabled. Choose an active station.";
+    const { a, el } = await mountGrid({
+      preview: vi.fn().mockResolvedValue([breadMove]),
+      setCell: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "route.station_inactive" })
+        .mockResolvedValue(undefined),
+    });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    await gridOf(el).updateComplete;
+    const box = cellCombo(el, "c:drinks", "terrace");
+    await vi.waitFor(() => expect(box.error).toBe(message));
+    expect(box.value).toBe("");
+    const actions = formActions(el);
+    expect(actions.error).toBe(`Drinks, Terrace: ${message}`);
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      `Drinks, Terrace: ${message}`,
+    );
+    expect(
+      [...el.shadowRoot!.querySelectorAll(".error")].filter((node) =>
+        node.textContent!.includes(message),
+      ),
+    ).toEqual([]);
+    expect(cellCombo(el, "c:drinks", "every").error).toBe("");
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledTimes(2);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("");
+    expect(actions.error).toBe("");
+  });
+
+  for (const code of ["service_zone.not_found", "route.subject_not_found"]) {
+    it(`a write refused with ${code} shows the save error beside the cell and at the bottom`, async () => {
+      setLocale("en");
+      const message = "The change could not be saved.";
+      const { el } = await mountGrid({
+        preview: vi.fn().mockResolvedValue([breadMove]),
+        setCell: vi.fn().mockRejectedValue({ code }),
+      });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      await gridOf(el).updateComplete;
+      await vi.waitFor(() => expect(cellCombo(el, "c:drinks", "terrace").error).toBe(message));
+      const actions = formActions(el);
+      await actions.updateComplete;
+      expect(actions.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+        `Drinks, Terrace: ${message}`,
+      );
+    });
+  }
+
+  it("a cell refusal outlives a background refresh and clears on a successful Make default and on a tab change", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const refused = async (el: PrepStationsScreen) => {
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      await gridOf(el).updateComplete;
+      await vi.waitFor(() =>
+        expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved."),
+      );
+    };
+    const { a, el } = await mountGrid({
+      liveData,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+      setCell: vi.fn().mockRejectedValue({ code: "service_zone.not_found" }),
+      setDefaultStation: vi.fn().mockResolvedValue(undefined),
+    });
+    await refused(el);
+    const loads = vi.mocked(a.load).mock.calls.length;
+    liveData.invalidate([{ type: "categories" }]);
+    await vi.waitFor(() => expect(vi.mocked(a.load).mock.calls.length).toBeGreaterThan(loads));
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved.");
+    expect(formActions(el).error).toBe("Drinks, Terrace: The change could not be saved.");
+
+    await chooseCell(el, "all", "every", "Kitchen");
+    expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("kitchen");
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("");
+    expect(formActions(el).error).toBe("");
+
+    await refused(el);
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
+    );
+    await settle(el);
+    el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: "routing" } }),
+    );
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("");
+    expect(formActions(el).error).toBe("");
+  });
+
+  it("Make default from All × Every zone calls the default route and maps its refusal", async () => {
+    const { a, el } = await mountGrid({
+      setDefaultStation: vi.fn().mockRejectedValue({
+        code: "hours.invalid",
+        params: { field: "date", date: "2096-06-10", subjectId: "bar" },
+      }),
+    });
+    await chooseCell(el, "all", "every", "Kitchen");
+    expect(a.setDefaultStation).toHaveBeenCalledExactlyOnceWith("kitchen");
+    expect(a.preview).not.toHaveBeenCalled();
+    expect(a.setCell).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe(
+        "Bar would go back to its saved hours, which overlap a day next to the special date on Sun, 10 Jun 2096. Move or delete that special date on the Hours page first.",
+      ),
+    );
+  });
+
+  const foodTerrace = { row: { kind: "category", categoryId: "food" }, zoneId: "terrace" };
+  const deferred = <T>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const answer = (stationId: string): RouteExplanation => ({
+    route: { kind: "station", stationId },
+    decidedBy: null,
+    fallbacks: [],
+    noReplacement: false,
+    clockReadable: true,
+    stations: [],
+    extras: [],
+    extrasWaitOnDish: false,
+  });
+  /** Mounted from a tester link, so Routing opens with Bread under test. */
+  async function mountTester(overrides: Partial<PrepStationsApi> = {}) {
+    const before = location.href;
+    history.replaceState(null, "", "/manage/prep-stations/test/bread");
+    try {
+      const a = api({
+        load: vi.fn().mockResolvedValue(gridView()),
+        setCell: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      });
+      const el = await mount(a);
+      await settle(el);
+      await gridOf(el).updateComplete;
+      return { a, el };
+    } finally {
+      history.replaceState(null, "", before);
+    }
+  }
+  const testAnswer = (el: PrepStationsScreen) =>
+    q(el, '[data-test="test-answer"]')?.textContent?.replace(/\s+/g, " ") ?? "";
+  const withCell = (target: { kind: string; stationId?: string }) => {
+    const next = gridView();
+    next.routing.cells = [
+      ...next.routing.cells,
+      { row: drinksTerrace.row, zoneId: "terrace", target },
+    ] as typeof next.routing.cells;
+    return next;
+  };
+
+  it.each([
+    "routing_cells",
+    "kitchen_stations",
+    "station_fallbacks",
+    "floor_zones",
+    "categories",
+    "category_details",
+    "products",
+  ])(
+    "a cell, default, station-active, fallback, zone, category-parent or product-category change refreshes the grid and tester (%s)",
+    async (type) => {
+      setLocale("en");
+      const liveData = new LiveData();
+      let made = "bar";
+      const explain = vi.fn(async () => answer(made));
+      const load = vi
+        .fn()
+        .mockResolvedValueOnce(gridView())
+        .mockResolvedValue(withCell(kitchenTarget));
+      const { el } = await mountTester({ liveData, load, explain });
+      await vi.waitFor(() => expect(testAnswer(el)).toContain("Made at: Bar"));
+      expect(cellCombo(el, "c:drinks", "terrace").value).toBe("");
+      made = "kitchen";
+      liveData.invalidate([{ type }]);
+      await vi.waitFor(async () => {
+        await gridOf(el).updateComplete;
+        expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+      });
+      await vi.waitFor(() => expect(testAnswer(el)).toContain("Made at: Kitchen"));
+    },
+  );
+
+  it("a passive refresh during a pending save keeps the coordinate and draft", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const write = deferred<void>();
+    const setCell = vi.fn(() => write.promise);
+    // A fresh object per read, so each refresh really replaces the screen's view.
+    const background = { load: vi.fn(async () => gridView()), explain: vi.fn() };
+    const { a, el } = await mountGrid({
+      liveData,
+      setCell,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+      background: background as unknown as PrepStationsApi,
+    });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() => expect(background.load).toHaveBeenCalledTimes(1));
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(
+      "Drinks, Terrace: this changes Bar to Kitchen.",
+    );
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() => expect(background.load).toHaveBeenCalledTimes(2));
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+    expect(cellCombo(el, "c:drinks", "every").value).toBe("station:bar");
+    write.resolve();
+    await vi.waitFor(() => expect(background.load).toHaveBeenCalledTimes(3));
+    expect(setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, kitchenTarget);
+    expect(a.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("a successful read clears only a read error and never an action failure", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValue(gridView());
+    const { el } = await mountGrid({
+      liveData,
+      load,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+      setCell: vi.fn().mockRejectedValue({ code: "service_zone.not_found" }),
+      setDefaultStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const pageAlert = () => q(el, '[role="alert"]')?.textContent?.trim() ?? "";
+    const reread = async (outcome: "fails" | "succeeds") => {
+      const calls = load.mock.calls.length;
+      if (outcome === "fails") load.mockRejectedValueOnce({ code: "connection.failed" });
+      liveData.refresh();
+      await vi.waitFor(() => expect(load.mock.calls.length).toBeGreaterThan(calls));
+      await settle(el);
+      await gridOf(el).updateComplete;
+    };
+    await reread("fails");
+    expect(pageAlert()).toContain("could not be loaded");
+    await reread("succeeds");
+    expect(pageAlert()).toBe("");
+
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    await vi.waitFor(() =>
+      expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved."),
+    );
+    await chooseCell(el, "all", "every", "Kitchen");
+    await vi.waitFor(() => expect(pageAlert()).toBe("The change could not be saved."));
+    await reread("fails");
+    expect(pageAlert()).toBe("The change could not be saved.");
+    await reread("succeeds");
+    expect(pageAlert()).toBe("The change could not be saved.");
+    expect(cellCombo(el, "c:drinks", "terrace").error).toBe("The change could not be saved.");
+    expect(formActions(el).error).toBe("Drinks, Terrace: The change could not be saved.");
+  });
+
+  it("a late read cannot reopen a closed editor or reorder the selection", async () => {
+    const preview = vi.fn().mockResolvedValueOnce([breadMove]).mockResolvedValue([]);
+    const liveData = new LiveData();
+    const stale = deferred<PrepStationsView>();
+    const load = vi.fn(async () => gridView());
+    const { a, el } = await mountGrid({ liveData, load, preview });
+    const rowOrder = () =>
+      [...gridOf(el).shadowRoot!.querySelectorAll("tbody th")].map((th) =>
+        th.textContent!.replace(/\s+/g, " ").trim(),
+      );
+
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    load.mockReturnValueOnce(stale.promise).mockImplementation(async () => withCell(kitchenTarget));
+    const calls = load.mock.calls.length;
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() => expect(load.mock.calls.length).toBe(calls + 1));
+    q(el, '[data-test="cancel-routing"]')!.click();
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    await vi.waitFor(() =>
+      expect(a.setCell).toHaveBeenCalledExactlyOnceWith(drinksTerrace, kitchenTarget),
+    );
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+    });
+    const order = rowOrder();
+    // The read that started before Cancel lists the categories in another order.
+    const reordered = gridView();
+    reordered.routing.categories = [...reordered.routing.categories].reverse();
+    stale.resolve(reordered);
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("station:kitchen");
+    expect(rowOrder()).toEqual(order);
+    expect(a.setCell).toHaveBeenCalledTimes(1);
+  });
+
+  it("a choice whose No category row a refresh removed while its preview was out is dropped, not saved, when the preview moves nothing", async () => {
+    const liveData = new LiveData();
+    const answer = deferred<unknown[]>();
+    const categorised = gridView();
+    categorised.routing.products = categorised.routing.products.map((product) => ({
+      ...product,
+      categoryId: "food",
+    }));
+    const load = vi.fn(async () => gridView());
+    const { a, el } = await mountGrid({
+      liveData,
+      load,
+      preview: vi.fn().mockReturnValueOnce(answer.promise).mockResolvedValue([breadMove]),
+    });
+    await chooseCell(el, "no_category", "terrace", "Kitchen");
+    load.mockImplementation(async () => categorised);
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(gridOf(el).shadowRoot!.querySelector('td[data-row="no_category"]')).toBeNull();
+    });
+    answer.resolve([]);
+    await settle(el);
+    await gridOf(el).updateComplete;
+    expect(a.setCell).not.toHaveBeenCalled();
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(cellCombo(el, "all", "terrace").value).toBe("");
+    await chooseCell(el, "c:food", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
+  });
+
+  it("reopening an editor owns a new request generation", async () => {
+    setLocale("en");
+    const first = deferred<unknown[]>();
+    const second = deferred<unknown[]>();
+    const preview = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { a, el } = await mountGrid({ preview });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await settle(el);
+    await gridOf(el).updateComplete;
+    await chooseCell(el, "c:food", "terrace", "Kitchen");
+    second.resolve([breadMove]);
+    await vi.waitFor(() => expect(q(el, '[data-test="routing-preview"]')).not.toBeNull());
+    first.resolve([breadMove]);
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("Food, Terrace:");
+    expect(cellCombo(el, "c:drinks", "terrace").value).toBe("");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
+  });
+
+  it.each([
+    [
+      "zone",
+      (next: PrepStationsView) => {
+        next.routing.zones = [];
+        next.zones = [];
+      },
+    ],
+    [
+      "category",
+      (next: PrepStationsView) => {
+        next.routing.categories = next.routing.categories.filter((c) => c.id !== "drinks");
+        next.routing.cells = [];
+        next.categories = next.categories.filter((c) => c.id !== "drinks");
+      },
+    ],
+  ])(
+    "removing a %s while its editor is open shows the target unavailable and requires cancel or reselection, never saving to a neighbour",
+    async (_what, remove) => {
+      setLocale("en");
+      const liveData = new LiveData();
+      const removed = gridView();
+      remove(removed);
+      const load = vi.fn().mockResolvedValue(gridView());
+      const { a, el } = await mountGrid({
+        liveData,
+        load,
+        preview: vi.fn().mockResolvedValue([breadMove]),
+      });
+      await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+      load.mockResolvedValue(removed);
+      liveData.invalidate([{ type: "floor_zones" }, { type: "categories" }]);
+      await vi.waitFor(() =>
+        expect(q(el, '[data-test="routing-unavailable"]')?.textContent?.trim()).toBe(
+          "This row or zone is no longer in the grid. Cancel, then choose again.",
+        ),
+      );
+      const confirm = q(el, '[data-test="confirm-routing"]') as HTMLElement & { disabled: boolean };
+      expect(confirm.disabled).toBe(true);
+      confirm.click();
+      await settle(el);
+      expect(a.setCell).not.toHaveBeenCalled();
+      expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+
+      q(el, '[data-test="cancel-routing"]')!.click();
+      await settle(el);
+      expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+      await chooseCell(el, "c:food", "every", "Kitchen");
+      expect(q(el, '[data-test="routing-unavailable"]')).toBeNull();
+      q(el, '[data-test="confirm-routing"]')!.click();
+      await settle(el);
+      expect(a.setCell).toHaveBeenCalledExactlyOnceWith(
+        { row: { kind: "category", categoryId: "food" }, zoneId: null },
+        kitchenTarget,
+      );
+    },
+  );
+
+  it("a refresh that gives the last uncategorised product a category removes the No category row while a No category choice is pending: the screen cancels that draft, and nothing is saved to All categories or any other row", async () => {
+    const liveData = new LiveData();
+    const categorised = gridView();
+    categorised.routing.products = categorised.routing.products.map((product) => ({
+      ...product,
+      categoryId: "food",
+    }));
+    const load = vi.fn().mockResolvedValue(gridView());
+    const { a, el } = await mountGrid({
+      liveData,
+      load,
+      preview: vi.fn().mockResolvedValue([breadMove]),
+    });
+    await chooseCell(el, "no_category", "terrace", "Kitchen");
+    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    load.mockResolvedValue(categorised);
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(async () => {
+      await gridOf(el).updateComplete;
+      expect(gridOf(el).shadowRoot!.querySelector('td[data-row="no_category"]')).toBeNull();
+    });
+    await settle(el);
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(cellCombo(el, "all", "terrace").value).toBe("");
+    expect(a.setCell).not.toHaveBeenCalled();
+    await chooseCell(el, "c:food", "terrace", "Kitchen");
+    q(el, '[data-test="confirm-routing"]')!.click();
+    await settle(el);
+    expect(a.setCell).toHaveBeenCalledExactlyOnceWith(foodTerrace, kitchenTarget);
+  });
+
+  it("detach stops observers and timers; elapsed-time refresh stays passive", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const liveData = new LiveData();
+      const background = {
+        load: vi.fn().mockResolvedValue(gridView()),
+        explain: vi.fn().mockResolvedValue(answer("bar")),
+      };
+      const { a, el } = await mountTester({
+        liveData,
+        explain: vi.fn().mockResolvedValue(answer("bar")),
+        background: background as unknown as PrepStationsApi,
+      });
+      const active = {
+        load: vi.mocked(a.load).mock.calls.length,
+        explain: vi.mocked(a.explain).mock.calls.length,
+      };
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle(el);
+      expect(background.load).toHaveBeenCalledTimes(1);
+      expect(background.explain).toHaveBeenCalled();
+      expect(vi.mocked(a.load).mock.calls.length).toBe(active.load);
+      expect(vi.mocked(a.explain).mock.calls.length).toBe(active.explain);
+      el.remove();
+      expect(liveData.interests).toEqual([]);
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(background.load).toHaveBeenCalledTimes(1);
+
+      const timed = api({ load: vi.fn().mockResolvedValue(gridView()) });
+      const unwatched = await mount(timed);
+      expect(timed.load).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(timed.load).toHaveBeenCalledTimes(2);
+      unwatched.remove();
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(timed.load).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

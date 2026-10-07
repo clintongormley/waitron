@@ -1291,8 +1291,9 @@ For example, selecting Drinks and Bread shows **2 selected** and lets you move b
 step. Confirm destructive actions in a `wt-modal` with a `danger` button. Keep a refused
 action open and show its message at the bottom of the form, so you can correct the choice.
 For folder deletion, read what every selected folder contains before enabling Delete.
-When the selection is only folders with no products, subfolders or routing rules, they are
-deleted without asking; when they hold only routing rules, the confirmation gives the rule count and asks
+When the selection is only folders with no products, subfolders or routing rules (cells on their
+rows in the routing grid), they are deleted without asking; when they hold only routing rules, the
+confirmation gives the rule count and asks
 nothing about contents; otherwise offer moving their contents up as the default, reversible choice.
 
 ### Icon buttons with a tooltip (`iconButtonStyles`, `trackIconTooltip`)
@@ -2645,9 +2646,15 @@ localized `label` for the tab group.
 
 Prep stations uses `stations`, `routing`, `tickets`, `watchers` and `settings` at
 `/manage/prep-stations/view/<key>`. Stations shows live health and opens read-only dish drilldowns;
-Tickets and Watchers own their printer selections. Settings edits each station value in its own
+Routing shows the route tester above the routing grid
+(`packages/venue-service/src/dashboard/routing-grid.ts`): a row for All categories, each category,
+each top-level product and, while any product has no category, No category; a column for Every
+zone and each active service zone. A choice that moves products opens a preview listing each one
+with its old and new destination before anything is saved; a choice that moves nothing saves at
+once. Tickets and Watchers own their printer selections. Settings edits each station value in its own
 cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Rename,
-Make default and Disable/Enable actions belong to the Stations row menu. A supervisor sees only
+Make default and Disable/Enable actions belong to the Stations row menu; Routing's All categories ×
+Every zone cell also sets the default station, for someone with `venue.configure`. A supervisor sees only
 Stations.
 
 Hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates` and `calendar`

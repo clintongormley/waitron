@@ -1,4 +1,4 @@
-import { createException } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -68,12 +68,12 @@ useVenueDb({
     // Agua is handed over at the bar, so a held Agua has no kitchen ticket at all: only its group
     // says it is held.
     await inTx(v, (tx) =>
-      createException(tx, v.cfg, {
-        zoneId: null,
-        categoryId: null,
-        productId: productIds.get("Agua")!,
-        target: { kind: "no_preparation" },
-      }),
+      setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: productIds.get("Agua")! }, zoneId: null },
+        { kind: "no_preparation" },
+      ),
     );
     const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
     adminId = admin!.id;

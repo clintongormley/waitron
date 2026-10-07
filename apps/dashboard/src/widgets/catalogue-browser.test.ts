@@ -124,21 +124,22 @@ async function nameBox(el: CatalogueBrowser) {
   )!;
 }
 
-it("marks a category with no claim while the default station is switched off, or whose claim names a switched-off station with no fallback, and clears the mark once claimed", async () => {
+it("marks a category with no cell while the default station is switched off, or whose cell names a switched-off station with no fallback, and clears the mark once it has a cell", async () => {
   setLocale("en-GB");
-  const routing = {
+  const routing: RoutingModel = {
     stationTimes: [],
     todayEnds: null,
     clockReadable: true,
-    claims: [
+    zones: [],
+    categories: [],
+    products: [],
+    cells: [
       {
-        categoryId: "d",
-        target: { kind: "station" as const, stationId: "bar" },
-        stationOff: false,
+        row: { kind: "category", categoryId: "d" },
+        zoneId: null,
+        target: { kind: "station", stationId: "bar" },
       },
     ],
-    exceptions: [],
-    unassigned: { folders: [], products: [] },
     defaultStationId: "default",
     stations: [
       { id: "bar", name: "Bar", active: true },
@@ -155,9 +156,13 @@ it("marks a category with no claim while the default station is switched off, or
   expect(await unroutedMarker(el, "folder:b")).toBeNull();
   el.routing = {
     ...routing,
-    claims: [
-      ...routing.claims,
-      { categoryId: "f", target: { kind: "station", stationId: "bar" }, stationOff: false },
+    cells: [
+      ...routing.cells,
+      {
+        row: { kind: "category", categoryId: "f" },
+        zoneId: null,
+        target: { kind: "station", stationId: "bar" },
+      },
     ],
   };
   await el.updateComplete;
@@ -178,26 +183,22 @@ it("marks a category with no claim while the default station is switched off, or
   );
 });
 
-it("does not mark a folder covered by a global folder exception", async () => {
+it("does not mark a folder covered by its own Every zone cell", async () => {
   const el = await mountBrowser({
     routing: {
       stationTimes: [],
       todayEnds: null,
       clockReadable: true,
-      claims: [],
-      exceptions: [
+      zones: [],
+      categories: [],
+      products: [],
+      cells: [
         {
-          id: "route-food",
-          position: 0,
+          row: { kind: "category", categoryId: "f" },
           zoneId: null,
-          categoryId: "f",
-          productId: null,
           target: { kind: "station", stationId: "kitchen" },
-          neverMatches: false,
-          stationOff: false,
         },
       ],
-      unassigned: { folders: [], products: [] },
       defaultStationId: null,
       stations: [{ id: "kitchen", name: "Kitchen", active: true }],
     },
@@ -225,9 +226,16 @@ const routingWith = (overrides: Partial<RoutingModel> = {}): RoutingModel => ({
   stationTimes: [],
   todayEnds: null,
   clockReadable: true,
-  claims: [{ categoryId: "d", target: { kind: "station", stationId: "bar" }, stationOff: false }],
-  exceptions: [],
-  unassigned: { folders: [], products: [] },
+  zones: [],
+  categories: [],
+  products: [],
+  cells: [
+    {
+      row: { kind: "category", categoryId: "d" },
+      zoneId: null,
+      target: { kind: "station", stationId: "bar" },
+    },
+  ],
   defaultStationId: "kitchen",
   stations: [
     { id: "bar", name: "Bar", active: true },
@@ -243,26 +251,32 @@ it("shows each category's route from the routing it holds, and redraws it when r
   await toggleCategory(el, "d");
   expect(await madeAtText(el, "folder:b")).toBe("Bar from Drinks");
   el.routing = routingWith({
-    claims: [{ categoryId: "d", target: { kind: "no_preparation" }, stationOff: false }],
+    cells: [
+      {
+        row: { kind: "category", categoryId: "d" },
+        zoneId: null,
+        target: { kind: "no_preparation" },
+      },
+    ],
   });
   expect(await madeAtText(el, "folder:d")).toBe("No preparation set on this category");
   expect(await madeAtText(el, "folder:b")).toBe("No preparation from Drinks");
 });
 
 it("works the route out again when the products or the categories change", async () => {
-  const exceptions = [
-    {
-      id: "e1",
-      position: 0,
-      zoneId: null,
-      categoryId: null,
-      productId: "juice",
-      target: { kind: "station" as const, stationId: "kitchen" },
-      neverMatches: false,
-      stationOff: false,
-    },
-  ];
-  const el = await mountBrowser({ routing: routingWith({ exceptions }) });
+  const routing = routingWith();
+  const el = await mountBrowser({
+    routing: routingWith({
+      cells: [
+        ...routing.cells,
+        {
+          row: { kind: "product", productId: "juice" },
+          zoneId: null,
+          target: { kind: "station", stationId: "kitchen" },
+        },
+      ],
+    }),
+  });
   expect(await madeAtText(el, "folder:d")).toBe("Bar set on this category");
   el.products = [
     ...PRODUCTS,

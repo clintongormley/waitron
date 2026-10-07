@@ -146,11 +146,13 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
           JSON.stringify(
             path === "/management-api/venue-service/routing"
               ? {
-                  claims: [],
-                  exceptions: [],
-                  unassigned: { folders: [], products: [] },
+                  zones: [],
+                  categories: [],
+                  products: [],
+                  cells: [],
                   defaultStationId: null,
                   stations: [],
+                  canMakeDefault: true,
                 }
               : path === "/management-api/stations/health"
                 ? {

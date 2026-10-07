@@ -56,7 +56,7 @@ import {
   cardReaderHolders,
   cardReaders,
 } from "@waitron/payments";
-import { stationClaims } from "@waitron/venue-service";
+import { routingCells } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
@@ -235,7 +235,7 @@ async function setupVenue(): Promise<{
     await publishWorkingMenu(tx, cat.id);
     const defaultStation = sql`(select id from kitchen_stations
            where location_id = ${cfg.locationId} and is_default)`;
-    await tx.insert(stationClaims).values([
+    await tx.insert(routingCells).values([
       { locationId: cfg.locationId, categoryId: comida.id, stationId: defaultStation },
       { locationId: cfg.locationId, categoryId: bebidas.id, stationId: defaultStation },
     ]);

@@ -970,14 +970,12 @@ export class ProductList extends LitElement {
                 "{name}",
                 () => source.name ?? t("editor.missing_choice"),
               )
-            : source.kind === "default"
-              ? t("folders.made_at_default")
-              : t("folders.made_at_exception"),
+            : t("folders.made_at_default"),
       made.someElsewhere ? t("folders.made_at_some_elsewhere") : "",
     ]
       .filter((part) => part !== "")
       .join(" · ");
-    return html`<a part="maker-link" href="/manage/prep-stations">${value}</a>${
+    return html`<a part="maker-link" href="/manage/prep-stations/view/routing">${value}</a>${
         detail === "" ? nothing : html` <span part="maker-detail">${detail}</span>`
       }`;
   }

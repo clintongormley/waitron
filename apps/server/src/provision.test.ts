@@ -18,6 +18,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
 import { parseModuleConfig } from "@waitron/module";
+import { createCategory } from "@waitron/catalogue";
 import {
   readHolidays,
   readLocalHolidayModel,
@@ -25,6 +26,7 @@ import {
   saveHolidayArea,
   saveLocalHoliday,
   saveSpecialDate,
+  setRoutingCell,
 } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
@@ -282,6 +284,34 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
+  it("a fresh venue has one active default station and zero routing_cells rows; rerunning provision adds none", async () => {
+    const db = ownerDb();
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+    const counts = async () =>
+      (
+        await db.execute<Record<string, number>>(sql`
+          select
+            (select cast(count(*) as int) from kitchen_stations
+              where is_default = 1 and active = 1) as default_stations,
+            (select cast(count(*) as int) from kitchen_stations) as stations,
+            (select cast(count(*) as int) from routing_cells) as cells`)
+      ).rows[0];
+
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
+    expect(await counts()).toEqual({ default_stations: 1, stations: 1, cells: 0 });
+
+    const error = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    ).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
+    await recoverProvisionedVenue(db, request);
+    expect(await counts()).toEqual({ default_stations: 1, stations: 1, cells: 0 });
+  });
+
   it("recovers the exact committed venue by location, node and series after a process dies before file publication", async () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
@@ -483,6 +513,35 @@ describe("clearProvisionFixture", () => {
       stations: 0,
       locations: 0,
     });
+  });
+  it("clears a venue's routing cells before its stations", async () => {
+    const db = ownerDb();
+    const result = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    );
+    const cfg = { locationId: brandLocationId(result.locationId) };
+    await withTransaction(db, async (tx) => {
+      const [bar] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: result.locationId, name: "Bar" })
+        .returning({ id: kitchenStations.id });
+      const folder = await createCategory(tx, { name: "Drinks" });
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "category", categoryId: folder.id }, zoneId: null },
+        { kind: "station", stationId: bar!.id },
+      );
+    });
+
+    await clearProvisionFixture(db);
+
+    const { rows } = await db.execute<Record<string, number>>(sql`
+      select
+        (select cast(count(*) as int) from routing_cells) as cells,
+        (select cast(count(*) as int) from kitchen_stations) as stations`);
+    expect(rows[0]).toEqual({ cells: 0, stations: 0 });
   });
 });
 

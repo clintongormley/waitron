@@ -97,6 +97,9 @@ export class EquipmentLabel extends LitElement {
   /** Replaced in tests, which cannot answer a print dialog. */
   @property({ attribute: false }) print: (label: EquipmentLabelContent) => void = (label) =>
     printEquipmentLabel(label);
+  /** Replaced in tests, which hold a drawing back. */
+  @property({ attribute: false }) drawQr: (code: string) => Promise<string> = (code) =>
+    toDataURL(code, { margin: 2, width: 320 });
 
   @state() private qr = "";
 
@@ -108,7 +111,7 @@ export class EquipmentLabel extends LitElement {
     if (changed.has("kind") || changed.has("itemId")) {
       this.qr = "";
       const code = this.#code();
-      void toDataURL(code, { margin: 2, width: 320 }).then((qr) => {
+      void this.drawQr(code).then((qr) => {
         if (this.#code() === code) this.qr = qr;
       });
     }

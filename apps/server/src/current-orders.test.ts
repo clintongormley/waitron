@@ -1,4 +1,4 @@
-import { createException } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -205,12 +205,12 @@ async function setupVenue(): Promise<Venue> {
     await assignCatalogueToLocation(tx, venue.locationId, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
-    await createException(tx, cfg, {
-      zoneId: null,
-      categoryId: null,
-      productId: productId.water,
-      target: { kind: "no_preparation" },
-    });
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "product", productId: productId.water }, zoneId: null },
+      { kind: "no_preparation" },
+    );
     return {
       cfg,
       zoneId: offers.zoneId,
