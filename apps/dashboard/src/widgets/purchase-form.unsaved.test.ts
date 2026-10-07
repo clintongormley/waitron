@@ -45,6 +45,62 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
+it("a busy purchase ignores delivered field and VAT-choice events without dirtying its saved values", async () => {
+  const { app, form } = await mount();
+  app.busy = true;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  for (const [name, value] of [
+    ["supplier-name", "Different supplier"],
+    ["regime", "simplified"],
+    ["line-base-0", "999"],
+    ["line-kind-0", "capital"],
+  ]) {
+    form
+      .shadowRoot!.querySelector(`[data-test=${name}]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+  }
+  for (const action of ["add-line", "remove-line-0"]) {
+    form.shadowRoot!.querySelector(`[data-test=${action}]`)!.dispatchEvent(new MouseEvent("click"));
+  }
+  await form.updateComplete;
+  expect(unload()).toBe(false);
+  expect(
+    (form.shadowRoot!.querySelector("[data-test=supplier-name]") as HTMLInputElement).value,
+  ).toBe("Supplier");
+  expect(
+    (form.shadowRoot!.querySelector("[data-test=line-base-0]") as HTMLInputElement).value,
+  ).toBe("100.00");
+  app.busy = false;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  const sent: unknown[] = [];
+  form.addEventListener("update-purchase", (event) => sent.push((event as CustomEvent).detail));
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  expect(sent).toEqual([
+    {
+      id: "pi-1",
+      patch: {
+        header: {
+          supplierTaxId: "B12345678",
+          supplierName: "Supplier",
+          supplierInvoiceNumber: "F-1",
+          issuedOn: "2026-08-10",
+          receivedOn: "2026-08-12",
+          total: "121.00",
+          regime: "general",
+          deductibleProportion: "100.00",
+          note: null,
+        },
+        lines: [{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }],
+      },
+    },
+  ]);
+});
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);

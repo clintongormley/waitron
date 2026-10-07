@@ -231,6 +231,90 @@ it("adopting one discovery row does not discard another edited name", async () =
   q(screen, "[data-test=cancel-discovery]")!.click();
   await choose(app, "keep");
 });
+it("adoption commits only the submitted name when newer input arrives before its reply", async () => {
+  let finish!: () => void;
+  const sent: unknown[] = [];
+  const { app, screen } = await mount(
+    {
+      adoptReader: async (body) => {
+        sent.push(body);
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        return { id: "r3", status: "paired" };
+      },
+    },
+    true,
+  );
+  change(screen, "Submitted", "name-a1");
+  q(screen, "[data-test=adopt-a1]")!.click();
+  await expect.poll(() => typeof finish).toBe("function");
+  change(screen, "Newer", "name-a1");
+  finish();
+  await expect
+    .poll(() => (q(screen, "[data-test=name-a1]") as HTMLInputElement)?.disabled)
+    .toBe(false);
+  expect((q(screen, "[data-test=name-a1]") as HTMLInputElement).value).toBe("Newer");
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=cancel-discovery]")!.click();
+  await choose(app, "keep");
+  change(screen, "Submitted", "name-a1");
+  expect(unload()).toBe(false);
+  expect(sent).toEqual([{ providerId: "test", providerRef: "a1", name: "Submitted" }]);
+});
+it("a departed discovery input cannot rename a reopened row", async () => {
+  const { screen } = await mount({}, true);
+  const old = q(screen, "[data-test=name-a1]")!;
+  q(screen, "[data-test=cancel-discovery]")!.click();
+  await expect.poll(() => dialog(screen, "reader-discovery")).toBeNull();
+  q(screen, "[data-test=add-reader-test]")!.click();
+  await expect.poll(() => q(screen, "[data-test=name-a1]")).not.toBeNull();
+  old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Departed" } }));
+  await screen.updateComplete;
+  expect((q(screen, "[data-test=name-a1]") as HTMLInputElement).value).toBe("Counter");
+  expect(unload()).toBe(false);
+});
+for (const refuses of [false, true]) {
+  it(`an earlier adoption ${refuses ? "refusal" : "success"} cannot finish a replacement discovery`, async () => {
+    let finish!: () => void;
+    let reads = 0;
+    const { screen } = await mount(
+      {
+        listReaders: async () => {
+          reads++;
+          return [reader];
+        },
+        adoptReader: async () => {
+          await new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+          if (refuses) throw { code: "connection.failed" };
+          return { id: "r3", status: "paired" };
+        },
+      },
+      true,
+    );
+    change(screen, "Submitted", "name-a1");
+    q(screen, "[data-test=adopt-a1]")!.click();
+    await expect.poll(() => typeof finish).toBe("function");
+    q(screen, "[data-test=add-reader-test]")!.click();
+    await expect
+      .poll(() => (q(screen, "[data-test=name-a1]") as HTMLInputElement)?.value)
+      .toBe("Counter");
+    change(screen, "Replacement", "name-a1");
+    const beforeReply = reads;
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await screen.updateComplete;
+    expect((q(screen, "[data-test=name-a1]") as HTMLInputElement).value).toBe("Replacement");
+    expect((q(screen, "[data-test=adopt-a1]") as HTMLButtonElement).disabled).toBe(false);
+    expect(dialog(screen, "reader-discovery")!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(reads).toBe(beforeReply);
+    expect(unload()).toBe(true);
+    change(screen, "Counter", "name-a1");
+    expect(unload()).toBe(false);
+  });
+}
 it("details and unpair confirmation remain exempt", async () => {
   const { app, screen } = await mount();
   q(screen, "[data-test=close-reader-editor]")!.click();

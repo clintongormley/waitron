@@ -35,6 +35,31 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
+it("a busy ingredient ignores delivered name, active and allergen changes without dirtying its baseline", async () => {
+  const { form } = await fixture();
+  form.busy = true;
+  await form.updateComplete;
+  for (const [selector, type, detail] of [
+    ["wt-input", "wt-change", { value: "Changed" }],
+    ["[data-test=active]", "wt-change", { checked: false }],
+    ["[data-test=allergens]", "wt-allergens-change", { value: {} }],
+    ["[data-test=dietary-origin]", "origin-changed", { origin: "plant" }],
+  ] as const) {
+    form
+      .shadowRoot!.querySelector(selector)!
+      .dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+  await form.updateComplete;
+  expect(unloadProtected()).toBe(false);
+  form.busy = false;
+  await form.updateComplete;
+  const sent: unknown[] = [];
+  form.addEventListener("update-ingredient", (event) => sent.push((event as CustomEvent).detail));
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  expect(sent).toEqual([
+    { id: "salt", patch: { name: "Salt", active: true, allergens: null, dietaryOrigin: null } },
+  ]);
+});
 async function fixture(props: Partial<IngredientLeaveApp> = {}) {
   setLocale("en-GB");
   const { el: app } = await mountWidget<IngredientLeaveApp>("ingredient-leave-test-app", props);
@@ -333,4 +358,20 @@ it("an invalid raw ingredient name still asks before losing its value", async ()
   expect((await question(app)).open).toBe(true);
   await choose(app, "keep");
   expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("   ");
+});
+
+it("a detached ingredient control cannot change the body submitted after reconnection", async () => {
+  const { app, form } = await fixture();
+  const origin = form.shadowRoot!.querySelector("[data-test=dietary-origin]")!;
+  form.remove();
+  origin.dispatchEvent(new CustomEvent("origin-changed", { detail: { origin: "animal" } }));
+  expect(unloadProtected()).toBe(false);
+  app.shadowRoot!.prepend(form);
+  await form.updateComplete;
+  const sent: unknown[] = [];
+  form.addEventListener("update-ingredient", (event) => sent.push((event as CustomEvent).detail));
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  expect(sent).toEqual([
+    { id: "salt", patch: { name: "Salt", active: true, allergens: null, dietaryOrigin: null } },
+  ]);
 });

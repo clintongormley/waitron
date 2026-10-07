@@ -4162,3 +4162,32 @@ navigation target, a collapsed sidebar group and an unpainted dark canvas; those
 excluded from the final results. No live printer write or whole-shell accessibility claim is made.
 The previous whole-branch Claude review is retained. Rebase, push and current-head CI remain
 before delivery.
+
+## Current-head coverage repair, 2026-10-07
+
+CI run `37568443521` at `c940a9a26a69088ff51f5c79c6b6ecd484c6a7f4` passed the
+8,338 dashboard tests but refused branch coverage at 94.79%. Running
+`pnpm --filter @waitron/dashboard test:coverage` locally reproduced both results.
+The remaining CI jobs completed successfully. The normal push hook had passed in 111 seconds.
+
+Additional cases exercise disposed printer drafts, replacement reader discovery input and
+adoption replies, departed Profile credential operations, field/form Venue refusals, busy
+Purchase/Ingredient events and nested Product child creation. They assert retained/reverted
+values, exact submitted bodies, write ownership and independent scope cleanup. No production
+code or existing behavioral assertion changed in this coverage repair.
+
+In an independently installed clone, removing the discovery input guard failed one new case
+beside one passing revert control; removing adoption reply guards failed two beside one control.
+Removing Profile's save-operation checks failed six beside one clean-details control. Removing
+inline printer disposal failed four beside two revert controls. Removing child refusal/focus
+checks failed three beside one legitimate-refusal control. The final Google redirect, busy-input,
+detached-origin and already-open-child deletions failed six cases beside three controls. After
+restoring the guards, the seven changed test files passed all 153 cases and their measured source
+files matched the feature checkout byte for byte. The exact measuring directory was removed.
+Logs are retained in Lane E's `receipts/w69-ci-resume-20261007/`.
+
+The final full dashboard coverage command passed 8,371 tests across 262 files, with
+98.43% statements, 95% branches, 99.03% functions and 99.38% lines. Dashboard typechecking and
+changed-test lint passed. Earlier attempts with incomplete fixture return types, incorrect widget
+properties and an incomplete candidate overlay are excluded from those results. The previous
+Claude review remains retained; the next pushed head still needs its normal hook and required CI.

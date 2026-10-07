@@ -7,6 +7,7 @@ import { venueDetailsFixture, venueClockPreviewFixture } from "../testing/venue-
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./venue-details-panel.js";
+import { codeMessage } from "../i18n/codes.js";
 
 class VenueDetailsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -91,6 +92,7 @@ for (const [name, value, original] of [
   ["addressLine1", "Different street", " Calle Mayor 1 "],
   ["addressLine2", "Floor 2", "   "],
   ["city", "Barcelona", "Madrid"],
+  ["postalCode", "28002", " 28001 "],
   ["timeZone", "invalid-zone", "Europe/Madrid"],
   ["dayCutover", "not a time", "06:00:00"],
 ] as const) {
@@ -165,6 +167,46 @@ it("a refused write keeps the submitted values protected", async () => {
   expect(await request).toBe("kept");
   expect(field(panel, "addressLine1").value).toBe("Different street");
 });
+for (const code of [
+  "venue.detail_locked",
+  "venue.detail_invalid",
+  "venue.detail_read_only",
+  "connection.failed",
+] as const) {
+  for (const fieldError of [false, true]) {
+    it(`${code} ${fieldError ? "field" : "form"} refusal preserves the venue draft until Discard`, async () => {
+      const { app, panel, writes } = await mount({
+        patchVenueDetails: async () => {
+          throw { code, params: fieldError ? { field: "addressLine1" } : undefined };
+        },
+      });
+      await change(panel, "addressLine1", "Different street");
+      click(panel, "save");
+      const expected =
+        code === "venue.detail_locked" || code === "venue.detail_read_only"
+          ? t("venue_details.read_only")
+          : code === "venue.detail_invalid"
+            ? t("venue_details.invalid")
+            : codeMessage(code);
+      await expect
+        .poll(() =>
+          fieldError
+            ? field(panel, "addressLine1").error
+            : panel.shadowRoot!.querySelector("wt-form-actions")?.error,
+        )
+        .toBe(expected);
+      expect(field(panel, "addressLine1").value).toBe("Different street");
+      expect(unload()).toBe(true);
+      expect(writes).toEqual([
+        { changes: { addressLine1: "Different street" }, expected: venueDetailsFixture().details },
+      ]);
+      click(panel, "cancel");
+      await choose(app, "discard");
+      await expect.poll(() => panel.shadowRoot!.querySelector("wt-input")).toBeNull();
+      expect(unload()).toBe(false);
+    });
+  }
+}
 it("live values do not reset the opening baseline, and disconnect invalidates a question", async () => {
   const model = venueDetailsFixture();
   let current: VenueDetailsModel = model;

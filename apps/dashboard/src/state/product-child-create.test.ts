@@ -161,3 +161,81 @@ it("commits a saved child before attachment and refresh, but never commits a rep
   expect(committed).toBe(false);
   expect(fx.controller.kind).toBe("unit");
 });
+it("Cancel and Submit without an open child leave the dirty product alone", async () => {
+  const fx = await fixture();
+  let writes = 0;
+  fx.controller.cancel();
+  await fx.controller.submit(async () => {
+    writes++;
+    return { id: "unexpected" };
+  });
+  expect(writes).toBe(0);
+  expect(fx.controller.kind).toBeNull();
+  expect(fx.el.currentValue.name).toBe("Dirty coffee");
+  expect(fx.accept).not.toHaveBeenCalled();
+  expect(fx.refresh).not.toHaveBeenCalled();
+  expect(fx.focus).not.toHaveBeenCalled();
+});
+it("a child opened before Cancel's focus settles retains its focus ownership", async () => {
+  const fx = await fixture();
+  fx.controller.open("unit");
+  fx.controller.cancel();
+  fx.controller.open("courses");
+  await fx.el.updateComplete;
+  expect(fx.controller.kind).toBe("courses");
+  expect(fx.focus).not.toHaveBeenCalled();
+  expect(fx.el.currentValue.name).toBe("Dirty coffee");
+});
+it("a departed child refusal cannot mark the replacement child or clear its write gate", async () => {
+  const fx = await fixture();
+  fx.controller.open("unit");
+  const departed = deferred<{ id: string }>();
+  const old = fx.controller.submit(() => departed.promise);
+  fx.controller.reset();
+  fx.controller.open("courses");
+  const current = deferred<{ id: string; name: string }>();
+  const saving = fx.controller.submit(() => current.promise);
+  departed.reject(new Error("Old refusal"));
+  await old;
+  expect(fx.controller.kind).toBe("courses");
+  expect(fx.controller.busy).toBe(true);
+  expect(fx.controller.error).toBeNull();
+  expect(fx.el.currentValue.name).toBe("Dirty coffee");
+  current.resolve({ id: "new-course", name: "New course" });
+  await saving;
+  expect(fx.el.currentValue.courseId).toBe("new-course");
+});
+it("replacement during a committed child's attachment prevents the old focus and refresh", async () => {
+  const fx = await fixture();
+  fx.controller.open("unit");
+  const committed: string[] = [];
+  fx.accept.mockImplementationOnce(() => {
+    fx.controller.reset();
+    fx.controller.open("courses");
+  });
+  await fx.controller.submit(
+    async () => ({ id: "saved-unit" }),
+    () => committed.push("saved-unit"),
+  );
+  expect(committed).toEqual(["saved-unit"]);
+  expect(fx.controller.kind).toBe("courses");
+  expect(fx.controller.busy).toBe(false);
+  expect(fx.focus).not.toHaveBeenCalled();
+  expect(fx.refresh).not.toHaveBeenCalled();
+  expect(fx.el.currentValue.name).toBe("Dirty coffee");
+});
+
+it("opening another child cannot replace a pending child write", async () => {
+  const fx = await fixture();
+  fx.controller.open("unit");
+  const request = deferred<{ id: string; name: Record<string, string> }>();
+  const pending = fx.controller.submit(() => request.promise);
+  fx.controller.open("courses");
+  expect(fx.controller.kind).toBe("unit");
+  expect(fx.controller.busy).toBe(true);
+  request.resolve({ id: "new-unit", name: { en: "Scoop" } });
+  await pending;
+  expect(fx.el.currentValue.unitId).toBe("new-unit");
+  expect(fx.el.currentValue.courseId).toBeNull();
+  expect(fx.el.currentValue.name).toBe("Dirty coffee");
+});

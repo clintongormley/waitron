@@ -104,6 +104,38 @@ async function choose(app: InlinePrinterApp, decision: "keep" | "discard") {
   await expect.poll(() => question.open).toBe(false);
 }
 for (const owner of ["name", "connection"] as const) {
+  for (const refuses of [false, true]) {
+    it(`inline ${owner} departed ${refuses ? "refusal" : "success"} leaves a reopened editor alone`, async () => {
+      let finish!: () => void;
+      const { app, screen } = await mount({
+        updatePrinter: async () => {
+          await new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+          if (refuses) throw { code: "connection.failed" };
+        },
+      });
+      await open(screen, owner);
+      change(screen, owner, owner === "name" ? "Submitted" : "10.0.0.88");
+      q(screen, `[data-test=save-printer-${owner}]`)!.click();
+      await expect.poll(() => typeof finish).toBe("function");
+      screen.remove();
+      const reopened = new PrintersScreen();
+      reopened.api = app.api;
+      app.shadowRoot!.append(reopened);
+      await expect.poll(() => q(reopened, "[data-test=edit-printer-name]")).not.toBeNull();
+      await open(reopened, owner);
+      change(reopened, owner, owner === "name" ? "Reopened" : "10.0.0.99");
+      finish();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await reopened.updateComplete;
+      expect(field(reopened, owner).value).toBe(owner === "name" ? "Reopened" : "10.0.0.99");
+      expect(field(reopened, owner).disabled).toBe(false);
+      expect(unload()).toBe(true);
+      change(reopened, owner, owner === "name" ? "Kitchen" : "10.0.0.9");
+      expect(unload()).toBe(false);
+    });
+  }
   const original = owner === "name" ? "Kitchen" : "10.0.0.9";
   const edited = owner === "name" ? "New kitchen" : "10.0.0.88";
   it(`inline ${owner} protects unload and shared Cancel decisions, then reopens saved values`, async () => {

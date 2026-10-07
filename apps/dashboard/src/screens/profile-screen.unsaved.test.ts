@@ -358,6 +358,68 @@ it("a disconnected authenticator enrollment result cannot repopulate secret fiel
   expect(screen.shadowRoot!.querySelector("[data-test=authenticator-qr]")).toBeNull();
   expect(unload()).toBe(false);
 });
+for (const action of ["recovery-codes", "setup-google", "confirm-email"] as const) {
+  for (const refuses of [false, true]) {
+    it(`departed ${action} ${refuses ? "refusal" : "success"} cannot affect a reconnected profile`, async () => {
+      let finish!: () => void;
+      let reads = 0;
+      let redirects = 0;
+      const wait = async () => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        if (refuses) throw { code: "connection.failed" };
+      };
+      const { app, screen } = await mount({
+        getProfile: async () => {
+          reads++;
+          return { ...profile, hasGoogle: false };
+        },
+        regenerateRecoveryCodes: async () => {
+          await wait();
+          return { codes: ["OLD-SECRET"] };
+        },
+        beginGoogleLink: async () => {
+          await wait();
+          return { authorizationUrl: "https://example.com/old" };
+        },
+        confirmProfileEmail: async () => {
+          await wait();
+          return { email: "new@example.com" };
+        },
+      });
+      screen.navigate = () => {
+        redirects++;
+      };
+      await click(screen, action);
+      if (action === "confirm-email") change(screen, "setupCode", "123456");
+      else {
+        change(screen, "currentPassword", "proof");
+        change(screen, "totp", "123456");
+      }
+      await click(screen, "save");
+      await expect.poll(() => typeof finish).toBe("function");
+      screen.remove();
+      app.shadowRoot!.prepend(screen);
+      await screen.updateComplete;
+      await click(screen, "change-password");
+      change(screen, "password", "Replacement");
+      const beforeReply = reads;
+      finish();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await screen.updateComplete;
+      expect(value(screen, "password")).toBe("Replacement");
+      expect(screen.shadowRoot!.querySelector("[data-test=recovery-code-list]")).toBeNull();
+      expect(screen.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+      expect(screen.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+      expect(reads).toBe(beforeReply);
+      expect(redirects).toBe(0);
+      expect(unload()).toBe(true);
+      change(screen, "password", "");
+      expect(unload()).toBe(false);
+    });
+  }
+}
 
 it("passkey enrollment submits the captured name and preserves a newer unsubmitted name", async () => {
   let resolve!: () => void;
@@ -506,4 +568,70 @@ it("reverting a detail email excludes the now-hidden proof from its submitted dr
   await click(screen, "cancel");
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});
+
+it("a Google-link reply retains newer proof input instead of redirecting away from it", async () => {
+  let finish!: () => void;
+  const destinations: string[] = [];
+  const { screen } = await mount({
+    getProfile: async () => ({ ...profile, hasGoogle: false }),
+    beginGoogleLink: async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { authorizationUrl: "https://example.com/link" };
+    },
+  });
+  screen.navigate = (url) => {
+    destinations.push(url);
+  };
+  await click(screen, "setup-google");
+  change(screen, "currentPassword", "submitted");
+  change(screen, "totp", "123456");
+  await click(screen, "save");
+  await expect.poll(() => typeof finish).toBe("function");
+  change(screen, "currentPassword", "newer");
+  finish();
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=save]")!.disabled)
+    .toBe(false);
+  expect(destinations).toEqual([]);
+  expect(value(screen, "currentPassword")).toBe("newer");
+  expect(screen.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  expect(unload()).toBe(true);
+  change(screen, "currentPassword", "submitted");
+  expect(unload()).toBe(false);
+});
+
+it("a pending PIN write ignores a delivered Cancel and a details-editor request", async () => {
+  let reject!: (reason: unknown) => void;
+  const { app, screen } = await mount({
+    changePin: () =>
+      new Promise((_, no) => {
+        reject = no;
+      }),
+  });
+  await click(screen, "change-pin");
+  change(screen, "currentPassword", "proof");
+  change(screen, "totp", "123456");
+  change(screen, "pin", "1234");
+  change(screen, "confirmPin", "1234");
+  await click(screen, "save");
+  screen.shadowRoot!.querySelector("[data-test=cancel]")!.dispatchEvent(new MouseEvent("click"));
+  screen.editDetails();
+  await screen.updateComplete;
+  expect(value(screen, "pin")).toBe("1234");
+  expect(screen.shadowRoot!.querySelector("wt-input[name=displayName]")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  reject({ code: "password.invalid" });
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+          .disabled,
+    )
+    .toBe(false);
+  expect(value(screen, "pin")).toBe("1234");
+  expect(unload()).toBe(true);
 });
