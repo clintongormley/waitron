@@ -1074,7 +1074,7 @@ unused `units` property is gone (it closes W75's leftover).
     that matches a filter in its own right. Once a load has had no clash, a clash that comes back
     (Undo, a live re-read) does not switch the filter back to Clashes.
   - Done in A345: the tab now counts and marks clashes the way publishing does (see A345 below).
-- **A345, owner 2026-10-07 — DONE (a menu with clashes cannot be published, from anywhere):** a
+- **A345, owner 2026-10-07 — DONE (#1383, a menu with clashes cannot be published, from anywhere):** a
   probe on a real database found every way to publish or schedule a menu already refused one with
   clashes (`menu.clashes_unresolved`), and a scheduled edition going live only moves to a stored
   copy. What the owner saw was the Price overrides tab disagreeing with the publish check both ways:
@@ -1090,6 +1090,11 @@ unused `units` property is gone (it closes W75's leftover).
   - Decided as built: a product with both a variant that follows its clashing price and a variant
     whose own price clashes is marked on its own price first, because a price typed there settles
     one of them; once typed, the mark moves to the variants.
+  - Open: Spanish says "discrepancia(s)" on the tab and the heading, but "conflictos" in the
+    menus list and in the publish refusal (`apps/dashboard/src/i18n/codes.ts`); both predate #1383.
+    Next: the owner picks one word.
+  - Open, from #1383's review: on the Preview tab a failed live refresh keeps the heading's old
+    clash count, as the rest of that line already does (`#menuReadFailed`, from A290, #1307).
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
