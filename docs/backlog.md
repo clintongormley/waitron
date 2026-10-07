@@ -1785,9 +1785,7 @@ printer. Its own driverless setup refused a printer taking only PWG Raster (appa
 CUPS 2.4.10 that later versions fix; Debian testing's 2.4.18 accepted it), and that printer did
 print through a route CUPS calls deprecated. CUPS held a job while the printer was away and printed
 it by itself later; its source code waits 7 days before counting such a job failed. The owner approved drawing pages ourselves (decision 10), and A231 has landed.
-**Next action:** build A231p from the reconciled plan, with email and A4 printing in one PR
-that ends `needs-owner-review`. Physical printer checks need the owner present or an agreed
-arrangement. The build is in progress: the shared document content has been extracted from the roll renderer,
+**Owner split, 2026-10-07:** finish the completed foundation as A231p part 1, keeping public F1 issuance disabled, and park its PR `needs-owner-review`. UI work takes priority next. A231q finishes the live email setup/provisioning and dashboard editor, restore checks, office-printer discovery/registration/location selection and IPP transport, delivery and send-again/download screens, withdrawal actions and the remaining integration and gate. Built-image rendering, box measurements and physical printer checks remain; physical printing requires owner presence or arrangement. The [reconciled plan](superpowers/plans/2026-10-03-invoice-pdf-email-and-office-printing.md) lists the split. The foundation built so far: the shared document content has been extracted from the roll renderer,
 with captured mixed-rate discounted F1 bytes preserved on 58/80 mm paper. The A4 PDF and
 300/600 dpi glyph-outline page renderers now share a paginated layout. Tests extract the saved
 figures, decode the drawn QR, compare raster text with the PDF rendered at 300 dpi, and check
