@@ -100,6 +100,7 @@ export {
   readLiveDocuments,
 } from "./menu-publication.js";
 export {
+  activateDueMenuPublications,
   cancelMenuPublication,
   listMenuPublications,
   queueMenuPublication,

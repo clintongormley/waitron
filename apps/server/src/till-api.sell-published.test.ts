@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { and, eq, sql, type SQL } from "drizzle-orm";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   floorZones,
@@ -16,12 +16,14 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  activateDueMenuPublications,
   addProductToMenu,
   addMember,
   removeMember,
   addShortcut,
   addProducts,
   assignCatalogueToLocation,
+  buildMenuDocument,
   createCatalogue,
   createCategory,
   createExtraList,
@@ -29,10 +31,12 @@ import {
   createProduct,
   createSectionIn,
   deactivateCatalogue,
+  menuDocumentHash,
   menuStatus,
   menuVersions,
   menuPublications,
   optionLabels,
+  queueMenuPublication,
   requireMenuRoot,
   setHomeDisplay,
   updateExtraList,
@@ -57,7 +61,7 @@ import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { configureZone, createDepartment } from "@waitron/venue-service";
+import { configureZone, createDepartment, workingLineContexts } from "@waitron/venue-service";
 import { createTable } from "./tables.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -458,6 +462,95 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
       });
     }
     expect(await written()).toEqual(before);
+  });
+});
+
+describe("a basket that spans a scheduled activation", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("refuses the old version once the queued one's time passes, prices new lines from it, and leaves recorded lines alone", async () => {
+    const start = Math.ceil(Date.now() / 60_000) * 60_000;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(start);
+    const v = await setupLunch();
+    const v1 = await publish(v.menuId);
+    const lineVersions = (where: SQL) =>
+      suite.db
+        .select({
+          menuVersionId: workingLineContexts.menuVersionId,
+          gross: workingOrderLines.unitPriceGross,
+        })
+        .from(workingLineContexts)
+        .innerJoin(
+          workingOrderLines,
+          eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
+        )
+        .where(where);
+
+    const early = await pay(v, [lemonadeLine(v, v1)]);
+    expect(early.status).toBe(200);
+    expect(((await early.json()) as { total: string }).total).toBe("3.00");
+    await withTransaction(suite.db, (tx) =>
+      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { grossPrice: "3.50" }),
+    );
+    const v2 = (
+      await withTransaction(suite.db, async (tx) => {
+        const { document } = await buildMenuDocument(tx, v.menuId);
+        return queueMenuPublication(
+          tx,
+          v.menuId,
+          menuDocumentHash(document),
+          new Date(start + 60_000),
+          "manager-ana",
+        );
+      })
+    ).versionId;
+    const heldId = randomUUID();
+    const held = await send(v, "POST", "/api/working-orders", {
+      id: heldId,
+      zoneId: v.zoneId,
+      lines: [lemonadeLine(v, v1)],
+      label: "Mesa 5",
+    });
+    expect(held.status).toBe(200);
+
+    vi.setSystemTime(start + 60_000);
+    const before = await written();
+    const stale = await pay(v, [lemonadeLine(v, v1)]);
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      error: {
+        code: "menu.version_changed",
+        params: { menus: [{ menuId: v.menuId, liveVersionId: v2 }] },
+      },
+    });
+    expect(await written()).toEqual(before);
+
+    const fresh = await pay(v, [lemonadeLine(v)]);
+    expect(fresh.status).toBe(200);
+    expect(((await fresh.json()) as { total: string }).total).toBe("3.50");
+    const [freshSale] = await suite.db
+      .select({ workingOrderId: sales.workingOrderId })
+      .from(sales)
+      .where(and(eq(sales.seriesId, v.cfg.seriesId), eq(sales.total, 350)));
+    expect(
+      await lineVersions(eq(workingOrderLines.workingOrderId, freshSale!.workingOrderId!)),
+    ).toEqual([{ menuVersionId: v2, gross: 350 }]);
+
+    await withTransaction(suite.db, (tx) => activateDueMenuPublications(tx));
+    expect(await lineVersions(eq(workingOrderLines.workingOrderId, heldId))).toEqual([
+      { menuVersionId: v1, gross: 300 },
+    ]);
+    const [earlySale] = await suite.db
+      .select({ menuVersionId: saleLines.menuVersionId })
+      .from(saleLines)
+      .innerJoin(sales, eq(sales.id, saleLines.saleId))
+      .where(and(eq(sales.seriesId, v.cfg.seriesId), eq(sales.total, 300)));
+    expect(earlySale!.menuVersionId).toBe(v1);
+    const state = await send(v, "GET", `/api/menu-state?zoneId=${v.zoneId}`);
+    expect(
+      ((await state.json()) as { menus: { menuId: string; versionId: string }[] }).menus,
+    ).toEqual([expect.objectContaining({ menuId: v.menuId, versionId: v2 })]);
   });
 });
 

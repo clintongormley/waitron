@@ -1,8 +1,9 @@
 import { navigateMenuChanges } from "./menu-navigation.js";
-import { and, asc, eq, gt, gte, inArray, lt, lte, max, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, lte, max, ne, or, sql } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { batches } from "./batches.js";
+import { BATCH_SIZE, batches } from "./batches.js";
+import { alias, unionAll } from "drizzle-orm/sqlite-core";
 import {
   buildMenuDocument,
   buildMenuDocuments,
@@ -36,49 +37,146 @@ export type { MenuStatus } from "./menu-document-types.js";
 export interface LiveVersion {
   versionId: string;
   number: number;
-  publishedAt: Date;
+  /** When it became live: the pointer's `published_at`, or a due queued edition's `activates_at`. */
+  since: Date;
   contentHash: string;
   document: MenuDocument | null;
 }
 
-/** The named menus' live versions, or every published menu's when `menuIds` is left out. */
+/** Each named menu's highest-numbered queued edition due at `at`, chosen in SQL. */
+function dueEditions(tx: Transaction, at: Date, menuIds?: readonly string[]) {
+  return tx
+    .select({
+      menuId: menuScheduledPublications.menuId,
+      versionId: menuScheduledPublications.versionId,
+      activatesAt: menuScheduledPublications.activatesAt,
+      rank: sql<number>`row_number() over (partition by ${menuScheduledPublications.menuId} order by ${menuVersions.number} desc)`.as(
+        "rank",
+      ),
+    })
+    .from(menuScheduledPublications)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
+    .where(
+      and(
+        sql`${menuScheduledPublications.state} = 'queued'`,
+        lte(menuScheduledPublications.activatesAt, at),
+        menuIds === undefined ? undefined : inArray(menuScheduledPublications.menuId, menuIds),
+      ),
+    )
+    .as("due");
+}
+
+/**
+ * The named menus' versions live at `at`, or every published menu's when `menuIds` is left out:
+ * the pointer's, or the highest-numbered queued edition due by then when that number is higher.
+ */
 export async function liveVersions(
   tx: Transaction,
   menuIds: readonly string[] | undefined,
   mode: "metadata" | "format" | "document",
+  at: Date = now(),
 ): Promise<Map<string, LiveVersion>> {
-  const read = (where?: SQL) =>
-    tx
-      .select({
-        menuId: menuPublications.menuId,
-        versionId: menuVersions.id,
-        number: menuVersions.number,
-        publishedAt: menuVersions.publishedAt,
-        contentHash: menuVersions.contentHash,
-        document: mode === "document" ? menuVersions.document : sql<null>`null`,
-        format:
-          mode === "format"
-            ? sql<unknown>`json_extract(${menuVersions.document}, '$.format')`
-            : sql<null>`null`,
-      })
-      .from(menuPublications)
-      .innerJoin(menuVersions, eq(menuVersions.id, menuPublications.versionId))
-      .where(where);
+  const content = {
+    versionId: menuVersions.id,
+    number: menuVersions.number,
+    contentHash: menuVersions.contentHash,
+    document: mode === "document" ? menuVersions.document : sql<null>`null`,
+    format:
+      mode === "format"
+        ? sql<unknown>`json_extract(${menuVersions.document}, '$.format')`
+        : sql<null>`null`,
+  };
+  const read = (batch?: readonly string[]) => {
+    const due = dueEditions(tx, at, batch);
+    return unionAll(
+      tx
+        .select({
+          menuId: menuPublications.menuId,
+          since: menuPublications.publishedAt,
+          ...content,
+        })
+        .from(menuPublications)
+        .innerJoin(menuVersions, eq(menuVersions.id, menuPublications.versionId))
+        .where(batch === undefined ? undefined : inArray(menuPublications.menuId, batch)),
+      tx
+        .select({ menuId: due.menuId, since: due.activatesAt, ...content })
+        .from(due)
+        .innerJoin(menuVersions, eq(menuVersions.id, due.versionId))
+        .where(sql`${due.rank} = 1`),
+    );
+  };
   const rows = [];
-  if (menuIds === undefined) rows.push(...(await read()));
-  else
-    for (const batch of batches(menuIds))
-      rows.push(...(await read(inArray(menuPublications.menuId, batch))));
-  for (const { menuId, document, format } of rows) {
+  // Both halves name the batch's ids, and the instant is bound once more.
+  for (const batch of menuIds === undefined ? [undefined] : batches(menuIds, BATCH_SIZE / 2 - 1))
+    rows.push(...(await read(batch)));
+  const chosen = new Map<string, (typeof rows)[number]>();
+  for (const row of rows)
+    if ((chosen.get(row.menuId)?.number ?? 0) < row.number) chosen.set(row.menuId, row);
+  const live = new Map<string, LiveVersion>();
+  for (const [menuId, { versionId, number, since, contentHash, document, format }] of chosen) {
     if (mode === "document") requireCurrentFormat(menuId, document!.format);
     else if (mode === "format") requireCurrentFormat(menuId, format);
+    live.set(menuId, { versionId, number, since, contentHash, document });
   }
-  return new Map(
-    rows.map(({ menuId, versionId, number, publishedAt, contentHash, document }) => [
-      menuId,
-      { versionId, number, publishedAt, contentHash, document },
-    ]),
-  );
+  return live;
+}
+
+/**
+ * Marks every queued edition due at `at` activated, and moves each menu's pointer to its
+ * highest-numbered due edition, as of that edition's own time, unless the pointer already holds a
+ * higher number. Answers the pointers it moved.
+ */
+export async function settleDue(
+  tx: Transaction,
+  at: Date,
+  menuIds?: readonly string[],
+): Promise<{ menuId: string; versionId: string; number: number }[]> {
+  const current = alias(menuVersions, "current");
+  const read = (batch?: readonly string[]) => {
+    const due = dueEditions(tx, at, batch);
+    return tx
+      .select({
+        menuId: due.menuId,
+        versionId: due.versionId,
+        activatesAt: due.activatesAt,
+        number: menuVersions.number,
+        liveNumber: current.number,
+      })
+      .from(due)
+      .innerJoin(menuVersions, eq(menuVersions.id, due.versionId))
+      .leftJoin(menuPublications, eq(menuPublications.menuId, due.menuId))
+      .leftJoin(current, eq(current.id, menuPublications.versionId))
+      .where(sql`${due.rank} = 1`);
+  };
+  // The instant and the state are bound beside the batch's ids.
+  const groups = menuIds === undefined ? [undefined] : batches(menuIds, BATCH_SIZE - 2);
+  const candidates = [];
+  for (const batch of groups) candidates.push(...(await read(batch)));
+  if (candidates.length === 0) return [];
+  for (const batch of groups)
+    await tx
+      .update(menuScheduledPublications)
+      .set({ state: "activated", activatedAt: at })
+      .where(
+        and(
+          eq(menuScheduledPublications.state, "queued"),
+          lte(menuScheduledPublications.activatesAt, at),
+          batch === undefined ? undefined : inArray(menuScheduledPublications.menuId, batch),
+        ),
+      );
+  const moved = [];
+  for (const { menuId, versionId, number, activatesAt, liveNumber } of candidates) {
+    if (liveNumber !== null && liveNumber >= number) continue;
+    await tx
+      .insert(menuPublications)
+      .values({ menuId, versionId, publishedAt: activatesAt })
+      .onConflictDoUpdate({
+        target: menuPublications.menuId,
+        set: { versionId, publishedAt: activatesAt },
+      });
+    moved.push({ menuId, versionId, number });
+  }
+  return moved;
 }
 
 function requireCurrentFormat(menuId: string, format: unknown): void {
@@ -93,7 +191,7 @@ function statusOf(hash: string, version: LiveVersion | undefined, clashes = 0): 
         state: hash === version.contentHash ? "current" : "changed",
         clashes,
         version: version.number,
-        publishedAt: version.publishedAt.toISOString(),
+        publishedAt: version.since.toISOString(),
         hash: version.contentHash,
       };
 }
@@ -135,7 +233,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each published menu's live version and its document. Unsupported formats require a venue reset.
+ * Each published menu's version live at this instant and its document. Unsupported formats require a venue reset.
  * A version's row is never changed once written
  * (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents it has read,
  * frozen, and reads a document again only when it is not kept or its row's content hash differs
@@ -499,8 +597,9 @@ export function refuseOvertaken(menuId: string, overtaken: readonly OvertakenEdi
 /**
  * Makes the menu's working state its live version, inside the caller's one transaction: the
  * document is rebuilt here, and refused with `menu.changed_since_preview` unless it hashes to what
- * the preview showed. Publishing a menu that already matches its live version writes nothing;
- * otherwise a queued edition the publish would overtake refuses it.
+ * the preview showed. The menu's due queued editions are settled first. Publishing a menu that
+ * then matches its live version writes nothing more; otherwise a queued edition the publish would
+ * overtake refuses it.
  */
 export async function publishMenu(
   tx: Transaction,
@@ -510,12 +609,13 @@ export async function publishMenu(
   options: { at?: Date } = {},
 ): Promise<PublishedMenuVersion> {
   const publishedAt = options.at ?? now();
+  await settleDue(tx, publishedAt, [menuId]);
   const { document, clashes } = await buildMenuDocument(tx, menuId);
   if (clashes.length > 0)
     throw new AppError("menu.clashes_unresolved", { menuId, count: clashes.length });
   const contentHash = menuDocumentHash(document);
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });
-  const current = (await liveVersions(tx, [menuId], "format")).get(menuId);
+  const current = (await liveVersions(tx, [menuId], "format", publishedAt)).get(menuId);
   if (current?.contentHash === contentHash)
     return { versionId: current.versionId, number: current.number };
   const number = await nextNumber(tx, menuId);

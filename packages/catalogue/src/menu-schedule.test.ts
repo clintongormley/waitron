@@ -12,13 +12,21 @@ import {
 } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
-import { documentImages } from "./menu-document.js";
-import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+import { documentImages, MENU_DOCUMENT_FORMAT } from "./menu-document.js";
 import {
+  assertLiveVersions,
+  menuStatus,
+  previewMenu,
+  publishMenu,
+  readLiveDocuments,
+} from "./menu-publication.js";
+import {
+  activateDueMenuPublications,
   cancelMenuPublication,
   listMenuPublications,
   queueMenuPublication,
 } from "./menu-schedule.js";
+import { BATCH_SIZE } from "./batches.js";
 import { addMember } from "./sections.js";
 import { updateMenuItem, updateProduct } from "./operations.js";
 import {
@@ -31,9 +39,18 @@ import {
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-afterEach(() => vi.restoreAllMocks());
-
 const NOW = new Date("2026-10-07T08:00:00.000Z");
+
+// Reads with no instant of their own take the clock's, and an edition queued for a fixed date
+// becomes live on every such read once that date passes; so the clock is held at NOW.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 const day = (date: number) => new Date(`2026-10-${String(date).padStart(2, "0")}T06:00:00.000Z`);
 const ANA = "manager-ana";
 
@@ -94,6 +111,36 @@ async function statements<T>(fn: (tx: Transaction) => Promise<T>) {
     prepared.mockRestore();
     return sql;
   });
+}
+
+/** Like `statements`, with each statement's bound values. */
+async function preparedStatements<T>(fn: (tx: Transaction) => Promise<T>) {
+  return app(async (tx) => {
+    const session = (
+      tx as unknown as {
+        session: { prepareQuery: (q: { sql: string; params: unknown[] }) => unknown };
+      }
+    ).session;
+    const prepared = vi.spyOn(session, "prepareQuery");
+    await fn(tx);
+    const queries = prepared.mock.calls.map(([query]) => ({
+      sql: query.sql,
+      params: query.params,
+    }));
+    prepared.mockRestore();
+    return queries;
+  });
+}
+
+/** A prepared statement's text and values as a statement to run again. */
+function rebuilt({ sql: text, params }: { sql: string; params: unknown[] }) {
+  const parts = text.split("?");
+  expect(parts).toHaveLength(params.length + 1);
+  return sql.join(
+    parts.flatMap((part, index) =>
+      index < params.length ? [sql.raw(part), sql`${params[index]}`] : [sql.raw(part)],
+    ),
+  );
 }
 
 const writtenTables = (statements: readonly string[]) =>
@@ -487,5 +534,297 @@ describe("queuing and cancelling write only the publication tables", () => {
       cancelMenuPublication(tx, f.lunch, versionId, ANA, NOW),
     );
     expect(writtenTables(cancelled)).toEqual(["menu_scheduled_publications"]);
+  });
+});
+
+describe("a due edition is live at once", () => {
+  /** Queues versions 2, 3 and 4 of Lunch for the 8th, 9th and 10th, each with a different Soup price. */
+  async function queueThree() {
+    await setSoup("5.50");
+    const second = await queue(day(8));
+    await setSoup("6.00");
+    const third = await queue(day(9));
+    await setSoup("6.50");
+    const fourth = await queue(day(10));
+    return { second, third, fourth };
+  }
+
+  async function pointer() {
+    const [row] = await fx.db
+      .select()
+      .from(menuPublications)
+      .where(eq(menuPublications.menuId, f.lunch));
+    return row!;
+  }
+
+  /** What each live read answers for Lunch at the clock's instant. */
+  async function readsAtClock(asserted: string) {
+    return app(async (tx) => ({
+      status: (await menuStatus(tx, [f.lunch])).get(f.lunch),
+      documents: (await readLiveDocuments(tx, [f.lunch])).get(f.lunch)!.versionId,
+      asserted: (
+        await assertLiveVersions(tx, [f.lunch], [{ menuId: f.lunch, versionId: asserted }])
+      ).get(f.lunch)!.versionId,
+      preview: (await previewMenu(tx, f.lunch)).live!.versionId,
+    }));
+  }
+
+  it("answers the due edition on every read from its instant on, before anything writes", async () => {
+    await setSoup("5.50");
+    const second = await queue(day(8));
+
+    vi.setSystemTime(new Date("2026-10-08T05:59:00.000Z"));
+    const before = await readsAtClock(v1);
+    expect(before.status).toMatchObject({ version: 1 });
+    expect(before).toMatchObject({ documents: v1, asserted: v1, preview: v1 });
+
+    vi.setSystemTime(day(8));
+    const after = await readsAtClock(second.versionId);
+    expect(after.status).toMatchObject({ version: 2, publishedAt: "2026-10-08T06:00:00.000Z" });
+    expect(after).toMatchObject({
+      documents: second.versionId,
+      asserted: second.versionId,
+      preview: second.versionId,
+    });
+    expect((await pointer()).versionId).toBe(v1);
+    expect(await scheduleRow(second.versionId)).toMatchObject({
+      state: "queued",
+      activatedAt: null,
+    });
+  });
+
+  it("answers only the latest of several overdue editions, and one activation moves the pointer straight to it", async () => {
+    const { second, third, fourth } = await queueThree();
+    vi.setSystemTime(day(11));
+    const reads = await readsAtClock(fourth.versionId);
+    expect(reads.status).toMatchObject({ version: 4, publishedAt: day(10).toISOString() });
+    expect(reads).toMatchObject({
+      documents: fourth.versionId,
+      asserted: fourth.versionId,
+      preview: fourth.versionId,
+    });
+
+    let answer: Awaited<ReturnType<typeof activateDueMenuPublications>> | undefined;
+    const written = await statements(async (tx) => {
+      answer = await activateDueMenuPublications(tx, day(11));
+    });
+    expect(answer).toEqual({
+      activated: [{ menuId: f.lunch, versionId: fourth.versionId, number: 4 }],
+      nextDueAt: null,
+    });
+    for (const { versionId } of [second, third, fourth])
+      expect(await scheduleRow(versionId)).toMatchObject({
+        state: "activated",
+        activatedAt: day(11),
+      });
+    expect(await pointer()).toMatchObject({ versionId: fourth.versionId, publishedAt: day(10) });
+    expect(writtenTables(written).filter((table) => table === "menu_publications")).toHaveLength(1);
+  });
+
+  it("moves the pointer one edition at a time when each is activated at its own instant", async () => {
+    const { second, third, fourth } = await queueThree();
+    const steps = [
+      { at: day(8), live: second, nextDueAt: day(9) },
+      { at: day(9), live: third, nextDueAt: day(10) },
+      { at: day(10), live: fourth, nextDueAt: null },
+    ];
+    for (const { at, live, nextDueAt } of steps) {
+      const answer = await app((tx) => activateDueMenuPublications(tx, at));
+      expect(answer).toEqual({
+        activated: [{ menuId: f.lunch, versionId: live.versionId, number: live.number }],
+        nextDueAt,
+      });
+      expect(await pointer()).toMatchObject({ versionId: live.versionId, publishedAt: at });
+    }
+  });
+
+  it("never moves the pointer to a lower number than it holds", async () => {
+    await setSoup("5.50");
+    const hash2 = await hashOf(f.lunch);
+    const second = await app((tx) => publishMenu(tx, f.lunch, hash2, "person-1", { at: NOW }));
+    await setSoup("6.00");
+    const hash3 = await hashOf(f.lunch);
+    const third = await app((tx) => publishMenu(tx, f.lunch, hash3, "person-1", { at: NOW }));
+    await fx.db.run(
+      sql`insert into menu_scheduled_publications (version_id, menu_id, activates_at, queued_at, queued_by)
+          values (${second.versionId}, ${f.lunch}, ${day(8).toISOString()}, ${NOW.toISOString()}, ${ANA})`,
+    );
+
+    vi.setSystemTime(day(9));
+    expect((await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.versionId).toBe(
+      third.versionId,
+    );
+    const answer = await app((tx) => activateDueMenuPublications(tx, day(9)));
+    expect(answer).toEqual({ activated: [], nextDueAt: null });
+    expect(await scheduleRow(second.versionId)).toMatchObject({
+      state: "activated",
+      activatedAt: day(9),
+    });
+    expect(await pointer()).toMatchObject({ versionId: third.versionId, publishedAt: NOW });
+  });
+
+  it("settles a due edition before a write, and a refused write rolls the settle back too", async () => {
+    await setSoup("5.50");
+    const second = await queue(day(8));
+
+    const before = await publicationTables();
+    await expect(
+      app((tx) => cancelMenuPublication(tx, f.lunch, second.versionId, ANA, day(9))),
+    ).rejects.toMatchObject({
+      code: "menu_publication.not_queued",
+      params: { menuId: f.lunch, versionId: second.versionId, state: "activated" },
+    });
+    expect(await publicationTables()).toEqual(before);
+    expect(await scheduleRow(second.versionId)).toMatchObject({ state: "queued" });
+
+    const list = await app((tx) => listMenuPublications(tx, f.lunch, day(9)));
+    expect(list.live).toEqual({
+      versionId: second.versionId,
+      number: 2,
+      since: day(8).toISOString(),
+    });
+    expect(list.editions).toMatchObject([{ versionId: second.versionId, state: "activated" }]);
+    expect(await scheduleRow(second.versionId)).toMatchObject({ state: "queued" });
+
+    await setSoup("6.00");
+    const hash = await hashOf(f.lunch);
+    let published: { versionId: string; number: number } | undefined;
+    const prepared = await preparedStatements(async (tx) => {
+      published = await publishMenu(tx, f.lunch, hash, "person-1", { at: day(9) });
+    });
+    expect(published!.number).toBe(3);
+    expect(await scheduleRow(second.versionId)).toMatchObject({
+      state: "activated",
+      activatedAt: day(9),
+    });
+    const pointerWrites = prepared.filter(({ sql: text }) =>
+      /^\s*(?:insert into|update)\s+"menu_publications"/i.test(text),
+    );
+    expect(pointerWrites).toHaveLength(2);
+    expect(pointerWrites[0]!.params).toContain(second.versionId);
+    expect(pointerWrites[1]!.params).toContain(published!.versionId);
+    expect(await pointer()).toMatchObject({ versionId: published!.versionId, publishedAt: day(9) });
+  });
+
+  it("writes only the schedule and the pointer when it activates", async () => {
+    await queueThree();
+    const written = await statements((tx) => activateDueMenuPublications(tx, day(9)));
+    expect(new Set(writtenTables(written))).toEqual(
+      new Set(["menu_scheduled_publications", "menu_publications"]),
+    );
+  });
+
+  it("makes a menu's first edition live by schedule, though the menu was never published", async () => {
+    const hash = await hashOf(f.dinner);
+    const first = await app((tx) =>
+      queueMenuPublication(tx, f.dinner, hash, day(8), ANA, { at: NOW }),
+    );
+    expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)).toMatchObject({
+      state: "unpublished",
+    });
+    vi.setSystemTime(day(8));
+    expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)).toMatchObject({
+      version: 1,
+    });
+    expect(await app((tx) => activateDueMenuPublications(tx, day(8)))).toEqual({
+      activated: [{ menuId: f.dinner, versionId: first.versionId, number: 1 }],
+      nextDueAt: null,
+    });
+    const [row] = await fx.db
+      .select()
+      .from(menuPublications)
+      .where(eq(menuPublications.menuId, f.dinner));
+    expect(row).toMatchObject({ versionId: first.versionId, publishedAt: day(8) });
+  });
+
+  it("activates at the clock's instant when none is given", async () => {
+    await setSoup("5.50");
+    const second = await queue(day(8));
+    vi.setSystemTime(day(8));
+    expect(await app((tx) => activateDueMenuPublications(tx))).toEqual({
+      activated: [{ menuId: f.lunch, versionId: second.versionId, number: 2 }],
+      nextDueAt: null,
+    });
+  });
+
+  it("queues at the clock's instant when none is given", async () => {
+    await setSoup("5.50");
+    const hash = await hashOf(f.lunch);
+    const queued = await app((tx) => queueMenuPublication(tx, f.lunch, hash, day(8), ANA));
+    expect(await scheduleRow(queued.versionId)).toMatchObject({ queuedAt: NOW });
+  });
+
+  describe("keeps the live read's statement shape", () => {
+    const documentReads = (texts: readonly string[]) =>
+      texts.filter((text) => /"document"/.test(text));
+    const liveReads = (texts: readonly { sql: string; params: unknown[] }[]) =>
+      texts.filter(({ sql: text }) => /from "menu_publications"/.test(text));
+
+    it("one metadata statement naming the pointer table once, and no document read when warm", async () => {
+      await setSoup("5.50");
+      const second = await queue(day(8));
+      vi.setSystemTime(day(9));
+      const cold = await preparedStatements((tx) => readLiveDocuments(tx, [f.lunch]));
+      const live = liveReads(cold);
+      expect(live).toHaveLength(1);
+      expect(live[0]!.sql.match(/from "menu_publications"/g)).toHaveLength(1);
+      expect(documentReads(live.map(({ sql: text }) => text))).toEqual([]);
+      expect(documentReads(cold.map(({ sql: text }) => text))).toHaveLength(1);
+      const warm = await statements(async (tx) => {
+        expect((await readLiveDocuments(tx, [f.lunch])).get(f.lunch)!.versionId).toBe(
+          second.versionId,
+        );
+      });
+      expect(documentReads(warm)).toEqual([]);
+    });
+
+    it("binds no more than a batch's worth of values in any statement over many menus", async () => {
+      const count = 1001;
+      const document = JSON.stringify({ format: MENU_DOCUMENT_FORMAT });
+      const stamp = NOW.toISOString();
+      await fx.db.run(sql`
+        with recursive n(i) as (select 1 union all select i + 1 from n where i < ${count})
+        insert into catalogues (id, name, active, version, created_at, updated_at)
+        select 'planted-menu-' || i, 'Planted ' || i, 1, 1, ${stamp}, ${stamp} from n`);
+      await fx.db.run(sql`
+        insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
+        select 'planted-version-' || substr(id, 14), id, 1, ${document}, 'planted', ${stamp}, ${ANA}
+        from catalogues where id like 'planted-menu-%'`);
+      await fx.db.run(sql`
+        insert into menu_publications (menu_id, version_id, published_at)
+        select id, 'planted-version-' || substr(id, 14), ${stamp}
+        from catalogues where id like 'planted-menu-%'`);
+      const menuIds = Array.from({ length: count }, (_, i) => `planted-menu-${i + 1}`);
+
+      let size = 0;
+      const prepared = await preparedStatements(async (tx) => {
+        size = (await readLiveDocuments(tx, menuIds)).size;
+      });
+      expect(size).toBe(count);
+      const live = liveReads(prepared);
+      expect(live.length).toBeGreaterThan(1);
+      for (const { params } of live) expect(params.length).toBeLessThanOrEqual(BATCH_SIZE);
+    });
+
+    it("fetches no document of a due edition that a later due edition hides", async () => {
+      const { fourth } = await queueThree();
+      vi.setSystemTime(day(11));
+      let liveVersion: string | undefined;
+      const prepared = await preparedStatements(async (tx) => {
+        liveVersion = (await previewMenu(tx, f.lunch)).live!.versionId;
+      });
+      expect(liveVersion).toBe(fourth.versionId);
+      const live = liveReads(prepared);
+      expect(live.length).toBeGreaterThan(0);
+      for (const statement of live) {
+        const rows = await app(async (tx) =>
+          tx.all<{ menu_id: string; number: number }>(rebuilt(statement)),
+        );
+        const lunch = rows.filter((row) => row.menu_id === f.lunch);
+        expect(lunch.length).toBeGreaterThan(0);
+        expect(lunch.length).toBeLessThanOrEqual(2);
+        expect(lunch.map(({ number }) => number).sort()).toEqual([1, 4]);
+      }
+    });
   });
 });
