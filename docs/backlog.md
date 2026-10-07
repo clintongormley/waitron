@@ -1133,6 +1133,9 @@ unused `units` property is gone (it closes W75's leftover).
     was not measured.
   - Open: deleting a category with its contents says its products come off every menu, with no
     count.
+  - Open, for A348: the Price overrides widget still handles disabled rows `menuPrices` no longer
+    sends (`viaParent` and `#active` in `apps/dashboard/src/widgets/menu-prices-table.ts`, the
+    `menu_prices.status_parent_disabled` strings, and the test case asserting a "Disabled" row).
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is

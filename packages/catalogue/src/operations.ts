@@ -1213,13 +1213,12 @@ async function patchProduct(
       allergens: allergens !== undefined,
       diet: dietOverride !== undefined,
     });
-  // One Inactive already is on no menu and holds no menu price: the editor resends `active` on
-  // every save.
+  // Only a change from Active runs the removal: the editor resends `active` on every save.
   if (patch.active === false && row?.active === true)
     await (row.parentId === null ? takeOffMenus : dropMenuPrices)(tx, [id]);
 }
 
-/** Sets a product with no parent Inactive and takes it off every menu. */
+/** For a product with no parent: sets it Inactive and takes it off every menu. */
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
   await markInactive(tx, [id]);
   await takeOffMenus(tx, [id]);
