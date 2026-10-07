@@ -2045,7 +2045,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const id = requireUuidId(c.req.param("id"), "working_order.not_found");
         await gateZones(deps, session, [{ orderId: id }]);
         if (action === "receipt")
-          await printSaleReceipt({ db: deps.db, backend: deps.backend }, cfg, id, false);
+          await printSaleReceipt(
+            { db: deps.db, backend: deps.backend },
+            cfg,
+            id,
+            false,
+            undefined,
+            session.personId,
+          );
         else await printSalePaymentSlip(deps.db, cfg, id);
         return c.body(null, 200);
       }),
@@ -2063,7 +2070,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (language !== undefined && typeof language !== "string") {
         throw new AppError("management.request_invalid", { field: "language" });
       }
-      await reprintSale({ db: deps.db, backend: deps.backend }, cfg, id, language);
+      await reprintSale(
+        { db: deps.db, backend: deps.backend },
+        cfg,
+        id,
+        language,
+        session.personId,
+      );
       return c.body(null, 200);
     }),
   );

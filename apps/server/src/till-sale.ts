@@ -696,6 +696,7 @@ export async function printSaleReceipt(
   workingOrderId: string,
   duplicate: boolean,
   language?: string,
+  personId?: string,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
     if (language !== undefined) {
@@ -714,8 +715,8 @@ export async function printSaleReceipt(
       .where(eq(sales.workingOrderId, workingOrderId));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
-    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language);
-    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id);
+    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
+    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, undefined, personId);
   });
 }
 
@@ -1905,6 +1906,7 @@ export async function reprintSale(
   cfg: OriginConfig,
   workingOrderId: string,
   language?: string,
+  personId?: string,
 ): Promise<void> {
-  await printSaleReceipt(deps, cfg, workingOrderId, true, language);
+  await printSaleReceipt(deps, cfg, workingOrderId, true, language, personId);
 }
