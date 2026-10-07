@@ -19,8 +19,8 @@ import {
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
-import type { SeedCatalogue, SeedLocale } from "./menu.js";
-import type { DemoDataSet } from "./data-set.js";
+import type { SeedLocale } from "./menu.js";
+import type { DemoDataSet, SeedCatalogue } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedCataloguesInput {
@@ -186,9 +186,13 @@ export async function seedCatalogues(
     return catalogue.id;
   };
 
-  const { restaurant, lunch, deli, drinksName } = dataSet.menus;
+  const { restaurant, lunch, deli, drinksName, drinksCustomerName } = dataSet.menus;
   const drinksCategories = restaurant.categories.filter((category) => category.station === "bar");
-  const drinksId = await seedOne({ name: drinksName, categories: drinksCategories });
+  const drinksId = await seedOne({
+    name: drinksName,
+    customerName: drinksCustomerName,
+    categories: drinksCategories,
+  });
   const casaId = await seedOne(
     {
       ...restaurant,

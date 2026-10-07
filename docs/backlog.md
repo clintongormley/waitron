@@ -1873,6 +1873,16 @@ Left open:
 and the staff-facing names — is one data set, `casa-delgado-es`, which Spain's pack names; nothing
 a demo seeds changes.
 
+**The demo data carries Catalan and Galician text (W109-3, Task 3 of the same plan) — DONE; the
+text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
+in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
+`data-sets/casa-delgado-es.ts`) has a Catalan and a Galician value, written by Claude; nothing
+writes them until Task 4 (W109-4). The PR carries the side-by-side table. A speaker of each should
+read it; the drafter was least sure of the Galician "Charcutaría", "Lombo embuchado", "Ventrecha de
+bonito", "Luras á romana", "Polbo á feira", "Café só", "Tortilla de patacas" and the doneness
+choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error en marcar" and
+"Invitació de l'encarregat".
+
 **Content languages per region, for real venues and the demo — owner DECIDED 2026-10-06 ~17:23
 (W109; was "Demo languages per region — owner decision pending").** As relayed in lane A's queue
 (`~/waitron-campaign/queue.md`, WATCHER NOTE of 17:23 above W109-1) and
@@ -1906,7 +1916,8 @@ the regional language in the Valencian Community, the Balearic Islands and Galic
 starts with `resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`):
 its default, its area's required languages, then English. The dashboard's required-language
 messages now say Waitron keeps the language enabled for the region, not that the region requires
-it. The demo's side is still Tasks 3 and 4.
+it. The demo's side is Task 4 (W109-4); Task 3 (W109-3) gave the demo data its Catalan and Galician
+text and the rule.
 Left by #1320, OPEN, unqueued: `resolveInstalledDefaultContentLanguage`
 (`packages/country-packs/src/registry.ts`) is now called only by its own tests; delete it with its
 cases once the demo-data plan's Tasks 3 and 4 no longer name it. And seen during #1320's look

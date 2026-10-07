@@ -1162,7 +1162,7 @@ rule is no longer the demo's own: it is setup's starting languages for the area 
 - Modify: `apps/server/scripts/demo-seed/data-set.ts` — the content types move here from `menu.ts`
   and become generic over the data set's languages (below); `DemoDataSet` gains
   `contentLanguages` and the menus' customer-facing names; new `demoContentLanguages`
-- Modify: `apps/server/scripts/demo-seed/menu.ts` (re-exports the moved types for its own data;
+- Modify: `apps/server/scripts/demo-seed/menu.ts` (imports the moved types from `data-set.ts`;
   every customer-facing text gains `ca` and `gl`; each catalogue gains `customerName`),
   `seed-adjustments.ts` (each reason's `names` gains `ca` and `gl`),
   `data-sets/casa-delgado-es.ts` (`contentLanguages`, `drinksCustomerName`)
@@ -1182,7 +1182,7 @@ rule is no longer the demo's own: it is setup's starting languages for the area 
 // data-set.ts — L is the set of languages one data set carries in full. English and Spanish are
 // always in it: the writers take staff names out of these maps by staff language or by English
 // (seed-catalogue.ts:113, :123, :145, :160; seed-floor.ts:196; seed-adjustments.ts), and with no
-// `noUncheckedIndexedAccess` in tsconfig.base.json a missing one would compile and store undefined.
+// `noUncheckedIndexedAccess` in tsconfig.base.json a missing one would still compile.
 export type DemoText<L extends string> = Readonly<Record<L | SeedLocale, string>>;
 // SeedProduct<L>, SeedCategory<L>, SeedCatalogue<L>, SeedOptionLabel<L>, SeedOptionList<L>,
 // SeedProductOptionLists<L> and SeedReason<L>: every CUSTOMER-FACING field (customerName,
@@ -1255,7 +1255,7 @@ it("gives every Casa Delgado customer-facing text a value of its own in every la
   // Walk every DemoText in CASA_DELGADO_ES (products, variants, descriptions, sections, units,
   // option lists and labels, reasons, menu customer names). For each: a non-blank value per
   // CASA_DELGADO_LANGUAGES, and its ca and gl values are not copies of its en or es value unless
-  // the text is listed in an explicit allowance of proper names (e.g. "Casa Delgado").
+  // the text is listed in an explicit allowance of proper names (e.g. "Negroni").
 });
 ```
 

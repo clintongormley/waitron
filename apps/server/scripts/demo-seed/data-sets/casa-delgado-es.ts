@@ -4,13 +4,23 @@ import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "../floor.js";
 import { DEMO_STAFF } from "../staff.js";
 import { DEMO_ADJUSTMENT_REASONS } from "../seed-adjustments.js";
 
-export const CASA_DELGADO_ES: DemoDataSet = {
+export const CASA_DELGADO_LANGUAGES = ["es", "en", "ca", "gl"] as const;
+export type CasaDelgadoLanguage = (typeof CASA_DELGADO_LANGUAGES)[number];
+
+export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
   id: "casa-delgado-es",
+  contentLanguages: CASA_DELGADO_LANGUAGES,
   menus: {
     restaurant: CASA_DELGADO,
     deli: DELI_TAKEAWAY,
     lunch: MENU_DEL_DIA,
     drinksName: { en: "Drinks", es: "Bebidas" },
+    drinksCustomerName: {
+      en: "Drinks menu",
+      es: "Carta de bebidas",
+      ca: "Carta de begudes",
+      gl: "Carta de bebidas",
+    },
   },
   productOptionLists: PRODUCT_OPTION_LISTS,
   floor: {
