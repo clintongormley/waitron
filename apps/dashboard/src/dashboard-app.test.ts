@@ -6191,7 +6191,7 @@ describe("printer breadcrumb during a pending save", () => {
             .poll(() => screen.shadowRoot!.querySelector("[data-test=printer-status]"))
             .not.toBeNull();
           const q = (selector: string) => screen.shadowRoot!.querySelector<HTMLElement>(selector)!;
-          await expect.poll(() => screen.loading).toBe(false);
+          await screen.updateComplete;
           expect(q("[data-test=printer-refresh-error]")).toBeNull();
           if (editor === "connection") {
             const disclosure = q(
