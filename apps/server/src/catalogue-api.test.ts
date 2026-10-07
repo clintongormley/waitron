@@ -1253,7 +1253,7 @@ describe("unique category and product names", () => {
     );
   });
 
-  it("answers a product editor save whose variant takes a used name with the variant's field (409)", async () => {
+  it("refuses sibling variant clashes while accepting a variant named like another product", async () => {
     const app = mountApp();
     const name = `Agua ${tag()}`;
     await createNamedProductVia(app, name);
@@ -1270,30 +1270,39 @@ describe("unique category and product names", () => {
       available: true,
       active: true,
     });
-    await refused(
-      await send(app, "POST", `/management-api/catalogues/${catalogueId}/product-editor`, {
-        body: {
-          name: `Refresco ${tag()}`,
-          customerName: null,
-          description: null,
-          kitchenName: null,
-          image: null,
-          unitId,
-          unitPrice: "2.00",
-          active: true,
-          available: true,
-          ordering: "public",
-          vatClass: "general",
-          variants: [variant(`Pequeño ${tag()}`), variant(name)],
-          primaryCategoryId: null,
-          modifiers: [],
-          allergens: null,
-          dietaryDeclarations: [],
-        },
-      }),
-      "product.name_taken",
-      { field: "variants.1.name", name },
-    );
+    const body = {
+      name: `Refresco ${tag()}`,
+      customerName: null,
+      description: null,
+      kitchenName: null,
+      image: null,
+      unitId,
+      unitPrice: "2.00",
+      active: true,
+      available: true,
+      ordering: "public",
+      vatClass: "general",
+      variants: [variant(name), variant(name.toLowerCase())],
+      primaryCategoryId: null,
+      modifiers: [],
+      allergens: null,
+      dietaryDeclarations: [],
+    };
+    const path = `/management-api/catalogues/${catalogueId}/product-editor`;
+    await refused(await send(app, "POST", path, { body }), "product.name_taken", {
+      field: "variants.1.name",
+      name: name.toLowerCase(),
+    });
+    const accepted = await send(app, "POST", path, {
+      body: { ...body, variants: [variant(`Pequeño ${tag()}`), variant(name)] },
+    });
+    expect(accepted.status).toBe(201);
+    const saved = (await accepted.json()) as { id: string };
+    const editor = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
+    expect(editor.status).toBe(200);
+    expect(await editor.json()).toMatchObject({
+      variants: [{ name: expect.any(String) }, { name }],
+    });
   });
 });
 

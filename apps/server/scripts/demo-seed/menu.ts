@@ -599,7 +599,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
             customerName: {
               en: "Double",
               es: "Doble",
-              ca: "Doble",
+              ca: "Dosi doble",
               gl: "Dobre",
             },
             staffName: "Doble",
