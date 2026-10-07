@@ -14,7 +14,7 @@ import {
   deactivateProduct,
 } from "./operations.js";
 import { setIncludeFolder } from "./include-folder.js";
-import { addMember } from "./sections.js";
+import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
@@ -77,11 +77,9 @@ async function lunchIncludingDrinks(tx: Transaction, lunchId: string) {
     names: { es: "CLIENT-ES Bebidas", ca: "CLIENT-CA Begudes", en: "CLIENT-EN Drinks" },
   });
   const lunchRoot = await rootOf(lunchId);
-  const added = await addMember(tx, lunchRoot, {
-    kind: "section",
-    sectionId: await rootOf(drinks.id),
-  });
-  return { lunchRoot, member: added.id };
+  const drinksRoot = await rootOf(drinks.id);
+  const added = await addMember(tx, lunchRoot, { kind: "section", sectionId: drinksRoot });
+  return { lunchRoot, drinksRoot, member: added.id };
 }
 
 describe("the missing-translations report", () => {
@@ -305,6 +303,37 @@ describe("the missing-translations report", () => {
       ]);
       expect(gaps("es")).toEqual([]);
       expect(gaps("en").map((gap) => gap.kind)).toEqual(["section", "unit"]);
+    });
+  });
+
+  it("lists an include placed under a sub-section under the including menu, not the included one", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const lunch = await venue(tx);
+      const { lunchRoot, drinksRoot } = await lunchIncludingDrinks(tx, lunch.id);
+      const bar = await createSectionIn(tx, lunchRoot, {
+        internalName: "STAFF Bar",
+        names: { es: "CLIENT-ES Barra", ca: "CLIENT-CA Barra", en: "CLIENT-EN Bar" },
+      });
+      const wineBar = await createSectionIn(tx, bar.id, {
+        internalName: "STAFF Wine bar",
+        names: { es: "CLIENT-ES Vinoteca", ca: "CLIENT-CA Vinoteca", en: "CLIENT-EN Wine bar" },
+      });
+      const nested = await addMember(tx, wineBar.id, { kind: "section", sectionId: drinksRoot });
+      await setIncludeFolder(tx, wineBar.id, nested.id, {
+        showAsFolder: true,
+        overrides: { names: { es: "FOLDER-ES Barra", ca: "" } },
+      });
+
+      expect((await report(tx))("ca")).toEqual([
+        {
+          kind: "included_menu",
+          id: nested.id,
+          name: "STAFF Drinks",
+          reason: "partial",
+          parent: { id: lunch.id, name: "Lunch" },
+        },
+      ]);
     });
   });
 

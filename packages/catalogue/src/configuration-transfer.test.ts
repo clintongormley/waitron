@@ -292,6 +292,8 @@ describe("validateCatalogueConfiguration: include folders", () => {
       '{"names":{"not a language":"Bar"}}',
       '{"names":{"EN":"Bar"}}',
       '{"names":{"en":"Bar"},"note":"x"}',
+      '{"names":{}}',
+      '{"names":{},"color":null}',
       null,
       7,
     ])
