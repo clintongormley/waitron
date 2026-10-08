@@ -5,6 +5,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -248,6 +250,7 @@ export class PrepStationsScreen extends LitElement {
   /** Whether `error` is a read's failure, the only message a read's success may clear. */
   #readErrorShown = false;
   @state() private busy = false;
+  @state() private stationAttempted = false;
   @state() private testProduct = "";
   @state() private testExtras: string[] = [];
   @state() private testZone = "";
@@ -359,7 +362,7 @@ export class PrepStationsScreen extends LitElement {
     } else if (!this.#printerIdentity) {
       const id = (this.#printerIdentity = {});
       this.#leave ??= leaveCoordinatorFor(this);
-      this.#printerScope = this.#leave?.register({
+      this.#printerScope = draftScopeFor(this, {
         id,
         current: () => this.printerEditor!.ids,
         snapshot: (ids) => [...ids],
@@ -368,12 +371,12 @@ export class PrepStationsScreen extends LitElement {
           if (this.printerEditor)
             this.printerEditor = { ...this.printerEditor, ids: [...ids], error: "" };
         },
-      });
+      }).scope;
     }
   }
   #leavePrinters(reason: LeaveReason, identity: object | undefined, proceed: () => void): void {
     if (!this.#printerCurrent(identity) || this.printerBusy) return;
-    if (!this.#printerScope) proceed();
+    if (!this.#printerScope || !this.#leave) proceed();
     else
       void this.#leave!.request({
         scopes: [this.#printerScope.id],
@@ -414,7 +417,7 @@ export class PrepStationsScreen extends LitElement {
     } else if (!this.#settingsIdentity) {
       const id = (this.#settingsIdentity = {});
       this.#leave ??= leaveCoordinatorFor(this);
-      this.#settingsScope = this.#leave?.register({
+      this.#settingsScope = draftScopeFor(this, {
         id,
         current: () => this.#settingsValue(this.settingsEditor!),
         snapshot: (value) => value,
@@ -423,12 +426,12 @@ export class PrepStationsScreen extends LitElement {
           if (this.settingsEditor)
             this.settingsEditor = { ...this.settingsEditor, value, confirming: false };
         },
-      });
+      }).scope;
     }
   }
   #leaveSettings(reason: LeaveReason, identity: object | undefined, proceed: () => void): void {
     if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
-    if (!this.#settingsScope) proceed();
+    if (!this.#settingsScope || !this.#leave) proceed();
     else
       void this.#leave!.request({
         scopes: [this.#settingsScope.id],
@@ -491,7 +494,7 @@ export class PrepStationsScreen extends LitElement {
     } else if (!this.#stationIdentity) {
       const id = (this.#stationIdentity = {});
       this.#leave ??= leaveCoordinatorFor(this);
-      this.#stationScope = this.#leave?.register({
+      this.#stationScope = draftScopeFor(this, {
         id,
         current: () => this.draft,
         snapshot: (value) => ({ ...value }),
@@ -502,7 +505,7 @@ export class PrepStationsScreen extends LitElement {
         restore: (value) => {
           this.draft = { ...value };
         },
-      });
+      }).scope;
     }
     if (!this.rename) {
       this.#renameScope?.dispose();
@@ -511,7 +514,7 @@ export class PrepStationsScreen extends LitElement {
     } else if (!this.#renameIdentity) {
       const id = (this.#renameIdentity = {});
       this.#leave ??= leaveCoordinatorFor(this);
-      this.#renameScope = this.#leave?.register({
+      this.#renameScope = draftScopeFor(this, {
         id,
         current: () => ({ name: this.rename!.name }),
         snapshot: (value) => ({ ...value }),
@@ -519,7 +522,7 @@ export class PrepStationsScreen extends LitElement {
         restore: (value) => {
           if (this.rename) this.rename = { ...this.rename, name: value.name };
         },
-      });
+      }).scope;
     }
     if (!this.watcherRename) {
       this.#watcherRenameScope?.dispose();
@@ -528,7 +531,7 @@ export class PrepStationsScreen extends LitElement {
     } else if (!this.#watcherRenameIdentity) {
       const id = (this.#watcherRenameIdentity = {});
       this.#leave ??= leaveCoordinatorFor(this);
-      this.#watcherRenameScope = this.#leave?.register({
+      this.#watcherRenameScope = draftScopeFor(this, {
         id,
         current: () => ({ name: this.watcherRename!.name }),
         snapshot: (value) => ({ ...value }),
@@ -536,7 +539,7 @@ export class PrepStationsScreen extends LitElement {
         restore: (value) => {
           if (this.watcherRename) this.watcherRename = { ...this.watcherRename, name: value.name };
         },
-      });
+      }).scope;
     }
   }
 
@@ -557,7 +560,7 @@ export class PrepStationsScreen extends LitElement {
       } else if (!identity) {
         const id = {};
         this.#leave ??= leaveCoordinatorFor(this);
-        const registered = this.#leave?.register({
+        const registered = draftScopeFor(this, {
           id,
           current: () =>
             printers ? this.watcherPrinterEditor!.ids : this.watcherCellEditor!.values,
@@ -569,7 +572,7 @@ export class PrepStationsScreen extends LitElement {
             else if (!printers && this.watcherCellEditor)
               this.watcherCellEditor = { ...this.watcherCellEditor, values: [...values] };
           },
-        });
+        }).scope;
         if (printers) {
           this.#watcherPrinterIdentity = id;
           this.#watcherPrinterScope = registered;
@@ -598,7 +601,7 @@ export class PrepStationsScreen extends LitElement {
     )
       return;
     const scope = printers ? this.#watcherPrinterScope : this.#watcherCellScope;
-    if (!scope) {
+    if (!scope || !this.#leave) {
       proceed();
       return;
     }
@@ -655,7 +658,7 @@ export class PrepStationsScreen extends LitElement {
   ): Promise<boolean> {
     if (this.busy) return false;
     const scope = rename ? this.#renameScope : this.#stationScope;
-    if (!scope) return true;
+    if (!scope || !this.#leave) return true;
     const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
     return (
       identity === (rename ? this.#renameIdentity : this.#stationIdentity) &&
@@ -729,6 +732,7 @@ export class PrepStationsScreen extends LitElement {
     if (this.error === "" || this.#readErrorShown) this.#showError(message, true);
   }
   protected override willUpdate(changed: PropertyValues<this>) {
+    if (!this.isConnected) return;
     if (
       this.pending?.change.address.row.kind === "no_category" &&
       !this.busy &&
@@ -757,6 +761,7 @@ export class PrepStationsScreen extends LitElement {
   }
   override connectedCallback() {
     super.connectedCallback();
+    this.requestUpdate();
     void this.#load();
     void this.#loadHealth();
     if (!this.api.liveData) {
@@ -1224,6 +1229,7 @@ export class PrepStationsScreen extends LitElement {
       </wt-row-actions>`;
   }
   async #saveStationName() {
+    if (saveActionState(this.#renameScope).unchanged) return;
     const draft = this.rename;
     if (!draft || this.busy || !this.view?.stations.some((station) => station.id === draft.id))
       return;
@@ -1307,7 +1313,8 @@ export class PrepStationsScreen extends LitElement {
           >
           <wt-button
             data-test="save-station-name"
-            ?disabled=${this.busy || draft.invalid}
+            variant=${saveActionState(this.#renameScope).variant}
+            ?disabled=${saveActionState(this.#renameScope).unchanged || this.busy || draft.invalid}
             @click=${() => void this.#saveStationName()}
             >${t("prep.save")}</wt-button
           >
@@ -1316,6 +1323,7 @@ export class PrepStationsScreen extends LitElement {
     );
   }
   #openStation() {
+    this.stationAttempted = false;
     this.editor = { kind: "station" };
     this.draft = {
       name: "",
@@ -1333,7 +1341,7 @@ export class PrepStationsScreen extends LitElement {
     this.fieldError = { ...this.fieldError, [field]: "" };
     this.#showError("");
   }
-  async #saveStation() {
+  #stationErrors(): Record<string, string> {
     const d = this.draft;
     const errors: Record<string, string> = {};
     if (!d.name.trim()) errors.name = t("prep.name_required");
@@ -1348,6 +1356,13 @@ export class PrepStationsScreen extends LitElement {
       d.forgottenAfterMinutes <= d.overdueAfterMinutes
     )
       errors.forgottenAfterMinutes = t("prep.threshold_invalid");
+    return errors;
+  }
+  async #saveStation() {
+    if (saveActionState(this.#stationScope).unchanged) return;
+    this.stationAttempted = true;
+    const d = this.draft;
+    const errors = this.#stationErrors();
     this.fieldError = errors;
     if (Object.keys(errors).length) {
       this.#showError(t("prep.fix_fields"));
@@ -1804,6 +1819,7 @@ export class PrepStationsScreen extends LitElement {
     </wt-card>`;
   }
   async #saveStationPrinters(identity: object | undefined) {
+    if (saveActionState(this.#printerScope).unchanged) return;
     const editor = this.printerEditor;
     if (!editor || !this.#printerCurrent(identity) || this.printerBusy) return;
     const scope = this.#printerScope;
@@ -1925,7 +1941,8 @@ export class PrepStationsScreen extends LitElement {
         >
         <wt-button
           data-test=${`save-printers-${station.id}`}
-          ?disabled=${this.printerBusy}
+          variant=${saveActionState(this.#printerScope).variant}
+          ?disabled=${saveActionState(this.#printerScope).unchanged || this.printerBusy}
           @click=${() => void this.#saveStationPrinters(identity)}
           >${t("venue.save")}</wt-button
         >
@@ -1997,6 +2014,7 @@ export class PrepStationsScreen extends LitElement {
     ></wt-data-table>`;
   }
   async #saveWatcherPrinters(identity: object | undefined) {
+    if (saveActionState(this.#watcherPrinterScope).unchanged) return;
     const editor = this.watcherPrinterEditor;
     if (!editor || this.watcherPrinterBusy || !this.#watcherInlineCurrent(true, identity)) return;
     const scope = this.#watcherPrinterScope;
@@ -2133,7 +2151,8 @@ export class PrepStationsScreen extends LitElement {
         >
         <wt-button
           data-test=${`save-watcher-printers-${watcher.id}`}
-          ?disabled=${this.watcherPrinterBusy}
+          variant=${saveActionState(this.#watcherPrinterScope).variant}
+          ?disabled=${saveActionState(this.#watcherPrinterScope).unchanged || this.watcherPrinterBusy}
           @click=${() => void this.#saveWatcherPrinters(identity)}
           >${t("venue.save")}</wt-button
         >
@@ -2170,6 +2189,7 @@ export class PrepStationsScreen extends LitElement {
         : "";
   }
   async #saveWatcherCell(identity: object | undefined) {
+    if (saveActionState(this.#watcherCellScope).unchanged) return;
     const editor = this.watcherCellEditor;
     if (!editor || this.watcherCellBusy || !this.#watcherInlineCurrent(false, identity)) return;
     const scope = this.#watcherCellScope;
@@ -2344,7 +2364,8 @@ export class PrepStationsScreen extends LitElement {
         >
         <wt-button
           data-test="save-watcher-cell"
-          ?disabled=${this.watcherCellBusy || !!invalid}
+          variant=${saveActionState(this.#watcherCellScope).variant}
+          ?disabled=${saveActionState(this.#watcherCellScope).unchanged || this.watcherCellBusy || !!invalid}
           @click=${() => void this.#saveWatcherCell(identity)}
           >${t("venue.save")}</wt-button
         >
@@ -2352,6 +2373,7 @@ export class PrepStationsScreen extends LitElement {
     </div>`;
   }
   async #saveSettingsCell(identity: object | undefined) {
+    if (saveActionState(this.#settingsScope).unchanged) return;
     const editor = this.settingsEditor;
     if (!editor || !this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
     const scope = this.#settingsScope;
@@ -2551,9 +2573,11 @@ export class PrepStationsScreen extends LitElement {
         >
         <wt-button
           data-test="save-settings-cell"
-          ?disabled=${this.settingsBusy || !!invalid}
+          variant=${saveActionState(this.#settingsScope).variant}
+          ?disabled=${saveActionState(this.#settingsScope).unchanged || this.settingsBusy || !!invalid}
           @click=${() => {
             if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+            if (saveActionState(this.#settingsScope).unchanged) return;
             if (field === "fallback" && !editor.confirming)
               this.settingsEditor = { ...editor, confirming: true };
             else void this.#saveSettingsCell(identity);
@@ -2635,7 +2659,8 @@ export class PrepStationsScreen extends LitElement {
         >
         <wt-button
           data-test="save-settings-cell"
-          ?disabled=${this.settingsBusy || !!invalid}
+          variant=${saveActionState(this.#settingsScope).variant}
+          ?disabled=${saveActionState(this.#settingsScope).unchanged || this.settingsBusy || !!invalid}
           @click=${() => void this.#saveSettingsCell(identity)}
           >${t("venue.save")}</wt-button
         >
@@ -2829,11 +2854,12 @@ export class PrepStationsScreen extends LitElement {
     if (this.busy || !this.isConnected || !this.watcherRename) return false;
     const identity = this.#watcherRenameIdentity;
     const scope = this.#watcherRenameScope;
-    if (!scope) return true;
+    if (!scope || !this.#leave) return true;
     const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
     return this.isConnected && identity === this.#watcherRenameIdentity && outcome === "proceeded";
   };
   async #saveWatcherName(identity: object | undefined) {
+    if (saveActionState(this.#watcherRenameScope).unchanged) return;
     const draft = this.watcherRename;
     if (!draft || this.busy || !this.isConnected || identity !== this.#watcherRenameIdentity)
       return;
@@ -2944,7 +2970,8 @@ export class PrepStationsScreen extends LitElement {
           >
           <wt-button
             data-test="save-watcher-name"
-            ?disabled=${this.busy || invalid}
+            variant=${saveActionState(this.#watcherRenameScope).variant}
+            ?disabled=${saveActionState(this.#watcherRenameScope).unchanged || this.busy || invalid}
             @click=${() => void this.#saveWatcherName(identity)}
             >${t("venue.save")}</wt-button
           >
@@ -3134,7 +3161,8 @@ export class PrepStationsScreen extends LitElement {
             >${t("prep.cancel")}</wt-button
           ><wt-button
             data-test="save-station"
-            ?disabled=${this.busy}
+            variant=${saveActionState(this.#stationScope).variant}
+            ?disabled=${saveActionState(this.#stationScope).unchanged || this.busy || (this.stationAttempted && Object.keys(this.#stationErrors()).length > 0)}
             @click=${() => void this.#saveStation()}
             >${t("prep.save")}</wt-button
           >
@@ -3355,6 +3383,7 @@ export class PrepStationsScreen extends LitElement {
     );
   }
   override render() {
+    if (!this.isConnected) return nothing;
     const view = this.view;
     const active =
       view?.stations

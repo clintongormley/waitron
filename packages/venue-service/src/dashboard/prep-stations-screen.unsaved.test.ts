@@ -347,3 +347,37 @@ for (const [name, changed, reverted] of [
     expect(await modal.requestClose("cancel")).toBe(true);
   });
 }
+
+for (const rename of [false, true]) {
+  it(`${rename ? "Rename" : "Add"} reconnects its retained editor with a coordinated Save scope`, async () => {
+    const { screen, writes } = await mount();
+    await open(screen, rename);
+    screen.remove();
+    await screen.updateComplete;
+    expect(screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    app.shadowRoot!.append(screen);
+    await screen.updateComplete;
+    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+    const save = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-test=${rename ? "save-station-name" : "save-station"}]`,
+    )!;
+    await save.updateComplete;
+    expect(save.variant).toBe("secondary");
+    expect(save.disabled).toBe(true);
+    save.click();
+    await screen.updateComplete;
+    expect(writes).toEqual([]);
+    await field(modal, "After reconnect");
+    await save.updateComplete;
+    expect(save.variant).toBe("primary");
+    expect(save.disabled).toBe(false);
+    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    expect((await question()).open).toBe(true);
+    await choose("keep");
+    expect(modal.querySelector("wt-input")!.value).toBe("After reconnect");
+    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await choose("discard");
+    expect(writes).toEqual([]);
+    expect(unload()).toBe(false);
+  });
+}

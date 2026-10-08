@@ -274,9 +274,13 @@ it("keeps fallback editing in its cell and confirms its destination before writi
   expect(q(el, "[data-test=settings-choice]")).toBeNull();
 });
 it("rechecks confirmation when the fallback draft changes", async () => {
-  const a = api({ load: vi.fn().mockResolvedValue(fallbackView()), setStationFallback: vi.fn() });
+  const initial = fallbackView();
+  initial.routing.stationTimes[1]!.fallbackStationId = null;
+  const a = api({ load: vi.fn().mockResolvedValue(initial), setStationFallback: vi.fn() });
   const el = await mount(a);
   await openFallback(el);
+  choose(el, "bar");
+  await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
   expect(q(el, "[data-test=settings-fallback-confirmation]")?.textContent).toContain("Bar");
@@ -411,6 +415,8 @@ it("puts a field refusal beside the choice and a correction summary above the bu
     }),
   );
   await openRest(el);
+  choose(el, "yes");
+  await settle(el);
   q(el, "[data-test=save-settings-cell]")!.click();
   await settle(el);
   expect((q(el, "[data-test=settings-choice]") as WtCombobox).error).toContain(
