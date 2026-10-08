@@ -2,6 +2,7 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { isUniqueViolation, newId, nowIso, type Transaction } from "@waitron/db";
 import { AppError, jobOrigin } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
+import { assertLocationExists, assertPersonExists } from "./body-ids.js";
 import { appendToChain } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
 import {
@@ -367,9 +368,11 @@ export class WorkforceBackend {
 
   /**
    * Throws `roster.draft_exists` when a draft for this (location, week) already exists: no unique
-   * index covers drafts, so this check-then-insert is the guard.
+   * index covers drafts, so this check-then-insert is the guard. Throws `management.request_invalid`
+   * for an unknown location.
    */
   async createRosterVersion(tx: Transaction, input: CreateRosterVersionInput): Promise<string> {
+    await assertLocationExists(tx, input.locationId);
     const period = weekStartOf(input.period);
     const existing = await tx.execute<{ id: string }>(sql`
       select id from roster_versions
@@ -438,7 +441,8 @@ export class WorkforceBackend {
 
   /**
    * Refuses a malformed interval (`shift.invalid`), a missing version (`roster.not_found`) and a
-   * non-draft version (`roster.not_draft`).
+   * non-draft version (`roster.not_draft`), then an unknown person or location
+   * (`management.request_invalid`).
    */
   async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
     const { startsAt, endsAt } = shiftInterval(input.startsAt, input.endsAt);
@@ -448,6 +452,8 @@ export class WorkforceBackend {
         rosterVersionId: input.versionId,
       });
     }
+    await assertPersonExists(tx, input.personId, "personId");
+    await assertLocationExists(tx, input.locationId);
     // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
     const { rows } = await tx.execute<{ id: string }>(sql`
       insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
@@ -460,9 +466,11 @@ export class WorkforceBackend {
   }
 
   /** Validates the EFFECTIVE interval (patch value ?? current), so a partial edit cannot land a
-   * malformed one. Throws `shift.not_found`, `roster.not_draft` or `shift.invalid`. */
+   * malformed one. Throws `shift.not_found`, `roster.not_draft`, `management.request_invalid` or
+   * `shift.invalid`. */
   async updateShift(tx: Transaction, input: UpdateShiftInput): Promise<void> {
     const shift = await this.shiftForWrite(tx, input.shiftId);
+    if (input.personId !== undefined) await assertPersonExists(tx, input.personId, "personId");
     const { startsAt, endsAt } = shiftInterval(
       input.startsAt ?? shift.startsAt,
       input.endsAt ?? shift.endsAt,
