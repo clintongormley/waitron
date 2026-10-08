@@ -1526,6 +1526,10 @@ one `DragEdgeScroll` helper. A held pointer scrolls the nearest visible scrollin
 the drop target; leaving the edge or ending the gesture stops its frame loop. Columns reorder
 vertically in Customise; the helper also covers horizontal scrolling. Floor and grid placement
 editors remain outside this change.
+One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
+bottom; a later instrumented eight-case matrix reached the bottom in every case. The earlier
+cause is unverified. If it recurs, capture the current scroll/limit, pointer position, drag state
+and visible box before attributing it to the scroll helper.
 
 **A334b: wire the menu structure tree, after lane D's Preview bundle lands — OPEN.**
 Call the shared helper from Menu Structure's pointer drag and refresh its drop target on each
@@ -2712,6 +2716,8 @@ real touch screen; a drag does not scroll the page near its edge (nor does Produ
 390 px the Type column scrolls partly under the pinned Actions column, which is the table's own
 sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
 against the other states.
+(2026-10-08, A334: Products now scrolls at a held drag's edge, with native touch checked at
+390 px in both themes and languages. Menu Structure still needs A334b after the Preview bundle.)
 
 **A menu no longer switches a product or size off on its own — DONE (W90, #1216, 2026-10-05;
 owner 2026-10-04).**
