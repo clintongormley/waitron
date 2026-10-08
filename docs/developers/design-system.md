@@ -948,10 +948,10 @@ Hold a dragged row near the visible top or bottom edge to reach rows outside the
 `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box across
 shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
 scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
-Escape ends the scrolling loop. Products, shared reorder tables, preparation
+Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, preparation
 stations and the Customise column list use this helper. Shared reorder tables and preparation
 stations keep the moves already made when a drag is cancelled, as they do on pointer cancellation;
-Products apply their move only on release. Menu Structure still needs the helper wiring (A334b).
+Products and Menu Structure apply their move only on release.
 
 ### Remembered, searchable, filterable tables
 

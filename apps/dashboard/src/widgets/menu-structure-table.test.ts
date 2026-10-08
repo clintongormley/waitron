@@ -2217,3 +2217,186 @@ describe("a product row's Available and Edit product", () => {
     expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
   });
 });
+
+async function edgeMenu(up = false, fits = false) {
+  const el = await mount({
+    nodes: Array.from({ length: fits ? 1 : 35 }, (_, i) => productNode(`edge-${i}`, "p-burger")),
+    reordering: true,
+  });
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:40px;width:800px;height:300px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const key = up ? "edge-30" : "edge-0";
+  const from = grip(el, key);
+  if (up) box.scrollTop = from.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
+  const bounds = box.getBoundingClientRect();
+  const x = nameAt(el, key).getBoundingClientRect().left + 12;
+  const y = up ? bounds.top + 8 : bounds.bottom - 8;
+  const send = (type: string, at = y) => pointer(from, type, from, { clientX: x, clientY: at });
+  const pending = new Set<number>();
+  const request = window.requestAnimationFrame.bind(window);
+  const cancel = window.cancelAnimationFrame.bind(window);
+  const requested = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    const id = request((time) => {
+      pending.delete(id);
+      callback(time);
+    });
+    pending.add(id);
+    return id;
+  });
+  const cancelled = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    pending.delete(id);
+    cancel(id);
+  });
+  const restoreFrames = () => {
+    requested.mockRestore();
+    cancelled.mockRestore();
+  };
+  const initial = box.scrollTop;
+  send("pointerdown", from.getBoundingClientRect().top + 8);
+  send("pointermove");
+  return {
+    el,
+    box,
+    bounds,
+    send,
+    initial,
+    pending,
+    restoreFrames,
+    moves: listen(el, "wt-member-move"),
+  };
+}
+
+it.each([false, true])(
+  "edge scroll moves a stationary menu drag to a newly revealed sibling (up: %s)",
+  async (up) => {
+    const { el, box, send, initial, moves, pending, restoreFrames } = await edgeMenu(up);
+    try {
+      for (let frame = 0; frame < 40; frame++) await new Promise(requestAnimationFrame);
+      expect(up ? initial - box.scrollTop : box.scrollTop).toBeGreaterThan(350);
+
+      await expect
+        .poll(
+          () =>
+            Number(
+              all<HTMLElement>(el, '[part~="drop-gap-after"], [part~="drop-gap-before"]')[0]
+                ?.closest("tr")
+                ?.dataset.rowKey?.slice(5),
+            ),
+          { timeout: 4000 },
+        )
+        [up ? "toBeLessThan" : "toBeGreaterThan"](up ? 27 : 4);
+      const target = all<HTMLElement>(
+        el,
+        '[part~="drop-gap-after"], [part~="drop-gap-before"]',
+      )[0].closest("tr")!.dataset.rowKey!;
+      expect(pending.size).toBe(1);
+      send("pointerup");
+      expect(pending.size).toBe(0);
+      expect(moves).toEqual([
+        { path: [], memberId: up ? "edge-30" : "edge-0", to: Number(target.slice(5)) },
+      ]);
+      await settle(el);
+      await new Promise(requestAnimationFrame);
+      const ended = box.scrollTop;
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      expect(box.scrollTop).toBe(ended);
+    } finally {
+      send("pointercancel");
+      document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+      await new Promise(requestAnimationFrame);
+      restoreFrames();
+    }
+  },
+  15000,
+);
+
+it.each(["leave", "cancel", "Escape", "disconnect", "fits"])(
+  "edge scroll menu drag stops on %s",
+  async (end) => {
+    const { el, box, bounds, send, moves, pending, restoreFrames } = await edgeMenu(
+      false,
+      end === "fits",
+    );
+    try {
+      if (end === "fits") {
+        expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
+        expect(pending.size).toBe(0);
+      } else {
+        await expect.poll(() => box.scrollTop, { timeout: 4000 }).toBeGreaterThan(100);
+        expect(pending.size).toBe(1);
+      }
+      if (end === "leave") send("pointermove", bounds.top + bounds.height / 2);
+      else if (end === "cancel") send("pointercancel");
+      else if (end === "Escape")
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      else if (end === "disconnect") el.remove();
+      expect(pending.size).toBe(0);
+      await settle(el);
+      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+      const ended = box.scrollTop;
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      expect(box.scrollTop).toBe(ended);
+      expect(moves).toEqual([]);
+    } finally {
+      send("pointercancel");
+      document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+      await new Promise(requestAnimationFrame);
+      restoreFrames();
+    }
+  },
+);
+
+it("marks the held menu source even when the first move stays over that source", async () => {
+  const el = await mount({ reordering: true });
+  const from = grip(el, "m-burger");
+  pointer(from, "pointerdown");
+  const box = from.getBoundingClientRect();
+  pointer(from, "pointermove", from, { clientX: box.left + 20 });
+  try {
+    expect(row(el, "m-burger")!.part.contains("dragging")).toBe(true);
+  } finally {
+    pointer(from, "pointercancel");
+  }
+});
+
+it.each([300, 301.5])(
+  "releases on the final menu sibling after edge scrolling stops (%s px)",
+  async (height) => {
+    const { el, box, send, moves, pending, restoreFrames } = await edgeMenu();
+    try {
+      box.style.height = `${height}px`;
+      box.scrollTop = box.scrollHeight - box.clientHeight - 150;
+      send("pointermove");
+      await expect.poll(() => pending.size, { timeout: 4000 }).toBe(0);
+      expect(box.scrollTop).toBe(box.scrollHeight - box.clientHeight);
+      expect(marked(el, "drop-gap-after")).toEqual(["edge-34"]);
+      send("pointerup");
+      expect(moves).toEqual([{ path: [], memberId: "edge-0", to: 34 }]);
+      expect(pending.size).toBe(0);
+    } finally {
+      send("pointercancel");
+      restoreFrames();
+    }
+  },
+);
+
+it("releases on the menu sibling under the pointer after leaving the edge", async () => {
+  const { el, box, bounds, send, moves, pending, restoreFrames } = await edgeMenu();
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 4000 }).toBeGreaterThan(100);
+    const target = nameAt(el, "edge-12");
+    box.scrollTop += target.getBoundingClientRect().top - bounds.top - 120;
+    const targetBox = target.getBoundingClientRect();
+    send("pointermove", targetBox.top + targetBox.height / 2);
+    expect(pending.size).toBe(0);
+    expect(marked(el, "drop-gap-after")).toEqual(["edge-12"]);
+    send("pointerup");
+    expect(moves).toEqual([{ path: [], memberId: "edge-0", to: 12 }]);
+    expect(pending.size).toBe(0);
+  } finally {
+    send("pointercancel");
+    restoreFrames();
+  }
+});

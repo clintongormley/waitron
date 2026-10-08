@@ -1532,11 +1532,11 @@ bottom; a later instrumented eight-case matrix reached the bottom in every case.
 cause is unverified. If it recurs, capture the current scroll/limit, pointer position, drag state
 and visible box before attributing it to the scroll helper.
 
-**A334b: wire the menu structure tree, after lane D's Preview bundle lands — OPEN.**
-Call the shared helper from Menu Structure's pointer drag and refresh its drop target on each
-scroll. Add the up/down, release, Escape, leave-band and fitting-list Chromium cases there.
-The tree owns its drag lifecycle, so this needs a change to `menu-structure-table.ts`; that file
-is reserved by the watcher for Lane D's Preview bundle.
+**Menu Structure drags scroll at the list edge (A334b, 2026-10-08) — BUILT.**
+Menu Structure uses A334's shared helper, refreshing the drop target after each scroll.
+Chromium cases cover both edges and the exact move reported on release, leaving the edge,
+release, cancellation, Escape, disconnect and a fitting list. The lifecycle cases track real
+animation-frame requests and cancellation, including the absence of a pending frame at the end.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
@@ -2737,7 +2737,7 @@ real touch screen; a drag does not scroll the page near its edge (nor does Produ
 sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
 against the other states.
 (2026-10-08, A334: Products now scrolls at a held drag's edge, with native touch checked at
-390 px in both themes and languages. Menu Structure still needs A334b after the Preview bundle.)
+390 px in both themes and languages. Menu Structure gained the same helper in A334b after the Preview bundle.)
 
 **A menu no longer switches a product or size off on its own — DONE (W90, #1216, 2026-10-05;
 owner 2026-10-04).**
