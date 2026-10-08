@@ -800,7 +800,7 @@ network, each run as `timeout 400 apt-get update`:
 - one that sends the head and then one byte every 5 s: still waiting at 400 s, having printed only
   `Get:1 http://a422-trickle:8099/ubuntu noble InRelease [200 kB]` — the same shape as the CI log.
 
-So a per-read timeout is reset by every byte that arrives, and only an outer limit ends that wait.
+apt's own read timeout did not end a wait in which a byte arrived every 5 s; an outer limit does.
 
 Normal duration of the whole AppArmor/BlueZ step (apt included) over 29 green runs: median 10 s,
 longest 24 s.
@@ -815,8 +815,27 @@ The limits chosen:
   three attempts, with the same apt settings written to `/etc/apt/apt.conf.d/99bounded-waits` and
   removed again in the same `RUN`, so the image ships no apt setting. 300 s rather than CI's 60-90 s,
   because `deploy/waitron.sh` builds this same file on a venue's box over whatever link it has.
+  In CI one stalled attempt costs 5 minutes and its retry fits inside `smoke`'s 15-minute job
+  limit; three stalled attempts (900 s) do not, and the job's limit ends the build first.
 
-<!-- A422 bounded-probe receipt -->
+The same probe with the bound, run 2026-10-08 in the same containers. If the bound did nothing, the
+trickling case would print nothing more after its `Get:1` line until an outside limit killed it, as
+it did at 400 s above. The workflow step's loop, copied verbatim less `sudo`, run under `bash`:
+
+- against the trickling listener: three attempts, each ended by `timeout 60` at 60, 120 and 180 s,
+  then `apt-get failed or stalled on all three attempts` and exit 1 after 180 s;
+- against the silent listener: the same, exit 1 after 180 s;
+- control, against the image's own Ubuntu mirror: the update and the install of `bluez`,
+  `python3-dbus` and `python3-gi` finished in 10 s, exit 0.
+
+The Dockerfile's `bounded()` wrapper and settings file, copied verbatim, run under `sh` in a
+`node:26-slim` container (Debian 13, apt 3.0.3):
+
+- against the trickling listener: `bounded apt-get update` printed
+  `attempt 1 of 3 failed or stalled: apt-get update` at each of its three 300 s attempts, and the
+  shell exited 1 after 900 s;
+- control, against Debian's own mirror: `bounded apt-get update` and
+  `bounded apt-get install -y --no-install-recommends python3-minimal` finished in 4 s, exit 0.
 
 Guards: the "apt waits" cases in `scripts/ci-workflow.test.mjs` and "the Dockerfile's apt waits"
 cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — both read TEXT. The

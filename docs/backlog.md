@@ -6834,9 +6834,9 @@ approved.
   only stated reason was the cache export #1427 removed. Whether the builds still need it (for
   example for `load: true` or the print-agent build reusing the app build's layers) was not tried.
 - **Every apt wait is bounded (A422, watcher 2026-10-08) — landed pending (branch
-  fix/apt-bounded-waits).** Main run 37771042263's image smoke hung in `apt-get update` on a mirror
-  that kept trickling bytes, until the job's 15-minute limit; apt's own read timeout cannot end that
-  wait. Each apt-get in `image-smoke.yml` and `deploy/Dockerfile` now runs under an outer `timeout`
+  fix/apt-bounded-waits).** Main run 37771042263's image smoke sat in `apt-get update` with no output
+  until the job's 15-minute limit cancelled it, and `publish` was cancelled with it. A local probe
+  showed apt's own read timeout does not end a wait on a mirror that trickles bytes. Each apt-get in `image-smoke.yml` and `deploy/Dockerfile` now runs under an outer `timeout`
   with retries, and guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`
   fail on one that does not. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
   bounded".
