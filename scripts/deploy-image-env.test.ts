@@ -332,11 +332,12 @@ describe("the print-agent image and its compose wiring", () => {
 
 /**
  * What each `RUN` in a Dockerfile that mentions `apt-get` misses of the bounded-wait shape: apt's
- * own read timeouts written to a file under /etc/apt/apt.conf.d/, a `bounded()` wrapper that runs
- * `"$@"` under `timeout <n>`, every `apt-get update` and `apt-get install` called through it, and
- * the file removed again so the image ships no apt setting. Reads TEXT: it does not check that
- * `bounded()` retries, run the shell, judge the numbers, or see apt reached any other way (`apt`,
- * a script).
+ * own read timeouts and `APT::Update::Error-Mode "any"` (so an update that cannot fetch exits
+ * non-zero and is retried) written to a file under /etc/apt/apt.conf.d/, a `bounded()` wrapper
+ * that runs `"$@"` under `timeout <n>`, every `apt-get update` and `apt-get install` called
+ * through it, and the file removed again so the image ships no apt setting. Reads TEXT: it does
+ * not check that `bounded()` retries, run the shell, judge the numbers, or see apt reached any
+ * other way (`apt`, a script).
  */
 function aptRunGaps(dockerfile: string): { runs: number; gaps: string[] } {
   const runs = dockerfile
@@ -360,6 +361,9 @@ function aptRunGaps(dockerfile: string): { runs: number; gaps: string[] } {
     ) {
       missing.push(`${where}: does not remove ${config}`);
     }
+    if (config === undefined || !run.includes(`'APT::Update::Error-Mode "any";'`)) {
+      missing.push(`${where}: writes no APT::Update::Error-Mode "any" under /etc/apt/apt.conf.d/`);
+    }
     if (!/\bbounded\(\)\s*\{[^}]*\btimeout\s+\d+\s+"\$@"/.test(run)) {
       missing.push(`${where}: defines no bounded() that runs each attempt under timeout <n>`);
     }
@@ -376,7 +380,7 @@ function aptRunGaps(dockerfile: string): { runs: number; gaps: string[] } {
 describe("the Dockerfile's apt waits", () => {
   const bounded =
     "RUN set -eux; \\\n" +
-    "  printf '%s\\n' 'Acquire::Retries \"3\";' 'Acquire::http::Timeout \"30\";' 'Acquire::https::Timeout \"30\";' \\\n" +
+    "  printf '%s\\n' 'Acquire::Retries \"3\";' 'Acquire::http::Timeout \"30\";' 'Acquire::https::Timeout \"30\";' 'APT::Update::Error-Mode \"any\";' \\\n" +
     "    > /etc/apt/apt.conf.d/99bounded-waits; \\\n" +
     '  bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; done; return 1; }; \\\n' +
     "  bounded apt-get update; \\\n" +
@@ -404,6 +408,11 @@ describe("the Dockerfile's apt waits", () => {
       "RUN 1 with apt-get: writes no http and https read timeout under /etc/apt/apt.conf.d/",
     ],
     [
+      "an update that cannot fetch still exiting 0",
+      bounded.replace(" 'APT::Update::Error-Mode \"any\";'", ""),
+      'RUN 1 with apt-get: writes no APT::Update::Error-Mode "any" under /etc/apt/apt.conf.d/',
+    ],
+    [
       "a config left in the image",
       bounded.replace(" /etc/apt/apt.conf.d/99bounded-waits\n", "\n"),
       "RUN 1 with apt-get: does not remove /etc/apt/apt.conf.d/99bounded-waits",
@@ -421,6 +430,21 @@ describe("the Dockerfile's apt waits", () => {
         "apt-get on a box's link runs " +
         'through bounded() (docs/developers/ci-and-gates.md, "Every apt wait is bounded")',
     ).toEqual([]);
+  });
+
+  it("bounds the apt-get wait in the bench's CA probe image", () => {
+    const body = only(
+      read("bench/sqlite-failover/src/probes/linux-binaries.ts"),
+      /const CA_DOCKERFILE = \[\n([\s\S]*?)\n\]\.join\("\\n"\);/,
+      "CA_DOCKERFILE array",
+    );
+    const lines = [...body.matchAll(/^\s*`((?:[^`\\]|\\.)*)`,?$/gm)].map((line) =>
+      (line[1] ?? "").replace(/\\(.)/g, "$1"),
+    );
+    expect(lines.length, "expected CA_DOCKERFILE's template-literal lines").toBeGreaterThan(0);
+    const { runs, gaps } = aptRunGaps(lines.join("\n"));
+    expect(runs, "expected the CA probe's apt-get RUN to still be here").toBeGreaterThanOrEqual(1);
+    expect(gaps).toEqual([]);
   });
 });
 
