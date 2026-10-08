@@ -637,8 +637,9 @@ narrow as the controls below them.
 A table with no rows draws `emptyMessage` in a padded box with the table's own border, corners and
 background, centred, and under it whatever the screen puts in its `empty-action` slot: the screen's
 own Add button, rendered there only while its list is empty, so a screen whose Add button also
-sits above the table shows it twice while empty (owner, A176). A table with no Add action leaves the
-slot empty. A widget that draws a table with an Add button for a screen passes the button through:
+sits above the table shows it twice while empty (owner, A176). Devices keeps only its heading's
+Add a device button, including while empty (owner, A413, 2026-10-08). A table with no Add action
+leaves the slot empty. A widget that draws a table with an Add button for a screen passes the button through:
 `apps/dashboard/src/widgets/staff-list.ts` forwards the slot
 (`<slot name="empty-action" slot="empty-action">`), while the Products screen has no Add button in its table: its tree always shows the All products
 row, whose menu holds the screen's adds (spec `docs/superpowers/specs/2026-10-02-products-category-tree-design.md`

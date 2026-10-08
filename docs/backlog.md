@@ -3980,6 +3980,11 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      (`searchable`, which the content languages, modifiers and units screens turn on, and column
      filters); `devices-screen.ts` passes the filter labels but turns neither on. Filter at least by
      device profile and status.
+  Review follow-up: the profile filter's None choice selects devices whose Profile cell is blank;
+  typing "None" or "Ninguno" in search therefore finds none. The blank cell is unchanged from
+  main `3c508a481` (`#profileName` returns an empty string when there is no matching profile).
+  No wording change is queued. Screen-reader announcement of a newly inserted status region and
+  a Pair save completing after disconnect/reopen remain unverified; no guarantee is made for either.
 
 - **A414 — device screens on a phone (owner, 2026-10-08; open; no lane yet).**
   1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,

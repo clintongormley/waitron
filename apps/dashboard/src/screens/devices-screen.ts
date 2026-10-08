@@ -1,6 +1,5 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
-import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
@@ -1682,23 +1681,20 @@ export class DevicesScreen extends LitElement {
       ${
         this.added === null
           ? nothing
-          : keyed(
-              this.added,
-              html`<wt-notice
-                role="status"
-                data-test="added-device"
-                @wt-notice-gone=${(event: Event) => {
-                  event.stopPropagation();
-                  this.added = null;
-                }}
-                ><h2 class="added">
-                  ${t(this.added.enabled ? "devices.enabled" : "devices.added").replace(
-                    "{name}",
-                    this.added.name,
-                  )}
-                </h2></wt-notice
-              >`,
-            )
+          : html`<wt-notice
+              role="status"
+              data-test="added-device"
+              @wt-notice-gone=${(event: Event) => {
+                event.stopPropagation();
+                this.added = null;
+              }}
+              ><h2 class="added">
+                ${t(this.added.enabled ? "devices.enabled" : "devices.added").replace(
+                  "{name}",
+                  this.added.name,
+                )}
+              </h2></wt-notice
+            >`
       }
       ${
         this.askedAgain === null

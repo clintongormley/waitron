@@ -365,6 +365,13 @@ describe("devices-screen", () => {
               .mockResolvedValue([
                 ...devices,
                 { ...devices[0]!, id: "d3", label: "Handheld", deviceProfileId: "dp2" },
+                {
+                  ...devices[0]!,
+                  id: "d4",
+                  label: "Retired profile",
+                  deviceProfileId: "dp-retired",
+                  profileRetired: true,
+                },
               ]),
           }),
         });
@@ -386,6 +393,12 @@ describe("devices-screen", () => {
         await chooseOption(profile!, "dp1");
         expect(deepText(el, "[data-test=device-label-d1]")).toBe("Pantalla Cocina");
         expect(dq(table.shadowRoot!, "[data-test=device-row-d3]")).toBeNull();
+        await chooseOption(profile!, "retired");
+        expect(deepText(el, "[data-test=device-label-d4]")).toBe("Retired profile");
+        expect(dq(table.shadowRoot!, "[data-test=device-row-d1]")).toBeNull();
+        await chooseOption(profile!, "none");
+        expect(deepText(el, "[data-test=device-label-d2]")).toBe("Pase revocado");
+        expect(dq(table.shadowRoot!, "[data-test=device-row-d4]")).toBeNull();
         await chooseOption(profile!, "");
         const status = dq(table.shadowRoot!, 'wt-combobox[name="status-filter"]');
         expect(status).not.toBeNull();
