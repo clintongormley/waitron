@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   categoryColor,
+  categoryColorSource,
   effectiveColor,
   isStoredColor,
   type ColorNode,
@@ -55,6 +56,45 @@ describe("the venue default at the end of the walk", () => {
   it("loses to the product's own colour and to a coloured category above", () => {
     expect(effectiveColor("#b12525", null, drinks, fallback)).toBe("#b12525");
     expect(effectiveColor(null, "cold", drinks, fallback)).toBe("#256bb1");
+  });
+});
+
+describe("categoryColorSource", () => {
+  const fallback = "#777777";
+  it("names the category itself when it has a colour of its own", () =>
+    expect(categoryColorSource("juice", drinks, fallback)).toEqual({
+      color: "#25b125",
+      categoryId: "juice",
+    }));
+  it("names the nearest coloured category above an uncoloured one", () =>
+    expect(categoryColorSource("cold", drinks, fallback)).toEqual({
+      color: "#256bb1",
+      categoryId: "drinks",
+    }));
+  it("names no category when the colour is the fallback", () => {
+    const lone = tree([["a", { parentId: null, color: null }]]);
+    expect(categoryColorSource("a", lone, fallback)).toEqual({ color: fallback, categoryId: null });
+    expect(categoryColorSource(null, drinks, fallback)).toEqual({
+      color: fallback,
+      categoryId: null,
+    });
+  });
+  it("is empty when nothing above is coloured and there is no fallback", () =>
+    expect(categoryColorSource("a", tree([["a", { parentId: null, color: null }]]), null)).toEqual({
+      color: null,
+      categoryId: null,
+    }));
+  it("falls back for a category the tree lacks and for a loop in the data", () => {
+    expect(categoryColorSource("gone", drinks, fallback)).toEqual({
+      color: fallback,
+      categoryId: null,
+    });
+    const loop = tree([
+      ["a", { parentId: "b", color: null }],
+      ["b", { parentId: "a", color: null }],
+    ]);
+    expect(categoryColorSource("a", loop, fallback)).toEqual({ color: fallback, categoryId: null });
+    expect(categoryColorSource("a", loop, null)).toEqual({ color: null, categoryId: null });
   });
 });
 

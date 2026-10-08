@@ -327,6 +327,37 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with a category and products showing a colour they inherit", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products: products.map((product) =>
+          product.id === "p3" ? { ...product, primaryCategoryId: "cat-2" } : product,
+        ),
+        categories: [
+          { id: "cat-1", name: "Comida", parentId: null, color: "#b12525" },
+          { id: "cat-2", name: "Postres", parentId: "cat-1", color: null },
+        ],
+        defaultColor: "#256bb1",
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:cat-1"] .row-activate')!
+      .click();
+    await table.updateComplete;
+    table
+      .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:cat-2"] .row-activate')!
+      .click();
+    await table.updateComplete;
+    const inherited = (id: string) =>
+      table.shadowRoot!.querySelector(`[data-test="color-${id}"] [part~="inherited"]`);
+    for (const id of ["cat-2", "p1", "p3"]) expect(inherited(id), id).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it.each([null, "#b12525"])(
     "renders accessibly with All products' swatch for a venue default of %s",
     async (defaultColor) => {
