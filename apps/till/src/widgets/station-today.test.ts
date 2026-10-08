@@ -534,3 +534,30 @@ it("device permission refusal refreshes its managers without a session request",
     "/api/device/stations/grill/today",
   ]);
 });
+
+it.each(["answer", "refusal"])(
+  "ignores an old %s after reconnecting the same widget",
+  async (reply) => {
+    let finish!: (response: Response) => void;
+    let count = 0;
+    const { el, calls } = await mount({}, () =>
+      ++count === 1 ? new Promise((resolve) => (finish = resolve)) : json({ destinations }),
+    );
+    const read = vi.spyOn(el.api!, "stationToday");
+    act(el);
+    await expect.poll(() => typeof finish).toBe("function");
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await el.updateComplete;
+    finish(reply === "answer" ? json({ destinations }) : refused("time_zone.unreadable"));
+    await Promise.allSettled([read.mock.results[0]!.value]);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    act(el);
+    await dialog(el);
+    expect(calls).toHaveLength(2);
+  },
+);

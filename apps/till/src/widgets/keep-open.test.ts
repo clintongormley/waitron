@@ -321,3 +321,30 @@ it("manager approval retains a null endpoint when ending the extension", async (
     override: { personId: "ana", pin: "1234" },
   });
 });
+
+it.each(["answer", "refusal"])(
+  "ignores an old %s after reconnecting the same widget",
+  async (reply) => {
+    let finish!: (response: Response) => void;
+    let count = 0;
+    const { el, calls } = await mount({}, () =>
+      ++count === 1 ? new Promise((resolve) => (finish = resolve)) : json({ period }),
+    );
+    const read = vi.spyOn(el.api!, "keepOpen");
+    act(el);
+    await expect.poll(() => typeof finish).toBe("function");
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await el.updateComplete;
+    finish(reply === "answer" ? json({ period }) : refusal("time_zone.unreadable"));
+    await Promise.allSettled([read.mock.results[0]!.value]);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    act(el);
+    await dialog(el);
+    expect(calls).toHaveLength(2);
+  },
+);
