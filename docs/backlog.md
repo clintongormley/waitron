@@ -5123,8 +5123,8 @@ that has fallen behind.
   _2026-10-07: the printed QR sticker and the dropdown landed with W100 (#1332;
   see "Devices, profiles and departmental transfers" below). One difference from the decision
   above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
-  the dropdown moves it to the waiter's device. NFC (queued as W102) and Tap-to-Pay are still
-  open._
+  the dropdown moves it to the waiter's device. NFC (W102, not queued: it needs a real NFC handheld and tag to probe — owner 2026-10-08) and
+  Tap-to-Pay are still open._
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
   BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
   Stripe Checkout adapter that already exists forecloses no cheaper provider later.
@@ -6386,7 +6386,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       a printer is disabled or a reader is disabled or unpaired; nothing stores whether a printer or
       reader is online (Q7).
     - **Still pending: NFC** — tapping a phone on an NFC sticker to pick a reader (plan Task 5),
-      queued as W102.
+      W102 — not queued; it waits for a real NFC handheld (Chrome for Android) and a tag to
+      probe on, since a simulated NFC test cannot show hardware support (owner 2026-10-08).
     - Owner questions, each with the default built (answer when convenient):
       - Q1. A device cannot override its profile's default with "none" — owner question, default
         built.
