@@ -3493,8 +3493,9 @@ later measurement writes for an animation frame, cancelling that work on disconn
 The EN/ES watched-container regressions failed on the original code and pass with the change;
 existing sign-placement, hidden-field and font-change assertions are retained.
 The eight-suite catalogue/Preview/prices/navigation run passed 630 cases without this warning.
-The historical catalogue-only observation is investigated separately; this receipt does not
-attribute every occurrence of the same browser message to currency fields.
+The catalogue-only command on the original main commit passed 270 cases without the warning.
+Its historical occurrence was not reproduced here; this receipt does not attribute it to
+currency fields.
 See [the focused experiment](developers/conventions-ui.md#currency-measurements-and-resize-notifications-a407).
 
 
