@@ -74,6 +74,8 @@ const menu: TillZoneMenu = {
   id: "menu-lunch",
   name: "Lunch",
   isDefault: true,
+  orderable: true,
+  audience: "customer",
   versionId: "v1",
   structure: {
     members: [
@@ -143,6 +145,8 @@ function servedMenu(key: string, name: string, offered: TillProduct[]): TillZone
     id: `menu-${key}`,
     name,
     isDefault: false,
+    orderable: true,
+    audience: "customer",
     versionId: `v-${key}`,
     structure: {
       members: offered.map((each) => ({

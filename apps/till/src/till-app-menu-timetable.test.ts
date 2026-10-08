@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, draftServer, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import { menuOfferToTillProduct } from "./api/client.js";
 import type {
   MenuState,
   ServiceZoneSummary,
@@ -14,10 +15,6 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
-
-// The menu-state poll carries the zone's default menu. A till following the default moves to it
-// while its basket is empty; a person's own pick, a basket with lines and a table's order are left
-// alone.
 
 interface Menu {
   id: string;
@@ -81,12 +78,20 @@ function offers(
   serviceMode: ZoneOfferCatalogue["context"]["serviceMode"] = "prepay",
 ): ZoneOfferCatalogue {
   return {
-    context: { zoneId, departmentId: "department-restaurant", serviceMode },
+    service: { open: true, periodName: null },
+    context: {
+      departmentName: "Restaurant",
+      zoneId,
+      departmentId: "department-restaurant",
+      serviceMode,
+    },
     defaultMenuId,
     menus: menus.map((menu) => ({
       id: menu.id,
       name: menu.name,
       isDefault: menu.id === defaultMenuId,
+      orderable: true,
+      audience: "customer",
       versionId: "v1",
       structure: {
         members: [
@@ -111,6 +116,7 @@ const TERRAZA = offers("zone-terraza", [CENA, ALMUERZO, DESAYUNOS], "cena");
 
 function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenuId?: string } {
   return {
+    service: { open: true, periodName: null },
     menus: menus.map((menu) => ({ menuId: menu.id, versionId: "v1" })),
     unavailable: { products: [], optionLabels: [] },
     ...(defaultMenuId === undefined ? {} : { defaultMenuId }),
@@ -275,6 +281,162 @@ afterEach(() => {
   cleanupWidgets();
   vi.useRealTimers();
   sessionStorage.removeItem("waitron.lastMenu");
+});
+
+describe("period service at the counter", () => {
+  it("names the newly selected counter department when it is closed", async () => {
+    const closed = {
+      ...TERRAZA,
+      context: { ...TERRAZA.context, departmentId: "department-deli", departmentName: "Deli" },
+      service: { open: false, periodName: null },
+      menus: TERRAZA.menus.map((menu) => ({ ...menu, orderable: false })),
+    };
+    const { el } = await mountApp({ listZoneOffers: vi.fn(async () => closed) });
+    await signIn(el);
+    emit(counter(el), "counter-zone-selected", { zoneId: "zone-terraza" });
+    await flush(el);
+    expect(
+      counter(el).shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim(),
+    ).toBe("Deli is closed: no period is running");
+  });
+
+  it("shows a failed offers read without claiming the department is closed", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    await signIn(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+    expect(counter(el).shadowRoot!.querySelector("[data-service-closed]")).toBeNull();
+    expect(counter(el).shadowRoot!.querySelector("[data-service-period]")).toBeNull();
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "names a refused menu in one sentence (%s)",
+    async (locale) => {
+      const previousLocale = currentLocale();
+      try {
+        const { el } = await mountApp({
+          recordSale: vi
+            .fn()
+            .mockRejectedValue({ code: "menu_period.not_running", menuId: "desayunos" }),
+        });
+        await signIn(el);
+        setLocale(locale);
+        add(el, DESAYUNOS);
+        await flush(el);
+        emit(counter(el), "confirm-payment", { method: "cash", amount: "20" });
+        await flush(el);
+        expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+          locale === "en-GB"
+            ? "Desayunos is not available in the current period."
+            : "Desayunos no está disponible en el periodo actual.",
+        );
+        expect(counter(el).store.lineCount).toBe(1);
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it("shows the initial closed department without removing its basket or retained offers", async () => {
+    const closed = {
+      ...BARRA,
+      service: { open: false, periodName: null },
+      defaultMenuId: null,
+      menus: BARRA.menus.map((menu) => ({ ...menu, orderable: false, isDefault: false })),
+    };
+    const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => closed) });
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+    const screen = counter(el);
+    expect(screen.shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim()).toBe(
+      "Restaurant is closed: no period is running",
+    );
+    const grid = screen.shadowRoot!.querySelector("till-card-grid")!;
+    expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(grid.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+    expect(screen.store.lines.map((line) => line.product.productId)).toEqual(["Tostada"]);
+    expect(screen.products.map((product) => product.productId)).toEqual([
+      "Tostada",
+      "Menú del día",
+    ]);
+  });
+
+  it("closes and reopens at a poll without losing the pending basket", async () => {
+    const { el } = await mountApp();
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+    const closed = {
+      ...BARRA,
+      service: { open: false, periodName: null },
+      defaultMenuId: null,
+      menus: BARRA.menus.map((menu) => ({ ...menu, isDefault: false, orderable: false })),
+    };
+    api.listZoneOffers.mockResolvedValue(closed);
+    api.menuState.mockResolvedValue({
+      ...state([DESAYUNOS, ALMUERZO]),
+      service: closed.service,
+      defaultMenuId: null,
+    });
+    await poll(el);
+    expect(counter(el).shadowRoot!.querySelector("[data-service-closed]")).not.toBeNull();
+    expect(counter(el).store.lineCount).toBe(1);
+    expect(selected(el)).toBe("");
+    api.listZoneOffers.mockResolvedValue(BARRA);
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "desayunos"));
+    await poll(el);
+    expect(counter(el).shadowRoot!.querySelector("[data-service-closed]")).toBeNull();
+    expect(selected(el)).toBe("desayunos");
+    expect(counter(el).store.lines.map((line) => [line.product.productId, line.quantity])).toEqual([
+      ["Tostada", "1"],
+    ]);
+  });
+
+  it("refreshes unchanged versions on a period change, chooses the running menu and keeps every basket line", async () => {
+    const breakfast = {
+      ...BARRA,
+      service: { open: true, periodName: "Breakfast" },
+      menus: BARRA.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
+    };
+    const lunch = {
+      ...BARRA,
+      defaultMenuId: "almuerzo",
+      service: { open: true, periodName: "Lunch" },
+      menus: BARRA.menus.map((menu) => ({
+        ...menu,
+        isDefault: menu.id === "almuerzo",
+        orderable: menu.id === "almuerzo",
+      })),
+    };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () => breakfast),
+      listZoneOffers: vi.fn(async () => lunch),
+    });
+    await signIn(el);
+    emit(counter(el), "menu-selected", { id: "desayunos" });
+    add(el, DESAYUNOS);
+    await flush(el);
+    api.menuState.mockResolvedValue({
+      ...state([DESAYUNOS, ALMUERZO], "almuerzo"),
+      service: lunch.service,
+    });
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
+    expect(selected(el)).toBe("almuerzo");
+    expect(
+      counter(el).store.lines.map((line) => [
+        line.product.productId,
+        line.quantity,
+        line.product.unitPrice,
+      ]),
+    ).toEqual([["Tostada", "1", "3.00"]]);
+    expect(el.shadowRoot!.querySelector("till-basket-refresh")).toBeNull();
+    expect(
+      counter(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+    ).toBe("Lunch");
+  });
 });
 
 describe("a counter following its zone's default menu", () => {
@@ -533,6 +695,115 @@ describe("an open table's order", () => {
     shellGrid(el).shadowRoot!.querySelector<HTMLElement & { selectedMenuId: string }>(
       "till-table-order-screen",
     )!;
+
+  it("names the table's department independently of the counter when it is closed", async () => {
+    const closed = {
+      ...COMEDOR,
+      context: { ...COMEDOR.context, departmentId: "department-deli", departmentName: "Deli" },
+      service: { open: false, periodName: null },
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: false })),
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      listZoneOffers: vi.fn(async () => closed),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      listZones: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
+        ]),
+      listStatuses: vi.fn().mockResolvedValue([]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+    });
+    await signIn(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el);
+    expect(
+      tableScreen(el).shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim(),
+    ).toBe("Deli is closed: no period is running");
+  });
+
+  it("moves a table off an ended menu while retaining its draft and the counter's selection", async () => {
+    const breakfast = {
+      ...COMEDOR,
+      service: { open: true, periodName: "Breakfast" },
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
+    };
+    const lunch = {
+      ...COMEDOR,
+      service: { open: true, periodName: "Lunch" },
+      defaultMenuId: "almuerzo",
+      menus: COMEDOR.menus.map((menu) => ({
+        ...menu,
+        orderable: menu.id === "almuerzo",
+        isDefault: menu.id === "almuerzo",
+      })),
+    };
+    let current = breakfast;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      listZoneOffers: vi.fn(async (zoneId: string) =>
+        zoneId === "zone-comedor" ? current : BARRA,
+      ),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      listZones: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
+        ]),
+      listStatuses: vi.fn().mockResolvedValue([]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+      menuState: vi.fn(async (zoneId: string) =>
+        zoneId === "zone-comedor"
+          ? {
+              ...state([DESAYUNOS, ALMUERZO], current.defaultMenuId ?? undefined),
+              service: current.service,
+            }
+          : state([DESAYUNOS, ALMUERZO], "desayunos"),
+      ),
+    });
+    await signIn(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el);
+    const screen = tableScreen(el);
+    const browser = screen.shadowRoot!.querySelector<
+      HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
+    >("till-menu-browser")!;
+    browser.store.addProduct({ ...menuOfferToTillProduct(offer(DESAYUNOS), "v1") }, "1");
+    await flush(el);
+    current = lunch;
+    await poll(el);
+    expect(tableScreen(el).selectedMenuId).toBe("almuerzo");
+    expect(
+      browser.store.lines.map((line) => [
+        line.product.productId,
+        line.quantity,
+        line.product.unitPrice,
+      ]),
+    ).toEqual([["Tostada", "1", "3.00"]]);
+    expect(
+      tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+    ).toBe("Lunch");
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "counter" });
+    await flush(el);
+    expect(selected(el)).toBe("desayunos");
+  });
 
   it("keeps the menu the table shows whatever the poll names for the table's zone", async () => {
     const { el } = await mountApp({

@@ -768,3 +768,19 @@ test("decimal input uses a text control even when number type is requested", asy
   expect(input.type).toBe("text");
   expect(input.value).toBe("6,50");
 });
+
+test("a time input applies quarter-hour steps to the native control and clears them when unset", async () => {
+  const el = await mount(
+    '<wt-input label="Starts" name="startsAt" type="time" step="900"></wt-input>',
+  );
+  const input = parts(el).input;
+  expect(input.step).toBe("900");
+  input.value = "09:15";
+  expect(input.validity.stepMismatch).toBe(false);
+  input.value = "09:07";
+  expect(input.validity.stepMismatch).toBe(true);
+  el.removeAttribute("step");
+  await (el as LitElement).updateComplete;
+  expect(input.hasAttribute("step")).toBe(false);
+  expect(input.validity.stepMismatch).toBe(false);
+});

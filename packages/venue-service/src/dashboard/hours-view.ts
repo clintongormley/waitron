@@ -88,8 +88,7 @@ export function standardText(
 ): string {
   if (isDefaultStation(subject)) return t("hours.always_open_cell");
   const cell = weekCellOf(model, subject, weekday);
-  if (cell.mode === "not_set")
-    return t(subject.kind === "department" ? "hours.not_set_department" : "hours.not_set_station");
+  if (cell.mode === "not_set") return t("hours.not_set_station");
   return cellText(cell);
 }
 

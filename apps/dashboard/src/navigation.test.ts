@@ -25,18 +25,19 @@ it("preserves the Prep stations tab and tester when the dashboard rewrites its d
   expect(location.pathname).toBe("/manage/prep-stations/view/tickets/test/bread");
 });
 
-it("preserves the Menu timetable department a link names when the dashboard rewrites its destination", () => {
-  history.replaceState(null, "", "/manage/menu-timetable/department/deli");
+it("preserves the Opening hours tab and department a link names when the dashboard rewrites its destination", () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/periods/department/deli");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("department")).toBe("deli");
-  url.write({ dashboard: "menu-timetable" }, true);
-  expect(location.pathname).toBe("/manage/menu-timetable/department/deli");
+  expect(url.read("view")).toBe("periods");
+  url.write({ dashboard: "opening-hours" }, true);
+  expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/deli");
 });
 
-it("preserves the Hours tab and the subject a link names when the dashboard rewrites its destination", () => {
+it("preserves the Station hours tab and the station a link names when the dashboard rewrites its destination", () => {
   history.replaceState(null, "", "/manage/hours/view/week/station/bar");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
@@ -47,7 +48,20 @@ it("preserves the Hours tab and the subject a link names when the dashboard rewr
   url.write({ dashboard: "hours" }, true);
   expect(location.pathname).toBe("/manage/hours/view/week/station/bar");
   url.write({ station: null, department: "deli" }, true);
-  expect(location.pathname).toBe("/manage/hours/view/week/department/deli");
+  expect(location.pathname).toBe("/manage/hours/view/week");
+  expect(url.read("department")).toBeNull();
+});
+
+it("drops a department from a Station hours destination while preserving its station", () => {
+  history.replaceState(null, "", "/manage/hours/view/calendar/department/deli/station/bar");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  expect(url.read("department")).toBeNull();
+  expect(url.read("station")).toBe("bar");
+  url.write({ dashboard: "hours" }, true);
+  expect(location.pathname).toBe("/manage/hours/view/calendar/station/bar");
 });
 
 it("preserves the explicit menu price filter when the dashboard rewrites its destination", () => {

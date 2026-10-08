@@ -174,7 +174,7 @@ export async function expectNoA11yViolations(context: Element): Promise<void> {
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
 
-type ServedFields = Pick<ServedMenu, "structure" | "home">;
+type ServedFields = Pick<ServedMenu, "structure" | "home" | "orderable" | "audience">;
 
 /** An offer a {@link servedMenus} structure lists; with `section`, inside a section of that name. */
 export interface ServedOffer {
@@ -228,6 +228,8 @@ export function servedMenus<M extends { id: string }>(
       section.members.push(placed);
     }
     return {
+      orderable: true,
+      audience: "customer",
       ...menu,
       structure: { members },
       home: {

@@ -7,7 +7,8 @@ import {
   focusFirstInvalid,
   submitOnEnter,
   UrlStateController,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type LeaveCoordinator,
   type DraftScope,
   type LeaveReason,
@@ -188,9 +189,6 @@ export class HoursScreen extends LitElement {
       tbody th {
         white-space: nowrap;
       }
-      [data-separator] {
-        border-inline-start: var(--wt-field-line-width-active) solid var(--wt-color-text-muted);
-      }
       tr[aria-current] > th {
         color: var(--wt-color-primary-text);
       }
@@ -292,20 +290,14 @@ export class HoursScreen extends LitElement {
       if (this.#url.read("dashboard") !== "hours") return;
       const view = this.#url.read("view");
       this.view = view === "dates" || view === "calendar" ? view : "week";
-      const department = this.#url.read("department");
       const station = this.#url.read("station");
-      this.#linked =
-        department !== null
-          ? `department:${department}`
-          : station !== null
-            ? `station:${station}`
-            : undefined;
+      this.#linked = station !== null ? `station:${station}` : undefined;
       void this.#focusLinked();
     },
     {
       basePath: "/manage",
       primary: "dashboard",
-      children: { hours: { view: "view", department: "department", station: "station" } },
+      children: { hours: { view: "view", station: "station" } },
     },
   );
 
@@ -358,7 +350,6 @@ export class HoursScreen extends LitElement {
     this.renderRoot.querySelector<HTMLElement>(`thead th[data-subject="${key}"]`)?.focus();
   }
 
-  /** The model's subjects, departments first; inactive ones only when asked for. */
   #subjects(): Subject[] {
     return this.model!.subjects.filter((subject) => subject.active || this.showInactive);
   }
@@ -388,7 +379,7 @@ export class HoursScreen extends LitElement {
       this.#acceptEditor(editor, returnTo);
     };
     const scope = this.#activeScope();
-    if (!scope) proceed();
+    if (!scope || !this.#leave) proceed();
     else void this.#leave!.request({ scopes: [scope.id], reason: "navigation", proceed });
   }
 
@@ -422,11 +413,10 @@ export class HoursScreen extends LitElement {
     const generation = this.#generation;
     this.#editorBeforeClose = (reason) => this.#beforeClose(reason, generation);
     const editor = this.editor;
-    if (!editor || this.#weekScope) return;
+    if (!this.isConnected || !editor || this.#weekScope) return;
     if (editor.kind === "cell" || editor.kind === "configure") {
-      this.#leave = leaveCoordinatorFor(this);
       let registering = true;
-      this.#weekScope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: {},
         parent: this,
         current: () =>
@@ -461,8 +451,10 @@ export class HoursScreen extends LitElement {
           else if (this.editor?.kind === "configure") this.editor = { ...this.editor, drafts };
         },
       });
+      this.#leave = coordinator;
+      this.#weekScope = scope;
       registering = false;
-      this.#weekScope?.changed();
+      scope.changed();
     }
   }
 
@@ -472,8 +464,7 @@ export class HoursScreen extends LitElement {
 
   #registerDateScope(): void {
     const editor = this.editor;
-    if (!editor || this.#activeScope()) return;
-    this.#leave = leaveCoordinatorFor(this);
+    if (!this.isConnected || !editor || this.#activeScope()) return;
     let registering = true;
     if (editor.kind === "date") {
       const payload = (draft: DateDraft) => ({
@@ -493,7 +484,7 @@ export class HoursScreen extends LitElement {
             })),
           })),
       });
-      this.#dateScope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: {},
         parent: this,
         current: () =>
@@ -504,8 +495,10 @@ export class HoursScreen extends LitElement {
           if (this.editor?.kind === "date") this.editor = { ...this.editor, draft };
         },
       });
+      this.#leave = coordinator;
+      this.#dateScope = scope;
     } else if (editor.kind === "duplicate") {
-      this.#duplicateScope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: {},
         parent: this,
         current: () =>
@@ -518,6 +511,8 @@ export class HoursScreen extends LitElement {
           if (this.editor?.kind === "duplicate") this.editor = { ...this.editor, dates };
         },
       });
+      this.#leave = coordinator;
+      this.#duplicateScope = scope;
     }
     registering = false;
     this.#activeScope()?.changed();
@@ -546,7 +541,7 @@ export class HoursScreen extends LitElement {
   async #beforeClose(reason: LeaveReason, generation: number): Promise<boolean> {
     if (!this.isConnected || generation !== this.#generation || this.busy) return false;
     const scope = this.#activeScope();
-    if (!scope) return true;
+    if (!scope || !this.#leave) return true;
     return (
       (await this.#leave!.request({ scopes: [scope.id], reason, proceed: () => {} })) ===
       "proceeded"
@@ -707,8 +702,13 @@ export class HoursScreen extends LitElement {
     }
   }
 
+  #saveState() {
+    return saveActionState(this.#activeScope());
+  }
+
   #submit(): void {
     const editor = this.editor!;
+    if (this.busy || (this.#activeScope() && this.#saveState().unchanged)) return;
     this.attempted = true;
     this.refused = {};
     this.bottomRefusal = "";
@@ -937,12 +937,8 @@ export class HoursScreen extends LitElement {
     return format(key, { department: this.#departmentName(departmentId) });
   }
 
-  /** A department's name from the model, which lists inactive departments too. */
   #departmentName(id: string | undefined): string {
-    return (
-      this.model!.subjects.find((subject) => subject.kind === "department" && subject.id === id)
-        ?.name ?? ""
-    );
+    return this.model!.departments.find((department) => department.id === id)?.name ?? "";
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1067,12 +1063,7 @@ export class HoursScreen extends LitElement {
         return {
           heading: format("hours.clear_heading", { subject: editor.subject.name }),
           body: html`<p data-test="confirm-text">
-            ${format(
-              editor.subject.kind === "department"
-                ? "hours.clear_department"
-                : "hours.clear_station",
-              { subject: editor.subject.name },
-            )}
+            ${format("hours.clear_station", { subject: editor.subject.name })}
           </p>`,
           save: t("hours.clear"),
           danger: true,
@@ -1312,6 +1303,8 @@ export class HoursScreen extends LitElement {
     const errors = { ...this.refused, ...own };
     const content = this.#content(editor, errors);
     const marked = Object.keys(errors).length > 0;
+    const save = this.#saveState();
+    const tracked = this.#activeScope() !== undefined;
     const generation = this.#generation;
     return keyed(
       this.#generation,
@@ -1358,8 +1351,8 @@ export class HoursScreen extends LitElement {
           >
           <wt-button
             data-test="save-editor"
-            variant=${content.danger ? "danger" : "primary"}
-            ?disabled=${this.busy || Object.keys(own).length > 0}
+            variant=${content.danger ? "danger" : tracked ? save.variant : "primary"}
+            ?disabled=${this.busy || Object.keys(own).length > 0 || (tracked && save.unchanged)}
             @click=${() => {
               if (this.isConnected && generation === this.#generation) this.#submit();
             }}
@@ -1420,7 +1413,6 @@ export class HoursScreen extends LitElement {
 
   #week() {
     const subjects = this.#subjects();
-    const firstStation = subjects.find((subject) => subject.kind === "station");
     const today = this.model!.civilDate === null ? null : weekdayOf(this.model!.civilDate);
     const editableKeys = WEEK_DISPLAY_ORDER.flatMap((weekday) =>
       subjects
@@ -1449,12 +1441,7 @@ export class HoursScreen extends LitElement {
             <th scope="col">${t("hours.day_column")}</th>
             ${subjects.map(
               (subject) =>
-                html`<th
-                  scope="col"
-                  tabindex="-1"
-                  data-subject=${keyOf(subject)}
-                  ?data-separator=${subject === firstStation}
-                >
+                html`<th scope="col" tabindex="-1" data-subject=${keyOf(subject)}>
                   <div>
                     <span
                       ><span class="subject-name">${subject.name}</span>${
@@ -1481,11 +1468,7 @@ export class HoursScreen extends LitElement {
                   const key = keyOf(subject);
                   const value = this.#standardText(subject, weekday);
                   const shown = unbrokenRanges(value);
-                  return html`<td
-                    data-subject=${key}
-                    data-weekday=${weekday}
-                    ?data-separator=${subject === firstStation}
-                  >
+                  return html`<td data-subject=${key} data-weekday=${weekday}>
                     ${
                       this.#editable(subject)
                         ? html`<button

@@ -1,3 +1,4 @@
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -219,18 +220,10 @@ async function setupVenue(): Promise<{
       productId: product.id,
       grossPrice: "1.50",
     });
-    await tx.execute(sql`
-      insert into department_menus (department_id, menu_id, display_order)
-      select department_id, ${cat.id}, 0
-      from zone_service_policies
-      where location_id = ${cfg.locationId}
-        and is_counter_default`);
-    await tx.execute(sql`
-      insert into zone_all_day_menus (zone_id, department_id, menu_id)
-      select zone_id, department_id, ${cat.id}
-      from zone_service_policies
-      where location_id = ${cfg.locationId}
-        and is_counter_default`);
+    const counter = await tx.execute<{ zone_id: string }>(sql`
+      select zone_id from zone_service_policies
+      where location_id=${cfg.locationId} and is_counter_default`);
+    await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     await tx.insert(routingCells).values({
       locationId: cfg.locationId,

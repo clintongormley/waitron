@@ -1,5 +1,9 @@
 # Department menus and timetable — implementation plan (W98)
 
+> **2026-10-08:** A366 slice 1 Task 10 retires `resolveOpeningDateHours`; its station week,
+> named-date and default-opening checks move to the retained Hours model and station-state
+> readers. See [slice 1 plan](2026-10-07-a366-slice-1-service-periods.md).
+
 > **For agentic workers:** implement each task test-first: write the failing behavioural test,
 > run it and watch it fail for the stated reason, then the minimal implementation. Use
 > `superpowers:subagent-driven-development`; one implementer per task, in this worktree, in order.

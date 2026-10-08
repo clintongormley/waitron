@@ -1,15 +1,13 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } from "drizzle-orm";
 import { kitchenStations, newId, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { isReadableClock, skippedEndpoint, venueLocalMoment } from "./hours-clock.js";
 import {
   addDays,
-  calendarTone,
   cellIntervals,
   effective,
   invalidHours,
-  isLocalDate,
   parseDuplicateDates,
   parseSpecialDateInput,
   parseSubject,
@@ -32,7 +30,6 @@ import {
   type HoursModelSubject,
   type HoursSubject,
   type LocalDate,
-  type ResolvedHours,
   type SpecialDate,
   type SpecialDateInput,
   type WeekCell,
@@ -47,7 +44,7 @@ import {
   specialDateHoursPeriods,
   specialDates,
 } from "./schema/hours.js";
-import { departments } from "./schema/service.js";
+import { readOpeningHoursModel } from "./menu-timetable.js";
 import "./errors.js";
 
 export { cellIntervals } from "./hours-rules.js";
@@ -62,40 +59,20 @@ const bySubjectId = (a: DateHoursCell, b: DateHoursCell) =>
   Number(a.subject.id > b.subject.id) - Number(a.subject.id < b.subject.id);
 
 function ownerOf(cells: CellTable, subject: HoursSubject): SQL {
-  return subject.kind === "department"
-    ? eq(cells.departmentId, subject.id)
-    : eq(cells.stationId, subject.id);
+  return eq(cells.stationId, subject.id);
 }
 
-function subjectOfRow(row: { departmentId: string | null; stationId: string | null }) {
-  return row.departmentId !== null
-    ? { kind: "department" as const, id: row.departmentId }
-    : { kind: "station" as const, id: row.stationId! };
+function subjectOfRow(row: { stationId: string | null }) {
+  return { kind: "station" as const, id: row.stationId! };
 }
 
-/**
- * Resolves each subject within the venue, one read per kind: `hours.invalid` naming its `field`
- * when it is not this venue's, `station.always_open` for the default station when `writing`.
- * Returns the ids of the listed stations that are the default.
- */
 async function requireSubjects(
   tx: Transaction,
   cfg: VenueScope,
   entries: readonly { subject: HoursSubject; field: string; writing: boolean }[],
 ): Promise<Set<string>> {
-  const idsOf = (kind: HoursSubject["kind"]) =>
-    entries.filter((entry) => entry.subject.kind === kind).map((entry) => entry.subject.id);
-  const departmentIds = idsOf("department");
-  const stationIds = idsOf("station");
+  const stationIds = entries.map(({ subject, field }) => parseSubject(subject, field).id);
   const found = new Set<string>();
-  if (departmentIds.length > 0)
-    for (const row of await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(
-        and(inArray(departments.id, departmentIds), eq(departments.locationId, cfg.locationId)),
-      ))
-      found.add(keyOf({ kind: "department", id: row.id }));
   const defaults = new Set<string>();
   if (stationIds.length > 0)
     for (const row of await tx
@@ -107,12 +84,12 @@ async function requireSubjects(
           eq(kitchenStations.locationId, cfg.locationId),
         ),
       )) {
-      found.add(keyOf({ kind: "station", id: row.id }));
+      found.add(row.id);
       if (row.isDefault) defaults.add(row.id);
     }
   for (const { subject, field, writing } of entries) {
-    if (!found.has(keyOf(subject))) invalidHours(field);
-    if (writing && subject.kind === "station" && defaults.has(subject.id))
+    if (!found.has(subject.id)) invalidHours(field);
+    if (writing && defaults.has(subject.id))
       throw new AppError("station.always_open", { stationId: subject.id });
   }
   return defaults;
@@ -273,10 +250,7 @@ export async function replaceWeekHours(
     await tx.delete(hoursWeekCells).where(ownerOf(hoursWeekCells, parsedSubject));
     return;
   }
-  const owner =
-    parsedSubject.kind === "department"
-      ? { departmentId: parsedSubject.id }
-      : { stationId: parsedSubject.id };
+  const owner = { stationId: parsedSubject.id };
   for (const [weekday, cell] of week.cells.entries())
     await writeCell(
       tx,
@@ -319,6 +293,7 @@ async function readSpecialDays(
           specialDateHours.specialDateId,
           dates.map((date) => date.id),
         ),
+        isNotNull(specialDateHours.stationId),
         subject === null ? undefined : ownerOf(specialDateHours, subject),
       ),
     );
@@ -398,7 +373,7 @@ async function readDateCells(tx: Transaction, id: string): Promise<DateHoursCell
   const cells = await tx
     .select()
     .from(specialDateHours)
-    .where(eq(specialDateHours.specialDateId, id));
+    .where(and(eq(specialDateHours.specialDateId, id), isNotNull(specialDateHours.stationId)));
   const periods = await periodsByCell(
     tx,
     specialDateHoursPeriods,
@@ -428,22 +403,14 @@ export async function readSpecialDate(
   };
 }
 
-/** The venue's departments and non-default stations, which are the subjects hours apply to. */
 async function scheduledSubjects(tx: Transaction, cfg: VenueScope): Promise<HoursSubject[]> {
-  const departmentRows = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
   const stationRows = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
     .where(
       and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, false)),
     );
-  return [
-    ...departmentRows.map((row) => ({ kind: "department" as const, id: row.id })),
-    ...stationRows.map((row) => ({ kind: "station" as const, id: row.id })),
-  ];
+  return stationRows.map((row) => ({ kind: "station", id: row.id }));
 }
 
 /** Every subject's standard week in the venue, as intervals by subject key and weekday. */
@@ -451,20 +418,11 @@ async function weekIntervalsBySubject(
   tx: Transaction,
   subjects: HoursSubject[],
 ): Promise<Map<string, (Interval[] | null)[]>> {
-  const departmentIds = subjects.filter((s) => s.kind === "department").map((s) => s.id);
-  const stationIds = subjects.filter((s) => s.kind === "station").map((s) => s.id);
+  const stationIds = subjects.map((subject) => subject.id);
   const cells = await tx
     .select()
     .from(hoursWeekCells)
-    .where(
-      or(
-        and(
-          isNotNull(hoursWeekCells.departmentId),
-          inArray(hoursWeekCells.departmentId, departmentIds),
-        ),
-        and(isNotNull(hoursWeekCells.stationId), inArray(hoursWeekCells.stationId, stationIds)),
-      ),
-    );
+    .where(inArray(hoursWeekCells.stationId, stationIds));
   const periods = await periodsByCell(
     tx,
     hoursWeekPeriods,
@@ -739,9 +697,7 @@ export async function saveSpecialDate(
       own,
       {
         specialDateId,
-        ...(entry.subject.kind === "department"
-          ? { departmentId: entry.subject.id }
-          : { stationId: entry.subject.id }),
+        stationId: entry.subject.id,
       },
       entry.cell as { mode: StoredMode; periods: HourPeriod[] },
     );
@@ -894,9 +850,7 @@ export async function duplicateSpecialDate(
         undefined,
         {
           specialDateId: targetId,
-          ...(subject.kind === "department"
-            ? { departmentId: subject.id }
-            : { stationId: subject.id }),
+          stationId: subject.id,
         },
         {
           mode: cell.mode as StoredMode,
@@ -938,101 +892,6 @@ export async function deleteSpecialDate(
 }
 
 /**
- * Each subject's hours on one opening date, in a fixed number of reads however many subjects,
- * with the date's special date if it has one. The subjects must already be this venue's, and
- * `defaults` names those of them that are the default station.
- */
-async function resolveSubjects(
-  tx: Transaction,
-  cfg: VenueScope,
-  subjects: readonly HoursSubject[],
-  defaults: ReadonlySet<string>,
-  date: LocalDate,
-): Promise<{ special: SpecialDate | null; resolved: ResolvedHours[] }> {
-  const departmentIds = subjects.filter((s) => s.kind === "department").map((s) => s.id);
-  const stationIds = subjects.filter((s) => s.kind === "station").map((s) => s.id);
-  const owners = (cells: CellTable) =>
-    or(
-      and(isNotNull(cells.departmentId), inArray(cells.departmentId, departmentIds)),
-      and(isNotNull(cells.stationId), inArray(cells.stationId, stationIds)),
-    );
-  const [special] = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      name: specialDates.name,
-      colour: specialDates.colour,
-      closeWholeVenue: specialDates.closeWholeVenue,
-    })
-    .from(specialDates)
-    .where(and(eq(specialDates.locationId, cfg.locationId), eq(specialDates.date, date)));
-  const dateCells =
-    special === undefined
-      ? []
-      : await tx
-          .select()
-          .from(specialDateHours)
-          .where(and(eq(specialDateHours.specialDateId, special.id), owners(specialDateHours)));
-  const weekCells = await tx
-    .select()
-    .from(hoursWeekCells)
-    .where(and(eq(hoursWeekCells.weekday, weekdayOf(date)), owners(hoursWeekCells)));
-  const datePeriods = await periodsByCell(
-    tx,
-    specialDateHoursPeriods,
-    dateCells.map((cell) => cell.id),
-  );
-  const weekPeriods = await periodsByCell(
-    tx,
-    hoursWeekPeriods,
-    weekCells.map((cell) => cell.id),
-  );
-  const resolved = subjects.map((subject): ResolvedHours => {
-    const base = { subject, openingDate: date, specialDateId: special?.id ?? null };
-    if (subject.kind === "station" && defaults.has(subject.id))
-      return { ...base, source: "default_station", cell: { mode: "always_open", periods: [] } };
-    if (special?.closeWholeVenue)
-      return { ...base, source: "whole_venue", cell: { mode: "closed", periods: [] } };
-    const key = keyOf(subject);
-    const own = dateCells.find((cell) => keyOf(subjectOfRow(cell)) === key);
-    if (own !== undefined)
-      return {
-        ...base,
-        source: "special",
-        cell: cellOf(own.mode, datePeriods.get(own.id) ?? []),
-      };
-    const standard = weekCells.find((cell) => keyOf(subjectOfRow(cell)) === key);
-    return {
-      ...base,
-      source: "standard",
-      cell:
-        standard === undefined
-          ? { mode: "not_set", periods: [] }
-          : cellOf(standard.mode, weekPeriods.get(standard.id) ?? []),
-    };
-  });
-  return { special: special ?? null, resolved };
-}
-
-/**
- * One subject's hours on one opening date: the default station is always open, a whole-venue
- * closure closes everything else, then the date's own cell, then the standard week.
- */
-export async function resolveOpeningDateHours(
-  tx: Transaction,
-  cfg: VenueScope,
-  subject: HoursSubject,
-  openingDate: LocalDate,
-): Promise<ResolvedHours> {
-  const parsed = parseSubject(subject, "subject");
-  if (!isLocalDate(openingDate)) invalidHours("openingDate");
-  const defaults = await requireSubjects(tx, cfg, [
-    { subject: parsed, field: "subject", writing: false },
-  ]);
-  return (await resolveSubjects(tx, cfg, [parsed], defaults, openingDate)).resolved[0]!;
-}
-
-/**
  * The venue's subjects, their standard weeks and the special dates in `dates`, and any from
  * `listFrom` onward, with their cells, in a fixed number of reads however many dates, subjects and
  * special dates there are.
@@ -1043,16 +902,6 @@ async function readRange(
   dates: readonly LocalDate[],
   listFrom?: LocalDate,
 ) {
-  const departmentRows = await tx
-    .select({
-      id: departments.id,
-      name: departments.name,
-      active: departments.active,
-      isDefault: departments.isDefault,
-    })
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId))
-    .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   const stationRows = await tx
     .select({
       id: kitchenStations.id,
@@ -1063,31 +912,15 @@ async function readRange(
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
-  const subjects: HoursModelSubject[] = [
-    ...departmentRows.map((row) => ({ kind: "department" as const, ...row })),
-    ...stationRows.map((row) => ({ kind: "station" as const, ...row })),
-  ];
+  const subjects: HoursModelSubject[] = stationRows.map((row) => ({
+    kind: "station",
+    ...row,
+  }));
+  const stationIds = stationRows.map((row) => row.id);
   const weekCells = await tx
     .select()
     .from(hoursWeekCells)
-    .where(
-      or(
-        and(
-          isNotNull(hoursWeekCells.departmentId),
-          inArray(
-            hoursWeekCells.departmentId,
-            departmentRows.map((row) => row.id),
-          ),
-        ),
-        and(
-          isNotNull(hoursWeekCells.stationId),
-          inArray(
-            hoursWeekCells.stationId,
-            stationRows.map((row) => row.id),
-          ),
-        ),
-      ),
-    );
+    .where(inArray(hoursWeekCells.stationId, stationIds));
   const weekPeriods = await periodsByCell(
     tx,
     hoursWeekPeriods,
@@ -1126,9 +959,12 @@ async function readRange(
           .select()
           .from(specialDateHours)
           .where(
-            inArray(
-              specialDateHours.specialDateId,
-              specials.map((special) => special.id),
+            and(
+              inArray(
+                specialDateHours.specialDateId,
+                specials.map((special) => special.id),
+              ),
+              inArray(specialDateHours.stationId, stationIds),
             ),
           );
   const datePeriods = await periodsByCell(
@@ -1146,12 +982,8 @@ async function readRange(
   return { subjects, weeks, specials, cellsByDate };
 }
 
-/**
- * Each date of the range with its special date and calendar colour. The colour is Closed only
- * when every active department is Closed that date, by its week, the date's cell or a whole-venue
- * closure.
- */
 function calendarDays(
+  opening: Awaited<ReturnType<typeof readOpeningHoursModel>>,
   dates: readonly LocalDate[],
   range: Awaited<ReturnType<typeof readRange>>,
   holidays: readonly HolidayFact[],
@@ -1163,21 +995,25 @@ function calendarDays(
     if (facts === undefined) factsOn.set(fact.date, [fact]);
     else facts.push(fact);
   }
-  const active = range.subjects.filter((s) => s.kind === "department" && s.active);
+  const active = opening.departments.filter((department) => department.active);
   return dates.map((date) => {
     const special = specialOn.get(date) ?? null;
-    const cells = special === null ? [] : range.cellsByDate.get(special.id)!;
-    const modes = active.map((department) => {
-      if (special?.closeWholeVenue) return "closed";
-      const own = cells.find((entry) => entry.subject.id === department.id);
-      if (own !== undefined) return own.cell.mode;
-      return range.weeks.get(keyOf(department))?.[weekdayOf(date)]?.mode ?? "not_set";
-    });
+    const open =
+      !special?.closeWholeVenue &&
+      active.some((department) => {
+        const own =
+          special === null
+            ? undefined
+            : department.dates.find((day) => day.specialDateId === special.id);
+        const slots =
+          own?.slots ?? department.week.find((day) => day.weekday === weekdayOf(date))!.slots;
+        return slots.length > 0;
+      });
     return {
       date,
       specialDate: special,
       holidays: factsOn.get(date) ?? [],
-      tone: calendarTone(special?.colour ?? null, modes as ResolvedHours["cell"]["mode"][]),
+      tone: open ? (special?.colour ?? "standard") : "closed",
     };
   });
 }
@@ -1212,7 +1048,12 @@ export async function readCalendarDays(
 ): Promise<CalendarDay[]> {
   const dates = rangeDates(from, to);
   const range = await readRange(tx, cfg, dates);
-  return calendarDays(dates, range, await readHolidays(tx, cfg, dates, holidays));
+  return calendarDays(
+    await readOpeningHoursModel(tx, cfg, new Date()),
+    dates,
+    range,
+    await readHolidays(tx, cfg, dates, holidays),
+  );
 }
 
 /** Everything the Hours page shows for one range of dates, with the venue's date at `at`. */
@@ -1229,11 +1070,13 @@ export async function readHoursModel(
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
   const listFrom = civilDate === null ? from : addDays(civilDate, -1);
   const range = await readRange(tx, cfg, dates, listFrom);
+  const opening = await readOpeningHoursModel(tx, cfg, at);
   return {
     timeZone: clock.timeZone,
     dayCutover: clock.dayCutover,
     civilDate,
     clockReadable: civilDate !== null,
+    departments: opening.departments.map(({ id, name }) => ({ id, name })),
     subjects: range.subjects,
     week: range.subjects.map(({ kind, id }) => ({
       subject: { kind, id },
@@ -1242,7 +1085,7 @@ export async function readHoursModel(
         cell: range.weeks.get(keyOf({ kind, id }))?.[weekday] ?? { mode: "not_set", periods: [] },
       })),
     })),
-    days: calendarDays(dates, range, await readHolidays(tx, cfg, dates, holidays)),
+    days: calendarDays(opening, dates, range, await readHolidays(tx, cfg, dates, holidays)),
     specialDates: range.specials.filter((special) => special.date >= listFrom),
     specialCells: range.specials.map((special) => ({
       specialDateId: special.id,

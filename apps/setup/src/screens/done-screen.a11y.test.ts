@@ -13,6 +13,19 @@ const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTM
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (theme) => {
+  it("has no violations showing the first hours and their link", async () => {
+    const { host } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        openingHours: { departmentId: "first-department" },
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations while waiting for the restart", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

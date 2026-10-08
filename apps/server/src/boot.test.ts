@@ -4508,7 +4508,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           headers: json,
           body: live(TAX_ID),
         });
-        expect(await provisioned.json()).toEqual({ provisioned: true, restarting: true });
+        const [department] = target.store.venue.all<{ id: string }>(
+          sql`select id from departments where active = 1`,
+        );
+        expect(await provisioned.json()).toEqual({
+          provisioned: true,
+          restarting: true,
+          openingHours: { departmentId: department!.id },
+        });
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
       });

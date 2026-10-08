@@ -54,7 +54,7 @@ import type { WeekDay } from "./hours-types.js";
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 import { routingCells } from "./schema/routing.js";
 import { zoneSalePolicies } from "./schema/service.js";
-import { zoneAllDayMenus } from "./schema/menus.js";
+import { menuPeriods } from "./schema/menus.js";
 import {
   type Department,
   copyOrderServiceContext,
@@ -93,6 +93,42 @@ import { offerMenuThroughZone } from "./testing/zone-menus.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
   timeoutMs: 60_000,
+});
+
+describe("new department service periods", () => {
+  it("places the location's menu in Open on weekdays, and leaves a menu-less location without periods", async () => {
+    const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+    const id = brandLocationId(await seedLocation(`New ${randomUUID()}`));
+    await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
+    const department = await scoped((tx) =>
+      createDepartment(
+        tx,
+        { locationId: id },
+        { name: "Restaurant", defaultServiceMode: "prepay" },
+      ),
+    );
+    const periods = await db.execute(
+      sql`select name, menu_id from menu_periods where department_id = ${department.id}`,
+    );
+    expect(periods.rows).toEqual([{ name: "Open", menu_id: menu.id }]);
+    const slots = await db.execute(
+      sql`select d.weekday, s.starts_at, s.ends_at from menu_day_timetables d join menu_slots s on s.timetable_id = d.id where d.department_id = ${department.id} order by d.weekday`,
+    );
+    expect(slots.rows).toEqual(
+      [1, 2, 3, 4, 5].map((weekday) => ({ weekday, starts_at: "09:00:00", ends_at: "17:00:00" })),
+    );
+    const emptyId = brandLocationId(await seedLocation(`Empty ${randomUUID()}`));
+    const empty = await scoped((tx) =>
+      createDepartment(
+        tx,
+        { locationId: emptyId },
+        { name: "Restaurant", defaultServiceMode: "prepay" },
+      ),
+    );
+    expect(
+      (await db.execute(sql`select id from menu_periods where department_id = ${empty.id}`)).rows,
+    ).toEqual([]);
+  });
 });
 
 let db: Database;
@@ -266,7 +302,19 @@ describe("venue service routing", () => {
         { locationId },
         { name: "Bar", defaultServiceMode: "prepay" },
       );
+      const missingBar = {
+        code: "department.no_periods",
+        departmentId: otherDepartment.id,
+        departmentName: "Bar",
+      };
+      const missingRestaurant = {
+        code: "department.no_periods",
+        departmentId: department.id,
+        departmentName: "Restaurant",
+      };
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+        missingBar,
+        missingRestaurant,
         { code: "zone.department_missing", zoneId: zone, zoneName: "Terrace" },
       ]);
 
@@ -279,7 +327,9 @@ describe("venue service routing", () => {
         },
       );
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
-        { code: "zone.menu_missing", zoneId: zone, zoneName: "Terrace" },
+        missingBar,
+        missingRestaurant,
+        { code: "zone.menu_unpublished", zoneId: zone, zoneName: "Terrace" },
       ]);
 
       const menu = await createCatalogue(tx, { name: "Terrace menu" });
@@ -287,10 +337,12 @@ describe("venue service routing", () => {
         makeDefault: true,
       });
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+        missingBar,
         { code: "zone.menu_unpublished", zoneId: zone, zoneName: "Terrace" },
       ]);
       await publish(tx, menu.id);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+        missingBar,
         {
           code: "zone.menu_empty",
           zoneId: zone,
@@ -759,8 +811,9 @@ describe("venue service routing", () => {
       const versionId = await publish(tx, menu.id);
       const terrace = await listZoneOffers(tx, { locationId }, zone);
       expect({ ...terrace, menus: terrace.menus.map(versionOf) }).toEqual({
-        defaultMenuId: null,
-        menus: [{ id: menu.id, name: "Terrace", isDefault: false, versionId }],
+        defaultMenuId: menu.id,
+        service: { open: true, periodName: "Always" },
+        menus: [{ id: menu.id, name: "Terrace", isDefault: true, versionId }],
         offers: [],
       });
       await expect(
@@ -925,9 +978,10 @@ describe("routing outcomes and menu readiness", () => {
 
       const served = (await listZoneOffers(tx, cfg, zoneId)).offers;
       expect(served.map((row) => [row.id, row.available])).toEqual([[offer.id, false]]);
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
-        { code: "zone.menu_missing", zoneId: otherZoneId, zoneName: "Terrace" },
-      ]);
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      expect(
+        (await listZoneOffers(tx, cfg, otherZoneId)).offers.map((row) => [row.id, row.available]),
+      ).toEqual([[offer.id, false]]);
 
       await tx.execute(sql`update products set available = true where id = ${croquetas.id}`);
       expect(
@@ -1136,12 +1190,12 @@ describe("departments", () => {
     ]);
   });
 
-  it("refuses hours and deactivation for a department outside this venue, and an unset week clears the hours", async () => {
+  it("refuses station hours and department deactivation outside this venue, and an unset week clears station hours", async () => {
     const here = { locationId: brandLocationId(await seedLocation("Venue")) };
     const there = { locationId: brandLocationId(await seedLocation("Second venue")) };
     const at = new Date("2026-10-06T10:00:00Z");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, here, {
+      await createDepartment(tx, here, {
         name: "Restaurant",
         defaultServiceMode: "table_tab",
       });
@@ -1149,6 +1203,13 @@ describe("departments", () => {
         name: "Elsewhere",
         defaultServiceMode: "table_tab",
       });
+      const [station, foreignStation] = await tx
+        .insert(kitchenStations)
+        .values([
+          { locationId: here.locationId, name: "Pass" },
+          { locationId: there.locationId, name: "Elsewhere pass" },
+        ])
+        .returning();
       const openingHours = (): WeekDay[] =>
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -1164,14 +1225,22 @@ describe("departments", () => {
         weekday,
         cell: { mode: "not_set", periods: [] },
       }));
-      const asDepartment = (id: string) => ({ kind: "department" as const, id });
-      await replaceWeekHours(tx, here, asDepartment(department.id), openingHours(), at);
-      await replaceWeekHours(tx, there, asDepartment(elsewhere.id), openingHours(), at);
-      const stored = await readWeekHours(tx, there, asDepartment(elsewhere.id));
+      const asStation = (id: string) => ({ kind: "station" as const, id });
+      await replaceWeekHours(tx, here, asStation(station!.id), openingHours(), at);
+      await replaceWeekHours(tx, there, asStation(foreignStation!.id), openingHours(), at);
+      const stored = await readWeekHours(tx, there, asStation(foreignStation!.id));
 
       for (const departmentId of [elsewhere.id, UNKNOWN_ID]) {
         await expect(
-          rejection(replaceWeekHours(tx, here, asDepartment(departmentId), unset, at)),
+          rejection(
+            replaceWeekHours(
+              tx,
+              here,
+              asStation(departmentId === elsewhere.id ? foreignStation!.id : UNKNOWN_ID),
+              unset,
+              at,
+            ),
+          ),
         ).resolves.toEqual({ code: "hours.invalid", params: { field: "subject" } });
         await expect(rejection(deactivateDepartment(tx, here, departmentId))).resolves.toEqual({
           code: "department.not_found",
@@ -1190,17 +1259,19 @@ describe("departments", () => {
       expect(stored[1]!.cell.periods.map(({ opensAt, closesAt }) => [opensAt, closesAt])).toEqual([
         ["09:00", "17:00"],
       ]);
-      await expect(readWeekHours(tx, there, asDepartment(elsewhere.id))).resolves.toEqual(stored);
+      await expect(readWeekHours(tx, there, asStation(foreignStation!.id))).resolves.toEqual(
+        stored,
+      );
       await expect(listDepartments(tx, there)).resolves.toEqual([
         expect.objectContaining({ id: elsewhere.id, active: true }),
       ]);
 
-      await replaceWeekHours(tx, here, asDepartment(department.id), unset, at);
-      await expect(readWeekHours(tx, here, asDepartment(department.id))).resolves.toEqual(unset);
+      await replaceWeekHours(tx, here, asStation(station!.id), unset, at);
+      await expect(readWeekHours(tx, here, asStation(station!.id))).resolves.toEqual(unset);
       expect(
         (
           await tx.execute<{ n: number }>(
-            sql`select count(*) as n from hours_week_cells where department_id = ${department.id}`,
+            sql`select count(*) as n from hours_week_cells where station_id = ${station!.id}`,
           )
         ).rows,
       ).toEqual([{ n: 0 }]);
@@ -1374,7 +1445,7 @@ describe("departments", () => {
     const otherZoneId = await seedZone(cfg.locationId, "Dining room");
     const kitchen = await seedStation(cfg.locationId, "Kitchen");
     const bar = await seedStation(cfg.locationId, "Bar");
-    const { watcherId, menuId, categoryId, productId } = await scoped(async (tx) => {
+    const { watcherId, menuId, departmentId, categoryId, productId } = await scoped(async (tx) => {
       const department = await createDepartment(tx, cfg, {
         name: "Restaurant",
         defaultServiceMode: "table_tab",
@@ -1427,6 +1498,7 @@ describe("departments", () => {
       await tx.insert(watcherZones).values({ watcherId: watcher!.id, zoneId });
       return {
         watcherId: watcher!.id,
+        departmentId: department.id,
         menuId: menu.id,
         categoryId: product.categoryId,
         productId: product.id,
@@ -1457,9 +1529,9 @@ describe("departments", () => {
     ).toEqual([]);
     expect(
       await db
-        .select({ menuId: zoneAllDayMenus.menuId })
-        .from(zoneAllDayMenus)
-        .where(eq(zoneAllDayMenus.zoneId, zoneId)),
+        .select({ menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, departmentId)),
     ).toEqual([{ menuId }]);
     expect(
       await db
@@ -1729,8 +1801,14 @@ describe("retired and moved zones", () => {
     ).toEqual({ workingOrderId: orderId });
   });
 
-  it("moves a zone between departments, keeping its tables and dropping its own all-day menu", async () => {
+  it("moves a zone between departments, keeping its tables and inheriting the destination periods", async () => {
     const venue = await seedSellingVenue();
+    const destinationMenu = await scoped(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Destination period menu" });
+      await offerMenuThroughZone(tx, venue.cfg, venue.diningZone, menu.id, { makeDefault: true });
+      await publish(tx, menu.id);
+      return menu.id;
+    });
     const [table] = await db
       .insert(diningTables)
       .values({
@@ -1763,10 +1841,15 @@ describe("retired and moved zones", () => {
     });
     expect(
       await db
-        .select({ menuId: zoneAllDayMenus.menuId })
-        .from(zoneAllDayMenus)
-        .where(eq(zoneAllDayMenus.zoneId, venue.barZone)),
-    ).toEqual([]);
+        .select({ menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, venue.barId)),
+    ).toEqual([{ menuId: venue.menuId }]);
+    expect(
+      (await scoped((tx) => listZoneOffers(tx, venue.cfg, venue.barZone))).menus.map(
+        (menu) => menu.id,
+      ),
+    ).toEqual([destinationMenu, venue.menuId]);
   });
 });
 
@@ -2198,7 +2281,7 @@ describe("zone offers from the published menus", () => {
       code: "menu.reset_required",
       params: { menuId: venue.dinner },
     });
-    await expect(scoped((tx) => menuState(tx, venue.diningZone))).rejects.toMatchObject({
+    await expect(scoped((tx) => menuState(tx, venue.cfg, venue.diningZone))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: venue.dinner },
     });
@@ -2238,10 +2321,11 @@ describe("zone offers from the published menus", () => {
       // The bar zone sells All day alone; with only an unpublished menu it sells nothing.
       await offerMenuThroughZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
-        sql`delete from department_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
+        sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
       );
       await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
+        service: { open: true, periodName: "Always" },
         menus: [],
         offers: [],
       });
@@ -2257,7 +2341,7 @@ describe("zone offers from the published menus", () => {
       const brunch = await createCatalogue(tx, { name: "Brunch" });
       await offerMenuThroughZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
-        sql`delete from department_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
+        sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
       );
       // The dining room's unpublished Brunch is beside published menus, so it is not reported.
       await offerMenuThroughZone(tx, cfg, venue.diningZone, brunch.id);
@@ -2312,7 +2396,7 @@ describe("zone offers from the published menus", () => {
         venue.lemonadeOffer,
         venue.burgerOffer,
       ]);
-      expect((await menuState(tx, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
+      expect((await menuState(tx, venue.cfg, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ]);
       await expect(
@@ -2329,6 +2413,7 @@ describe("zone offers from the published menus", () => {
       // The bar sells All day alone.
       await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
+        service: { open: true, periodName: "Always" },
         menus: [],
         offers: [],
       });
@@ -2348,15 +2433,28 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("lists what the zone's live menus hold that cannot be sold now, one query per table", async () => {
+  it("returns no menu state for a zone outside the requested location", async () => {
+    const venue = await seedTwoMenuVenue();
+    const otherLocation = brandLocationId(await seedLocation("Other location"));
+    await expect(
+      scoped((tx) => menuState(tx, { locationId: otherLocation }, venue.diningZone)),
+    ).resolves.toEqual({
+      service: { open: false, periodName: null },
+      menus: [],
+      unavailable: { products: [], optionLabels: [] },
+    });
+  });
+
+  it("reads the service state and batches live menu availability", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
       const menus = [
         { menuId: venue.menuId, versionId: venue.versionId },
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ];
-      const before = await menuState(tx, venue.diningZone);
+      const before = await menuState(tx, venue.cfg, venue.diningZone);
       expect({ ...before, menus: before.menus.map(stateVersionOf) }).toEqual({
+        service: { open: true, periodName: "Always" },
         menus,
         unavailable: { products: [], optionLabels: [] },
       });
@@ -2406,14 +2504,15 @@ describe("zone offers from the published menus", () => {
       );
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
-      expect(prepared).toHaveBeenCalledTimes(4);
+      const { menus: served, unavailable } = await menuState(tx, venue.cfg, venue.diningZone);
+      expect(prepared).toHaveBeenCalledTimes(13);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
       });
-      await expect(menuState(tx, UNKNOWN_ID)).resolves.toEqual({
+      await expect(menuState(tx, venue.cfg, UNKNOWN_ID)).resolves.toEqual({
+        service: { open: false, periodName: null },
         menus: [],
         unavailable: { products: [], optionLabels: [] },
       });
@@ -2433,7 +2532,9 @@ describe("zone offers from the published menus", () => {
         },
         "en",
       );
-      expect((await menuState(tx, venue.diningZone)).unavailable.optionLabels).toEqual([WITH_ICE]);
+      expect((await menuState(tx, venue.cfg, venue.diningZone)).unavailable.optionLabels).toEqual([
+        WITH_ICE,
+      ]);
       const lemonade = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.id === venue.lemonadeOffer,
       )!;
@@ -2480,7 +2581,8 @@ describe("zone offers from the published menus", () => {
       await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
       const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       expect(sqlOf.filter((text) => /from "menu_publications"/.test(text))).toHaveLength(1);
-      expect(sqlOf.filter((text) => /from "department_menus"/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /from "menu_period_staff_menus"/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /from "menu_periods"/.test(text))).toHaveLength(1);
     });
   });
 });
@@ -2529,6 +2631,8 @@ describe("each served menu's structure and Device Home Page", () => {
         id: venue.dinner,
         name: "Dinner",
         isDefault: false,
+        audience: "staff",
+        orderable: true,
         versionId: venue.dinnerVersionId,
         structure: {
           members: [
@@ -2554,7 +2658,7 @@ describe("each served menu's structure and Device Home Page", () => {
           till: HOME_DISPLAY_DEFAULTS.till,
         },
       });
-      expect((await menuState(tx, venue.diningZone)).menus).toEqual([
+      expect((await menuState(tx, venue.cfg, venue.diningZone)).menus).toEqual([
         { menuId: venue.menuId, versionId: venue.versionId },
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ]);

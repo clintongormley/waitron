@@ -1,3 +1,4 @@
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { createZone } from "./testing/service-zone.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -1005,12 +1006,7 @@ describe("listTablesWithState (occupancy)", () => {
       await tx.execute(sql`update zone_service_policies
         set department_id = ${department!.id}, service_mode = 'table_tab'
         where zone_id = ${zone.id}`);
-      await tx.execute(sql`
-        insert into department_menus (department_id, menu_id)
-        values (${department!.id}, ${menuId})`);
-      await tx.execute(sql`
-        insert into zone_all_day_menus (zone_id, department_id, menu_id)
-        values (${zone.id}, ${department!.id}, ${menuId})`);
+      await offerMenuThroughZone(tx, cfg, zone.id, menuId, { makeDefault: true });
       await setRoutingCell(
         tx,
         cfg,

@@ -1382,14 +1382,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 })
               ).zoneId
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
-        const menuState = await VENUE_SERVICE.menuState(tx, zone);
+        const at = new Date();
+        const menuState = await VENUE_SERVICE.menuState(tx, deps.cfg, zone, at);
         return {
           ...menuState,
           defaultMenuId: await VENUE_SERVICE.resolveDefaultMenu(
             tx,
             deps.cfg,
             zone,
-            new Date(),
+            at,
             menuState.menus.map((menu) => menu.menuId),
           ),
         };
@@ -1489,6 +1490,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 zoneId ?? undefined,
                 undefined,
                 "ignore",
+                "none",
               )
             : null;
         const parents = priced?.lineRows.filter((line) => line.parentLineId === null) ?? [];
@@ -2689,6 +2691,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           zoneId ?? undefined,
           undefined,
           "ignore",
+          "none",
         );
         const parents = priced.lineRows.filter((line) => line.parentLineId === null);
         return {

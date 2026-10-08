@@ -145,6 +145,11 @@ export class TillCounterScreen extends LitElement {
   /** The grid shows the selected menu's offers; the allergen lookup screen keeps the full zone set. */
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
+  @property({ attribute: false }) service: { open: boolean; periodName: string | null } | null = {
+    open: true,
+    periodName: null,
+  };
+  @property() departmentName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
   @property() selectedMenuId = "";
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
@@ -277,13 +282,26 @@ export class TillCounterScreen extends LitElement {
             </div>`
           : nothing
       }
-      <till-menu-switcher
-        class="menu-switcher"
-        .menus=${this.menus}
-        .selectedId=${this.selectedMenuId}
-      ></till-menu-switcher>
       ${
-        this.#hasDietData()
+        this.service?.open === false
+          ? html`<p role="status" data-service-closed>
+              ${t("menu.department_closed").replace("{department}", () => this.departmentName)}
+            </p>`
+          : this.service?.periodName == null
+            ? nothing
+            : html`<p role="status" data-service-period>${this.service?.periodName}</p>`
+      }
+      ${
+        this.service?.open === true
+          ? html`<till-menu-switcher
+              class="menu-switcher"
+              .menus=${this.menus}
+              .selectedId=${this.selectedMenuId}
+            ></till-menu-switcher>`
+          : nothing
+      }
+      ${
+        this.service?.open === true && this.#hasDietData()
           ? html`<till-diet-filter
               class="diet-filter"
               .selected=${this.selectedDiet}
@@ -308,6 +326,8 @@ export class TillCounterScreen extends LitElement {
         .orderInFlight=${this.orderInFlight}
         .products=${this.products}
         .menus=${this.menus}
+        .service=${this.service}
+        .departmentName=${this.departmentName}
         .selectedMenuId=${this.selectedMenuId}
         .selectedDiet=${this.selectedDiet}
         .handheld=${this.handheld}

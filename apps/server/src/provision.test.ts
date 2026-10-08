@@ -202,13 +202,16 @@ describe("provisionVenue", () => {
       "fiscal-verifactu",
       "adjustments",
     ]);
-    const defaults = await db.execute<{ menus: number; department_menus: number }>(sql`
+    const defaults = await db.execute<{ menus: number; periods: number; slots: number }>(sql`
       select
-        (select cast(count(*) as int) from catalogues ) as menus,
-        (select cast(count(*) as int) from department_menus dm
-          join departments d on d.id = dm.department_id
-          where d.location_id = ${result.locationId}) as department_menus`);
-    expect(defaults.rows[0]).toEqual({ menus: 1, department_menus: 1 });
+        (select cast(count(*) as int) from catalogues) as menus,
+        (select cast(count(*) as int) from menu_periods p
+          join departments d on d.id = p.department_id
+          where d.location_id = ${result.locationId}) as periods,
+        (select cast(count(*) as int) from menu_slots s
+          join departments d on d.id = s.department_id
+          where d.location_id = ${result.locationId}) as slots`);
+    expect(defaults.rows[0]).toEqual({ menus: 1, periods: 1, slots: 5 });
 
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
 
@@ -453,9 +456,11 @@ describe("clearProvisionFixture", () => {
     const cfg = { locationId: brandLocationId(result.locationId) };
     const at = new Date("2026-10-06T10:00:00Z");
     await withTransaction(db, async (tx) => {
-      const { rows } = await tx.execute<{ id: string }>(sql`
-        select id from departments where is_default`);
-      const restaurant = { kind: "department" as const, id: rows[0]!.id };
+      const [pass] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: result.locationId, name: "Restaurant pass" })
+        .returning({ id: kitchenStations.id });
+      const restaurant = { kind: "station" as const, id: pass!.id };
       const [bar] = await tx
         .insert(kitchenStations)
         .values({ locationId: result.locationId, name: "Bar" })

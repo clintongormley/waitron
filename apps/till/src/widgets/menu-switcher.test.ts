@@ -3,8 +3,14 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillMenuSwitcher } from "./menu-switcher.js";
 
 const twoMenus = [
-  { id: "cat-food", name: "Food", isDefault: true },
-  { id: "cat-drinks", name: "Drinks", isDefault: false },
+  { id: "cat-food", name: "Food", isDefault: true, orderable: true, audience: "customer" as const },
+  {
+    id: "cat-drinks",
+    name: "Drinks",
+    isDefault: false,
+    orderable: true,
+    audience: "staff" as const,
+  },
 ];
 
 function options(el: TillMenuSwitcher): HTMLElement[] {
@@ -16,6 +22,45 @@ afterEach(cleanupWidgets);
 describe("till-menu-switcher", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-menu-switcher")).toBe(TillMenuSwitcher);
+  });
+
+  it("offers only running menus, with the customer menu before staff menus", async () => {
+    const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
+      menus: [
+        { id: "past", name: "Breakfast", isDefault: false, orderable: false, audience: "customer" },
+        { id: "staff", name: "Staff lunch", isDefault: false, orderable: true, audience: "staff" },
+        { id: "customer", name: "Lunch", isDefault: true, orderable: true, audience: "customer" },
+        { id: "future", name: "Dinner", isDefault: false, orderable: false, audience: "customer" },
+      ],
+      selectedId: "customer",
+    });
+    expect(options(el).map((option) => option.textContent?.trim())).toEqual([
+      "Lunch",
+      "Staff lunch",
+    ]);
+    options(el)[1]!.click();
+    expect(options(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("takes no space when just one running menu remains among retained menus", async () => {
+    const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
+      menus: [
+        { id: "past", name: "Breakfast", isDefault: false, orderable: false, audience: "customer" },
+        { id: "customer", name: "Lunch", isDefault: true, orderable: true, audience: "customer" },
+      ],
+    });
+    expect(options(el)).toHaveLength(0);
+    expect(el.shadowRoot!.textContent?.trim()).toBe("");
+  });
+
+  it("offers no retained menu when the department has no running period", async () => {
+    const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
+      menus: [
+        { id: "past", name: "Breakfast", isDefault: false, orderable: false, audience: "customer" },
+        { id: "future", name: "Dinner", isDefault: false, orderable: false, audience: "staff" },
+      ],
+    });
+    expect(options(el)).toHaveLength(0);
   });
 
   it("renders one option per menu, labelled by the menu name, and marks the selected one", async () => {
@@ -60,7 +105,15 @@ describe("till-menu-switcher", () => {
 
   it("renders NOTHING with a single menu — a single-menu venue looks exactly as before", async () => {
     const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
-      menus: [{ id: "cat-food", name: "Food", isDefault: true }],
+      menus: [
+        {
+          id: "cat-food",
+          name: "Food",
+          isDefault: true,
+          orderable: true,
+          audience: "customer" as const,
+        },
+      ],
       selectedId: "cat-food",
     });
     expect(el.shadowRoot!.querySelector('[data-test^="menu-"]')).toBeNull();

@@ -579,6 +579,7 @@ export function validateConfigurationBundle(
   const exported = {
     createdAt: new Date(bundle.createdAt),
     timeZone: bundle.venue.location.timeZone,
+    dayCutover: bundle.venue.location.dayCutover.slice(0, 5),
   };
   for (const module of modules) {
     const contribution = module.configurationTransfer;

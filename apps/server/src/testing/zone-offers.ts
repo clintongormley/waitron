@@ -15,7 +15,6 @@ import {
   setRoutingCell,
   setZoneSalePolicyOverride,
   listDepartments,
-  zoneAllDayMenus,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -69,11 +68,7 @@ export async function offerProducts(
   }
 
   const menuId = await ownMenu(tx);
-  const [own] = await tx
-    .select({ menuId: zoneAllDayMenus.menuId })
-    .from(zoneAllDayMenus)
-    .where(eq(zoneAllDayMenus.zoneId, zoneId));
-  await offerMenuThroughZone(tx, cfg, zoneId, menuId, { makeDefault: own === undefined });
+  await offerMenuThroughZone(tx, cfg, zoneId, menuId);
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);

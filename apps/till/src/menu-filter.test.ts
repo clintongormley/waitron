@@ -114,9 +114,30 @@ describe("filterProductsByDiet", () => {
 });
 
 describe("defaultMenu and shownMenu", () => {
-  const breakfast = { id: "breakfast", isDefault: false };
-  const lunch = { id: "lunch", isDefault: true };
-  const dinner = { id: "dinner", isDefault: false };
+  const breakfast = {
+    id: "breakfast",
+    isDefault: false,
+    orderable: true,
+    audience: "customer" as const,
+  };
+  const lunch = { id: "lunch", isDefault: true, orderable: true, audience: "customer" as const };
+  const dinner = { id: "dinner", isDefault: false, orderable: true, audience: "customer" as const };
+
+  it("never chooses a retained ended or future menu, even when selected or marked default", () => {
+    const ended = { id: "ended", isDefault: true, orderable: false, audience: "customer" as const };
+    const staff = { id: "staff", isDefault: false, orderable: true, audience: "staff" as const };
+    const customer = {
+      id: "customer",
+      isDefault: false,
+      orderable: true,
+      audience: "customer" as const,
+    };
+    expect(defaultMenu([ended, staff, customer])).toBe(customer);
+    expect(shownMenu([ended, staff, customer], "ended")).toBe(customer);
+    expect(shownMenu([ended, staff, customer], "staff")).toBe(staff);
+    expect(defaultMenu([ended])).toBeUndefined();
+    expect(shownMenu([ended], "ended")).toBeUndefined();
+  });
 
   it("takes the menu marked default, wherever it sits", () => {
     expect(defaultMenu([breakfast, lunch, dinner])).toBe(lunch);

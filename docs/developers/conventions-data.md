@@ -397,6 +397,14 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 
 ## Opening hours store "no claim" as no row
 
+**2026-10-08, A366 slice 1:** department opening hours now come from service periods.
+The Hours grid described below now edits station restrictions only. Its `special_dates` calendar
+also anchors department period schedules. `readHoursModel` and the Station hours page omit
+department subjects; hours requests refuse them at `kind`, and
+configuration import refuses a department owner. The old department Hours types and resolver
+have been retired. The earlier A261 account below is historical; use the service-period model
+in the next section for departments.
+
 Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
 `hours_week_cells` and `hours_week_periods` for each department's and non-default station's
 standard week, and `special_dates`, `special_date_hours` and `special_date_hours_periods` for dated
@@ -425,6 +433,38 @@ is in production" below).
 - One special date per venue and date (`special_dates_location_date_key`).
 
 ## Menu timetables share the special-date calendar
+
+**2026-10-08, A366 slice 1:** the W98 account below records the earlier model. All-day
+menus, a zone's period-menu choices and separately authored department hours are retired.
+Configuration-transfer verification is recorded under
+[service-period configuration](#service-period-configuration) below.
+
+You set a department's opening hours by placing its periods on the normal week. Each period has
+a name, a colour, one customer menu and zero or more staff-only menus. Its ranges run inside the
+venue's business day, from one changeover to the next. With a 06:00 changeover, Friday's
+21:00–03:00 range ends on Saturday morning; 06:00–06:00 covers the whole business day.
+
+With a readable venue clock, a special date with no timetable row follows the normal weekday. A saved row with no ranges
+closes that department for the date's business day. Closing the whole venue closes every
+department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these cases.
+
+The till offers new items from the running period's customer and staff menus. Sending a new line
+or increasing a stored line's quantity requires that period too. An unsent basket or draft can
+retain its dishes after the period ends, but sending them is refused. Slice 1 fixes the period-end
+offset at 0 (owner, 2026-10-08); A432 adds the signed minute setting. Other edits retain the stored
+line.
+`apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
+Pricing reads static period membership, without resolving ranges, dates or the clock. If the venue
+clock cannot be read, timetable resolution leaves the department's period menus orderable.
+
+Provisioning places the first department's Open period at 09:00–17:00 Monday to Friday when
+there is a catalogue and no existing period. Setup's completion screen shows those normal-week
+hours and links to that department in Opening hours only when its saved schedule matches them.
+A different authored or demo schedule is not described as that first weekday schedule. The checks are in
+`apps/server/src/setup-opening-hours.test.ts`, with the response and completed-request replay in
+`apps/server/src/setup-api.test.ts`.
+
+### Earlier W98 menu timetable model
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"
@@ -1136,15 +1176,34 @@ number the same as its own, as when it names none and the parent has no primary 
 
 **A module's transfer `validate` may read when and where the bundle was made.**
 `ModuleConfigurationTransfer.validate` (`packages/module/src/module.ts`) takes an optional second
-argument, `{ createdAt, timeZone }`, which `validateConfigurationBundle`
+argument, `{ createdAt, timeZone, dayCutover }`, which `validateConfigurationBundle`
 (`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
 `validate` before the import writes anything. Core, catalogue and media take only the tables.
-Venue-service uses it to leave out a clash between two days already past in the venue's zone when
-the bundle was made, as a save does, so a venue's own export imports again. It reads no day
-cutover: for a venue whose cutover or numeric-offset zone a save cannot read, the save checks every
-pair while the import still leaves past pairs out. It also refuses a special-date period that opens
-or closes at a minute the clocks skip in that zone, unless that date and the day after it were both
-past when the bundle was made; a default station's kept cells are not checked.
+Venue-service's station-hours validator uses the export date and zone to leave past neighbour
+pairs out and check skipped endpoints. Its menu validator uses the exported day changeover:
+see the service-period checks below. The station-hours validator still reads no changeover;
+when a save cannot read the cutover, the save checks every pair while import may leave past
+pairs out. A default station's retained cells are not checked.
+
+### Service-period configuration
+
+Measured 2026-10-08 with `pnpm --filter @waitron/venue-service exec vitest run
+src/configuration-transfer.test.ts` and `pnpm --filter @waitron/server exec vitest run
+src/configuration-transfer.test.ts`: period colours and ordered staff-menu rows travelled to a
+second real venue under new period, department and menu IDs. The server roundtrip uses 04:30:
+21:00–03:00 imports, 21:00–05:00 is refused with `setup.request_invalid`, field `menu_slots`.
+Replacing the export's changeover with 06:00 in an installed disposable checkout made that
+refusal assertion fail. The callback context now carries `createdAt`, `timeZone`, and
+`dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
+
+The menu validator uses `parseServiceDay`, so ranges stop at the business-day boundary and
+use quarter-hours. Special-date endpoints below changeover are checked on the next calendar
+morning; an end exactly at changeover is next morning and a start there is the business date.
+Removing each endpoint-date branch in the disposable checkout failed its skipped-time
+assertion. Unlike station hours, the menu writer and import check skipped endpoints on past
+business dates too (`saveSpecialDateMenus`, `packages/venue-service/src/menu-timetable.ts`).
+The station-hour assertions were retained. Remaining schema and screen work is tracked in
+A366's plan; these experiments are not a complete-slice result.
 
 **Transactions**
 

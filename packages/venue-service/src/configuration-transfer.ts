@@ -16,15 +16,10 @@ import {
   type Interval,
 } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
-import { isReadableZone, skippedEndpoint } from "./hours-clock.js";
-import {
-  firstMenuClash,
-  menuPeriodName,
-  parseMenuWeek,
-  parseSlots,
-  slotCell,
-  slotIntervals,
-} from "./menu-timetable-rules.js";
+import { isReadableClock, isReadableZone, skippedEndpoint } from "./hours-clock.js";
+import { menuPeriodName } from "./menu-timetable-rules.js";
+import { calendarDateOfTime, parseServiceDay } from "./service-day.js";
+import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import { HOURS_CELL_MODES } from "./schema/hours.js";
 import "./errors.js";
@@ -82,21 +77,12 @@ function exportDate(bundle: { readonly createdAt: Date; readonly timeZone: strin
   }
 }
 
-/** The `kind:id` key of a cell's one owner, which must be a department or station the bundle holds. */
-function ownerKey(
-  row: Row,
-  table: string,
-  departments: Set<unknown>,
-  stations: Set<unknown>,
-): string {
-  const department = row.department_id ?? null;
-  const station = row.station_id ?? null;
-  if ((department === null) === (station === null)) refuse(`${table}.department_id`);
-  if (department !== null) {
-    if (!departments.has(department)) refuse(`${table}.department_id`);
-    return `department:${department as string}`;
-  }
-  if (!stations.has(station)) refuse(`${table}.station_id`);
+function ownerKey(row: Row, table: string, stations: Set<unknown>): string {
+  if (row.department_id !== undefined && row.department_id !== null)
+    refuse(`${table}.department_id`);
+  const station = row.station_id;
+  if (station === undefined || station === null || !stations.has(station))
+    refuse(`${table}.station_id`);
   return `station:${station as string}`;
 }
 
@@ -137,26 +123,11 @@ function storedMode(row: Row, table: string): string {
   return row.mode as string;
 }
 
-/**
- * Refuses (`setup.request_invalid`, `field` naming the table or `<table>.<column>`) hours rows a
- * save could not have written. An import inserts rows as they come, so this holds what the writers
- * hold: canonical times, one cell per subject and day, periods only in a periods cell, a whole week
- * or none, no overlap within a day or across a midnight, and owners the bundle carries. It leaves
- * out a clash between two days already past in the venue's zone when the bundle was made, and
- * checks every pair when that date cannot be read. It reads no day cutover, so for a venue whose
- * cutover or numeric-offset zone a save finds unreadable (and then checks every pair), it can still
- * leave past pairs out. A special-date period may not open or close at a minute the clocks skip in
- * the venue's zone, unless its date and the day after were both past at export. With no readable
- * zone that goes unchecked, as a save leaves it unchecked for an unreadable clock; but reading no
- * cutover, it is checked for a venue whose zone reads and whose cutover does not, which a save
- * leaves unchecked. A default station's cells may travel, as the default keeps them, and take no
- * part in either check.
- */
+/** Retained default-station cells travel but do not constrain its opening times. */
 export function validateHoursConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string },
 ): void {
-  const departments = ids(tables.departments);
   const stations = ids(tables.kitchen_stations);
 
   const weekCells = tables.hours_week_cells ?? [];
@@ -167,7 +138,7 @@ export function validateHoursConfiguration(
   );
   const weeks = new Map<string, { weekday: number; cell: unknown }[]>();
   for (const row of weekCells) {
-    const key = ownerKey(row, "hours_week_cells", departments, stations);
+    const key = ownerKey(row, "hours_week_cells", stations);
     const weekday = row.weekday;
     if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
       refuse("hours_week_cells.weekday");
@@ -213,10 +184,9 @@ export function validateHoursConfiguration(
   const cellsByDate = new Map<unknown, { key: string; cell: unknown }[]>();
   for (const row of dateCells) {
     if (!dates.has(row.special_date_id)) refuse("special_date_hours.special_date_id");
-    const key = ownerKey(row, "special_date_hours", departments, stations);
+    const key = ownerKey(row, "special_date_hours", stations);
     const cells = cellsByDate.get(row.special_date_id) ?? [];
-    if (cells.some((cell) => cell.key === key))
-      refuse(`special_date_hours.${key.startsWith("department:") ? "department" : "station"}_id`);
+    if (cells.some((cell) => cell.key === key)) refuse("special_date_hours.station_id");
     const mode = storedMode(row, "special_date_hours");
     cells.push({ key, cell: { mode, periods: datePeriods.get(row.id) ?? [] } });
     cellsByDate.set(row.special_date_id, cells);
@@ -259,10 +229,9 @@ export function validateHoursConfiguration(
     });
   }
 
-  const subjects = [
-    ...[...departments].map((id) => `department:${id as string}`),
-    ...[...stations].filter((id) => !defaults.has(id)).map((id) => `station:${id as string}`),
-  ];
+  const subjects = [...stations]
+    .filter((id) => !defaults.has(id))
+    .map((id) => `station:${id as string}`);
   for (const key of subjects) {
     const week = (weekday: number) => weekIntervals.get(key)?.[weekday] ?? null;
     for (const date of states.keys())
@@ -330,38 +299,14 @@ export function validateHolidayConfiguration(
   }
 }
 
-/** A zone's all-day menu must be filed under the zone's own department, which no key states. */
-function validateDepartmentMenus(tables: Tables): void {
-  const departmentOf = new Map(
-    (tables.zone_service_policies ?? []).map((row) => [row.zone_id, row.department_id]),
-  );
-  for (const row of tables.zone_all_day_menus ?? [])
-    if (!departmentOf.has(row.zone_id) || departmentOf.get(row.zone_id) !== row.department_id)
-      refuse("zone_all_day_menus.department_id");
-}
-
-/**
- * Refuses (`setup.request_invalid`, `field` naming the table or `<table>.<column>`) menu timetable
- * rows a writer could not have written: a named period with a blank, untrimmed or repeated name or
- * a menu its department does not list; a day that is not exactly one weekday or one of the bundle's
- * special dates, or is held twice; a slot whose department or period is not its day's, whose times
- * are not canonical, or which overlaps another within a day or across a midnight; and a zone's
- * period menu filed under a department other than the zone's or the period's. A special-date slot
- * may not open or close at a minute the clocks skip, and past pairs are left out, as for the
- * hours rows above. A whole-venue closure plays no part.
- */
 export function validateMenuTimetables(
   tables: Tables,
-  bundle?: { readonly createdAt: Date; readonly timeZone: string },
+  bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
 ): void {
   const departments = ids(tables.departments);
-  const members = new Set(
-    (tables.department_menus ?? []).map(
-      (row) => `${String(row.department_id)}:${String(row.menu_id)}`,
-    ),
-  );
-  const member = (row: Row) => members.has(`${String(row.department_id)}:${String(row.menu_id)}`);
+  const menus = ids(tables.catalogues);
   const periodDepartment = new Map<unknown, unknown>();
+  const customerMenus = new Map<unknown, unknown>();
   const names = new Set<string>();
   for (const row of tables.menu_periods ?? []) {
     if (!departments.has(row.department_id)) refuse("menu_periods.department_id");
@@ -370,8 +315,30 @@ export function validateMenuTimetables(
     const name = JSON.stringify([row.department_id, row.name]);
     if (names.has(name)) refuse("menu_periods.name");
     names.add(name);
-    if (!member(row)) refuse("menu_periods.menu_id");
+    if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("menu_periods.colour");
+    if (!menus.has(row.menu_id)) refuse("menu_periods.menu_id");
     periodDepartment.set(row.id, row.department_id);
+    customerMenus.set(row.id, row.menu_id);
+  }
+  const staffMenus = new Set<string>();
+  for (const row of tables.menu_period_staff_menus ?? []) {
+    if (!periodDepartment.has(row.period_id)) refuse("menu_period_staff_menus.period_id");
+    if (periodDepartment.get(row.period_id) !== row.department_id)
+      refuse("menu_period_staff_menus.department_id");
+    const key = JSON.stringify([row.period_id, row.menu_id]);
+    if (
+      !menus.has(row.menu_id) ||
+      customerMenus.get(row.period_id) === row.menu_id ||
+      staffMenus.has(key)
+    )
+      refuse("menu_period_staff_menus.menu_id");
+    staffMenus.add(key);
+    if (
+      typeof row.display_order !== "number" ||
+      !Number.isInteger(row.display_order) ||
+      row.display_order < 0
+    )
+      refuse("menu_period_staff_menus.display_order");
   }
 
   const dates = new Map((tables.special_dates ?? []).map((row) => [row.id, row.date as LocalDate]));
@@ -417,45 +384,23 @@ export function validateMenuTimetables(
       endsAt: (row.ends_at as string).slice(0, 5),
     });
   }
-  for (const slots of slotsByDay.values()) {
-    slots.sort((a, b) => Number(a.startsAt > b.startsAt) - Number(a.startsAt < b.startsAt));
-    parsedAs("menu_slots", () => parseSlots(slots, "slots"));
-  }
-
-  const today = exportDate(bundle);
-  const zone = bundle !== undefined && isReadableZone(bundle.timeZone) ? bundle.timeZone : null;
-  for (const departmentId of departments) {
-    const own = [...days].filter(([, day]) => day.departmentId === departmentId);
-    const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-      weekday,
-      slots: slotsByDay.get(own.find(([, day]) => day.weekday === weekday)?.[0]) ?? [],
-    }));
-    parsedAs("menu_slots", () => parseMenuWeek(week));
-    const special = new Map<LocalDate, ReturnType<typeof slotIntervals>>();
-    for (const [id, day] of own) {
-      if (day.date === null) continue;
-      const slots = slotsByDay.get(id)!;
-      if (zone !== null && pairMatters(day.date, today)) {
-        const skipped = skippedEndpoint(day.date, [{ cell: slotCell(slots) }], zone);
-        if (skipped !== null)
-          refuse(`menu_slots.${skipped.end === "opensAt" ? "starts_at" : "ends_at"}`);
+  if ((tables.menu_slots ?? []).length === 0) return;
+  if (bundle === undefined || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(bundle.dayCutover))
+    refuse("menu_slots");
+  for (const [id, slots] of slotsByDay) {
+    const parsed = parsedAs("menu_slots", () => parseServiceDay(slots, "slots", bundle.dayCutover));
+    const date = days.get(id)!.date;
+    if (date === null || !isReadableClock(bundle)) continue;
+    for (const slot of parsed)
+      for (const end of ["startsAt", "endsAt"] as const) {
+        // The exclusive end at changeover belongs to the next calendar morning.
+        const calendarDate =
+          end === "endsAt" && slot[end] === bundle.dayCutover
+            ? addDays(date, 1)
+            : (calendarDateOfTime(date, slot[end], bundle.dayCutover) as LocalDate);
+        if (localTimeOccurrences(calendarDate, slot[end], bundle.timeZone).length === 0)
+          refuse(`menu_slots.${end === "startsAt" ? "starts_at" : "ends_at"}`);
       }
-      special.set(day.date, slotIntervals(slots));
-    }
-    const intervals = week.map((day) => slotIntervals(day.slots));
-    if (firstMenuClash(special, intervals, [...special.keys()], today) !== null)
-      refuse("menu_slots");
-  }
-
-  const zoneDepartment = new Map(
-    (tables.zone_service_policies ?? []).map((row) => [row.zone_id, row.department_id]),
-  );
-  for (const row of tables.zone_period_menus ?? []) {
-    if (!zoneDepartment.has(row.zone_id) || zoneDepartment.get(row.zone_id) !== row.department_id)
-      refuse("zone_period_menus.department_id");
-    if (periodDepartment.get(row.period_id) !== row.department_id)
-      refuse("zone_period_menus.period_id");
-    if (!member(row)) refuse("zone_period_menus.menu_id");
   }
 }
 
@@ -589,11 +534,10 @@ function validateZoneDepartments(tables: Tables): void {
 
 function validateVenueServiceConfiguration(
   tables: Tables,
-  bundle?: { readonly createdAt: Date; readonly timeZone: string },
+  bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
 ): void {
   validateHoursConfiguration(tables, bundle);
   validateHolidayConfiguration(tables);
-  validateDepartmentMenus(tables);
   validateMenuTimetables(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
@@ -608,9 +552,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_sale_policies" },
     { name: "zone_service_policies", locationColumns: ["location_id"] },
     { name: "zone_sale_policies" },
-    { name: "department_menus" },
-    { name: "department_all_day_menus" },
-    { name: "zone_all_day_menus" },
     { name: "device_profile_service_access" },
     { name: "device_profile_zones" },
     { name: "device_profile_stations" },
@@ -624,9 +565,9 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "hours_week_periods" },
     { name: "special_dates", locationColumns: ["location_id"] },
     { name: "menu_periods" },
+    { name: "menu_period_staff_menus" },
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
-    { name: "zone_period_menus" },
     { name: "special_date_hours" },
     { name: "special_date_hours_periods" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },

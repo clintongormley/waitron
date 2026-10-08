@@ -1103,6 +1103,11 @@ export class TillTableOrderScreen extends LitElement {
    * still render its name whatever menu is shown. */
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
+  @property({ attribute: false }) service: { open: boolean; periodName: string | null } | null = {
+    open: true,
+    periodName: null,
+  };
+  @property() departmentName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
@@ -2791,7 +2796,15 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #gridRegion(draft: WorkingOrderStore): TemplateResult {
+    if (this.service === null) return html`<div class="grid-region"></div>`;
+    if (this.service?.open === false)
+      return html`<div class="grid-region">
+        <p role="status" data-service-closed>
+          ${t("menu.department_closed").replace("{department}", () => this.departmentName)}
+        </p>
+      </div>`;
     return html`<div class="grid-region">
+      ${this.service?.periodName == null ? nothing : html`<p role="status" data-service-period>${this.service?.periodName}</p>`}
       <till-menu-switcher
         class="menu-switcher"
         .menus=${this.menus}

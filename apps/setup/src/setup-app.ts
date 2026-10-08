@@ -575,6 +575,7 @@ export class SetupApp extends LitElement {
   @state() private bucketRequest?: BucketRestoreRequestDetail;
   /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
   @state() private rebuilt = false;
+  @state() private openingHours?: { departmentId: string };
   @state() private cloudRecoveryView?: CloudRecoveryView;
   @state() private cloudRecoveryError?: Message;
   @state() private cloudInvalidField?: CloudField;
@@ -861,12 +862,13 @@ export class SetupApp extends LitElement {
     const generation = this.#rootGeneration;
     this.screen = "provisioning";
     try {
-      await (this.#localeChosen
+      const result = await (this.#localeChosen
         ? this.api.provision(assembleBody(submitted), currentLocale())
         : this.api.provision(assembleBody(submitted)));
       if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
+      this.openingHours = result.openingHours;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected || generation !== this.#rootGeneration) return;
@@ -1298,6 +1300,7 @@ export class SetupApp extends LitElement {
 
   /** Every flag the provisioning screen reads, so no answer outlives the request it answered. */
   #clearProvisionOutcome(): void {
+    this.openingHours = undefined;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
@@ -1552,6 +1555,7 @@ export class SetupApp extends LitElement {
           .mirrorJoin=${this.mirrorJoin}
           .onboardingIntent=${this.draft.mode}
           .rebuilt=${this.rebuilt}
+          .openingHours=${this.openingHours}
         ></setup-done-screen>`;
       default:
         return html`<setup-mode-screen

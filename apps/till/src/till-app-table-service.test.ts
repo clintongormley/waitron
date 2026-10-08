@@ -176,7 +176,13 @@ const till = {
 
 function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    context: { zoneId: floorZone.id, departmentId: "department-default", serviceMode: "prepay" },
+    service: { open: true, periodName: null },
+    context: {
+      departmentName: "Restaurant",
+      zoneId: floorZone.id,
+      departmentId: "department-default",
+      serviceMode: "prepay",
+    },
     defaultMenuId,
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
@@ -2358,6 +2364,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const menuState = vi.fn(async (zoneId: string) => ({
+        service: { open: true, periodName: null },
         menus: (zoneId === floorZone.id ? diningOffers : counterOffers).menus.map((menu) => ({
           menuId: menu.id,
           versionId: menu.versionId,
@@ -2402,6 +2409,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
         .mockResolvedValueOnce(diningOffers)
         .mockResolvedValue(republished);
       const menuState = vi.fn(async (zoneId: string) => ({
+        service: { open: true, periodName: null },
         menus:
           zoneId === floorZone.id
             ? [{ menuId: "menu-dinner", versionId: "v2" }]

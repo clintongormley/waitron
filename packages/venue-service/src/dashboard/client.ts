@@ -41,7 +41,7 @@ export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
   | { code: "zone.department_missing"; zoneId: string; zoneName: string }
-  | { code: "zone.menu_missing"; zoneId: string; zoneName: string }
+  | { code: "department.no_periods"; departmentId: string; departmentName: string }
   | { code: "zone.menu_unpublished"; zoneId: string; zoneName: string }
   | {
       code: "zone.menu_empty";

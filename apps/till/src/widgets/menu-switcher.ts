@@ -2,12 +2,15 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import { orderableMenus } from "../menu-filter.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
 
 interface SwitcherMenu {
   id: string;
   name: string;
   isDefault: boolean;
+  orderable: boolean;
+  audience: "customer" | "staff";
 }
 
 /**
@@ -50,10 +53,11 @@ export class TillMenuSwitcher extends LitElement {
   }
 
   override render() {
-    if (this.menus.length <= 1) return nothing;
+    const menus = orderableMenus(this.menus);
+    if (menus.length <= 1) return nothing;
     return html`
       <div class="switcher" part="options" role="group" aria-label=${t("menu.switcher")}>
-        ${this.menus.map(
+        ${menus.map(
           (menu) =>
             html`<button
               type="button"

@@ -338,13 +338,7 @@ async function placeTable(shop: Shop): Promise<void> {
     await tx.execute(sql`update zone_service_policies
       set department_id = ${departmentId}, service_mode = 'table_tab'
       where zone_id = ${zone.id}`);
-    await tx.execute(sql`
-      insert into department_menus (department_id, menu_id)
-      values (${departmentId}, ${shop.menuId})
-      on conflict (department_id, menu_id) do nothing`);
-    await tx.execute(sql`
-      insert into zone_all_day_menus (zone_id, department_id, menu_id)
-      values (${zone.id}, ${departmentId}, ${shop.menuId})`);
+    await offerMenuThroughZone(tx, shop.cfg, zone.id, shop.menuId, { makeDefault: true });
     // Through the table definition: `routingCells.id`
     // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.

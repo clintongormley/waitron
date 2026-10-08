@@ -899,6 +899,28 @@ describe("setup-app", () => {
     expect(readDraft(el).venue?.location?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
   });
 
+  it("shows the saved first opening hours returned by provisioning", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi.fn().mockResolvedValue({
+          provisioned: true,
+          restarting: true,
+          openingHours: { departmentId: "first-department" },
+        }),
+      }),
+    );
+    provisionRequest(el);
+    await flush(el);
+    const done = await screenHost(el, "done");
+    await (done as SetupDoneScreen).updateComplete;
+    expect(done.shadowRoot!.querySelector("[data-test=opening-hours]")?.textContent).toContain(
+      "Opening hours: Monday to Friday, 09:00–17:00",
+    );
+    expect(
+      done.shadowRoot!.querySelector("[data-test=opening-hours] a")?.getAttribute("href"),
+    ).toBe("/manage/opening-hours/department/first-department");
+  });
+
   it("provisions on provision-requested and, on the 200, advances to done", async () => {
     const provision = vi.fn().mockResolvedValue({
       provisioned: true,

@@ -46,6 +46,7 @@ describe("VENUE_SERVICE", () => {
       "recordSaleReceiptHeader",
       "requestDepartmentTransfer",
       "resolveDefaultMenu",
+      "resolveDepartmentService",
       "resolveExtraMakers",
       "resolveMakers",
       "resolveNewOrderZone",

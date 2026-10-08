@@ -397,14 +397,14 @@ describe("venue operations screen", () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
-        readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+        readiness: [{ code: "zone.menu_unpublished", zoneId: "z1", zoneName: "Dining room" }],
       }),
     } as unknown as VenueServiceApi);
     const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
     const zone = rows.find((row) => row.textContent?.includes("Dining room"));
     expect(zone).toBeDefined();
     expect(zone!.querySelector('[data-test="zone-readiness"]')?.textContent).toContain(
-      "needs a default menu",
+      "needs an active, published menu",
     );
     expect(
       rows
@@ -413,21 +413,29 @@ describe("venue operations screen", () => {
     ).toBe(true);
   });
 
-  it("links a zone's missing-menu warning to its department's menu timetable", async () => {
+  it("links a department's missing-period warning to Opening hours", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
-        readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+        readiness: [
+          {
+            code: "department.no_periods",
+            departmentId: "d1",
+            departmentName: "Restaurant and bar",
+          },
+        ],
       }),
     } as unknown as VenueServiceApi);
     const tree = table(el, "policy-tree").shadowRoot!;
     const zone = [...tree.querySelectorAll('tbody [role="row"]')].find((row) =>
-      row.textContent?.includes("Dining room"),
+      row.textContent?.includes("Restaurant and bar"),
     )!;
-    const action = zone.querySelector<HTMLAnchorElement>('[data-test="zone-readiness-action"]');
+    const action = zone.querySelector<HTMLAnchorElement>(
+      '[data-test="department-readiness-action"]',
+    );
     expect(action).not.toBeNull();
-    expect(action!.textContent).toContain("Set one up in Menu timetable");
-    expect(action!.getAttribute("href")).toBe("/manage/menu-timetable/department/d1");
+    expect(action!.textContent).toContain("Set up Opening hours");
+    expect(action!.getAttribute("href")).toBe("/manage/opening-hours?department=d1");
     // A plain link: the dashboard's same-app link handler navigates in the app.
     const before = location.href;
     let reachedBrowser = false;
@@ -445,16 +453,24 @@ describe("venue operations screen", () => {
   });
 
   it.each(["shift", "alt"] as const)(
-    "leaves a click with %s held on the menu timetable link to the browser",
+    "leaves a click with %s held on the Opening hours link to the browser",
     async (kind) => {
       const el = await mount({
         load: vi.fn().mockResolvedValue({
           ...model,
-          readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+          readiness: [
+            {
+              code: "department.no_periods",
+              departmentId: "d1",
+              departmentName: "Restaurant and bar",
+            },
+          ],
         }),
       } as unknown as VenueServiceApi);
       const tree = table(el, "policy-tree").shadowRoot!;
-      const action = tree.querySelector<HTMLAnchorElement>('[data-test="zone-readiness-action"]')!;
+      const action = tree.querySelector<HTMLAnchorElement>(
+        '[data-test="department-readiness-action"]',
+      )!;
       const before = location.href;
       let reachedBrowser = false;
       const blockDefault = (event: MouseEvent) => {
@@ -1191,7 +1207,7 @@ describe("venue operations screen", () => {
     expect(modal(el)?.textContent).toMatch(/Dining room:\s*2 active tables/);
   });
 
-  it("opens the Hours page focused on the chosen policy-tree department", async () => {
+  it("opens Opening hours focused on the chosen policy-tree department", async () => {
     history.replaceState(null, "", "/manage/venue-operations");
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1216,10 +1232,10 @@ describe("venue operations screen", () => {
       pushedUrls = pushed.mock.calls.map((call) => String(call[2]));
       pushed.mockRestore();
     }
-    expect(location.pathname).toBe("/manage/hours/department/d2");
+    expect(location.pathname).toBe("/manage/opening-hours/department/d2");
     // Chromium stops counting history.length at 50, so the entry is counted at pushState.
-    expect(pushedUrls).toEqual(["/manage/hours/department/d2"]);
-    expect(visits).toEqual(["/manage/hours/department/d2"]);
+    expect(pushedUrls).toEqual(["/manage/opening-hours/department/d2"]);
+    expect(visits).toEqual(["/manage/opening-hours/department/d2"]);
     expect(modal(el)).toBeNull();
   });
 
@@ -2317,7 +2333,7 @@ describe("venue operations screen", () => {
         { code: "venue.default_station_missing" },
         { code: "venue.department_missing" },
         { code: "zone.department_missing", zoneId: "z1", zoneName: "Dining room" },
-        { code: "zone.menu_missing", zoneId: "z2", zoneName: "Deli counter" },
+        { code: "department.no_periods", departmentId: "d2", departmentName: "Deli" },
         { code: "zone.menu_unpublished", zoneId: "z3", zoneName: "Terrace" },
         {
           code: "zone.menu_empty",
@@ -2335,7 +2351,7 @@ describe("venue operations screen", () => {
     expect(text).toContain("No default prep station is active.");
     expect(text).toContain("Create an active department");
     expect(text).toContain("Dining room needs an active department");
-    expect(text).toContain("Deli counter needs a default menu");
+    expect(text).toContain("Deli has no opening periods");
     expect(text).toContain("Terrace needs an active, published menu");
     expect(text).toContain("Casa Delgado has no products for Dining room");
   });
@@ -3459,6 +3475,42 @@ it.each([
   },
 );
 
+it("keeps the Operations draft when Opening hours navigation is refused, then follows its department after discard", async () => {
+  history.replaceState(null, "", "/manage/venue-operations");
+  let discard = false;
+  let asks = 0;
+  const guard = new NavigationGuard(window, {
+    isDirty: () => true,
+    request: async (proceed) => {
+      asks++;
+      if (!discard) return "kept";
+      await proceed();
+      return "proceeded";
+    },
+  });
+  onTestFinished(() => guard.dispose());
+  const el = await mount({ load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi);
+  const hours = table(el, "policy-tree").shadowRoot!.querySelector<HTMLElement>(
+    '[data-test="hours-tree-department-d2"]',
+  )!;
+  hours.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  const pushed = vi.spyOn(history, "pushState");
+  onTestFinished(() => pushed.mockRestore());
+  hours.click();
+  await expect.poll(() => asks).toBe(1);
+  expect(pushed).not.toHaveBeenCalled();
+  expect(location.pathname).toBe("/manage/venue-operations");
+  expect(new URL(guard.href).pathname).toBe("/manage/venue-operations");
+  discard = true;
+  hours.click();
+  await expect.poll(() => asks).toBe(2);
+  await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d2");
+  expect(new URL(guard.href).pathname).toBe("/manage/opening-hours/department/d2");
+  expect(
+    pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname),
+  ).toEqual(["/manage/opening-hours/department/d2"]);
+});
+
 it("Opening hours uses a distinct history position and Keep preserves the Operations entry", async () => {
   history.replaceState(null, "", "/manage/before-operations");
   let dirty = false;
@@ -3478,17 +3530,17 @@ it("Opening hours uses a distinct history position and Keep preserves the Operat
   )!;
   hours.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   hours.click();
-  await expect.poll(() => location.pathname).toBe("/manage/hours/department/d2");
+  await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d2");
   dirty = true;
   history.back();
   await expect.poll(() => asks).toBe(1);
-  expect(location.pathname).toBe("/manage/hours/department/d2");
+  expect(location.pathname).toBe("/manage/opening-hours/department/d2");
   await expect.poll(() => guard.write(guard.href)).toBe("proceeded");
   dirty = false;
   history.back();
   await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
   history.forward();
-  await expect.poll(() => location.pathname).toBe("/manage/hours/department/d2");
+  await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d2");
 });
 
 describe("reserved venue names", () => {

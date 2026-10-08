@@ -2,19 +2,17 @@ import "./errors.js";
 
 export * from "./schema/index.js";
 export * from "./operations.js";
-export * from "./department-menus.js";
 export type { MenuUse } from "./errors.js";
 export {
   MENU_TIMETABLE_CALENDAR_PARTICIPANT,
   clearSpecialDateMenus,
   deleteMenuPeriod,
-  readMenuTimetableModel,
+  readOpeningHoursModel,
   replaceMenuWeek,
+  resolveDepartmentService,
   resolveDefaultMenu,
-  resolveZoneMenus,
   saveMenuPeriod,
   saveSpecialDateMenus,
-  setZonePeriodMenu,
   updateMenuPeriod,
 } from "./menu-timetable.js";
 export type * from "./menu-timetable-types.js";
@@ -43,7 +41,6 @@ export {
   readWeekHours,
   renameSpecialDate,
   replaceWeekHours,
-  resolveOpeningDateHours,
   saveSpecialDate,
   type HolidayReader,
   type SpecialDateParticipant,

@@ -11,7 +11,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { getOrderServiceContext, resolveZoneContext } from "@waitron/venue-service";
+import { getOrderServiceContext, resolveZoneContext, listZoneOffers } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   assignCatalogueToLocation,
@@ -35,6 +35,7 @@ import type { OriginConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeCategoryTo, routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { openPartyTab } from "./testing/serve-line.js";
 
 const suite = useVenueDb({
@@ -140,7 +141,10 @@ async function counts(db: Database) {
       (select count(*) from zone_service_policies) as policies,
       (select count(*) from departments) as departments,
       (select count(*) from catalogues) as menus,
-      (select count(*) from department_menus) as department_menus,
+      (select count(*) from menu_periods) as periods,
+      (select count(*) from menu_period_staff_menus) as staff_menus,
+      (select count(*) from menu_day_timetables) as timetables,
+      (select count(*) from menu_slots) as slots,
       (select count(*) from menu_items) as items,
       (select count(*) from product_modifiers where extra_list_id is not null) as extras,
       (select count(*) from routing_cells) as routes`);
@@ -148,6 +152,43 @@ async function counts(db: Database) {
 }
 
 describe("offerProducts", () => {
+  it("keeps both menus orderable overnight and preserves a customer menu on repeat", async () => {
+    const venue = await seedVenue(suite.db);
+    const first = await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "UTC" })
+        .where(eq(locations.id, venue.cfg.locationId));
+      const offers = await offerProducts(tx, venue.cfg);
+      await addProductToMenu(tx, {
+        menuId: venue.catalogueId,
+        productId: venue.cafe,
+        grossPrice: "2.50",
+      });
+      await publishWorkingMenu(tx, venue.catalogueId);
+      await offerMenuThroughZone(tx, venue.cfg, offers.zoneId, venue.catalogueId, {
+        makeDefault: true,
+      });
+      return offers;
+    });
+    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    for (const hour of ["03", "15"]) {
+      const served = await withTransaction(suite.db, (tx) =>
+        listZoneOffers(tx, venue.cfg, first.zoneId, {
+          at: new Date(`2026-10-08T${hour}:00:00Z`),
+        }),
+      );
+      expect(served.defaultMenuId).toBe(venue.catalogueId);
+      expect(served.service).toEqual({ open: true, periodName: "Always" });
+      expect(
+        served.menus.map(({ id, orderable, audience }) => ({ id, orderable, audience })),
+      ).toEqual([
+        { id: venue.catalogueId, orderable: true, audience: "customer" },
+        { id: first.menuId, orderable: true, audience: "staff" },
+      ]);
+    }
+  });
+
   it("defaults quick-sale offers to prepay without reading the retired till setting", async () => {
     const venue = await seedVenue(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));

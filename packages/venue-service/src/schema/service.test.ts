@@ -14,7 +14,6 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./service.js";
-import { departmentAllDayMenus, departmentMenus, zoneAllDayMenus } from "./menus.js";
 import { serviceSettings } from "./settings.js";
 import { kitchenNotices } from "./kitchen-notices.js";
 import { routingCells } from "./routing.js";
@@ -83,30 +82,6 @@ const EXPECTED: Record<
   sale_receipt_headers: {
     table: saleReceiptHeaders,
     foreignKeys: ["sale_receipt_headers_sale_fk", "sale_receipt_headers_department_fk"],
-    checks: [],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
-  department_menus: {
-    table: departmentMenus,
-    foreignKeys: ["department_menus_department_fk", "department_menus_menu_fk"],
-    checks: [],
-    indexes: ["department_menus_order_idx"],
-    uniqueConstraints: [],
-    primaryKeys: ["department_menus_pk"],
-  },
-  department_all_day_menus: {
-    table: departmentAllDayMenus,
-    foreignKeys: ["department_all_day_menus_member_fk"],
-    checks: [],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
-  zone_all_day_menus: {
-    table: zoneAllDayMenus,
-    foreignKeys: ["zone_all_day_menus_zone_fk", "zone_all_day_menus_member_fk"],
     checks: [],
     indexes: [],
     uniqueConstraints: [],
@@ -247,8 +222,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers the nineteen tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(19);
+  it("covers the remaining service tables it lists", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(16);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

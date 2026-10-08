@@ -238,6 +238,8 @@ export interface ZoneMenu {
   readonly id: string;
   readonly name: string;
   readonly isDefault: boolean;
+  readonly orderable: boolean;
+  readonly audience: "customer" | "staff";
   readonly versionId: string;
   readonly structure: { readonly members: readonly ZoneMenuMember[] };
   readonly home: ZoneDeviceHome;
@@ -246,6 +248,7 @@ export interface ZoneMenu {
 /** What a zone sells: its active, published menus' live versions, each offer marked with its
  *  availability. */
 export interface ZoneOffers {
+  readonly service: { readonly open: boolean; readonly periodName: string | null };
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];
@@ -261,6 +264,7 @@ export interface ZoneUnavailable {
 
 /** A zone's live menu versions, and what they hold that cannot be sold now. */
 export interface ZoneMenuState {
+  readonly service: { readonly open: boolean; readonly periodName: string | null };
   readonly menus: readonly { readonly menuId: string; readonly versionId: string }[];
   readonly unavailable: ZoneUnavailable;
 }
@@ -431,6 +435,16 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
+  resolveDepartmentService(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    departmentId: string,
+    at: Date,
+  ): Promise<{
+    departmentId: string;
+    orderableMenuIds: readonly string[];
+    endedMenuIds: readonly string[];
+  }>;
   resolveSalePolicy(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -508,8 +522,6 @@ export interface VenueServiceContribution {
       withDefault?: false;
     },
   ): Promise<ZoneOffers>;
-  /** The zone's default menu at `at` among `servedMenuIds`, which the caller already read: the
-   *  timetable's, else the first served when that one is not served. Reads no publication. */
   resolveDefaultMenu(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -517,8 +529,12 @@ export interface VenueServiceContribution {
     at: Date,
     servedMenuIds: readonly string[],
   ): Promise<string | null>;
-  /** Does not check the zone: an unknown one holds nothing. */
-  menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;
+  menuState(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at?: Date,
+  ): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -803,7 +819,11 @@ export type ModuleConfigurationTransfer =
       readonly tables: readonly ConfigurationTransferTable[];
       readonly validate?: (
         tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
-        bundle?: { readonly createdAt: Date; readonly timeZone: string },
+        bundle?: {
+          readonly createdAt: Date;
+          readonly timeZone: string;
+          readonly dayCutover: string;
+        },
       ) => void;
       /** Runs in the import's transaction after every module's rows are inserted, each module's in
        * module order, to set what the module derives from those rows rather than letting a bundle

@@ -1,45 +1,67 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or, type SQL } from "drizzle-orm";
-import { catalogues, floorZones, newId, type Transaction } from "@waitron/db";
+import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
+import { catalogues, newId, type Transaction } from "@waitron/db";
+import { directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { assertDepartment, assertMember, listDepartmentMenus } from "./department-menus.js";
-import { isReadableClock, skippedEndpoint, venueLocalMoment } from "./hours-clock.js";
-import { addDays, weekdayOf, type Interval } from "./hours-rules.js";
-import type { SpecialDateParticipant } from "./hours.js";
-import type { LocalDate } from "./hours-types.js";
+
+import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
+import { addDays, weekdayOf } from "./hours-rules.js";
+import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
-  firstMenuClash,
-  invalidTimetable,
-  menuPeriodName,
-  parseMenuWeek,
-  parseSlots,
-  slotCell,
-  slotInForce,
-  slotIntervals,
-} from "./menu-timetable-rules.js";
+  calendarDateOfTime,
+  parseServiceDay,
+  rangeInForce,
+  rangeSpan,
+  serviceMomentAt,
+  type ServiceRange,
+} from "./service-day.js";
+import type { SpecialDateParticipant } from "./hours.js";
+import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
+import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
 import type {
-  MenuPeriod,
+  DepartmentService,
+  OpeningHoursModel,
+  MenuPeriodInput,
   MenuPeriodUse,
   MenuSlot,
-  MenuTimetableModel,
-  MenuWeekDay,
-  ZoneMenuChoice,
 } from "./menu-timetable-types.js";
-import { storedTime, type VenueScope } from "./operations.js";
+import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import {
-  departmentAllDayMenus,
-  departmentMenus,
-  menuDayTimetables,
-  menuPeriods,
-  menuSlots,
-  zoneAllDayMenus,
-  zonePeriodMenus,
-} from "./schema/menus.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
+import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
+import { departments } from "./schema/service.js";
 import "./errors.js";
 
 const wire = (time: string) => time.slice(0, 5);
+
+export async function placeOpenPeriod(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  menuId: string,
+): Promise<void> {
+  const [existing] = await tx
+    .select({ id: menuPeriods.id })
+    .from(menuPeriods)
+    .where(eq(menuPeriods.departmentId, departmentId))
+    .limit(1);
+  if (existing !== undefined) return;
+  const { id } = await saveMenuPeriod(tx, cfg, departmentId, {
+    name: "Open",
+    menuId,
+    staffMenuIds: [],
+  });
+  await replaceMenuWeek(
+    tx,
+    cfg,
+    departmentId,
+    [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      slots:
+        weekday >= 1 && weekday <= 5 ? [{ periodId: id, startsAt: "09:00", endsAt: "17:00" }] : [],
+    })),
+    new Date(),
+  );
+}
 
 async function requireSpecialDate(tx: Transaction, cfg: VenueScope, id: string) {
   const [row] = await tx
@@ -91,6 +113,7 @@ async function assertOwnPeriods(
 interface VenueClock {
   today: LocalDate | null;
   zone: string | null;
+  cutover: string;
 }
 
 async function readVenueClock(tx: Transaction, cfg: VenueScope, at: Date): Promise<VenueClock> {
@@ -98,6 +121,7 @@ async function readVenueClock(tx: Transaction, cfg: VenueScope, at: Date): Promi
   return {
     today: venueLocalMoment(at, clock)?.civilDate ?? null,
     zone: isReadableClock(clock) ? clock.timeZone : null,
+    cutover: clock.dayCutover,
   };
 }
 
@@ -121,92 +145,27 @@ async function slotsByTimetable(
   return byTimetable;
 }
 
-/**
- * One department's week by weekday, Sunday first, and its special-date timetables on the dates
- * `where` selects, leaving out `exceptDateId`'s.
- */
-async function readDepartmentDays(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-  where: SQL | undefined,
-  exceptDateId: string | null,
-): Promise<{ week: Interval[][]; dates: Map<LocalDate, Interval[]> }> {
-  const rows = await tx
-    .select({
-      id: menuDayTimetables.id,
-      weekday: menuDayTimetables.weekday,
-      date: specialDates.date,
-    })
-    .from(menuDayTimetables)
-    .leftJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
-    .where(
-      and(
-        eq(menuDayTimetables.departmentId, departmentId),
-        or(
-          isNotNull(menuDayTimetables.weekday),
-          and(
-            eq(specialDates.locationId, cfg.locationId),
-            where,
-            exceptDateId === null ? undefined : ne(specialDates.id, exceptDateId),
-          ),
-        ),
-      ),
-    );
-  const slots = await slotsByTimetable(
-    tx,
-    rows.map((row) => row.id),
-  );
-  const week: Interval[][] = [0, 1, 2, 3, 4, 5, 6].map(() => []);
-  const dates = new Map<LocalDate, Interval[]>();
-  for (const row of rows) {
-    const intervals = slotIntervals(slots.get(row.id)!);
-    if (row.weekday !== null) week[row.weekday] = intervals;
-    else dates.set(row.date!, intervals);
-  }
-  return { week, dates };
-}
-
-/**
- * Refuses one department's `proposed` special-date timetables when their slots overlap across a
- * midnight with the dates either side of each `touched` date. A touched date `proposed` leaves out
- * follows the week; `exceptDateId`'s stored timetable is not read. Pairs already past are left out.
- */
-async function assertBesideNeighbours(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-  today: LocalDate | null,
-  proposed: ReadonlyMap<LocalDate, Interval[]>,
-  touched: readonly LocalDate[],
-  exceptDateId: string | null,
-  clash: (date: LocalDate, other: LocalDate) => never,
-): Promise<void> {
-  const neighbours = touched.flatMap((date) => [addDays(date, -1), addDays(date, 1)]);
-  const stored = await readDepartmentDays(
-    tx,
-    cfg,
-    departmentId,
-    inArray(specialDates.date, neighbours),
-    exceptDateId,
-  );
-  for (const date of touched) stored.dates.delete(date);
-  for (const [date, intervals] of proposed) stored.dates.set(date, intervals);
-  const found = firstMenuClash(stored.dates, stored.week, touched, today);
-  if (found !== null) clash(found.date, found.other);
-}
-
 /** The first slot that opens or closes at a minute the clock skips on `date`, or null; null too when
  * the clock cannot be read. */
 function skippedSlot(
-  zone: string | null,
+  clock: VenueClock,
   date: LocalDate,
   slots: readonly MenuSlot[],
 ): { position: number; end: "startsAt" | "endsAt" } | null {
-  if (zone === null) return null;
-  const skipped = skippedEndpoint(date, [{ cell: slotCell(slots) }], zone);
-  if (skipped === null) return null;
-  return { position: skipped.position, end: skipped.end === "opensAt" ? "startsAt" : "endsAt" };
+  if (clock.zone === null) return null;
+  for (const [position, slot] of slots.entries())
+    for (const end of ["startsAt", "endsAt"] as const)
+      if (
+        localTimeOccurrences(
+          end === "endsAt" && slot[end] === clock.cutover
+            ? addDays(date, 1)
+            : calendarDateOfTime(date, slot[end], clock.cutover),
+          slot[end],
+          clock.zone,
+        ).length === 0
+      )
+        return { position, end };
+  return null;
 }
 
 /** Writes one day's row if it is new, and replaces its slots by deleting then inserting them. */
@@ -231,111 +190,127 @@ async function writeDay(
     );
 }
 
-/**
- * The menus zone `zoneId` offers at `at` and the one it starts on. Refused `service_zone.not_found`
- * for a zone that is not this venue's, or whose department is inactive. The statement-count case in
- * `menu-timetable.test.ts` measured the same number with one slot and one zone menu as with twenty
- * and five.
- */
-export async function resolveZoneMenus(
+export async function resolveDepartmentService(
   tx: Transaction,
   cfg: VenueScope,
-  zoneId: string,
+  departmentId: string,
   at: Date,
-): Promise<ZoneMenuChoice> {
-  const [zone] = await tx
+): Promise<DepartmentService> {
+  await assertDepartment(tx, cfg, departmentId);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const moment = serviceMomentAt(at, clock);
+  const periods = await tx
+    .select({ id: menuPeriods.id, name: menuPeriods.name, menuId: menuPeriods.menuId })
+    .from(menuPeriods)
+    .where(eq(menuPeriods.departmentId, departmentId))
+    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
+  const staff = await tx
+    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
+    .from(menuPeriodStaffMenus)
+    .where(eq(menuPeriodStaffMenus.departmentId, departmentId))
+    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
+  const menusOf = (periodId: string): string[] => {
+    const period = periods.find((entry) => entry.id === periodId)!;
+    return [
+      period.menuId,
+      ...staff.filter((entry) => entry.periodId === periodId).map((entry) => entry.menuId),
+    ];
+  };
+  const closed: DepartmentService = {
+    departmentId,
+    open: false,
+    periodId: null,
+    periodName: null,
+    customerMenuId: null,
+    orderableMenuIds: [],
+    endedMenuIds: [],
+  };
+  if (moment === null)
+    return {
+      ...closed,
+      open: true,
+      orderableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
+    };
+
+  const yesterday = addDays(moment.businessDay, -1);
+  const dates = await tx
     .select({
-      departmentId: zoneServicePolicies.departmentId,
-      zoneAllDay: zoneAllDayMenus.menuId,
-      departmentAllDay: departmentAllDayMenus.menuId,
+      id: specialDates.id,
+      date: specialDates.date,
+      closeWholeVenue: specialDates.closeWholeVenue,
     })
-    .from(zoneServicePolicies)
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .leftJoin(zoneAllDayMenus, eq(zoneAllDayMenus.zoneId, zoneServicePolicies.zoneId))
-    .leftJoin(
-      departmentAllDayMenus,
-      eq(departmentAllDayMenus.departmentId, zoneServicePolicies.departmentId),
-    )
+    .from(specialDates)
     .where(
       and(
-        eq(zoneServicePolicies.zoneId, zoneId),
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(departments.active, true),
+        eq(specialDates.locationId, cfg.locationId),
+        inArray(specialDates.date, [yesterday, moment.businessDay]),
       ),
     );
-  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  const { departmentId } = zone;
-  const members = await tx
-    .select({ menuId: departmentMenus.menuId })
-    .from(departmentMenus)
-    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
-    .where(and(eq(departmentMenus.departmentId, departmentId), eq(catalogues.active, true)))
-    .orderBy(asc(departmentMenus.displayOrder), asc(departmentMenus.menuId));
-  const allDay = zone.zoneAllDay ?? zone.departmentAllDay;
-  const choice = (defaultMenuId: string | null, periodId: string | null): ZoneMenuChoice => ({
-    departmentId,
-    availableMenuIds: members.map((row) => row.menuId),
-    defaultMenuId,
-    periodId,
-  });
-  const moment = venueLocalMoment(at, await readLocationClock(tx, cfg.locationId));
-  if (moment === null) return choice(allDay, null);
-
-  const today = moment.civilDate;
-  const yesterday = addDays(today, -1);
-  const days = await tx
+  const timetables = await tx
     .select({
       id: menuDayTimetables.id,
       weekday: menuDayTimetables.weekday,
-      date: specialDates.date,
+      specialDateId: menuDayTimetables.specialDateId,
     })
     .from(menuDayTimetables)
-    .leftJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
     .where(
       and(
         eq(menuDayTimetables.departmentId, departmentId),
         or(
-          inArray(menuDayTimetables.weekday, [weekdayOf(yesterday), weekdayOf(today)]),
-          and(
-            eq(specialDates.locationId, cfg.locationId),
-            inArray(specialDates.date, [yesterday, today]),
-          ),
+          inArray(menuDayTimetables.weekday, [weekdayOf(yesterday), moment.weekday]),
+          dates.length === 0
+            ? undefined
+            : inArray(
+                menuDayTimetables.specialDateId,
+                dates.map((date) => date.id),
+              ),
         ),
       ),
     );
-  const dayOf = (date: LocalDate) =>
-    (days.find((day) => day.date === date) ?? days.find((day) => day.weekday === weekdayOf(date)))
-      ?.id;
-  const ids = [dayOf(yesterday), dayOf(today)].filter((id) => id !== undefined);
-  const rows =
-    ids.length === 0
+  const timetableOn = (date: string) => {
+    const special = dates.find((entry) => entry.date === date);
+    if (special?.closeWholeVenue) return undefined;
+    return (
+      (special === undefined
+        ? undefined
+        : timetables.find((entry) => entry.specialDateId === special.id)) ??
+      timetables.find((entry) => entry.weekday === weekdayOf(date))
+    );
+  };
+  const today = timetableOn(moment.businessDay);
+  const previous = timetableOn(yesterday);
+  const slots = await slotsByTimetable(
+    tx,
+    [today?.id, previous?.id].filter((id): id is string => id !== undefined),
+  );
+  const rangesOn = (id: string | undefined): ServiceRange[] =>
+    id === undefined
       ? []
-      : await tx
-          .select({
-            timetableId: menuSlots.timetableId,
-            periodId: menuSlots.periodId,
-            startsAt: menuSlots.startsAt,
-            endsAt: menuSlots.endsAt,
-            periodMenu: menuPeriods.menuId,
-            zoneMenu: zonePeriodMenus.menuId,
-          })
-          .from(menuSlots)
-          .innerJoin(menuPeriods, eq(menuPeriods.id, menuSlots.periodId))
-          .leftJoin(
-            zonePeriodMenus,
-            and(
-              eq(zonePeriodMenus.zoneId, zoneId),
-              eq(zonePeriodMenus.periodId, menuSlots.periodId),
-            ),
-          )
-          .where(inArray(menuSlots.timetableId, ids));
-  const on = (id: string | undefined) =>
-    rows
-      .filter((row) => row.timetableId === id)
-      .map((row) => ({ ...row, startsAt: wire(row.startsAt), endsAt: wire(row.endsAt) }));
-  const slot = slotInForce(on(dayOf(today)), on(dayOf(yesterday)), moment.timeOfDay);
-  if (slot === null) return choice(allDay, null);
-  return choice(slot.zoneMenu ?? slot.periodMenu, slot.periodId);
+      : (slots.get(id) ?? [])
+          .slice()
+          .sort(
+            (a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start,
+          );
+  const ranges = rangesOn(today?.id);
+  const running = rangeInForce(ranges, moment.minute, clock.dayCutover);
+  const period =
+    running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
+  const orderableMenuIds = period === undefined ? [] : menusOf(period.id);
+  const ended = [
+    ...rangesOn(previous?.id),
+    ...ranges.filter((range) => rangeSpan(range, clock.dayCutover).end <= moment.minute),
+  ];
+  return {
+    departmentId,
+    open: period !== undefined,
+    periodId: period?.id ?? null,
+    periodName: period?.name ?? null,
+    customerMenuId: period?.menuId ?? null,
+    orderableMenuIds,
+    endedMenuIds: [...new Set(ended.flatMap((range) => menusOf(range.periodId)))].filter(
+      (id) => !orderableMenuIds.includes(id),
+    ),
+  };
 }
 
 /** `defaultMenuId` when it is served or null, else the first served menu. */
@@ -348,7 +323,6 @@ export function servedDefault(
     : (servedMenuIds[0] ?? null);
 }
 
-/** The zone's default at `at` among the menus a caller found served, reading no publication. */
 export async function resolveDefaultMenu(
   tx: Transaction,
   cfg: VenueScope,
@@ -356,25 +330,55 @@ export async function resolveDefaultMenu(
   at: Date,
   servedMenuIds: readonly string[],
 ): Promise<string | null> {
-  return servedDefault((await resolveZoneMenus(tx, cfg, zoneId, at)).defaultMenuId, servedMenuIds);
+  const zone = await resolveZoneContext(tx, cfg, zoneId);
+  const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
+  return servedDefault(
+    service.customerMenuId,
+    servedMenuIds.filter((id) => service.orderableMenuIds.includes(id)),
+  );
 }
 
-/** Creates (`id` null) or renames and re-points one of the department's named periods. */
 export async function saveMenuPeriod(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  period: { id: string | null; name: string; menuId: string },
-): Promise<MenuPeriod> {
+  period: MenuPeriodInput,
+): Promise<{ id: string }> {
+  return writeMenuPeriod(tx, cfg, departmentId, null, period);
+}
+
+async function writeMenuPeriod(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  periodId: string | null,
+  period: MenuPeriodInput,
+): Promise<{ id: string }> {
   const name = menuPeriodName(period.name);
   await assertDepartment(tx, cfg, departmentId);
-  await assertMember(tx, departmentId, period.menuId);
-  if (period.id !== null) {
+  if (
+    period.colour !== undefined &&
+    (typeof period.colour !== "string" || !CALENDAR_COLOURS.includes(period.colour))
+  )
+    throw new AppError("menu_period.invalid", { field: "colour" });
+  const staffMenuIds = period.staffMenuIds;
+  if (!Array.isArray(staffMenuIds))
+    throw new AppError("menu_period.invalid", { field: "staffMenuIds" });
+  if (staffMenuIds.includes(period.menuId) || new Set(staffMenuIds).size !== staffMenuIds.length)
+    throw new AppError("menu_period.invalid", { field: "staffMenuIds" });
+  for (const menuId of [period.menuId, ...staffMenuIds]) {
+    const [menu] = await tx
+      .select({ id: catalogues.id })
+      .from(catalogues)
+      .where(and(eq(catalogues.id, menuId), eq(catalogues.active, true)));
+    if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
+  }
+  if (periodId !== null) {
     const [own] = await tx
       .select({ id: menuPeriods.id })
       .from(menuPeriods)
-      .where(and(eq(menuPeriods.id, period.id), eq(menuPeriods.departmentId, departmentId)));
-    if (own === undefined) throw new AppError("menu_period.not_found", { periodId: period.id });
+      .where(and(eq(menuPeriods.id, periodId), eq(menuPeriods.departmentId, departmentId)));
+    if (own === undefined) throw new AppError("menu_period.not_found", { periodId });
   }
   const [taken] = await tx
     .select({ id: menuPeriods.id })
@@ -383,37 +387,64 @@ export async function saveMenuPeriod(
       and(
         eq(menuPeriods.departmentId, departmentId),
         eq(menuPeriods.name, name),
-        period.id === null ? undefined : ne(menuPeriods.id, period.id),
+        periodId === null ? undefined : ne(menuPeriods.id, periodId),
       ),
     );
   if (taken !== undefined) throw new AppError("menu_period.name_taken", { departmentId, name });
-  const values = { name, menuId: period.menuId };
-  if (period.id === null) {
+  const used = await tx
+    .select({ colour: menuPeriods.colour })
+    .from(menuPeriods)
+    .where(eq(menuPeriods.departmentId, departmentId));
+  const colour =
+    period.colour ??
+    CALENDAR_COLOURS.find((value) => !used.some((row) => row.colour === value)) ??
+    CALENDAR_COLOURS[0];
+  const values = { name, menuId: period.menuId, colour };
+  let id = periodId;
+  if (periodId === null) {
     const [row] = await tx
       .insert(menuPeriods)
       .values({ departmentId, ...values })
       .returning({ id: menuPeriods.id });
-    return { id: row!.id, ...values };
+    id = row!.id;
+  } else {
+    await tx.update(menuPeriods).set(values).where(eq(menuPeriods.id, periodId));
+    await tx.delete(menuPeriodStaffMenus).where(eq(menuPeriodStaffMenus.periodId, periodId));
   }
-  await tx.update(menuPeriods).set(values).where(eq(menuPeriods.id, period.id));
-  return { id: period.id, ...values };
+  if (staffMenuIds.length > 0)
+    await tx.insert(menuPeriodStaffMenus).values(
+      staffMenuIds.map((menuId, displayOrder) => ({
+        periodId: id!,
+        departmentId,
+        menuId,
+        displayOrder,
+      })),
+    );
+  return { id: id! };
 }
 
-/**
- * Renames or re-points a named period of this venue, in its own department; a field left out keeps
- * its stored value, so a menu choice cannot undo a rename saved since the caller last read.
- */
 export async function updateMenuPeriod(
   tx: Transaction,
   cfg: VenueScope,
   periodId: string,
-  period: { name?: string; menuId?: string },
-): Promise<MenuPeriod> {
+  period: Partial<MenuPeriodInput>,
+): Promise<void> {
   const stored = await requirePeriod(tx, cfg, periodId);
-  return saveMenuPeriod(tx, cfg, stored.departmentId, {
-    id: periodId,
-    name: period.name ?? stored.name,
-    menuId: period.menuId ?? stored.menuId,
+  const staff = await tx
+    .select({ menuId: menuPeriodStaffMenus.menuId })
+    .from(menuPeriodStaffMenus)
+    .where(eq(menuPeriodStaffMenus.periodId, periodId))
+    .orderBy(asc(menuPeriodStaffMenus.displayOrder));
+  const [appearance] = await tx
+    .select({ colour: menuPeriods.colour })
+    .from(menuPeriods)
+    .where(eq(menuPeriods.id, periodId));
+  await writeMenuPeriod(tx, cfg, stored.departmentId, periodId, {
+    name: period.name === undefined ? stored.name : period.name,
+    menuId: period.menuId === undefined ? stored.menuId : period.menuId,
+    colour: period.colour === undefined ? appearance!.colour : period.colour,
+    staffMenuIds:
+      period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
   });
 }
 
@@ -448,10 +479,6 @@ async function periodUses(
   return uses;
 }
 
-/**
- * Deletes a named period, and with it every zone's menu for it. Refused `menu_period.in_use`
- * while any day places it, past special dates included.
- */
 export async function deleteMenuPeriod(
   tx: Transaction,
   cfg: VenueScope,
@@ -463,38 +490,24 @@ export async function deleteMenuPeriod(
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
 }
 
-/**
- * Replaces the department's whole week; a day with no slots offers the all-day default all day.
- * Refused when the week's slots overlap across a midnight with a special date's from the venue's
- * yesterday on (`field` `date`, naming that special date).
- */
 export async function replaceMenuWeek(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  days: readonly MenuWeekDay[],
+  days: unknown,
   at: Date,
 ): Promise<void> {
-  const week = parseMenuWeek(days);
+  void at;
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const week = parseMenuWeek(days, (value, field) =>
+    parseServiceDay(value, field, clock.dayCutover),
+  );
   await assertDepartment(tx, cfg, departmentId);
   await assertOwnPeriods(
     tx,
     departmentId,
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
-  const { today } = await readVenueClock(tx, cfg, at);
-  const stored = await readDepartmentDays(
-    tx,
-    cfg,
-    departmentId,
-    today === null ? undefined : gte(specialDates.date, addDays(today, -1)),
-    null,
-  );
-  const intervals = week.slots.map((slots) => slotIntervals(slots));
-  for (const date of [...stored.dates.keys()].sort())
-    if (firstMenuClash(stored.dates, intervals, [date], today, true) !== null)
-      invalidTimetable("date", { date, departmentId, reason: "overlap" });
-
   const existing = await tx
     .select({ id: menuDayTimetables.id, weekday: menuDayTimetables.weekday })
     .from(menuDayTimetables)
@@ -511,37 +524,22 @@ export async function replaceMenuWeek(
     if (slots.length > 0) await writeDay(tx, idOf(weekday), { departmentId, weekday }, slots);
 }
 
-/**
- * Gives the department a timetable of its own on a special date, replacing its week there; `slots`
- * may be empty, which offers the all-day default all day. Refused at `slots.N.startsAt` or
- * `slots.N.endsAt` for a time the clock skips that date, and at `slots`, naming the other date,
- * when its slots overlap across a midnight with a neighbour's.
- */
 export async function saveSpecialDateMenus(
   tx: Transaction,
   cfg: VenueScope,
   specialDateId: string,
   departmentId: string,
-  slots: readonly MenuSlot[],
+  slots: unknown,
   at: Date,
 ): Promise<void> {
-  const parsed = parseSlots(slots, "slots");
+  const clock = await readVenueClock(tx, cfg, at);
+  const parsed = parseServiceDay(slots, "slots", clock.cutover);
   const special = await requireSpecialDate(tx, cfg, specialDateId);
   await assertDepartment(tx, cfg, departmentId);
   await assertOwnPeriods(tx, departmentId, [{ field: "slots", slots: parsed }]);
-  const clock = await readVenueClock(tx, cfg, at);
-  const skipped = skippedSlot(clock.zone, special.date, parsed);
-  if (skipped !== null) invalidTimetable(`slots.${skipped.position}.${skipped.end}`);
-  await assertBesideNeighbours(
-    tx,
-    cfg,
-    departmentId,
-    clock.today,
-    new Map([[special.date, slotIntervals(parsed)]]),
-    [special.date],
-    specialDateId,
-    (_, other) => invalidTimetable("slots", { date: other, departmentId, reason: "overlap" }),
-  );
+  const skipped = skippedSlot(clock, special.date, parsed);
+  if (skipped !== null)
+    invalidTimetable(`slots.${skipped.position}.${skipped.end}`, { reason: "clock_skips" });
   const [existing] = await tx
     .select({ id: menuDayTimetables.id })
     .from(menuDayTimetables)
@@ -554,10 +552,6 @@ export async function saveSpecialDateMenus(
   await writeDay(tx, existing?.id, { departmentId, specialDateId }, parsed);
 }
 
-/**
- * Returns the department to its normal week on a special date, a past one included. Refused
- * (`field` `date`, naming the neighbour) when the week would overlap a neighbour's slots.
- */
 export async function clearSpecialDateMenus(
   tx: Transaction,
   cfg: VenueScope,
@@ -565,7 +559,8 @@ export async function clearSpecialDateMenus(
   departmentId: string,
   at: Date,
 ): Promise<void> {
-  const special = await requireSpecialDate(tx, cfg, specialDateId);
+  void at;
+  await requireSpecialDate(tx, cfg, specialDateId);
   await assertDepartment(tx, cfg, departmentId);
   const [existing] = await tx
     .select({ id: menuDayTimetables.id })
@@ -577,60 +572,9 @@ export async function clearSpecialDateMenus(
       ),
     );
   if (existing === undefined) return;
-  await assertBesideNeighbours(
-    tx,
-    cfg,
-    departmentId,
-    (await readVenueClock(tx, cfg, at)).today,
-    new Map(),
-    [special.date],
-    specialDateId,
-    (_, other) => invalidTimetable("date", { date: other, departmentId, reason: "overlap" }),
-  );
   await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.id, existing.id));
 }
 
-/**
- * A zone's own menu for one of its department's named periods; `null` inherits the period's. An
- * inactive zone's may be set and cleared. A period of another department is refused at `periodId`.
- */
-export async function setZonePeriodMenu(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  periodId: string,
-  menuId: string | null,
-): Promise<void> {
-  const [policy] = await tx
-    .select({ departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(
-      and(
-        eq(zoneServicePolicies.zoneId, zoneId),
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-      ),
-    );
-  if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  const period = await requirePeriod(tx, cfg, periodId);
-  const { departmentId } = policy;
-  if (period.departmentId !== departmentId) invalidTimetable("periodId");
-  if (menuId === null) {
-    await tx
-      .delete(zonePeriodMenus)
-      .where(and(eq(zonePeriodMenus.zoneId, zoneId), eq(zonePeriodMenus.periodId, periodId)));
-    return;
-  }
-  await assertMember(tx, departmentId, menuId);
-  await tx
-    .insert(zonePeriodMenus)
-    .values({ zoneId, periodId, departmentId, menuId })
-    .onConflictDoUpdate({
-      target: [zonePeriodMenus.zoneId, zonePeriodMenus.periodId],
-      set: { menuId },
-    });
-}
-
-/** Each department's timetables on one special date, with their slots. */
 async function dateTimetables(tx: Transaction, specialDateId: string) {
   const rows = await tx
     .select({ id: menuDayTimetables.id, departmentId: menuDayTimetables.departmentId })
@@ -644,41 +588,15 @@ async function dateTimetables(tx: Transaction, specialDateId: string) {
   return rows.map((row) => ({ departmentId: row.departmentId, slots: slots.get(row.id)! }));
 }
 
-/**
- * Refuses placing `timetables` on each of `dates` (`field` `date`, naming that date, the department
- * and the `reason`) when a slot opens or closes at a minute the clock skips there, or overlaps a
- * neighbour's across a midnight, the other dates included. With `leaving`, that date's timetables go
- * back to the week too, and an overlap there names the neighbour.
- */
 async function assertPlaced(
-  tx: Transaction,
-  cfg: VenueScope,
   clock: VenueClock,
-  exceptDateId: string | null,
   timetables: readonly { departmentId: string; slots: MenuSlot[] }[],
   dates: readonly LocalDate[],
-  leaving: LocalDate | null,
 ): Promise<void> {
-  for (const { departmentId, slots } of timetables) {
+  for (const { departmentId, slots } of timetables)
     for (const date of dates)
-      if (skippedSlot(clock.zone, date, slots) !== null)
+      if (skippedSlot(clock, date, slots) !== null)
         invalidTimetable("date", { date, departmentId, reason: "clock_skips" });
-    await assertBesideNeighbours(
-      tx,
-      cfg,
-      departmentId,
-      clock.today,
-      new Map(dates.map((date) => [date, slotIntervals(slots)])),
-      leaving === null ? dates : [...dates, leaving],
-      exceptDateId,
-      (touched, other) =>
-        invalidTimetable("date", {
-          date: dates.includes(touched) ? touched : other,
-          departmentId,
-          reason: "overlap",
-        }),
-    );
-  }
 }
 
 /**
@@ -692,68 +610,47 @@ export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
   },
   async afterCopies(tx, cfg, sourceId, targets, at) {
     await assertPlaced(
-      tx,
-      cfg,
       await readVenueClock(tx, cfg, at),
-      null,
       await dateTimetables(tx, sourceId),
       targets.map((target) => target.date),
-      null,
     );
   },
   async beforeMove(tx, cfg, id, toDate, at) {
-    const from = await requireSpecialDate(tx, cfg, id);
-    const clock = await readVenueClock(tx, cfg, at);
-    await assertPlaced(tx, cfg, clock, id, await dateTimetables(tx, id), [toDate], from.date);
+    await assertPlaced(await readVenueClock(tx, cfg, at), await dateTimetables(tx, id), [toDate]);
   },
-  async beforeDelete(tx, cfg, id, at) {
-    const special = await requireSpecialDate(tx, cfg, id);
-    const { today } = await readVenueClock(tx, cfg, at);
-    for (const { departmentId } of await dateTimetables(tx, id))
-      await assertBesideNeighbours(
-        tx,
-        cfg,
-        departmentId,
-        today,
-        new Map(),
-        [special.date],
-        id,
-        (_, other) => invalidTimetable("date", { date: other, departmentId, reason: "overlap" }),
-      );
-  },
+  async beforeDelete() {},
 };
 
-/** Everything the menu timetable editor shows. */
-export async function readMenuTimetableModel(
+export async function readOpeningHoursModel(
   tx: Transaction,
   cfg: VenueScope,
   at: Date,
-): Promise<MenuTimetableModel> {
+): Promise<OpeningHoursModel> {
   const clock = await readLocationClock(tx, cfg.locationId);
-  const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
+  const moment = serviceMomentAt(at, clock);
   const departmentRows = await tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departments)
     .where(eq(departments.locationId, cfg.locationId))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
-  const lists = new Map(
-    (await listDepartmentMenus(tx, cfg)).map((list) => [list.departmentId, list]),
-  );
   const periods = await tx
     .select({
       id: menuPeriods.id,
       departmentId: menuPeriods.departmentId,
       name: menuPeriods.name,
+      colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
     .where(eq(departments.locationId, cfg.locationId))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const uses = await periodUses(
-    tx,
-    periods.map((period) => period.id),
-  );
+  const staff = await tx
+    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
+    .from(menuPeriodStaffMenus)
+    .innerJoin(departments, eq(departments.id, menuPeriodStaffMenus.departmentId))
+    .where(eq(departments.locationId, cfg.locationId))
+    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   const timetables = await tx
     .select({
       id: menuDayTimetables.id,
@@ -764,96 +661,86 @@ export async function readMenuTimetableModel(
     .from(menuDayTimetables)
     .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
     .where(eq(departments.locationId, cfg.locationId))
-    .orderBy(asc(menuDayTimetables.departmentId));
+    .orderBy(asc(menuDayTimetables.weekday), asc(menuDayTimetables.specialDateId));
   const slots = await slotsByTimetable(
     tx,
     timetables.map((row) => row.id),
   );
-  const zones = await tx
-    .select({
-      id: floorZones.id,
-      departmentId: zoneServicePolicies.departmentId,
-      name: floorZones.name,
-      active: floorZones.active,
-      allDayMenuId: zoneAllDayMenus.menuId,
-    })
-    .from(zoneServicePolicies)
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .leftJoin(zoneAllDayMenus, eq(zoneAllDayMenus.zoneId, zoneServicePolicies.zoneId))
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
-  const zoneMenus = await tx
-    .select({
-      zoneId: zonePeriodMenus.zoneId,
-      periodId: zonePeriodMenus.periodId,
-      menuId: zonePeriodMenus.menuId,
-    })
-    .from(zonePeriodMenus)
-    .innerJoin(menuPeriods, eq(menuPeriods.id, zonePeriodMenus.periodId))
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zonePeriodMenus.zoneId))
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const timetabled = [
-    ...new Set(
-      timetables.flatMap((row) => (row.specialDateId === null ? [] : [row.specialDateId])),
-    ),
-  ];
+  const ranges = (id: string): ServiceRange[] =>
+    slots
+      .get(id)!
+      .slice()
+      .sort((a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start);
   const dates = await tx
-    .select({ id: specialDates.id, date: specialDates.date, name: specialDates.name })
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      name: specialDates.name,
+      colour: specialDates.colour,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
     .from(specialDates)
     .where(
       and(
         eq(specialDates.locationId, cfg.locationId),
-        civilDate === null
+        moment === null
           ? undefined
           : or(
-              gte(specialDates.date, addDays(civilDate, -1)),
-              inArray(specialDates.id, timetabled),
+              gte(specialDates.date, addDays(moment.businessDay, -1)),
+              inArray(
+                specialDates.id,
+                timetables.flatMap((row) =>
+                  row.specialDateId === null ? [] : [row.specialDateId],
+                ),
+              ),
             ),
       ),
     )
     .orderBy(asc(specialDates.date));
-
   const menus = await tx
     .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
     .from(catalogues)
     .orderBy(asc(catalogues.name), asc(catalogues.id));
-
+  const graph = await loadSectionGraph(tx);
+  const menuNames = new Map(menus.map((menu) => [menu.id, menu.name]));
   return {
-    menus,
     timeZone: clock.timeZone,
-    clockReadable: civilDate !== null,
-    civilDate,
-    departments: departmentRows.map((department) => ({
-      ...department,
-      menuIds: lists.get(department.id)!.menuIds,
-      allDayMenuId: lists.get(department.id)!.allDayMenuId,
-      periods: periods
-        .filter((period) => period.departmentId === department.id)
-        .map(({ id, name, menuId }) => ({ id, name, menuId, uses: uses.get(id)! })),
-      week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
-        const row = timetables.find(
-          (entry) => entry.departmentId === department.id && entry.weekday === weekday,
-        );
-        return { weekday, slots: row === undefined ? [] : slots.get(row.id)! };
-      }),
-      zones: zones
-        .filter((zone) => zone.departmentId === department.id)
-        .map(({ id, name, active, allDayMenuId }) => ({
-          id,
-          name,
-          active,
-          allDayMenuId,
-          periodMenus: zoneMenus
-            .filter((entry) => entry.zoneId === id)
-            .map(({ periodId, menuId }) => ({ periodId, menuId })),
-        })),
+    clockReadable: moment !== null,
+    dayCutover: clock.dayCutover,
+    menus: menus.map((menu) => ({
+      ...menu,
+      includes: directIncludedMenus(graph, menu.id).map((id) => menuNames.get(id)!),
     })),
-    specialDates: dates.map((special) => ({
-      ...special,
-      timetables: timetables
-        .filter((row) => row.specialDateId === special.id)
-        .map((row) => ({ departmentId: row.departmentId, slots: slots.get(row.id)! })),
-    })),
+    specialDates: dates,
+    departments: departmentRows.map((department) => {
+      const days = timetables.filter((row) => row.departmentId === department.id);
+      return {
+        ...department,
+        periods: periods
+          .filter((period) => period.departmentId === department.id)
+          .map(({ id, name, colour, menuId }) => ({
+            id,
+            name,
+            colour,
+            menuId,
+            staffMenuIds: staff
+              .filter((entry) => entry.periodId === id)
+              .map((entry) => entry.menuId),
+            weekdays: days
+              .filter(
+                (day) =>
+                  day.weekday !== null && ranges(day.id).some((range) => range.periodId === id),
+              )
+              .map((day) => day.weekday!),
+          })),
+        week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
+          const day = days.find((row) => row.weekday === weekday);
+          return { weekday, slots: day === undefined ? [] : ranges(day.id) };
+        }),
+        dates: days
+          .filter((row) => row.specialDateId !== null)
+          .map((day) => ({ specialDateId: day.specialDateId!, slots: ranges(day.id) })),
+      };
+    }),
   };
 }

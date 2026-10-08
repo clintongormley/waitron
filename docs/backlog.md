@@ -1255,12 +1255,21 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; slice 1 plan approved and queued in campaign lane D (A366-1, then
-  A366-2 … A366-7, each planned then built without stopping for the owner)**. Opening hours and
+  APPROVED 2026-10-07; remaining work is slices 2–7, each planned then built without
+  stopping for the owner**. Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, and the till sells only the current
   period's menus. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service
   zones spec; it folds in S11. [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+
+- **A432 — a service period's signed end offset** (owner, 2026-10-08). Slice 1 fixes the offset
+  at 0. Add one signed whole-minute value per period: negative stops new dishes before the end,
+  positive allows sending leftovers after it. Editor, request gate and till follow the same window.
+  [Detail](backlog/service-periods.md#a432--a-service-periods-signed-end-offset)
+
+- **Changing the business-day start after saving service hours** — open review follow-up from
+  A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
+  the setting directly in the database. [Detail](backlog/service-periods.md#changing-the-business-day-start-after-saving-service-hours)
 
 - **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
   implemented through A261.** The first department is named after the venue; the

@@ -62,7 +62,7 @@ const reaches = (types: Set<string>, query: readonly string[]) =>
 
 it("refreshes Hours and routing after every schedule, date, clock, subject and override change", async () => {
   const at = new Date("2026-10-06T10:00:00Z");
-  const { cfg, deli, bar, kitchen } = await withTransaction(db, async (tx) => {
+  const { cfg, departmentId, deli, bar, kitchen } = await withTransaction(db, async (tx) => {
     const [location] = await tx
       .insert(locations)
       .values({
@@ -82,16 +82,18 @@ it("refreshes Hours and routing after every schedule, date, clock, subject and o
         isDefault: true,
       })
       .returning();
-    const [barRow, kitchenRow] = await tx
+    const [barRow, kitchenRow, deliRow] = await tx
       .insert(kitchenStations)
       .values([
         { locationId: location!.id, name: "Bar" },
         { locationId: location!.id, name: "Kitchen", isDefault: true },
+        { locationId: location!.id, name: "Deli pass" },
       ])
       .returning();
     return {
       cfg: { locationId: locationId(location!.id) } as VenueScope,
-      deli: { kind: "department", id: department!.id } as HoursSubject,
+      departmentId: department!.id,
+      deli: { kind: "station", id: deliRow!.id } as HoursSubject,
       bar: { kind: "station", id: barRow!.id } as HoursSubject,
       kitchen: kitchenRow!.id,
     };
@@ -153,7 +155,7 @@ it("refreshes Hours and routing after every schedule, date, clock, subject and o
   expect(reaches(clock, routing)).toEqual(["locations"]);
 
   const renamed = await announced((tx) =>
-    tx.update(departments).set({ name: "Shop" }).where(eq(departments.id, deli.id)),
+    tx.update(departments).set({ name: "Shop" }).where(eq(departments.id, departmentId)),
   );
   expect(reaches(renamed, hours)).toEqual(["departments"]);
   const station = await announced((tx) =>

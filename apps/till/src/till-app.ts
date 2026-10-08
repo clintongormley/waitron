@@ -437,6 +437,8 @@ function isPartyOutOfDate(error: unknown): boolean {
 }
 
 function tableWriteError(error: unknown): CounterError {
+  const period = periodRefusal(error);
+  if (period !== undefined) return period;
   const code = (error as { code?: string } | undefined)?.code;
   return code !== undefined && TABLE_REFUSALS.has(code) ? { code } : "table.error";
 }
@@ -602,8 +604,15 @@ const HAND_OVER_REFUSALS = new Set([
 /** Refusals naming a line the table's offers can mark once they are read again. */
 const UNSELLABLE_LINE_REFUSALS = new Set(["product.unavailable", "product.not_sold_separately"]);
 
-/** A counter pay, place or hold refusal: its own message when it is actionable, else `fallback`. */
+function periodRefusal(error: unknown): CounterError | undefined {
+  const { code, menuId } = (error ?? {}) as { code?: unknown; menuId?: unknown };
+  if (code !== "menu_period.not_running") return undefined;
+  return { code, ...(typeof menuId === "string" ? { menuId } : {}) };
+}
+
 function counterError(error: unknown, fallback: StringKey): CounterError {
+  const period = periodRefusal(error);
+  if (period !== undefined) return period;
   if (isPaymentsReceived(error)) return "bill.pay_with_bill_payments";
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
@@ -764,7 +773,7 @@ function drawerErrorKey(code: string | undefined): StringKey {
  * screen, with a second message when something else failed since. */
 type CounterError =
   | StringKey
-  | { code: string }
+  | { code: string; menuId?: string }
   | { billPayments: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
   | { excess: string; lineChange?: true }
@@ -797,9 +806,16 @@ interface ReadBills {
   bills: PartyBill[] | null;
 }
 
-function errorText(error: CounterError): string | TemplateResult {
+function errorText(error: CounterError, menus: readonly TillZoneMenu[]): string | TemplateResult {
   if (typeof error === "string") return t(error);
-  if ("code" in error) return codeMessage(error.code);
+  if ("code" in error) {
+    if (error.code === "menu_period.not_running") {
+      const menu = menus.find((menu) => menu.id === error.menuId);
+      if (menu !== undefined)
+        return t("menu.period_not_running").replace("{menu}", () => menu.name);
+    }
+    return codeMessage(error.code);
+  }
   if ("takenOver" in error)
     return error.unsent === true
       ? named(
@@ -1605,6 +1621,10 @@ export class TillApp extends LitElement {
   @state() private menus: TillZoneMenu[] = [];
   @state() private tableProducts: TillProduct[] = [];
   @state() private tableMenus: TillZoneMenu[] = [];
+  @state() private counterService: MenuStateAnswer["service"] | null = null;
+  @state() private tableService: MenuStateAnswer["service"] | null = null;
+  @state() private counterDepartmentName = "";
+  @state() private tableDepartmentName = "";
   /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
    * applies without reloading them. */
   readonly #counterOffers = new ZoneOfferIndex();
@@ -2389,11 +2409,15 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (replaced()) return;
       offerLoadFailed = zoneLoadError(error);
-      this.#loadCounterOffers({ offers: [], menus: [] }, false);
+      this.#loadCounterOffers(
+        { offers: [], menus: [], service: { open: false, periodName: null } },
+        false,
+      );
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
     }
-    const kept = keptMenu !== null && this.menus.some((menu) => menu.id === keptMenu);
+    const kept =
+      keptMenu !== null && this.menus.some((menu) => menu.id === keptMenu && menu.orderable);
     this.#selectMenu(kept ? keptMenu! : this.#defaultCatalogueId());
     this.#browsing = {
       personId,
@@ -2719,7 +2743,7 @@ export class TillApp extends LitElement {
 
   #selectTableMenu(id: string): void {
     if (!this.isConnected) return;
-    if (id !== "" && !this.tableMenus.some((menu) => menu.id === id)) return;
+    if (id !== "" && !this.tableMenus.some((menu) => menu.id === id && menu.orderable)) return;
     this.tableSelectedCatalogueId = id;
   }
 
@@ -2736,7 +2760,7 @@ export class TillApp extends LitElement {
 
   #selectMenu(id: string): void {
     if (!this.isConnected) return;
-    if (id !== "" && !this.menus.some((menu) => menu.id === id)) return;
+    if (id !== "" && !this.menus.some((menu) => menu.id === id && menu.orderable)) return;
     this.selectedCatalogueId = id;
     try {
       sessionStorage.setItem("waitron.lastMenu", id);
@@ -2783,9 +2807,15 @@ export class TillApp extends LitElement {
     }
   }
 
-  #loadCounterOffers(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
+  #loadCounterOffers(
+    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service"> &
+      Partial<Pick<ZoneOfferCatalogue, "context">>,
+    loaded = true,
+  ): void {
     this.#counterOffers.load(catalogue, loaded);
     this.menus = catalogue.menus;
+    this.counterService = loaded ? catalogue.service : null;
+    this.counterDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
     this.#showCounterOffers();
   }
 
@@ -2801,13 +2831,16 @@ export class TillApp extends LitElement {
    */
   #loadTableOffers(
     zoneId: string | undefined,
-    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">,
+    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service"> &
+      Partial<Pick<ZoneOfferCatalogue, "context">>,
     loaded = true,
   ): void {
     const before = this.#tableOffers.versions;
     this.#tableZoneId = zoneId;
     this.#tableOffers.load(catalogue, loaded);
     this.tableMenus = catalogue.menus;
+    this.tableService = loaded ? catalogue.service : null;
+    this.tableDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
     this.tableProducts = this.#tableOffers.products();
     if (!loaded) return;
     const { versions, byId } = this.#tableOffers;
@@ -2913,20 +2946,19 @@ export class TillApp extends LitElement {
     this.basketHeld = unsaved.some((line) => line.blocked !== undefined || isStale(line, versions));
   }
 
-  /**
-   * A poll's answer (D11): the unavailable set applies to the loaded offers at once, on both zones.
-   * On the counter's zone a version other than the one loaded runs the basket refresh — unless a
-   * sale, hold or place is in flight or the dialog is already open, when the next poll asks again.
-   * On the open table's zone a new version reloads that zone's offers and then compares the
-   * person's draft ({@link #reconcileDraft}); a comparison put off earlier is tried again at each
-   * poll.
-   */
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
     if (zoneId === this.counterServiceZoneId) {
       if (this.#counterOffers.setUnavailable(state.unavailable)) this.#showCounterOffers();
       if (state.defaultMenuId !== undefined) this.#polledDefaults.set(zoneId, state.defaultMenuId);
+      const serviceMoved =
+        state.service.open !== this.counterService?.open ||
+        state.service.periodName !== this.counterService?.periodName;
       const busy = this.submitting || this.parking || this.placing;
-      if (versionsMoved(this.menus, state.menus) && !busy && this.basketRefresh === undefined)
+      if (
+        (versionsMoved(this.menus, state.menus) || serviceMoved) &&
+        !busy &&
+        this.basketRefresh === undefined
+      )
         void this.#refreshBasket().then(() => this.#followDefault());
       else if (!busy) this.#followDefault();
     }
@@ -2936,7 +2968,10 @@ export class TillApp extends LitElement {
         this.#markRounds();
         this.#markDraft(true);
       }
-      if (!versionsMoved(this.tableMenus, state.menus)) this.#reconcileDraft();
+      const serviceMoved =
+        state.service.open !== this.tableService?.open ||
+        state.service.periodName !== this.tableService?.periodName;
+      if (!versionsMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
       else
         void this.#reloadTableOffers(zoneId).then((read) => {
           if (read) this.#reconcileDraft(false);
@@ -2944,10 +2979,15 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** A counter following its zone's default, with nothing in its basket, moves to the default its
-   * zone's latest menu-state answer named. It does not move a table's menu to follow the default. */
   #followDefault(): void {
     const menuId = this.#polledDefaults.get(this.counterServiceZoneId);
+    const selectedRunning = this.menus.some(
+      (menu) => menu.id === this.selectedCatalogueId && menu.orderable,
+    );
+    if (!selectedRunning) {
+      this.#selectMenu(menuId ?? this.#defaultCatalogueId());
+      return;
+    }
     if (menuId === undefined || menuId === null) return;
     if (this.#browsing?.menuId !== null || this.#store.lines.length > 0) return;
     this.#selectMenu(menuId);
@@ -2974,7 +3014,9 @@ export class TillApp extends LitElement {
       )
         return false;
       this.#loadTableOffers(zoneId, catalogue);
-      if (!catalogue.menus.some((menu) => menu.id === this.tableSelectedCatalogueId))
+      if (
+        !catalogue.menus.some((menu) => menu.id === this.tableSelectedCatalogueId && menu.orderable)
+      )
         this.tableSelectedCatalogueId =
           catalogue.defaultMenuId ?? this.#defaultCatalogueId(catalogue.menus);
       return true;
@@ -4885,7 +4927,11 @@ export class TillApp extends LitElement {
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {
         if (offerRequest !== this.#tableOfferRequest) return;
-        this.#loadTableOffers(undefined, { offers: [], menus: [] }, false);
+        this.#loadTableOffers(
+          undefined,
+          { offers: [], menus: [], service: { open: false, periodName: null } },
+          false,
+        );
         this.tableSelectedCatalogueId = "";
         // Both are said: a canvas showing the floor and the order together keeps the previous
         // table's order on screen, so the failed open needs saying even beside a late change.
@@ -4895,7 +4941,11 @@ export class TillApp extends LitElement {
         return;
       }
     } else {
-      this.#loadTableOffers(undefined, { offers: [], menus: [] }, false);
+      this.#loadTableOffers(
+        undefined,
+        { offers: [], menus: [], service: { open: false, periodName: null } },
+        false,
+      );
       this.tableSelectedCatalogueId = "";
     }
     // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
@@ -8374,6 +8424,8 @@ export class TillApp extends LitElement {
         .store=${this.#store}
         .products=${this.products}
         .menus=${this.menus}
+        .service=${this.counterService}
+        .departmentName=${this.counterDepartmentName}
         .selectedMenuId=${this.selectedCatalogueId}
         .serviceZones=${this.counterServiceZones}
         .selectedServiceZoneId=${this.counterServiceZoneId}
@@ -8441,6 +8493,8 @@ export class TillApp extends LitElement {
       .initialDeviceStation=${this.initialDeviceStation}
       .initialDeviceWatcher=${this.initialDeviceWatcher}
       .menus=${tableTab ? this.tableMenus : this.menus}
+      .service=${tableTab ? this.tableService : this.counterService}
+      .departmentName=${tableTab ? this.tableDepartmentName : this.counterDepartmentName}
       .selectedMenuId=${tableTab ? this.tableSelectedCatalogueId : this.selectedCatalogueId}
       .selectedDiet=${this.selectedDiet}
       .statuses=${this.statuses}
@@ -8493,6 +8547,8 @@ export class TillApp extends LitElement {
           .cancelOffer=${this.cancelOffer}
           .products=${this.tableProducts}
           .menus=${this.tableMenus}
+          .service=${this.tableService}
+          .departmentName=${this.tableDepartmentName}
           .selectedMenuId=${this.tableSelectedCatalogueId}
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}
@@ -8615,6 +8671,9 @@ export class TillApp extends LitElement {
 
   override render() {
     const shellCanvas = this.#inShell() ? this.canvas : undefined;
+    const errorMessage = this.errorKey
+      ? errorText(this.errorKey, this.#tableCatalogueActive() ? this.tableMenus : this.menus)
+      : nothing;
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       <div
@@ -8761,11 +8820,7 @@ export class TillApp extends LitElement {
             ? html`<p class="mode-indicator" data-test="mode-indicator">${t("mode.live")}</p>`
             : nothing
         }
-        ${
-          this.errorKey
-            ? html`<p class="error" role="alert">${errorText(this.errorKey)}</p>`
-            : nothing
-        }
+        ${this.errorKey ? html`<p class="error" role="alert">${errorMessage}</p>` : nothing}
         <wt-toast
           class="submitted-toast"
           data-submitted-toast

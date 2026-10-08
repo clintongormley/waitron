@@ -1,3 +1,4 @@
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql, type SQL } from "drizzle-orm";
@@ -238,12 +239,7 @@ async function setupLunch(): Promise<Lunch> {
       select zone_id as id from zone_service_policies
       where location_id = ${cfg.locationId} and is_counter_default`);
     const zoneId = zone.rows[0]!.id;
-    await tx.execute(sql`
-      insert into department_menus (department_id, menu_id)
-      select department_id, ${lunch.id} from zone_service_policies where zone_id = ${zoneId}`);
-    await tx.execute(sql`
-      insert into zone_all_day_menus (zone_id, department_id, menu_id)
-      select zone_id, department_id, ${lunch.id} from zone_service_policies where zone_id = ${zoneId}`);
+    await offerMenuThroughZone(tx, cfg, zoneId, lunch.id, { makeDefault: true });
     await tx.execute(sql`
       insert into routing_cells (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${category.id},
@@ -446,9 +442,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
     const brunch = await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Brunch" });
       await addProductToMenu(tx, { menuId: menu.id, productId: v.burger.productId });
-      await tx.execute(sql`
-        insert into department_menus (department_id, menu_id, display_order)
-        select department_id, ${menu.id}, 1 from zone_service_policies where zone_id = ${v.zoneId}`);
+      await offerMenuThroughZone(tx, v.cfg, v.zoneId, menu.id, { displayOrder: 1 });
       return publishWorkingMenu(tx, menu.id);
     });
     const before = await written();
@@ -964,6 +958,7 @@ describe("GET /api/menu-state", () => {
     const v = await setupLunch();
     const v1 = await publish(v.menuId);
     expect(await state(v)).toEqual({
+      service: { open: true, periodName: "Always" },
       menus: [{ menuId: v.menuId, versionId: v1 }],
       unavailable: nothing,
       defaultMenuId: v.menuId,
@@ -973,6 +968,7 @@ describe("GET /api/menu-state", () => {
       withTransaction(suite.db, (tx) => updateProduct(tx, v.burger.productId, { available }));
     await setBurger(false);
     expect(await state(v)).toEqual({
+      service: { open: true, periodName: "Always" },
       menus: [{ menuId: v.menuId, versionId: v1 }],
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,
@@ -1052,6 +1048,8 @@ describe("the Device Home Page each menu serves", () => {
       id: v.menuId,
       name: "Lunch",
       isDefault: true,
+      audience: "customer",
+      orderable: true,
       versionId,
       structure: {
         members: [

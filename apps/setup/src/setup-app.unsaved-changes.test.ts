@@ -31,7 +31,7 @@ async function mount() {
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
     getVenueDefaults: vi.fn().mockResolvedValue({}),
-    provision: vi.fn(),
+    provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
   await vi.waitFor(() => expect((el as unknown as State).screen).toBe("mode"));

@@ -8,8 +8,8 @@ import "./venue-operations-screen.js";
 import "./service-settings-panel.js";
 import { HoursApi } from "./hours-client.js";
 import "./hours-screen.js";
-import { MenuTimetableApi } from "./menu-timetable-client.js";
-import "./menu-timetable-screen.js";
+import { OpeningHoursApi } from "./opening-hours-client.js";
+import "./opening-hours-screen.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   module: "venue-service",
@@ -55,7 +55,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         id: "hours",
         navLabelKey: "nav.hours",
         group: "operations",
-        order: 15,
+        order: 16,
         requiresPermission: "venue_service.manage",
         readPermission: "venue.view",
       },
@@ -72,20 +72,21 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
     },
     {
       screen: {
-        id: "menu-timetable",
-        navLabelKey: "nav.menu_timetable",
-        group: "menu",
+        id: "opening-hours",
+        navLabelKey: "nav.opening_hours",
+        group: "operations",
+        order: 15,
         requiresPermission: "venue_service.manage",
         readPermission: "venue.view",
       },
       create(ctx) {
-        const api = new MenuTimetableApi(ctx.request, ctx.liveData);
+        const api = new OpeningHoursApi(ctx.request, ctx.liveData);
         return {
           render: (readOnly = false) =>
-            html`<dashboard-menu-timetable-screen
+            html`<dashboard-opening-hours-screen
               .api=${api}
               .readOnly=${readOnly}
-            ></dashboard-menu-timetable-screen>`,
+            ></dashboard-opening-hours-screen>`,
         };
       },
     },

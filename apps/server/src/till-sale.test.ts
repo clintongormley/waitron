@@ -1,3 +1,4 @@
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -233,14 +234,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       ]);
       variantIds = { double: variants[0]!.id, fuera: variants[1]!.id };
     }
-    await tx.execute(sql`
-      insert into department_menus (department_id, menu_id)
-      select department_id, ${cat.id} from zone_service_policies
-      where zone_id = ${zone.rows[0]!.id}`);
-    await tx.execute(sql`
-      insert into zone_all_day_menus (zone_id, department_id, menu_id)
-      select zone_id, department_id, ${cat.id} from zone_service_policies
-      where zone_id = ${zone.rows[0]!.id}`);
+    await offerMenuThroughZone(tx, cfg, zone.rows[0]!.id, cat.id, { makeDefault: true });
     await tx.execute(sql`
       insert into routing_cells (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},

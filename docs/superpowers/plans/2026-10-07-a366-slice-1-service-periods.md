@@ -48,13 +48,14 @@ and menu-state answers).
 
 The owner confirms or overrides these when reviewing the plan.
 
-1. **Items added before a period ended can be sent at any time after it** (owner, 2026-10-07: the
-   kitchen should see what is left to cook). The till's basket stays on the till until it is sent,
-   so the server cannot know when an item was added: it accepts a new line whose menu belongs to
-   the current period or to any period that has already ended this business day or ran on the one
-   before, and refuses a menu whose period has not started yet, or anything when no period has
-   run. The till offers no new items from a period that has ended. Lines already stored are never
-   re-checked.
+1. **A request adds dishes only while their own period runs** (owner, 2026-10-08,
+   replacing the earlier unlimited leftovers allowance). Each period will have one signed
+   minutes setting measured from its end: negative closes orders before the end; positive
+   allows sending after it. In slice 1 the offset is fixed at **0**. A Lunch dish sent at
+   13:50 during Lunch 12:00–14:00 is accepted; at 14:00 or 17:00 it is refused. A menu
+   whose period has not started is refused even if it ran yesterday, and a closed day
+   accepts no new dishes. The till's selections follow the running period. Existing stored
+   dishes retain their snapshots; other edits do not add new dishes. A432 adds the setting.
 2. **Asking for more of a stored line after its period has ended is refused** (owner, 2026-10-07),
    until slice 3's manager extension can keep the period open. Raising a stored line's quantity
    is checked against the current period only. Any other edit of a stored line is not checked.
@@ -135,7 +136,7 @@ has its test in the task named.
    morning is Friday's Night (Tasks 1 and 4).
 2. **A boundary minute.** Lunch 12:00–14:00 then Afternoon 14:00–19:00: 14:00 is Afternoon; 13:59
    is Lunch (Task 1).
-3. **After a period ends.** A Lunch item left in the basket and sent at 17:00 is accepted; a
+3. **After a period ends.** A Lunch item left in the basket and sent at 17:00 is refused; a
    Dinner item sent during Lunch is refused with `menu_period.not_running`; raising a stored Lunch
    line's quantity at 14:05 is refused the same way; the till's basket keeps a Lunch line after
    the period changes (Tasks 8 and 9).
@@ -329,8 +330,11 @@ Rules the tests pin:
   location's `day_cutover` (`readLocationClock`, `packages/reporting/src/business-day.ts:220`) and
   refuse another department's period (existing `assertOwnPeriods`). The cross-midnight neighbour
   checks go (see "Behaviour this slice removes").
-- The clock-skip check (`skippedSlot`, `menu-timetable.ts:201-211`, and `assertPlaced`) checks each
-  time against `calendarDateOfTime(date, time, cutover)`, not the special date's own date.
+- The clock-skip check (`skippedSlot` and `assertPlaced`) checks each endpoint on its calendar
+  date: `calendarDateOfTime(date, time, cutover)` for a start; the same for an end, except an
+  end exactly equal to the changeover belongs to the next calendar date. A start exactly at the
+  changeover belongs to the business date. This also governs copies and moves (owner approved
+  2026-10-08).
 - `placeOpenPeriod` creates "Open" with the menu and places 09:00–17:00 on Monday to Friday — only
   when the department has no periods.
 - Provisioning replaces `addDepartmentMenu` and the all-day insert (`:106-112`) with
@@ -445,9 +449,12 @@ the department's row for the business day's special date when there is one, else
 periods** (so pricing and the till's basket keep any line's menu), each with
 `audience: "customer" | "staff"` and `orderable: boolean`; `isDefault` marks the current customer
 menu. `ZoneOffers.service` is `{ open: boolean; periodName: string | null }`. With
-`withDefault: false` (pricing) the timetable is not read and `orderable` is `true` for every menu;
-the existing case "price a basket's offers without reading the timetable at all" keeps passing
-unchanged.
+`withDefault: false` (pricing), static customer/staff period membership may be read; range,
+special-date and clock resolution is not read. Every period menu remains present and orderable,
+with no default selected. Owner, 2026-10-08 Task 5 ruling (A): update the pricing test to compare
+the same membership with no ranges against many ranges, preserve its statement-count assertion,
+forbid range/date/clock reads, and add a resolver-in-pricing deletion control. Commit the changed
+assertion separately and include its inventory in the pull request.
 
 Readiness: `zone.menu_missing` goes; `department.no_periods` (an active department with no slot on
 any weekday) is added; `zone.menu_unpublished` and `zone.menu_empty` read the department's period
@@ -491,17 +498,22 @@ period with no menu yet) makes the menu the customer menu, otherwise it becomes 
 bundle keeps format 2: the module-version check (`apps/server/src/configuration-transfer.ts:571-575`)
 already refuses an older export.
 
-- [ ] **Step 1: Failing tests:** `testing-zone-offers.test.ts`: two menus offered through one zone
+- [x] **Step 1: Failing tests:** `testing-zone-offers.test.ts`: two menus offered through one zone
 are both orderable at 03:00 and 15:00. `configuration-transfer.test.ts` (both): an export holds
 `menu_periods` with `colour` and `menu_period_staff_menus` and round-trips. `seed.test.ts`:
 decision 8's demo hours; no department rows in `hours_week_cells`.
-- [ ] **Step 2: Run; watch them fail.**
-- [ ] **Step 3: Implement,** including the raw-SQL fixtures and `provision.test.ts:205-211` (its
+- [x] **Step 2: Run; watch them fail.**
+- [x] **Step 3: Implement,** including the raw-SQL fixtures and `provision.test.ts:205-211` (its
 change goes in the `Changed test checks` commit). Then
 `pnpm --filter @waitron/server typecheck` and `pnpm --filter @waitron/venue-service typecheck`.
-- [ ] **Step 4: Run** the listed files, then `pnpm --filter @waitron/server test:coverage` in the
+- [x] **Step 4: Run** the listed files, then `pnpm --filter @waitron/server test:coverage` in the
 background after checking headroom (`memory_pressure | grep free`). Fix fixtures only.
-- [ ] **Step 5: Commit** — `test: fixtures, demo seed and configuration transfer follow periods (A366)`.
+- [x] **Step 5: Commit** — `test: fixtures, demo seed and configuration transfer follow periods (A366)`.
+
+Checkpoint 2026-10-08: server coverage ran 415 files and 9,550 tests, all passing with no skips.
+The configuration-transfer and fixture changes have focused checks and independent deletion
+controls recorded in the local implementation ledger. Task 7 still owns the legacy schema and
+transfer-table retirement; the slice remains unfinished.
 
 ---
 
@@ -523,22 +535,27 @@ background after checking headroom (`memory_pressure | grep free`). Fix fixtures
 `CALENDAR_COLOURS`); on `menu_slots` drop `starts_at <> ends_at` and add `menu_slots_step_ck`
 (minutes `00`, `15`, `30` or `45` on both times). No column is added, so the rebuild rule holds.
 
-- [ ] **Step 1: Failing test.** `migrations.test.ts`: `TABLES` without the four; a period whose
+- [x] **Step 1: Failing test.** `migrations.test.ts`: `TABLES` without the four; a period whose
 menu is an active catalogue never listed anywhere else saves; a slot `06:00`–`06:00` saves; a slot
 `12:10`–`14:00` inserted directly is refused by the database.
-- [ ] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. drizzle emits the
-`DROP TABLE` of a removed table before the rebuilds (as in `0027_retire_zone_menus.sql:1`), so on
-a venue holding a period or a zone menu choice the first statement is refused: that is this
-slice's venue reset. Run `scripts/migration-upgrade.test.ts`, and add a `RESETS` entry for
-`venue-service/0033_...` naming exactly the refusal it prints, as the `0027_retire_zone_menus`
-entry does.
-- [ ] **Step 3:** remove the transitional `department_menus` inserts from the writers; delete
+- [x] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. Generated `0033_aromatic_slapstick.sql` drops the four retired tables before rebuilding
+periods and slots. The upgrade walk refused the second drop, `DROP TABLE department_menus`,
+with `FOREIGN KEY constraint failed`; the first drop of `department_all_day_menus` completed.
+That measured refusal is recorded under `venue-service/0033_aromatic_slapstick` in `RESETS`
+in `scripts/migration-upgrade.test.ts`. No shipped migration is edited.
+- [x] **Step 3:** remove the transitional `department_menus` inserts from the writers; delete
 `department-menus.ts`; fix the two importers.
-- [ ] **Step 4: Run** Step 1's test, the guard list from Task 2 Step 4,
+- [x] **Step 4: Run** Step 1's test, the guard list from Task 2 Step 4,
 `scripts/append-only-triggers.test.ts`, `scripts/behavioural-triggers.test.ts` and
 `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`; typecheck
 venue-service and server.
-- [ ] **Step 5: Commit** — `feat(venue-service): retire department and zone menu tables (A366) — venue reset needed`.
+- [x] **Step 5: Commit** — `feat(venue-service): retire department and zone menu tables (A366) — venue reset needed`.
+
+Checkpoint 2026-10-08: the complete venue-service node project passes after the retained
+resolver/model/provisioning checks moved to periods. The named migration guards, venue-service
+and server typechecks, server provisioning/transfer checks and unedited fiscal suites pass.
+Backend consumers of the removed tables retire here; Task 12 still removes the old browser
+client, screen and their types.
 
 ---
 
@@ -553,13 +570,13 @@ venue-service and server.
 **Interfaces:** error `menu_period.not_running`, params `{ departmentId, menuId }`, registered in
 `packages/venue-service/src/errors.ts` (a refusal, not a recorded incident: no alert wording).
 
-Rule: a line the request adds is accepted when its menu is in `orderableMenuIds` or
-`endedMenuIds`. The added quantity of a stored line is accepted only when its menu is in
-`orderableMenuIds`. Anything else about stored lines is not checked. An item on no menu of the
+Rule: a line the request adds, including a draft submission, is accepted only when its menu
+is in `orderableMenuIds`. The added quantity of a stored line follows the same rule.
+`endedMenuIds` describes elapsed ranges; it never grants acceptance with slice 1's fixed 0 offset. Anything else about stored lines is not checked. An item on no menu of the
 department's periods stays `service_zone.offer_not_allowed`.
 
 - [ ] **Step 1: Failing tests** through the real routes with `vi.setSystemTime`: a Lunch item sent
-at 13:50 → accepted; sent at 17:00 → accepted; a Dinner item sent at 13:00 →
+at 13:50 → accepted; sent at 14:00 or 17:00 → `menu_period.not_running`; a Dinner item sent at 13:00 →
 `menu_period.not_running`; a Lunch line stored at 13:50, quantity raised at 13:55 → accepted, at
 14:05 → `menu_period.not_running`; that stored line's note edited at 15:00 → accepted; on a day with
 no periods, any new line → `menu_period.not_running`; an item on no period's menu →
@@ -606,7 +623,7 @@ implement; pass; open the order screen in both themes and at phone width and loo
   `resolveSubjects :945`, `resolveOpeningDateHours :1021`, `readRange :1040`, `calendarDays :1154`),
   `hours-rules.ts :159-163`, `hours-types.ts :27`, `index.ts :40-46`,
   `dashboard/hours-screen.ts`, `hours-view.ts`, `hours-client.ts`, `dashboard/index.ts`, `strings.ts`
-  (`nav.hours`), `apps/dashboard/src/navigation.ts :10`, `configuration-transfer.ts` `ownerKey
+  (`nav.hours`), `dashboard/hours-dates-list.ts`, `apps/dashboard/src/navigation.ts :10`, `configuration-transfer.ts` `ownerKey
   :70-80`
 - Test: `hours.test.ts`, `hours-routes.test.ts`, `dashboard/hours-*.test.ts`,
   `apps/dashboard/src/navigation.test.ts`
@@ -616,6 +633,12 @@ siblings are (`hours.invalid` at `subject.kind`); readers ignore any department 
 tables; `resolveOpeningDateHours` is deleted; the calendar's Closed tone means "no active
 department is open that business day" (through `readOpeningHoursModel`); the nav label is "Station
 hours" / "Horario de estaciones"; the URL's `department` parameter goes.
+Timetable refusals keep their department names in a separate `HoursModel.departments` list of
+`{ id, name }`, from the opening-model snapshot used for the calendar. These names do not create
+editable columns; `subjects` and all hour cells remain stations only.
+The rewritten Hours editors follow A331 (owner, 2026-10-08): `draftScopeFor`,
+`saveActionState` and an unchanged-submit early return, with retained baselines and reconnect
+cases in `hours-screen.unsaved.test.ts`. Clear/Delete remain confirmations.
 
 - [ ] Steps: failing tests per behaviour; watch them fail; implement; pass; commit
 `feat(venue-service): the Hours screen keeps stations only (A366)`.
@@ -646,13 +669,19 @@ drag a block's bottom edge → `grid-block-change`; selections snap to 15 minute
 neighbouring block. Keyboard: arrows move a focus cell, Shift+arrows extend, Enter on a selection
 emits `grid-range-select`, Enter on a block emits `grid-block-open`. `readOnly` draws only.
 
-- [ ] Steps: failing tests (a "21:00–03:00" block's position with cutover 06:00; a pointer drag
+- [x] Steps: failing tests (a "21:00–03:00" block's position with cutover 06:00; a pointer drag
 12:00→14:00 emits `{ startsAt: "12:00", endsAt: "14:00" }`; a drag across a block stops at it; the
 keyboard emits the same; the block's computed colour is the token's; axe for empty, filled and
 selected in both themes); watch them fail; implement; pass; commit
 `feat(venue-service): a day grid for service periods (A366)`.
 
 ---
+
+Task 11 checkpoint: the component and its event payloads pass the focused Chromium suites,
+including real mouse selection and resizing, keyboard selection, cancellation and both-theme
+axe scans. A changeover between quarter-hours draws short edge fragments but selects clock
+quarter-hours only, matching the request parser. Read-only grids retain a keyboard-scrollable
+region. Opening hours integration follows in Tasks 12–14.
 
 ### Task 12: Opening hours screen — shell, client, Periods tab
 
@@ -676,12 +705,64 @@ Delete); "Add a period". The dialog (`period-editor.ts`, `wt-modal`): name (requ
 menus (the customer menu not offered); refusals under the field they name; a draft scope.
 `menu_period.in_use` shows as one sentence.
 
-- [ ] Steps: failing tests (periods render; create, edit, delete call the client and refresh; a
+- [x] Steps: failing tests (periods render; create, edit, delete call the client and refresh; a
 refusal lands under its field; the unsaved dialog asks; axe in both themes); watch them fail;
 implement; pass; look in both themes and at phone width; commit
 `feat(venue-service): Opening hours screen with periods (A366)`.
 
+**Checkpoint 2026-10-08 — client and period editor.** `OpeningHoursApi` reads the opening-hours
+model passively and writes periods, normal weeks and dated placements through the existing routes.
+`period-editor` holds its own compact modal and emits `period-save` with `{ periodId, input }`;
+`commitSubmitted(input)` records a successful write and returns whether the draft now matches it.
+Its shared draft scope gates Save and discard, preserving the opened or saved baseline across
+reconnect. Active menu choices include their included menus; the customer choice is omitted from
+staff-only choices. Field refusals, required checks, native Save/Enter, departed controls, reconnect
+and both-theme accessibility have focused tests. No existing test assertions change in this
+substep.
+
+**Checkpoint 2026-10-08 — screen shell and Periods table.** The new screen has Week, Periods and
+Day tabs, a department picker and URL state. Its Periods table shows the colour and name, customer
+menu with included menus, staff menus and placed weekdays. The end-pinned row menu edits or asks
+before deleting; viewers get a table without actions. A successful write commits its submitted
+baseline and closes the current editor before asking the model watch to refresh. Field refusals
+stay in the editor; an in-use deletion stays in its confirmation as one sentence. Separate read
+messages cannot clear either refusal. New tests cover native Save, Cancel and phone row-menu
+access, discard and reconnect, background snapshots, late responses and controls from departed
+openings. Deletion confirmations use an identity for each opening, including reopening the same
+period. No existing test assertions change in this substep.
+
+**Checkpoint 2026-10-08 — registration and navigation.** Opening hours replaces Menu timetable's
+registered contribution, with operations order 15; Station hours moves to 16. The dashboard path
+keeps the Opening hours view and department. The Departments row action opens Opening hours for
+its department through the navigation guard. Existing registration and history assertions now check
+these approved destinations, retaining request/live-data wiring and viewer permission checks.
+A new forward-navigation check asserts no history write on Keep and one write after Discard.
+Focused checks and three safeguard-deletion controls pass after restoration. The registered
+manager and viewer Periods views have been inspected in both languages, themes and phone/desktop
+widths. New periods now start with the first unused department colour, repeating the first palette colour
+once all have been used (decision 6). Existing periods keep their recorded colour; background reads
+keep a selected draft colour. Focused browser checks and two safeguard-deletion controls cover that
+selection. The old named-period block's four tests have moved to Opening hours and its editor: complete
+POST/PATCH bodies, required fields, duplicate and invalid-name refusals, and the in-use sentence
+naming all weekdays and the special date. Its old follow-week button in the deletion refusal is
+retired; the new refusal is one sentence as specified above. The remaining old Menu timetable
+sources and tests still need retirement; preserve the Week and special-date assertions until
+their new consumers exist. Week and Day content remain
+Tasks 13 and 14. Leave Task 12 unchecked until its remaining work and verification finish.
+
 ---
+
+**Checkpoint 2026-10-08 — Task 12 retirement complete locally.** The old Menu timetable screen,
+client and slot editor, their six browser test files and their unused strings/model types/query key
+are removed. The week parser now requires the business-day callback already supplied by the writer;
+its old civil-day fallback and neighbouring-date helpers are removed. The retained weekday shape,
+field-path, day-body and name checks still run. Opening hours retains the original department history,
+Spanish title/actions, menu-only dirty comparison, dated-override comparison and clean deletion
+Cancel/native Escape checks. The unchanged token guard passes once deleted files leave Git's index.
+Two parser safeguard removals fail the selected assertions in an installed disposable checkout;
+restoration passes the parser/service-day suites. The legacy Week/date and named-period mappings,
+and this retirement's per-file inventory, remain in the lane receipts for the final PR.
+Task 15 and final branch review, CI and landing remain.
 
 ### Task 13: Opening hours — Week tab
 
@@ -701,10 +782,79 @@ implement; pass; look in both themes and at phone width; commit
 - Changes are staged and saved with one "Save" (`PUT .../menu-week`, or the special-date routes); a
   refusal is shown on the day it names; a draft scope; leaving with staged changes asks.
 
-- [ ] Steps: failing tests per bullet; watch them fail; implement; pass; look in both themes and at
+- [x] Steps: failing tests per bullet; watch them fail; implement; pass; look in both themes and at
 phone width; commit `feat(venue-service): edit a department's week of periods (A366)`.
 
 ---
+
+**Checkpoint 2026-10-08 — range dialog prerequisite.** `range-dialog` stages one time range
+locally, with required quarter-hour time fields, the department's periods and a New period action.
+It checks business-day ordering and overlap against the other ranges of that day. Save emits
+`range-save` with `{ input }`; existing blocks also offer `range-delete`. Both close the editor;
+the parent must stage that change and retain its own dirty scope until its server write succeeds.
+New period emits `range-new-period` with the current input and leaves the editor open;
+`choosePeriod(id)` selects the created period after the parent has updated the period list.
+The parent still needs to wire this to the period dialog, hold the range dialog busy while that
+child is open, and check the opening's identity before accepting a late creation response.
+The range dialog has quiet unchanged Save, field and bottom validation, native Save/Enter,
+Cancel/discard protection and reconnect checks. `wt-input` now forwards an optional numeric
+`step`, tested through the native time control with 900 seconds. Week/date grids, day-copy actions,
+staged parent saves and the nested period flow remain unimplemented; keep Task 13 unchecked.
+
+**Checkpoint 2026-10-08, 16:43: normal-week parent.** This supersedes the prerequisite
+checkpoint's remaining normal-week and nested-flow work. `opening-hours-week` renders seven
+Monday-to-Sunday columns, with each day's copy/clear menu in `service-grid`'s `header-{key}` slot.
+A range edit stages the week's values; one Save sends all seven days, indexed Sunday first.
+The parent owns a draft scope, quiet unchanged Save and the refusal beside the named day.
+Background snapshots keep dirty ranges; a write begun before disconnect cannot mark the
+reconnected draft saved. Creating a period returns to the same range with its times kept and
+the new id selected. Native child cancellation returns without a write. The parent uses the
+opening's identity and connection generation for late replies and departed controls.
+
+Focused browser checks cover these paths, EN/ES discard and reconnect, and six accessibility
+states in both themes. The new file's restricted coverage is 100/100/100/95.48; this is not a
+package-wide result. Normal-week, copy, range, nested period, refusal and native day-menu layouts
+were inspected at measured 390/1280 CSS pixels in both languages and themes. The remaining
+special-date switch/picker, closed-day `[]`, follow-week DELETE and date-column save/refusal
+flow are still Task 13 work. Task 14's Day consumer and Task 12's legacy assertion migration
+also remain; keep both Task 12 and Task 13 unchecked.
+
+**Checkpoint 2026-10-08, 17:05: special-date consumer.** This supersedes the previous
+checkpoint's missing date switch and save flow. The Week tab now selects the normal week or a
+special date, with a Station hours link for adding dates. One date column uses the shared range
+editor. Closed all day stages an empty override; Follow the normal week stages a DELETE. The
+save comparison includes whether the date follows the week, because an inherited empty weekday
+and an explicitly closed date both have no ranges. Both actions wait for the parent's Save.
+
+The date uses the same draft scope and saved baseline as the week. EN/ES Keep/Discard and
+before/after reconnect cases pass; hidden weekdays and departed selectors are ignored. A refused
+slots field is marked at the date header with a distinct bottom message and an enabled retry.
+Four safeguards removed in an installed disposable candidate fail their selected assertions;
+restoring the candidate passes the date suites. The shared week editor's restricted coverage is
+99.22 statements, 95.08 branches, 100 functions and 100 lines, measured by 78 focused tests.
+This is not a package-wide coverage result. Final 390/1280-width captures include the date grid,
+Save, refusal, inherited/closed states, viewer and empty picker in both languages and themes.
+The legacy week/date/slot assertions still require migration and a complete acceptance audit;
+keep Task 13 unchecked. Task 14's Day consumer and Tasks 12/15 also remain.
+
+**Checkpoint 2026-10-08: Task 13 acceptance complete.** The retained Week/date checks now have
+explicit counterparts in the new grid, range and parent-save suites. A new complete seven-day
+body checks preservation of six other weekdays, including an overnight range. EN/ES save checks
+keep the exact submitted body and discard protection after a refusal, and commit before a failed
+refresh. The old sources and tests remain until Task 12 retires them together; none is removed here.
+
+The model now carries the venue timezone and whether its clock can be read. The special-date range
+editor explains a repeated endpoint on its actual calendar morning, including an end exactly at
+the changeover. The unreadable-clock and UTC controls show no invented repetition. A skipped-time
+refusal explains the clock gap at the date header and leaves the staged ranges retryable. These
+missing behaviors were observed failing before implementation; existing assertions remain intact.
+
+The focused editor/grid/model/route run passes 380 tests; the unedited fiscal pair passes 20.
+Five safeguard deletions fail their intended assertions, with 48 passing after restoration.
+The two measured editor files exceed their coverage bars; this is not package-wide coverage.
+The task's Week/date, nested editor, copy, menu, refused and clock-change states were inspected
+in English and Spanish, both themes and measured 390/1280 widths. Task 14's Day tab, Task 12's
+source retirement and Task 15 still precede branch review, CI and landing.
 
 ### Task 14: Opening hours — Day tab, and the Departments page
 
@@ -719,8 +869,28 @@ that weekday, with the note "Changes every {weekday}" (decision 9). Departments 
 row's "Hours" action and the readiness link open `/manage/opening-hours?department=<id>`;
 `department.no_periods` reads "Has no opening periods" with that link; `zone.menu_missing` goes.
 
-- [ ] Steps: failing tests per behaviour; watch them fail; implement; pass; commit
+- [x] Steps: failing tests per behaviour; watch them fail; implement; pass; commit
 `feat(venue-service): Opening hours day view; Departments links to it (A366)`.
+
+**Checkpoint 2026-10-08 — Task 14 complete locally.** The Day tab starts on the venue business
+date and shows the active departments in one grid. One staged Save writes normal weekdays with
+all seven days preserved, or named-date ranges. Date stepping uses the shared leave coordinator;
+ordinary dates explain the repeating weekday. The range and nested period dialogs retain their
+department identity, times and late-response checks. Dirty drafts keep their original department
+and date targets across background reads and reconnect.
+
+**Ruling:** Save writes changed departments sequentially through the existing per-department
+routes, committing each success before another request. A later refusal keeps only the remaining
+departments dirty. The plan does not require atomic writes across those separate requests.
+The already-built Departments row action retains the canonical path used by the dashboard's URL
+controller; the readiness anchor uses the query form. Both select the named department in Opening
+hours. Their existing navigation, history and readiness assertions pass unchanged.
+
+The focused browser run passes 499 tests; the unedited fiscal pair passes 20. The new Day file's
+focused coverage exceeds the package bars, and both-theme axe checks pass. Five safeguard deletions
+fail intended assertions in an installed disposable candidate; restoring it passes 53 tests.
+The final 64 Day captures cover EN/ES, both themes and measured 390/1280 widths. Task 12's old
+source retirement, Task 15 and final branch review, CI and landing remain.
 
 ---
 
@@ -735,9 +905,16 @@ Opening hours when provisioning placed the "Open" period. The docs describe peri
 day, a closed special date and sending items after their period, and retire the all-day menu, zone menus and
 department hours (dated pointer where a document is historical).
 
-- [ ] Steps: failing test for the summary; watch it fail; implement; pass; commit
+- [x] Steps: failing test for the summary; watch it fail; implement; pass; commit
 `feat(setup): show the first opening hours (A366)`; then the docs commit
 `docs: Opening hours replaces the menu timetable and department hours (A366)`.
+
+The completion response now carries an optional `openingHours.departmentId`, read from the
+saved default department's normal week. The summary is omitted for another schedule or an
+uninstalled venue-service module. A summary-read failure leaves setup successful, and completed
+request replay keeps the recorded summary. The setup shell passes it to the completion screen,
+which shows English/Spanish wording and a link to that department. Focused receipts for Task 15
+are retained in the campaign ledger; whole-branch review, final validation, CI and landing remain.
 
 ---
 

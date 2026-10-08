@@ -1,3 +1,4 @@
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -22,11 +23,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  addDepartmentMenu,
   departments,
   setProfileServiceAccess,
   setRoutingCell,
-  setZoneAllDayMenu,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import {
@@ -234,8 +233,7 @@ const suite = useVenueDb({
         await tx.execute(sql`
         insert into zone_sale_policies (zone_id) values (${zone!.id})`);
         const venueScope = { locationId: brandLocationId(loc!.id) };
-        await addDepartmentMenu(tx, venueScope, department!.id, cat.id);
-        await setZoneAllDayMenu(tx, venueScope, zone!.id, cat.id);
+        await offerMenuThroughZone(tx, venueScope, zone!.id, cat.id, { makeDefault: true });
         const offer = await addProductToMenu(tx, {
           menuId: cat.id,
           productId: p.id,
@@ -3516,8 +3514,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
         (location_id, zone_id, department_id)
       values (${cfg.locationId}, ${zoneId}, ${department!.id})`);
     await withTransaction(suite.db, async (tx) => {
-      await addDepartmentMenu(tx, cfg, department!.id, aguaProduct.catalogueId);
-      await setZoneAllDayMenu(tx, cfg, zoneId, aguaProduct.catalogueId);
+      await offerMenuThroughZone(tx, cfg, zoneId, aguaProduct.catalogueId, { makeDefault: true });
     });
 
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
@@ -4330,8 +4327,7 @@ describe("canonical modifier HTTP serialization", () => {
       sql`insert into zone_service_policies (location_id,zone_id,department_id) values (${cfg.locationId},${zoneId},${modifierDepartment!.id})`,
     );
     await withTransaction(suite.db, async (tx) => {
-      await addDepartmentMenu(tx, cfg, modifierDepartment!.id, aguaProduct.catalogueId);
-      await setZoneAllDayMenu(tx, cfg, zoneId, aguaProduct.catalogueId);
+      await offerMenuThroughZone(tx, cfg, zoneId, aguaProduct.catalogueId, { makeDefault: true });
     });
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: "Modifiers", zoneId }),

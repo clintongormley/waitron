@@ -1,5 +1,9 @@
 # Service times, departments, zones and prep stations
 
+> **2026-10-08:** A366 slice 1 Task 10 retires `resolveOpeningDateHours`; its station week,
+> named-date and default-opening checks move to the retained Hours model and station-state
+> readers. See [slice 1 plan](../plans/2026-10-07-a366-slice-1-service-periods.md).
+
 **Status:** owner decisions of 2026-10-07, from one brainstorm with mockups. The owner approved
 this written spec on 2026-10-07, including section 15's three defaults. Not built. Backlog item **A366**. Behaviour below is the target design, not a
 claim about what runs today; section 2 is the only part that describes today's code, and it cites
@@ -103,6 +107,12 @@ period can run past the changeover. A day whose clocks change keeps today's rule
 skip is refused (`skippedEndpoint`).
 
 ## 5. At the till
+
+**Owner update, 2026-10-08:** the earlier after-period sending rule below is superseded.
+Each period gets a signed number of minutes from its end, negative for last orders before
+it, positive for sending leftovers after it. Slice 1 fixes it at 0 and accepts new dishes
+only while their own period runs. See [slice 1 decision 1](../plans/2026-10-07-a366-slice-1-service-periods.md).
+A432 adds the configurable value.
 
 - **Only the current period's menus can be ordered**, the customer menu and its staff-only menus.
   The till opens on the customer menu.

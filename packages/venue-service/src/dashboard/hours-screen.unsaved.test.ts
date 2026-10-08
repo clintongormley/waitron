@@ -23,8 +23,9 @@ const model: HoursModel = {
   dayCutover: "06:00",
   civilDate: "2026-10-07",
   clockReadable: true,
-  subjects: [{ kind: "department", id: "d1", name: "Restaurant", active: true, isDefault: true }],
-  week: [{ subject: { kind: "department", id: "d1" }, days }],
+  departments: [],
+  subjects: [{ kind: "station", id: "d1", name: "Restaurant", active: true, isDefault: false }],
+  week: [{ subject: { kind: "station", id: "d1" }, days }],
   days: [],
   specialDates: [],
   specialCells: [],
@@ -80,7 +81,7 @@ async function mount(
 async function open(screen: HoursScreen) {
   screen
     .shadowRoot!.querySelector<HTMLButtonElement>(
-      'td[data-subject="department:d1"][data-weekday="0"] button',
+      'td[data-subject="station:d1"][data-weekday="0"] button',
     )!
     .click();
   await screen.updateComplete;
@@ -127,7 +128,7 @@ async function choose(decision: "keep" | "discard") {
 const expected = [
   "/management-api/venue-service/hours/week",
   {
-    subject: { kind: "department", id: "d1" },
+    subject: { kind: "station", id: "d1" },
     days: days.map((day) =>
       day.weekday === 0
         ? {
@@ -331,7 +332,7 @@ it("opening another weekday asks before replacing an edited Hours draft", async 
   const { modal } = await open(screen);
   await change(screen, "10:00");
   const trigger = screen.shadowRoot!.querySelector<HTMLButtonElement>(
-    'td[data-subject="department:d1"][data-weekday="0"] button',
+    'td[data-subject="station:d1"][data-weekday="0"] button',
   )!;
   trigger.click();
   await choose("keep");
@@ -350,7 +351,7 @@ const unconfigured: HoursModel = {
   ...model,
   week: [
     {
-      subject: { kind: "department", id: "d1" },
+      subject: { kind: "station", id: "d1" },
       days: days.map(({ weekday }) => ({
         weekday,
         cell: { mode: "not_set", periods: [] },
@@ -389,7 +390,7 @@ function action(modal: HTMLElement, kind: "save" | "cancel") {
 const configuredBody = [
   "/management-api/venue-service/hours/week",
   {
-    subject: { kind: "department", id: "d1" },
+    subject: { kind: "station", id: "d1" },
     days: [
       { weekday: 0, cell: { mode: "closed", periods: [] } },
       { weekday: 1, cell: { mode: "all_day", periods: [] } },
@@ -547,7 +548,7 @@ it("Configure hours asks before a second Configure opening replaces its draft", 
   const { screen, modal, writes } = await configure();
   await mode(screen, "monday", "all_day");
   const trigger = screen.shadowRoot!.querySelector<HTMLButtonElement>(
-    'td[data-subject="department:d1"][data-weekday="0"] button',
+    'td[data-subject="station:d1"][data-weekday="0"] button',
   )!;
   trigger.click();
   await choose("keep");
@@ -613,7 +614,7 @@ const specialModel: HoursModel = {
   specialCells: [
     {
       specialDateId: "fiesta",
-      cells: [{ subject: { kind: "department", id: "d1" }, cell: { mode: "closed", periods: [] } }],
+      cells: [{ subject: { kind: "station", id: "d1" }, cell: { mode: "closed", periods: [] } }],
     },
   ],
 };
@@ -704,7 +705,7 @@ const editedDateBody = [
     name: "Changed fiesta",
     colour: "red",
     closeWholeVenue: false,
-    cells: [{ subject: { kind: "department", id: "d1" }, cell: { mode: "closed", periods: [] } }],
+    cells: [{ subject: { kind: "station", id: "d1" }, cell: { mode: "closed", periods: [] } }],
   },
 ];
 it("special-date Edit commits the exact accepted body before a failed refresh", async () => {
@@ -765,8 +766,7 @@ it.each(["date", "name", "colour", "closeWholeVenue", "cell"])(
             composed: true,
           }),
         );
-      } else if (field === "cell")
-        await mode(screen, "department.d1", changed ? "all_day" : "closed");
+      } else if (field === "cell") await mode(screen, "station.d1", changed ? "all_day" : "closed");
       else
         await dateField(
           screen,
@@ -1038,3 +1038,160 @@ it.each(["edit", "duplicate"] as const)(
     expect(unload()).toBe(true);
   },
 );
+
+async function saveButton(screen: HoursScreen) {
+  const button =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-editor]",
+    )!;
+  await button.updateComplete;
+  return button;
+}
+async function expectSave(screen: HoursScreen, changed: boolean) {
+  const button = await saveButton(screen);
+  expect(button.variant).toBe(changed ? "primary" : "secondary");
+  expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(!changed);
+}
+
+it.each([false, true])(
+  "weekday Save follows changed values outside the dashboard shell=%s",
+  async (standalone) => {
+    history.replaceState(null, "", "/manage/hours");
+    const { screen, writes } = await mount();
+    if (standalone) {
+      screen.remove();
+      document.body.append(screen);
+      await screen.updateComplete;
+    }
+    try {
+      await open(screen);
+      await expectSave(screen, false);
+      (await saveButton(screen)).click();
+      await screen.updateComplete;
+      expect(writes).toEqual([]);
+      expect(screen.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+      await change(screen, "10:00");
+      await expectSave(screen, true);
+      await change(screen, "09:00");
+      await expectSave(screen, false);
+      await change(screen, "10:00");
+      screen.remove();
+      (standalone ? document.body : app.shadowRoot!).append(screen);
+      await screen.updateComplete;
+      expect(value(screen)).toBe("10:00");
+      await expectSave(screen, true);
+      await change(screen, "09:00");
+      await expectSave(screen, false);
+      action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
+      await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+      expect(writes).toEqual([]);
+    } finally {
+      if (standalone) screen.remove();
+    }
+  },
+);
+
+it("Configure Save waits for a changed day and retains it through confirmation and reconnect", async () => {
+  history.replaceState(null, "", "/manage/hours");
+  const { screen, modal, writes } = await configure();
+  await expectSave(screen, false);
+  action(modal, "save");
+  await screen.updateComplete;
+  expect(modal.querySelector("[data-test=confirm-text]")).toBeNull();
+  expect(writes).toEqual([]);
+  await mode(screen, "monday", "all_day");
+  await expectSave(screen, true);
+  action(modal, "save");
+  await screen.updateComplete;
+  await expectSave(screen, true);
+  action(modal, "cancel");
+  await screen.updateComplete;
+  screen.remove();
+  app.shadowRoot!.append(screen);
+  await screen.updateComplete;
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  await expectSave(screen, true);
+  await mode(screen, "monday", "closed");
+  await expectSave(screen, false);
+});
+
+it.each(["add", "edit", "duplicate"] as const)(
+  "special-date %s Save follows its draft through reconnect and blocks unchanged host clicks",
+  async (kind) => {
+    const { screen, modal, writes } = await dateEditor(kind);
+    await expectSave(screen, false);
+    action(modal, "save");
+    await screen.updateComplete;
+    expect(writes).toEqual([]);
+    expect(modal.querySelector("[invalid]")).toBeNull();
+    const name = kind === "duplicate" ? "dates.0" : "name";
+    const changed = kind === "duplicate" ? "2026-10-20" : "Changed fiesta";
+    await dateField(screen, name, changed);
+    await expectSave(screen, true);
+    screen.remove();
+    app.shadowRoot!.append(screen);
+    await screen.updateComplete;
+    expect(dateValue(screen, name)).toBe(changed);
+    await expectSave(screen, true);
+    expect(unload()).toBe(true);
+    action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
+    await choose("keep");
+    expect(dateValue(screen, name)).toBe(changed);
+    await dateField(screen, name, kind === "edit" ? "  Fiesta  " : "");
+    await expectSave(screen, false);
+    expect(unload()).toBe(false);
+  },
+);
+
+it("weekday edits made after reconnect still ask before discarding", async () => {
+  history.replaceState(null, "", "/manage/hours");
+  const { screen, writes } = await mount();
+  await open(screen);
+  screen.remove();
+  await screen.updateComplete;
+  app.shadowRoot!.append(screen);
+  await screen.updateComplete;
+  await expectSave(screen, false);
+  await change(screen, "10:00");
+  action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
+  await choose("keep");
+  expect(value(screen)).toBe("10:00");
+  expect(writes).toEqual([]);
+});
+it.each(["add", "edit", "duplicate"] as const)(
+  "special-date %s edits made after reconnect still ask before discarding",
+  async (kind) => {
+    const { screen, writes } = await dateEditor(kind);
+    screen.remove();
+    await screen.updateComplete;
+    app.shadowRoot!.append(screen);
+    await screen.updateComplete;
+    await expectSave(screen, false);
+    const name = kind === "duplicate" ? "dates.0" : "name";
+    const changed = kind === "duplicate" ? "2026-10-20" : "Changed fiesta";
+    await dateField(screen, name, changed);
+    action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
+    await choose("keep");
+    expect(dateValue(screen, name)).toBe(changed);
+    expect(writes).toEqual([]);
+  },
+);
+it("a refused weekday Save remains primary and enabled for retry", async () => {
+  history.replaceState(null, "", "/manage/hours");
+  const pending = heldWrite();
+  const { screen, writes } = await mount(async () => {
+    await pending.promise;
+    throw { code: "connection.failed" };
+  });
+  const { modal } = await open(screen);
+  await change(screen, "10:00");
+  action(modal, "save");
+  await expect.poll(() => writes.length).toBe(1);
+  const button = await saveButton(screen);
+  expect(button.variant).toBe("primary");
+  expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
+  pending.resolve();
+  await expect.poll(() => button.disabled).toBe(false);
+  await expectSave(screen, true);
+  expect(writes).toEqual([expected]);
+});

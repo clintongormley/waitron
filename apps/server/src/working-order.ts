@@ -424,6 +424,7 @@ export async function priceOrderLines(
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
   snapshot?: ZoneOffers,
   invalidMakeAt: "refuse" | "ignore" = "refuse",
+  periodCheck: "added" | "none" = "added",
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
@@ -437,13 +438,17 @@ export async function priceOrderLines(
   offers: ZoneOffers;
 }> {
   if (requestedLines.length === 0) {
-    // A lineless call needs no zone and reads nothing.
     return {
       lineRows: [],
       gross: grossBasketWithOptions([]),
       identities: [],
       lineContexts: [],
-      offers: { defaultMenuId: null, menus: [], offers: [] },
+      offers: {
+        service: { open: false, periodName: null },
+        defaultMenuId: null,
+        menus: [],
+        offers: [],
+      },
     };
   }
   const offers =
@@ -456,6 +461,15 @@ export async function priceOrderLines(
       requestedLines,
       requestedLines.map((line) => line.menuItemId),
     ));
+  const service =
+    periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)
+      ? await VENUE_SERVICE.resolveDepartmentService(
+          tx,
+          cfg,
+          (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!)).departmentId,
+          new Date(),
+        )
+      : null;
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line) => {
@@ -468,6 +482,16 @@ export async function priceOrderLines(
       throw new AppError("service_zone.offer_not_allowed", {
         zoneId: zoneId!,
         menuItemId: line.menuItemId,
+      });
+    }
+    if (
+      service !== null &&
+      line[ADDED_EXTRAS_ONLY] !== true &&
+      !service.orderableMenuIds.includes(offer.menuId)
+    ) {
+      throw new AppError("menu_period.not_running", {
+        departmentId: service.departmentId,
+        menuId: offer.menuId,
       });
     }
     // Every asserted version is live, so one naming another menu is not this line's.

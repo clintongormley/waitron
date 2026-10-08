@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
 
 describe("VENUE_SERVICE_CLASSIFICATION", () => {
+  it("copies a period's staff-only menu choices as state", () => {
+    expect(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "menu_period_staff_menus").map(
+        (entry) => [entry.table, entry.class],
+      ),
+    ).toEqual([["menu_period_staff_menus", "state"]]);
+  });
   it("replicates opening hours, station fallbacks and today's state", () => {
     const timing = [
       "station_hours",

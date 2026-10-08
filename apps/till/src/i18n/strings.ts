@@ -1055,6 +1055,8 @@ export const en = {
   "party.try_again": "Check it and try again.",
   "boot.error": "Could not load the till, reload to try again",
   // Menu and service-zone names are server data, not keys here.
+  "menu.period_not_running": "{menu} is not available in the current period.",
+  "menu.department_closed": "{department} is closed: no period is running",
   "menu.switcher": "Menu",
   // The menu browser: search, the Device Home Page's shortcuts and the menu's sections.
   "menu.search": "Search",
@@ -2117,6 +2119,8 @@ export const es: Record<StringKey, string> = {
   "party.changed_bill_request_cancelled": "Se ha anulado su petición de cuenta.",
   "party.try_again": "Revísala e inténtalo de nuevo.",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
+  "menu.period_not_running": "{menu} no está disponible en el periodo actual.",
+  "menu.department_closed": "{department} está cerrado: no hay ningún periodo en curso",
   "menu.switcher": "Carta",
   "menu.search": "Buscar",
   "menu.shortcuts": "Accesos directos",

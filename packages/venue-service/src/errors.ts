@@ -48,20 +48,17 @@ declare module "@waitron/shared" {
     /** Removing a menu from a department's list that `uses` still name, every one of them. */
     "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
     "menu_period.not_found": { periodId: string };
+    "menu_period.not_running": { departmentId: string; menuId: string };
+    "menu_period.invalid": { field: "staffMenuIds" | "colour" };
     /** Deleting a named period that `uses` still place, past special dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };
-    /**
-     * `field` is the request path of the refused value, as for `hours.invalid`. A refusal naming a
-     * date also names the department, and whether slots would overlap a neighbouring day's across a
-     * midnight (`overlap`) or open or close at a minute the clock skips there (`clock_skips`).
-     */
     "menu_timetable.invalid": {
       field: string;
       date?: string;
       departmentId?: string;
-      reason?: "overlap" | "clock_skips";
+      reason?: "overlap" | "clock_skips" | "empty" | "order" | "step";
     };
     "zone.name_taken": { name: string };
     /** An import's refusal adds the department and each name the export holds. */

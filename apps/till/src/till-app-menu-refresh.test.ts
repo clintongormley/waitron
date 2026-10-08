@@ -126,13 +126,21 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
 
 function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue {
   return {
-    context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
+    service: { open: true, periodName: null },
+    context: {
+      departmentName: "Restaurant",
+      zoneId: "zone-counter",
+      departmentId: "department-bar",
+      serviceMode: "prepay",
+    },
     defaultMenuId: "lunch",
     menus: [
       {
         id: "lunch",
         name: "Lunch",
         isDefault: true,
+        orderable: true,
+        audience: "customer",
         versionId: version,
         structure: {
           members: offers.map((each) => ({
@@ -158,6 +166,7 @@ const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
+    service: { open: true, periodName: null },
     menus: [{ menuId: "lunch", versionId: version }],
     unavailable: { ...NOTHING, ...unavailable },
   };
@@ -838,6 +847,7 @@ describe("a refresh overtaken by a change of service area", () => {
     const terrace = {
       ...catalogue("t1", [offer("offer-terrace-water", "Water", "2.00")]),
       context: {
+        departmentName: "Restaurant",
         zoneId: "zone-terrace",
         departmentId: "department-bar",
         serviceMode: "prepay" as const,
@@ -1246,6 +1256,7 @@ describe("the poll's own costs", () => {
     const terrace = {
       ...catalogue("t1", [offer("offer-terrace-water", "Water", "2.00")]),
       context: {
+        departmentName: "Restaurant",
         zoneId: "zone-terrace",
         departmentId: "department-bar",
         serviceMode: "prepay" as const,
@@ -2033,6 +2044,7 @@ describe("the menu's Device Home Page", () => {
     await toCounter(el);
     const shown = browser(el).menu;
     api.menuState.mockResolvedValue({
+      service: { open: true, periodName: null },
       menus: [{ menuId: "lunch", versionId: "v2" }],
       unavailable: NOTHING,
     } satisfies MenuState);

@@ -110,8 +110,8 @@ export async function seedCatalogues(
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
     select d.menu_id as id from zone_service_policies p
-    join department_all_day_menus d on d.department_id = p.department_id
-    where p.location_id = ${locationId} and p.is_counter_default
+    join menu_periods d on d.department_id = p.department_id
+    where p.location_id = ${locationId} and p.is_counter_default and d.name = 'Open'
     limit 1`);
 
   const seedOne = async (data: SeedCatalogue, existingMenuId?: string): Promise<string> => {

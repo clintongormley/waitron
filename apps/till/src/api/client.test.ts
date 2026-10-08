@@ -613,7 +613,12 @@ describe("TillApi", () => {
 
   it("listZoneOffers GETs menu-item identities for the selected service zone, cancellably", async () => {
     const payload = {
-      context: { zoneId: "zone-upstairs", departmentId: "restaurant", serviceMode: "table_tab" },
+      context: {
+        departmentName: "Restaurant",
+        zoneId: "zone-upstairs",
+        departmentId: "restaurant",
+        serviceMode: "table_tab",
+      },
       defaultMenuId: "drinks",
       menus: [{ id: "drinks", name: "Drinks", isDefault: true }],
       offers: [
@@ -666,7 +671,12 @@ describe("TillApi", () => {
 
   it("listDefaultZoneOffers resolves the configured counter zone", async () => {
     const payload = {
-      context: { zoneId: "counter", departmentId: "deli", serviceMode: "prepay" as const },
+      context: {
+        departmentName: "Restaurant",
+        zoneId: "counter",
+        departmentId: "deli",
+        serviceMode: "prepay" as const,
+      },
       defaultMenuId: "takeaway",
       menus: [{ id: "takeaway", name: "Takeaway", isDefault: true }],
       offers: [],
@@ -685,7 +695,12 @@ describe("TillApi", () => {
       .fn()
       .mockResolvedValueOnce(
         jsonResponse({
-          context: { zoneId: "counter", departmentId: "deli", serviceMode: "prepay" },
+          context: {
+            departmentName: "Restaurant",
+            zoneId: "counter",
+            departmentId: "deli",
+            serviceMode: "prepay",
+          },
           defaultMenuId: "takeaway",
           menus: [],
           offers: [],

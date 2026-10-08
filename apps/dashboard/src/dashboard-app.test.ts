@@ -5763,6 +5763,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(items("service")).toEqual(["nav-bookings"]);
     expect(items("operations")).toEqual([
       "nav-venue-operations",
+      "nav-opening-hours",
       "nav-hours",
       "nav-floor",
       "nav-prep-stations",

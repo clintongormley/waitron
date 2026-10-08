@@ -372,9 +372,11 @@ export type TillMenuOffer = LiveOffer;
 export type TillZoneMenu = ServedMenu;
 
 export interface ZoneOfferCatalogue {
+  service: MenuState["service"];
   context: {
     zoneId: string;
     departmentId: string;
+    departmentName: string;
     serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
     receiptPrintMode?: "auto" | "on_request" | "never";
   };

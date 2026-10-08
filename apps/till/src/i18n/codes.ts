@@ -3,6 +3,10 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "menu_period.not_running": {
+    en: "That menu is not available in the current period.",
+    es: "Esa carta no está disponible en el periodo actual.",
+  },
   "department_transfer.desk_unavailable": {
     en: "That department has no usable receiving desk. Ask a manager to check its transfer settings.",
     es: "Ese departamento no tiene un mostrador receptor disponible. Pide a un responsable que revise los ajustes de traspaso.",

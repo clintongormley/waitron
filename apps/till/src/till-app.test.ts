@@ -402,7 +402,9 @@ function fixtureOffers(
     courseId: product.courseId ?? null,
   }));
   return {
+    service: { open: true, periodName: null },
     context: {
+      departmentName: "Restaurant",
       zoneId: "zone-counter",
       departmentId: "department-default",
       serviceMode: "prepay",
@@ -1454,7 +1456,13 @@ describe("till-app", () => {
 
   it("loads the default zone's offers and orders two menu identities for one product", async () => {
     const listDefaultZoneOffers = vi.fn().mockResolvedValue({
-      context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
+      service: { open: true, periodName: null },
+      context: {
+        departmentName: "Restaurant",
+        zoneId: "zone-counter",
+        departmentId: "department-bar",
+        serviceMode: "prepay",
+      },
       zones: [
         {
           id: "zone-counter",
@@ -1615,6 +1623,7 @@ describe("till-app", () => {
       products: [{ ...jamon, catalogueId: "menu-deli", catalogueName: "Deli" }],
     });
     deliCatalogue.context = {
+      departmentName: "Restaurant",
       zoneId: "zone-deli",
       departmentId: "department-deli",
       serviceMode: "ticket_then_pay",
@@ -5555,6 +5564,8 @@ describe("till-app", () => {
 
   it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
     const homeFields = {
+      orderable: true,
+      audience: "customer" as const,
       structure: { members: [] },
       home: {
         shortcuts: [],
@@ -5563,7 +5574,13 @@ describe("till-app", () => {
       },
     };
     const catalogue = {
-      context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
+      service: { open: true, periodName: null },
+      context: {
+        departmentName: "Restaurant",
+        zoneId: "zone-counter",
+        departmentId: "department-bar",
+        serviceMode: "prepay",
+      },
       defaultMenuId: "menu-standard",
       menus: [
         {
@@ -5648,7 +5665,9 @@ describe("till-app", () => {
     };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        service: { open: true, periodName: null },
         context: {
+          departmentName: "Restaurant",
           zoneId: "zone-counter",
           departmentId: "department-default",
           serviceMode: "prepay",
@@ -12726,6 +12745,7 @@ describe("a failed list refresh after a successful write", () => {
   function mountWithPrepayZone(getStationQueue: ReturnType<typeof vi.fn>) {
     const counterZone = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
     counterZone.context = {
+      departmentName: "Restaurant",
       zoneId: "zone-counter",
       departmentId: "department-default",
       serviceMode: "ticket_then_pay",
@@ -12747,7 +12767,12 @@ describe("a failed list refresh after a successful write", () => {
       },
     ];
     const deli = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
-    deli.context = { zoneId: "zone-deli", departmentId: "department-deli", serviceMode: "prepay" };
+    deli.context = {
+      departmentName: "Restaurant",
+      zoneId: "zone-deli",
+      departmentId: "department-deli",
+      serviceMode: "prepay",
+    };
     return mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       getStationQueue,

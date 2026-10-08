@@ -1,17 +1,22 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
-import { LiveData, createRequest } from "@waitron/dashboard-kit";
+import { LiveData, createRequest, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { VENUE_SERVICE_DASHBOARD } from "./index.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { ServiceSettingsPanel } from "./service-settings-panel.js";
 import type { HoursScreen } from "./hours-screen.js";
-import type { MenuTimetableScreen } from "./menu-timetable-screen.js";
+import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 
 const containers: HTMLElement[] = [];
+const originalUrl = location.href;
+const originalLocale = currentLocale();
+beforeEach(() => setLocale("en"));
 afterEach(() => {
   for (const container of containers.splice(0)) container.remove();
   vi.useRealTimers();
+  history.replaceState(null, "", originalUrl);
+  setLocale(originalLocale);
 });
 
 describe("VENUE_SERVICE_DASHBOARD", () => {
@@ -226,12 +231,12 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       id: "hours",
       navLabelKey: "nav.hours",
       group: "operations",
-      order: 15,
+      order: 16,
       requiresPermission: "venue_service.manage",
       readPermission: "venue.view",
     });
-    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.hours"]).toBe("Hours");
-    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.hours"]).toBe("Horarios");
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.hours"]).toBe("Station hours");
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.hours"]).toBe("Horario de estaciones");
     const handle = hours.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,
@@ -253,22 +258,18 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   });
 
-  it("files Menu timetable with the menus, readable with venue.view", async () => {
+  it("places Opening hours before Station hours, readable with venue.view", async () => {
     const model = {
-      menus: [{ id: "m1", name: "Desayunos", active: true }],
-      timeZone: "Europe/Madrid",
-      clockReadable: true,
-      civilDate: "2026-10-07",
+      dayCutover: "06:00",
+      menus: [{ id: "m1", name: "Desayunos", active: true, includes: [] }],
       departments: [
         {
           id: "d1",
           name: "Restaurant",
           active: true,
-          menuIds: ["m1"],
-          allDayMenuId: null,
           periods: [],
           week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
-          zones: [],
+          dates: [],
         },
       ],
       specialDates: [],
@@ -280,17 +281,19 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
         text: async () => JSON.stringify(model),
       } as Response),
     );
+    history.replaceState(null, "", "/manage/opening-hours/view/periods/department/d1");
     const liveData = new LiveData();
     const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.at(-1)!;
     expect(timetable.screen).toEqual({
-      id: "menu-timetable",
-      navLabelKey: "nav.menu_timetable",
-      group: "menu",
+      id: "opening-hours",
+      navLabelKey: "nav.opening_hours",
+      group: "operations",
+      order: 15,
       requiresPermission: "venue_service.manage",
       readPermission: "venue.view",
     });
-    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.menu_timetable"]).toBe("Menu timetable");
-    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.menu_timetable"]).toBe("Horario de cartas");
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.opening_hours"]).toBe("Opening hours");
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.opening_hours"]).toBe("Horario de apertura");
     const handle = timetable.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,
@@ -299,14 +302,28 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     document.body.append(container);
     containers.push(container);
     render(handle.render(true), container);
-    const screen = container.querySelector<MenuTimetableScreen>("dashboard-menu-timetable-screen")!;
+    const screen = container.querySelector<OpeningHoursScreen>("dashboard-opening-hours-screen")!;
     expect(screen.api.liveData).toBe(liveData);
     expect(screen.readOnly).toBe(true);
+    await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
     await vi.waitFor(() =>
-      expect(screen.shadowRoot!.querySelector('[data-test="menu-list"]')).not.toBeNull(),
+      expect(
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "[name=departmentId]",
+        )!.value,
+      ).toBe("d1"),
     );
+    const periods =
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
+    await periods.updateComplete;
+    expect(periods.shadowRoot!.textContent).toContain("No periods yet.");
+    expect(screen.shadowRoot!.querySelector("[data-test=new-period]")).toBeNull();
+    render(handle.render(false), container);
+    await screen.updateComplete;
+    expect(screen.readOnly).toBe(false);
+    expect(screen.shadowRoot!.querySelector("[data-test=new-period]")).not.toBeNull();
     const [[path, init]] = fetchImpl.mock.calls as unknown as [[string, RequestInit]];
-    expect(path).toBe("/management-api/venue-service/menu-timetable");
+    expect(path).toBe("/management-api/venue-service/opening-hours");
     expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   });
 });

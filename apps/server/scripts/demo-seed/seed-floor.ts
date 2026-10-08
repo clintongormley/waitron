@@ -9,8 +9,10 @@ import {
   departmentSalePolicies,
   departments,
   replaceWeekHours,
-  addDepartmentMenu,
-  setDepartmentAllDayMenu,
+  menuPeriods,
+  saveMenuPeriod,
+  updateMenuPeriod,
+  replaceMenuWeek,
   setRoutingCell,
   setStationFallback,
   zoneServicePolicies,
@@ -185,28 +187,48 @@ export async function seedFloor(
   });
   if (menuIds !== undefined) {
     const restaurantId = defaultPolicy.department_id;
-    for (const [displayOrder, menuId] of [menuIds.restaurant, menuIds.lunch].entries())
-      await addDepartmentMenu(tx, cfg, restaurantId, menuId, { displayOrder });
-    await setDepartmentAllDayMenu(tx, cfg, restaurantId, menuIds.restaurant);
-    await addDepartmentMenu(tx, cfg, deliDepartmentId, menuIds.deli, { displayOrder: 0 });
-    await setDepartmentAllDayMenu(tx, cfg, deliDepartmentId, menuIds.deli);
+    const [existing] = await tx
+      .select({ id: menuPeriods.id })
+      .from(menuPeriods)
+      .where(and(eq(menuPeriods.departmentId, restaurantId), eq(menuPeriods.name, "Open")));
+    const restaurant =
+      existing ??
+      (await saveMenuPeriod(tx, cfg, restaurantId, {
+        name: "Open",
+        menuId: menuIds.restaurant,
+        staffMenuIds: [menuIds.lunch],
+      }));
+    if (existing !== undefined)
+      await updateMenuPeriod(tx, cfg, existing.id, {
+        menuId: menuIds.restaurant,
+        staffMenuIds: [menuIds.lunch],
+      });
+    const deli = await saveMenuPeriod(tx, cfg, deliDepartmentId, {
+      name: "Open",
+      menuId: menuIds.deli,
+      staffMenuIds: [],
+    });
+    await replaceMenuWeek(
+      tx,
+      cfg,
+      restaurantId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [{ periodId: restaurant.id, startsAt: "09:00", endsAt: "00:00" }],
+      })),
+      new Date(),
+    );
+    await replaceMenuWeek(
+      tx,
+      cfg,
+      deliDepartmentId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: weekday === 0 ? [] : [{ periodId: deli.id, startsAt: "09:00", endsAt: "18:00" }],
+      })),
+      new Date(),
+    );
   }
-
-  const hoursCfg = { locationId: brandLocationId(locationId) };
-  await replaceWeekHours(
-    tx,
-    hoursCfg,
-    { kind: "department", id: defaultPolicy.department_id },
-    weekOf(() => opening("12:00", "01:00")),
-    new Date(),
-  );
-  await replaceWeekHours(
-    tx,
-    hoursCfg,
-    { kind: "department", id: deliDepartmentId },
-    weekOf((weekday) => (weekday === 0 ? CLOSED : opening("09:00", "18:00"))),
-    new Date(),
-  );
 
   for (const table of floor.tables) {
     const zoneId = zoneIds.get(table.zoneKey);

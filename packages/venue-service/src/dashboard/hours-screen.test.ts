@@ -54,7 +54,7 @@ const barWeek = week((d) =>
 );
 
 const subject = (
-  kind: "department" | "station",
+  kind: "station",
   id: string,
   name: string,
   extra: Partial<HoursModelSubject> = {},
@@ -87,17 +87,21 @@ function model(): HoursModel {
     dayCutover: "06:00",
     civilDate: "2026-10-07",
     clockReadable: true,
+    departments: [
+      { id: "restaurant", name: "Restaurant" },
+      { id: "deli", name: "Deli" },
+    ],
     subjects: [
-      subject("department", "restaurant", "Restaurant", { isDefault: true }),
-      subject("department", "deli", "Deli"),
-      subject("department", "terrace", "Terrace", { active: false }),
+      subject("station", "restaurant", "Restaurant"),
+      subject("station", "deli", "Deli"),
+      subject("station", "terrace", "Terrace", { active: false }),
       subject("station", "kitchen", "Kitchen", { isDefault: true }),
       subject("station", "bar", "Bar"),
     ],
     week: [
-      { subject: { kind: "department", id: "restaurant" }, days: restaurantWeek },
-      { subject: { kind: "department", id: "deli" }, days: week(() => UNSET) },
-      { subject: { kind: "department", id: "terrace" }, days: week(() => ALL_DAY) },
+      { subject: { kind: "station", id: "restaurant" }, days: restaurantWeek },
+      { subject: { kind: "station", id: "deli" }, days: week(() => UNSET) },
+      { subject: { kind: "station", id: "terrace" }, days: week(() => ALL_DAY) },
       { subject: { kind: "station", id: "kitchen" }, days: week(() => UNSET) },
       { subject: { kind: "station", id: "bar" }, days: barWeek },
     ],
@@ -110,12 +114,12 @@ function model(): HoursModel {
         specialDateId: "fiesta",
         cells: [
           {
-            subject: { kind: "department", id: "restaurant" },
+            subject: { kind: "station", id: "restaurant" },
             cell: { mode: "periods", periods: [P("f1", "12:00", "23:00")] },
           },
-          { subject: { kind: "department", id: "deli" }, cell: { mode: "closed", periods: [] } },
+          { subject: { kind: "station", id: "deli" }, cell: { mode: "closed", periods: [] } },
           {
-            subject: { kind: "department", id: "terrace" },
+            subject: { kind: "station", id: "terrace" },
             cell: { mode: "closed", periods: [] },
           },
         ],
@@ -292,16 +296,16 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-const restaurant = "department:restaurant";
-const deli = "department:deli";
+const restaurant = "station:restaurant";
+const deli = "station:deli";
 const kitchen = "station:kitchen";
 const bar = "station:bar";
 
 describe("Hours: the standard week", () => {
-  it("shows Monday to Sunday down the side and departments, then a separated block of stations", async () => {
+  it("shows Monday to Sunday down the side and a single block of stations", async () => {
     const { api } = server();
     const el = await mount(api);
-    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Hours");
+    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Station hours");
     expect(el.shadowRoot!.querySelectorAll("h1")).toHaveLength(1);
     const grid = el.shadowRoot!.querySelector('table[data-test="week-grid"]')!;
     expect([...grid.querySelectorAll("tbody th")].map(text)).toEqual([
@@ -325,14 +329,14 @@ describe("Hours: the standard week", () => {
     expect(headers.map((th) => th.hasAttribute("data-separator"))).toEqual([
       false,
       false,
-      true,
+      false,
       false,
     ]);
-    expect(cell(el, kitchen, 1).hasAttribute("data-separator")).toBe(true);
+    expect(cell(el, kitchen, 1).hasAttribute("data-separator")).toBe(false);
     expect(text(cell(el, restaurant, 1))).toBe("Closed");
     expect(text(cell(el, restaurant, 2))).toBe("12:00–16:00, 20:00–23:30");
     expect(text(cell(el, bar, 5))).toBe("18:00–02:00");
-    expect(text(cell(el, deli, 4))).toBe("No hours set");
+    expect(text(cell(el, deli, 4))).toBe("No hours restriction");
     expect(text(el.shadowRoot!.querySelector('[data-test="clock-note"]'))).toBe(
       "Times are the venue's local time (Europe/Madrid).",
     );
@@ -372,10 +376,10 @@ describe("Hours: the standard week", () => {
     state.model.week[4]!.days = week(() => UNSET);
     const el = await mount(api);
     expect(text(cell(el, bar, 1))).toBe("No hours restriction");
-    expect(text(cell(el, deli, 1))).toBe("No hours set");
+    expect(text(cell(el, deli, 1))).toBe("No hours restriction");
   });
 
-  it("names a sole department by its own name", async () => {
+  it("names each remaining station by its own name", async () => {
     const { api, state } = server();
     state.model.subjects = state.model.subjects.filter(
       (s) => s.id !== "deli" && s.id !== "terrace",
@@ -392,24 +396,24 @@ describe("Hours: the standard week", () => {
     ]);
   });
 
-  it("keeps inactive departments and stations out of view until asked, then shows them read-only", async () => {
+  it("keeps inactive stations out of view until asked, then shows them read-only", async () => {
     const { api } = server();
     const el = await mount(api);
-    expect(el.shadowRoot!.querySelector('th[data-subject="department:terrace"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('th[data-subject="station:terrace"]')).toBeNull();
     const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="showInactive"]')!;
     toggle.dispatchEvent(
       new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
     );
     await settle(el);
-    const header = el.shadowRoot!.querySelector('th[data-subject="department:terrace"]')!;
+    const header = el.shadowRoot!.querySelector('th[data-subject="station:terrace"]')!;
     expect(text(header)).toBe("Terrace (inactive)");
     expect(header.querySelector("wt-row-actions")).toBeNull();
-    expect(text(cell(el, "department:terrace", 1))).toBe("Open all day");
-    expect(cellButton(el, "department:terrace", 1)).toBeNull();
+    expect(text(cell(el, "station:terrace", 1))).toBe("Open all day");
+    expect(cellButton(el, "station:terrace", 1)).toBeNull();
     const order = [...el.shadowRoot!.querySelectorAll<HTMLElement>("thead th[data-subject]")].map(
       (th) => th.dataset.subject,
     );
-    expect(order).toEqual([restaurant, deli, "department:terrace", kitchen, bar]);
+    expect(order).toEqual([restaurant, deli, "station:terrace", kitchen, bar]);
   });
 
   it("edits one day in its own editor and saves the whole week, every other day as it was", async () => {
@@ -428,7 +432,7 @@ describe("Hours: the standard week", () => {
       [
         "/management-api/venue-service/hours/week",
         {
-          subject: { kind: "department", id: "restaurant" },
+          subject: { kind: "station", id: "restaurant" },
           days: restaurantWeek.map((day) =>
             day.weekday === 2
               ? {
@@ -628,7 +632,7 @@ describe("Hours: the standard week", () => {
     ],
     [
       { code: "hours.invalid", params: { field: "subject" } },
-      "A department or prep station these hours are for no longer exists. Close this editor and open it again.",
+      "A prep station these hours are for no longer exists. Close this editor and open it again.",
     ],
   ])(
     "says a refusal that names no field in the editor at its bottom: %j",
@@ -637,6 +641,7 @@ describe("Hours: the standard week", () => {
       const el = await mount(api);
       await click(el, cellButton(el, restaurant, 1));
       state.writes.push({ reject: refusal });
+      await choose(el, "monday.mode", "all_day");
       await click(el, saveButton(el));
       expect(await bottomMessage(el)).toBe(message);
       expect(field(el, "monday.mode")!.error).toBe("");
@@ -651,6 +656,7 @@ describe("Hours: the standard week", () => {
     state.writes.push({
       reject: { code: "hours.invalid", params: { field: "days.2.cell.periods.1.closesAt" } },
     });
+    await setField(el, "tuesday.periods.1.closesAt", "23:00");
     await click(el, saveButton(el));
     expect(field(el, "tuesday.periods.1.closesAt")!.error).toBe("Check this value.");
     expect(field(el, "tuesday.mode")!.error).toBe("");
@@ -661,6 +667,7 @@ describe("Hours: the standard week", () => {
     const el = await mount(api);
     await click(el, cellButton(el, bar, 2));
     state.reads.push({ reject: { code: "connection.failed" } });
+    await setField(el, "tuesday.periods.0.opensAt", "18:00");
     await click(el, saveButton(el));
     expect(modal(el)).toBeNull();
     expect(text(el.shadowRoot!.querySelector('[data-test="page-alert"]'))).toBe(
@@ -673,6 +680,7 @@ describe("Hours: the standard week", () => {
     const el = await mount(api);
     await click(el, cellButton(el, deli, 5));
     expect(modal(el)!.getAttribute("size")).toBe("standard");
+    await choose(el, "friday.mode", "all_day");
     await click(el, saveButton(el));
     expect(modal(el)!.getAttribute("size")).toBe("compact");
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
@@ -721,7 +729,7 @@ describe("Hours: the standard week", () => {
     await click(el, saveButton(el));
     const [[path, body]] = calls("PUT") as [[string, { subject: unknown; days: WeekDay[] }]];
     expect(path).toBe("/management-api/venue-service/hours/week");
-    expect(body.subject).toEqual({ kind: "department", id: "deli" });
+    expect(body.subject).toEqual({ kind: "station", id: "deli" });
     expect(body.days.map((day) => [day.weekday, day.cell.mode])).toEqual([
       [0, "closed"],
       [1, "closed"],
@@ -761,14 +769,14 @@ describe("Hours: the standard week", () => {
     await menuAction(el, header, "clear");
     expect(modal(el)!.getAttribute("heading")).toBe("Clear schedule: Restaurant");
     expect(text(el.shadowRoot!.querySelector('[data-test="confirm-text"]'))).toBe(
-      "Restaurant will show no opening hours.",
+      "Restaurant will have no hours restriction and take work at any time.",
     );
     expect(calls("PUT")).toEqual([]);
     await click(el, saveButton(el));
     expect(calls("PUT")).toEqual([
       [
         "/management-api/venue-service/hours/week",
-        { subject: { kind: "department", id: "restaurant" }, days: week(() => UNSET) },
+        { subject: { kind: "station", id: "restaurant" }, days: week(() => UNSET) },
       ],
     ]);
     await menuAction(el, el.shadowRoot!.querySelector(`th[data-subject="${bar}"]`)!, "clear");
@@ -783,6 +791,7 @@ describe("Hours: the standard week", () => {
     const el = await mount(api);
     await click(el, cellButton(el, restaurant, 2));
     state.writes.push({ reject: { code: "server.internal" } });
+    await setField(el, "tuesday.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe("The change could not be saved.");
 
@@ -816,6 +825,7 @@ describe("Hours: the standard week", () => {
       saved.week[0]!.days = week((d) => (d === 2 ? ALL_DAY : restaurantWeek[d]!.cell));
       state.model = saved;
       await click(el, cellButton(el, restaurant, 2));
+      await choose(el, "tuesday.mode", "all_day");
       await click(el, saveButton(el));
       await vi.waitFor(() => expect(text(cell(el, restaurant, 2))).toContain("Open all day"));
       slow.resolve(model());
@@ -837,6 +847,7 @@ describe("Hours: the standard week", () => {
     const late = deferred();
     state.writes.push(late.promise);
     await click(el, cellButton(el, restaurant, 2));
+    await setField(el, "tuesday.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
     expect(saveButton(el).disabled).toBe(true);
     expect(cancelButton(el).disabled).toBe(true);
@@ -858,6 +869,7 @@ describe("Hours: the standard week", () => {
     const late = deferred();
     state.writes.push(late.promise);
     await click(el, cellButton(el, restaurant, 2));
+    await setField(el, "tuesday.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
     await click(el, cancelButton(el));
     expect(modal(el)).not.toBeNull();
@@ -938,18 +950,18 @@ describe("Hours: the standard week", () => {
     setLocale("es");
     const { api } = server();
     const el = await mount(api);
-    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Horarios");
+    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Horario de estaciones");
     const grid = el.shadowRoot!.querySelector('table[data-test="week-grid"]')!;
     expect(text(grid.querySelector("tbody th"))).toBe("Lunes");
     expect(text(cell(el, restaurant, 1))).toBe("Cerrado");
     expect(text(cell(el, kitchen, 1))).toBe("Siempre abierta");
-    expect(text(cell(el, deli, 1))).toBe("Sin horario");
+    expect(text(cell(el, deli, 1))).toBe("Sin restricción horaria");
   });
 });
 
 describe("Hours: where a link opens it", () => {
   it.each([
-    ["/manage/hours/view/week/department/deli", deli],
+    ["/manage/hours/view/week/station/bar", bar],
     ["/manage/hours/station/bar", bar],
   ])("focuses the subject %s names", async (path, key) => {
     history.replaceState(null, "", path);
@@ -964,6 +976,7 @@ describe("Hours: where a link opens it", () => {
   });
 
   it.each([
+    "/manage/hours/department/deli",
     "/manage/hours/department/nobody",
     "/manage/hours/department/bar",
     "/manage/hours/station/terrace",
@@ -1011,8 +1024,8 @@ describe("Hours: special dates", () => {
     expect(table.columns.map(({ key, label, group }) => [key, label, group ?? null])).toEqual([
       ["date", "Date", null],
       ["name", "Name", null],
-      [restaurant, "Restaurant", "Departments"],
-      [deli, "Deli", "Departments"],
+      [restaurant, "Restaurant", "Prep stations"],
+      [deli, "Deli", "Prep stations"],
       [kitchen, "Kitchen", "Prep stations"],
       [bar, "Bar", "Prep stations"],
       ["actions", "Actions", null],
@@ -1056,8 +1069,8 @@ describe("Hours: special dates", () => {
       ),
     ];
     expect(editors.map((e) => [e.label, e.fieldPrefix])).toEqual([
-      ["Restaurant", "department.restaurant"],
-      ["Deli", "department.deli"],
+      ["Restaurant", "station.restaurant"],
+      ["Deli", "station.deli"],
       ["Bar", "station.bar"],
     ]);
     expect(text(el.shadowRoot!.querySelector('[data-test="default-station"]'))).toBe(
@@ -1072,11 +1085,11 @@ describe("Hours: special dates", () => {
     await setField(el, "date", "2026-10-19");
     expect(mode.placeholder).toBe("Standard hours (17:00–23:00)");
     expect(
-      (field(el, "department.restaurant.mode") as Field & { placeholder: string }).placeholder,
+      (field(el, "station.restaurant.mode") as Field & { placeholder: string }).placeholder,
     ).toBe("Standard hours (Closed)");
     await setField(el, "name", "Puente");
     await choose(el, "colour", "amber");
-    await choose(el, "department.restaurant.mode", "closed");
+    await choose(el, "station.restaurant.mode", "closed");
     await choose(el, "station.bar.mode", "periods");
     await setField(el, "station.bar.periods.0.opensAt", "18:00");
     await setField(el, "station.bar.periods.0.closesAt", "22:00");
@@ -1091,7 +1104,7 @@ describe("Hours: special dates", () => {
           closeWholeVenue: false,
           cells: [
             {
-              subject: { kind: "department", id: "restaurant" },
+              subject: { kind: "station", id: "restaurant" },
               cell: { mode: "closed", periods: [] },
             },
             {
@@ -1119,12 +1132,12 @@ describe("Hours: special dates", () => {
     const el = await mount(api);
     await selectTab(el, "dates");
     await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    await choose(el, "department.deli.mode", "periods");
+    await choose(el, "station.deli.mode", "periods");
     await click(el, saveButton(el));
     expect(field(el, "date")!.error).toBe("Enter a date.");
     expect(field(el, "name")!.error).toBe("Enter a name.");
     expect(field(el, "colour")!.error).toBe("Choose a colour.");
-    expect(field(el, "department.deli.periods.0.opensAt")!.error).toBe("Enter a time.");
+    expect(field(el, "station.deli.periods.0.opensAt")!.error).toBe("Enter a time.");
     expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
     expect(saveButton(el).disabled).toBe(true);
     await setField(el, "name", "   ");
@@ -1132,7 +1145,7 @@ describe("Hours: special dates", () => {
     expect(calls("POST")).toEqual([]);
   });
 
-  it("edits a date in place, keeping the cells of departments it does not show", async () => {
+  it("edits a date in place, keeping the cells of stations it does not show", async () => {
     const { api, calls } = server();
     const el = await mount(api);
     await selectTab(el, "dates");
@@ -1141,8 +1154,8 @@ describe("Hours: special dates", () => {
     expect(field(el, "date")!.value).toBe("2026-10-12");
     expect(field(el, "name")!.value).toBe("Fiesta Nacional");
     expect(field(el, "colour")!.value).toBe("red");
-    expect(field(el, "department.restaurant.periods.0.closesAt")!.value).toBe("23:00");
-    await choose(el, "department.deli.mode", "");
+    expect(field(el, "station.restaurant.periods.0.closesAt")!.value).toBe("23:00");
+    await choose(el, "station.deli.mode", "");
     await setField(el, "name", "Fiesta");
     await click(el, saveButton(el));
     expect(calls("PUT")).toEqual([
@@ -1155,11 +1168,11 @@ describe("Hours: special dates", () => {
           closeWholeVenue: false,
           cells: [
             {
-              subject: { kind: "department", id: "restaurant" },
+              subject: { kind: "station", id: "restaurant" },
               cell: { mode: "periods", periods: [P("f1", "12:00", "23:00")] },
             },
             {
-              subject: { kind: "department", id: "terrace" },
+              subject: { kind: "station", id: "terrace" },
               cell: { mode: "closed", periods: [] },
             },
           ],
@@ -1230,11 +1243,11 @@ describe("Hours: special dates", () => {
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     await choose(el, "station.bar.mode", "periods");
     await setField(el, "station.bar.periods.0.opensAt", "18:00");
-    await setField(el, "department.restaurant.periods.0.closesAt", "");
+    await setField(el, "station.restaurant.periods.0.closesAt", "");
     await switchClosure(el, true);
     expect(field(el, "station.bar.mode")!.value).toBe("");
     expect(field(el, "station.bar.periods.0.opensAt")).toBeNull();
-    expect(field(el, "department.restaurant.periods.0.closesAt")!.value).toBe("23:00");
+    expect(field(el, "station.restaurant.periods.0.closesAt")!.value).toBe("23:00");
     expect(saveButton(el).disabled).toBe(false);
     await click(el, saveButton(el));
     expect(calls("PUT")).toEqual([
@@ -1303,7 +1316,7 @@ describe("Hours: special dates", () => {
     await setField(el, "date", "2026-12-24");
     await setField(el, "name", "Christmas Eve");
     await choose(el, "colour", "green");
-    await choose(el, "department.restaurant.mode", "all_day");
+    await choose(el, "station.restaurant.mode", "all_day");
     await choose(el, "station.bar.mode", "closed");
     await switchClosure(el, true);
     await click(el, saveButton(el));
@@ -1317,7 +1330,7 @@ describe("Hours: special dates", () => {
           closeWholeVenue: true,
           cells: [
             {
-              subject: { kind: "department", id: "restaurant" },
+              subject: { kind: "station", id: "restaurant" },
               cell: { mode: "all_day", periods: [] },
             },
             { subject: { kind: "station", id: "bar" }, cell: { mode: "closed", periods: [] } },
@@ -1554,7 +1567,7 @@ describe("Hours: special dates", () => {
         code: "hours.invalid",
         params: { field: "cells.0.cell", date: "2026-10-11", subjectId: "restaurant" },
       },
-      "department.restaurant.mode",
+      "station.restaurant.mode",
       "These hours overlap the hours on Sun, 11 Oct 2026.",
     ],
     [
@@ -1564,7 +1577,7 @@ describe("Hours: special dates", () => {
     ],
     [
       { code: "hours.invalid", params: { field: "cells.0.cell.periods.0.closesAt" } },
-      "department.restaurant.periods.0.closesAt",
+      "station.restaurant.periods.0.closesAt",
       "The clock skips this time on this date.",
     ],
     [
@@ -1583,7 +1596,7 @@ describe("Hours: special dates", () => {
     ],
     [
       { code: "hours.invalid", params: { field: "cells.0.cell" } },
-      "department.restaurant.mode",
+      "station.restaurant.mode",
       "Check the highlighted hours: periods must not overlap, including past midnight.",
     ],
     [
@@ -1618,6 +1631,7 @@ describe("Hours: special dates", () => {
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     state.writes.push({ reject: refusal });
+    await setField(el, "colour", "blue");
     await click(el, saveButton(el));
     expect(field(el, name)!.error).toBe(message);
     expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
@@ -1655,7 +1669,7 @@ describe("Hours: special dates", () => {
     ],
     [
       { code: "hours.invalid", params: { field: "cells.1.subject" } },
-      "A department or prep station these hours are for no longer exists. Close this editor and open it again.",
+      "A prep station these hours are for no longer exists. Close this editor and open it again.",
     ],
   ])("says a refusal that names no shown field at the bottom: %j", async (refusal, message) => {
     const { api, state } = server();
@@ -1663,6 +1677,7 @@ describe("Hours: special dates", () => {
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     state.writes.push({ reject: refusal });
+    await setField(el, "colour", "blue");
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe(message);
     expect(
@@ -1815,7 +1830,7 @@ describe("Hours: special dates", () => {
       new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
     );
     await settle(el);
-    const terrace = listTable(el).columns.find((column) => column.key === "department:terrace");
+    const terrace = listTable(el).columns.find((column) => column.key === "station:terrace");
     expect(terrace?.label).toBe("Terrace (inactive)");
   });
 
@@ -2030,7 +2045,7 @@ describe("Hours: the calendar", () => {
       closeWholeVenue: false,
     };
     const deliClosed = {
-      subject: { kind: "department" as const, id: "deli" },
+      subject: { kind: "station" as const, id: "deli" },
       cell: { mode: "closed" as const, periods: [] as [] },
     };
     // The page's first read starts at yesterday; the calendar's month read holds the past date.
@@ -2042,6 +2057,7 @@ describe("Hours: the calendar", () => {
     await openDay(el, "2026-10-01");
     await panelAction(el, "edit");
     expect(field(el, "name")!.value).toBe("Past party");
+    await setField(el, "name", "Past party edited");
     await click(el, saveButton(el));
     await vi.waitFor(() => expect(modal(el)).toBeNull());
     expect(calls("PUT")).toEqual([
@@ -2049,7 +2065,7 @@ describe("Hours: the calendar", () => {
         "/management-api/venue-service/special-dates/past",
         {
           date: "2026-10-01",
-          name: "Past party",
+          name: "Past party edited",
           colour: "amber",
           closeWholeVenue: false,
           cells: [deliClosed],
@@ -2282,6 +2298,7 @@ describe("Hours: the calendar", () => {
     const { api, state } = server(liveData);
     const el = await mount(api);
     await click(el, cellButton(el, bar, 2));
+    await setField(el, "tuesday.periods.0.opensAt", "18:00");
     await click(el, saveButton(el));
     expect(modal(el)).toBeNull();
     state.reads.push({ reject: { code: "connection.failed" } });
@@ -2562,3 +2579,42 @@ describe("Hours: public holidays", () => {
 function requestWrites(calls: (method: string) => unknown[][]) {
   return [...calls("POST"), ...calls("PUT"), ...calls("DELETE")];
 }
+
+it("a retired department URL cannot override the station named alongside it", async () => {
+  history.replaceState(null, "", "/manage/hours/department/deli/station/bar");
+  const { api } = server();
+  const el = await mount(api);
+  const header = el.shadowRoot!.querySelector('th[data-subject="station:bar"]')!;
+  expect(el.shadowRoot!.activeElement).toBe(header);
+  expect(modal(el)).toBeNull();
+});
+
+it.each([
+  ["en", "Dining room's menu timetable uses a time the clock skips on this date."],
+  ["es", "El horario de cartas de Dining room usa una hora que el reloj se salta en esta fecha."],
+])(
+  "names a timetable refusal's department outside the station columns in %s",
+  async (locale, message) => {
+    setLocale(locale);
+    const { api, state } = server();
+    state.model.departments = [{ id: "dining-room", name: "Dining room" }];
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    state.writes.push({
+      reject: {
+        code: "menu_timetable.invalid",
+        params: {
+          field: "date",
+          date: "2026-10-20",
+          departmentId: "dining-room",
+          reason: "clock_skips",
+        },
+      },
+    });
+    await setField(el, "colour", "blue");
+    await click(el, saveButton(el));
+    expect(field(el, "date")!.error).toBe(message);
+    expect(saveButton(el).disabled).toBe(false);
+  },
+);

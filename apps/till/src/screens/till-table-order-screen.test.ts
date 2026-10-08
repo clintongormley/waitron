@@ -1,3 +1,4 @@
+import { WorkingOrderStore } from "../state/working-order.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
@@ -4480,5 +4481,35 @@ describe("till-table-order-screen — printing problems", () => {
     const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
     expect(notice(el)).not.toBeNull();
+  });
+});
+
+describe("closed department ordering", () => {
+  it("does not claim the department is closed while its offers are unread", async () => {
+    const draft = new WorkingOrderStore();
+    draft.addProduct(cafe, "2");
+    const { el } = await mount({ draftStore: draft, service: null, departmentName: "Restaurant" });
+    expect(el.shadowRoot!.querySelector("[data-service-closed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([["cafe", "2"]]);
+  });
+
+  it("keeps saved and draft lines while removing the menu and all add tiles", async () => {
+    const draft = new WorkingOrderStore();
+    draft.addProduct(cafe, "2");
+    const { el } = await mount({
+      draftStore: draft,
+      lines: [pendingLine],
+      service: { open: false, periodName: null },
+      departmentName: "Restaurant",
+    });
+    expect(el.shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim()).toBe(
+      "Restaurant is closed: no period is running",
+    );
+    expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+    expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([["cafe", "2"]]);
+    expect(el.shadowRoot!.querySelector("[data-review-open]")).not.toBeNull();
+    expect(el.lines.map((line) => line.id)).toEqual(["line-1"]);
   });
 });

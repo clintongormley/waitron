@@ -16,8 +16,8 @@ import {
 } from "@waitron/db";
 import { alias } from "drizzle-orm/sqlite-core";
 import { AppError } from "@waitron/shared";
-import { assertDepartment } from "./department-menus.js";
 import {
+  assertDepartment,
   getOrderServiceContext,
   retargetOrderServiceContext,
   type VenueScope,

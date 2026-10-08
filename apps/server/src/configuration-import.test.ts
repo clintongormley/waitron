@@ -248,7 +248,13 @@ describe("staged configuration import", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
     const withHours = [
-      ...modules,
+      {
+        ...modules[0]!,
+        configurationTransfer: {
+          kind: "tables",
+          tables: [{ name: "products" }, { name: "kitchen_stations" }],
+        },
+      } satisfies WaitronModule,
       {
         name: "venue-service",
         version: "0.0.0",
@@ -267,8 +273,8 @@ describe("staged configuration import", () => {
     );
     const cells = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
       id: `cell-${weekday}`,
-      department_id: "department",
-      station_id: null,
+      department_id: null,
+      station_id: "station",
       weekday,
       mode: "periods",
     }));
@@ -286,6 +292,7 @@ describe("staged configuration import", () => {
         ...tables,
         ...bundle.tables,
         departments: [{ id: "department" }],
+        kitchen_stations: [{ id: "station", is_default: false }],
         hours_week_cells: cells,
         hours_week_periods: periods,
       },

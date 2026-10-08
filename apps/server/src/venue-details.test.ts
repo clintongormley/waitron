@@ -5,7 +5,7 @@ import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { jobOrigin } from "@waitron/shared";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { VenueDetailPatch, VenueDetailWrite } from "./venue-detail-types.js";
 import { recordDailyClose, businessDayStart, computeDailyClose } from "@waitron/reporting";
@@ -45,6 +45,7 @@ beforeEach(async () => {
   );
 });
 const read = () => withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.cfg));
+afterEach(() => vi.useRealTimers());
 
 async function prepareSale(observeClock?: () => void) {
   const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
@@ -762,6 +763,8 @@ describe("venue details preserve committed history", () => {
     expect(suite.db.all(sql`select id from sales`)).toHaveLength(1);
   });
   it("commits a queued clock edit before the following real sale reads current location details", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-06T12:00:00Z"));
     const clocksReadAtIssuance: unknown[] = [];
     const sell = await prepareSale(() =>
       clocksReadAtIssuance.push(
