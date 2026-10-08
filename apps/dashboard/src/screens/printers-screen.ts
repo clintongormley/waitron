@@ -3881,7 +3881,7 @@ export class PrintersScreen extends LitElement {
                 .items=${[
                   { key: "queue", label: t("printers.jobs_title") },
                   { key: "printers", label: t("printers.list_title") },
-                  { key: "agents", label: t("printers.agents_title") },
+                  { key: "agents", label: t("printers.agents_tab") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
                   this.view = event.detail.value;

@@ -9698,9 +9698,7 @@ describe.each(["en", "es-ES"] as const)(
       },
     );
 
-    // Spanish at a 390 px window: "Agentes de impresión" (178.5 px) and "Añadir un agente" (149 px)
-    // are wider together than the 310 px screen, so that tab shows its start, cut at the action.
-    it("shows the selected tab whole at every window width except the Spanish Agents tab on a phone", async () => {
+    it("shows the selected tab whole beside its Add action at every window width", async () => {
       const cut: string[] = [];
       for (const [viewport, hostWidth] of windows) {
         for (const tab of ["agents", "printers"] as const) {
@@ -9711,7 +9709,7 @@ describe.each(["en", "es-ES"] as const)(
           cleanupWidgets();
         }
       }
-      expect(cut).toEqual(locale === "es-ES" ? ["390 px agents"] : []);
+      expect(cut).toEqual([]);
     });
 
     it("scrolls the tabs beside the action at a 310 px screen", async () => {

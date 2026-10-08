@@ -602,6 +602,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
+- **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts** in
+  A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen widths 310 and
+  390 px (tab 95.67 px; strip 106.42 and 186.42 px). The owner has not ruled on Modifiers;
+  reproduce with the Linux fonts before choosing a change. The Printers tab's shorter label
+  was the separate A434 ruling.
+
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
 - **Menu-root default fallback when content languages are unset (A420 review).**
@@ -2787,13 +2793,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
   category warns about exactly what will go, #1196).
-
-- **In Spanish at a 390 px window the Printers screen's selected "Agentes de impresión" tab is
-  cut beside "Añadir un agente"**: the tab (178.5 px) and the button (149 px) are wider together
-  than the 310 px screen, so the tab shows its start and stops where the button begins. On CI's
-  Linux fonts Modifiers' Spanish "Opciones" tab at a 310 px screen is cut the same way. Options
-  for the owner: accept it, a shorter Spanish tab label ("Agentes"), or an icon-only add button
-  at phone width. Left open by A424 (#1452), which put every tab action on the tabs' line.
 
 - **A freshly added printer's wizard opens with a blue Save** — the campaign runner's ruling of
   2026-10-08, for the owner to confirm. Left open by A331 batch 3b (#1415).
