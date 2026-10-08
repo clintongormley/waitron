@@ -289,10 +289,11 @@ interface RefreshRetry {
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
 // Icons shared primitives draw and their consuming app registers: wt-toast's `close`,
-// wt-combobox's, and wt-row-actions' `kebab`.
+// wt-combobox's, wt-row-actions' `kebab`, and the top bar's More menu's `hamburger`.
 registerIcons({
   close: CROSS_ICON_PATH,
   ...DROPDOWN_ICONS,
+  hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
 });

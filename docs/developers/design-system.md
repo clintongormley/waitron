@@ -1303,7 +1303,10 @@ registers it. `hamburger` and `kebab` look similar in the abstract ("reveal more
 different things at different scales: hamburger opens the whole app's navigation (used once);
 kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
-or the nav toggle looking like just another row's overflow menu.
+or the nav toggle looking like just another row's overflow menu. The till's top-bar More menu is a
+hamburger (`apps/till/src/widgets/tab-shell.ts`, registered in `apps/till/src/till-app.ts`): it
+holds the screen's own navigation and tools, not one item's actions. Kebab stays for one row's or
+one card's actions.
 
 ### Selection mode
 
@@ -3150,12 +3153,25 @@ The language controls display the names from `SUPPORTED_LOCALES` before their op
 app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
 header, after the logo; in the dashboard's banner, before the alerts bell and the account menu, and
 there on its own when nobody is signed in; in the till's tab-shell bar, before the operator's name
-— on a phone, before the More menu that holds the name, Log out and the bar's action buttons — as
-in the counter screen's own header (which it draws only when not embedded in the shell, and the
+while that is on the bar, and before the More menu when the bar has one, as in the counter screen's
+own header (which it draws only when not embedded in the shell, and the
 app always embeds it). A till screen with no top bar — the sign-in and join screens, and the
 kitchen display, whose shell draws no bar — holds it at the top right on its own, above the
-content. At 40rem wide or less the trigger shows the language's short code instead of its full
-name, by each app's own `::part` rule (`apps/setup/src/setup-app.ts`,
+content.
+
+The till's tab-shell bar is one row at every width. On a phone (40rem wide or less) it holds the
+tabs, the language chooser and a More menu with everything else. Wider, it measures itself when
+its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row,
+in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My schedule,
+Pass, Kitchen, Find a bill, Department transfers (the count and its button together), and last the
+operator's name with Log out. Inside More the items keep the bar's order. The tabs and the language
+chooser never leave the bar; once everything else has left, the tabs scroll sideways. Items come
+back when the screen grows wider, the bar's content other than the transfer count changes, or the
+language changes, but not while More is open. While the transfers are in More, its button carries the pending count. Cases:
+`apps/till/src/widgets/tab-shell.test.ts`.
+
+At 40rem wide or less the language chooser's trigger shows the language's short code instead of
+its full name, by each app's own `::part` rule (`apps/setup/src/setup-app.ts`,
 `apps/dashboard/src/dashboard-app.ts`, `apps/till/src/widgets/language-chooser-styles.ts`); its
 accessible name is the full name either way. Its menu opens downwards. The parent passes the
 page's language as `active` and decides what a pick means. A signed-in operator's choice uses the

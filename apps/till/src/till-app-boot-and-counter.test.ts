@@ -3233,6 +3233,66 @@ describe("department transfers across operator lifetimes", () => {
     }
   }
 
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  for (const locale of ["en-GB", "es-ES"]) {
+    for (const theme of ["light", "dark"]) {
+      for (const width of [1024, 1280]) {
+        it(`keeps the counter's top bar to one row, its More icon drawn: ${locale}, ${theme}, ${width}`, async () => {
+          const desk = transfers();
+          await page.viewport(width, 800);
+          try {
+            const { el, host } = await mountApp({
+              ...desk.calls,
+              listDefaultZoneOffers: vi
+                .fn()
+                .mockResolvedValue(
+                  zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter"),
+                ),
+            });
+            host.setAttribute("data-theme", theme);
+            await signIn(el);
+            setLocale(locale);
+            await flush(el);
+            await vi.waitFor(() => expect(pendingCount(el)).not.toBeNull());
+            await frame();
+            await frame();
+            const root = shell(el)!.shadowRoot!;
+            const header = root.querySelector("header")!;
+            const box = header.getBoundingClientRect();
+            const parts = [
+              ...header.querySelectorAll<HTMLElement>(
+                ":scope > .brand, :scope > .tabs, :scope > .session > *",
+              ),
+            ]
+              .map((part) => part.getBoundingClientRect())
+              .filter((r) => r.width > 0 && r.height > 0);
+            const centres = parts.map((r) => r.top + r.height / 2);
+            expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(2);
+            for (const r of parts) {
+              expect(r.top).toBeGreaterThanOrEqual(box.top);
+              expect(r.bottom).toBeLessThanOrEqual(box.bottom);
+              expect(r.right).toBeLessThanOrEqual(box.right);
+            }
+            expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+            const menu = root.querySelector<HTMLElement>('[data-test="more-menu"]')!;
+            expect(menu.getAttribute("icon")).toBe("hamburger");
+            const path = menu
+              .shadowRoot!.querySelector("wt-icon")!
+              .shadowRoot!.querySelector("svg path");
+            expect(path?.getAttribute("d")).toBe(
+              "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
+            );
+            expect(path!.getBoundingClientRect().width).toBeGreaterThan(0);
+          } finally {
+            setLocale("es-ES");
+            await page.viewport(1280, 768);
+          }
+        });
+      }
+    }
+  }
+
   it("does not publish a pending count on a profile that is not the receiving desk", async () => {
     const desk = transfers();
     desk.calls.listIncomingDepartmentTransfers.mockRejectedValue({
