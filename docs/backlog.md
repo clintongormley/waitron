@@ -688,6 +688,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   states.
   [Detail](backlog/catalogue.md#a-menus-structure-tab-is-one-tree-w88-1209-not-checked)
 
+- **When the venue needs a reset, the menu editor shows the "reset the venue" sentence inside the
+  brackets beside the menu's name**, where the live version normally sits, in muted text. A review
+  suggested a line of its own; kept in the brackets by decision. Left open by A335 (#1457).
+
+- **A menu never published gets no star on its Preview tab**: only a menu whose working copy differs
+  from a live version shows "Preview*", as the Menus list's Changes column already does. Whether a
+  never-published menu should show one too is the owner's call. Left open by A335 (#1457).
+
 - **Not checked: the Price overrides tab on the running dev stack** — a real save and the re-read
   after it, and Undo against the real server (the look in Chromium used mounted widgets only). Left
   open by W89 (#1239).
