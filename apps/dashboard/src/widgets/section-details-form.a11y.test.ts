@@ -45,6 +45,14 @@ describe.each(["light", "dark"] as const)("section details (%s)", (theme) => {
         await el.updateComplete;
       }
       if (state === "invalid") {
+        el.shadowRoot!.querySelector("[name=names-en]")!.dispatchEvent(
+          new CustomEvent("wt-change", {
+            detail: { value: "Mains" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await el.updateComplete;
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
         await el.updateComplete;
       }

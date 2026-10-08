@@ -102,6 +102,20 @@ it("goes quiet again when the stored name is typed back, spaces around it includ
   await expectQuiet(el);
 });
 
+it.each([
+  ["a stored section", stored],
+  ["a create with nothing typed", null],
+])("an untouched press on %s sends nothing and shows no error", async (_label, value) => {
+  const el = await mount(value);
+  const submitted = vi.fn();
+  el.addEventListener("wt-submit", submitted);
+  save(el).click();
+  await el.updateComplete;
+  expect(submitted).not.toHaveBeenCalled();
+  expect(field(el, "internalName").error).toBeFalsy();
+  await expectQuiet(el);
+});
+
 it("keeps a changed form with an empty internal name primary and disabled after a press", async () => {
   const el = await mount();
   const submitted = vi.fn();

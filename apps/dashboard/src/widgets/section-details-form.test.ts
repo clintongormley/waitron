@@ -16,6 +16,10 @@ it("marks the required internal name and refuses a blank submission", async () =
     'wt-input[name="internalName"]',
   );
   expect(field?.required).toBe(true);
+  el.shadowRoot!.querySelector('[name="names-en"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Drinks" }, bubbles: true, composed: true }),
+  );
+  await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
   await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(field!.error).not.toBe("");
@@ -232,6 +236,9 @@ it("clears translation refusals on retry without discarding other language value
   expect(field(el, "names-en").invalid).toBe(false);
   expect(field(el, "names-en").value).toBe("Something to drink");
   expect(bottomOf(el)).toBe(t("form.fix_fields"));
+  changeField(el, "internalName", "Drinks bar");
+  await el.updateComplete;
+  expect(field(el, "names-es").invalid).toBe(true);
   saveButton(el).click();
   await el.updateComplete;
   expect(field(el, "names-es").error).toBe("");
@@ -246,6 +253,8 @@ it("prevents duplicate save and dismissal while a save is in flight", async () =
   const idle = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
   modalOf(el).dispatchEvent(idle);
   expect(idle.defaultPrevented).toBe(false);
+  changeField(el, "internalName", "Drinks bar");
+  await el.updateComplete;
   saveButton(el).click();
   await el.updateComplete;
   expect(field(el, "internalName").disabled).toBe(true);
@@ -315,6 +324,8 @@ it("draws the Custom square empty for no colour and saves none", async () => {
   expect(border).not.toEqual(beside);
   const submitted = vi.fn();
   el.addEventListener("wt-submit", submitted);
+  changeField(el, "internalName", "Drinks bar");
+  await el.updateComplete;
   saveButton(el).click();
   expect((submitted.mock.calls[0]![0] as CustomEvent).detail.color).toBeNull();
 });

@@ -189,6 +189,7 @@ export class SectionDetailsForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.#dismiss(
       ...Object.keys(this.fieldErrors),

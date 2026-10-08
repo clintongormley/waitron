@@ -311,6 +311,16 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     q(el, '[data-test="add-menu"]').click();
     await el.updateComplete;
     q(el, '[data-test="menu-form"]')
+      .shadowRoot!.querySelector('wt-input[name="names-es"]')!
+      .dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Brunch" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    await el.updateComplete;
+    q(el, '[data-test="menu-form"]')
       .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
       .click();
     await el.updateComplete;
@@ -372,6 +382,16 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       await editDrinks(el);
       await rowAction(el, "m-drinks", "new-section");
       if (refused) {
+        q(el, '[data-test="section-form"]')
+          .shadowRoot!.querySelector('wt-input[name="names-es"]')!
+          .dispatchEvent(
+            new CustomEvent("wt-change", {
+              detail: { value: "Sidras" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        await el.updateComplete;
         q(el, '[data-test="section-form"]')
           .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
           .click();
