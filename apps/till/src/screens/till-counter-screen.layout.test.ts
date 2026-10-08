@@ -455,3 +455,27 @@ it("keeps the cash-at-till explanation across the payment card", async () => {
   const note = inShadow(el, ".cash-at-till").getBoundingClientRect();
   expect(note.width).toBe(inShadow(el, ".idle-actions").getBoundingClientRect().width);
 });
+
+it.each([390, 1280])("shows the full Spanish service-area label at %i px", async (width) => {
+  setLocale("es-ES");
+  await page.viewport(width, 844);
+  const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
+    counterTab,
+    store: new WorkingOrderStore(),
+    embedded: true,
+    serviceZones: [
+      { id: "bar", name: "Barra", departmentId: "d", departmentName: "Bar", serviceMode: "prepay" },
+    ],
+    selectedServiceZoneId: "bar",
+    products: [],
+    menus: [],
+  });
+  const combo = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    'wt-combobox[name="service-zone"]',
+  )!;
+  await combo.updateComplete;
+  const label = combo.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+  expect(label.textContent).toBe("Zona de servicio");
+  expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+  expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+});

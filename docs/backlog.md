@@ -1600,6 +1600,8 @@ building, not changed:**
   `apps/till/src/widgets/product-name.ts`) names itself in English only, so a Spanish till drawing
   such a product shows the unit's id — seen only with test products; whether the server ever sends
   a product without a unit was not checked;
+  **2026-10-08:** A385 supplies Spanish legacy-unit text and removes the id fallback;
+  helper and rendered-tile cases cover the legacy product shape.
 - **for the owner:** the two dropdown explanations on venue service's Kitchen panel in Venue
   settings ("Applies to new kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`,
   which a field that always holds a value never shows, so only screen readers read them while the
@@ -2421,8 +2423,11 @@ independent real-database cash-sale check pass in `apps/server/src/time-health.t
 installed review candidate). The isolated alert-source tests do not check its boot wiring.
 Add a boot-level check that feeds an authority sample and reads the resulting alert; this
 review recorded the gap without changing the filing observer or widening A364.
-A364's synthetic shell captures show the pricing-unit UUID below Café in Spanish, while English
-shows `/ea`. This is an uninvestigated fixture or translation issue; no live-stack check was made.
+**A385 DONE:** the till's legacy unit fallback includes Spanish text. A missing enabled
+abbreviation falls back to the unit's enabled name; with no enabled text the label is
+empty, never an id. Chromium helper and rendered-tile cases cover Spanish, a missing requested
+translation and a legacy product without a unit. The unchanged live demo already supplied
+Spanish unit labels; the UUID was reproduced with the legacy fallback and incomplete unit maps.
 
 **Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not
 checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-shots/`.
@@ -2439,9 +2444,26 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
 - **Phone till: the top bar keeps too much space for its buttons (A378, queued).**
   A310 measured about 440 of 844 px before A364 removed the clock notices. Re-measure the
   remaining controls for A378; the earlier capture was described as including a clock notice.
-- **Spanish till: the tab buttons still read "Counter" and "Floor"**, the service-area label is cut
-  to "Zona de servi…", and some demo dish names ("Spanish omelette", "House bread") stay English.
+- **A379 DONE: standard till tab titles follow the UI language.** Standard key/title pairs
+  Counter, Floor and Order read Mostrador, Sala and Pedido in Spanish; renamed and custom
+  tabs keep their stored titles. The service-area selector reserves room for its full label,
+  including a short selected zone at 390 and 1280 px. An English-seeded demo keeps its
+  English plain staff names when you switch the UI language. A real-database Spanish-seed
+  check reads every dish's Spanish customer and staff names, every stored unit's Spanish
+  labels and an empty Spanish translation-gap report. To practise with Spanish staff names,
+  seed the demo with `WAITRON_SEED_LOCALE=es-ES`; switching UI language does not rewrite names.
 - **Dashboard at 1280 px: the overview's top-row cards have uneven heights.**
+- **English-only till entry pages, OPEN, unqueued (A379 source audit).** The development
+  device chooser (`apps/till/src/screens/till-device-chooser.ts`) contains fixed English
+  headings and actions, and the certificate trust instructions (`apps/till/src/main.ts`)
+  have fixed English prose. Reproduce in Spanish before deciding their translation scope;
+  this branch changes the standard selling tabs only.
+- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).**
+  A unit with no enabled text has an empty label; the tile and basket-refresh price templates
+  still append a slash. Render those empty-label cases before choosing their display.
+  Legacy unit maps cover English and Spanish only. The default Kitchen title remains
+  English when the tab shell is shown in a synthetic Spanish probe; check whether any
+  real kitchen session shows that bar before widening the standard-tab translation.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -4063,7 +4085,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
     C130's entry above: 560 px in English and 602 px in Spanish with only Find a bill offered);
   - on the till's floor map at 390 px wide, tables overlap one another;
   - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
-    canvases, see A182 below);
+    canvases, see A182 below; fixed by A379 on 2026-10-08);
   - the till's browser console shows Lit's "scheduled an update … after an update completed"
     warning.
 
@@ -4097,6 +4119,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   stored `title` (`apps/till/src/widgets/tab-shell.ts`), and the defaults store English titles,
   which is why "Counter", "Floor" and "Order" stay in English in Spanish (one of the screen faults
   in the entry above).
+  **2026-10-08:** A379 translates the standard key/title pairs at render time while preserving
+  renamed and custom titles.
 
   The work, each part its own brainstorm, spec and plan:
   1. **Design the screens for each kind of device** — the till at the counter, the handheld (phone

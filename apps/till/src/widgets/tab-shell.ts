@@ -152,6 +152,20 @@ export class TillTabShell extends LitElement {
       : nothing;
   }
 
+  #tabTitle(tab: TabDef): string {
+    // Only the standard key/title pairs are UI labels; a renamed tab remains the venue's text.
+    switch (`${tab.key}:${tab.title}`) {
+      case "counter:Counter":
+        return t("tab.counter");
+      case "floor:Floor":
+        return t("tab.floor");
+      case "order:Order":
+        return t("tab.order");
+      default:
+        return tab.title;
+    }
+  }
+
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
     // Mirrors `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body rendered.
@@ -178,7 +192,7 @@ export class TillTabShell extends LitElement {
                           aria-selected=${tab.key === activeKey ? "true" : "false"}
                           @click=${() => this.#emit("tab-select", { key: tab.key })}
                         >
-                          ${tab.title}
+                          ${this.#tabTitle(tab)}
                         </button>
                       `,
                     )}

@@ -2524,3 +2524,22 @@ describe("till-menu-browser", () => {
     });
   });
 });
+
+describe("Spanish pricing-unit labels", () => {
+  it.each([
+    { unit: EACH, label: "ud" },
+    { unit: { ...EACH, name: { en: "Each" }, abbreviation: { en: "ea" } }, label: "ea" },
+    { unit: undefined, label: "ud" },
+  ])("shows /$label on the dish tile without exposing a unit id", async ({ unit, label }) => {
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "en", languages: ["es", "en"] });
+    const dish = product("cafe", "Café", { unit, pricingUnit: "each" });
+    const { el } = await mount({
+      menu: lunch({ structure: { members: [member("cafe")] } }),
+      products: [dish],
+    });
+    const price = entry(el, "structure", "Café").querySelector(".price")!.textContent;
+    expect(price).toBe(`1,50\u00a0€/${label}`);
+    expect(price).not.toMatch(/[0-9a-f]{8}-[0-9a-f-]{27}/i);
+  });
+});
