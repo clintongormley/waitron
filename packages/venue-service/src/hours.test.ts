@@ -24,6 +24,7 @@ import {
   readHoursModel,
   readSpecialDate,
   readStationSchedules,
+  stationsRestrictedFrom,
   readWeekHours,
   renameSpecialDate,
   replaceWeekHours,
@@ -2991,5 +2992,158 @@ describe("Hours on a real Spanish public holiday", () => {
       state: { open: false, isDefault: false },
     });
     expect((await dateSnapshot(f, f.bar, ORDINARY)).specialCell).toBeUndefined();
+  });
+});
+
+describe("named-day station occurrences", () => {
+  async function namedDay(f: Fixture, overrides: Partial<typeof specialDates.$inferInsert> = {}) {
+    return withTransaction(db, async (tx) => {
+      const [row] = await tx
+        .insert(specialDates)
+        .values({
+          locationId: f.cfg.locationId,
+          date: "2026-12-25",
+          name: "Navidad",
+          colour: "red",
+          repeatOn: "12-25",
+          closeWholeVenue: true,
+          ...overrides,
+        })
+        .returning();
+      return row!;
+    });
+  }
+
+  it("closes every station on each yearly occurrence, without closing adjacent dates or earlier years", async () => {
+    const f = await fixture();
+    await namedDay(f);
+    await withTransaction(db, async (tx) => {
+      const ids = [f.bar.id, f.restaurant.id, f.kitchen.id];
+      const schedules = await readStationSchedules(tx, f.cfg, ids, {
+        from: "2027-12-20",
+        to: "2027-12-31",
+      });
+      for (const id of ids) expect(schedules.get(id)!.dates).toEqual(new Map([["2027-12-25", []]]));
+      const earlier = await readStationSchedules(tx, f.cfg, ids, {
+        from: "2025-12-20",
+        to: "2025-12-31",
+      });
+      for (const id of ids) expect(earlier.get(id)!.dates).toEqual(new Map());
+      const untimed = await readStationSchedules(tx, f.cfg, ids, null);
+      for (const id of ids) expect(untimed.get(id)!.dates).toEqual(new Map());
+    });
+  });
+
+  it("applies a repeating leap-day closure only in leap years and only at its venue", async () => {
+    const f = await fixture();
+    await namedDay(f, { date: "2024-02-29", repeatOn: "02-29" });
+    const [otherStation] = await withTransaction(db, (tx) =>
+      tx
+        .select({ locationId: kitchenStations.locationId })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, f.otherStation.id)),
+    );
+    await namedDay(f, { locationId: otherStation!.locationId, date: "2027-12-25" });
+    await withTransaction(db, async (tx) => {
+      expect(
+        (
+          await readStationSchedules(tx, f.cfg, [f.bar.id], {
+            from: "2027-02-28",
+            to: "2027-03-01",
+          })
+        ).get(f.bar.id)!.dates,
+      ).toEqual(new Map());
+      expect(
+        (
+          await readStationSchedules(tx, f.cfg, [f.bar.id], {
+            from: "2028-02-28",
+            to: "2028-03-01",
+          })
+        ).get(f.bar.id)!.dates,
+      ).toEqual(new Map([["2028-02-29", []]]));
+      expect(
+        (
+          await readStationSchedules(tx, f.cfg, [f.bar.id], {
+            from: "2027-12-25",
+            to: "2027-12-25",
+          })
+        ).get(f.bar.id)!.dates,
+      ).toEqual(new Map());
+    });
+  });
+
+  it("reports a future recurring venue closure even when its first date is before the requested range", async () => {
+    const f = await fixture();
+    await namedDay(f);
+    const result = await withTransaction(db, (tx) =>
+      stationsRestrictedFrom(tx, f.cfg, "2027-01-01"),
+    );
+    expect(result).toEqual({ wholeVenue: true, stationIds: new Set() });
+  });
+
+  it("does not report a repeating closure when no occurrence remains in the date range", async () => {
+    const f = await fixture();
+    await namedDay(f, { date: "2024-02-29", repeatOn: "02-29" });
+    expect(
+      await withTransaction(db, (tx) => stationsRestrictedFrom(tx, f.cfg, "9999-01-01")),
+    ).toEqual({ wholeVenue: false, stationIds: new Set() });
+  });
+
+  it("does not report an expired one-off closure as a future restriction", async () => {
+    const f = await fixture();
+    await namedDay(f, { repeatOn: null });
+    expect(
+      await withTransaction(db, (tx) => stationsRestrictedFrom(tx, f.cfg, "2027-01-01")),
+    ).toEqual({ wholeVenue: false, stationIds: new Set() });
+    expect(await withTransaction(db, (tx) => stationsRestrictedFrom(tx, f.cfg, null))).toEqual({
+      wholeVenue: true,
+      stationIds: new Set(),
+    });
+  });
+
+  it("lets dated late station hours reach a repeating closed neighbour", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 6: periods(period("01:00", "05:00")) }));
+    await namedDay(f);
+    const saved = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2027-12-24",
+        cells: [{ subject: f.bar, cell: { mode: "periods", periods: [period("22:00", "02:00")] } }],
+      }),
+    );
+    expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saved.id))).cells).toEqual(
+      [
+        {
+          subject: f.bar,
+          cell: {
+            mode: "periods",
+            periods: [expect.objectContaining({ opensAt: "22:00", closesAt: "02:00" })],
+          },
+        },
+      ],
+    );
+  });
+
+  it("still refuses the neighbour clash before a repeating closure's first year", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 6: periods(period("01:00", "05:00")) }));
+    await namedDay(f, { date: "2028-12-25" });
+    await expect(
+      saveDate(
+        f,
+        null,
+        specialInput({
+          date: "2027-12-24",
+          cells: [
+            { subject: f.bar, cell: { mode: "periods", periods: [period("22:00", "02:00")] } },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "cells.0.cell", date: "2027-12-25", subjectId: f.bar.id },
+    });
   });
 });

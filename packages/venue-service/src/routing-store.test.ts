@@ -63,6 +63,7 @@ import { closeStationForToday, setStationFallback, setStationToday } from "./sta
 import { seedStationWeek } from "./testing/station-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { saveSpecialDate } from "./hours.js";
+import { specialDates } from "./schema/hours.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
 const suite = useVenueDb({
@@ -2842,5 +2843,46 @@ describe("hours from special dates", () => {
       await closedOn(tx, f.cfg, "2026-10-10", more[1]!.id);
       expect(await reads()).toBe(few);
       expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({ open: false });
+    }));
+});
+
+describe("routing on repeating named days", () => {
+  it("routes a dish away from a closed station every Christmas, retaining the default station", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid", dayCutover: "06:00:00" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setCategoryCell(tx, f.cfg, f.cocktails, station(f.terraceBar));
+      await setStationFallback(tx, f.cfg, f.terraceBar, f.bar);
+      await tx.insert(specialDates).values({
+        locationId: f.cfg.locationId,
+        date: "2026-12-25",
+        name: "Navidad",
+        colour: "red",
+        repeatOn: "12-25",
+        closeWholeVenue: true,
+      });
+      for (const instant of ["2026-12-25T12:00:00Z", "2027-12-25T12:00:00Z"]) {
+        const resolver = await routingAt(tx, f.cfg, new Date(instant));
+        expect(await resolver.makers(null, [f.mojito])).toEqual(
+          new Map([[f.mojito, { kind: "made", route: station(f.bar) }]]),
+        );
+        expect((await resolver.stations()).get(f.terraceBar)).toMatchObject({ open: false });
+        expect((await resolver.stations()).get(f.bar)).toMatchObject({
+          open: true,
+          isDefault: true,
+        });
+      }
+      for (const instant of ["2025-12-25T12:00:00Z", "2027-12-26T12:00:00Z"]) {
+        expect(
+          await (await routingAt(tx, f.cfg, new Date(instant))).makers(null, [f.mojito]),
+        ).toEqual(new Map([[f.mojito, { kind: "made", route: station(f.terraceBar) }]]));
+      }
+      const model = await routingModel(tx, f.cfg, new Date("2027-01-01T12:00:00Z"));
+      expect(model.stationTimes.find((row) => row.stationId === f.terraceBar)).toMatchObject({
+        specialDateRestricts: true,
+      });
     }));
 });

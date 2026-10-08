@@ -44,7 +44,8 @@ import {
   specialDateHoursPeriods,
   specialDates,
 } from "./schema/hours.js";
-import { namedDaysOn } from "./named-days.js";
+import { namedDaysBetween, namedDaysOn } from "./named-days.js";
+import { nextOccurrence } from "./named-day-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import "./errors.js";
 
@@ -262,28 +263,29 @@ export async function replaceWeekHours(
     );
 }
 
-/** The special dates, each with its stored cells. */
 async function readSpecialDays(
   tx: Transaction,
   cfg: VenueScope,
-  where: SQL | undefined,
+  where: SQL | LocalDate[] | undefined,
   subject: HoursSubject | null,
   exceptId: string | null,
 ): Promise<{ date: LocalDate; closeWholeVenue: boolean; cells: DateHoursCell[] }[]> {
-  const dates = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      closeWholeVenue: specialDates.closeWholeVenue,
-    })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        where,
-        exceptId === null ? undefined : ne(specialDates.id, exceptId),
-      ),
-    );
+  const dates = Array.isArray(where)
+    ? [...(await namedDaysOn(tx, cfg, where)).values()].filter((day) => day.id !== exceptId)
+    : await tx
+        .select({
+          id: specialDates.id,
+          date: specialDates.date,
+          closeWholeVenue: specialDates.closeWholeVenue,
+        })
+        .from(specialDates)
+        .where(
+          and(
+            eq(specialDates.locationId, cfg.locationId),
+            where,
+            exceptId === null ? undefined : ne(specialDates.id, exceptId),
+          ),
+        );
   if (dates.length === 0) return [];
   const cells = await tx
     .select()
@@ -315,11 +317,10 @@ async function readSpecialDays(
   }));
 }
 
-/** The special dates as the clash check sees them. */
 async function readDateStates(
   tx: Transaction,
   cfg: VenueScope,
-  where: SQL | undefined,
+  where: SQL | LocalDate[] | undefined,
   subject: HoursSubject | null,
   exceptId: string | null,
 ): Promise<Map<LocalDate, DateState>> {
@@ -497,13 +498,7 @@ async function assertDatesBesideNeighbours(
 ): Promise<void> {
   const now = await today(tx, cfg, at);
   const neighbours = touched.flatMap((date) => [addDays(date, -1), addDays(date, 1)]);
-  const dates = await readDateStates(
-    tx,
-    cfg,
-    inArray(specialDates.date, neighbours),
-    null,
-    exceptId,
-  );
+  const dates = await readDateStates(tx, cfg, neighbours, null, exceptId);
   for (const date of touched) dates.delete(date);
   for (const [date, state] of proposed) dates.set(date, state);
   const subjects = await scheduledSubjects(tx, cfg);
@@ -1173,20 +1168,7 @@ export async function readStationSchedules(
       schedule.hours.push({ weekday: cell.weekday, ...period });
   }
   if (dates === null) return schedules;
-  const specials = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      closeWholeVenue: specialDates.closeWholeVenue,
-    })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        gte(specialDates.date, dates.from),
-        lte(specialDates.date, dates.to),
-      ),
-    );
+  const specials = await namedDaysBetween(tx, cfg, dates.from, dates.to);
   if (specials.length === 0) return schedules;
   const dateCells = await tx
     .select()
@@ -1230,6 +1212,8 @@ export async function stationsRestrictedFrom(
 ): Promise<{ wholeVenue: boolean; stationIds: Set<string> }> {
   const rows = await tx
     .select({
+      date: specialDates.date,
+      repeatOn: specialDates.repeatOn,
       closeWholeVenue: specialDates.closeWholeVenue,
       stationId: specialDateHours.stationId,
     })
@@ -1245,12 +1229,21 @@ export async function stationsRestrictedFrom(
     .where(
       and(
         eq(specialDates.locationId, cfg.locationId),
-        from === null ? undefined : gte(specialDates.date, from),
+        from === null
+          ? undefined
+          : or(gte(specialDates.date, from), isNotNull(specialDates.repeatOn)),
         or(eq(specialDates.closeWholeVenue, true), isNotNull(specialDateHours.id)),
       ),
     );
+  const future =
+    from === null
+      ? rows
+      : rows.filter(
+          (row) =>
+            nextOccurrence({ date: row.date, repeats: row.repeatOn !== null }, from) !== null,
+        );
   return {
-    wholeVenue: rows.some((row) => row.closeWholeVenue),
-    stationIds: new Set(rows.flatMap((row) => (row.stationId === null ? [] : [row.stationId]))),
+    wholeVenue: future.some((row) => row.closeWholeVenue),
+    stationIds: new Set(future.flatMap((row) => (row.stationId === null ? [] : [row.stationId]))),
   };
 }
