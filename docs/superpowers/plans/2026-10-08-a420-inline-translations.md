@@ -207,8 +207,8 @@ Retain catalogue report/API assertions unchanged. In `content-languages-screen.t
 
 - [x] Check clean tree, spec coverage and consumers/prose. Execute finish-branch inline: fetch/rebase feature branch for initial review, capture literal base SHA, build an independent disposable candidate containing the complete tree, install locked dependencies.
 - [x] Run one completed Claude whole-branch review through `~/workspace/tools/claude-seat.sh review-run <candidate> <brief> <report>`. Include deletion receipts/unverified claims; require completed findings and experiment results. Fix findings with red/green and `git commit -s`. Do not repeat review solely for later rebases.
-- [ ] Push through the normal hook once; never bypass it or duplicate whole-workspace package tests locally. Require current-head CI, expected package selections/coverage, resolved conversations and matching SHA. Handle origin/main advances here only: inspect overlap/conflicts; focused checks, hook/CI after required rebases.
-- [ ] Report ready PR/receipts. **Landing stays locked:** this plan authorizes no merge, main-checkout work or branch cleanup. Hand off to locked landing. End the firing with a clean tree and no owned processes.
+- [x] Push through the normal hook once; never bypass it or duplicate whole-workspace package tests locally. Require current-head CI, expected package selections/coverage, resolved conversations and matching SHA. Handle origin/main advances here only: inspect overlap/conflicts; focused checks, hook/CI after required rebases.
+- [x] Report ready PR/receipts. **Landing stays locked:** this plan authorizes no merge, main-checkout work or branch cleanup. Hand off to locked landing. End the firing with a clean tree and no owned processes.
 
 ## Plan self-check
 
@@ -268,3 +268,18 @@ links and fields for a newly added language are exercised. Five installed contro
 assertions; restored candidate dialog126 and shell4 pass. The misplaced error-code comment
 was deleted. The unset menu-root fallback remains a separate backlog entry. Normal push
 and current-head CI still own the final gate; landing uses the runner's authorised lock.
+
+Task 8 landing checkpoint, 2026-10-08: PR [#1456](https://github.com/clintongormley/waitron/pull/1456)
+landed by squash as `145eac9c34cfcab7e807ecebcdef0a0ef1ab43b7`. The normal push hook passed;
+CI run `37828296772` completed successfully on candidate
+`6c864e4b36350b29a7755a4d6232edad07e55719`. Its changed scope selected catalogue, dashboard
+and server, with their consumers; catalogue, dashboard and merged server coverage passed.
+The licence and sign-off run also passed, and there were no review conversations.
+
+The owner and runner separately authorised landing. The runner's shared lock was held
+through the merge, main update, dependency install and feature worktree/branch cleanup.
+Main had advanced only in purchasing code and the backlog; the only overlap was the backlog,
+so the documented BEHIND exception applied. The merge's own CI run `37829876544` exists
+for the exact squash SHA; it was still queued at this checkpoint. The completed A420 backlog
+entry was removed in the feature change. The unset menu-root fallback remains a separate
+open decision; the media-name and section-address follow-ups remain open too.
