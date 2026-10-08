@@ -762,7 +762,8 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 
 The `smoke` figure was measured while the remote layer cache was still in place; its limit is
-checked again without it (final-state run: TBD). The workflows' other jobs already carried their own
+checked again without it: the whole `smoke` job took 2.4 and 2.3 minutes in image-nightly runs
+`37757851422` and `37758191291` (commit `642537ead`). The workflows' other jobs already carried their own
 limits and are not in the table. A job that calls a reusable workflow (ci.yml's `image`,
 image-nightly.yml's `smoke`) cannot carry `timeout-minutes` — it is not among the keywords github/docs
 `reusing-workflow-configurations.md` lists for "the job containing the call" — so the called
@@ -796,14 +797,17 @@ them before adding the export.
 Since A399, neither `image-smoke.yml`'s builds nor `publish`'s (ci.yml) import or export a
 `type=gha` layer cache.
 
-The import hit only the layers before `COPY . .` in `deploy/Dockerfile` — pnpm's global install,
-`WORKDIR`, and on the runtime side `setcap` and `useradd`, about 2 s of work. Every layer after
-`COPY . .` rebuilt in the runs read: the image-nightly control run `37722747608`, and publish run
-`37750748442`, which rebuilt `pnpm install` even after the smoke build of the same commit. "Build
+The import hit only layers before `COPY . .` in `deploy/Dockerfile`. In the image-nightly control
+run `37722747608` it hit one layer of the app build, `npm install --global pnpm@9.15.0`, which took
+1.8 s to build without it in run `37755993548`; every other layer of that build ran. In publish run
+`37750748442` it hit that layer and `WORKDIR /src`, and `pnpm install` rebuilt even after the smoke
+build of the same commit. "Build
 the image" took a mean of 88 s and at most 127 s over 30 image-nightly runs with the import, and
 110 s in run `37755993548` (commit `9ff673d12`) without the import but still exporting, of which
 "preparing build cache for export" was 23.4 s. The export was about 17–23 s of every main build.
-Without import or export: (final-state run: TBD).
+Without import or export, "Build the image" took 54 s and 55 s (image-nightly runs `37757851422`
+and `37758191291`, commit `642537ead`, neither log naming `importing cache manifest` or
+`preparing build cache for export`).
 
 The one stall: measured 2026-10-08 on PR #1399, run `37743000577`, job `113198431831`, the cached
 print-agent layer `sha256:6e14a6c2683e027cbf0f8e85962c02bf23fea4a97b588241ddac0b68fdc621b8`
