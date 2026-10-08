@@ -264,7 +264,7 @@ screen is designed.
     of ours covering the page — not told apart. If it recurs, attach over USB before restarting
     Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
 
-## A kitchen display with someone signed in, logged out only after a long idle time
+## A436 — a kitchen display with someone signed in, logged out only after a long idle time
 
 - **Owner, 2026-10-08, answering decisions 4 and 5 of the
   [A366 slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md):** "kitchen
