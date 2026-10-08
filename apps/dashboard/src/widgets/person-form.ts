@@ -1,7 +1,13 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -94,8 +100,7 @@ export class PersonForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<PersonInput>({
+      const { coordinator, scope } = draftScopeFor<PersonInput>(this, {
         id: this,
         current: () => this.#submissionValue(),
         snapshot: (value) => ({ ...value }),
@@ -109,6 +114,8 @@ export class PersonForm extends LitElement {
           this.selectedRole = value.role;
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -174,7 +181,7 @@ export class PersonForm extends LitElement {
 
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
+    if (this.busy || saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.#dismiss("_form");
     if (Object.keys(this.#validate()).length > 0) {
@@ -216,7 +223,7 @@ export class PersonForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#reportClose();
   }
 
@@ -240,6 +247,7 @@ export class PersonForm extends LitElement {
 
   override render() {
     const errors = this.#errors();
+    const s = saveActionState(this.#scope);
     const fieldKeys = new Set(FIELDS.filter((key) => Boolean(errors[key])));
     const formMessages = Object.entries(errors)
       .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
@@ -253,7 +261,7 @@ export class PersonForm extends LitElement {
         heading=${t("person.new")}
         .open=${this.open}
         .dismissible=${!this.busy}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           this.#reportClose();
@@ -294,9 +302,13 @@ export class PersonForm extends LitElement {
             >${t("action.cancel")}</wt-button
           >
           <wt-button
-            variant="primary"
+            variant=${s.variant}
             data-test="confirm"
-            ?disabled=${this.busy || (this.attempted && Object.keys(this.#validate()).length > 0)}
+            ?disabled=${
+              s.unchanged ||
+              this.busy ||
+              (this.attempted && Object.keys(this.#validate()).length > 0)
+            }
             @click=${(event: Event) => this.#confirm(event)}
             >${t("action.create")}</wt-button
           >

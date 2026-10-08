@@ -102,6 +102,43 @@ async function openEdit(el: StaffScreen, personId: string): Promise<void> {
   await el.updateComplete;
 }
 
+function typeInto(dialog: HTMLElement, testId: string, value: string): void {
+  dialog
+    .shadowRoot!.querySelector(`[data-test=${testId}]`)!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+}
+
+/** Fills the open add form and presses Create, so create-person carries what the form holds. */
+async function createThroughForm(el: StaffScreen, email = "cy@x.com"): Promise<void> {
+  const add = form(el);
+  typeInto(add, "first-names", "Cy");
+  typeInto(add, "last-names", "Young");
+  typeInto(add, "email", email);
+  await add.updateComplete;
+  add.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+}
+const createdThroughForm = {
+  firstNames: "Cy",
+  lastNames: "Young",
+  displayName: "Cy Young",
+  email: "cy@x.com",
+  telephone: null,
+  role: "staff",
+};
+
+/** Edits one field of the open edit form and presses Save, so save-person carries what it holds. */
+async function saveThroughEdit(
+  el: StaffScreen,
+  testId = "edit-telephone",
+  value = "+44 20 7946 0000",
+): Promise<void> {
+  const edit = editForm(el);
+  await edit.updateComplete;
+  typeInto(edit, testId, value);
+  await edit.updateComplete;
+  edit.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+}
+
 async function nativeDialog(el: StaffScreen): Promise<HTMLDialogElement> {
   const wtDialog = form(el).shadowRoot!.querySelector("wt-modal")!;
   await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
@@ -168,9 +205,7 @@ describe("staff-screen", () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
     await openEdit(el, "p1");
-    editForm(el).dispatchEvent(
-      new CustomEvent("save-person", { detail: {}, bubbles: true, composed: true }),
-    );
+    await saveThroughEdit(el);
     await flush(el);
     expect(api.savePerson).toHaveBeenCalledTimes(1);
     expect(editForm(el).open).toBe(false);
@@ -344,10 +379,7 @@ describe("staff-screen", () => {
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
     const button = await pressEmptyAdd(el);
-    const detail = { displayName: "Cy", role: "staff" as const, pin: "1234", email: "cy@x.com" };
-    form(el).dispatchEvent(
-      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
-    );
+    await createThroughForm(el);
     await vi.waitFor(() => expect(form(el).open).toBe(false));
     await vi.waitFor(() => expect(button.isConnected).toBe(false));
     await afterDialogCloses(el);
@@ -410,18 +442,10 @@ describe("staff-screen", () => {
     await el.updateComplete;
     expect(form(el).open).toBe(true);
 
-    const detail = {
-      displayName: "Cy",
-      role: "staff" as const,
-      pin: "1234",
-      email: "cy@x.com",
-    };
-    form(el).dispatchEvent(
-      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
-    );
+    await createThroughForm(el);
     await flush(el);
 
-    expect(api.createPerson).toHaveBeenCalledWith(detail);
+    expect(api.createPerson).toHaveBeenCalledWith(createdThroughForm);
     expect(api.listStaff).toHaveBeenCalledTimes(2);
     expect(form(el).open).toBe(false);
     expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent).toContain(
@@ -475,12 +499,10 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    const detail = { displayName: "A", role: "staff" as const, pin: "1234", email: "dupe@x.com" };
-    form(el).dispatchEvent(
-      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
-    );
+    await createThroughForm(el, "dupe@x.com");
     await flush(el);
 
+    expect(api.createPerson).toHaveBeenCalledTimes(1);
     expect(form(el).error).toBe("person.email_taken");
     await form(el).updateComplete;
     const email = form(el).shadowRoot!.querySelector("[data-test=email]")!;
@@ -502,16 +524,11 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    form(el).dispatchEvent(
-      new CustomEvent("create-person", {
-        detail: { displayName: "A", role: "staff", email: "a@x.com" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    await createThroughForm(el, "a@x.com");
     await flush(el);
     await form(el).updateComplete;
 
+    expect(api.createPerson).toHaveBeenCalledTimes(1);
     const lastNames = form(el).shadowRoot!.querySelector("[data-test=last-names]")!;
     expect(lastNames.getAttribute("error")).toBe(codeMessage("profile.invalid", "es-ES"));
     expect(await nativeDisabled(form(el), "confirm")).toBe(false);
@@ -527,23 +544,13 @@ describe("staff-screen", () => {
     await flush(el);
     await openEdit(el, "p1");
 
-    editForm(el).dispatchEvent(
-      new CustomEvent("save-person", {
-        detail: {
-          displayName: "Ada",
-          firstNames: "Ada",
-          lastNames: "Lovelace",
-          telephone: null,
-          email: "bea@x.com",
-          role: "manager",
-          status: "active",
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    // The fixture's stored telephone is too short for the form's own check.
+    typeInto(editForm(el), "edit-telephone", "+44 20 7946 0000");
+    await saveThroughEdit(el, "edit-email", "bea@x.com");
     await flush(el);
     await editForm(el).updateComplete;
+
+    expect(api.savePerson).toHaveBeenCalledTimes(1);
 
     const email = editForm(el).shadowRoot!.querySelector("[data-test=edit-email]")!;
     expect(email.getAttribute("error")).toBe(codeMessage("person.email_taken", "es-ES"));
@@ -1201,16 +1208,6 @@ describe("staff-screen — row actions, filters and edit races", () => {
   });
 
   describe("an edit dialog opened while the post-save reload is in flight", () => {
-    const saveDetail = {
-      displayName: "Ada",
-      firstNames: "Ada",
-      lastNames: "Lovelace",
-      telephone: null,
-      email: "ada@x.com",
-      role: "manager",
-      status: "active",
-    };
-
     async function openDuringReload(reloaded: PersonSummary[]): Promise<StaffScreen> {
       let finishReload!: (value: PersonSummary[]) => void;
       const api = stubApi({
@@ -1231,9 +1228,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
       const closed = new Promise((resolve) =>
         editForm(el).addEventListener("wt-close", resolve, { once: true }),
       );
-      editForm(el).dispatchEvent(
-        new CustomEvent("save-person", { detail: saveDetail, bubbles: true, composed: true }),
-      );
+      await saveThroughEdit(el);
       await flush(el);
       await closed;
       expect(api.listStaff).toHaveBeenCalledTimes(2);
