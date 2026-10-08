@@ -3950,8 +3950,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
 
 **Open — screens:**
 
-- **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority, campaign
-  lane B):**
+- **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
   1. **The Add-a-printer scan shows an empty box while it searches.** Say something like "No
      printers found yet" while scanning, and something clearer if the scan ends with nothing found.
   2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
@@ -3978,8 +3977,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      own heading or a wider one for the step. The same label shows on the printer details
      (A405), and changes there too.
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority, campaign
-  lane B after A404).** A modal means the printer page is no longer a sub-page, so the owner
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room; after A404).** A modal means the printer page is no longer a sub-page, so the owner
   dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
   1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
      Edit opens the name field off to the right, away from the title it changes; whether the
@@ -4036,7 +4034,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   is unverified. Unassigned Profile cells stay blank; the None profile filter selects them. No
   cell-wording change was queued.
 
-- **A414 — device screens on a phone (owner, 2026-10-08; open; no lane yet).**
+- **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1 lands).**
   1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
      411 CSS px wide) on the handheld's Floor tab: the page's body padding is 24px a side
      (`apps/till/index.html`), and the floor screen adds 16px a side inside it, leaving 331 of 411
@@ -4053,8 +4051,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
     of ours covering the page — not told apart. If it recurs, attach over USB before restarting
     Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
 
-- **A419 — Valencian offered as a content language in Spain's pack (owner, 2026-10-08; open; no
-  lane yet).** The Content languages screen's "Add language" list shows Basque and Galician under
+- **A419 — Valencian offered as a content language in Spain's pack (owner, 2026-10-08; open; campaign lane E).** The Content languages screen's "Add language" list shows Basque and Galician under
   "Official languages" in a Catalan venue; the owner asks for Valencian there too. This reverses
   the 2026-10-06 decision _"'Valenciano' is Catalan (`ca`) for now"_ (entry "Content languages per
   region", A2), so the first step is the owner's choice of what Valencian IS in the data: its own
@@ -4066,7 +4063,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   stay with the parked C125 entry (A8).
 
 - **A420 — the Content languages screen becomes a table, with translations filled in a dialog
-  (owner, 2026-10-08; open; no lane yet).** `apps/dashboard/src/screens/content-languages-screen.ts`.
+  (owner, 2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/content-languages-screen.ts`.
   1. **One table, one row per content language**: the language, how complete its translations are,
      and a row menu (`key: "actions"`, `pinned: "end"`, CLAUDE.md §3). The menu holds **Make
      default** (was "Set as default"), **Delete** (was "Remove") and **Edit translations**. The
@@ -4083,7 +4080,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      dialog holds staged input, so it takes a draft scope and a `*.unsaved.test.ts` (CLAUDE.md §3).
 
 - **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
-  2026-10-08; open; no lane yet).** `apps/dashboard/src/screens/payments-screen.ts`.
+  2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/payments-screen.ts`.
   1. **Providers and Readers become two tabs**, laid out like Print agents and Printers. The screen
      opens on Readers when the venue has at least one reader, and on Providers when it has none
      (read as "added to Waitron", online or not — confirm with the owner if that matters).
@@ -5564,7 +5561,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   signals read beside the profile reload); folding the signal data into the profile response would
   remove it.
 
-- **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority, campaign lane A):**
+- **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
   1. **Choosing a passkey on the password step asks to discard unsaved changes.** On the dashboard
      sign-in: enter an email, press Next, then press "Log in with passkey" on the password step — the
      "discard unsaved changes" dialog appears. Moving between sign-in methods loses nothing the
@@ -6836,7 +6833,7 @@ approved.
   retried; guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts` fail on
   one with no outer timeout. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
   bounded".
-  **Open points (no action queued):** (1) the Dockerfile's `bounded()` does not retry an
+  **Open points (queued as A429, campaign lane A, 2026-10-08):** (1) the Dockerfile's `bounded()` does not retry an
   `apt-get update` that cannot connect, because apt prints "Failed to fetch" and still exits 0
   (measured in the A422 probes; apt's own `Acquire::Retries=3` still applies);
   `APT::Update::Error-Mode=any` would make it fail and be retried, at the cost of failing on any one
@@ -6964,6 +6961,21 @@ approved.
   timestamps aside); and the loader itself still runs a TypeScript file on esbuild 0.25.12. A full
   Stryker run over `packages/shared` gave the same 990 mutants with the same results on the old and
   new lockfile.
+- **Open Dependabot pull requests — low priority, not queued (owner, 2026-10-08: take them from here
+  when a lane has room).** #1179 (Vitest 5) waits on Stryker (owner). The rest, each landed per
+  workflow-guide → Dependabot pull requests:
+  1. **sharp 0.35.5 (#1299 root, #1423 `apps/server`) and the compose group (#1178).** Land the two
+     sharp PRs together. sharp is copied into the box image and left out of every bundle, so the
+     image smoke's sharp step is the proof — and a PR that changed no image input builds no image
+     (CLAUDE.md §2): say how the image was built for it (a `workflow_dispatch` on the head, with its
+     `headSha`). For compose, check the dev stack still starts if a service image moved.
+  2. **The npm minor-and-patch group (#1267, 13 updates).** Rebase first. Read every package's notes
+     across its whole range; list anything that changes behaviour, a default or built output, and
+     diff built artefacts for anything in a bundle. A bump that breaks is dropped from the group,
+     with the reason recorded.
+  3. **stripe 22.6.2 → 23.0.0 (#1181, a major).** Map each breaking change to
+     `packages/payments-stripe` call sites; test through the real client as well as a fake (CLAUDE.md
+     §4). Payments: full review path.
 - **Copies of the patterns A105 and C27 replaced — OPEN.** The same two SQL patterns (the
   block-comment one A105 replaced, and `/--.*$/`, the one C27 replaced) are copied in
   `scripts/module-graph-honesty.test.ts`, a guard reading the repository's own SQL;
@@ -7769,7 +7781,7 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A _Small_ item that
 turns out to need a design moves to its track.
 
-**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 LANDED as #1441 (a workforce request whose body names an unknown person or location answers 400, not 500); A394-2 LANDED as #1444 (a recipe or ingredient route naming an unknown product or ingredient answers 404, and an unknown or repeated ingredient in a recipe 400, not 200, 204 or 500; left open: `product.not_found` has no dashboard wording, so the recipe screen shows the generic message for it); A394-3 to A394-22 OPEN.** Read, not
+**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 LANDED as #1441 (a workforce request whose body names an unknown person or location answers 400, not 500); A394-2 LANDED as #1444 (a recipe or ingredient route naming an unknown product or ingredient answers 404, and an unknown or repeated ingredient in a recipe 400, not 200, 204 or 500; left open: `product.not_found` has no dashboard wording, so the recipe screen shows the generic message for it); A394-3 in progress (campaign lane C); A394-4 to A394-22 OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room.** Read, not
 run: of 49 boundaries, 96 status rows break the rule (`docs/developers/conventions-data.md`); 17 defects
 answer 500 or success for a missing id (A394-1 to -6 first); 16 owner questions; A394-8 settles A374's.
 The follow-ups and the rows: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
