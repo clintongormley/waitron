@@ -1,6 +1,11 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "opening.title": "Opening hours",
+  "opening.load_error": "Opening hours could not be loaded. It will be tried again.",
+  "opening.delete_confirm": "Delete {name}?",
+  "opening.tab.periods": "Periods",
+  "opening.tab.day": "Day",
   "opening.menu_includes": "{name} · includes {menus}",
   "opening.staff_menus": "Staff-only menus",
   "opening.active_menus_required": "Choose active menus.",
@@ -720,6 +725,11 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "opening.title": "Horario de apertura",
+  "opening.load_error": "No se ha podido cargar el horario de apertura. Se volverá a intentar.",
+  "opening.delete_confirm": "¿Eliminar {name}?",
+  "opening.tab.periods": "Periodos",
+  "opening.tab.day": "Día",
   "opening.menu_includes": "{name} · incluye {menus}",
   "opening.staff_menus": "Cartas solo para el personal",
   "opening.active_menus_required": "Elige cartas activas.",

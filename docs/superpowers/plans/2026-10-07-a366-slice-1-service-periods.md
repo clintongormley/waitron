@@ -717,9 +717,21 @@ Its shared draft scope gates Save and discard, preserving the opened or saved ba
 reconnect. Active menu choices include their included menus; the customer choice is omitted from
 staff-only choices. Field refusals, required checks, native Save/Enter, departed controls, reconnect
 and both-theme accessibility have focused tests. No existing test assertions change in this
-substep. The screen shell, period table and write/refresh handling, registration/navigation and
-retirement of the old UI and its retained checks are still owed by this task. Leave its checkbox
-unchecked until those steps and their full verification run are complete.
+substep.
+
+**Checkpoint 2026-10-08 — screen shell and Periods table.** The new screen has Week, Periods and
+Day tabs, a department picker and URL state. Its Periods table shows the colour and name, customer
+menu with included menus, staff menus and placed weekdays. The end-pinned row menu edits or asks
+before deleting; viewers get a table without actions. A successful write commits its submitted
+baseline and closes the current editor before asking the model watch to refresh. Field refusals
+stay in the editor; an in-use deletion stays in its confirmation as one sentence. Separate read
+messages cannot clear either refusal. New tests cover native Save, Cancel and phone row-menu
+access, discard and reconnect, background snapshots, late responses and controls from departed
+openings. Deletion confirmations use an identity for each opening, including reopening the same
+period. No existing test assertions change in this substep. The screen is not registered yet;
+registration/navigation, the Departments link and retirement of the old UI with its retained
+checks remain in Task 12. Week and Day content remain Tasks 13 and 14. Leave Task 12 unchecked
+until its remaining work and verification finish.
 
 ---
 
