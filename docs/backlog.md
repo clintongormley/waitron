@@ -1043,7 +1043,7 @@ unused `units` property is gone (it closes W75's leftover).
   sleep in `wt-disclosure.test.ts` is replaced by pausing and seeking real height transitions,
   then observing the completion handler's cleared animation flag and released height, or by an
   immediate assertion for a path
-  that does not animate. Intermediate heights, rapid toggles, closing focus exclusion,
+  that does not animate. Growth cases let scheduled animation frames run before changing content. Intermediate heights, rapid toggles, closing focus exclusion,
   interrupted reopening, validation errors, reduced motion and content growth remain checked.
   Delaying the final close's animation-frame callback by 1200 ms reproduced `expected false
   to be true` in the old rapid-toggle case. The same delayed frame passed with the revised case;

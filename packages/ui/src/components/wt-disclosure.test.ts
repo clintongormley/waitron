@@ -167,6 +167,9 @@ test("an empty body opened before content arrives grows with its content", async
   el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
   await disclosure.updateComplete;
   expect(body.classList.contains("animating")).toBe(false);
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
   (el.querySelector(".late") as HTMLElement).style.height = "150px";
   expect(body.getBoundingClientRect().height).toBe(150);
 });
@@ -182,6 +185,9 @@ test("a same-frame close and reopen leaves the body free to grow", async () => {
   header.click();
   await disclosure.updateComplete;
   expect(body.classList.contains("animating")).toBe(false);
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
   (el.querySelector(".growing") as HTMLElement).style.height = "400px";
   expect(body.getBoundingClientRect().height).toBe(400);
 });
@@ -213,6 +219,8 @@ test("a validation error interrupts closing and exposes its fields immediately",
   expect(header.getAttribute("aria-expanded")).toBe("true");
   expect(body.hidden).toBe(false);
   expect(body.inert).toBe(false);
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.style.height).toBe("");
   expect(body.getBoundingClientRect().height).toBe(200);
 });
 
@@ -265,6 +273,8 @@ test("switching on reduced motion during a close hides the body immediately", as
     expect(body.hidden).toBe(false);
     await commands.emulateReducedMotion("reduce");
     await expect.poll(() => body.hidden, { timeout: 450, interval: 25 }).toBe(true);
+    expect(body.classList.contains("animating")).toBe(false);
+    expect(body.style.height).toBe("");
   } finally {
     await commands.emulateReducedMotion(null);
   }
