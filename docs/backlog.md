@@ -1047,6 +1047,10 @@ unused `units` property is gone (it closes W75's leftover).
     English from 833/831 px. Whether this clipping predates A367 was not measured on the old
     commit; read from its diff (`git show 98f34cb3b`), above 640 px A367 changed only the agent
     button's text and named three `wt-tabs` parts.
+    **Open, unqueued (seen in A408's after-look, #1437):** when the Add button wraps under the
+    tabs, the tab row's bottom border runs below the button, so the selected tab's underline sits
+    above the button rather than on the line. Judged from the old 640 px rule's code to have drawn
+    the same shape before #1437; not measured on the old commit.
     A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
     the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
     on screen in English and Spanish.
