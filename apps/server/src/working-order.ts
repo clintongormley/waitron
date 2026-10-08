@@ -394,9 +394,6 @@ async function readBasketOffers(
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 
-// Only server-planned quantity increases carry this marker; a JSON request cannot opt into it.
-const CURRENT_PERIOD_ONLY = Symbol("currentPeriodOnly");
-
 /**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
  * options alike, each at the VAT class the version froze — and classify each line's product as it
@@ -422,7 +419,6 @@ export async function priceOrderLines(
     frozenOptions?: OptionSnapshot[];
     frozenExtras?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
-    [CURRENT_PERIOD_ONLY]?: true;
   } & LineExtras)[],
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
@@ -491,8 +487,7 @@ export async function priceOrderLines(
     if (
       service !== null &&
       line[ADDED_EXTRAS_ONLY] !== true &&
-      !service.orderableMenuIds.includes(offer.menuId) &&
-      (line[CURRENT_PERIOD_ONLY] === true || !service.endedMenuIds.includes(offer.menuId))
+      !service.orderableMenuIds.includes(offer.menuId)
     ) {
       throw new AppError("menu_period.not_running", {
         departmentId: service.departmentId,
@@ -4814,7 +4809,6 @@ async function applyLineEdits(
     if (action === "raise" || (action === "change" && rise > 0) || addedApart) {
       pricing.push({
         ...asOffered(subtractDecimal(requested, parent.quantity)),
-        [CURRENT_PERIOD_ONLY]: true,
         courseId: parent.courseId,
       });
       pricedAs.push(
@@ -4834,8 +4828,7 @@ async function applyLineEdits(
             },
       );
     }
-    if (action === "free" && rise > 0 && !addedApart)
-      raised.push({ ...asOffered(requested), [CURRENT_PERIOD_ONLY]: true });
+    if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
     if (action === "change") {
       // The changed line goes to the kitchen again, which a sold-out dish never does.
       resent.push(parent.productId!, ...extras.kept.map(({ child }) => child.productId!));
