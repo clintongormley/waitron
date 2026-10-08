@@ -7,7 +7,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
     for (const table of [
       "local_holidays",
       "holiday_geographies",
-      "zone_period_menus",
       "menu_slots",
       "menu_day_timetables",
       "menu_period_staff_menus",
@@ -30,9 +29,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "device_profile_admission_roles",
       "device_profile_admission_persons",
       "device_approved_profiles",
-      "zone_all_day_menus",
-      "department_all_day_menus",
-      "department_menus",
       "zone_service_policies",
       "departments",
       "tenant_credentials",

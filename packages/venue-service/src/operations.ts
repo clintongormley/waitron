@@ -112,6 +112,14 @@ export async function listServiceZones(
   }));
 }
 
+export async function assertDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
+  const [row] = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
+  if (row === undefined) throw new AppError("department.not_found", { departmentId });
+}
+
 async function requireDepartmentName(
   tx: Transaction,
   cfg: VenueScope,

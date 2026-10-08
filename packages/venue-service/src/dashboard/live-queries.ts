@@ -66,13 +66,9 @@ export const QUERY_DEPENDENCIES = {
     "locations",
   ],
   "menu-timetable": [
-    "department_menus",
-    "department_all_day_menus",
-    "zone_all_day_menus",
     "menu_periods",
     "menu_day_timetables",
     "menu_slots",
-    "zone_period_menus",
     "special_dates",
     "departments",
     "floor_zones",

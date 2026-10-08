@@ -534,22 +534,27 @@ transfer-table retirement; the slice remains unfinished.
 `CALENDAR_COLOURS`); on `menu_slots` drop `starts_at <> ends_at` and add `menu_slots_step_ck`
 (minutes `00`, `15`, `30` or `45` on both times). No column is added, so the rebuild rule holds.
 
-- [ ] **Step 1: Failing test.** `migrations.test.ts`: `TABLES` without the four; a period whose
+- [x] **Step 1: Failing test.** `migrations.test.ts`: `TABLES` without the four; a period whose
 menu is an active catalogue never listed anywhere else saves; a slot `06:00`–`06:00` saves; a slot
 `12:10`–`14:00` inserted directly is refused by the database.
-- [ ] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. drizzle emits the
-`DROP TABLE` of a removed table before the rebuilds (as in `0027_retire_zone_menus.sql:1`), so on
-a venue holding a period or a zone menu choice the first statement is refused: that is this
-slice's venue reset. Run `scripts/migration-upgrade.test.ts`, and add a `RESETS` entry for
-`venue-service/0033_...` naming exactly the refusal it prints, as the `0027_retire_zone_menus`
-entry does.
-- [ ] **Step 3:** remove the transitional `department_menus` inserts from the writers; delete
+- [x] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. Generated `0033_aromatic_slapstick.sql` drops the four retired tables before rebuilding
+periods and slots. The upgrade walk refused the second drop, `DROP TABLE department_menus`,
+with `FOREIGN KEY constraint failed`; the first drop of `department_all_day_menus` completed.
+That measured refusal is recorded under `venue-service/0033_aromatic_slapstick` in `RESETS`
+in `scripts/migration-upgrade.test.ts`. No shipped migration is edited.
+- [x] **Step 3:** remove the transitional `department_menus` inserts from the writers; delete
 `department-menus.ts`; fix the two importers.
-- [ ] **Step 4: Run** Step 1's test, the guard list from Task 2 Step 4,
+- [x] **Step 4: Run** Step 1's test, the guard list from Task 2 Step 4,
 `scripts/append-only-triggers.test.ts`, `scripts/behavioural-triggers.test.ts` and
 `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`; typecheck
 venue-service and server.
-- [ ] **Step 5: Commit** — `feat(venue-service): retire department and zone menu tables (A366) — venue reset needed`.
+- [x] **Step 5: Commit** — `feat(venue-service): retire department and zone menu tables (A366) — venue reset needed`.
+
+Checkpoint 2026-10-08: the complete venue-service node project passes after the retained
+resolver/model/provisioning checks moved to periods. The named migration guards, venue-service
+and server typechecks, server provisioning/transfer checks and unedited fiscal suites pass.
+Backend consumers of the removed tables retire here; Task 12 still removes the old browser
+client, screen and their types.
 
 ---
 

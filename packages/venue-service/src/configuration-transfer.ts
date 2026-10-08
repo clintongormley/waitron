@@ -325,16 +325,6 @@ export function validateHolidayConfiguration(
   }
 }
 
-/** A zone's all-day menu must be filed under the zone's own department, which no key states. */
-function validateDepartmentMenus(tables: Tables): void {
-  const departmentOf = new Map(
-    (tables.zone_service_policies ?? []).map((row) => [row.zone_id, row.department_id]),
-  );
-  for (const row of tables.zone_all_day_menus ?? [])
-    if (!departmentOf.has(row.zone_id) || departmentOf.get(row.zone_id) !== row.department_id)
-      refuse("zone_all_day_menus.department_id");
-}
-
 export function validateMenuTimetables(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
@@ -574,7 +564,6 @@ function validateVenueServiceConfiguration(
 ): void {
   validateHoursConfiguration(tables, bundle);
   validateHolidayConfiguration(tables);
-  validateDepartmentMenus(tables);
   validateMenuTimetables(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
@@ -589,9 +578,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_sale_policies" },
     { name: "zone_service_policies", locationColumns: ["location_id"] },
     { name: "zone_sale_policies" },
-    { name: "department_menus" },
-    { name: "department_all_day_menus" },
-    { name: "zone_all_day_menus" },
     { name: "device_profile_service_access" },
     { name: "device_profile_zones" },
     { name: "device_profile_stations" },
@@ -608,7 +594,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "menu_period_staff_menus" },
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
-    { name: "zone_period_menus" },
     { name: "special_date_hours" },
     { name: "special_date_hours_periods" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },

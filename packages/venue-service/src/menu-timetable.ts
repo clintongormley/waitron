@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { catalogues, floorZones, newId, type Transaction } from "@waitron/db";
+import { catalogues, newId, type Transaction } from "@waitron/db";
 import { directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { assertDepartment, assertMember, listDepartmentMenus } from "./department-menus.js";
+
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
@@ -17,34 +17,18 @@ import {
 } from "./service-day.js";
 import type { SpecialDateParticipant } from "./hours.js";
 import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
-import {
-  invalidTimetable,
-  menuPeriodName,
-  parseMenuWeek,
-  slotInForce,
-} from "./menu-timetable-rules.js";
+import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
 import type {
   DepartmentService,
   OpeningHoursModel,
   MenuPeriodInput,
   MenuPeriodUse,
   MenuSlot,
-  MenuTimetableModel,
-  ZoneMenuChoice,
 } from "./menu-timetable-types.js";
-import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
+import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import {
-  departmentAllDayMenus,
-  departmentMenus,
-  menuDayTimetables,
-  menuPeriods,
-  menuPeriodStaffMenus,
-  menuSlots,
-  zoneAllDayMenus,
-  zonePeriodMenus,
-} from "./schema/menus.js";
-import { departments, zoneServicePolicies } from "./schema/service.js";
+import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
+import { departments } from "./schema/service.js";
 import "./errors.js";
 
 const wire = (time: string) => time.slice(0, 5);
@@ -329,113 +313,6 @@ export async function resolveDepartmentService(
   };
 }
 
-/**
- * The menus zone `zoneId` offers at `at` and the one it starts on. Refused `service_zone.not_found`
- * for a zone that is not this venue's, or whose department is inactive. The statement-count case in
- * `menu-timetable.test.ts` measured the same number with one slot and one zone menu as with twenty
- * and five.
- */
-export async function resolveZoneMenus(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  at: Date,
-): Promise<ZoneMenuChoice> {
-  const [zone] = await tx
-    .select({
-      departmentId: zoneServicePolicies.departmentId,
-      zoneAllDay: zoneAllDayMenus.menuId,
-      departmentAllDay: departmentAllDayMenus.menuId,
-    })
-    .from(zoneServicePolicies)
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .leftJoin(zoneAllDayMenus, eq(zoneAllDayMenus.zoneId, zoneServicePolicies.zoneId))
-    .leftJoin(
-      departmentAllDayMenus,
-      eq(departmentAllDayMenus.departmentId, zoneServicePolicies.departmentId),
-    )
-    .where(
-      and(
-        eq(zoneServicePolicies.zoneId, zoneId),
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    );
-  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  const { departmentId } = zone;
-  const members = await tx
-    .select({ menuId: departmentMenus.menuId })
-    .from(departmentMenus)
-    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
-    .where(and(eq(departmentMenus.departmentId, departmentId), eq(catalogues.active, true)))
-    .orderBy(asc(departmentMenus.displayOrder), asc(departmentMenus.menuId));
-  const allDay = zone.zoneAllDay ?? zone.departmentAllDay;
-  const choice = (defaultMenuId: string | null, periodId: string | null): ZoneMenuChoice => ({
-    departmentId,
-    availableMenuIds: members.map((row) => row.menuId),
-    defaultMenuId,
-    periodId,
-  });
-  const moment = venueLocalMoment(at, await readLocationClock(tx, cfg.locationId));
-  if (moment === null) return choice(allDay, null);
-
-  const today = moment.civilDate;
-  const yesterday = addDays(today, -1);
-  const days = await tx
-    .select({
-      id: menuDayTimetables.id,
-      weekday: menuDayTimetables.weekday,
-      date: specialDates.date,
-    })
-    .from(menuDayTimetables)
-    .leftJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
-    .where(
-      and(
-        eq(menuDayTimetables.departmentId, departmentId),
-        or(
-          inArray(menuDayTimetables.weekday, [weekdayOf(yesterday), weekdayOf(today)]),
-          and(
-            eq(specialDates.locationId, cfg.locationId),
-            inArray(specialDates.date, [yesterday, today]),
-          ),
-        ),
-      ),
-    );
-  const dayOf = (date: LocalDate) =>
-    (days.find((day) => day.date === date) ?? days.find((day) => day.weekday === weekdayOf(date)))
-      ?.id;
-  const ids = [dayOf(yesterday), dayOf(today)].filter((id) => id !== undefined);
-  const rows =
-    ids.length === 0
-      ? []
-      : await tx
-          .select({
-            timetableId: menuSlots.timetableId,
-            periodId: menuSlots.periodId,
-            startsAt: menuSlots.startsAt,
-            endsAt: menuSlots.endsAt,
-            periodMenu: menuPeriods.menuId,
-            zoneMenu: zonePeriodMenus.menuId,
-          })
-          .from(menuSlots)
-          .innerJoin(menuPeriods, eq(menuPeriods.id, menuSlots.periodId))
-          .leftJoin(
-            zonePeriodMenus,
-            and(
-              eq(zonePeriodMenus.zoneId, zoneId),
-              eq(zonePeriodMenus.periodId, menuSlots.periodId),
-            ),
-          )
-          .where(inArray(menuSlots.timetableId, ids));
-  const on = (id: string | undefined) =>
-    rows
-      .filter((row) => row.timetableId === id)
-      .map((row) => ({ ...row, startsAt: wire(row.startsAt), endsAt: wire(row.endsAt) }));
-  const slot = slotInForce(on(dayOf(today)), on(dayOf(yesterday)), moment.timeOfDay);
-  if (slot === null) return choice(allDay, null);
-  return choice(slot.zoneMenu ?? slot.periodMenu, slot.periodId);
-}
-
 /** `defaultMenuId` when it is served or null, else the first served menu. */
 export function servedDefault(
   defaultMenuId: string | null,
@@ -523,10 +400,6 @@ async function writeMenuPeriod(
     CALENDAR_COLOURS.find((value) => !used.some((row) => row.colour === value)) ??
     CALENDAR_COLOURS[0];
   const values = { name, menuId: period.menuId, colour };
-  await tx
-    .insert(departmentMenus)
-    .values({ departmentId, menuId: period.menuId })
-    .onConflictDoNothing({ target: [departmentMenus.departmentId, departmentMenus.menuId] });
   let id = periodId;
   if (periodId === null) {
     const [row] = await tx
@@ -606,10 +479,6 @@ async function periodUses(
   return uses;
 }
 
-/**
- * Deletes a named period, and with it every zone's menu for it. Refused `menu_period.in_use`
- * while any day places it, past special dates included.
- */
 export async function deleteMenuPeriod(
   tx: Transaction,
   cfg: VenueScope,
@@ -706,47 +575,6 @@ export async function clearSpecialDateMenus(
   await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.id, existing.id));
 }
 
-/**
- * A zone's own menu for one of its department's named periods; `null` inherits the period's. An
- * inactive zone's may be set and cleared. A period of another department is refused at `periodId`.
- */
-export async function setZonePeriodMenu(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  periodId: string,
-  menuId: string | null,
-): Promise<void> {
-  const [policy] = await tx
-    .select({ departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(
-      and(
-        eq(zoneServicePolicies.zoneId, zoneId),
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-      ),
-    );
-  if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  const period = await requirePeriod(tx, cfg, periodId);
-  const { departmentId } = policy;
-  if (period.departmentId !== departmentId) invalidTimetable("periodId");
-  if (menuId === null) {
-    await tx
-      .delete(zonePeriodMenus)
-      .where(and(eq(zonePeriodMenus.zoneId, zoneId), eq(zonePeriodMenus.periodId, periodId)));
-    return;
-  }
-  await assertMember(tx, departmentId, menuId);
-  await tx
-    .insert(zonePeriodMenus)
-    .values({ zoneId, periodId, departmentId, menuId })
-    .onConflictDoUpdate({
-      target: [zonePeriodMenus.zoneId, zonePeriodMenus.periodId],
-      set: { menuId },
-    });
-}
-
-/** Each department's timetables on one special date, with their slots. */
 async function dateTimetables(tx: Transaction, specialDateId: string) {
   const rows = await tx
     .select({ id: menuDayTimetables.id, departmentId: menuDayTimetables.departmentId })
@@ -792,141 +620,6 @@ export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
   },
   async beforeDelete() {},
 };
-
-/** Everything the menu timetable editor shows. */
-export async function readMenuTimetableModel(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-): Promise<MenuTimetableModel> {
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
-  const departmentRows = await tx
-    .select({ id: departments.id, name: departments.name, active: departments.active })
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId))
-    .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
-  const lists = new Map(
-    (await listDepartmentMenus(tx, cfg)).map((list) => [list.departmentId, list]),
-  );
-  const periods = await tx
-    .select({
-      id: menuPeriods.id,
-      departmentId: menuPeriods.departmentId,
-      name: menuPeriods.name,
-      menuId: menuPeriods.menuId,
-    })
-    .from(menuPeriods)
-    .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(eq(departments.locationId, cfg.locationId))
-    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const uses = await periodUses(
-    tx,
-    periods.map((period) => period.id),
-  );
-  const timetables = await tx
-    .select({
-      id: menuDayTimetables.id,
-      departmentId: menuDayTimetables.departmentId,
-      weekday: menuDayTimetables.weekday,
-      specialDateId: menuDayTimetables.specialDateId,
-    })
-    .from(menuDayTimetables)
-    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(eq(departments.locationId, cfg.locationId))
-    .orderBy(asc(menuDayTimetables.departmentId));
-  const slots = await slotsByTimetable(
-    tx,
-    timetables.map((row) => row.id),
-  );
-  const zones = await tx
-    .select({
-      id: floorZones.id,
-      departmentId: zoneServicePolicies.departmentId,
-      name: floorZones.name,
-      active: floorZones.active,
-      allDayMenuId: zoneAllDayMenus.menuId,
-    })
-    .from(zoneServicePolicies)
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .leftJoin(zoneAllDayMenus, eq(zoneAllDayMenus.zoneId, zoneServicePolicies.zoneId))
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
-  const zoneMenus = await tx
-    .select({
-      zoneId: zonePeriodMenus.zoneId,
-      periodId: zonePeriodMenus.periodId,
-      menuId: zonePeriodMenus.menuId,
-    })
-    .from(zonePeriodMenus)
-    .innerJoin(menuPeriods, eq(menuPeriods.id, zonePeriodMenus.periodId))
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zonePeriodMenus.zoneId))
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId))
-    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const timetabled = [
-    ...new Set(
-      timetables.flatMap((row) => (row.specialDateId === null ? [] : [row.specialDateId])),
-    ),
-  ];
-  const dates = await tx
-    .select({ id: specialDates.id, date: specialDates.date, name: specialDates.name })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        civilDate === null
-          ? undefined
-          : or(
-              gte(specialDates.date, addDays(civilDate, -1)),
-              inArray(specialDates.id, timetabled),
-            ),
-      ),
-    )
-    .orderBy(asc(specialDates.date));
-
-  const menus = await tx
-    .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
-    .from(catalogues)
-    .orderBy(asc(catalogues.name), asc(catalogues.id));
-
-  return {
-    menus,
-    timeZone: clock.timeZone,
-    clockReadable: civilDate !== null,
-    civilDate,
-    departments: departmentRows.map((department) => ({
-      ...department,
-      menuIds: lists.get(department.id)!.menuIds,
-      allDayMenuId: lists.get(department.id)!.allDayMenuId,
-      periods: periods
-        .filter((period) => period.departmentId === department.id)
-        .map(({ id, name, menuId }) => ({ id, name, menuId, uses: uses.get(id)! })),
-      week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
-        const row = timetables.find(
-          (entry) => entry.departmentId === department.id && entry.weekday === weekday,
-        );
-        return { weekday, slots: row === undefined ? [] : slots.get(row.id)! };
-      }),
-      zones: zones
-        .filter((zone) => zone.departmentId === department.id)
-        .map(({ id, name, active, allDayMenuId }) => ({
-          id,
-          name,
-          active,
-          allDayMenuId,
-          periodMenus: zoneMenus
-            .filter((entry) => entry.zoneId === id)
-            .map(({ periodId, menuId }) => ({ periodId, menuId })),
-        })),
-    })),
-    specialDates: dates.map((special) => ({
-      ...special,
-      timetables: timetables
-        .filter((row) => row.specialDateId === special.id)
-        .map((row) => ({ departmentId: row.departmentId, slots: slots.get(row.id)! })),
-    })),
-  };
-}
 
 export async function readOpeningHoursModel(
   tx: Transaction,
