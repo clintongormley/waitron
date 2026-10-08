@@ -1274,8 +1274,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the shared service contract exposes both. The server's extension routes and the till's service
   response carry the current or last period's keep-open subject. The station-today widget and
   destination dialog now support status, close/open requests, destination refresh after a refusal,
-  manager PIN retry and unsaved-choice protection. Wiring them into the Station screen and kitchen
-  display, and building the visible keep-open control, remain to do.
+  manager PIN retry and unsaved-choice protection. The operator Station screen now shows the
+  selected station's control above its queue, names the closed station's destination and marks
+  closed picker entries. Closing or reopening refreshes its status and queue; polling also reads
+  station status. Wiring the kitchen display and building the visible keep-open control remain
+  to do.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows

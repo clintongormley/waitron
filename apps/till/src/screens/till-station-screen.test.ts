@@ -12,6 +12,8 @@ import type {
   StationQueueGroup,
   TillApi,
 } from "../api/client.js";
+import { TillApi as StationTodayApi } from "../api/client.js";
+import type { TillStationToday } from "../widgets/station-today.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
 
 const stations: Station[] = [
@@ -2455,5 +2457,183 @@ describe.each([false, true])("printer warnings (device mode: %s)", (deviceMode) 
     expect(warnings(el)[0]?.textContent?.trim()).toBe(
       "La impresora Epson no ha impreso nada desde que se atascó algo que se le envió a las 20:14. Las comandas siguen apareciendo aquí; avisa a un encargado.",
     );
+  });
+});
+
+describe("operator station-today controls", () => {
+  beforeEach(() => setLocale("en"));
+  afterEach(() => setLocale("en"));
+
+  function server(closed = false) {
+    let rows: Station[] = [
+      { ...stations[0]!, name: "Pass" },
+      {
+        ...stations[1]!,
+        name: "Bar",
+        open: !closed,
+        byHand: closed ? "closed" : null,
+        sendsTo: closed ? "st-1" : null,
+        why: closed ? "closed_by_hand" : "open",
+      },
+    ];
+    const reads: string[] = [];
+    let failRead = false;
+    const writes: unknown[] = [];
+    const api = new StationTodayApi("", async (input, init) => {
+      const path = String(input);
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      if (path === "/api/stations") {
+        reads.push(path);
+        return failRead
+          ? json({ error: { code: "server.internal", params: {} } }, 500)
+          : json(rows);
+      }
+      if (path.endsWith("/queue"))
+        return json({
+          items: path.includes("st-1") ? cocinaQueue : barraQueue,
+          notices: [],
+          printersDown: [],
+        });
+      if (path === "/api/stations/st-2/today") {
+        if (init?.method === "PUT") {
+          const body = JSON.parse(String(init.body)) as {
+            state: "open" | "closed";
+            sendsToStationId?: string;
+          };
+          writes.push(body);
+          rows = rows.map((row) =>
+            row.id !== "st-2"
+              ? row
+              : {
+                  ...row,
+                  open: body.state === "open",
+                  byHand: body.state,
+                  sendsTo: body.sendsToStationId ?? null,
+                  why: body.state === "open" ? "open" : "closed_by_hand",
+                },
+          );
+          return new Response(null, { status: 204 });
+        }
+        return json({ destinations: [{ id: "st-1", name: "Pass", isDefault: true }] });
+      }
+      throw new Error(`Unexpected station request: ${path}`);
+    });
+    return {
+      api,
+      reads,
+      writes,
+      closeFromElsewhere: () => {
+        rows = rows.map((row) =>
+          row.id !== "st-2"
+            ? row
+            : { ...row, open: false, byHand: "closed", sendsTo: "st-1", why: "closed_by_hand" },
+        );
+      },
+      failRefresh: () => {
+        failRead = true;
+      },
+    };
+  }
+  async function mountToday(closed = false) {
+    const backend = server(closed);
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api: backend.api,
+    });
+    await flush(el);
+    const control = () => el.shadowRoot!.querySelector<TillStationToday>("till-station-today");
+    const line = () => control()?.shadowRoot?.querySelector("[data-status]")?.textContent?.trim();
+    const pickBar = async () => {
+      el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+      await flush(el);
+      await control()?.updateComplete;
+    };
+    return { ...backend, el, host, control, line, pickBar };
+  }
+  it("shows the selected station status above its queue", async () => {
+    const { el, control, line } = await mountToday();
+    expect(line()).toBe("Always open: this is the default station.");
+    expect(
+      control()!.compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(control()!.shadowRoot!.querySelector("[data-action]")).toBeNull();
+  });
+  it("switches the control along with the picked station", async () => {
+    const { control, line, pickBar } = await mountToday();
+    await pickBar();
+    expect(line()).toBe("Open");
+    expect(control()!.shadowRoot!.querySelector("[data-action]")!.textContent!.trim()).toBe(
+      "Close for today",
+    );
+  });
+  it.each([
+    ["en", "Bar · Closed"],
+    ["es", "Bar · Cerrada"],
+  ])("marks the closed picker in %s", async (locale, label) => {
+    setLocale(locale);
+    const { el } = await mountToday(true);
+    expect(el.shadowRoot!.querySelector('[data-station="st-2"]')!.textContent!.trim()).toBe(label);
+    expect(el.shadowRoot!.querySelector('[data-station="st-1"]')!.textContent!.trim()).toBe("Pass");
+  });
+  it("resolves the stored destination id to its station name", async () => {
+    const { line, pickBar } = await mountToday(true);
+    await pickBar();
+    expect(line()).toBe("Closed for today. New dishes go to Pass.");
+  });
+  it("closes through the real widget and refreshes the picker and status without changing the pick", async () => {
+    const { el, host, control, line, pickBar, writes } = await mountToday();
+    await pickBar();
+    const escaped = vi.fn();
+    host.addEventListener("station-today-changed", escaped);
+    control()!.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
+    await expect
+      .poll(() => control()!.shadowRoot!.querySelector("till-station-today-dialog"))
+      .not.toBeNull();
+    const dialog = control()!.shadowRoot!.querySelector("till-station-today-dialog")!;
+    await dialog.updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+    await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+    expect(writes).toEqual([{ state: "closed", sendsToStationId: "st-1" }]);
+    expect(el.shadowRoot!.querySelector('[data-station="st-2"]')!.textContent!.trim()).toBe(
+      "Bar · Closed",
+    );
+    expect(queueWidget(el)!.groups).toEqual(barraQueue);
+    expect(escaped).not.toHaveBeenCalled();
+  });
+  it("reopens the picked station and clears its closed marker", async () => {
+    const { el, control, line, pickBar, writes } = await mountToday(true);
+    await pickBar();
+    control()!.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
+    await expect.poll(line).toBe("Opened for today.");
+    expect(writes).toEqual([{ state: "open" }]);
+    expect(el.shadowRoot!.querySelector('[data-station="st-2"]')!.textContent!.trim()).toBe("Bar");
+  });
+  it("a failed refresh keeps the saved dialog closed and the last queue, with a stale warning", async () => {
+    const { el, control, pickBar, failRefresh, writes } = await mountToday(true);
+    await pickBar();
+    failRefresh();
+    control()!.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+    expect(writes).toEqual([{ state: "open" }]);
+    expect(control()!.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
+    expect(control()!.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(queueWidget(el)!.groups).toEqual(barraQueue);
+  });
+  it("the periodic refresh follows a station closed at another till", async () => {
+    vi.useFakeTimers();
+    try {
+      const { line, pickBar, closeFromElsewhere } = await mountToday();
+      await pickBar();
+      expect(line()).toBe("Open");
+      closeFromElsewhere();
+      await vi.advanceTimersByTimeAsync(15_000);
+      vi.useRealTimers();
+      await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
