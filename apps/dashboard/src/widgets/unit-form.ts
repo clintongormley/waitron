@@ -78,6 +78,8 @@ export class UnitForm extends LitElement {
   @state() private precisionUsageUnavailable = false;
   #usageGeneration = 0;
   #scope?: DraftScope<UnitDraft>;
+  /** Survives disconnect, so an edit kept across a put-back still compares against it. */
+  #baseline?: UnitDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -120,6 +122,7 @@ export class UnitForm extends LitElement {
       this.attempted = false;
       this.#scope?.dispose();
       this.#scope = undefined;
+      this.#baseline = undefined;
     }
     if (changed.has("fieldErrors") || (this.open && needsDraft)) this.dismissed = new Set();
     if (!this.open) {
@@ -127,6 +130,7 @@ export class UnitForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (this.isConnected && !this.#scope) {
+      this.#baseline ??= structuredClone(this.#comparisonValue());
       const { coordinator, scope } = draftScopeFor<UnitDraft>(this, {
         id: this,
         parent: this.draftParent,
@@ -141,6 +145,7 @@ export class UnitForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
 
@@ -273,6 +278,7 @@ export class UnitForm extends LitElement {
   }
 
   commitSaved(submitted: UnitInput): void {
+    this.#baseline = structuredClone(submitted);
     this.#scope?.commit(submitted);
   }
 
