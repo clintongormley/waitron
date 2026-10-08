@@ -5769,7 +5769,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       save answers the same code 404. The owner answered on 2026-10-08 that every API answers a
       refusal by one rule based on what it means; the campaign's A394 (low priority, not yet a
       backlog entry) audits the statuses against that rule.
-    - **Done by A393 (owner answer "Yes, refuse it", 2026-10-08): a configuration import refuses a
+    - **Done by A393 (#1425; owner answer "Yes, refuse it", 2026-10-08): a configuration import refuses a
       switched-on zone in a switched-off department**, whether or not a routing cell names it,
       with the zone's own `zone.department_inactive`, naming the zone and the department (each name
       only where the export holds one), answered 400; the dashboard's saves answer the same code
