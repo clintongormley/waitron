@@ -57,7 +57,10 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
   mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
     products,
-    menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true }], []),
+    menus: servedMenus(
+      [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
+      [],
+    ),
     counterTab,
     operatorName: "Ana",
     ...over,

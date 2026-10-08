@@ -67,7 +67,7 @@ const offers: ZoneOfferCatalogue = {
     serviceMode: "prepay",
   },
   defaultMenuId: null,
-  menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true }], []),
+  menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }], []),
   offers: [],
 };
 
