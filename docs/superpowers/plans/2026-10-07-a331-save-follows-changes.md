@@ -1294,6 +1294,8 @@ every create opens empty — the unit form from the catalogue screen has no `.va
 stored date and time (`menu-publications.ts` ~430–431), where pressing Move untouched changes
 nothing. The catalogue default VAT class is always a stored `VatClass`
 (`packages/catalogue/src/settings-types.ts` ~4), so the panel opens on a valid stored value.
+(2026-10-08: superseded for one opening by A410 — the option window opened showing a refusal the
+list handed it passes `savableAtOpen`; see design-system.md → Forms.)
 
 **Not a save, not gated (no code change):**
 
@@ -1402,6 +1404,9 @@ Split from the option list (2a.3b) for size; the window goes first, and each com
 - Suites: `src/widgets/option-label-form src/widgets/option-list-form
   src/widgets/modifier-forms.unsaved src/widgets/section-details-form.test.ts`
   (`section-details-form.test.ts` ~347–352 mounts the option window for a style comparison only).
+
+_2026-10-08 (owner, A410): the option window opened showing a refusal the list handed it now opens
+with Save active; see design-system.md → Forms._
 
 ### Task 2a.3b — option lists (`widgets/option-list-form.ts`)
 

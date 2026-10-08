@@ -102,7 +102,7 @@ async function bottomOf(el: OptionListForm): Promise<string> {
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
-const saveOf = (el: OptionListForm): HTMLElementTagNameMap["wt-button"] =>
+const saveOf = (el: OptionListForm | OptionLabelForm): HTMLElementTagNameMap["wt-button"] =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('wt-modal [data-test="save"]')!;
 
 /** Save as a form opened and left untouched draws it: quiet and disabled. */
@@ -1533,6 +1533,27 @@ it("clears a refusal held for an option once that option is saved in its editor,
   await click(editor(el), "cancel");
   expect(rowErrors(el, 0)).toEqual(["Too long."]);
   expect((await openEditor(el, 0)).errors).toEqual({ "label-kitchen-name": "Too long." });
+});
+
+it("opens a refused option's editor with Save active, and an untouched Save there clears its refusal", async () => {
+  const { el, host } = await mount({
+    value: cooked,
+    fieldErrors: { "labels.1.name": "Already used." },
+  });
+  const submitted = record(host);
+  await type(el, "name", "Doneness");
+
+  const form = await openEditor(el, 1);
+  expect(field(form, "label-name").error).toBe("Already used.");
+  expect(saveOf(form).disabled).toBe(false);
+  expect(saveOf(form).variant).toBe("primary");
+  await saveEditor(el);
+
+  expect(editor(el).open).toBe(false);
+  expect(rowErrors(el, 1)).toEqual([]);
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.labels.map((label) => label.name)).toEqual(["Rare", "Medium"]);
 });
 
 it("keeps a refusal held for an option when its editor is cancelled", async () => {

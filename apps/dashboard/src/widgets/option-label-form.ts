@@ -90,6 +90,8 @@ export class OptionLabelForm extends LitElement {
   @state() private dismissed = new Set<string>();
 
   #scope?: DraftScope<Omit<DraftLabel, "id">>;
+  /** Opened showing a refusal, so Save starts active: a refusal never disables it. */
+  #refusedAtOpen = false;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -163,6 +165,7 @@ export class OptionLabelForm extends LitElement {
     this.available = value?.available ?? true;
     this.attempted = false;
     this.dismissed = new Set();
+    this.#refusedAtOpen = Object.values(this.errors).some(Boolean);
   }
 
   #edit(change: () => void, ...keys: string[]): void {
@@ -197,7 +200,7 @@ export class OptionLabelForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    if (saveActionState(this.#scope).unchanged) return;
+    if (this.#saveAction().unchanged) return;
     this.attempted = true;
     this.dismissed = new Set(Object.keys(this.errors));
     if (Object.keys(this.#validate()).length > 0) {
@@ -215,6 +218,10 @@ export class OptionLabelForm extends LitElement {
         available: this.available,
       },
     });
+  }
+
+  #saveAction() {
+    return saveActionState(this.#scope, { savableAtOpen: this.#refusedAtOpen });
   }
 
   #comparisonValue(): Omit<DraftLabel, "id"> {
@@ -294,7 +301,7 @@ export class OptionLabelForm extends LitElement {
     const fields = this.#fields(errors);
     const fieldKeys = new Set(this.#fieldKeys(errors));
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
-    const saveAction = saveActionState(this.#scope);
+    const saveAction = this.#saveAction();
     const bottom = [
       ...Object.entries(errors)
         .filter(([key, message]) => message && !fieldKeys.has(key))
