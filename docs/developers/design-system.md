@@ -1552,12 +1552,19 @@ and nothing guards it across screens:
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
-  form; the shift dialog.
+  form; the shift dialog;
+- batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
+  upload and names edit.
 
 The backup settings editor is the one form here that can open already savable: when the stored
 schedule is not a wall-clock one, or no retention is stored, the form cannot show what is running,
 so it opens with its own defaults and Save ready (`#policyReplaced` in
 `apps/dashboard/src/screens/backup-screen.ts`).
+
+Stripe Connect/Add and SumUp Connect/Pair/Try again are provider operations. Their actions keep
+their existing validation and retry behavior. See the
+[Batch 4a classifications](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a)
+for each provider call path.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with

@@ -261,6 +261,10 @@ it("a successful Image write commits submitted values while preserving newer inp
   );
   library.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
   await library.updateComplete;
+  const save =
+    library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+  expect(save.variant).toBe("primary");
+  expect(save.disabled).toBe(true);
   const field = library.shadowRoot!.querySelector("[name=name-es]")!;
   field.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -281,8 +285,12 @@ it("a successful Image write commits submitted values while preserving newer inp
     library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!.value,
   ).toBe("Newer name");
   expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(save.variant).toBe("primary");
+  expect(save.disabled).toBe(false);
   await edit(library, "Submitted name");
   expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(save.variant).toBe("secondary");
+  expect(save.disabled).toBe(true);
   cancel(library);
   await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect((await question()).open).toBe(false);

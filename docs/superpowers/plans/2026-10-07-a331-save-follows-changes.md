@@ -420,3 +420,94 @@ Backlog and Forms now record the audit. Only documentation changed; no new Save 
 assertion or visible screen change was introduced, so no red-green cycle, new save-state axe matrix
 or visual-change inspection is claimed. Logs and the source-review triage are retained outside the
 repository in `~/waitron-campaign-e/receipts/a331-6/`.
+
+## Batch 4a — module forms (Lane E, A331-4a)
+
+Branch `feat/save-follows-changes-modules`. Apply Batch 1 and Batch 3a's rules, plus Batch 3b's
+two extra rules read from the hardware worktree: treat `Unhandled error` output as a failure, and
+temporarily throw at each untouched-save early return to find affected checks. This section plans
+execution; it records no implementation or test results. No migration. Leave `packages/venue-service`
+and other lanes' work untouched.
+
+**Classification receipts:** numbered source at `3c5514738` (2026-10-08); recheck before execution.
+Paths below are repository-relative. Provider actions remain ungated even though they write local
+registrations or credentials after the provider step.
+
+| Named form | Decision and call path |
+| --- | --- |
+| `packages/payments-stripe/src/dashboard/stripe-add-reader.ts` | Exclude Add: provider-reader adoption. Handler `:147` calls `packages/payments-stripe/src/dashboard/client.ts:39`; `apps/server/src/payments-api.ts:571` calls the provider, then `:585` inserts the local reader. `packages/payments-stripe/src/card-provider.ts:207` retrieves an existing Stripe reader; this is not a new Stripe pairing or a stored-reader name editor. |
+| `packages/payments-stripe/src/dashboard/stripe-connect-form.ts` | Exclude Connect: handler `:129` calls `packages/payments-stripe/src/dashboard/client.ts:31`; `apps/server/src/payments-api.ts:472` invokes the provider and `:483` seals credentials. `packages/payments-stripe/src/card-provider.ts:162` verifies the account with Stripe. |
+| `packages/payments-sumup/src/dashboard/sumup-add-reader.ts` | Exclude Pair and Try again: handler `:181` calls `packages/payments-sumup/src/dashboard/client.ts:76`, through `apps/server/src/payments-api.ts:571` to `packages/payments-sumup/src/card-provider.ts:214` (`pairReader`). The form polls pairing status at `:212` and finishes at `:227`. Preserve polling, cancellation and orphan cleanup. |
+| `packages/payments-sumup/src/dashboard/sumup-connect-form.ts` | Exclude Connect, including merchant selection: handler `:182` calls `packages/payments-sumup/src/dashboard/client.ts:67`, through `apps/server/src/payments-api.ts:472` to `packages/payments-sumup/src/card-provider.ts:158` (memberships) and `:165` (merchant choice), before credentials are sealed at server `:483`. |
+| `packages/adjustments/src/dashboard/reasons-screen.ts` | Gate reason create/edit (`save-editor`, `:1088`) and bill-discount limit (`save-limit`, `:763`). Handlers `:651` / `:692` call `packages/adjustments/src/dashboard/client.ts:131`, `:135`, `:161`; `packages/adjustments/src/routes.ts:236`, `:248`, `:283` write reasons/settings. Reorder, Enable and Deactivate remain immediate actions (`:410`, `:627`, `:617`). |
+| `packages/bookings/src/dashboard/booking-form.ts` | Gate Create/Save (`confirm`, `:354`). Handler emits update/create at `:235` / `:244`; `packages/bookings/src/dashboard/bookings-screen.ts:223` / `:243` calls `packages/bookings/src/dashboard/client.ts:75` / `:79`; `packages/bookings/src/routes.ts:160` / `:173` writes the booking. Seating, cancellation and other booking actions are outside this form. |
+| `packages/media/src/dashboard/image-library.ts` | Gate names edit and upload (`save`, `:786`): handler `:527` / `:530` calls `packages/media/src/dashboard/client.ts:71` / `:80`; `packages/media/src/routes.ts:132` / `:146` stores the image/metadata. Opening Upload, preview, picker selection, retry and Delete remain ungated (`:797`, `:567`, `:897`, `:873`, `:663`). |
+
+### Rules and tests for the included saves
+
+- Use only `draftScopeFor` and `saveActionState` from `@waitron/ui` (exports
+  `packages/ui/src/index.ts:108`, `:110`). All three included packages already depend on it
+  (`packages/adjustments/package.json:29`, `packages/bookings/package.json:28`,
+  `packages/media/package.json:24`). Bind `variant` and `disabled` on `wt-button`; retain existing
+  busy/validation conditions. Return early while unchanged before setting attempted/errors or
+  emitting a write/event. Keep request refusals retryable, including those naming fields.
+- Keep coordinator guards separate from always-present scopes. Adjustments: `:268`, `:275`,
+  `:1051`; bookings: `:273` guards the callback at `:91`; media: `:714`, `:780` guard `:320`.
+  Preserve parent scopes, discard/close behavior, submitted-value commits and stale-completion checks.
+  Dispose and recreate scopes on reopen; test without a coordinator and with the real coordinator.
+- Equality must compare draft values independently of busy state: do not copy the payment forms'
+  `busy || equal` pattern (`stripe-add-reader.ts:74`, `stripe-connect-form.ts:67`,
+  `sumup-connect-form.ts:99`). A changed in-flight save stays primary and disabled. Keep each
+  included owner's normalization; do not add a second dirty comparison.
+- No current included opening needs `savableAtOpen`: reason defaults still lack name/actions
+  (`reasons-screen.ts:450`), booking creation only seeds date (`booking-form.ts:159`), upload opens
+  without file/names (`image-library.ts:436`). Editing the duplicate-upload result opens a stored
+  image (`:867`), so unchanged metadata is quiet. Recheck actual callers; if a fully savable creation
+  is found, document it and use the same opening flag in render and handler, clearing it on success/close.
+- Tests first in Chromium: watch each new behavioral case fail for the expected reason, then add
+  the minimal wiring and rerun. Assert host and native button disabled/secondary at a fully filled
+  stored opening and empty create; edit enables primary, undo restores quiet; untouched host submit
+  sends no request/event; invalid changed input follows the existing error contract; refusal permits
+  retry; successful commit quiets any retained form; reopening starts a fresh baseline. Test newer
+  edits during a write and primary styling while busy. Remove the gate as a negative control, observe
+  failure, then restore it. Axe unchanged/changed states in both themes for every included mode.
+- During execution, temporarily replace the unchanged return with `throw new Error("untouched save")`
+  and run each task's existing suites. Restore the plain return. Classify every resulting failure;
+  retain behavioral assertions and list `file:line`, before/after and why under **Changed test checks**
+  in the ledger and PR. Predictable cases: `reasons-screen.a11y.test.ts:169`, `:179`, `:198`, and
+  `image-library.a11y.test.ts:71` press untouched saves. Make a meaningful edit first while preserving
+  their error/refusal/success assertions. The probe, not this prediction, determines the full list.
+
+### Execution checklist
+
+- [ ] Remap on the starting main, check open-PR overlap, read PRs #1391/#1401/#1407 and the topic
+  guides, and obtain one fresh-context review of this section before implementation.
+- [ ] Adjustments: convert `#reasonScope` (`:462`) and `#limitScope` (`:351`) separately; gate their
+  own handlers/buttons. Test normalized percent/money undo and limits saved while the page stays
+  open. Add `src/dashboard/reasons-screen.save-state.test.ts`; extend the existing unsaved/axe suites.
+- [ ] Bookings: convert registration (`:173`), preserve `comparable` (`:31`) and open/identity reset
+  (`:153`), gate `#confirm` (`:212`). Add `src/dashboard/booking-form.save-state.test.ts` and
+  `src/dashboard/booking-form.a11y.test.ts`; retain parent-screen write/refusal behavior. Register
+  the shared `parkPointerCommands` in bookings browser config before importing the shared axe
+  helper, as adjustments/media do; this avoids an unregistered-command hook failure.
+- [ ] Media: convert registration (`:445`), preserve names/file equality and generation reset
+  (`:433`), gate `#save` (`:504`). Add `src/dashboard/image-library.save-state.test.ts`; test file
+  selection/removal, names undo, duplicate upload and reopen; extend unsaved/axe suites.
+- [ ] Run focused suites, including the new files and existing consumers:
+  `pnpm --filter @waitron/adjustments exec vitest run src/dashboard/reasons-screen`;
+  `pnpm --filter @waitron/bookings exec vitest run src/dashboard/booking-form src/dashboard/bookings-screen`;
+  `pnpm --filter @waitron/media exec vitest run src/dashboard/image-library src/dashboard/image-picker`.
+  Also run the media throw probe and retained checks through dashboard parents:
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/image-upload.unsaved
+  src/widgets/section-details-form.unsaved src/widgets/product-editor.unsaved
+  src/widgets/image-upload.a11y src/screens/receipts-screen.top-block`.
+  Record counts and inspect complete output for `Unhandled error`; run affected package typechecks.
+- [ ] LOOK at each included mode unchanged/changed, EN/ES, light/dark, 1280/390px, using the managed
+  worktree dev stack. Retain visual receipts. Run fiscal20 unedited:
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
+- [ ] In the implementation change, update A331's backlog status and Forms' implemented-form list
+  in `docs/developers/design-system.md`, linking the excluded provider-action classifications, and record classifications and
+  changed checks in its own PR. Use signed-off commits, then announce readiness for `finish-branch`;
+  use the no-migration light path, including the required Claude whole-branch run-it review after
+  initial rebase, normal push hook and current-head CI/coverage. Preserve other appended batches on
+  rebase. Land only with owner authorization through `land-branch`, verify merge CI and managed cleanup.

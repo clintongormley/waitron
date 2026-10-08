@@ -6,7 +6,8 @@ import {
   currentContentLanguages,
   focusFirstInvalid,
   submitOnEnter,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import {
@@ -441,8 +442,7 @@ export class ImageLibrary extends LitElement {
     this.attempted = false;
     this.refusal = null;
     this.duplicateImage = null;
-    this.#leave = leaveCoordinatorFor(this);
-    this.#scope = this.#leave?.register<ImageDraft>({
+    const draft = draftScopeFor<ImageDraft>(this, {
       id: this,
       parent: this.draftParent,
       current: () => this.#draft(),
@@ -457,6 +457,8 @@ export class ImageLibrary extends LitElement {
         this.#setPreview(value.file);
       },
     });
+    this.#leave = draft.coordinator;
+    this.#scope = draft.scope;
   }
   #closeEditor(): void {
     if (this.busy) return;
@@ -503,7 +505,7 @@ export class ImageLibrary extends LitElement {
   }
   async #save(): Promise<void> {
     const editor = this.editor;
-    if (editor === null || this.busy) return;
+    if (editor === null || this.busy || saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.refusal = null;
     if ([...this.#checked().values()].some(Boolean)) {
@@ -711,7 +713,7 @@ export class ImageLibrary extends LitElement {
       size="standard"
       open
       heading=${t(editor.image ? "image.edit" : "image.upload")}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#closeEditor();
@@ -777,14 +779,15 @@ export class ImageLibrary extends LitElement {
           variant="secondary"
           ?disabled=${this.busy}
           @click=${() => {
-            if (this.#scope)
+            if (this.#leave)
               void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
             else this.#closeEditor();
           }}
           >${t("image.cancel")}</wt-button
         ><wt-button
           data-test="save"
-          ?disabled=${this.busy || invalid}
+          variant=${saveActionState(this.#scope).variant}
+          ?disabled=${saveActionState(this.#scope).unchanged || this.busy || invalid}
           @click=${() => void this.#save()}
           >${t("image.save")}</wt-button
         ></wt-form-actions

@@ -1517,7 +1517,11 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     `update-shift`) instead of pressing the form's button; they pass, but never prove the button
     works.
 - **Batch 3b — OPEN.** Printers, devices, device profiles, payments, canvases.
-- **Batch 4 — OPEN.** Module screens: venue service, Stripe, SumUp, adjustments, bookings, media.
+- **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
+  booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
+  and SumUp Connect/Pair/Try again remain provider operations;
+  [classification and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
+- **Batch 4b — OPEN.** Venue-service module screens.
 - **Batch 5 — OPEN.** The till; many of its dialogs act (pay, refund, find) rather than save, and
   the batch says which ones save.
 - **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.

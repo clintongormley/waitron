@@ -18,7 +18,8 @@ import {
   ContentLanguageController,
   currentContentLanguages,
   focusFirstInvalid,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -265,14 +266,14 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   async #beforeClose(editor: Editor, reason: LeaveReason): Promise<boolean> {
     if (this.editor !== editor || this.busy || !this.isConnected) return false;
-    if (!this.#reasonScope) return true;
+    if (!this.#leave) return true;
     const outcome = await this.#leave!.request({ scopes: [editor], reason, proceed() {} });
     return this.editor === editor && this.isConnected && outcome === "proceeded";
   }
 
   #cancel(editor: Editor): void {
     if (this.editor !== editor || this.busy || !this.isConnected) return;
-    if (!this.#reasonScope) this.#close();
+    if (!this.#leave) this.#close();
     else void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel");
   }
   /** The active reasons' ids in list order, and each one's place in it, kept in step with `reasons`. */
@@ -348,7 +349,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           const dirty = this.#limitScope?.isDirty();
           this.settings = settings;
           if (!this.#limitScope) {
-            this.#limitScope = leaveCoordinatorFor(this)?.register({
+            this.#limitScope = draftScopeFor(this, {
               id: {},
               parent: this,
               current: () => this.#limitText(),
@@ -361,7 +362,7 @@ export class AdjustmentReasonsScreen extends LitElement {
                 this.limitError = undefined;
                 this.limitSaved = false;
               },
-            });
+            }).scope;
           } else if (!dirty) {
             this.limitDraft = undefined;
             this.#limitScope.commit(this.#limitText());
@@ -458,8 +459,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         approverRole: reason?.approverRole ?? "manager",
         noteRequired: reason?.noteRequired ?? false,
       };
-      this.#leave = leaveCoordinatorFor(this);
-      this.#reasonScope = this.#leave?.register({
+      const draft = draftScopeFor(this, {
         id: editor,
         parent: this,
         current: () => this.draft!,
@@ -469,6 +469,8 @@ export class AdjustmentReasonsScreen extends LitElement {
           this.draft = { ...value, names: { ...value.names }, actions: [...value.actions] };
         },
       });
+      this.#leave = draft.coordinator;
+      this.#reasonScope = draft.scope;
     }
   }
 
@@ -638,6 +640,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #save(editor: Editor): void {
     if (this.editor !== editor || editor.kind !== "reason" || !this.isConnected || this.busy)
       return;
+    if (saveActionState(this.#reasonScope).unchanged) return;
     this.attempted = true;
     this.refusedFields = {};
     this.editorError = undefined;
@@ -675,7 +678,7 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   /** A refresh that fails after the save succeeded is a load failure, shown as one. */
   async #saveLimit(): Promise<void> {
-    if (this.limitSaving) return;
+    if (this.limitSaving || saveActionState(this.#limitScope).unchanged) return;
     this.limitAttempted = true;
     this.limitRefused = false;
     this.limitError = undefined;
@@ -759,9 +762,9 @@ export class AdjustmentReasonsScreen extends LitElement {
       }
       <wt-form-actions .error=${bottom}
         ><wt-button
-          variant="primary"
+          variant=${saveActionState(this.#limitScope).variant}
           data-test="save-limit"
-          ?disabled=${this.limitSaving || own !== undefined}
+          ?disabled=${saveActionState(this.#limitScope).unchanged || this.limitSaving || own !== undefined}
           @click=${() => void this.#saveLimit()}
           >${t("adjustments.limit.save")}</wt-button
         ></wt-form-actions
@@ -1048,7 +1051,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         size=${deactivating ? "compact" : "standard"}
         open
         heading=${heading}
-        .beforeClose=${this.#reasonScope ? this.#closeGuard : undefined}
+        .beforeClose=${this.#leave ? this.#closeGuard : undefined}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (event.target === event.currentTarget && this.editor === editor) this.#close();
@@ -1084,9 +1087,9 @@ export class AdjustmentReasonsScreen extends LitElement {
                   >${t("adjustments.disable")}</wt-button
                 >`
               : html`<wt-button
-                  variant="primary"
+                  variant=${saveActionState(this.#reasonScope).variant}
                   data-test="save-editor"
-                  ?disabled=${this.busy || invalid}
+                  ?disabled=${saveActionState(this.#reasonScope).unchanged || this.busy || invalid}
                   @click=${() => this.#save(editor)}
                   >${t("adjustments.save")}</wt-button
                 >`
