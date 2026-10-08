@@ -1521,6 +1521,23 @@ quantities. Cause and real-venue reproduction remain unverified. Inspect the rea
 attributing them to W69 or changing quantity/money handling. Service-status labels, sidebar
 and warning hover contrast investigations remain separate below.
 
+**"All products" holds a venue default colour (A332, owner 2026-10-07) — LANDED as #1430 (2026-10-08).**
+The venue has one default colour, stored in `catalogue_settings.default_color` (catalogue
+migration 0031, an added column) and edited from the Products screen's All products row, whose
+swatch now sits in the slot that was blank. It is the last step of the colour walk: a product
+with no colour of its own, no category colour and none above takes it. The dashboard shows it
+live (Products, the product editor's "Use default colour" choice, a menu's Structure tab);
+published menus freeze it, so a menu reads "changed" after the default changes and the till shows
+the new colour once the menu is published again. The look (`~/waitron-campaign-b/a332-shots/`)
+found that a saved setting never repainted an open screen: the change feed sent the id of a
+one-row table as a number and the dashboard dropped the whole batch. The feed now sends every id
+as text, which also makes the other one-row settings tables refresh open screens. Open points:
+(1) at phone width every swatch slot is hidden and a category's row menu has no colour item, so
+the default cannot be set on a phone; (2) a refused default colour reuses
+`category.invalid {field:"color"}`, as the VAT default reuses `product.invalid`; (3) the All
+products swatch sits one tree level left of the categories' swatches, by the table's indent
+rule — the owner may want them in one column instead.
+
 **Held reorder drags scroll at the list edge (A334, 2026-10-08) — BUILT.**
 Products, shared reorder tables, preparation stations and the column chooser use
 one `DragEdgeScroll` helper. A held pointer scrolls the nearest visible scrolling box and refreshes
@@ -1757,8 +1774,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   edit made after the form is put back, and one made before it was taken out) and passes with the
   fix; the purchase and shift forms and the bookings form also replaced an edit made before
   removal with the stored values. Still open (A397 part 2): the product editor, and the unit form's edit-first
-  point under batch 2a, both waiting for lane B's A332 (`feat/all-products-colour`), which changes
-  their unsaved suites. Also seen in the purchase and shift forms' tests, not changed and not
+  point under batch 2a, which waited for lane B's A332 because it changes their unsaved suites; A332 landed as #1430,
+  so they can start. Also seen in the purchase and shift forms' tests, not changed and not
   tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
   neither asks nor closes until focus is back on a field inside the dialog (the tests put it there
   with `focus()`; a click was not tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`,
