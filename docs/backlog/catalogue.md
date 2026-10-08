@@ -461,8 +461,9 @@ the 2026-09-30 folders design; what remains:
   flaky-test entry); whether it was this one is not known.
 - **Home page shortcuts (Task 8, #722; rewritten 2026-10-06 for W93, which replaced named layouts
   and the profile's choice with one Device Home Page per menu).** The add-shortcut picker offers
-  active products only, so a shortcut to a product switched off since shows no marker in the
-  Structure tree and, once removed, cannot be added again until the product is switched back on.
+  active products only, so a shortcut to a product switched off since, once removed, cannot be
+  added again until the product is switched back on. How the Home page tab's preview draws such a
+  shortcut was not checked.
 
 ## Copying some of a section's products into another section is not built
 

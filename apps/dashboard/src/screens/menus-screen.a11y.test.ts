@@ -533,16 +533,16 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     },
   );
 
-  it("accessible Structure tab with the Device Home Page row open and the shortcut picker", async () => {
-    const { el, host } = await mount("populated", theme, LUNCH);
-    await vi.waitFor(() =>
-      treeRows(el).querySelector<HTMLElement>('tr[data-row-key="home"] .row-activate')!.click(),
-    );
+  it("accessible Home page tab with the shortcut picker open", async () => {
+    const { el, host } = await mountHome(1280);
+    const preview = q(
+      el,
+      "dashboard-device-home-preview",
+    ) as HTMLElementTagNameMap["dashboard-device-home-preview"];
     await vi.waitFor(() => {
-      if (!treeRows(el).querySelector('tr[data-row-key="home/t-soup"]')) throw new Error("open");
+      if (!preview.shadowRoot!.querySelector('[data-test="add-product"]')) throw new Error("edit");
     });
-    await expectNoA11yViolations(host);
-    await rowAction(el, "home", "add-product-shortcut");
+    preview.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
     await vi.waitFor(() =>
       expect(
         (q(el, 'wt-modal[data-test="add-shortcut"]') as HTMLElement & { open: boolean }).open,

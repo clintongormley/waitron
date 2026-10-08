@@ -280,6 +280,20 @@ Colours mode, or neutral. A section tile always has a second line under its name
 on the till "Nothing matches the filter" for one a diet filter emptied — so a section and a product
 differ without colour; its image, when shown, takes the folder icon's place.
 
+**A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
+The tab is one column, the preview first, until its box is 800px wide, then two: the preview on
+the left, the device choice and display settings on the right. In the preview's home view each
+shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a ⋮ holding Remove shortcut.
+On the grip, the arrow keys move the shortcut one position, Up and Down included, and a drag moves
+it among the shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu
+no longer reaches is a dashed tile reading "Missing: <name>"; one the menu reaches but a device
+would not show (an empty section, a product with no price) is a muted tile reading "Not shown on
+devices". After the last shortcut come two dashed add tiles, Add product shortcuts and Add section
+shortcuts, drawn even when there are none, so an empty shortcut block shows in the dashboard but
+never on a device. Each opens a window whose one multi-select list offers what the menu reaches and
+is not already a shortcut, and one Add adds every choice in the order chosen. The Structure tab
+shows no shortcuts.
+
 **Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",
 so you can distinguish it from a section with the same name.
@@ -897,13 +911,7 @@ Any table, flat or a tree, answers `filterValues(key)` and takes a filter choice
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
 `apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is the
-menu's Device Home Page (W93): no grip (in Reorder mode, below, only the grip's blank space), closed
-at first, with "No shortcuts yet." under its name while it has none. Its ⋮ holds Add a product
-shortcut and Add a section shortcut; each opens a window whose one dropdown offers what the menu
-reaches and is not already a shortcut, and choosing adds it at once. Its children are the shortcuts
-in order, each with a grip in Reorder mode, no colour square or photo, and a ⋮ holding Remove
-shortcut; one whose target the menu no longer reaches reads "Missing: <name>", its kind "No longer
-available". The menu's own row, "Menu: <name>", comes next. It has no grip (in Reorder mode, only
+menu's own row, "Menu: <name>". It has no grip (in Reorder mode, only
 the grip's blank space) and cannot be closed, and its ⋮ holds the adds: New section here, Include a
 menu and Add products. Under it the menu's members follow in menu order, with no sort. A row's key
 is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
@@ -919,10 +927,10 @@ and photo, each following the included menu until it is changed; and "Remove fro
 rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in
 Reorder mode each keeps an unseen grip-sized space. Only an owned row has a grip.
 In Reorder mode, put every grip in one leading column before the tree arrow and indentation.
-Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and media slot inside
+Reserve that column on the menu's and read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
-holds a section's colour square, a product's colour square or photo, or nothing on the Home and
-menu rows. A photo has a ring in the product's own colour, falling back to its category's inherited
+holds a section's colour square, a product's colour square or photo, or nothing on the menu's
+row. A photo has a ring in the product's own colour, falling back to its category's inherited
 colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide

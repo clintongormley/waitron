@@ -35,19 +35,11 @@ import {
   folderPresentation,
 } from "@waitron/catalogue/src/include-folder-presentation.js";
 import type { Presentation } from "@waitron/catalogue/src/section-types.js";
-import type {
-  CategorySummary,
-  HomeTile,
-  MenuHome,
-  MenuStructureNode,
-  Product,
-} from "../api/client.js";
+import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 
 export const ROOT_KEY = "root";
-/** The Device Home Page row's key, and the list key its shortcuts' order is kept under. */
-export const HOME_KEY = "home";
 
 /** A section node's own customer-facing presentation, before any include's folder applies. */
 export function ownPresentation(node: MenuStructureNode): Presentation {
@@ -60,7 +52,6 @@ const gripSpace = html`<span part="grip-space" aria-hidden="true"
 const TOP_LIST = "";
 
 type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null; path: string[] };
-type HomeRow = { kind: "home"; key: typeof HOME_KEY; parentKey: null; path: [] };
 
 interface MemberRow {
   kind: "member";
@@ -78,24 +69,7 @@ interface MemberRow {
   readOnly: boolean;
 }
 
-interface ShortcutRow {
-  kind: "shortcut";
-  /** `home/` and the shortcut's member id. */
-  key: string;
-  parentKey: typeof HOME_KEY;
-  path: [];
-  tile: HomeTile;
-  name: string;
-}
-
-type MovableRow = MemberRow | ShortcutRow;
-
-type Row = HomeRow | RootRow | MemberRow | ShortcutRow;
-
-const SHORTCUT_ADDS = [
-  { kind: "product", label: () => t("home.add_product") },
-  { kind: "section", label: () => t("home.add_section") },
-] as const;
+type Row = RootRow | MemberRow;
 
 export type StructureAddAction = "new-section" | "include-menu" | "add-products";
 
@@ -109,8 +83,7 @@ const samePath = (next: string[], previous: string[] | undefined): boolean =>
   previous !== undefined && next.join("/") === previous.join("/");
 
 /**
- * A menu's structure as one tree table: the Device Home Page with its shortcuts, then the menu
- * itself and every member in menu order, each place a section is shown keyed by its own path. The
+ * A menu's structure as one tree table: the menu itself and every member in menu order, each place a section is shown keyed by its own path. The
  * widget only reports what the person asked for; the host owns every write.
  */
 @customElement("dashboard-menu-structure-table")
@@ -207,8 +180,6 @@ export class MenuStructureTable extends LitElement {
   /** Whether rows carry grips and can be moved. On by default, so a mount that wants a tree
    * without them passes `.reordering=${false}`. */
   @property({ type: Boolean, reflect: true }) reordering = true;
-  /** Null draws no Device Home Page row. */
-  @property({ attribute: false }) home: MenuHome | null = null;
 
   #rowByKey = new Map<string, Row>();
   #productById = new Map<string, Product>();
@@ -259,10 +230,8 @@ export class MenuStructureTable extends LitElement {
       };
       walk(this.nodes);
       this.#sectionNames = names;
-      const shortcuts = this.#order.get(HOME_KEY);
-      this.#order = new Map(shortcuts ? [[HOME_KEY, shortcuts]] : []);
+      this.#order = new Map();
     }
-    if (changed.has("home")) this.#order.delete(HOME_KEY);
     if (changed.has("current")) this.#lostReported = false;
   }
 
@@ -332,28 +301,22 @@ export class MenuStructureTable extends LitElement {
       ?.focus();
   }
 
-  /** A shortcut's siblings are the other shortcuts: no member's parent is the home row. */
-  #siblingRows(row: MovableRow): MovableRow[] {
+  #siblingRows(row: MemberRow): MemberRow[] {
     return [...this.#rowByKey.values()].filter(
-      (other): other is MovableRow =>
-        (other.kind === "member" || other.kind === "shortcut") && other.parentKey === row.parentKey,
+      (other): other is MemberRow => other.kind === "member" && other.parentKey === row.parentKey,
     );
   }
 
-  #memberId(row: MovableRow): string {
-    return row.kind === "member" ? row.node.memberId : row.tile.memberId;
+  #siblings(row: MemberRow): string[] {
+    return this.#siblingRows(row).map((other) => other.node.memberId);
   }
 
-  #siblings(row: MovableRow): string[] {
-    return this.#siblingRows(row).map((other) => this.#memberId(other));
-  }
-
-  #movable(key: string): MovableRow | undefined {
+  #movable(key: string): MemberRow | undefined {
     const row = this.#rowByKey.get(key);
-    return row?.kind === "member" || row?.kind === "shortcut" ? row : undefined;
+    return row?.kind === "member" ? row : undefined;
   }
 
-  #gripDown(event: PointerEvent, row: MovableRow): void {
+  #gripDown(event: PointerEvent, row: MemberRow): void {
     if (this.#drag || this.busy || event.button !== 0) return;
     // Keep the press from selecting text or starting the browser's own drag.
     event.preventDefault();
@@ -387,13 +350,12 @@ export class MenuStructureTable extends LitElement {
       }
       drag.active = true;
       holdPageCursor();
-      // A shortcut's row draws its name alone, and so does its ghost.
-      const ref = row.kind === "member" ? row.node.ref : null;
+      const ref = row.node.ref;
       this.ghost = {
         label: row.name,
         image:
-          ref?.kind === "product" ? (this.#productById.get(ref.productId)?.image ?? null) : null,
-        folder: ref?.kind === "section",
+          ref.kind === "product" ? (this.#productById.get(ref.productId)?.image ?? null) : null,
+        folder: ref.kind === "section",
       };
       void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
     }
@@ -453,7 +415,7 @@ export class MenuStructureTable extends LitElement {
     this.#paint();
   }
 
-  /** A member or shortcut moves only within its own list, so the row under the pointer stands for
+  /** A member moves only within its own list, so the row under the pointer stands for
    * the sibling whose branch holds it. Keys are compared by whole member ids: `m-fav` does not hold
    * `m-fav-drinks`. */
   #targetFor(dragged: string, over: string): string | undefined {
@@ -484,27 +446,21 @@ export class MenuStructureTable extends LitElement {
     return { key: lastShownRow(this.#table()!.shadowRoot!, this.#target), side: "after" };
   }
 
-  #move(row: MovableRow, to: number): void {
+  #move(row: MemberRow, to: number): void {
     const siblings = this.#siblings(row);
-    const memberId = this.#memberId(row);
-    const order = reorder(siblings, siblings.indexOf(memberId), to);
-    if (row.kind === "shortcut") {
-      this.#order.set(HOME_KEY, order);
-      this.#send("wt-shortcut-move", { memberId, to });
-    } else {
-      this.#order.set(row.list, order);
-      this.#send("wt-member-move", { path: row.path.slice(0, -1), memberId, to });
-    }
+    const memberId = row.node.memberId;
+    this.#order.set(row.list, reorder(siblings, siblings.indexOf(memberId), to));
+    this.#send("wt-member-move", { path: row.path.slice(0, -1), memberId, to });
     this.requestUpdate();
   }
 
-  #gripKey(event: KeyboardEvent, row: MovableRow): void {
+  #gripKey(event: KeyboardEvent, row: MemberRow): void {
     const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
     if (delta === 0 || this.busy) return;
     // Without this the arrow scrolls the page, carrying the row out from under the grip.
     event.preventDefault();
     const siblings = this.#siblings(row);
-    const to = siblings.indexOf(this.#memberId(row)) + delta;
+    const to = siblings.indexOf(row.node.memberId) + delta;
     if (to < 0 || to >= siblings.length) return;
     this.#move(row, to);
     this.#refocus = row.key;
@@ -557,27 +513,11 @@ export class MenuStructureTable extends LitElement {
   }
 
   #label(row: Row): string {
-    if (row.kind === "root") return this.#rootName();
-    return row.kind === "home" ? t("home.row") : row.name;
+    return row.kind === "root" ? this.#rootName() : row.name;
   }
 
   #rows(): Row[] {
-    const rows: Row[] = [];
-    if (this.home !== null) {
-      rows.push({ kind: "home", key: HOME_KEY, parentKey: null, path: [] });
-      for (const tile of this.#ordered(this.home.shortcuts, HOME_KEY))
-        rows.push({
-          kind: "shortcut",
-          key: `${HOME_KEY}/${tile.memberId}`,
-          parentKey: HOME_KEY,
-          path: [],
-          tile,
-          name: tile.reachable
-            ? tile.name
-            : t("home.missing").replace("{name}", tile.missingName ?? tile.name),
-        });
-    }
-    rows.push({ kind: "root", key: ROOT_KEY, parentKey: null, path: [] });
+    const rows: Row[] = [{ kind: "root", key: ROOT_KEY, parentKey: null, path: [] }];
     const walk = (
       nodes: MenuStructureNode[],
       parentPath: string[],
@@ -614,9 +554,7 @@ export class MenuStructureTable extends LitElement {
     return order.flatMap((memberId) => items.filter((item) => item.memberId === memberId));
   }
 
-  /** The Device Home Page is no place in the menu, so neither it nor a shortcut is ever current. */
   #isCurrent(row: Row): boolean {
-    if (row.kind === "home" || row.kind === "shortcut") return false;
     return row.path.join("/") === this.current.join("/");
   }
 
@@ -632,7 +570,7 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  #grip(row: MovableRow) {
+  #grip(row: MemberRow) {
     if (!this.reordering) return nothing;
     if (row.kind === "member" && row.readOnly) return gripSpace;
     return html`<button
@@ -648,34 +586,21 @@ export class MenuStructureTable extends LitElement {
     </button>`;
   }
 
-  /** The Device Home Page's and the menu's rows: no grip, a blank slot, and a note when empty. */
-  #topCell(row: HomeRow | RootRow, empty: string | null, emptyTest: string) {
+  /** The menu's row: no grip, a blank slot, and a note when the menu is empty. */
+  #rootCell(row: RootRow) {
     return html`<span part="folder-cell"
       >${folderFrame()}<span part="name-stack folder-stack"
         >${this.#nameSpan(row)}${
-          empty === null ? nothing : html`<span part="note" data-test=${emptyTest}>${empty}</span>`
+          this.nodes.length === 0
+            ? html`<span part="note" data-test="empty">${t("menus.structure_empty")}</span>`
+            : nothing
         }</span
       ></span
     >`;
   }
 
   #nameCell(row: Row) {
-    if (row.kind === "root")
-      return this.#topCell(
-        row,
-        this.nodes.length === 0 ? t("menus.structure_empty") : null,
-        "empty",
-      );
-    if (row.kind === "home")
-      return this.#topCell(
-        row,
-        this.home?.shortcuts.length === 0 ? t("home.empty") : null,
-        "home-empty",
-      );
-    if (row.kind === "shortcut")
-      return html`<span part="product-cell"
-        ><span part="name-stack">${this.#nameSpan(row)}</span></span
-      >`;
+    if (row.kind === "root") return this.#rootCell(row);
     const { node, key } = row;
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
@@ -805,31 +730,13 @@ export class MenuStructureTable extends LitElement {
     }${this.#remove(row, t("members.remove_from").replace("{list}", row.holder))}`;
   }
 
-  #shortcutItems(row: HomeRow | ShortcutRow) {
-    if (row.kind === "shortcut")
-      return this.#button(`remove-${row.key}`, t("home.remove"), "secondary", () =>
-        this.#send("wt-shortcut-remove", { memberId: row.tile.memberId }),
-      );
-    return SHORTCUT_ADDS.map(({ kind, label }) =>
-      this.#button(`add-${kind}-shortcut-${row.key}`, label(), "secondary", () =>
-        this.#send("wt-shortcut-add", { kind }),
-      ),
-    );
-  }
-
   #actionsCell(row: Row) {
     if (row.kind === "member" && row.readOnly) return nothing;
     return html`<wt-row-actions
       align="end"
       data-test=${`actions-${row.key}`}
       label=${`${t("members.actions")}: ${this.#label(row)}`}
-      >${
-        row.kind === "root"
-          ? this.#adds(row)
-          : row.kind === "member"
-            ? this.#menuItems(row)
-            : this.#shortcutItems(row)
-      }</wt-row-actions
+      >${row.kind === "root" ? this.#adds(row) : this.#menuItems(row)}</wt-row-actions
     >`;
   }
 
@@ -840,11 +747,7 @@ export class MenuStructureTable extends LitElement {
         key: "kind",
         label: t("members.kind"),
         cell: (row) => {
-          if (row.kind === "root" || row.kind === "home") return nothing;
-          if (row.kind === "shortcut")
-            return html`<span part="kind" data-test="kind"
-              >${memberKindLabel(row.tile.reachable ? row.tile.ref : { kind: "missing", name: "" })}</span
-            >`;
+          if (row.kind === "root") return nothing;
           return html`<span part=${row.readOnly ? "kind read-only" : "kind"} data-test="kind"
             >${memberKindLabel(row.node.ref)}</span
           >`;
@@ -883,14 +786,12 @@ export class MenuStructureTable extends LitElement {
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
-        .rowControls=${this.reordering ? (row: Row) => (row.kind === "member" || row.kind === "shortcut" ? this.#grip(row) : gripSpace) : undefined}
+        .rowControls=${this.reordering ? (row: Row) => (row.kind === "member" ? this.#grip(row) : gripSpace) : undefined}
         rowControlsLabel=${t("folders.drag")}
         rowControlsAlign="center"
         .rowCollapsible=${(row: Row) => row.kind !== "root"}
         .rowActivation=${(row: Row) =>
-          row.kind === "home" || (row.kind === "member" && row.node.ref.kind === "section")
-            ? "toggle"
-            : "none"}
+          row.kind === "member" && row.node.ref.kind === "section" ? "toggle" : "none"}
         .rowToggleLabel=${(row: Row, expanded: boolean) =>
           t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", this.#label(row))}
         .rows=${rows}

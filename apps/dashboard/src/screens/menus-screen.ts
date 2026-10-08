@@ -30,7 +30,6 @@ import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
 import {
-  HOME_KEY,
   ROOT_KEY,
   ownPresentation,
   type StructureAddAction,
@@ -622,8 +621,7 @@ export class MenusScreen extends LitElement {
   @state() private addingProducts: ListTarget | null = null;
   @state() private addProductsError: string | null = null;
 
-  /** Null until the open menu's Device Home Page is read, which happens only on the Structure and
-   * Home page tabs. */
+  /** Null until the open menu's Device Home Page is read, which happens only on the Home page tab. */
   @state() private menuHome: MenuHome | null = null;
   @state() private homeLoadError = false;
   /** Why a display setting was refused, when the refusal names no control on screen. */
@@ -921,7 +919,7 @@ export class MenusScreen extends LitElement {
   #menuReadParts(): MenuReadPart[] {
     return [
       "structure",
-      ...(this.view === "structure" || this.view === "home" ? ["home" as const] : []),
+      ...(this.view === "home" ? ["home" as const] : []),
       this.view === "home" || this.view === "preview" ? "preview" : "status",
     ];
   }
@@ -1116,7 +1114,7 @@ export class MenusScreen extends LitElement {
     this.view = view;
     this.#followStatus();
     if (view !== "preview" && view !== "home") this.#releasePreview();
-    if (view !== "home" && view !== "structure") this.#releaseHome();
+    if (view !== "home") this.#releaseHome();
     if (view !== "prices") {
       this.priceRefusals = {};
       this.priceOutcome = null;
@@ -1603,10 +1601,9 @@ export class MenusScreen extends LitElement {
 
   // ── The Device Home Page ─────────────────────────────────────────────────────────────────────
 
-  /** Reads the home again after a write, when a tab drawing it still shows the same menu. */
+  /** Reads the home again after a write, while the Home page tab still shows the same menu. */
   async #rereadHome(menuId: string, afterWrite = false): Promise<void> {
-    if (this.menuId === menuId && (this.view === "home" || this.view === "structure"))
-      await this.#menuReads.refresh(afterWrite);
+    if (this.menuId === menuId && this.view === "home") await this.#menuReads.refresh(afterWrite);
   }
 
   /** Adds and removes hold `busy` until the home is read again. Their scope is the menu's home, as
@@ -1659,17 +1656,14 @@ export class MenusScreen extends LitElement {
     );
   }
 
-  /** From the Home page tab, focus goes back to the add tile that opened the window once nothing
-   * is out: while busy the tile is disabled, so the dialog's own focus return finds nothing. */
-  #openShortcutPicker(kind: "product" | "section", from: "home" | "structure"): void {
+  /** Focus goes back to the add tile that opened the window once nothing is out: while busy the
+   * tile is disabled, so the dialog's own focus return finds nothing. */
+  #openShortcutPicker(kind: "product" | "section"): void {
     this.addingShortcut = kind;
     this.shortcutError = "";
     this.shortcutFormError = "";
-    if (from === "structure") this.#returnFocusTo([HOME_KEY]);
-    else {
-      this.#focusReturn = { menuId: this.menuId!, shortcuts: [], add: kind };
-      this.#windowShut = false;
-    }
+    this.#focusReturn = { menuId: this.menuId!, shortcuts: [], add: kind };
+    this.#windowShut = false;
   }
 
   readonly #beforeShortcutsClose = async (reason: LeaveReason): Promise<boolean> => {
@@ -1685,14 +1679,12 @@ export class MenusScreen extends LitElement {
 
   /** One add per target, in the order chosen, all inside one write to the menu's home so a move
    * waits behind every one of them. Stops at the first refusal, leaving the targets not yet added
-   * chosen. An empty home's Structure row opens once the adds are read back, because a branch the
-   * tree sees for the first time starts closed. */
+   * chosen. */
   #addShortcuts(kind: "product" | "section", ids: string[]): void {
     if (this.addingShortcut !== kind || this.busy || ids.length === 0) return;
     const menuId = this.menuId!;
     const picker = this.shadowRoot!.querySelector("dashboard-home-shortcut-picker");
     const names = new Map((picker?.options ?? []).map(({ value, label }) => [value, label]));
-    const wasEmpty = this.menuHome?.shortcuts.length === 0;
     this.memberError = null;
     this.shortcutError = "";
     this.shortcutFormError = "";
@@ -1725,11 +1717,6 @@ export class MenusScreen extends LitElement {
       this.addingShortcut = null;
       await this.#rereadHome(menuId, true);
       this.busy = false;
-      if (!wasEmpty || this.menuId !== menuId || !this.menuHome?.shortcuts.length) return;
-      await this.updateComplete;
-      await this.renderRoot
-        .querySelector("dashboard-menu-structure-table")
-        ?.setExpanded(HOME_KEY, true);
     });
   }
 
@@ -1754,13 +1741,7 @@ export class MenusScreen extends LitElement {
   /** Not `busy`, as for a member's move: the keyboard user's focus stays on the row. The last queued
    * write's answer is shown only while the order on screen is the one the move was sent over, or
    * the answer itself; any other order may be a newer change, so the home is read again. */
-  #moveShortcut(
-    memberId: string,
-    to: number,
-    report: (message: string) => void = (message) => {
-      this.memberError = message;
-    },
-  ): void {
+  #moveShortcut(memberId: string, to: number, report: (message: string) => void): void {
     const menuId = this.menuId!;
     this.memberError = null;
     let sentOver: string[] = [];
@@ -2252,18 +2233,7 @@ export class MenusScreen extends LitElement {
           ? nothing
           : html`<p role="status" data-test="structure-loading">${t("menus.structure_loading")}</p>`
       }`;
-    const homeError = this.homeLoadError
-      ? html`<p class="error" role="alert" data-test="home-row-error">${t("home.error")}</p>
-          <div>
-            <wt-button
-              data-test="home-row-retry"
-              variant="secondary"
-              @click=${() => void this.#watchHome(this.menuId!)}
-              >${t("menus.retry")}</wt-button
-            >
-          </div>`
-      : nothing;
-    return html`${error}${homeError}
+    return html`${error}
       ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/manage/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
@@ -2273,27 +2243,7 @@ export class MenusScreen extends LitElement {
         .current=${this.path}
         .busy=${this.busy}
         .reordering=${this.structureReordering}
-        .home=${this.menuHome}
         menuName=${this.#menuName()}
-        @wt-shortcut-add=${(event: CustomEvent<{ kind: "product" | "section" }>) => {
-          event.stopPropagation();
-          this.#openShortcutPicker(event.detail.kind, "structure");
-        }}
-        @wt-shortcut-remove=${(event: CustomEvent<{ memberId: string }>) => {
-          event.stopPropagation();
-          const { memberId } = event.detail;
-          this.#returnFocusTo([HOME_KEY], true);
-          void this.#shortcutWrite(
-            (menuId) => this.api.removeHomeShortcut(menuId, memberId),
-            (error) => {
-              this.memberError = codeMessage(codeOf(error));
-            },
-          );
-        }}
-        @wt-shortcut-move=${(event: CustomEvent<{ memberId: string; to: number }>) => {
-          event.stopPropagation();
-          this.#moveShortcut(event.detail.memberId, event.detail.to);
-        }}
         @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
           event.stopPropagation();
           this.#edit(event.detail.path);
@@ -2605,7 +2555,7 @@ export class MenusScreen extends LitElement {
         .busy=${this.busy}
         @wt-shortcut-add=${(event: CustomEvent<{ kind: "product" | "section" }>) => {
           event.stopPropagation();
-          this.#openShortcutPicker(event.detail.kind, "home");
+          this.#openShortcutPicker(event.detail.kind);
         }}
         @wt-shortcut-remove=${(event: CustomEvent<{ memberId: string }>) => {
           event.stopPropagation();

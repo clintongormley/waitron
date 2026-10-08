@@ -1010,22 +1010,6 @@ function ghost(el: MenuStructureTable): HTMLElement | null {
 }
 
 describe("with reordering off", () => {
-  const HOME_WITH_SHORTCUT: MenuHome = {
-    homeSectionId: "s-home",
-    shortcuts: [
-      {
-        memberId: "t-one",
-        position: 0,
-        ref: { kind: "product", productId: "p-burger" },
-        missingName: null,
-        name: "Burger",
-        reachable: true,
-      },
-    ],
-    handheld: { columns: 3, tiles: "colours", order: "home_first" },
-    till: { columns: 6, tiles: "colours", order: "home_first" },
-  };
-
   it.each([1280, 390])(
     "draws no grip or grip space on any row, and puts the Name heading over the menu's name (%ipx)",
     async (width) => {
@@ -1033,12 +1017,8 @@ describe("with reordering off", () => {
       try {
         await page.viewport(width, 844);
         const el = await mountDeep({ reordering: false });
-        el.home = HOME_WITH_SHORTCUT;
-        await settle(el);
         for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
-        await toggle(el, "home");
-        expect(shown(el)).toContain("home/t-one");
-        expect(all(el, "tbody tr[data-row-key]").length).toBe(DEEP_ROWS.length + 2);
+        expect(all(el, "tbody tr[data-row-key]").length).toBe(DEEP_ROWS.length);
         expect(all(el, '[part~="drag-grip"], [part~="grip-space"]')).toEqual([]);
         expect(table(el).hasAttribute("narrow")).toBe(width === 390);
         const heading = inTable(el, 'thead [part~="tree-heading"]')!;
@@ -1770,9 +1750,9 @@ describe("colour swatches", () => {
   });
 });
 
-describe("the Device Home Page row", () => {
-  /** Burger and Drinks are on the menu; Chips is no longer reached by it. */
-  const home = (): MenuHome => ({
+describe("without the Device Home Page", () => {
+  /** What the table used to draw as its first row: a host still handing it over is ignored. */
+  const handedHome: MenuHome = {
     homeSectionId: "s-home",
     shortcuts: [
       {
@@ -1783,236 +1763,27 @@ describe("the Device Home Page row", () => {
         name: "Burger",
         reachable: true,
       },
-      {
-        memberId: "t-drinks",
-        position: 1,
-        ref: { kind: "section", sectionId: "s-drinks" },
-        missingName: null,
-        name: "Drinks",
-        reachable: true,
-      },
-      {
-        memberId: "t-chips",
-        position: 2,
-        ref: { kind: "product", productId: "p-chips" },
-        missingName: "Chips",
-        name: "Chips",
-        reachable: false,
-      },
     ],
     handheld: { columns: 3, tiles: "colours", order: "home_first" },
     till: { columns: 6, tiles: "colours", order: "home_first" },
-  });
+  };
 
-  const SHORTCUT_KEYS = ["home/t-burger", "home/t-drinks", "home/t-chips"];
-
-  const openHome = (el: MenuStructureTable) => toggle(el, "home");
-
-  /** Each event with how it was sent, so a non-bubbling or uncomposed one fails. */
-  function sentAs(el: MenuStructureTable, name: string) {
-    const seen: { detail: unknown; bubbles: boolean; composed: boolean }[] = [];
-    el.addEventListener(name, (event) => {
-      const { detail, bubbles, composed } = event as CustomEvent;
-      seen.push({ detail, bubbles, composed });
-    });
-    return seen;
-  }
-
-  const sent = (detail: unknown) => ({ detail, bubbles: true, composed: true });
-
-  it("puts a fixed Device Home Page row first, above the menu", async () => {
-    const el = await mount({ home: home() });
-    expect(shown(el)).toEqual(["home", "root", "m-burger", "m-drinks", "m-fav"]);
-    expect(nameOf(el, "home")).toBe(t("home.row"));
-    expect(row(el, "home")!.getAttribute("aria-level")).toBe("1");
-    expect(row(el, "root")!.getAttribute("aria-level")).toBe("1");
-    // The menu's top level is current; the Device Home Page row is not part of it.
-    expect(row(el, "home")!.querySelector('[aria-current="true"]')).toBeNull();
-    expect(row(el, "root")!.querySelector('[aria-current="true"]')).not.toBeNull();
-    expect(row(el, "home")!.querySelector('[part~="grip-space"]')).not.toBeNull();
-    expect(row(el, "home")!.querySelector('[part~="folder-frame"]')).not.toBeNull();
-    expect(row(el, "home")!.querySelector('[data-test="home-empty"]')).toBeNull();
-
-    el.home = { ...home(), shortcuts: [] };
-    await settle(el);
-    expect(item(el, "home-empty").textContent!.trim()).toBe(t("home.empty"));
-
-    el.home = null;
+  it("draws the menu's own row first, even when a home is handed to it", async () => {
+    const el = await mount();
+    Object.assign(el, { home: handedHome });
     await settle(el);
     expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
-    expect((await mount()).home).toBeNull();
+    expect(nameOf(el, "root")).toBe(t("menus.menu_prefix").replace("{name}", "Lunch Menu"));
   });
 
-  it("lists the shortcuts under it, in order, by name and kind, marking a missing one", async () => {
-    const el = await mount({ home: home() });
-    expect(row(el, "home")!.getAttribute("aria-expanded")).toBe("false");
-    expect(row(el, "home")!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
-      t("menus.expand").replace("{name}", t("home.row")),
-    );
-    await openHome(el);
-    expect(row(el, "home")!.getAttribute("aria-expanded")).toBe("true");
-    expect(shown(el)).toEqual(["home", ...SHORTCUT_KEYS, "root", "m-burger", "m-drinks", "m-fav"]);
-    expect(SHORTCUT_KEYS.map((key) => nameOf(el, key))).toEqual([
-      "Burger",
-      "Drinks",
-      t("home.missing").replace("{name}", "Chips"),
-    ]);
-    expect(
-      SHORTCUT_KEYS.map((key) => row(el, key)!.querySelector('[data-test="kind"]')!.textContent),
-    ).toEqual([t("members.kind_product"), t("members.kind_section"), t("members.missing")]);
-    for (const key of SHORTCUT_KEYS) {
-      const shortcut = row(el, key)!;
-      expect(shortcut.getAttribute("aria-level"), key).toBe("2");
-      expect(shortcut.hasAttribute("aria-expanded"), key).toBe(false);
-      expect(shortcut.querySelector(".row-activate, .tree-toggle"), key).toBeNull();
-      expect(
-        shortcut.querySelector('[part~="swatch-box"], [part~="swatch-button"]'),
-        key,
-      ).toBeNull();
-    }
-    row(el, "home/t-drinks")!.querySelector<HTMLElement>('[data-test="name"]')!.click();
+  it("offers no shortcut add on any row", async () => {
+    const el = await mount();
+    Object.assign(el, { home: handedHome });
     await settle(el);
-    expect(shown(el)).toEqual(["home", ...SHORTCUT_KEYS, "root", "m-burger", "m-drinks", "m-fav"]);
-  });
-
-  it("names a missing shortcut by the name it was kept under, else by its target's name", async () => {
-    const shortcuts = home().shortcuts;
-    const el = await mount({
-      home: {
-        ...home(),
-        shortcuts: [
-          { ...shortcuts[0]!, reachable: false, missingName: null },
-          { ...shortcuts[1]!, reachable: false, missingName: "Dinner Menu › Drinks" },
-        ],
-      },
-    });
-    await openHome(el);
-    expect(["home/t-burger", "home/t-drinks"].map((key) => nameOf(el, key))).toEqual([
-      t("home.missing").replace("{name}", "Burger"),
-      t("home.missing").replace("{name}", "Dinner Menu › Drinks"),
-    ]);
-  });
-
-  it("offers only the two adds on the Device Home Page row", async () => {
-    const el = await mount({ home: home() });
-    const adds = sentAs(el, "wt-shortcut-add");
-    expect(menuItems(el, "home")).toEqual([
-      "add-product-shortcut-home",
-      "add-section-shortcut-home",
-    ]);
-    expect(item(el, "add-product-shortcut-home").textContent!.trim()).toBe(t("home.add_product"));
-    expect(item(el, "add-section-shortcut-home").textContent!.trim()).toBe(t("home.add_section"));
-    await openMenu(el, "home");
-    item(el, "add-product-shortcut-home").click();
-    await settle(el);
-    expect(popupOpen(el, "home")).toBe(false);
-    item(el, "add-section-shortcut-home").click();
-    expect(adds).toEqual([sent({ kind: "product" }), sent({ kind: "section" })]);
-    expect(row(el, "home")!.getAttribute("aria-expanded")).toBe("false");
-    expect(row(el, "home")!.querySelector('[part~="drag-grip"]')).toBeNull();
-    expect(
-      row(el, "home")!.querySelector('[part~="swatch-box"], [part~="swatch-button"]'),
-    ).toBeNull();
-  });
-
-  it("removes a shortcut from its ⋮, which holds Remove alone, a missing one included", async () => {
-    const el = await mount({ home: home() });
-    const removes = sentAs(el, "wt-shortcut-remove");
-    await openHome(el);
-    for (const key of SHORTCUT_KEYS) expect(menuItems(el, key)).toEqual([`remove-${key}`]);
-    expect(item(el, "remove-home/t-chips").textContent!.trim()).toBe(t("home.remove"));
-    item(el, "remove-home/t-chips").click();
-    item(el, "remove-home/t-burger").click();
-    expect(removes).toEqual([sent({ memberId: "t-chips" }), sent({ memberId: "t-burger" })]);
-  });
-
-  it("moves a shortcut by keyboard within the shortcuts only", async () => {
-    const el = await mount({ home: home() });
-    const moves = sentAs(el, "wt-shortcut-move");
-    const memberMoves = listen(el, "wt-member-move");
-    await openHome(el);
-    await press(el, "home/t-burger", "ArrowDown");
-    expect(moves).toEqual([sent({ memberId: "t-burger", to: 1 })]);
-    expect(shown(el).slice(0, 4)).toEqual([
-      "home",
-      "home/t-drinks",
-      "home/t-burger",
-      "home/t-chips",
-    ]);
-    expect(announced(el)).toBe(reordered("Burger", 2, 3));
-    expect(focusedInTable(el)).toBe("drag-home/t-burger");
-
-    await press(el, "home/t-drinks", "ArrowUp");
-    expect(moves).toHaveLength(1);
-
-    // A new value from the host replaces the order the move showed.
-    el.home = home();
-    await settle(el);
-    expect(shown(el).slice(0, 4)).toEqual(["home", ...SHORTCUT_KEYS]);
-
-    // A shortcut dropped on another shortcut moves; across the two lists nothing is offered.
-    const shortcut = grip(el, "home/t-burger");
-    pointer(shortcut, "pointerdown");
-    pointer(shortcut, "pointermove", nameAt(el, "home/t-drinks"));
-    await settle(el);
-    expect(marked(el, "drop-gap-after")).toEqual(["home/t-drinks"]);
-    for (const key of ["m-drinks", "root", "home"]) {
-      pointer(shortcut, "pointermove", nameAt(el, key));
-      await settle(el);
-      expect([...marked(el, "drop-gap-after"), ...marked(el, "drop-gap-before")], key).toEqual([]);
-    }
-    pointer(shortcut, "pointerup", nameAt(el, "m-drinks"));
-    await settle(el);
-
-    const member = grip(el, "m-burger");
-    pointer(member, "pointerdown");
-    pointer(member, "pointermove", nameAt(el, "home/t-drinks"));
-    await settle(el);
-    expect([...marked(el, "drop-gap-after"), ...marked(el, "drop-gap-before")]).toEqual([]);
-    pointer(member, "pointerup", nameAt(el, "home/t-drinks"));
-    await settle(el);
-
-    pointer(shortcut, "pointerdown");
-    pointer(shortcut, "pointermove", nameAt(el, "home/t-chips"));
-    pointer(shortcut, "pointerup", nameAt(el, "home/t-chips"));
-    await settle(el);
-    expect(moves).toEqual([
-      sent({ memberId: "t-burger", to: 1 }),
-      sent({ memberId: "t-burger", to: 2 }),
-    ]);
-    expect(memberMoves).toEqual([]);
-  });
-
-  it("keeps a moved shortcut's place when only the menu's nodes are refreshed", async () => {
-    const el = await mount({ home: home() });
-    await openHome(el);
-    await press(el, "home/t-burger", "ArrowDown");
-    const moved = ["home", "home/t-drinks", "home/t-burger", "home/t-chips"];
-    expect(shown(el).slice(0, 4)).toEqual(moved);
-
-    el.nodes = lunchNodes();
-    await settle(el);
-    expect(shown(el).slice(0, 4)).toEqual(moved);
-  });
-
-  it("disables the grips and actions while busy", async () => {
-    const el = await mount({ home: home(), busy: true });
-    await openHome(el);
-    const events: string[] = [];
-    for (const name of ["wt-shortcut-add", "wt-shortcut-remove", "wt-shortcut-move"])
-      el.addEventListener(name, () => events.push(name));
-    for (const key of ["home", ...SHORTCUT_KEYS])
-      for (const button of [
-        ...inTable(el, `[data-test="actions-${CSS.escape(key)}"]`)!.querySelectorAll("wt-button"),
-      ]) {
-        expect((button as HTMLElement & { disabled: boolean }).disabled, key).toBe(true);
-        (button as HTMLElement).click();
-      }
-    for (const key of SHORTCUT_KEYS) expect(grip(el, key).disabled, key).toBe(true);
-    keyOn(el, "home/t-burger", "ArrowDown");
-    await settle(el);
-    expect(events).toEqual([]);
-    expect(shown(el).slice(0, 4)).toEqual(["home", ...SHORTCUT_KEYS]);
+    await toggle(el, "m-drinks");
+    await toggle(el, "m-fav");
+    const adds = all(el, '[data-test*="shortcut"]').map((node) => node.dataset.test);
+    expect(adds).toEqual([]);
   });
 });
 
@@ -2100,22 +1871,6 @@ describe("a product row's Available and Edit product", () => {
     product("p-burger", "Burger", "burger.webp"),
     product("p-rioja", "Rioja"),
   ];
-  const shortcutHome: MenuHome = {
-    homeSectionId: "s-home",
-    shortcuts: [
-      {
-        memberId: "t-burger",
-        position: 0,
-        ref: { kind: "product", productId: "p-burger" },
-        missingName: null,
-        name: "Burger",
-        reachable: true,
-      },
-    ],
-    handheld: { columns: 3, tiles: "colours", order: "home_first" },
-    till: { columns: 6, tiles: "colours", order: "home_first" },
-  };
-
   /** The text of a row's cell under the Available heading. */
   function availableOf(el: MenuStructureTable, key: string): string {
     const heads = all(el, "thead th").map((th) => th.textContent!.trim());
@@ -2127,15 +1882,14 @@ describe("a product row's Available and Edit product", () => {
   }
 
   it("shows Available on product rows only, each by its own product's flag", async () => {
-    const el = await mount({ products: flagged, home: shortcutHome });
+    const el = await mount({ products: flagged });
     await toggle(el, "m-drinks");
-    await toggle(el, "home");
     const columns = (table(el) as unknown as { columns: { key: string }[] }).columns;
     expect(columns.map((column) => column.key)).toEqual(["name", "kind", "available", "actions"]);
     expect(availableOf(el, "m-burger")).toBe(t("menus.available_yes"));
     expect(availableOf(el, "m-drinks/m-lemonade")).toBe(t("menus.available_no"));
     expect(availableOf(el, "m-drinks/m-lager")).toBe(t("menus.available_yes"));
-    for (const key of ["root", "home", "home/t-burger", "m-drinks", "m-drinks/m-beer"])
+    for (const key of ["root", "m-drinks", "m-drinks/m-beer"])
       expect(availableOf(el, key), key).toBe("");
   });
 
