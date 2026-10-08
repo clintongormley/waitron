@@ -16,8 +16,8 @@ the form's own checks pass — no summary at the top (owner, 2026-09-28). A form
 with that action quiet (`secondary`) and disabled until its draft changes (owner decision,
 2026-10-07, A331: "open a form with the Save button transparent (and disabled?). but as soon as you
 make a change, make the Save button active/blue"; how, and the exceptions:
-[design-system.md](design-system.md) → Forms); batches 1, 3a, 4a and 5 follow it so far (the list is in
-design-system.md → Forms; backlog A331), and nothing guards it across screens. An error from a request
+[design-system.md](design-system.md) → Forms); the forms that follow it so far are listed in
+design-system.md → Forms (backlog A331), and nothing guards it across screens. An error from a request
 never disables the action by itself (owner, 2026-09-29: "Fields with errors should explain the problem";
 "if there is a form validation error leave it disabled; if the error comes from a request leave it
 enabled"); when handling a refusal empties or reveals a required field, that field's own check holds

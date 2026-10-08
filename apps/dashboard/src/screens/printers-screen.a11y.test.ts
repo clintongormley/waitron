@@ -672,6 +672,17 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
     q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
     await flush(el);
+    expect((q(el, "[data-test=confirm-pair]") as HTMLElementTagNameMap["wt-button"]).variant).toBe(
+      "secondary",
+    );
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "12 34" }, bubbles: true }),
+    );
+    await flush(el);
+    expect((q(el, "[data-test=confirm-pair]") as HTMLElementTagNameMap["wt-button"]).variant).toBe(
+      "primary",
+    );
     await expectNoA11yViolations(host);
     q(el, "[data-test=confirm-pair]")!.click();
     await flush(el);
@@ -896,6 +907,90 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     q(el, "[data-test=edit-agent-a1]")!.click();
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  /** Save's look and whether it can be pressed, so each axe pass below scans the state it names. */
+  function saveLook(el: PrintersScreen, test: string) {
+    const save = q(el, `[data-test=${test}]`) as HTMLElementTagNameMap["wt-button"];
+    return { variant: save.variant, disabled: save.disabled };
+  }
+  function edit(el: PrintersScreen, selector: string, value: string) {
+    q(el, selector)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
+
+  it("renders the agent editor's quiet and changed Save accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    expect(saveLook(el, "save-agent")).toEqual({ variant: "secondary", disabled: true });
+    await expectNoA11yViolations(host);
+    edit(el, "[data-test=edit-agent-name]", "Kitchen Pi");
+    await flush(el);
+    expect(saveLook(el, "save-agent")).toEqual({ variant: "primary", disabled: false });
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the printer page's name and connection Save, quiet and changed, accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    await openPrinter(el);
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=edit-printer-connection]")!.click();
+    await flush(el);
+    expect(saveLook(el, "save-printer-name")).toEqual({ variant: "secondary", disabled: true });
+    expect(saveLook(el, "save-printer-connection")).toEqual({
+      variant: "secondary",
+      disabled: true,
+    });
+    await expectNoA11yViolations(host);
+    edit(el, '[name="printer-detail-name"]', "Cocina 2");
+    edit(el, '[name="printer-detail-port"]', "9101");
+    await flush(el);
+    expect(saveLook(el, "save-printer-name")).toEqual({ variant: "primary", disabled: false });
+    expect(saveLook(el, "save-printer-connection")).toEqual({
+      variant: "primary",
+      disabled: false,
+    });
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the calibration wizard's quiet and changed Save accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    await openPrinter(el);
+    await openCalibration(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    expect(saveLook(el, "save-printer-p1")).toEqual({ variant: "secondary", disabled: true });
+    await expectNoA11yViolations(host);
+    const portable = q(el, '[name="printer-portable"]')!.shadowRoot!.querySelector("input")!;
+    portable.checked = !portable.checked;
+    portable.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush(el);
+    expect(saveLook(el, "save-printer-p1")).toEqual({ variant: "primary", disabled: false });
     await expectNoA11yViolations(host);
   });
 });

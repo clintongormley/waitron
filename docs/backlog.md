@@ -1521,10 +1521,11 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 5 (the till) in #1414;
-batch 6 audited with no stored-setting editors; batch 7 unreserved forms audited; batches 2, 3b and
-4b OPEN.** The owner: "open a form with the Save button transparent (and disabled?). but as soon as
-you make a change, make the Save button active/blue",
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b built on `feat/save-follows-changes-hardware`
+(pull request pending); batch 4a module forms; batch 5 (the till) in #1414; batch 6 audited with no
+stored-setting editors; batch 7 unreserved forms audited; batches 2 and 4b OPEN.** The owner:
+"open a form with the Save button transparent (and disabled?). but as soon as you make a change,
+make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
 pressable, and undoing the change turns it quiet and disabled again. "Changed" is what the form's
@@ -1567,7 +1568,30 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`,
     `update-shift`) instead of pressing the form's button; they pass, but never prove the button
     works.
-- **Batch 3b — OPEN.** Printers, devices, device profiles, payments, canvases.
+- **Batch 3b — BUILT, pull request pending.** Printers, devices, device profiles, payments,
+  canvases: the print agent's Edit dialog, a printer page's name and connection editors, the
+  calibration wizard, the Bluetooth printer Pair dialog, the Edit device dialog, the device profile
+  editor, the card reader's Rename dialog, the bill attestation and the canvas editor (list:
+  [design-system.md](developers/design-system.md) → Forms). Opening already savable: the printers'
+  name dialog, the calibration wizard when an add opened it (the campaign runner's ruling of
+  2026-10-08, for the owner to confirm: a freshly added printer's wizard opens with a blue Save),
+  the device pairing dialog, each row of "Add a card reader", the canvas Duplicate dialog, and a new
+  canvas's editor. Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px,
+  light, each form unchanged and after one edit; a printer's name editor, the calibration wizard and
+  Edit device also at 390px, dark, Spanish); screenshots in `~/waitron-campaign-b/a331-3b-shots/`.
+  Every form reached opened quiet and disabled and turned blue on the first edit; the connection
+  editor, Edit device and the profile editor went quiet again when the stored value was typed back;
+  the savable ones (the name dialog as Add and as Enable, the wizard after a fresh add and after a
+  re-add, Duplicate, a new canvas) opened blue. The demo venue has no card provider connected
+  (connecting one takes an API key), and no device asking to pair was made on the shared venue, so
+  "Add a card reader" (four readers), Rename reader and the pairing dialog were looked at mounted
+  with test data instead; "Add a card reader" now shows a blue Add on every row, as the printers'
+  discovered rows do. Not looked at, left to their tests: the Bluetooth Pair dialog (the laptop's
+  print agent has no `bluetoothctl`) and the bill attestation (the demo venue showed no payment to
+  attest). Seen and not changed, because this batch does not touch them: the canvas Create and
+  Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow to show "A331 look
+  canvas (copy)" whole; the printer name dialog is titled "Add a printer" when its button says
+  Enable.
 - **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
   booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
   and SumUp Connect/Pair/Try again remain provider operations;
@@ -1608,8 +1632,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   saved address. Existing behavior remains unchanged. The
   [audit and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
   list each classification. **Reserved forms still need their owning batch and a follow-up audit:**
-  printer/agent/calibration, device/profile, reader and canvas forms left for after
-  `feat/save-follows-changes-hardware` lands; till dialogs left for after
+  printer/agent/calibration, device/profile, reader and canvas forms (gated by batch 3b) still await
+  a rerun of Batch 7's two inventories; till dialogs left for after
   `feat/save-follows-changes-till` lands; device-home, menus and Preview widgets left for after
   `fix/home-column-ranges` and its following Preview work land; hours/date/holiday/slot, watcher,
   service settings, operations, timetable and preparation-station forms left for after

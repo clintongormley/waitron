@@ -248,6 +248,8 @@ describe("bill payment recovery on the Payments screen", () => {
     const el = await mount(api);
     q(el, "[data-test=attest-bill-refund-br-1]")!.click();
     await flush(el);
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    await flush(el);
     q(el, "[data-test=confirm-bill-attest]")!.click();
     await flush(el);
     expect(api.attestStuckBillRefund).not.toHaveBeenCalled();
@@ -264,6 +266,8 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(
       (q(el, "[data-test=bill-attest-note]") as HTMLElement & { error: string }).error,
     ).toBeTruthy();
+    change(el, "[data-test=bill-attest-pin]", "");
+    await flush(el);
     expect(
       (q(el, "[data-test=bill-attest-pin]") as HTMLElement & { error: string }).error,
     ).toBeTruthy();
@@ -352,6 +356,7 @@ describe("bill payment recovery on the Payments screen", () => {
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
     change(el, "[data-test=bill-attest-note]", " ");
+    change(el, "[data-test=bill-attest-pin]", "1234");
     await flush(el);
     expect(errorOf(el, "bill-attest-note")).toBe("");
     expect(errorOf(el, "bill-attest-outcome")).toBe("");
@@ -362,6 +367,8 @@ describe("bill payment recovery on the Payments screen", () => {
   it("on an invalid submission focuses the first invalid field, marks it and disables Record", async () => {
     const el = await mount();
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    change(el, "[data-test=bill-attest-pin]", "1234");
     await flush(el);
     q(el, "[data-test=confirm-bill-attest]")!.click();
     await flush(el);
@@ -390,6 +397,8 @@ describe("bill payment recovery on the Payments screen", () => {
   it("re-checks every change after a failed submission, and Record works again once all are fixed", async () => {
     const el = await mount();
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    change(el, "[data-test=bill-attest-note]", "Provider confirmed");
     await flush(el);
     q(el, "[data-test=confirm-bill-attest]")!.click();
     await flush(el);
@@ -464,15 +473,24 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(attest).toHaveBeenCalledTimes(2);
   });
 
-  it("starts again when the form is reopened: no messages and Record working", async () => {
+  it("starts again when the form is reopened: no messages, Record quiet, and working after an edit", async () => {
     const el = await mount();
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    await flush(el);
     q(el, "[data-test=confirm-bill-attest]")!.click();
     await flush(el);
+    expect(errorOf(el, "bill-attest-note")).toBe(t("payments.bill.note_required"));
     q(el, "[data-test=bill-attest-dialog]")!.dispatchEvent(new CustomEvent("wt-close"));
     await flush(el);
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    expect(errorOf(el, "bill-attest-note")).toBe("");
+    expect(errorOf(el, "bill-attest-outcome")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(attestDisabled(el)).toBe(true);
+    change(el, "[data-test=bill-attest-note]", "Provider confirmed");
     await flush(el);
     expect(errorOf(el, "bill-attest-note")).toBe("");
     expect(errorOf(el, "bill-attest-outcome")).toBe("");
@@ -640,6 +658,8 @@ describe("bill recovery's outcome field", () => {
       ]);
       expect(outcome.value).toBe("");
 
+      change(el, "[data-test=bill-attest-note]", "Provider confirmed");
+      await flush(el);
       q(el, "[data-test=confirm-bill-attest]")!.click();
       await flush(el);
       expect(outcome.error).toBe(t("payments.bill.outcome_required"));

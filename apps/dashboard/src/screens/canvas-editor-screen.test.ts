@@ -669,6 +669,8 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
 
   it("Save on an existing canvas calls updateCanvas and returns to the list", async () => {
     const { el, api } = await openValidEditor();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-basket]")!.click();
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     expect(api.updateCanvas).toHaveBeenCalledTimes(1);
@@ -705,6 +707,10 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     const { el } = await openValidEditor({
       updateCanvas: vi.fn().mockRejectedValue({ code: "canvas.name_taken" }),
     });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
+    await el.updateComplete;
+    change(el, "canvas-name", "Bar till");
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     const alert = el.shadowRoot!.querySelector("[role=alert]")!;
@@ -735,6 +741,8 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     change(el, "config-columns", "5");
     await el.updateComplete;
     change(el, "config-columns", ""); // emptied → the key is removed, not stored as a value
+    await el.updateComplete;
+    change(el, "card-rowspan", "5");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
@@ -935,6 +943,8 @@ describe("canvas navigation during requests", () => {
       api: stubApi({ getCanvas, updateCanvas }),
     });
     await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-basket]")!.click();
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
     await flush(el);
     expect(updateCanvas).toHaveBeenCalledTimes(1);
@@ -972,6 +982,8 @@ it("does not save twice before the disabled state renders", async () => {
     }),
   });
   await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-basket]")!.click();
+  await el.updateComplete;
   const save = el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
   save.click();
   save.click();
@@ -1174,6 +1186,28 @@ describe("canvas editor edge paths", () => {
     await flush(el);
   }
   const card = { type: "basket", colSpan: 4, rowSpan: 4, config: {} };
+  /** Save stays quiet only while the draft equals what was read. */
+  async function expectSaveQuiet(el: CanvasEditorScreen) {
+    const save = $(el, "[data-test=save]") as HTMLElementTagNameMap["wt-button"];
+    await save.updateComplete;
+    expect(save.variant).toBe("secondary");
+    expect(save.disabled).toBe(true);
+    expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+  }
+  async function renameAndSave(el: CanvasEditorScreen) {
+    $(el, "[data-test=canvas-settings]")!.click();
+    await el.updateComplete;
+    $(el, "[data-test=canvas-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Evening till" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    $(el, "[data-test=save]")!.click();
+    await flush(el);
+  }
 
   it("counts only tabs that carry a card list, and previews a canvas with no tabs as blank", async () => {
     const api = stubApi({
@@ -1362,11 +1396,11 @@ describe("canvas editor edge paths", () => {
     intent(el, "move-card", { from: 9, to: 0 });
     await el.updateComplete;
     expect($(el, "[data-test=card-panel]")).toBeNull();
-    $(el, "[data-test=save]")!.click();
-    await flush(el);
+    await expectSaveQuiet(el);
+    await renameAndSave(el);
     expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith(
       "c1",
-      "Counter till",
+      "Evening till",
       validTillDefinition,
     );
   });
@@ -1378,11 +1412,11 @@ describe("canvas editor edge paths", () => {
     $(el, "[data-test=tab-delete]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll("[data-test^=tab-btn-]")).toHaveLength(1);
-    $(el, "[data-test=save]")!.click();
-    await flush(el);
+    await expectSaveQuiet(el);
+    await renameAndSave(el);
     expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith(
       "c1",
-      "Counter till",
+      "Evening till",
       validTillDefinition,
     );
   });

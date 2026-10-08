@@ -362,8 +362,8 @@ it("W69 reconnect releases the departed write's busy state and ignores its reply
   await expect.poll(() => q(screen, "edit-p1")).not.toBeNull();
   q(screen, "edit-p1")!.click();
   await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
-  await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
   change(screen, "profile-name", "Replacement counter");
+  await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
   finish();
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(q(screen, "profile-name")).not.toBeNull();

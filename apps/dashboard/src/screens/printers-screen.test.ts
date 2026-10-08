@@ -526,8 +526,7 @@ describe("guided printer calibration", () => {
     });
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
-    q(el, "[data-test=save-printer-p1]")!.click();
-    await flush(el);
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
@@ -818,10 +817,11 @@ describe("guided printer calibration", () => {
   it("does not write unchanged calibration settings", async () => {
     const api = stubApi();
     const el = await openStepThree(api);
-    q(el, "[data-test=save-printer-p1]")!.click();
-    await flush(el);
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
   it("does not resend detail edits when finishing calibration", async () => {
@@ -864,17 +864,21 @@ describe("guided printer calibration", () => {
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
+    toggleSwitch(el, '[name="printer-portable"]', true);
+    await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledTimes(3);
+    expect(api.updatePrinter).toHaveBeenCalledTimes(4);
     expect(api.updatePrinter).toHaveBeenNthCalledWith(1, "p1", { name: "Updated kitchen" });
     expect(api.updatePrinter).toHaveBeenNthCalledWith(2, "p1", { host: "10.0.0.88", port: 9101 });
     expect(api.updatePrinter).toHaveBeenNthCalledWith(3, "p1", { active: false });
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(4, "p1", { portable: true });
     expect(stored).toMatchObject({
       name: "Updated kitchen",
       host: "10.0.0.88",
       port: 9101,
       active: false,
+      portable: true,
     });
   });
 
@@ -4124,6 +4128,7 @@ it("saves an inline printer name when Enter is pressed in its field", async () =
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Kitchen receipt");
+  await flush(el);
   const input = q(el, '[name="printer-detail-name"]')!.shadowRoot!.querySelector("input")!;
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
@@ -4145,6 +4150,7 @@ it("saves an inline network address when Enter is pressed in its field", async (
   q(el, "[data-test=edit-printer-connection]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-host"]', "10.0.0.20");
+  await flush(el);
   const input = q(el, '[name="printer-detail-host"]')!.shadowRoot!.querySelector("input")!;
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
@@ -5542,6 +5548,8 @@ describe("printers-screen agent joining edges", () => {
     await flush(el);
     q(el, "[data-test=edit-agent-a1]")!.click();
     await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen Pi");
+    await flush(el);
     const staleSave = q(el, "[data-test=save-agent]")!;
     q(el, "[data-test=cancel-edit-agent]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-agent-modal]")).toBeNull());
@@ -6021,6 +6029,8 @@ describe("printers-screen printer editor edges", () => {
     await flush(el);
     q(el, "[data-test=edit-printer-name]")!.click();
     await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "Barra nueva");
+    await flush(el);
 
     staleName.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "Leaked" }, bubbles: true, composed: true }),
@@ -6028,7 +6038,7 @@ describe("printers-screen printer editor edges", () => {
     q(el, "[data-test=save-printer-name]")!.click();
 
     await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { name: "Barra USB" }),
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { name: "Barra nueva" }),
     );
   });
 
@@ -6038,6 +6048,8 @@ describe("printers-screen printer editor edges", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
     await flush(el);
     const staleSave = q(el, "[data-test=save-printer-name]")!;
     q(el, "[data-test=cancel-printer-name]")!.click();
@@ -6475,6 +6487,8 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     });
     q(el, "[data-test=edit-agent-a1]")!.click();
     await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen box");
+    await flush(el);
     q(el, "[data-test=save-agent]")!.click();
     await flush(el);
     expect(isDisabled(el, "[data-test=save-agent]")).toBe(false);
@@ -6488,6 +6502,8 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
       updateAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }),
     });
     q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen box");
     await flush(el);
     q(el, "[data-test=save-agent]")!.click();
     await flush(el);
@@ -6560,7 +6576,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     expect(errorOf(el, '[name="printer-detail-host"]')).toBe("");
     expect(isDisabled(el, "[data-test=save-printer-connection]")).toBe(true);
 
-    typeField(el, '[name="printer-detail-port"]', "9100");
+    typeField(el, '[name="printer-detail-port"]', "9101");
     await flush(el);
     expect(isDisabled(el, "[data-test=save-printer-connection]")).toBe(false);
     expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -6606,6 +6622,9 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     );
     expect(errorOf(el, '[name="printer-detail-name"]')).toBe("");
     expect(q(el, "[data-test=printer-name-refusal]")).toBeNull();
+    expect(isDisabled(el, "[data-test=save-printer-name]")).toBe(true);
+    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
+    await flush(el);
     expect(isDisabled(el, "[data-test=save-printer-name]")).toBe(false);
   });
 
@@ -6889,6 +6908,10 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(pinField(el).error).toBe("");
     expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe("");
 
+    typeField(el, sel("bluetooth-pin"), "12 34");
+    await flush(el);
+    expect(pinField(el).error).toBe("");
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
     q(el, sel("confirm-pair"))!.click();
     await flush(el);
     expect(api.pairBluetooth).not.toHaveBeenCalled();
@@ -7011,6 +7034,9 @@ describe("printers-screen Bluetooth pairing", () => {
     await flush(el);
     expect(pinField(el).error).toBe("");
     expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe("");
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(true);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
     expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
     expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
   });

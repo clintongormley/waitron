@@ -184,7 +184,10 @@ Batch 2 waits: lane A's open #1392 (A347) changes `catalogue-browser.ts` and `me
 lane A's next menus items change the same area. Batch 3 overlaps no open pull request, so it goes
 first, split in two pull requests: **3a** (venue settings, service and people, below) and **3b**
 (printers, devices, device profiles, payments, canvases — task list appended when 3a lands).
-`login-screen.ts` is excluded: every action on it is a sign-in, not a save.
+`login-screen.ts` is excluded: every action on it is a sign-in, not a save. 2026-10-08, after 3a
+landed: batch 2 still waits on lane A's A346 and A348 (branch
+`fix/price-overrides-stand-out-and-available`, which edits the menus-screen tests and the menu
+tables), so 3b goes next.
 
 ## Batch 3a — venue settings, service and people (13 files)
 
@@ -770,3 +773,346 @@ action list (a pointer to this table); the root `CLAUDE.md` §3 forms clause ("b
 follow it") and `docs/developers/conventions-ui.md` (~19) name batch 5. Update the A331 backlog
 entry (batch 5 landed). Lane B's 3b branch edits the same lines: whichever lands second rebases and
 keeps both. FULL review path because of the invoice recipient (5.3).
+
+## Batch 3b — printers, devices, device profiles, payments, canvases (5 files)
+
+Branch `feat/save-follows-changes-hardware`, worktree
+`/Users/clintongormley/workspace/worktrees/waitron-feat-save-follows-changes-hardware`. Line numbers
+(~NNN) were read from the tree at `59fa80809` on 2026-10-08. On the same day,
+`gh pr view <n> --json files` over the open non-Dependabot pull requests (#1399, #1400, #1404), and
+a `git diff --name-only` of lane A's `fix/price-overrides-stand-out-and-available` against `main`,
+listed none of the five screens.
+
+**The 3a rules block ("Rules for every task") applies to every task below.** Two more rules, each
+learnt in 3a:
+
+- Read the whole run output for `Unhandled error` lines. Vitest can report every test passing
+  while it prints one, and that is a failure: find what threw and fix it.
+- To find the tests that press an untouched Save, make the new early return THROW for a moment
+  (`if (s.unchanged) throw new Error("untouched save")`) and run the task's suites. Every test that
+  then fails pressed an untouched Save: each is a changed check (one edit before the press, or an
+  assertion that Save is disabled) or a fix. Put the plain `return` back afterwards. The
+  "predicted changed checks" below came from a script that looked for a press with no edit
+  earlier in the same test; it misses an edit made inside a helper, and it misses a test whose
+  start it misread, so the throw-probe is the list that counts.
+
+**Where a save handler today reads "a scope exists" as "a coordinator exists".** Once a scope
+always exists, every `if (scope) … else …` branch whose `else` stood for "no coordinator" changes
+what runs in a widget test. Each task names its sites. Where both branches end the same way (the
+form closes, or it stays open on a newer edit), delete the `else` branch: the scope's
+`commit`/`isDirty` gives the same answer with or without a coordinator, and the dead branch would
+cost coverage. Where they differ, gate on the coordinator. A widget test that relied on the old
+`else` branch is a changed check; a failure showing that the scope branch is wrong in the app is
+a regression: stop and report it.
+
+**Forms that open already savable** (each passes `{ savableAtOpen: true }` — or the condition
+given — to `saveActionState`, and gets a save-state case asserting it opens enabled and `primary`).
+None of these forms needs the early return, because their action is never `unchanged`. Their
+registrations stay as they are — except the calibration wizard, which is savable at open only when
+an add opened it: 3b.1b converts its registration, and its early return reads the same flag:
+
+- **Printers, "name this printer" dialog** (`confirm-add-printer`, ~3511–3518, labelled Add or
+  Enable). `#namePrinter` (~569–593) fills the name from what discovery reported, or from a
+  switched-off printer's stored name (`discoveredNames[key] ?? #disabledPrinter(device)?.name ??
+  #discoveredLabel(device)`, ~575–579), and pressing Add with that name registers the printer. It
+  passes `savableAtOpen: true` every time it opens, not only after an add: opening it IS the add.
+- **Printers, the calibration wizard when an add opened it (a fresh add or a re-add).** `#registerDiscovered`
+  opens the wizard (`#openPrinter`, ~1376) and then sets `#readdingId` (~1399). Closing the wizard
+  without saving switches the printer off again (`#finishCalibration`, ~668–677), so pressing Save
+  with the settings as they are is what keeps it on — the test "leaves the printer switched on
+  once its calibration is saved" (`printers-screen.test.ts` ~7495) presses it untouched and must
+  stay as it is. `#savePrinter` clears `#readdingId` as it starts (~1707), so do not read
+  `#readdingId` live in the render: set a flag of the wizard's own beside `#readdingId = disabled.id`
+  (~1399) and clear it in `#disposeCalibrationDraft` (~661), or Save turns quiet while its
+  request is in flight. **Ruling (runner, 2026-10-08, after the plan review): after a FRESH add the
+  wizard is savable at open too.** The wizard exists to confirm a new printer's default settings
+  (80mm, 180dpi, no drawer, not portable, ~1376–1398) — a pre-filled value the operator must
+  confirm. Today an untouched Save there closes the wizard with no request (`#savePrinter` builds
+  an empty patch, ~1700–1711); gating it would leave Cancel as the only way to finish, while Cancel
+  after a re-add means "switch it off again". So set ONE "opened by an add" flag in both branches
+  of `#registerDiscovered` (fresh and re-add), beside `#openPrinter`, and read it for
+  `savableAtOpen`. This changes no current behaviour. Editing an existing printer's calibration
+  (`calibrate-printer-details`) opens quiet. The PR names this ruling for the owner.
+- **Devices, the pairing dialog's settings step** (`pair-submit`, ~1890–1897). `#toSettings`
+  (~798–817) fills the name with the device's own asked-for name (`waitingName(request)`) and, for a
+  returning device, its old profile and station; pressing Pair approves the device as it asked. The
+  dialog keeps its own checks (`blocked`, `#pairSettled`).
+- **Payments, each reader row in "Add a reader"** (`adopt-${providerRef}`, ~1666–1670). `#onAddReader`
+  fills each name with the provider's reader name (`drafts`, ~634; drawn at ~1639), and Add adopts the
+  reader under that name. Today these buttons have no `variant`, so `savableAtOpen` draws them
+  `primary` for the first time — the same look as the printers' discovered-row Add (~3684). LOOK
+  at a dialog with several readers in 3b.6.
+- **Canvases, the duplicate dialog** (`confirm-duplicate`, ~1033–1040). `#openDuplicate` (~853–857)
+  fills the name with `<name> (copy)`, and Duplicate creates the canvas (`createCanvas`, ~868).
+
+**What the earlier survey notes said, checked against the code:** devices' Edit backs one Save
+with the edit scope and the reader scope — true (~510–511; the save handler already reads both,
+~1413). Device profiles' Save backs the draft scope and the reader scope — true (~501–504, ~1352).
+"Printers' calibration wizard and name-printer modal open savable after an add" — half true: the
+name dialog always opens savable; the wizard does after any add (above, ruling). "Canvas
+create/duplicate savable at open" — duplicate is; the create dialog is not a save at all
+(`#confirmCreate`, ~496–511, sends no request: it opens the editor on a default canvas), and the
+editor it opens already reports a change, because its scope's baseline is `null` (~502, ~312)
+while the draft is a canvas, so its Save opens enabled with no flag. "Payments adopt pre-filled" —
+true. Not in the notes: devices' pairing dialog also opens savable.
+
+**Two calls the plan reviewer agreed with**, both gated below on the 3a.2b ruling that a
+submission of staged input is gated: the printers' Bluetooth Pair dialog (`confirm-pair`) sends a
+PIN to the agent rather than saving an edit, and the payments bill attestation (`confirm-bill-attest`)
+records an outcome with a note and a manager PIN. Both open with every required field empty
+(`pairPin = ""` at ~1585; `billOutcome`, `billNote`, `billPin` all `""` at ~841–843), so an
+untouched press can never send anything: gating changes only that the empty press now shows a
+disabled button instead of the field errors.
+
+### Task 3b.1a — printers: the agent dialog and the printer page's name and connection editors
+
+All in `apps/dashboard/src/screens/printers-screen.ts`.
+
+- **Edit agent** (`save-agent`, ~2171–2178, fixed `variant="primary"` today) on `#agentScope`,
+  registered with `leaveCoordinatorFor(this)` and `?.register` in `#editAgent` (~693–702): make it
+  `draftScopeFor`. Leave paths that read "a scope exists": `.beforeClose=${this.#agentScope ? …}`
+  (~2135), `#beforeAgentClose` (~683–686, `this.#agentLeave!` and `this.#agentScope!`), and
+  `#closeModal`'s `if (this.#agentScope)` (~3154) — gate all three on `#agentLeave`. The early
+  return goes in `#saveAgent` (~2183) after its `!agent` check and BEFORE `formAttempted = true`,
+  so an untouched press shows no error.
+- **Printer page, name** (`save-printer-name`, ~2635–2641) on `#detailNameScope`
+  (`leaveCoordinatorFor(this)?.register`, ~2370) and **connection** (`save-printer-connection`,
+  ~2770–2776) on `#detailConnectionScope` (~2396): both become `draftScopeFor`, keep their
+  existing `?disabled` conditions, and return early at the top of `#saveDetailName` (~2486) and
+  `#saveDetailConnection` (~2428). `#cancelDetail` (~2407–2426) already gates on
+  `coordinator && scope`. "Scope exists" branches in the two save handlers: the refusal paths'
+  `if (scope && …) … else if (this.detail… === savingDraft)` (~2447–2454, ~2501–2504) and the
+  success paths' `if (scope) … else if (… === savingDraft)` (~2458–2469, ~2508–2518). I believe
+  each `else` becomes unreachable once the scope always exists; delete them (coverage confirms).
+- Immediate, not gated: `edit-agent-*`, `revoke-agent-*`, `allow-agent-*`, `scan-agents`,
+  `open-add-agent` (the Add-an-agent dialog has no field and only a Close), `join-review-*` (opens
+  the join dialog), the join dialog's number choices and `join-deny-*`, the status switch (`printer-detail-active`),
+  `edit-printer-name`, `edit-printer-connection`, `open-equipment-label`.
+- Predicted changed checks (`printers-screen.test.ts`): "does nothing when a Save from a closed
+  agent editor is pressed" (~5539) and "does nothing when Save from a closed name editor is
+  pressed" (~6035) — type a change first, so they still prove the STALE press does nothing rather
+  than the untouched one; "leaves the agent's Save working after a refusal that names no field"
+  (~6472) and "shows an agent refusal and the fields sentence one after the other" (~6486) — one
+  edit before the first press.
+- Suites: `pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen
+  src/screens/printer-agent.unsaved src/screens/printer-inline.unsaved src/dashboard-app.test`
+  (`dashboard-app.test.ts` ~6370–6420 edits a printer's name and connection under the real
+  coordinator).
+
+### Task 3b.1b — printers: the calibration wizard
+
+- `save-printer-${id}` (~3440–3446, fixed `variant="primary"`, no `?disabled` today, shown on step
+  3 only) on `#calibrationScope` (`?.register`, ~2251–2264): make it `draftScopeFor`; bind
+  `variant` and `?disabled=${s.unchanged}` (keep `?loading`) with
+  `saveActionState(this.#calibrationScope, { savableAtOpen: <the opened-by-an-add flag> })` (see "Forms that
+  open already savable"). Early return in `#savePrinter` (~1691) after its `submitting` check,
+  on `saveActionState(…)` with the SAME `savableAtOpen` flag as the render, so an added or re-added
+  printer's untouched Save still works. Clear that flag where a save succeeds (beside
+  `scope?.commit(submitted)`, ~1720): a wizard a newer edit keeps open (`scope.isDirty()`) must
+  turn quiet again when that edit is undone, as any form left open after a save does.
+  `submitOnEnter` on the wizard (~3248) already skips a disabled button
+  (`packages/ui-core/src/submit-on-enter.ts` ~35).
+- Leave paths: `.beforeClose=${this.#calibrationScope ? …}` (~3244), `#beforeCalibrationClose`'s
+  `!this.#calibrationScope || this.#calibrationLeave!` (~649–650), `#closeModal`'s
+  `if (id === "edit-printer-modal" && this.#calibrationScope)` (~3169) — gate on
+  `#calibrationLeave`.
+- Not gated: `calibration-next` and `calibration-back` (step navigation), `print-ruler-*`,
+  `print-sample-receipt-*`, `test-printer-drawer`, `cancel-edit-printer`, and on the printer rows
+  `print-test-page-*`, `deactivate-printer-*`, `forget-pairing-*`, `edit-printer-*` (opens the
+  name editor), `calibrate-printer-details`.
+- Save-state cases: an existing printer's wizard reaches step 3 with Save quiet and disabled;
+  changing paper width on step 1 makes it primary on step 3; changing it back makes it quiet; a re-added printer's wizard opens with Save enabled and primary, and pressing it untouched keeps
+  the printer on (no `deactivatePrinter`) and stays primary while the request is in flight; a
+  freshly added printer's wizard also opens with Save enabled and primary, and pressing it
+  untouched closes the wizard with no update request (today's behaviour).
+- Predicted changed checks (`printers-screen.test.ts`): "keeps the printer's saved paper width and
+  resolution when calibration is run again" (~509–531) and "does not write unchanged calibration
+  settings" (~818–825) — both press an untouched Save and expect no write: assert Save disabled
+  instead (the second also expected the wizard to close; it now stays open until Cancel). Also
+  (plan review): "does not resend detail edits when finishing calibration" (~827–880) edits the
+  name and connection first, so the script missed it, but its calibration Save (~867) is pressed
+  untouched: its `toHaveBeenCalledTimes(3)` would still pass with Save disabled, proving nothing —
+  change one calibration setting before the press and assert the fourth call carries only that
+  setting.
+- Suites: `src/screens/printers-screen src/screens/printer-calibration.unsaved`.
+
+### Task 3b.1c — printers: Add a printer (the name dialog and the Bluetooth Pair dialog)
+
+- **Name dialog** (`confirm-add-printer`, ~3511–3518): bind `variant` through
+  `saveActionState(this.#printerNameScope, { savableAtOpen: true })` (it stays `primary`, as
+  today). Leave `#printerNameScope`'s registration (~582–592) as it is: the gate never reads it,
+  and keeping it coordinator-only leaves `#registerDiscovered`'s scope branches (~1335–1343,
+  ~1357–1375), `#beforePrinterNameClose` (~560–567) and the Add dialog's `.beforeClose` (~3736)
+  untouched.
+- **Bluetooth Pair dialog** (`confirm-pair`, ~3573–3580, fixed `variant="primary"`,
+  `?disabled=${pinInvalid}`) on `#pairScope` (`?.register`, ~1597–1607, `parent:
+  this.#addressScope?.id`): make it `draftScopeFor` and gate it (see "Two calls the plan reviewer agreed with").
+  Early return in `#pair` (~1610) before `pairAttempted = true`. Leave paths:
+  `.beforeClose=${this.#pairScope ? …}` (~3534), `#beforePairClose`'s `!this.#pairScope ||
+  this.#pairLeave!` (~756–757), `#closeModal`'s `if (id === "pair-printer-modal" && this.#pairScope)`
+  (~3165) — gate on `#pairLeave`. "Scope exists" branch in `#pair`: `if (scope && modal) { closeAfter
+  … } else await this.#closeModal(…)` (~1630–1634). `closeAfter("saved")` only sets `open = false`
+  (`packages/ui/src/components/wt-dialog.ts` ~155–157), so I believe both branches end the same
+  way: keep `if (modal)` and delete the `else`.
+- `#addressScope` (~2988–2998) stays as it is: the only action beside it, Check address
+  (`probe-printer`), is a lookup that writes nothing (`#probe` ~1155 → `probePrinterAddress`), so it
+  is not gated.
+- Immediate, not gated: `open-add-printer`, `scan-printers`, `show-all-bluetooth`, `probe-printer`,
+  `register-*` (opens the name dialog), `pair-*` (opens the Pair dialog), `forget-device-*`,
+  `cancel-new-printer`, `resend-job-*`, `view-job-*`, `refresh-printer-lists`.
+- Predicted changed checks: "asks for the PIN, checks it beside the field and in the bottom
+  message, then pairs" (`printers-screen.test.ts` ~6876–6897) and "renders Bluetooth devices, Show
+  all and the Pair dialog accessibly" (`printers-screen.a11y.test.ts` ~658–681) press Pair with the
+  PIN empty to show its error: type an invalid PIN (`12 34`) first.
+- Suites: `src/screens/printers-screen src/screens/printer-name.unsaved
+  src/screens/printer-pair.unsaved src/screens/printer-address.unsaved`.
+
+### Task 3b.2 — devices (`devices-screen.ts`)
+
+- **Edit device** (`edit-save`, ~1988–1995, fixed `variant="primary"`, `?disabled=${blocked}`) on
+  `{ isDirty: () => this.#editScope.isDirty() || this.#readerScope?.isDirty() }`. `#editScope` is
+  registered with `?.register` in `#registerEditDraft` (~552–579) and `#readerScope` with
+  `this.#editLeave?.register` once the readers arrive (~1095–1101): both become `draftScopeFor`
+  (the reader scope still only once its read lands). Early return in `#submitEdit` (~1323) after
+  `editSaving` and BEFORE `editAttempted = true`. Leave paths: `.beforeClose=${this.#editScope ||
+  this.#readerScope ? …}` (~1921) — gate on `#editLeave`. `#beforeEditClose` (~512–520) already
+  answers "close" without a coordinator, so it is safe as it stands, but binding on the
+  coordinator keeps a widget test's close as direct as today.
+- I believe no edit opens savable: the baseline is taken from the form as opened, after
+  `heldBinding`, `#activeBinding` and the printer choices have been resolved (~1050–1074), so a
+  stored value the form shows differently is part of the baseline. The save-state test fills
+  every field: name, a kitchen device with a held switched-off station (as in ~1297), all three
+  printers, made-here stations, approved profiles and a card reader.
+- **Pair** (`pair-submit`) opens savable — see above.
+- Immediate, not gated: `edit-device-*`, `remove-*` (two-tap), `open-add-device`, `pair-*` on the
+  waiting list, the number choices (`#checkNumber`), `add-device-close`.
+- Predicted changed checks (`devices-screen.test.ts`; each presses Save untouched through its
+  `save()` helper, ~1161): ~1297, ~1331 ("…saves it unchanged" with a held station or watcher),
+  ~1686 ("Save keeps both, unchanged"), ~1720, ~1861, ~1876, ~2013, ~2055 ("a name clash shows
+  under Name"), ~2174, ~2228, ~2248, ~2283, ~2429 ("sends one request however often Save is
+  pressed"), ~2552, ~2816; `devices-screen.a11y.test.ts` ~420 and ~509 (refusal states). A test
+  whose point is that an untouched Save sends the held values unchanged becomes the 3a.4a shape:
+  the form opens disabled (which shows the held values read back equal), then one field is edited
+  and every OTHER field is sent as it was.
+- Suites: `src/screens/devices-screen src/screens/device-edit.unsaved
+  src/screens/device-pair.unsaved`.
+- This task is the size of 3a.3 (receipts): commit at a green point and hand over if it nears ~80
+  tool calls (done, left, files, each check's state). While working, filter runs by test name
+  (`-t`); run the whole suites for the throw-probe and the final pass.
+
+### Task 3b.3 — device profiles (`device-profiles-screen.ts`)
+
+- `profile-save` (~2138–2144, fixed `variant="primary"`, `?disabled=${this.saving || ownMarked}`)
+  on `{ isDirty: () => this.#draftScope.isDirty() || this.#readerScope?.isDirty() }`. Both are
+  registered with `this.#leave?.register` — `#registerDraft` (~540–566, `id: this`) and
+  `#loadReaders` (~1001–1011, `parent: this`): both become `draftScopeFor`. Early return in `#save`
+  (~1287) after `saving` and BEFORE `attempted = true`.
+- Leave path: `#cancel`'s `if (this.#draftScope) await this.#leave!.request(…)` (~1242) — gate on
+  `#leave`.
+- A new profile with nothing typed opens unchanged: `#openCreate` (~903–931) takes the baseline
+  after the draft is cleared, and moves it (`scope?.commit`, ~921) when it fills in a venue's only
+  department, so that fill-in is not a change. Its name is required (`#save` ~1286 comment), so
+  it is not savable at open. I believe no edit opens savable either: `#openEditor` (~935–987) drops
+  switched-off zones (`liveZones`) BEFORE `#registerDraft`, and `#extrasToSend` (~1190–1221) sends
+  nothing for a part that matches what was loaded.
+- **Duplicate is immediate**: `#duplicate` (~1390–1439) creates the copy straight away
+  (`createDeviceProfile`, ~1422) with no dialog. Also immediate: `create` (opens the editor),
+  `edit-*`, `delete-*` and `confirm-delete`. The printer list's up/down buttons are draft edits.
+- Predicted changed checks (`device-profiles-screen.test.ts`; the `editListed`/`editKitchen`/
+  `openEdit` helpers open without editing, `openCreate` ~1352 types a name): ~446 and ~531 (Edit
+  then Save untouched), ~1014, ~1030, ~1256 ("sends no lists when they are unchanged"), ~1757,
+  ~1772, ~2060 ("sends no default or drawer list a save leaves alone"), ~2109, ~2123, ~2184,
+  ~2214, ~2231. The "…unchanged"/"…leaves alone" ones take the 3a.4a shape described in 3b.2.
+- Suites: `src/screens/device-profiles-screen` (the `.test`, `.a11y.test` and `.unsaved.test`
+  files).
+- This task is the size of 3a.3 (receipts): commit at a green point and hand over if it nears ~80
+  tool calls (done, left, files, each check's state). While working, filter runs by test name
+  (`-t`); run the whole suites for the throw-probe and the final pass.
+
+### Task 3b.4 — payments (`payments-screen.ts`)
+
+- **Rename a reader** (the reader dialog in `edit` mode: `save-reader`, ~1786–1793). The same
+  button is `confirm-unpair` in `unpair` mode, which stays as it is (immediate). In edit mode bind
+  `variant` and `?disabled=${this.busy || invalid || s.unchanged}` from
+  `saveActionState(this.#editScope)`. `#editScope` is registered with `this.#readerLeave?.register`
+  in `#openEditor` (~741–749): make it `draftScopeFor`. Early return in `#saveEditor` (~773) for
+  edit mode only, BEFORE `editAttempted = true`. Leave path: `.beforeClose=${this.#editScope ? …}`
+  (~1728) — gate on `#readerLeave`; `#beforeEditorClose` (~435–439) already starts with
+  `!this.#readerLeave ||`.
+- **Bill attestation** (`confirm-bill-attest`, ~1250–1256, no `variant` today, `?disabled=${invalid}`)
+  on `#billScope` (`this.#billLeave?.register`, ~847–855): make it `draftScopeFor`, gate it (see
+  "Two calls the plan reviewer agreed with"). Early return in `#attestBill` (~903) BEFORE `billAttempted = true`. Leave
+  path: `.beforeClose=${this.#billScope ? …}` (~1166) — gate on `#billLeave`; `#beforeBillClose`
+  (~401–405) already starts with `!this.#billLeave ||`.
+- **Add a reader** rows (`adopt-*`) open savable — see above; their per-row scopes (~638–645) stay.
+- Immediate, not gated: `connect-*`, `disconnect-*` (two-tap), `add-reader-*`, `pair-new-reader`,
+  `cancel-discovery`, the reader rows' `edit-*`, `label-*`, `details-*`, `enable-*`/`disable-*`,
+  `unpair-*` and `confirm-unpair`, `refresh-readers`, `check-*` and `confirm-bill-check`,
+  `attest-*` (opens the dialog), `refresh-bill-recovery`, `resolve-*` and `confirm-resolve`. The
+  connect form and the pairing panel (`connect-form-*`, `add-reader-dialog-*`) are the payment
+  modules' own panels, in batch 4.
+- Predicted changed checks (`payments-screen.bill-recovery.test.ts`): "requires a confirmed
+  outcome, note and PIN before attesting a refund" (~246), "on an invalid submission focuses the
+  first invalid field" (~362), "re-checks every change after a failed submission" (~390), the
+  outcome case near ~643 — each presses Record with the form empty: fill one field wrongly first;
+  "starts again when the form is reopened: no messages and Record working" (~467) — the reopened
+  form now opens with Record DISABLED; `payments-screen.a11y.test.ts` ~300–312 presses Record
+  empty for the errors state: one field first. No rename test predicted: each types a name first.
+- Suites: `src/screens/payments-screen src/screens/payment-attestation.unsaved
+  src/screens/payment-readers.unsaved` (the first covers `.test`, `.a11y.test` and
+  `.bill-recovery.test`).
+
+### Task 3b.5 — canvases (`canvas-editor-screen.ts`)
+
+- **Editor Save** (`save`, ~1320–1326, fixed `variant="primary"`, `?disabled=${this.saving}`) on
+  `#editorScope`, registered with `this.#leave?.register` inside `willUpdate` (~298–313): make it
+  `draftScopeFor`. Its `commit` then asks for an update from inside `willUpdate` (~312); I believe
+  Lit folds that into the update already running, but check the run for a "scheduled an update
+  after an update completed" warning and for an update loop. Early return in `#save` (~808) after
+  its `saving` check. A NEW canvas's editor opens enabled with no flag (its baseline is `null`,
+  ~502 and ~312): a save-state case pins that, beside an existing canvas opening quiet.
+- **Duplicate** (`confirm-duplicate`) opens savable — see above; its scope (~338–351) stays.
+- **Create** (`confirm-create`, ~1002–1008) is NOT a save: it writes nothing (`#confirmCreate`,
+  ~496–511) and opens the editor. Leave it as it is, and its scope (~319–333) too.
+- Leave paths: none to change. `#requestCancelEditor` already gates on `#leave` (~251–262), and the
+  create and duplicate dialogs' `.beforeClose` bindings (~984, ~1017) read scopes that stay
+  coordinator-only.
+- Immediate, not gated: `create`, `edit-*`, `duplicate-*` (opens the dialog), `delete-*` and
+  `confirm-delete`, `editor-cancel`, `canvas-settings`. The tab bar, palette, card and tab buttons
+  are draft edits.
+- Predicted changed checks (`canvas-editor-screen.test.ts`): "Save on an existing canvas calls
+  updateCanvas and returns to the list" (~670), "surfaces a server canvas.name_taken rejection"
+  (~704), "keeps the newer canvas open when an earlier save finishes" (~916), "does not save twice
+  before the disabled state renders" (~955) — each opens an existing canvas and presses Save
+  untouched: one edit first. The `.unsaved.test.ts` presses all follow `canvasName(…)`. Also
+  (plan review): "ignores move and resize intents naming a card the tab does not have" (~1359)
+  and "keeps the last tab when its delete is clicked anyway" (~1374) make an edit that changes
+  nothing, then press Save and expect `updateCanvas` with the unchanged definition: assert Save
+  stays disabled instead, which proves the ignored edit changed nothing.
+- Suites: `src/screens/canvas-editor-screen` (the `.test`, `.a11y.test` and `.unsaved.test`
+  files).
+
+### Task 3b.6 — look, docs, backlog
+
+- Run `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test
+  src/dashboard-app.a11y.test` once: they mount the printers, devices, device profiles, payments
+  and canvas screens to check routing and headings (`dashboard-app.test.ts` ~1790, ~1863, ~1875,
+  ~2623, ~5433–5440; `dashboard-app.a11y.test.ts` ~503–518) and press none of their Saves except
+  the printer page editors already run in 3b.1a. No `dashboard-app.*unsaved*` or settings-panels
+  test mounts any of the five (`git grep -l` of each element name over `apps/dashboard/src`,
+  2026-10-08).
+- LOOK (dev stack from the worktree, `wa-wt demo waitron-feat-save-follows-changes-hardware`;
+  check port 8080 and the venue folder's holders first): each form above unchanged and after one
+  edit, desktop, light, English — including the forms that open savable (name a printer, a
+  freshly added and a re-added printer's wizard, device pairing, Add a reader with several readers, duplicate a
+  canvas). Then 390px, dark, Spanish on the printers screen (the printer page's name editor and
+  the calibration wizard) and one dialog (Edit device).
+- `docs/developers/design-system.md` → Forms: add a "batch 3b" line to the list of forms that
+  follow the rule, and name the 3b forms that open already savable beside the backup paragraph
+  (the name-a-printer dialog, the calibration wizard when an add opened it, device pairing, Add a reader,
+  duplicate a canvas).
+- Root `CLAUDE.md` §3: the clause becomes "the forms that follow it are listed in
+  design-system.md", naming no batches. It is format-checked: run `pnpm format:check`.
+- `docs/backlog.md` A331: batch 3b's status in the headline, and
+  a 3b bullet listing the forms, the ones that open savable, and what the look found.
+- Light review path (no risk trigger).

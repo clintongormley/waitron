@@ -1566,6 +1566,10 @@ and nothing guards it across screens:
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
   form; the shift dialog;
+- batch 3b: the print agent's Edit dialog; a printer page's name and connection editors; the
+  calibration wizard; the Bluetooth printer Pair dialog; the Edit device dialog; the device profile
+  editor, new and existing; the card reader's Rename dialog; the bill attestation's Record; the
+  canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
@@ -1576,10 +1580,23 @@ and nothing guards it across screens:
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
   The till's forms that track no unsaved changes wait for Batch 7's follow-up audit.
 
-The backup settings editor is the one form here that can open already savable: when the stored
-schedule is not a wall-clock one, or no retention is stored, the form cannot show what is running,
-so it opens with its own defaults and Save ready (`#policyReplaced` in
-`apps/dashboard/src/screens/backup-screen.ts`).
+These open already savable:
+
+- the backup settings editor, when the stored schedule is not a wall-clock one, or no retention is
+  stored: the form cannot show what is running, so it opens with its own defaults and Save ready
+  (`#policyReplaced` in `apps/dashboard/src/screens/backup-screen.ts`);
+- the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
+- the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
+  default settings, and after a re-add pressing Save is what keeps the printer on, because closing
+  the wizard switches it off again (`#calibrationOpenedByAdd` in
+  `apps/dashboard/src/screens/printers-screen.ts`). This is the campaign runner's ruling of
+  2026-10-08, still awaiting the owner's word. Opened from a printer's page, it opens quiet;
+- the device pairing dialog's Pair: its settings step opens holding the name the device asked
+  with, and pressing Pair approves the device;
+- each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
+- the canvas Duplicate dialog, holding `<name> (copy)`;
+- a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
+  as changed from the start.
 
 Stripe Connect/Add and SumUp Connect/Pair/Try again are provider operations. Their actions keep
 their existing validation and retry behavior. See the

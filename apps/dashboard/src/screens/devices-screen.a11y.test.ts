@@ -292,6 +292,14 @@ async function openPair(el: DevicesScreen): Promise<void> {
   await flush(el);
 }
 
+/** One edit in the Edit dialog, so its Save has a change to send. */
+async function rename(el: DevicesScreen, name: string): Promise<void> {
+  el.shadowRoot!.querySelector("[data-test=edit-name]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: name }, bubbles: true, composed: true }),
+  );
+  await flush(el);
+}
+
 async function flush(el: DevicesScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -417,6 +425,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=edit-made-here]")).not.toBeNull();
+      await rename(el, "Barra 1");
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
       await vi.waitFor(() =>
         expect(
@@ -437,6 +446,45 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await page.viewport(1280, 900);
     },
   );
+
+  it("renders a till's Edit dialog with Save quiet, and then with a change, accessibly", async () => {
+    const till: DeviceRow = {
+      ...devices[0]!,
+      id: "till",
+      kind: "till",
+      stationId: null,
+      binding: null,
+      madeHereStationIds: ["s2"],
+    };
+    const { el, host } = await mountWidget<DevicesScreen>(
+      "dashboard-devices-screen",
+      { api: stubApi({ listDevices: vi.fn().mockResolvedValue([till]) }) },
+      theme,
+    );
+    await flush(el);
+    deep(el.shadowRoot!, "[data-test=edit-device-till]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        (
+          el.shadowRoot!.querySelector("[data-test=edit-reader]") as
+            | (HTMLElement & {
+                disabled: boolean;
+              })
+            | null
+        )?.disabled,
+      ).toBe(false),
+    );
+    await flush(el);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=edit-save]")!;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    await rename(el, "Caja 2");
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
 
   it.each([390, 1280])(
     "renders a till's Edit dialog with Use default, a carried printer, a busy reader and a held refusal accessibly at %ipx",
@@ -506,6 +554,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await flush(el);
       await expectNoA11yViolations(host);
+      await rename(el, "Caja 2");
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
       await vi.waitFor(() =>
         expect(
