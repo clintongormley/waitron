@@ -1296,7 +1296,14 @@ describe("venue service management routes", () => {
           serviceMode: "prepay",
         },
       ],
-      readiness: [{ code: "zone.menu_unpublished", zoneId: fx.zoneId }],
+      readiness: [
+        {
+          code: "department.no_periods",
+          departmentId: department.id,
+          departmentName: "Restaurant",
+        },
+        { code: "zone.menu_unpublished", zoneId: fx.zoneId, zoneName: "Terrace" },
+      ],
     });
     const blocked = await send(
       fx.app,
