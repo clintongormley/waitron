@@ -739,7 +739,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     },
   );
 
-  it("renders device filters and the joined heading accessibly", async () => {
+  it("renders device filters and the joined confirmation accessibly", async () => {
     sessionStorage.removeItem("devices");
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
@@ -761,7 +761,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=pair-modal]")).toBeNull(),
     );
-    expect(el.shadowRoot!.querySelector("[data-test=added-device] h2")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=joined-modal]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

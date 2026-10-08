@@ -3973,9 +3973,12 @@ The original walkthrough is retained under _Detail → Setup wizard_.
 - **A413 — the Devices screen and Add a device (owner, 2026-10-08; in progress in lane E on `fix/devices-screen-add-device`).**
   1. **Two "Add a device" buttons when there are no devices**: one in the page heading and one in
      the "No devices yet." box. Show one.
-  2. **"Added [name]" is lost in the dialog's text.** When a device joins, show its name as a large
-     heading that stays a few seconds and fades. Once one has joined, the waiting line reads
-     "Waiting for more devices…" (the first wait keeps "Waiting for devices…"). Both languages.
+  2. **After a device joins, ask whether to add another** (owner revised this part, 2026-10-08).
+     Close the waiting dialog and show a compact confirmation: "[device name] has been added."
+     and "Do you want to add another device?" Close ends adding; Add another device resumes
+     waiting with "Waiting for more devices…". The first wait keeps "Waiting for devices…".
+     Both languages. Release this flow's pairing hold while the question shows. A second ask
+     already received stays pending and is offered when you choose Add another device.
   3. **The devices table has no search and no filters.** The shared `wt-data-table` offers both
      (`searchable`, which the content languages, modifiers and units screens turn on, and column
      filters); `devices-screen.ts` passes the filter labels but turns neither on. Filter at least by
@@ -3983,8 +3986,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   Review follow-up: the profile filter's None choice selects devices whose Profile cell is blank;
   typing "None" or "Ninguno" in search therefore finds none. The blank cell is unchanged from
   main `3c508a481` (`#profileName` returns an empty string when there is no matching profile).
-  No wording change is queued. Screen-reader announcement of a newly inserted status region and
-  a Pair save completing after disconnect/reopen remain unverified; no guarantee is made for either.
+  No wording change is queued. A Pair save completing after disconnect/reopen remains outside
+  this item's scope; its existing unsaved-draft tests remain in place.
 
 - **A414 — device screens on a phone (owner, 2026-10-08; open; no lane yet).**
   1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,

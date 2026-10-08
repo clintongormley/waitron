@@ -3233,8 +3233,8 @@ describe("add a device", () => {
     const decoy = document.createElement("button");
     el.shadowRoot!.prepend(decoy);
 
-    q(el, "[data-test=add-device-close]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
+    q(el, "[data-test=joined-close]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).toBeNull());
     await flush(el);
     expect(el.shadowRoot!.activeElement).toBe(q(el, ".heading [data-test=open-add-device]"));
   });
@@ -3521,11 +3521,27 @@ describe("add a device", () => {
     );
   });
 
-  for (const [locale, first, more, added] of [
-    ["en-GB", "Waiting for devices…", "Waiting for more devices…", "Added Barra 2"],
-    ["es-ES", "Esperando dispositivos…", "Esperando más dispositivos…", "Barra 2 añadido"],
+  for (const [locale, first, more, added, question, another, close] of [
+    [
+      "en-GB",
+      "Waiting for devices…",
+      "Waiting for more devices…",
+      "Barra 2 has been added.",
+      "Do you want to add another device?",
+      "Add another device",
+      "Close",
+    ],
+    [
+      "es-ES",
+      "Esperando dispositivos…",
+      "Esperando más dispositivos…",
+      "Barra 2 se ha añadido.",
+      "¿Quieres añadir otro dispositivo?",
+      "Añadir otro dispositivo",
+      "Cerrar",
+    ],
   ] as const) {
-    it(`shows a prominent joined heading and waits for more devices in ${locale}`, async () => {
+    it(`pauses at a compact confirmation and resumes only on Add another device in ${locale}`, async () => {
       const before = currentLocale();
       setLocale(locale);
       try {
@@ -3542,13 +3558,20 @@ describe("add a device", () => {
         await toSettings(el);
         await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
         q(el, "[data-test=pair-submit]")!.click();
-        await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-        const notice = q(el, "[data-test=added-device]")!;
-        const heading = notice.querySelector("h2");
-        expect(heading?.textContent?.trim()).toBe(added);
-        expect(parseFloat(getComputedStyle(heading!).fontSize)).toBeGreaterThan(
-          parseFloat(getComputedStyle(q(el, "[data-test=waiting-empty]")!).fontSize),
-        );
+        await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+        expect(text(el, "[data-test=added-device]")).toBe(added);
+        expect(text(el, "[data-test=add-another-question]")).toBe(question);
+        expect(text(el, "[data-test=joined-close]")).toBe(close);
+        expect(text(el, "[data-test=add-another-device]")).toBe(another);
+        expect(q(el, "[data-test=add-another-device]")!.getAttribute("variant")).toBe("primary");
+        expect(q(el, "[data-test=add-device-modal]")).toBeNull();
+        expect(q(el, "[data-test=waiting-empty]")).toBeNull();
+        expect(api.releasePairingHold).toHaveBeenCalled();
+        const holds = vi.mocked(api.takePairingHold).mock.calls.length;
+        q(el, "[data-test=add-another-device]")!.click();
+        await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
+        await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalledTimes(holds + 1));
+        expect(q(el, "[data-test=joined-modal]")).toBeNull();
         expect(text(el, "[data-test=waiting-empty]")).toBe(more);
       } finally {
         setLocale(before);
@@ -3556,44 +3579,112 @@ describe("add a device", () => {
     });
   }
 
-  for (const reducedMotion of [false, true]) {
-    it(`removes the joined heading after its notice expires (reduced motion: ${reducedMotion})`, async () => {
-      const el = await openAdd(stubApi({ joinRequests: vi.fn().mockResolvedValue([pending[0]!]) }));
+  for (const dismissal of ["close", "escape"] as const) {
+    it(`ends adding on confirmation ${dismissal} and starts a fresh first wait next time`, async () => {
+      const api = stubApi({
+        joinRequests: vi.fn().mockResolvedValue([pending[0]!]),
+        listDevices: vi.fn().mockResolvedValue([{ ...devices[0]!, id: "d9", label: "Barra 2" }]),
+      });
+      const el = await openAdd(api);
       await toSettings(el);
       await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      try {
-        q(el, "[data-test=pair-submit]")!.click();
-        await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-        const notice = q(el, "[data-test=added-device]") as HTMLElementTagNameMap["wt-notice"];
-        expect(notice.localName).toBe("wt-notice");
-        notice.reducedMotion = reducedMotion;
-        await vi.advanceTimersByTimeAsync(3000);
-        expect(notice.hidden).toBe(false);
-        await vi.advanceTimersByTimeAsync(1000);
-        await notice.updateComplete;
-        if (!reducedMotion) {
-          const fade = notice.shadowRoot!.querySelector<HTMLElement>(".fading")!;
-          expect(fade).not.toBeNull();
-          expect(getComputedStyle(fade).animationName).toBe("wt-notice-fade");
-          vi.useRealTimers();
-          await vi.waitFor(() => expect(q(el, "[data-test=added-device]")).toBeNull());
-        } else {
-          expect(q(el, "[data-test=added-device]")).toBeNull();
-        }
-        expect(text(el, "[data-test=waiting-empty]")).toBe(t("devices.waiting_more"));
-        vi.useRealTimers();
-        q(el, "[data-test=add-device-close]")!.click();
-        await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
-        q(el, "[data-test=open-add-device]")!.click();
-        await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
-        expect(q(el, "[data-test=added-device]")).toBeNull();
-        expect(text(el, "[data-test=waiting-empty]")).toBe(t("devices.waiting"));
-      } finally {
-        vi.useRealTimers();
+      q(el, "[data-test=pair-submit]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+      if (dismissal === "close") q(el, "[data-test=joined-close]")!.click();
+      else {
+        q(el, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.focus();
+        await userEvent.keyboard("{Escape}");
       }
+      await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).toBeNull());
+      expect(q(el, "[data-test=add-device-modal]")).toBeNull();
+      await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-d9]")).toBe("Barra 2"));
+      vi.mocked(api.joinRequests).mockResolvedValue([]);
+      // The already consumed ask may still appear in a passive snapshot until it refreshes.
+      const parent = el.parentElement!;
+      el.remove();
+      parent.appendChild(el);
+      await flush(el);
+      q(el, "[data-test=open-add-device]")!.click();
+      await vi.waitFor(() =>
+        expect(text(el, "[data-test=waiting-empty]")).toBe(t("devices.waiting")),
+      );
     });
   }
+
+  it("reopens waiting with a fresh QR read even when the first QR is still pending", async () => {
+    let resolve!: (qr: string) => void;
+    const qrFor = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((yes) => {
+            resolve = yes;
+          }),
+      )
+      .mockResolvedValue("data:image/png;base64,fresh");
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api, qrFor });
+    await flush(el);
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() => expect(qrFor).toHaveBeenCalledOnce());
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+    q(el, "[data-test=add-another-device]")!.click();
+    try {
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=device-qr]")?.getAttribute("src")).toBe(
+          "data:image/png;base64,fresh",
+        ),
+      );
+    } finally {
+      resolve("data:image/png;base64,old");
+    }
+    await flush(el);
+    expect(q(el, "[data-test=device-qr]")!.getAttribute("src")).toBe("data:image/png;base64,fresh");
+    expect(qrFor).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores stale close reports from the waiting and confirmation dialogs", async () => {
+    const el = await openAdd(stubApi());
+    const waiting = q(el, "[data-test=add-device-modal]")!;
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+    const confirmation = q(el, "[data-test=joined-modal]")!;
+    q(el, "[data-test=add-another-device]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
+    waiting.dispatchEvent(
+      new CustomEvent("wt-close", { bubbles: true, composed: true, detail: {} }),
+    );
+    confirmation.dispatchEvent(
+      new CustomEvent("wt-close", { bubbles: true, composed: true, detail: {} }),
+    );
+    await flush(el);
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+    expect(d(el, "[data-test=pair-r2]")).not.toBeNull();
+  });
+
+  it("keeps a simultaneous second ask pending while the confirmation is open", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+    expect(q(el, "[data-test=waiting-table]")).toBeNull();
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    q(el, "[data-test=add-another-device]")!.click();
+    await vi.waitFor(() => expect(d(el, "[data-test=pair-r2]")).not.toBeNull());
+    expect(d(el, "[data-test=pair-r1]")).toBeNull();
+    await openPair(el, "r2");
+    expect(api.joinChallenge).toHaveBeenLastCalledWith("r2");
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+  });
 
   it("Pair sends the typed name, profile and binding, then says Added", async () => {
     const api = stubApi();
@@ -3616,10 +3707,10 @@ describe("add a device", () => {
     expect(text(el, "[data-test=added-device]")).toBe(
       t("devices.added").replace("{name}", "Barra 2"),
     );
-    expect(q(el, "[data-test=added-device]")!.getAttribute("role")).toBe("status");
+    expect(q(el, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     expect(api.listDevices).toHaveBeenCalledTimes(2);
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+    expect(q(el, "[data-test=add-device-modal]")).toBeNull();
   });
 
   it("sends a watcher binding without a station, and no binding for a till", async () => {
@@ -3663,6 +3754,8 @@ describe("add a device", () => {
     });
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    q(el, "[data-test=add-another-device]")!.click();
+    await vi.waitFor(() => expect(d(el, "[data-test=pair-r2]")).not.toBeNull());
     await openPair(el, "r2");
     await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();

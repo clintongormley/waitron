@@ -1,9 +1,10 @@
 # Adding and editing devices
 
 **2026-10-08 update:** [A413](../../backlog.md) replaces the two Add buttons with one in the page
-heading, shows a completed join as a heading for four seconds before the shared fade, and changes
-the empty waiting message to "Waiting for more devices…" after the first join. The Devices table
-also gains search and profile/status filters. The original design and plan below remain historical.
+heading and replaces the completed-join line with a compact confirmation asking whether to add
+another device (owner revision at 14:05). Close ends adding; Add another device resumes waiting
+with "Waiting for more devices…". The Devices table also gains search and profile/status filters.
+The original design and plan below remain historical.
 
 **Status:** agreed with the owner in conversation on 2026-10-04; written spec awaiting the owner's
 review. No plan or product change accompanies it. Behaviour described as "today" was read from the

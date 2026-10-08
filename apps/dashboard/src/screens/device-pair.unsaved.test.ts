@@ -244,7 +244,7 @@ it("new-device settings start clean after number proof and retain invalid edits"
   expect((q(screen, "[data-test=pair-name]") as HTMLInputElement).value).toBe("");
   expect(deny).not.toHaveBeenCalled();
 });
-it("successful pairing commits its exact payload before a failed refresh and leaves Add open", async () => {
+it("successful pairing commits its exact payload before a failed refresh and opens confirmation", async () => {
   let reads = 0;
   const { screen, accept, deny, release } = await mount({
     listDevices: async () => {
@@ -264,9 +264,12 @@ it("successful pairing commits its exact payload before a failed refresh and lea
     stationId: "s1",
   });
   expect(deny).not.toHaveBeenCalled();
-  expect(release).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
   expect(unload()).toBe(false);
-  expect(modal(screen, "add")!.open).toBe(true);
+  expect(modal(screen, "add")).toBeNull();
+  expect(q(screen, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.open).toBe(
+    true,
+  );
   await expect
     .poll(() => screen.shadowRoot!.textContent)
     .toContain(t("devices.enabled").replace("{name}", "Renamed"));
