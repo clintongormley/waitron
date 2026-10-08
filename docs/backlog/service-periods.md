@@ -6,8 +6,8 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; slice 1 plan approved and queued in campaign lane D (A366-1, then
-  A366-2 … A366-7, each planned then built without stopping for the owner)**
+  APPROVED 2026-10-07; remaining work is slices 2–7, each planned then built without
+  stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
   a name with one customer menu plus staff-only menus, a department's day is time ranges each given
@@ -24,6 +24,22 @@ their full text.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
   in two pull requests — each department's receipt with translated subtitle and footer after
   slice 1, the department page's Receipt tab after slice 6 — with its open decisions at its top.
+
+## A432 — a service period's signed end offset
+
+Owner, 2026-10-08: one signed whole-minute setting per service period, measured from its end.
+Slice 1 fixes it at 0. Negative means last orders before the end; positive allows unsent dishes
+within the window after it. Keep the editor, server refusal and till selection/sending rules aligned.
+The implementation needs its own small plan, migration and review. Campaign lane D queues A432
+immediately after slice 1.
+
+## Changing the business-day start after saving service hours
+
+The second A366-1 review directly changed the stored setting from 05:00 to 03:00. A saved
+22:00–04:30 range and an all-day 05:00–05:00 range then reported closed; re-saving the latter
+returned `menu_timetable.invalid` (`empty`). The settings route was not run. Reproduce through
+that route before deciding whether to remap, refuse the change, or require re-authoring the hours.
+Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2026-10-08).
 
 ## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
 
