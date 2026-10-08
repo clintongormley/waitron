@@ -668,13 +668,19 @@ drag a block's bottom edge → `grid-block-change`; selections snap to 15 minute
 neighbouring block. Keyboard: arrows move a focus cell, Shift+arrows extend, Enter on a selection
 emits `grid-range-select`, Enter on a block emits `grid-block-open`. `readOnly` draws only.
 
-- [ ] Steps: failing tests (a "21:00–03:00" block's position with cutover 06:00; a pointer drag
+- [x] Steps: failing tests (a "21:00–03:00" block's position with cutover 06:00; a pointer drag
 12:00→14:00 emits `{ startsAt: "12:00", endsAt: "14:00" }`; a drag across a block stops at it; the
 keyboard emits the same; the block's computed colour is the token's; axe for empty, filled and
 selected in both themes); watch them fail; implement; pass; commit
 `feat(venue-service): a day grid for service periods (A366)`.
 
 ---
+
+Task 11 checkpoint: the component and its event payloads pass the focused Chromium suites,
+including real mouse selection and resizing, keyboard selection, cancellation and both-theme
+axe scans. A changeover between quarter-hours draws short edge fragments but selects clock
+quarter-hours only, matching the request parser. Read-only grids retain a keyboard-scrollable
+region. Opening hours integration follows in Tasks 12–14.
 
 ### Task 12: Opening hours screen — shell, client, Periods tab
 

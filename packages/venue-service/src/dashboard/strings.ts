@@ -1,6 +1,8 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "service.grid": "Service periods",
+  "service.adjust_range": "Adjust {name} range",
   "prep.tickets.printer_count": "{count} printers",
   "prep.tickets.printed_on": "Printed on",
   "prep.tickets.screens": "Shown on screens",
@@ -715,6 +717,8 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "service.grid": "Periodos de servicio",
+  "service.adjust_range": "Ajustar el intervalo de {name}",
   "prep.tickets.printer_count": "{count} impresoras",
   "prep.tickets.printed_on": "Se imprime en",
   "prep.tickets.screens": "Se muestra en pantallas",
