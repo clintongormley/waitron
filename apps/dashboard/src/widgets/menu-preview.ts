@@ -302,7 +302,14 @@ export class MenuPreviewPanel extends LitElement {
       const section = members.find(
         (member) => member.kind === "section" && member.sectionId === id,
       );
-      if (section?.kind !== "section") return null;
+      if (section?.kind !== "section") {
+        if (change.kind === "section_removed" || change.kind === "product_removed")
+          return {
+            kind: "list",
+            sectionIds: target.sectionIds.slice(0, target.sectionIds.indexOf(id)),
+          };
+        return null;
+      }
       members = section.members;
     }
     if (
@@ -353,7 +360,8 @@ export class MenuPreviewPanel extends LitElement {
       this.confirmingHash = null;
       this.navigationUnavailable = false;
       this.#navigation++;
-      const menuId = this.preview?.document.menuId ?? null;
+      if (this.preview === null) return;
+      const menuId = this.preview.document.menuId;
       if (this.#menuId !== menuId) {
         this.selectedView = null;
         this.hiddenChangeIds = new Set();
@@ -634,7 +642,7 @@ export class MenuPreviewPanel extends LitElement {
                         target === null
                           ? nothing
                           : html`<a
-                              data-own-click
+                              ?data-own-click=${target.kind !== "home"}
                               data-change-id=${change.id}
                               href=${`/manage/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/${target.kind === "home" ? "home" : "preview"}`}
                               @click=${target.kind === "home" ? nothing : (event: MouseEvent) => void this.#navigate(event, change, target)}
@@ -786,6 +794,7 @@ export class MenuPreviewPanel extends LitElement {
       </ul>
       <a
         data-test="clash-prices"
+        data-own-click
         @click=${(event: MouseEvent) => {
           if (leftToBrowser(event)) return;
           event.preventDefault();

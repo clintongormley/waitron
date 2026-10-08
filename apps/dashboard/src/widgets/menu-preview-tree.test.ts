@@ -457,3 +457,57 @@ it("keeps the tree's swatch-size image slot visible beside changes in a desktop 
     parseFloat(getComputedStyle(node).getPropertyValue("--wt-tap-min")),
   );
 });
+
+it("keeps hidden changes and the content view through a same-menu empty reload", async () => {
+  const el = await mount();
+  el.shadowRoot!.querySelector<HTMLAnchorElement>('a[data-hide-change="stable"]')!.click();
+  el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "en" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  el.preview = null;
+  await el.updateComplete;
+  el.preview = fixture([change(), { ...change(), id: "new" }]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-change-row="new"]')).not.toBeNull();
+  expect((await tree(el)).view).toEqual({ kind: "customer", language: "en" });
+});
+
+it.each([false, true])(
+  "views a removed product and section at the nearest surviving parent (outer survives: %s)",
+  async (survives) => {
+    const p = fixture([
+      {
+        id: "removed-dish",
+        kind: "product_removed",
+        productId: "dish",
+        name: "Old dish",
+        under: ["Drinks", "Cold"],
+        source: "this_menu",
+        targets: { before: [target], after: [] },
+      },
+      {
+        id: "removed-section",
+        kind: "section_removed",
+        sectionId: "gone",
+        name: "Gone",
+        parentSectionIds: ["outer", "inner"],
+        under: ["Drinks", "Cold"],
+        source: "this_menu",
+        targets: { before: [], after: [] },
+      },
+    ]);
+    p.document.root.members = survives ? [documentSection("outer", "Surviving parent", [])] : [];
+    p.document.offers = {};
+    const el = await mount(p);
+    const node = await tree(el);
+    for (const id of ["removed-dish", "removed-section"]) {
+      expect(link(el, id)).not.toBeNull();
+      link(el, id).click();
+      await expect
+        .poll(() => rows(node).querySelector('[aria-current="true"]')?.textContent)
+        .toContain(survives ? "Surviving parent" : "Frozen lunch");
+    }
+  },
+);

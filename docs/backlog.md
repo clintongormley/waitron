@@ -2929,7 +2929,7 @@ A390's disclosure follow-up landed separately as #1413 at
 `9164e05d49bec002219f6bfda74377287f9920a2`. Its own main CI run 37730952603 succeeded;
 the earlier A339 merge run remains recorded as failed.
 
-Follow-up Preview bundle (A349/A350/A351/A352/A383/A384), implementation in progress:
+Follow-up Preview bundle (A349/A350/A351/A352/A383/A384), implemented 2026-10-08:
 the repeated Live section is removed; includers are named and linked beside Publish; clashes
 appear as a red sentence with their exact prices and sources. The Clashes link selects that
 Price overrides filter once after loading, overriding a remembered All prices choice. Later
@@ -2952,7 +2952,11 @@ pass. Whole-screen verification passed 508 cases. The final dense screen checks 
 EN/ES, light/dark, 390/1280 cases after the column-width changes. The Casa Delgado real-app look
 covered those same combinations with served photos in the shared 44px swatch slot on desktop;
 phone rows follow Structure's hidden-media layout. Demo edits were restored to the original
-preview hash and change count. One whole-branch review and current-head CI remain before landing.
+preview hash and change count. The whole-branch run-it review reproduced Hide losing its state
+through an empty reload, missing removal targets when their parents were removed, and Home
+bypassing app navigation; new failing tests caught each before the fixes. Hide and content view
+now survive the empty reload, removals select the nearest surviving ancestor, and Home uses the
+shell's normal route. The clash link's own handler also runs inside the shell.
 
 Historical W95 receipt follows. Its card, detail, Before and Return navigation describe the
 2026-10-06 implementation; A350/A351 replace those surfaces with the tree and View links above.
