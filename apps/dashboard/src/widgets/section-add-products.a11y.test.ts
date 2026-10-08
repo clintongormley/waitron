@@ -79,8 +79,12 @@ describe.each(["light", "dark"] as const)("section add products (%s)", (theme) =
     }
     if (state === "no-matches" || state === "busy") expect(header!.disabled).toBe(true);
     if (state === "invalid") {
+      root.querySelector<HTMLInputElement>('input[value="p-lager"]')!.click();
+      el.inSection = ["p-lemonade", "p-lager"];
+      await el.updateComplete;
       root.querySelector<HTMLElement>('[data-test="add"]')!.click();
       await el.updateComplete;
+      expect(root.querySelector('[data-test="error"]')).not.toBeNull();
     }
     await expectNoA11yViolations(host);
   });

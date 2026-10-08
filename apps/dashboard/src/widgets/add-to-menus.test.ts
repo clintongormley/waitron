@@ -236,41 +236,62 @@ describe("dashboard-add-to-menus", () => {
     expect(event.bubbles && event.composed).toBe(true);
   });
 
-  it("explains, beside the places and above Add, that nothing was chosen", async () => {
+  it("explains, beside the places and above Add, that nothing is chosen once a sent choice is unticked", async () => {
     const el = await mount();
     const submit = vi.fn();
     el.addEventListener("wt-submit", submit);
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
+    button(el, "add-to-menus")!.click();
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     button(el, "add-to-menus")!.click();
     await el.updateComplete;
-    expect(submit).not.toHaveBeenCalled();
+    expect(submit).toHaveBeenCalledOnce();
     expect(button(el, "none-chosen")!.textContent!.trim()).toBe(t("add_to_menus.none_chosen"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(root(el).querySelector("wt-form-error-summary")).toBeNull();
   });
 
-  it("says nothing about errors before the first press of Add, which works", async () => {
+  it("says nothing about errors before the first press of Add, which is quiet again once a tick is undone", async () => {
     const el = await mount();
     await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     expect(button(el, "none-chosen")).toBeNull();
     expect(await bottomOf(el)).toBe("");
+    expect(button(el, "add-to-menus")!.hasAttribute("disabled")).toBe(true);
+    expect(button(el, "add-to-menus")!.getAttribute("variant")).toBe("secondary");
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     expect(button(el, "add-to-menus")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("on a press with nothing chosen focuses the first place and disables Add", async () => {
+  it("once a sent choice is unticked, marks every place and disables Add", async () => {
     const el = await mount();
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     button(el, "add-to-menus")!.click();
-    await el.updateComplete;
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     const first = boxes(el, "m-lunch")[0]!;
     expect(first.getAttribute("aria-invalid")).toBe("true");
-    await expect.poll(() => root(el).activeElement).toBe(first);
+    expect(boxes(el, "m-dinner")[0]!.getAttribute("aria-invalid")).toBe("true");
     expect(button(el, "add-to-menus")!.hasAttribute("disabled")).toBe(true);
   });
 
-  it("re-checks every choice after a refused press, and Add works again once one is chosen", async () => {
+  it("asks for nothing when every ticked place is one it no longer lists", async () => {
     const el = await mount();
+    const submit = vi.fn();
+    el.addEventListener("wt-submit", submit);
+    el.failures = [{ sectionId: "s-gone", reason: "Try again." }];
+    await el.updateComplete;
+    expect(button(el, "add-to-menus")!.hasAttribute("disabled")).toBe(false);
     button(el, "add-to-menus")!.click();
     await el.updateComplete;
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("re-checks every choice after a press, and Add works again once one is chosen", async () => {
+    const el = await mount();
+    await tick(el, boxes(el, "m-lunch", "s-drinks")[0]!);
+    button(el, "add-to-menus")!.click();
+    await tick(el, boxes(el, "m-lunch", "s-drinks")[0]!);
+    expect(button(el, "none-chosen")).not.toBeNull();
 
     await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     expect(button(el, "none-chosen")).toBeNull();
@@ -290,14 +311,20 @@ describe("dashboard-add-to-menus", () => {
     expect(button(el, "add-to-menus")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("starts again when reopened: no message and Add working", async () => {
+  it("starts again when reopened: no message, Add quiet, and working after a tick", async () => {
     const el = await mount();
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     button(el, "add-to-menus")!.click();
-    await el.updateComplete;
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
+    expect(button(el, "none-chosen")).not.toBeNull();
     el.open = false;
     await el.updateComplete;
     el.open = true;
     await el.updateComplete;
+    expect(button(el, "none-chosen")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(button(el, "add-to-menus")!.hasAttribute("disabled")).toBe(true);
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     expect(button(el, "none-chosen")).toBeNull();
     expect(await bottomOf(el)).toBe("");
     expect(button(el, "add-to-menus")!.hasAttribute("disabled")).toBe(false);
@@ -349,8 +376,9 @@ describe("dashboard-add-to-menus", () => {
     );
   });
 
-  it("marks adding as the main action and skipping as the other", async () => {
+  it("marks adding as the main action once a place is ticked, and skipping as the other", async () => {
     const el = await mount();
+    await tick(el, boxes(el, "m-lunch", "s-starters")[0]!);
     expect(button(el, "add-to-menus")!.getAttribute("variant")).toBe("primary");
     expect(button(el, "skip")!.getAttribute("variant")).toBe("secondary");
   });

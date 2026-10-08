@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { CatalogueSummary, MenuStructure } from "../api/client.js";
 import { AddToMenus, placementMenus } from "./add-to-menus.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -85,8 +85,13 @@ describe.each(["light", "dark"] as const)("add to menus (%s)", (theme) => {
       await el.updateComplete;
     }
     if (state === "invalid") {
-      root.querySelector<HTMLElement>('[data-test="add-to-menus"]')!.click();
+      const drinks = root.querySelector<HTMLInputElement>('input[value="s-drinks"]')!;
+      drinks.click();
       await el.updateComplete;
+      root.querySelector<HTMLElement>('[data-test="add-to-menus"]')!.click();
+      drinks.click();
+      await el.updateComplete;
+      expect(root.querySelector('[data-test="none-chosen"]')).not.toBeNull();
     }
     if (state === "failed") {
       el.failures = [{ sectionId: "s-drinks", reason: "The server could not do that." }];

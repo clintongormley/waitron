@@ -282,9 +282,12 @@ it("shows no On this menu mark outside a menu", async () => {
   expect(el.shadowRoot!.textContent).not.toContain(t("add_products.on_menu"));
 });
 
-it("explains, rather than emitting, when confirmed with nothing chosen", async () => {
+it("explains, rather than emitting, when confirmed with nothing left to add", async () => {
   const el = await mount();
   const adds = capture(el);
+  await tick(el, "p-lemonade");
+  el.inSection = ["p-lemonade"];
+  await el.updateComplete;
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(adds).toEqual([]);
@@ -496,6 +499,9 @@ it("disables the header checkbox while busy", async () => {
 
 it("clears the nothing-chosen explanation once the header checkbox chooses", async () => {
   const el = await mount();
+  await tick(el, "p-lemonade");
+  el.inSection = ["p-lemonade"];
+  await el.updateComplete;
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(q(el, '[data-test="error"]')).not.toBeNull();
