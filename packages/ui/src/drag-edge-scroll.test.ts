@@ -1,10 +1,13 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, mount } from "./test-helpers.js";
 import { DragEdgeScroll } from "./drag-edge-scroll.js";
 
-const scroll = new DragEdgeScroll();
+let scroll: DragEdgeScroll;
+beforeEach(() => {
+  scroll = new DragEdgeScroll();
+});
 afterEach(() => {
-  scroll.stop();
+  if (scroll !== undefined) scroll.stop();
   vi.restoreAllMocks();
   cleanup();
 });
