@@ -4609,6 +4609,105 @@ describe("a category row's leading slot", () => {
     expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
   });
 
+  it.each([1280, 560])(
+    "draws one colour square at every level of a nested tree, each at its own row's indent (%i px)",
+    (width) =>
+      atWidth(width, async () => {
+        const { el, table, root } = await mountTree({
+          defaultColor: "#777777",
+          categories: [
+            { ...drinks, color: "#b12525" },
+            beer,
+            { id: "c", name: "Craft", parentId: "b", color: "#2a9d8f" },
+          ],
+          products: [
+            product({
+              id: "ipa",
+              name: "IPA",
+              primaryCategoryId: "c",
+              image: null,
+              variants: [
+                { ...bunVariant, id: "pint", name: "Pint" },
+                { ...bunVariant, id: "half", name: "Half" },
+              ],
+            }),
+            product({
+              id: "stout",
+              name: "Stout",
+              primaryCategoryId: "b",
+              image: null,
+              color: "#e07a5f",
+            }),
+          ],
+        });
+        for (const key of ["folder:d", "folder:b", "folder:c"]) await openRow(el, key);
+        root.querySelector<HTMLElement>('tr[data-row-key="ipa"] .tree-toggle')!.click();
+        await table.updateComplete;
+
+        const rows = {
+          root: ROOT_KEY,
+          d: "folder:d",
+          b: "folder:b",
+          c: "folder:c",
+          ipa: "ipa",
+          pint: "ipa:pint",
+          half: "ipa:half",
+          stout: "stout",
+        };
+        const levels = Object.keys(rows) as (keyof typeof rows)[];
+        const square = (level: keyof typeof rows) => {
+          const row = root.querySelector(`tr[data-row-key="${rows[level]}"]`);
+          expect(row, level).not.toBeNull();
+          const squares = row!.querySelectorAll<HTMLElement>('[part~="color-swatch"]');
+          expect(squares, level).toHaveLength(1);
+          expect(
+            row!.querySelector(`[data-test="color-${level}"] [part~="color-swatch"]`),
+            level,
+          ).toBe(squares[0]);
+          const box = squares[0]!.getBoundingClientRect();
+          expect(box.width, level).toBeGreaterThan(0);
+          const style = getComputedStyle(squares[0]!);
+          return {
+            x: box.left,
+            paint: style.backgroundColor,
+            outline: {
+              width: parseFloat(style.borderTopWidth),
+              style: style.borderTopStyle,
+              color: style.borderTopColor,
+            },
+          };
+        };
+        const at = Object.fromEntries(levels.map((level) => [level, square(level)]));
+
+        expect(at.b!.outline.width).toBeGreaterThan(0);
+        expect(at.b!.outline.style).not.toBe("none");
+        expect(at.b!.outline.color).not.toBe("rgba(0, 0, 0, 0)");
+        expect(Object.fromEntries(levels.map((id) => [id, at[id]!.paint]))).toEqual({
+          root: "rgb(119, 119, 119)",
+          d: "rgb(177, 37, 37)",
+          b: "rgba(0, 0, 0, 0)",
+          c: "rgb(42, 157, 143)",
+          ipa: "rgb(42, 157, 143)",
+          pint: "rgb(42, 157, 143)",
+          half: "rgb(42, 157, 143)",
+          stout: "rgb(224, 122, 95)",
+        });
+
+        // A415: squares step in a level at a time, not one column for the whole tree (owner, 2026-10-08).
+        const step = at.d!.x - at.root!.x;
+        expect(step).toBeGreaterThan(0);
+        for (const [upper, lower] of [
+          ["d", "b"],
+          ["b", "c"],
+          ["c", "ipa"],
+        ])
+          expect(at[lower]!.x - at[upper]!.x, `${upper} → ${lower}`).toBeCloseTo(step, 1);
+        expect(at.pint!.x).toBeCloseTo(at.ipa!.x, 1);
+        expect(at.half!.x).toBeCloseTo(at.ipa!.x, 1);
+        expect(at.stout!.x).toBeCloseTo(at.c!.x, 1);
+      }),
+  );
+
   it("gives All products a swatch the width of a top-level category's, as far from its name, at 1280 px", () =>
     atWidth(1280, async () => {
       const { root } = await mountTree();
