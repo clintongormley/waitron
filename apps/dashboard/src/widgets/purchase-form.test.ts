@@ -464,7 +464,7 @@ describe("purchase-form", () => {
     expect((await created).type).toBe("create-purchase");
   });
 
-  it("starts again when reopened: no messages and Create working", async () => {
+  it("starts again when reopened: no messages, Create quiet until an edit and then working", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await setInput(el, "supplier-name", "   ");
     await click(el, "confirm");

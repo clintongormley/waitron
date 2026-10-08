@@ -1492,8 +1492,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   the backup turn-on form and settings editor, the bucket copy form, your profile's details and
   credential dialogs, the edit-person and new-person dialogs, the purchase form and the shift
   dialog (list: [design-system.md](developers/design-system.md) → Forms). The backup settings
-  editor opens already savable when the stored schedule is one the form cannot show. Looked at on
-  2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form unchanged and
+  editor opens already savable when the stored schedule is one the form cannot show, or no
+  retention is stored. Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form unchanged and
   after one edit; the floor, edit-person and backup forms also at 390px, in dark and in Spanish),
   plus the backup settings editor mounted with test data, because the demo venue has backups off;
   screenshots in `~/waitron-campaign-b/a331-3a-shots/`. Every form opened quiet and disabled (the
@@ -1504,8 +1504,10 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   the edit in every pair measured; Add table was compared by eye. Left open:
   - a password manager that fills the profile's current-password field without the field's change
     event was not tried, so whether Save stays quiet until the person types is unknown;
-  - other purchases-screen tests still send made-up create and update events from an untouched
-    form instead of pressing the form's button; they pass, but never prove the button works.
+  - other purchases-screen, staff-screen and roster-screen tests still send made-up create and
+    update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`,
+    `update-shift`) instead of pressing the form's button; they pass, but never prove the button
+    works.
 - **Batch 3b — OPEN.** Printers, devices, device profiles, payments, canvases.
 - **Batch 4 — OPEN.** Module screens: venue service, Stripe, SumUp, adjustments, bookings, media.
 - **Batch 5 — OPEN.** The till; many of its dialogs act (pay, refund, find) rather than save, and

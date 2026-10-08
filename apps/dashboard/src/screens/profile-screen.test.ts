@@ -1115,29 +1115,32 @@ describe("your profile — validation, refusals and the remaining actions", () =
   it.each([
     ["en-GB", "Enter the code from your email"],
     ["es-ES", "Introduce el código de tu correo"],
-  ])("requires the emailed code before confirming a new address (%s)", async (locale, text) => {
-    const before = currentLocale();
-    setLocale(locale);
-    try {
-      const { el, api } = await mount({
-        getProfile: vi
-          .fn()
-          .mockResolvedValue(await baseProfile({ pendingEmail: "new@example.com" })),
-        confirmProfileEmail: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
-      });
-      await click(el, "confirm-email");
-      input(el, "setupCode", "000000");
-      await click(el, "save");
-      input(el, "setupCode", "");
-      await flush(el);
-      expect(api.confirmProfileEmail).toHaveBeenCalledOnce();
-      expect(field(el, "setupCode").error).toBe(text);
-    } finally {
-      setLocale(before);
-    }
-  });
+  ])(
+    "marks the emailed code as required when it is cleared after a refused attempt (%s)",
+    async (locale, text) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, api } = await mount({
+          getProfile: vi
+            .fn()
+            .mockResolvedValue(await baseProfile({ pendingEmail: "new@example.com" })),
+          confirmProfileEmail: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
+        });
+        await click(el, "confirm-email");
+        input(el, "setupCode", "000000");
+        await click(el, "save");
+        input(el, "setupCode", "");
+        await flush(el);
+        expect(api.confirmProfileEmail).toHaveBeenCalledOnce();
+        expect(field(el, "setupCode").error).toBe(text);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
-  it("requires the authenticator's code before finishing its setup", async () => {
+  it("marks the authenticator's code as required when it is cleared after a refused attempt", async () => {
     const { el, api } = await mount({
       finishTotp: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
     });

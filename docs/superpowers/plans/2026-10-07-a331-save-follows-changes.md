@@ -235,6 +235,8 @@ Branch `feat/save-follows-changes-venue`. The pattern is batch 1's, copied from
 
 **Forms that open already savable:** `git grep -n -i 'duplicat\|clone\|prefill'` over the 13 files
 finds only backup's `#prefillFromStatus` (an edit form), so no 3a form passes `savableAtOpen`.
+(2026-10-08: superseded in 3a.4a — the backup settings editor passes `savableAtOpen` when the
+stored schedule is not a wall-clock one or no retention is stored; see design-system.md → Forms.)
 
 ### Task 3a.1 — floor and service status (`floor-screen.ts`, `service-status-screen.ts`)
 
