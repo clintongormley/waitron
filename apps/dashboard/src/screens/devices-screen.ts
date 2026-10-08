@@ -1,6 +1,6 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
-import { ifDefined } from "lit/directives/if-defined.js";
+import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
@@ -25,6 +25,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
+import "@waitron/ui/src/components/wt-notice.js";
 import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
@@ -301,6 +302,8 @@ export class DevicesScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .added {
+        margin: 0 0 var(--wt-space-3);
+        font-size: var(--wt-font-size-xl);
         color: var(--wt-color-text);
         font-weight: var(--wt-font-weight-bold);
       }
@@ -405,6 +408,7 @@ export class DevicesScreen extends LitElement {
   @state() private qr = "";
   /** The last device this dialog paired, and whether it was enabled rather than added. */
   @state() private added: { name: string; enabled: boolean } | null = null;
+  @state() private hasJoined = false;
   /** The device whose open Pair dialog its own new ask replaced. */
   @state() private askedAgain: string | null = null;
   /** The Add dialog's own refusal: a wrong number, a failed discard, or its read of the address. */
@@ -687,6 +691,7 @@ export class DevicesScreen extends LitElement {
     if (this.addingDevice) return;
     const epoch = ++this.#addEpoch;
     this.addingDevice = true;
+    this.hasJoined = false;
     this.added = null;
     this.askedAgain = null;
     this.addError = null;
@@ -937,6 +942,7 @@ export class DevicesScreen extends LitElement {
     this.submitting = false;
     this.#pairSettled = true;
     this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
+    this.hasJoined = true;
     this.added = { name: result.name, enabled: Boolean(request.returning) };
     if (!scope?.isDirty()) await this.#finishPair(epoch, "saved");
     try {
@@ -1457,6 +1463,16 @@ export class DevicesScreen extends LitElement {
       },
       {
         key: "profile",
+        filter: {
+          label: t("devices.device_profile"),
+          allLabel: t("devices.filter_profile_all"),
+          value: (d) => (d.profileRetired ? "retired" : (d.deviceProfileId ?? "none")),
+          options: [
+            ...this.deviceProfiles.map((profile) => ({ value: profile.id, label: profile.name })),
+            { value: "none", label: t("equipment.none") },
+            { value: "retired", label: t("devices.profile_deleted") },
+          ],
+        },
         choosable: "shown",
         label: t("devices.device_profile"),
         sortValue: (d) =>
@@ -1500,6 +1516,16 @@ export class DevicesScreen extends LitElement {
       },
       {
         key: "status",
+        sortValue: (d) => (d.active ? t("devices.status_active") : t("devices.status_disabled")),
+        filter: {
+          label: t("devices.column_status"),
+          allLabel: t("devices.filter_status_all"),
+          value: (d) => (d.active ? "active" : "disabled"),
+          options: [
+            { value: "active", label: t("devices.status_active") },
+            { value: "disabled", label: t("devices.status_disabled") },
+          ],
+        },
         choosable: "shown",
         label: t("devices.column_status"),
         cell: (d) =>
@@ -1528,6 +1554,8 @@ export class DevicesScreen extends LitElement {
       noMatchesMessage=${tableNoMatches()}
       filterSearchPlaceholder=${t("categories.combobox_search")}
       filterNoResultsLabel=${t("categories.combobox_no_results")}
+      searchable
+      searchLabel=${t("devices.search")}
       data-test="devices-table"
       viewKey="devices"
       customiseColumnsLabel=${t("table.customise_columns")}
@@ -1552,13 +1580,11 @@ export class DevicesScreen extends LitElement {
       .rowClickable=${(d: DeviceRow) => d.active}
       .rowClickLabel=${(d: DeviceRow) => t("devices.edit_title").replace("{name}", d.label)}
       .emptyMessage=${t("devices.no_devices")}
-      >${this.devices.length === 0 ? this.#renderAddButton("empty-action") : nothing}</wt-data-table
-    >`;
+    ></wt-data-table>`;
   }
 
-  #renderAddButton(slot?: "empty-action"): TemplateResult {
+  #renderAddButton(): TemplateResult {
     return html`<wt-button
-      slot=${ifDefined(slot)}
       variant="primary"
       data-test="open-add-device"
       @click=${() => void this.#openAddDevice()}
@@ -1580,7 +1606,8 @@ export class DevicesScreen extends LitElement {
       return this.holdStatus === "lapsed" || this.holdStatus === "failed"
         ? nothing
         : html`<p class="waiting" data-test="waiting-empty">
-            <wt-spinner></wt-spinner>${t("devices.waiting")}
+            <wt-spinner></wt-spinner
+            >${t(this.hasJoined ? "devices.waiting_more" : "devices.waiting")}
           </p>`;
     const held = this.#hold.holdId !== null;
     const columns: DataTableColumn<JoinRequestRow>[] = [
@@ -1655,12 +1682,23 @@ export class DevicesScreen extends LitElement {
       ${
         this.added === null
           ? nothing
-          : html`<p class="added" role="status" data-test="added-device">
-              ${t(this.added.enabled ? "devices.enabled" : "devices.added").replace(
-                "{name}",
-                this.added.name,
-              )}
-            </p>`
+          : keyed(
+              this.added,
+              html`<wt-notice
+                role="status"
+                data-test="added-device"
+                @wt-notice-gone=${(event: Event) => {
+                  event.stopPropagation();
+                  this.added = null;
+                }}
+                ><h2 class="added">
+                  ${t(this.added.enabled ? "devices.enabled" : "devices.added").replace(
+                    "{name}",
+                    this.added.name,
+                  )}
+                </h2></wt-notice
+              >`,
+            )
       }
       ${
         this.askedAgain === null

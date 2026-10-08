@@ -3968,7 +3968,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      belongs to a location, not a department (`printers.location_id`); departments share one through
      `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
 
-- **A413 — the Devices screen and Add a device (owner, 2026-10-08; open; no lane yet).**
+- **A413 — the Devices screen and Add a device (owner, 2026-10-08; in progress in lane E on `fix/devices-screen-add-device`).**
   1. **Two "Add a device" buttons when there are no devices**: one in the page heading and one in
      the "No devices yet." box. Show one.
   2. **"Added [name]" is lost in the dialog's text.** When a device joins, show its name as a large
