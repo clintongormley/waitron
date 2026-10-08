@@ -389,9 +389,10 @@ describe("Local holidays: adding and changing an entry", () => {
     expect(field(el, "holidayDate")!.required).toBe(true);
     expect(field(el, "holidayName")!.required).toBe(true);
     expect(field(el, "holidayName")!.hint).toBe("As your town council publishes it");
+    await setField(el, "holidayName", "Feria");
     await click(el, saveButton(el));
     expect(field(el, "holidayDate")!.error).toBe("Enter a date.");
-    expect(field(el, "holidayName")!.error).toBe("Enter a name.");
+    expect(field(el, "holidayName")!.error).toBe("");
     expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
     expect(saveButton(el).disabled).toBe(true);
     await vi.waitFor(() => expect(field(el, "holidayDate")!.matches(":focus-within")).toBe(true));
@@ -420,6 +421,21 @@ describe("Local holidays: adding and changing an entry", () => {
     expect(document.activeElement === el && el.shadowRoot!.activeElement).toBe(
       part(el, "add-local"),
     );
+  });
+
+  it("marks a blank name when a date is typed, and holds Save until it is fixed", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await click(el, part(el, "add-local"));
+    await setField(el, "holidayDate", "2026-09-08");
+    await setField(el, "holidayName", "   ");
+    await click(el, saveButton(el));
+    expect(field(el, "holidayName")!.error).toBe("Enter a name.");
+    expect(field(el, "holidayDate")!.error).toBe("");
+    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+    expect(saveButton(el).disabled).toBe(true);
+    await vi.waitFor(() => expect(field(el, "holidayName")!.matches(":focus-within")).toBe(true));
+    expect(calls("POST")).toEqual([]);
   });
 
   const DOS_HERMANAS_NOW = () =>
@@ -630,12 +646,13 @@ describe("Local holidays: adding and changing an entry", () => {
       const { api, state } = server(localModel({ geographies: [SEVILLA, OLD_TOWN] }));
       const el = await mount(api);
       await menuAction(el, "edit-local");
+      await setField(el, "holidayName", "San Fernando Rey");
       state.writes.push({ reject: refusal });
       await click(el, saveButton(el));
       expect(await bottomMessage(el)).toBe(sentence);
       expect(await bottomMessage(el)).not.toContain("{");
       expect(saveButton(el).disabled).toBe(false);
-      expect(field(el, "holidayName")!.value).toBe("San Fernando");
+      expect(field(el, "holidayName")!.value).toBe("San Fernando Rey");
       expect(text(part(el, "retained"))).toBe("These local holidays were for Dos Hermanas. Remove");
     },
   );
@@ -677,9 +694,11 @@ describe("Local holidays: adding and changing an entry", () => {
     await click(el, cancelButton(el));
     expect(modal(el)).toBeNull();
     await click(el, part(el, "add-local"));
-    expect(saveButton(el).disabled).toBe(false);
+    expect(saveButton(el).disabled).toBe(true);
     expect(field(el, "holidayDate")!.value).toBe("");
     expect(field(el, "holidayDate")!.error).toBe("");
+    await setField(el, "holidayName", "Feria");
+    expect(saveButton(el).disabled).toBe(false);
     expect(calls("POST")).toHaveLength(1);
   });
 
@@ -895,6 +914,7 @@ describe("Local holidays: reading", () => {
     const { api, state, request, calls } = server(localModel(), liveData);
     const el = await mount(api);
     await menuAction(el, "edit-local");
+    await setField(el, "holidayName", "San Fernando Rey");
     state.writes.push({ reject: { code: "connection.failed" } });
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe("The change could not be saved.");

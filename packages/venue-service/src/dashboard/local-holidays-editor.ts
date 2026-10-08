@@ -6,7 +6,9 @@ import {
   baseStyles,
   focusFirstInvalid,
   submitOnEnter,
+  draftScopeFor,
   leaveCoordinatorFor,
+  saveActionState,
   type DataTableColumn,
   type DraftScope,
   type LeaveCoordinator,
@@ -189,8 +191,8 @@ export class LocalHolidaysEditor extends LitElement {
   #open(editor: Editor, returnTo: ReturnTo): void {
     if (!this.isConnected || this.busy) return;
     const scope = this.#scope;
-    if (scope) {
-      void this.#leave!.request({
+    if (scope && this.#leave) {
+      void this.#leave.request({
         scopes: [scope.id],
         reason: "navigation",
         proceed: () => this.#begin(editor, returnTo),
@@ -209,9 +211,8 @@ export class LocalHolidaysEditor extends LitElement {
     this.bottomRefusal = "";
     this.busy = false;
     const generation = this.#generation;
-    this.#leave = leaveCoordinatorFor(this);
     if (editor.kind === "entry") {
-      this.#scope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: {},
         parent: this,
         current: () => {
@@ -224,13 +225,16 @@ export class LocalHolidaysEditor extends LitElement {
           this.editor = { ...editor, ...value };
         },
       });
-    }
+      this.#leave = coordinator;
+      this.#scope = scope;
+    } else this.#leave = leaveCoordinatorFor(this);
     this.#beforeClose = async (reason) => {
       if (!this.isConnected || generation !== this.#generation || this.busy) return false;
       const scope = this.#scope;
       return (
         !scope ||
-        (await this.#leave!.request({ scopes: [scope.id], reason, proceed: () => {} })) ===
+        !this.#leave ||
+        (await this.#leave.request({ scopes: [scope.id], reason, proceed: () => {} })) ===
           "proceeded"
       );
     };
@@ -278,6 +282,7 @@ export class LocalHolidaysEditor extends LitElement {
 
   #submit(): void {
     const editor = this.editor!;
+    if (editor.kind === "entry" && saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.refused = {};
     this.bottomRefusal = "";
@@ -426,7 +431,6 @@ export class LocalHolidaysEditor extends LitElement {
                 this.#setEntry({ name: event.detail.value }, "holidayName", generation)}
             ></wt-input>`,
           save: t("hours.save"),
-          danger: false,
         };
       }
       case "remove":
@@ -439,7 +443,6 @@ export class LocalHolidaysEditor extends LitElement {
             })}
           </p>`,
           save: t("hours.remove"),
-          danger: true,
         };
       case "forget":
         return {
@@ -448,7 +451,6 @@ export class LocalHolidaysEditor extends LitElement {
             ${format("holidays.forget_confirm", { city: editor.geography.city })}
           </p>`,
           save: t("hours.remove"),
-          danger: true,
         };
     }
   }
@@ -461,6 +463,7 @@ export class LocalHolidaysEditor extends LitElement {
     const content = this.#content(editor, errors);
     const generation = this.#generation;
     const marked = Object.keys(errors).length > 0;
+    const entry = editor.kind === "entry" ? saveActionState(this.#scope) : undefined;
     return keyed(
       this.#generation,
       html`<wt-modal
@@ -490,15 +493,15 @@ export class LocalHolidaysEditor extends LitElement {
             ?disabled=${this.busy}
             @click=${() => {
               if (!this.isConnected || generation !== this.#generation || this.busy) return;
-              if (!this.#scope) this.#close();
+              if (!this.#scope || !this.#leave) this.#close();
               else void this.renderRoot.querySelector("wt-modal")?.requestClose("cancel");
             }}
             >${t("hours.cancel")}</wt-button
           >
           <wt-button
             data-test="save-local"
-            variant=${content.danger ? "danger" : "primary"}
-            ?disabled=${this.busy || Object.keys(own).length > 0}
+            variant=${entry?.variant ?? "danger"}
+            ?disabled=${this.busy || Object.keys(own).length > 0 || entry?.unchanged === true}
             @click=${() => {
               if (this.isConnected && generation === this.#generation && !this.busy) this.#submit();
             }}
