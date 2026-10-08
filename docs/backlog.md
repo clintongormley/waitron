@@ -178,11 +178,27 @@ whole text in the area's detail file under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-_Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal items._
+_Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal items._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
+
+- **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
+  matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
+  `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
+  resent cancellation is not established. The owner may want to confirm this choice. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
+
+- **`HUELLA_MISMATCH` is filed and flagged, not refused.** It is not expected to occur, since
+  Waitron's own builder computes the fingerprint; nothing tests that it cannot. Refusing it may be
+  preferred since a wrong fingerprint is permanent. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
+
+- **No sale over €3,010 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3010-can-be-made-at-all)
+
+- **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not
+  shown to happen either way. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
+
+- **An unusable `TiempoEsperaEnvio` is not recorded** anywhere (the raw value is dropped). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
 
 ### The setup wizard, onboarding and the demo venue
 
-_Formerly A2 and B1._
+_Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
@@ -200,9 +216,41 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere._
 
 _Formerly A4._
 
+- **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
+  find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
+  string key, so it cannot carry the amount the collect and table-bill paths now show. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
+
 ### Printers, the print agent and receipts
 
-_Formerly A3, A8 and B6._
+_Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
+
+- **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the log do. [Detail](backlog/printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
+
+- **The office-printer check and the check of addresses typed into the dashboard still run inside the poll** — left open by C117 (#955), so the job pull still waits for them (see "A sweep in flight keeps connecting" below). The agent puts no limit of its own on a scan pass; read, not run: the whole sweep across several networks and the USB reads have no overall limit.
+
+- **Unpair can come back for a short while after a successful unpairing** — found in C103's review, read, not run. Clearing `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end it; the owner was asked (questions.md, C103). [Detail](backlog/printers.md#unpair-can-come-back-for-a-short-while-after-a-successful-unpairing)
+
+- **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](backlog/printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
+
+- **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
+  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer paper-size
+  queries that follow the scan have no deadline either: at most eight at a time, each up to
+  1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
+
+- Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
+  burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
+
+- **Cross-box print-agent TLS** — an agent trusts only its local box CA, so a mirror's agent cannot
+  reach the primary; gates the mirror's print agent (_Afterwards_). The vouch slots into the same
+  route later.
+
+- **Cloud-poll transports** (Star CloudPRNT, Epson Server Direct Print) — a NAT'd printer with no
+  agent. Low priority.
+
+- **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
+  Needs a native app; parked behind the go-native decision.
+
+- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no caller in the tree outside its own package's tests** — C70, #866. A refused report still rolls back every job of its batch when the caller's transaction rolls back, so all of them print again (measured 2026-09-29 with a scratch probe). [Detail](backlog/printers.md#runagentonce-packagesprintingsrcruntimets-has-no-caller-in-the-tree-outside-its-own-packages-tests)
 
 ### Payments and card readers
 
@@ -230,7 +278,71 @@ _Formerly entries spread across the old sections._
 
 ### The box: backups, upgrades and recovery
 
-_Formerly B2, B3, B4, B5 and B7._
+_Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
+
+- **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2);
+  the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
+  per-destination timeout lands with the first network backend.
+
+- **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
+  an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
+  neither captured nor excluded — the curated list went stale on `modules.json` already.
+
+- **When a nightly report job exists, the backup slot should fire after it** — left open by the "backups off or stale" reminder (#371).
+
+- **The remaining cold-restore operator surface** (promote Slice 4): connection rebinding, advertised
+  origin and an authenticated entry.
+
+- **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
+  `artifact-cipher.ts` holds the whole database copy in memory and is restorable only by Waitron
+  code, where piping the engine's own copy through a standard encrypter into a tar is the obvious
+  alternative.
+
+- **B3. The bootable USB installer** — Runs `waitron.sh install` unattended. Open questions it owns: whether the stick carries the images so
+  install needs no internet; unattended updates for a box we did not sell; AP-mode WiFi onboarding. Box
+  image constraints under _Detail → Box image_. Not started.
+
+- **The box the customer buys probably doubles as a till, so the image ships a screen and a browser** — owner, 2026-09-29. A lean, not yet a decision. **Open:** whether the box's own screen enrols as a till like any other device or is treated differently because it is local, and what address it opens the till at. [Detail](backlog/box.md#the-box-the-customer-buys-probably-doubles-as-a-till-so-the-image-ships-a-screen-and-a-browser)
+
+- **a local maintenance account on each box** — belongs with B3; a discussion record, not an approved spec. Its remote-support half is tracked in Cloud and not approved. [Detail](backlog/box.md#a-local-maintenance-account-on-each-box)
+
+- **Upgrade testing — blocking before go-live (owner, 2026-09-26).** Still open: rows the product itself writes. Every step here is built by this image's own migrator from today's change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the new image, is the test that matches what a box does. [Detail](backlog/box.md#upgrade-testing--blocking-before-go-live-owner-2026-09-26)
+
+- **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
+
+- **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** [Detail](backlog/box.md#every-migrating-path-but-boot-and-the-bucket-rebuild-runs-with-no-ahead-of-image-check)
+
+- **Provisioning's migrate path still runs the linear full `manifestSets()`** — route it through the
+  resolver once it gains per-module enablement.
+
+- **What `waitron.sh install`'s self-refresh (C83, #890) left open:** No case in `scripts/waitron-sh.test.mjs` covers a script not run from a file, a link `readlink -f` cannot follow, a folder the script cannot enter, or a box with neither curl nor wget. [Detail](backlog/box.md#what-waitronsh-installs-self-refresh-c83-890-left-open)
+
+- **What `waitron.sh --reset install` (#1122) left open:** a build or pull that fails still leaves the box's files changed, as a plain `install` always has. Also open: the simplify review suggested `waitron.sh reset … --install [ref]` instead of `--reset … install [ref]`, reusing reset's own option reading; the form shipped is the one the owner asked for, so that is the owner's call. [Detail](backlog/box.md#what-waitronsh---reset-install-1122-left-open)
+
+- **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
+
+- **The recovery spec** — a degraded-but-trading mode and the module-contract field it needs.
+
+- **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on every log line — the connection-string shape and nothing else. [Detail](backlog/box.md#the-recovery-pages-secret-bound-is-a-convention-not-a-guard)
+
+- A `sealAeat`/`persistTrading` I/O failure AFTER `provisionVenue` succeeds wedges the box (tenant
+  minted, no `trading.env`) and needs a recovery path or a loud wedge; a provision failure after
+  `provision()` mints the tenant and chain needs a re-image today.
+
+- **Resetting a box without a terminal** — owner, 2026-10-02. Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a box that will not start is the one an operator most wants to reset. Open: who may press it (the owner only?), and whether a reset started from inside the app container can remove the Docker volumes the script removes, or has to empty them instead. [Detail](backlog/box.md#resetting-a-box-without-a-terminal)
+
+- **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
+  renewal path yet. Ties to a time-health check and certificate renewal.
+
+- **Shutdown closes the database even when stopping background work fails (C71, #870)**
+  (`apps/server/src/boot.ts`). One consequence: if stopping Litestream itself fails, the store is
+  now closed while Litestream may still be running; nothing tests that case.
+
+- **Two concurrent first provisions can still race past the venue guard** — 2026-09-14. **Next action:** decide where the lock belongs — a database advisory lock around guard→stamp→apply is the obvious home — and prove it with two concurrent provisions against a real database, not with the row-level check alone. [Detail](backlog/box.md#two-concurrent-first-provisions-can-still-race-past-the-venue-guard)
+
+- **Creation/provisioning `dayCutover` still needs input validation.** The W6 review (#1104) passed `"24:00"` and `"99:99"`
+  through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
+  boundary and a domain refusal, then test invalid values before they reach storage.
 
 ### Replication, failover and the cloud
 
@@ -240,6 +352,13 @@ _Formerly _Afterwards_ and _Cloud connection integration_._
 
 _Formerly B9, and Track C's development-stack and house-rules items._
 
+- **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
+  `wa-wt reset demo <name>` rebuilds it as the demo business, tax ID `B00000000` (W108). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
+
+- **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
+  duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
+  A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._
@@ -247,6 +366,22 @@ _Formerly parts of B9 and Track C._
 ### Modules, data and code health
 
 _Formerly B8, and Track C's correctness items._
+
+- **`modules.json` has no flow-down channel** from a primary to its standby (matters under
+  _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
+  load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
+
+- **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
+  normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax
+  IDs; the pack's module preset; the refused foral, Canary, Ceuta and Melilla jurisdictions; a
+  territory picker in the setup wizard (it offers `ES-common` only).
+
+- **`fiscal-none` left-behinds:** remove the inert `resolveClient`/`skipRetryMs`; regime-agnostic
+  provisioning tests.
+
+- **The tax-model system** — the `tax` slot is an inert label today; the intended shape puts the tax
+  MODEL in core with the fiscal module supplying rates and labels. A prerequisite for any non-ES
+  venue, so parked.
 
 ### Data protection and legal compliance
 
@@ -6596,356 +6731,6 @@ The box, the image, the data layer and the machinery: `deploy/`, the Dockerfiles
 print-agent process (`packages/print-agent`, `apps/print-agent`), `apps/server`'s boot, config,
 TLS and backup code, `packages/media`, the module framework, CI and test infra. `packages/sync` and
 `packages/membership` belong here too but their open work is under _Afterwards_.
-
-**Built:** the two containers + `deploy/compose.yml` + named volumes (#285); `waitron.sh install` and
-`reset` (#314); the recovery supervisor and the box serving its own leaf over HTTPS in every mode;
-the CI `image` job (#288); boot-failure diagnosability — a recovery page of curated operator text keyed
-by error code, and an ahead-of-image database check (#310); the enum-upgrade repair and its two root
-guards (#307); real hardware bringup (#302); `linux/amd64`-only images (#325, published — the manifest
-carries amd64 alone); the backup + recovery-key wizard (#295); guided node onboarding, all four modes
-(#296); the print-agent process, its box wiring and on-node auto-enrolment (#282, #289, #308, #311); the
-CA-trust onboarding guidance, connection retry/help and the per-OS certificate walkthrough (#330,
-reworked #346); the print agent's own AppArmor profile and its Bluetooth availability report (A129, #862;
-`scan off` and `Disconnected` added by A134, #887); `waitron.sh install` refreshing the box's
-own copy of the script (C83, #890).
-Proven end to end 2026-09-09: blank box → phone setup → provision → trading over HTTPS → enrolled
-till → a recorded preproduction sale.
-
-### B1. Onboarding must surface the CA-trust step — LANDED #330 (2026-09-12)
-
-One guard here is narrower than its name. `scripts/trust-page-logo.test.ts` checks that the logo
-pasted into the server's source still matches the brand lockup — the two drawings agree, and nothing
-else. It does not check that the page renders, that either theme is readable, or that the logo is
-visible at all. **Done 2026-10-07** by #1337: the guard and its hedge are named in
-`docs/developers/testing-guide.md`, in the section on pages asserted as a string.
-
-**DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it
-shows only on the path where the wizard skipped the connection question, and the question is not
-asked there.
-
-### B2. Backups that leave the box
-
-- **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
-  authorize trading or stop another server.
-- **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2);
-  the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
-  per-destination timeout lands with the first network backend.
-- **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
-  an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
-  neither captured nor excluded — the curated list went stale on `modules.json` already.
-- **The "backups off or stale" reminder** is built as dashboard alerts (#371). Still open: when a
-  nightly report job exists, the backup slot should fire after it.
-- **The remaining cold-restore operator surface** (promote Slice 4): connection rebinding, advertised
-  origin and an authenticated entry.
-- **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
-  `artifact-cipher.ts` holds the whole database copy in memory and is restorable only by Waitron
-  code, where piping the engine's own copy through a standard encrypter into a tar is the obvious
-  alternative.
-- Carry-forwards under _Detail → Backup_.
-
-### B3. The bootable USB installer
-
-Runs `waitron.sh install` unattended. Open questions it owns: whether the stick carries the images so
-install needs no internet; unattended updates for a box we did not sell; AP-mode WiFi onboarding. Box
-image constraints under _Detail → Box image_. Not started.
-
-**The box the customer buys probably doubles as a till, so the image ships a screen and a browser**
-(owner, 2026-09-29: "we probably want the server the customer buys to also serve as a till, which
-means that we need to ship Debian with a UI and chromium"). A lean, not yet a decision. The hardware
-decisions already put the deli's box under the counter driving the counter touchscreen (O5,
-[handheld and till hardware §5](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)),
-but as a machine built by hand; this makes it how every box ships. What it asks of the image B3 lays
-down, none of it built:
-
-- **Debian with a graphical session and Chromium**, not a server-only install. Spec §5's lean is the
-  smallest one: automatic login on the console, then one full-screen Chromium under `cage` (a Wayland
-  compositor that runs a single application), restarted as a service, with no desktop environment.
-  Whether "a UI" means only that or a fuller desktop is not yet settled.
-- **The four traps spec §5 lists, each established on the first real build:** the "restore pages?"
-  bubble after a power cut, Chromium's own certificate store (the box's root certificate is installed
-  there separately), screen blanking and sleep, and the BIOS set to power on when mains returns.
-- **The box is specified for both jobs** — server, database and browser — which spec §5 and §6 already
-  say; spec §6's memory figure for a page-only machine is reasoning, not a measurement.
-- **Open:** whether the box's own screen enrols as a till like any other device or is treated
-  differently because it is local, and what address it opens the till at.
-- **Related:** the print-agent's AppArmor policy (A129, #862) was chosen on the owner's "we'll be
-  shipping with our own OS"; the licence notices for what an OS image adds (Debian packages, Chromium,
-  `cage`) need an answer too, beside the container image's `/app/third-party/`.
-
-Belongs with it: **a local maintenance account on each box**, its password printed on a sealed card
-and set when the box is imaged, with procedures for a lost card, a change of owner and a reinstall
-([box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md),
-a discussion record, not an approved spec). Its remote-support half is tracked in Cloud and not
-approved.
-
-### B4. Upgrades and migrations
-
-- **Upgrade testing — blocking before go-live (owner, 2026-09-26).**
-  `scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
-  order, with the change feed installed between steps, and since A164 (#970) carries two synthetic
-  rows per table through every step. The steps that cannot carry those rows are listed in the test's
-  `RESETS`, where the walk restarts from an empty database. One is a real loss rather than a refusal:
-  core `0012_printer_calibration` rebuilds `drawer_opens` without copying its rows (read from the
-  migration; the guard's two rows were gone after it), so a box holding drawer-open records when it
-  took that migration would have lost them — inferred, not run on a box. Whether the owner's box held
-  any then was not checked.
-
-  What it still does not cover, each needed before a real venue is live:
-  - **Rows.** Still open: rows the product itself writes. The synthetic rows hold a few generic
-    values, so a migration that fails only on values the product writes and they lack passes — a
-    unique index two real rows break where these two differ, a required column real rows leave empty
-    while these hold a value. Seed a realistic venue (the demo seed at least) at each step for that;
-    the product's writers name today's columns; whether they can write an older step's schema was
-    not tried.
-  - **A rebuild of a table another set's trigger BODY reads is still refused** on a box that has
-    the trigger — core `0003` on `products`, recorded in
-    [conventions-data.md](developers/conventions-data.md) → _A migration set depends on another
-    through a foreign key, a trigger on its table, or a trigger body naming its table_, and in Track
-    A, the paragraph opening **Task 1 LANDED as #511**. The guard steps over it by applying
-    everything up to `0003` in one go, so the next such rebuild fails the guard. Decide the fix.
-  - **A real old database.** Every step here is built by this image's own migrator from today's
-    change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the
-    new image, is the test that matches what a box does.
-
-- **Automatic upgrades that can be undone until the first order** (owner, 2026-10-02). Today an
-  upgrade is `waitron.sh install`, run by hand at the box's terminal: it pulls the new images,
-  restarts, and waits about three minutes for the app to report healthy (`wait_healthy`,
-  `deploy/waitron.sh`). It takes no backup first, and once the new image has migrated the database
-  there is no way back — an older image then refuses to start with `provisioning.database_ahead`
-  (`deploy/README.md`, "It can migrate the box's database one way"). Wanted: the box upgrades
-  itself, in this order:
-  1. stop the app and take a snapshot of the box's state;
-  2. start the new image and let it migrate, with sales refused;
-  3. check that it started properly;
-  4. only then take orders. If the check fails, put back the snapshot and the old image, and
-     report the failure.
-
-  **Rolling back is not a fix** (owner, 2026-10-02): it keeps the venue trading on the version that
-  worked while the failed upgrade is reported and fixed. The point of no return is the first order
-  taken on the new version, not the restart: rolling back after that would lose the order.
-
-  **The snapshot is a filesystem snapshot where the disk allows it** (owner, 2026-10-02). Debian's
-  default filesystem, ext4, has none; btrfs (in Debian's own kernel) and LVM thin volumes do. ZFS
-  does too but is built outside Debian's kernel because of its licence. The B3 installer lays the
-  disk out, so it can put the folder holding Docker's volumes on btrfs. What it should buy, none of
-  it measured yet: taking and restoring a snapshot costs about the same whatever the size of
-  `venue.db`, which holds the product photos, where a file copy grows with it; and it takes every
-  volume at once, so nobody keeps a list of the files a restore needs (the hand-kept list already
-  went stale once — B2's whole-state-volume bullet). What it does not cover:
-  - the old image, which is kept by its tag, not in the snapshot;
-  - a box whose disk the installer did not lay out (ext4), which needs a fallback copy;
-  - the failed attempt's own logs, which a rollback of the logs volume would erase — keep them out
-    of the rollback, or send the report before rolling back.
-
-  Questions to settle in the brainstorm:
-  - **Where the failure is reported.** To the owner, as a dashboard alert once the old version is
-    back; to Waitron as well, which needs the one-touch bug report (A9, Logging Slice 2) or
-    something like it.
-  - **What counts as "started properly".** `/health` returning 200 says the duty loop runs; that
-    may be too little — every module opened, the fiscal chain read back and checked, the till able
-    to load its menu.
-  - **Nothing fiscal before the check passes.** The new version must not file a record with AEAT
-    or use an invoice number before step 4, or a rollback would leave AEAT holding a record the
-    restored database does not, or a gap in the series.
-  - **The bucket stream.** The new version streams `venue.db` while it starts; a rollback must not
-    put back a copy that the bucket's newer data then overrides, or the reverse.
-  - **When it runs and who starts it.** A quiet hour outside trading, and something outside the app
-    container, since it replaces that container (a timer on the host running `waitron.sh`, or a
-    small updater with access to Docker). Where the box learns a release exists is B3's open
-    question, "unattended updates for a box we did not sell".
-  - **Upgrade testing above still comes first**: a rollback keeps the venue trading through a
-    failed migration; it does not prevent one.
-
-- **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.**
-  `conventions-data.md` holds the full list — among them a
-  readiness runner and the dev, demo and Cloud fixture scripts under `apps/server/scripts`, two of
-  the Cloud fixture scripts migrating through `restore.ts` rather than calling `applyMigrations`
-  themselves, which a grep for that name alone does not find.
-- **Provisioning's migrate path still runs the linear full `manifestSets()`** — route it through the
-  resolver once it gains per-module enablement.
-- **`modules.json` has no flow-down channel** from a primary to its standby (matters under
-  _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
-  load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
-- **What `waitron.sh install`'s self-refresh (C83, #890) left open:** installing a ref whose script
-  predates the refresh puts back a copy that does not update itself (`deploy/README.md` says to
-  download it again); a copy another user owns in `/tmp` is not updated under `sudo`, because
-  systemd's `fs.protected_regular` setting stops root writing the fetched script into the temp file
-  beside it (install reports a failed fetch; the README says to download to the home folder
-  instead); nothing checks a fetched script before running it beyond what the fetch of `compose.yml`
-  already trusts — the same GitHub URL over HTTPS. No case in `scripts/waitron-sh.test.mjs` covers a
-  script not run from a file, a link `readlink -f` cannot follow, a folder the script cannot enter,
-  or a box with neither curl nor wget.
-- **What `waitron.sh --reset install` (#1122) left open:** a build or pull that fails still leaves
-  the box's files changed, as a plain `install` always has. `fetch_box_files` replaces `compose.yml`
-  before any image work, and an install of `main` removes the image lines from `.env` before its
-  pull, so after a failure the box's files name the new ref while its running containers are the
-  old ones. Nothing has been taken down or wiped at that point, and the error asks for a re-run;
-  making it leave the files untouched means fetching into a temporary folder and moving the files
-  into place only once the images are in. Raised by the run-it review and not taken because it
-  restructures `install`. Also open: the simplify review suggested `waitron.sh reset … --install
-[ref]` instead of `--reset … install [ref]`, reusing reset's own option reading; the form shipped
-  is the one the owner asked for, so that is the owner's call.
-
-### B5. The recovery page and degraded mode
-
-- **What showing the failed start's reason (#695) left:** a failed migration's report names the SET
-  (`migrations.apply_failed`, `{ set }`), not the migration file, though the refused statement shows
-  in the detail; the start-up's own log writer ignores `WAITRON_LOG_MAX_BYTES`/`WAITRON_LOG_MAX_FILES`
-  (it only appends, so they do not apply); the two restore errors' text quotes the "Why the last start
-  failed" heading with nothing tying the quote to the heading; and no staged restore has been run
-  through the real migrator to see it end in `migrations.apply_failed`.
-- **The recovery spec** — a degraded-but-trading mode and the module-contract field it needs.
-- **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on
-  every log line — the connection-string shape and nothing else. A secret in any other shape still
-  reaches the unauthenticated page two ways — through the log tail, and through the failed start's
-  full detail under "Why the last start failed" (stacks with file paths, the message of each cause
-  down to five levels, an `AppError`'s params) — bounded only by the convention that an `AppError`'s params
-  carry none.
-- A `sealAeat`/`persistTrading` I/O failure AFTER `provisionVenue` succeeds wedges the box (tenant
-  minted, no `trading.env`) and needs a recovery path or a loud wedge; a provision failure after
-  `provision()` mints the tenant and chain needs a re-image today.
-
-### B6. The print-agent process
-
-- **What the AppArmor profile (A129, #862; A134, #887) left open:**
-  - **`trust` is still refused.** A property write (`trust`) and `Disconnect` were measured still
-    refused against the stand-in BlueZ; BlueZ's `Agent1.Release` is not allowed either; the stand-in
-    never sends it, and whether a real BlueZ does is still open.
-  - **Box check owed:** after `sudo bash waitron.sh install`, switch off the kernel's rate limit on
-    its log first (`sudo sysctl -w kernel.printk_ratelimit=0`), which can drop refusal lines —
-    image-smoke switches it off for that reason. Then `scan on` / `scan off` and a pairing from
-    `docker compose exec -it print-agent bluetoothctl`, then
-    `sudo journalctl -k --since '-5 min' | grep 'apparmor="DENIED"'` should print nothing for
-    `waitron-print-agent`.
-  - **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the
-    log do. The page is English-only, with no language switch to carry a Spanish line.
-  - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured
-    2026-09-29 on a CI runner against the stand-in BlueZ, with a profile that allowed the bus
-    daemon's own messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed
-    "No default controller available" and exited 0.
-  - **`bluetooth scan failed` is logged on every pass** (left by A131, #915), where the agent's other
-    Bluetooth failure lines are logged once while the same failure repeats, so a box with no adapter
-    logs one line per pass while a discovery window is open.
-  - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
-    the agent has joined and is not out of touch, `/status.json` answers only loopback callers
-    (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
-- **While Add a printer is open, print jobs no longer wait behind each scan pass — DONE (C117,
-  #955).** Left open: the office-printer check and the check of addresses typed into the dashboard
-  still run inside the poll, so the job pull still waits for them (see "A sweep in flight keeps
-  connecting" below). The agent puts no limit of its own on a scan pass; read, not run: the whole
-  sweep across several networks and the USB reads have no overall limit.
-- **Unpair can come back for a short while after a successful unpairing** (found in C103's review,
-  read, not run). The server calls a Bluetooth device paired while the agent's last "paired" report
-  is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while a discovery
-  window is open, 15 otherwise), and a later report that the device is no longer paired keeps the
-  old `pairedAt`. So for up to that long after an Unpair a device can read as paired again. Clearing
-  `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end
-  it; the owner was asked (questions.md, C103).
-- **An agent compares the server's discovery deadline with its own clock** (found in C102, read, not
-  run). `discoveryUntil` is a time on the server's clock, and the agent checks it against
-  `host.now()` (`packages/print-agent/src/agent.ts`), where a network probe's deadline is sent as a
-  duration because the two clocks can differ. An agent on another machine whose clock is out by
-  minutes scans for the wrong span; one on the box shares its clock.
-- **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
-  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer paper-size
-  queries that follow the scan have no deadline either: at most eight at a time, each up to
-  1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
-- Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
-  burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
-- **Cross-box print-agent TLS** — an agent trusts only its local box CA, so a mirror's agent cannot
-  reach the primary; gates the mirror's print agent (_Afterwards_). The vouch slots into the same
-  route later.
-- **Cloud-poll transports** (Star CloudPRNT, Epson Server Direct Print) — a NAT'd printer with no
-  agent. Low priority.
-- **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
-  Needs a native app; parked behind the go-native decision.
-- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no caller in the tree outside its own
-  package's tests** (C70, #866). A
-  refused report still rolls back every job of its batch when the caller's transaction rolls back,
-  so all of them print again (measured 2026-09-29 with a scratch probe). A process that holds the
-  venue database and runs the agent itself, and wants to confine a refused report, should call
-  `claimPrintJobs` and then `reportPrintJob` per job, each report in its own transaction, as
-  `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
-
-### B7. Provisioning and build debt
-
-**`@waitron/verifactu` 0.2.1 (A230, owner 2026-10-03) — landed as #1099.** Left open:
-
-- **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
-  matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
-  `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
-  resent cancellation is not established. The owner may want to confirm this choice.
-- **`HUELLA_MISMATCH` is filed and flagged, not refused.** It is not expected to occur, since
-  Waitron's own builder computes the fingerprint; nothing tests that it cannot. Refusing it may be
-  preferred since a wrong fingerprint is permanent.
-- **No sale over €3,010 can be made at all**: Waitron issues only simplified invoices and no screen
-  accepts a customer's tax ID, so a full invoice is not offered. Spain's legal ceiling for a
-  simplified invoice in hospitality is €3,000 (RD 1619/2012 art. 4.2, quoted in
-  [verifactu-findings.md](compliance/verifactu-findings.md) and the
-  [full-invoices design](superpowers/specs/2026-10-03-full-invoices-at-till-design.md)); the
-  branch refuses over €3,010, the limit `@waitron/verifactu`'s validator applies (3,000 plus its
-  10.00 tolerance), as the owner asked.
-- **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not
-  shown to happen either way.
-- **An unusable `TiempoEsperaEnvio` is not recorded** anywhere (the raw value is dropped).
-- **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
-  find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
-  string key, so it cannot carry the amount the collect and table-bill paths now show.
-- **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
-  `wa-wt reset demo <name>` rebuilds it as the demo business, tax ID `B00000000` (W108).
-
-- **Resetting a box without a terminal** (owner, 2026-10-02). An operator who set the box up in
-  Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
-  `waitron.sh reset` or `waitron.sh --reset install` (`wipe_box`, `deploy/waitron.sh`), run with `sudo` at the box's terminal —
-  which a box operator does not have. Going from Prepare to Live needs a fresh database too (one
-  database per environment, CLAUDE.md §5): the Backups screen can export the venue's configuration
-  and setup can import it (`apps/server/src/configuration-export-api.ts`,
-  `apps/server/src/configuration-import.ts`), but the wipe between them is again only the script.
-  Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a
-  box that will not start is the one an operator most wants to reset. It keeps the script's rules:
-  refused on a production box, confirmed by typing a word, and keeping the box's certificate so
-  devices need not trust it again. Open: who may press it (the owner only?), and whether a reset
-  started from inside the app container can remove the Docker volumes the script removes, or has
-  to empty them instead.
-
-- **Reading a credential does not re-check it against `PURPOSES` — owner decision 2026-09-15.**
-  `getCredential`/`tryGetCredential` (`packages/credentials/src/store.ts`) return what was sealed,
-  rather than refuse the read, which would stop every venue holding that kind of secret the moment
-  a field is added; each reader must check the fields it uses instead. `rotate` re-checks a secret
-  against the current list only when it re-seals one: it skips a secret already on the current key
-  (`rotateCredentials`, `packages/credentials/src/store.ts`), so an out-of-date one stops a key
-  rotation only when it is on an older key, until it is re-entered.
-- **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
-  renewal path yet. Ties to a time-health check and certificate renewal.
-- **Shutdown closes the database even when stopping background work fails (C71, #870)**
-  (`apps/server/src/boot.ts`). One consequence: if stopping Litestream itself fails, the store is
-  now closed while Litestream may still be running; nothing tests that case.
-- **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
-  pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
-  says in as many words that callers must serialise provisioning, and nothing enforces it — the
-  setup route's latch is process-local. #378 closed only the taxpayer row's part of
-  it (the second insert now loses to the singleton primary key), and its test claims only that
-  neither plan dies on a `tenants_*` key. **Next action:** decide where the lock belongs — a
-  database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
-  concurrent provisions against a real database, not with the row-level check alone.
-- **Creation/provisioning `dayCutover` still needs input validation.** The W6 review (#1104) passed `"24:00"` and `"99:99"`
-  through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
-  boundary and a domain refusal, then test invalid values before they reach storage.
-
-### B8. Module framework follow-ons
-
-- **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
-  normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax
-  IDs; the pack's module preset; the refused foral, Canary, Ceuta and Melilla jurisdictions; a
-  territory picker in the setup wizard (it offers `ES-common` only).
-- **`fiscal-none` left-behinds:** remove the inert `resolveClient`/`skipRetryMs`; regime-agnostic
-  provisioning tests.
-- **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
-  duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
-  A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
-- **The tax-model system** — the `tax` slot is an inert label today; the intended shape puts the tax
-  MODEL in core with the fiscal module supplying rates and labels. A prerequisite for any non-ES
-  venue, so parked.
 
 ### B9. CI and test infra
 
