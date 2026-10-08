@@ -1620,8 +1620,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     window with Save active, and pressing it untouched gives the option back to the list, which
     clears that option's refusal; the window opened any other way still opens quiet. **Landed as
     #1434.** Left as built, for the owner: Save turns active only for a refusal the window holds
-    when it OPENS — one handed to it while it is already open leaves Save as it was (the list sends
-    nothing while the window is open, so no product path does this today) — and it stays active
+    when it OPENS — one handed to it while it is already open leaves Save as it was (believed
+    unreachable, from reading only: the list's own Save sits behind the open window) — and it stays active
     for the whole time that window is open, even once the refused field is edited back;
   - on the autumn clock-change day, the Change time form can no longer move a scheduled menu
     version to the other copy of the same repeated local time (the other 02:30) in one step. The
