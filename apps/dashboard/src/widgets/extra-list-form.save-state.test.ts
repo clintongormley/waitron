@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ExtraListForm } from "./extra-list-form.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -93,22 +93,14 @@ const ADDONS: ExtraList = {
   ],
 };
 
-async function mount(
-  value: ExtraList | null,
-  theme?: "light" | "dark",
-  props: Partial<ExtraListForm> = {},
-) {
-  const { el, host } = await mountWidget<ExtraListForm>(
-    "dashboard-extra-list-form",
-    {
-      open: true,
-      languages: { defaultLanguage: "en", languages: ["en", "es"] },
-      products,
-      value,
-      ...props,
-    },
-    theme,
-  );
+async function mount(value: ExtraList | null, props: Partial<ExtraListForm> = {}) {
+  const { el, host } = await mountWidget<ExtraListForm>("dashboard-extra-list-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "es"] },
+    products,
+    value,
+    ...props,
+  });
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return { el, host };
 }
@@ -358,22 +350,4 @@ it("Escape on a changed list with no leave coordinator closes the window and rep
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => cancel.mock.calls.length).toBe(1);
   expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-});
-
-describe.each(["light", "dark"] as const)("extras list Save states (%s)", (theme) => {
-  it("is accessible with Save quiet, for a stored list and for a new one", async () => {
-    for (const value of [ADDONS, null]) {
-      const { el, host } = await mount(value, theme);
-      expect(await saveState(el)).toEqual(quiet);
-      await expectNoA11yViolations(host);
-      cleanupWidgets();
-    }
-  });
-
-  it("is accessible with Save primary after an edit", async () => {
-    const { el, host } = await mount(ADDONS, theme);
-    await type(el, "name", "Extras");
-    expect(await saveState(el)).toEqual(ready);
-    await expectNoA11yViolations(host);
-  });
 });

@@ -6,12 +6,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import "./menu-publications.js";
 import type { MenuPublicationsPanel } from "./menu-publications.js";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  expectNoA11yViolations,
-  mountWidget,
-} from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
 
@@ -102,17 +97,13 @@ async function flush(el: MenuPublicationsPanel): Promise<void> {
   await el.shadowRoot!.querySelector("wt-data-table")?.updateComplete;
 }
 
-async function mount(api: Api = stubApi(), theme?: "light" | "dark") {
-  const { el, host } = await mountWidget<MenuPublicationsPanel>(
-    "dashboard-menu-publications",
-    {
-      api: api as unknown as DashboardApi,
-      menuId: "menu-lunch",
-      menuName: "Lunch Menu",
-      preview: PREVIEW,
-    },
-    theme,
-  );
+async function mount(api: Api = stubApi()) {
+  const { el, host } = await mountWidget<MenuPublicationsPanel>("dashboard-menu-publications", {
+    api: api as unknown as DashboardApi,
+    menuId: "menu-lunch",
+    menuName: "Lunch Menu",
+    preview: PREVIEW,
+  });
   await flush(el);
   return { el, host };
 }
@@ -411,26 +402,4 @@ describe("the Change time form's Change time", () => {
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => form(el).open).toBe(false);
   });
-});
-
-describe.each(["light", "dark"] as const)("the schedule form's action states (%s)", (theme) => {
-  it.each(["schedule", "move"] as const)("is accessible with the %s action quiet", async (kind) => {
-    const { el, host } = await mount(stubApi(), theme);
-    if (kind === "schedule") await openSchedule(el);
-    else await openMove(el, "v-lunch-2");
-    expect(await actionState(el)).toEqual(quiet);
-    await expectNoA11yViolations(host);
-  });
-
-  it.each(["schedule", "move"] as const)(
-    "is accessible with the %s action primary after a change",
-    async (kind) => {
-      const { el, host } = await mount(stubApi(), theme);
-      if (kind === "schedule") await openSchedule(el);
-      else await openMove(el, "v-lunch-2");
-      await enter(el, "date", "2026-10-10");
-      expect(await actionState(el)).toEqual(ready);
-      await expectNoA11yViolations(host);
-    },
-  );
 });

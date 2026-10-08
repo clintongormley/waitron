@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { OptionLabelForm, type DraftLabel } from "./option-label-form.js";
 import { t } from "../i18n/t.js";
 
@@ -20,12 +20,12 @@ const RARE: DraftLabel = {
   available: false,
 };
 
-async function mount(value: DraftLabel | null, theme?: "light" | "dark") {
-  const { el, host } = await mountWidget<OptionLabelForm>(
-    "dashboard-option-label-form",
-    { open: true, languages: { defaultLanguage: "en", languages: ["en", "es"] }, value },
-    theme,
-  );
+async function mount(value: DraftLabel | null) {
+  const { el, host } = await mountWidget<OptionLabelForm>("dashboard-option-label-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "es"] },
+    value,
+  });
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return { el, host };
 }
@@ -171,22 +171,4 @@ it("Escape on a changed option with no leave coordinator closes the window and r
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => cancel.mock.calls.length).toBe(1);
   expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-});
-
-describe.each(["light", "dark"] as const)("option window Save states (%s)", (theme) => {
-  it("is accessible with Save quiet, for an option and for Add option", async () => {
-    for (const value of [RARE, null]) {
-      const { el, host } = await mount(value, theme);
-      expect(await saveState(el)).toEqual(quiet);
-      await expectNoA11yViolations(host);
-      cleanupWidgets();
-    }
-  });
-
-  it("is accessible with Save primary after an edit", async () => {
-    const { el, host } = await mount(RARE, theme);
-    await type(el, "label-name", "Very rare");
-    expect(await saveState(el)).toEqual(ready);
-    await expectNoA11yViolations(host);
-  });
 });

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { SectionAddProducts } from "./section-add-products.js";
@@ -86,6 +87,45 @@ describe.each(["light", "dark"] as const)("section add products (%s)", (theme) =
       await el.updateComplete;
       expect(root.querySelector('[data-test="error"]')).not.toBeNull();
     }
+    await expectNoA11yViolations(host);
+  });
+});
+
+/** What Add looks like and whether a person can press it: the host's state and its inner button's. */
+async function addState(el: SectionAddProducts) {
+  await el.updateComplete;
+  const add =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!;
+  await add.updateComplete;
+  return {
+    variant: add.variant,
+    disabled: add.disabled,
+    innerDisabled: add.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
+const ready = { variant: "primary", disabled: false, innerDisabled: false };
+
+describe.each(["light", "dark"] as const)("section add products Add states (%s)", (theme) => {
+  const mount = () =>
+    mountWidget<SectionAddProducts>(
+      "dashboard-section-add-products",
+      { products, categories, inSection: [], onMenu: ["p-burger"] },
+      theme,
+    );
+
+  it("is accessible with Add quiet", async () => {
+    const { el, host } = await mount();
+    expect(await addState(el)).toEqual(quiet);
+    await expectNoA11yViolations(host);
+  });
+
+  it("is accessible with Add primary after a tick", async () => {
+    const { el, host } = await mount();
+    await userEvent.click(
+      page.elementLocator(el.shadowRoot!.querySelector('input[value="p-lager"]')!),
+    );
+    expect(await addState(el)).toEqual(ready);
     await expectNoA11yViolations(host);
   });
 });

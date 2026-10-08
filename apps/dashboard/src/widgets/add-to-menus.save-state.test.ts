@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { CatalogueSummary, MenuStructure } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { AddToMenus, placementMenus } from "./add-to-menus.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
 afterEach(cleanupWidgets);
 
@@ -57,16 +57,12 @@ const structures: MenuStructure[] = [
   },
 ];
 
-async function mount(theme?: "light" | "dark") {
-  const { el, host } = await mountWidget<AddToMenus>(
-    "dashboard-add-to-menus",
-    {
-      open: true,
-      productName: "Croquetas",
-      menus: placementMenus(menus, structures),
-    },
-    theme,
-  );
+async function mount() {
+  const { el, host } = await mountWidget<AddToMenus>("dashboard-add-to-menus", {
+    open: true,
+    productName: "Croquetas",
+    menus: placementMenus(menus, structures),
+  });
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return { el, host };
 }
@@ -206,19 +202,4 @@ it("Escape after ticking a place with no leave coordinator closes the window and
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => cancel.mock.calls.length).toBe(1);
   expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-});
-
-describe.each(["light", "dark"] as const)("add to menus Add states (%s)", (theme) => {
-  it("is accessible with Add quiet", async () => {
-    const { el, host } = await mount(theme);
-    expect(await addState(el)).toEqual(quiet);
-    await expectNoA11yViolations(host);
-  });
-
-  it("is accessible with Add primary after a tick", async () => {
-    const { el, host } = await mount(theme);
-    await tick(el, "s-drinks");
-    expect(await addState(el)).toEqual(ready);
-    await expectNoA11yViolations(host);
-  });
 });

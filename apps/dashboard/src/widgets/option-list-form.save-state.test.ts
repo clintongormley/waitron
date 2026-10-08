@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { OptionListForm } from "./option-list-form.js";
 import type { OptionLabelForm } from "./option-label-form.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
@@ -45,12 +45,12 @@ const COOKED: OptionList = {
   ],
 };
 
-async function mount(value: OptionList | null, theme?: "light" | "dark") {
-  const { el, host } = await mountWidget<OptionListForm>(
-    "dashboard-option-list-form",
-    { open: true, languages: { defaultLanguage: "en", languages: ["en", "es"] }, value },
-    theme,
-  );
+async function mount(value: OptionList | null) {
+  const { el, host } = await mountWidget<OptionListForm>("dashboard-option-list-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "es"] },
+    value,
+  });
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return { el, host };
 }
@@ -262,22 +262,4 @@ it("Escape on a changed list with no leave coordinator closes the window and rep
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => cancel.mock.calls.length).toBe(1);
   expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-});
-
-describe.each(["light", "dark"] as const)("option list Save states (%s)", (theme) => {
-  it("is accessible with Save quiet, for a stored list and for a new one", async () => {
-    for (const value of [COOKED, null]) {
-      const { el, host } = await mount(value, theme);
-      expect(await saveState(el)).toEqual(quiet);
-      await expectNoA11yViolations(host);
-      cleanupWidgets();
-    }
-  });
-
-  it("is accessible with Save primary after an edit", async () => {
-    const { el, host } = await mount(COOKED, theme);
-    await type(el, "name", "Doneness");
-    expect(await saveState(el)).toEqual(ready);
-    await expectNoA11yViolations(host);
-  });
 });

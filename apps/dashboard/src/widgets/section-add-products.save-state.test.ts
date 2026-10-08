@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { CategorySummary } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { SectionAddProducts } from "./section-add-products.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
 afterEach(cleanupWidgets);
 
@@ -18,12 +18,13 @@ const products = [
   { id: "p-burger", name: "Burger", categoryId: "c-mains" },
 ];
 
-async function mount(theme?: "light" | "dark") {
-  return mountWidget<SectionAddProducts>(
-    "dashboard-section-add-products",
-    { products, categories, inSection: [], onMenu: ["p-burger"] },
-    theme,
-  );
+async function mount() {
+  return mountWidget<SectionAddProducts>("dashboard-section-add-products", {
+    products,
+    categories,
+    inSection: [],
+    onMenu: ["p-burger"],
+  });
 }
 function addButton(el: SectionAddProducts) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="add"]')!;
@@ -150,19 +151,4 @@ it("is quiet again once the ticked products are added", async () => {
   await press(el);
   el.commitSaved(["p-lager"]);
   expect(await addState(el)).toEqual(quiet);
-});
-
-describe.each(["light", "dark"] as const)("section add products Add states (%s)", (theme) => {
-  it("is accessible with Add quiet", async () => {
-    const { el, host } = await mount(theme);
-    expect(await addState(el)).toEqual(quiet);
-    await expectNoA11yViolations(host);
-  });
-
-  it("is accessible with Add primary after a tick", async () => {
-    const { el, host } = await mount(theme);
-    await tick(el, "p-lager");
-    expect(await addState(el)).toEqual(ready);
-    await expectNoA11yViolations(host);
-  });
 });
