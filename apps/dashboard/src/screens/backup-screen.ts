@@ -1247,7 +1247,7 @@ export class BackupScreen extends LitElement {
       ${this.#renderKeyStep()}
 
       <wt-button
-        variant=${this.#rotateWaiting ? "secondary" : "primary"}
+        variant=${this.submitting || !this.#rotateWaiting ? "primary" : "secondary"}
         data-test="rotate-confirm"
         ?disabled=${this.#rotateDisabled}
         @click=${() => void this.#rotate()}

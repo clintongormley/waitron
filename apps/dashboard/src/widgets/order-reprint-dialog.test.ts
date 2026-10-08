@@ -168,8 +168,10 @@ it.each(["light", "dark"] as const)(
 );
 
 it("keeps Print quiet when there is no printer to send to", async () => {
+  let arrive!: (printers: { id: string; name: string }[]) => void;
+  const held = new Promise<{ id: string; name: string }[]>((resolve) => (arrive = resolve));
   const api = {
-    getOrderPrinters: vi.fn().mockResolvedValue([]),
+    getOrderPrinters: vi.fn().mockReturnValue(held),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
@@ -177,7 +179,8 @@ it("keeps Print quiet when there is no printer to send to", async () => {
     row,
   });
   await vi.waitFor(() => expect(api.getOrderPrinters).toHaveBeenCalled());
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  arrive([]);
+  await held;
   await el.updateComplete;
   const print = printButton(el);
   await print.updateComplete;
@@ -186,9 +189,10 @@ it("keeps Print quiet when there is no printer to send to", async () => {
 });
 
 it("keeps Print blue while the copy it sent is in progress", async () => {
+  let finish!: () => void;
   const api = {
     getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
-    reprintOrder: vi.fn().mockReturnValue(new Promise(() => {})),
+    reprintOrder: vi.fn().mockReturnValue(new Promise<void>((resolve) => (finish = resolve))),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
@@ -201,4 +205,34 @@ it("keeps Print blue while the copy it sent is in progress", async () => {
   await vi.waitFor(() => expect(print.loading).toBe(true));
   expect(api.reprintOrder).toHaveBeenCalled();
   expect(print.variant).toBe("primary");
+  finish();
+  await vi.waitFor(() => expect(print.loading).toBe(false));
+});
+
+it("keeps Print blue while its copy is being sent, even if the printers vanish meanwhile", async () => {
+  let finish!: () => void;
+  const liveData = new LiveData();
+  const getOrderPrinters = vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]);
+  const api = {
+    getOrderPrinters,
+    reprintOrder: vi.fn().mockReturnValue(new Promise<void>((resolve) => (finish = resolve))),
+    liveData,
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row,
+  });
+  const print = printButton(el);
+  await vi.waitFor(() => expect(print.getAttribute("disabled")).toBeNull());
+  print.click();
+  await vi.waitFor(() => expect(print.loading).toBe(true));
+  getOrderPrinters.mockResolvedValue([]);
+  liveData.refresh();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull());
+  await el.updateComplete;
+  await print.updateComplete;
+  expect(print.loading).toBe(true);
+  expect(print.variant).toBe("primary");
+  finish();
+  await vi.waitFor(() => expect(print.loading).toBe(false));
 });

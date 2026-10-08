@@ -680,6 +680,30 @@ describe("backup-screen", () => {
     expect(rotate.variant).toBe("primary");
   });
 
+  it("keeps Rotate blue while its rotation is in progress, even if the tick is taken away", async () => {
+    const api = stubApi(
+      { rotateBackupKey: vi.fn().mockReturnValue(new Promise(() => {})) },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    const rotate = q(el, "[data-test=rotate-confirm]") as HTMLElementTagNameMap["wt-button"];
+    rotate.click();
+    await vi.waitFor(() => expect(api.rotateBackupKey).toHaveBeenCalled());
+    const savedIt = q(el, "[data-test=saved-it]") as HTMLInputElement;
+    savedIt.checked = false;
+    savedIt.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await rotate.updateComplete;
+    expect(savedIt.checked).toBe(false);
+    expect(rotate.hasAttribute("disabled")).toBe(true);
+    expect(rotate.variant).toBe("primary");
+  });
+
   it("lets an enabled box change its destination through applyBackup, reusing the current key", async () => {
     const rotatedEnabled: BackupStatusView = {
       ...ENABLED,

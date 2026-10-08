@@ -581,7 +581,7 @@ export class ModifiersScreen extends LitElement {
     return html`<wt-button
       data-test=${`add-${row}-list`}
       slot=${ifDefined(slot)}
-      variant="primary"
+      variant=${this.locales ? "primary" : "secondary"}
       .disabled=${!this.locales}
       @click=${(event: Event) => {
         this.#addOpener = event.currentTarget as HTMLElement;
@@ -736,7 +736,7 @@ export class ModifiersScreen extends LitElement {
             >${t("action.close")}</wt-button
           ><wt-button
             data-test="detail-edit"
-            variant="primary"
+            variant=${this.locales ? "primary" : "secondary"}
             .disabled=${!this.locales}
             @click=${() => this.#editViewed()}
             >${t("action.edit")}</wt-button

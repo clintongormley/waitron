@@ -1833,7 +1833,10 @@ it("keeps the toolbar Delete red while the delete it started is being sent", asy
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
     { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
   ]);
-  vi.mocked(el.api.deleteCatalogueItems).mockReturnValueOnce(new Promise<void>(() => {}));
+  let finish!: () => void;
+  vi.mocked(el.api.deleteCatalogueItems).mockReturnValueOnce(
+    new Promise<void>((resolve) => (finish = resolve)),
+  );
   await selectKeys(el, ["folder:f"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalled());
@@ -1841,6 +1844,9 @@ it("keeps the toolbar Delete red while the delete it started is being sent", asy
   await remove.updateComplete;
   expect(remove.getAttribute("disabled")).not.toBeNull();
   expect(remove.variant).toBe("danger");
+  finish();
+  await vi.waitFor(() => expect(toolbarButton(el, "delete").variant).toBe("secondary"));
+  expect(dialog(el)).toBeNull();
 });
 it("shows a move refused for a duplicate name in the move dialog, keeping the choice", async () => {
   const el = await mountBrowser();

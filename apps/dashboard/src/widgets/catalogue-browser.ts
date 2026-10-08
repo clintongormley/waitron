@@ -355,6 +355,9 @@ export class CatalogueBrowser extends LitElement {
     }
     if (read === this.#disablingRead) this.disablingMenus = menus;
   }
+  get #deleteWaiting(): boolean {
+    return !this.selected.length || this.summaryLoading;
+  }
   /** A confirmation from the dialog reads its counts again before deleting. */
   async #confirm(operation = this.operation, fromDialog = false): Promise<void> {
     if (
@@ -976,8 +979,8 @@ export class CatalogueBrowser extends LitElement {
                             ? nothing
                             : html`<wt-button
                                 data-test="delete"
-                                variant=${!this.selected.length || this.summaryLoading ? "secondary" : "danger"}
-                                .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
+                                variant=${this.#deleteWaiting ? "secondary" : "danger"}
+                                .disabled=${this.#deleteWaiting || this.operationBusy}
                                 @click=${() => void this.#openDelete()}
                                 >${this.#deleteLabel(selection)}</wt-button
                               >`
