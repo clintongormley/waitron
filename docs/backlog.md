@@ -3856,6 +3856,39 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      original is out of service. Offer active printers, the original chosen by default; check
      whether a job laid out for one paper width needs laying out again for another. Drawer jobs
      stay unresendable (CLAUDE.md §5).
+  5. **The printer details say where the printer is used, each with a link** (owner, 2026-10-08):
+     the device profiles that list it and for what (receipts, payment slips, cash drawer), the
+     preparation stations that print to it, and the departments those profiles belong to. A printer
+     belongs to a location, not a department (`printers.location_id`); departments share one through
+     `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
+
+- **A413 — the Devices screen and Add a device (owner, 2026-10-08; open; no lane yet).**
+  1. **Two "Add a device" buttons when there are no devices**: one in the page heading and one in
+     the "No devices yet." box. Show one.
+  2. **"Added [name]" is lost in the dialog's text.** When a device joins, show its name as a large
+     heading that stays a few seconds and fades. Once one has joined, the waiting line reads
+     "Waiting for more devices…" (the first wait keeps "Waiting for devices…"). Both languages.
+  3. **The devices table has no search and no filters.** The shared `wt-data-table` offers both
+     (`searchable`, which the content languages, modifiers and units screens turn on, and column
+     filters); `devices-screen.ts` passes the filter labels but turns neither on. Filter at least by
+     device profile and status.
+
+- **A414 — device screens on a phone (owner, 2026-10-08; open; no lane yet).**
+  1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
+     411 CSS px wide) on the handheld's Floor tab: the page's body padding is 24px a side
+     (`apps/till/index.html`), and the floor screen adds 16px a side inside it, leaving 331 of 411
+     px before the floor plan's own frame. Cut the body padding on narrow screens and stop screens
+     adding a second layer; check the Order tab and the other device screens too. The floor plan
+     itself is out of scope — the owner will redo it later.
+  2. **No demo bar on device screens.** A venue set up as a demo (or "prepare") shows the
+     Demo / Dashboard / Device / Email inbox bar on the till and handheld too
+     (`apps/till/src/till-app.ts`, `onboardingIntent`). Keep it in the dashboard only.
+  - **Watch, not a job yet:** on 2026-10-08 the phone's Chrome showed a white page for every box
+    address (`/`, `/dashboard`, the box's IP) while the laptop drew it. Read over USB debugging,
+    the page had loaded without errors and the join screen's element measured 679 px tall, while
+    the owner still saw white; quitting and reopening Chrome fixed it. A browser fault or something
+    of ours covering the page — not told apart. If it recurs, attach over USB before restarting
+    Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
 
 - **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
   `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
@@ -4745,6 +4778,10 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   **Separate, and staying** (§11): a menu's Device Home Page and its Handheld and Till displays
   (how its shortcuts are arranged), receipt
   configuration, and the floor-plan editor.
+
+  **Owner, 2026-10-08:** "delete the canvases functionality. we provide prebuilt screens with
+  configuration settings." Open question to the owner: delete now, keeping today's default canvases
+  as fixed built-in screens and redesigning after, or keep the order above (design, then delete).
 
   **Until this lands, build no new feature as a canvas card or card setting** — put it in the
   screen itself. Slice 3d already kept its kitchen-group choice off the `expo` card (its P15).
