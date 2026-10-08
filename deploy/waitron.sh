@@ -45,13 +45,15 @@ fi
 
 as_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
 # apt, never interactive: sudo's env_reset discards an exported DEBIAN_FRONTEND, so pass it inline.
-# Each attempt is cut off at 300 s and tried three times, because apt's own timeouts do not end every
-# stall: docs/developers/ci-and-gates.md, "Every apt wait is bounded".
+# Each attempt is cut off and tried three times, because apt's own timeouts do not end every stall:
+# docs/developers/ci-and-gates.md, "Every apt wait is bounded". An install gets longer than an update
+# because Docker's packages are about 120 MB, which a slow box link can take more than 300 s to fetch.
 apt_get() {
-  local limit attempt
+  local limit seconds=1800 attempt
   limit="$(command -v gtimeout || command -v timeout)" || die "need timeout (GNU coreutils) to bound apt-get"
+  [ "${1:-}" = update ] && seconds=300
   for attempt in 1 2 3; do
-    as_root "$limit" 300 env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 \
+    as_root "$limit" "$seconds" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 \
       -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" && return 0
     echo "waitron.sh: attempt $attempt of 3 failed or stalled: apt-get $*" >&2
   done

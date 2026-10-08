@@ -450,7 +450,7 @@ describe("the Dockerfile's apt waits", () => {
 
 /**
  * What a box script misses of the bounded apt shape: every `apt-get` runs inside `apt_get()`, whose
- * body runs it under `"$limit" <n>` with `limit` resolved from gtimeout or timeout. Reads TEXT: a
+ * body runs it under `"$limit" <n>` (a number or a `"$variable"`) with `limit` resolved from gtimeout or timeout. Reads TEXT: a
  * `command -v apt-get` lookup and whole-line comments are skipped, and it does not run the shell,
  * check the retries, or see apt reached any other way (`apt`, `eval`, a variable).
  */
@@ -466,7 +466,7 @@ function shAptGaps(script: string): string[] {
     .replace(/\\\n\s*/g, " ");
   if (
     !/\blimit="\$\(command -v gtimeout \|\| command -v timeout\)"/.test(body) ||
-    !/"\$limit"\s+\d+\s[^\n]*\bapt-get\b/.test(body)
+    !/"\$limit"\s+(?:\d+|"\$\w+")\s[^\n]*\bapt-get\b/.test(body)
   ) {
     gaps.push('apt_get() does not run apt-get under "$limit" <n>, limit from gtimeout or timeout');
   }

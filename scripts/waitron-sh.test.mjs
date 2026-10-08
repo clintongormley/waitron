@@ -1611,6 +1611,14 @@ describe("the apt_get wrapper inside waitron.sh", () => {
     expect(r.apts).toEqual([`apt-get ${OPTIONS} update`]);
   });
 
+  // Docker's packages are about 120 MB, which a slow box link can take longer than 300 s to fetch.
+  it("gives an install 1800 s per attempt, because a slow link can take longer than 300 s", () => {
+    const r = aptGet(["install", "-y", "docker-ce"]);
+    expect(r.status).toBe(0);
+    expect(r.limits).toHaveLength(1);
+    expect(r.limits[0]).toMatch(/^g?timeout 1800 env DEBIAN_FRONTEND=noninteractive apt-get /);
+  });
+
   it("tries a call that fails twice a third time, says so twice, and succeeds", () => {
     const r = aptGet(["install", "-y", "qrencode"], { fail: 2 });
     expect(r.status).toBe(0);
