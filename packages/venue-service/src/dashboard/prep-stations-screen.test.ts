@@ -2841,6 +2841,39 @@ it.each([
   },
 );
 
+// Two add buttons share the tab action area here, so the strip keeps half the row (A424).
+it.each([
+  { locale: "en", width: 310 },
+  { locale: "en", width: 390 },
+  { locale: "es", width: 310 },
+  { locale: "es", width: 390 },
+] as const)(
+  "keeps half of a $width px tab row for the tabs, with the selected tab whole ($locale)",
+  async ({ locale, width }) => {
+    setLocale(locale);
+    const el = await mount(
+      api({
+        load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+        readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
+      }),
+    );
+    el.parentElement!.style.width = `${width}px`;
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await tabs.updateComplete;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const row = tabs.shadowRoot!.querySelector('[part="tab-row"]')!.getBoundingClientRect();
+    const strip = tabs.shadowRoot!.querySelector("[role=tablist]")!.getBoundingClientRect();
+    const selected = tabs
+      .shadowRoot!.querySelector('[aria-selected="true"]')!
+      .getBoundingClientRect();
+    expect(tabs.querySelectorAll('[slot="actions"] wt-button')).toHaveLength(2);
+    expect(strip.width).toBeGreaterThanOrEqual(row.width / 2 - 1);
+    expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
+    expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
+  },
+);
+
 it.each([
   { locale: "en", theme: "light", width: 390 },
   { locale: "en", theme: "dark", width: 390 },
