@@ -2294,8 +2294,8 @@ export class MenusScreen extends LitElement {
   #renderPreview() {
     return html`<dashboard-menu-preview
       menuName=${this.#menuName()}
+      .includedBy=${this.structure?.includedBy ?? []}
       .status=${this.status}
-      .statusFailed=${this.statusError}
       .preview=${this.preview}
       .failed=${this.previewError}
       .failureReason=${this.previewResetRequired ? codeMessage("menu.reset_required") : ""}

@@ -2897,7 +2897,10 @@ that does this today. Guards: `apps/dashboard/src/screens/menus-screen.heading.t
 
 A menu's Preview shows frozen customer content beside unpublished changes. Choose a content
 language independently of the dashboard language, or select Internal names for staff inspection.
-Keep publication state and actions outside the two scrolling panes. Stack the panes when the host
+Keep the live version in the editor header rather than repeating it in Preview. Show price clashes
+as a red sentence, with each conflicting price and its source below it. A menu included by other
+menus names those includers as links to their Preview tabs beside Publish; omit that note when
+there are none. Keep publication actions outside the two scrolling panes. Stack the panes when the host
 has less than 800px available. Each pane has its own accessible name and keyboard focus.
 
 Make a change row a native button. Its separate field and place controls use frozen names as labels

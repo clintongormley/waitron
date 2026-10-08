@@ -2924,6 +2924,16 @@ would be the first).
   (read in `menus-screen.ts`, not run).
 
 **Inspect the proposed menu and follow every change — DONE (W95, #1302, 2026-10-06).**
+Open UI follow-up (A390, Lane E): main CI after A339 failed the disclosure rapid-toggle
+case at `packages/ui/src/components/wt-disclosure.test.ts:82`; the timed case still expected the
+body to be hidden after 1050 ms. Reproduce and fix its cause before claiming the merge run green.
+
+Follow-up Preview bundle (A349/A350/A351/A352/A383/A384) in progress: the first A349
+step removes the repeated Live section, names and links includers beside Publish, shows clashes
+as a red sentence with their prices, and uses Unpublished changes as its heading. The explicit
+Clashes-filter destination, frozen Structure-style tree, grouped View links, Hide/Show all,
+Spanish conflicto wording and failed-refresh count still await the bundle's remaining steps.
+The bundle has not landed.
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 [implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
 hierarchy, product inspection and linked before/after changes, with explicit translation

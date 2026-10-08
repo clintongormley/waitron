@@ -2197,8 +2197,9 @@ export const en = {
   "menu_status.current_version": "Version {number}",
   "menu_status.changed": "Unpublished changes",
   "menu_status.changed_version": "Live: version {number}",
-  "menu_preview.clash_count": "Resolve {count} clash before publishing.",
-  "menu_preview.clashes_count": "Resolve {count} clashes before publishing.",
+  "menu_preview.clash_count": "{count} price has a clash. Resolve it before publishing this menu.",
+  "menu_preview.clashes_count":
+    "{count} prices have clashes. Resolve them before publishing this menu.",
   "customer_menu.target_count": "{count} places or fields",
   "customer_menu.view": "Content view",
   "customer_menu.internal": "Internal names (staff only)",
@@ -2258,12 +2259,8 @@ export const en = {
   "customer_menu.not_sold_separately": "Not sold separately",
   "customer_menu.limits": "Pick limits",
   "customer_menu.maxQuantity": "Maximum quantity",
-  "menu_preview.live_heading": "Live version",
-  "menu_preview.live_loading": "Checking the live version…",
-  "menu_preview.live_error": "The live version could not be checked.",
-  "menu_preview.never_published": "This menu has not been published yet.",
   "menu_preview.live_version": "Version {number}, published {time}",
-  "menu_preview.changes_heading": "Changes not yet published",
+  "menu_preview.changes_heading": "Unpublished changes",
   "menu_preview.loading": "Working out the changes…",
   "menu_preview.error": "The changes could not be worked out.",
   "menu_preview.nothing": "Nothing to publish: version {number} matches this menu.",
@@ -2324,8 +2321,10 @@ export const en = {
     "{product} in {list} has a saved portion of {amount}, which exceeds the unit's {precision} decimal places. Check it before publishing.",
   "menu_preview.publish": "Publish {menu}",
   "menu_preview.publishing": "Publishing {menu}…",
-  "menu_preview.only_this_menu":
-    "Only {menu} is published. Other menus that share these changes keep their live version until they are published.",
+  "menu_preview.includer_note":
+    "includes this menu. It keeps its live version until it is published.",
+  "menu_preview.includers_note":
+    "include this menu. They keep their live version until each of them is published.",
   "menu_preview.published": "{menu} version {number} is now live.",
   "menu_preview.failed_kept":
     "{menu} was not published: version {number} is still live. Your changes are still saved. {reason}",
@@ -4740,10 +4739,6 @@ export const es: Record<StringKey, string> = {
   "customer_menu.not_sold_separately": "No se vende por separado",
   "customer_menu.limits": "Límites de selección",
   "customer_menu.maxQuantity": "Cantidad máxima",
-  "menu_preview.live_heading": "Versión publicada",
-  "menu_preview.live_loading": "Comprobando la versión publicada…",
-  "menu_preview.live_error": "No se pudo comprobar la versión publicada.",
-  "menu_preview.never_published": "Esta carta aún no se ha publicado.",
   "menu_preview.live_version": "Versión {number}, publicada el {time}",
   "menu_preview.changes_heading": "Cambios sin publicar",
   "menu_preview.loading": "Calculando los cambios…",
@@ -4808,8 +4803,10 @@ export const es: Record<StringKey, string> = {
     "{product} en {list} tiene una porción guardada de {amount}, que supera los {precision} decimales de la unidad. Revísala antes de publicar.",
   "menu_preview.publish": "Publicar {menu}",
   "menu_preview.publishing": "Publicando {menu}…",
-  "menu_preview.only_this_menu":
-    "Solo se publica {menu}. Las demás cartas que comparten estos cambios siguen con su versión publicada hasta que se publiquen.",
+  "menu_preview.includer_note":
+    "incluye esta carta. Mantiene su versión publicada hasta que se publique.",
+  "menu_preview.includers_note":
+    "incluyen esta carta. Mantienen su versión publicada hasta que se publique cada una.",
   "menu_preview.published": "La versión {number} de {menu} ya está publicada.",
   "menu_preview.failed_kept":
     "No se ha publicado {menu}: la versión {number} sigue publicada. Tus cambios siguen guardados. {reason}",

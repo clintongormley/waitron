@@ -26,7 +26,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { conjunctionList } from "../i18n/list.js";
 import { localizedName } from "../i18n/localized.js";
 import { PATH_SEPARATOR } from "./category-form.js";
-import { describeSetting } from "./price-source.js";
+import { placeName } from "./price-source.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
@@ -223,10 +223,9 @@ export class MenuPreviewPanel extends LitElement {
   ];
 
   @property() menuName = "";
+  @property({ attribute: false }) includedBy: { id: string; name: string }[] = [];
   /** Null while the live version is being read. */
   @property({ attribute: false }) status: MenuStatus | null = null;
-  /** The live version could not be read. */
-  @property({ type: Boolean }) statusFailed = false;
   /** Null while the changes are being worked out, or when that failed. */
   @property({ attribute: false }) preview: MenuPreview | null = null;
   /** The preview could not be read. */
@@ -662,29 +661,6 @@ export class MenuPreviewPanel extends LitElement {
     );
   }
 
-  #renderLive() {
-    const status = this.status;
-    const words =
-      status === null
-        ? t(this.statusFailed ? "menu_preview.live_error" : "menu_preview.live_loading")
-        : status.state === "unpublished"
-          ? t("menu_preview.never_published")
-          : fill("menu_preview.live_version", {
-              number: String(status.version),
-              time: formatIsoMinute(status.publishedAt),
-            });
-    return html`<section aria-labelledby="live-heading">
-      <h2 id="live-heading">${t("menu_preview.live_heading")}</h2>
-      <p
-        data-test="live"
-        class=${this.statusFailed && status === null ? "error" : ""}
-        role=${status !== null ? nothing : this.statusFailed ? "alert" : "status"}
-      >
-        ${words}
-      </p>
-    </section>`;
-  }
-
   #renderResult() {
     const result = this.result;
     if (result === null) return nothing;
@@ -892,17 +868,30 @@ export class MenuPreviewPanel extends LitElement {
           menu,
         )}</wt-button
       >
-      <p class="help" data-test="only-this-menu">${fill("menu_preview.only_this_menu", menu)}</p>
+      ${this.includedBy.length === 0 ? nothing : html`<p class="help" data-test="only-this-menu">${this.#includerLinks()} ${t(this.includedBy.length === 1 ? "menu_preview.includer_note" : "menu_preview.includers_note")}</p>`}
     </div>`;
+  }
+
+  #includerLinks() {
+    let index = 0;
+    return new Intl.ListFormat(currentLocale(), { type: "conjunction" })
+      .formatToParts(this.includedBy.map((menu) => menu.name))
+      .map((part) => {
+        if (part.type === "literal") return part.value;
+        const menu = this.includedBy[index++]!;
+        return html`<a href=${`/manage/menus/menu/${encodeURIComponent(menu.id)}/view/preview`}
+          >${menu.name}</a
+        >`;
+      });
   }
 
   #renderClashes() {
     const clashes = this.preview?.clashes ?? [];
     if (!clashes.length) return nothing;
     return html`<section>
-      <h2 data-test="clash-count">
+      <p class="error" role="status" data-test="clash-count">
         ${fill(clashes.length === 1 ? "menu_preview.clash_count" : "menu_preview.clashes_count", { count: String(clashes.length) })}
-      </h2>
+      </p>
       <ul data-test="clashes">
         ${clashes.map((clash) => {
           const offer = Object.values(this.preview!.document.offers).find(
@@ -913,28 +902,35 @@ export class MenuPreviewPanel extends LitElement {
             ? (offer?.variants.find((variant) => variant.id === clash.variantId)?.name ??
               clash.variantId)
             : null;
-          const words = describeSetting(
-            {
-              state: "clash",
-              candidates:
-                clash.candidates as import("@waitron/catalogue/src/menu-combine-types.js").Candidate<
-                  import("@waitron/shared").Decimal
-                >[],
-            },
-            { product: name },
-            t,
-          );
+          const candidates = clash.candidates
+            .map((candidate) =>
+              fill("menu_prices.source_candidate", {
+                price:
+                  "value" in candidate
+                    ? formatMoney(candidate.value, currentLocale())
+                    : t("menu_prices.clash"),
+                place: placeName(candidate.place, t),
+              }),
+            )
+            .join(", ");
+          const words = fill("menu_prices.clash_prices", { candidates });
           return html`<li>
-            ${name}${variant ? ` — ${variant}` : ""}: ${t("menu_prices.override_column")} — ${words}
+            ${name}${variant ? ` — ${variant}` : ""}:
+            ${words.replace(/^./, (letter) => letter.toLocaleLowerCase(currentLocale()))}
           </li>`;
         })}
       </ul>
+      <a
+        data-test="clash-prices"
+        href=${`/manage/menus/menu/${encodeURIComponent(this.preview!.document.menuId)}/view/prices`}
+        >${t("menu_prices.show_clashes")}</a
+      >
     </section>`;
   }
 
   override render() {
-    return html`${this.#renderLive()} ${this.#renderResult()} ${this.#renderWarnings()}
-      ${this.#renderClashes()} ${this.#renderPublish()}
+    return html`${this.#renderResult()} ${this.#renderWarnings()} ${this.#renderClashes()}
+      ${this.#renderPublish()}
       <slot name="schedule"></slot>
       <div class="panes">
         <div

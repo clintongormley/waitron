@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
 import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
-import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
@@ -544,7 +543,7 @@ it.each([
   expect(items(el, "changes")).toEqual([line]);
 });
 
-it("shows the live version and when it was published, apart from the pending changes", async () => {
+it("leaves live-version facts to the header while showing pending changes", async () => {
   const el = await mount({
     preview: preview([
       {
@@ -558,17 +557,11 @@ it("shows the live version and when it was published, apart from the pending cha
       },
     ]),
   });
-  expect(text(q(el, '[data-test="live"]'))).toBe(
-    t("menu_preview.live_version")
-      .replace("{number}", "2")
-      .replace("{time}", formatIsoMinute(PUBLISHED_AT)),
-  );
-  expect(q(el, '[data-test="live"]')!.closest("section")).not.toBe(
-    q(el, '[data-test="changes"]')!.closest("section"),
-  );
+  expect(q(el, '[data-test="live"]')).toBeNull();
+  expect(q(el, '[data-test="changes"]')).not.toBeNull();
 });
 
-it("says a menu never published has no live version, and offers to publish it", async () => {
+it("offers to publish a never-published menu without repeating the header status", async () => {
   const el = await mount({
     status: { state: "unpublished", clashes: 0 },
     preview: preview([
@@ -583,7 +576,7 @@ it("says a menu never published has no live version, and offers to publish it", 
       },
     ]),
   });
-  expect(text(q(el, '[data-test="live"]'))).toBe(t("menu_preview.never_published"));
+  expect(q(el, '[data-test="live"]')).toBeNull();
   expect(text(q(el, '[data-test="publish"]'))).toBe("Publish Lunch Menu");
 });
 
@@ -603,9 +596,7 @@ it("names the one menu on the publish button, and asks to publish the hash it pr
   const asked: unknown[] = [];
   el.addEventListener("wt-menu-publish", (event) => asked.push((event as CustomEvent).detail));
   expect(text(q(el, '[data-test="publish"]'))).toBe("Publish Lunch Menu");
-  expect(text(q(el, '[data-test="only-this-menu"]'))).toBe(
-    t("menu_preview.only_this_menu").replaceAll("{menu}", "Lunch Menu"),
-  );
+  expect(q(el, '[data-test="only-this-menu"]')).toBeNull();
   q(el, '[data-test="publish"]')!.click();
   expect(asked).toEqual([{ hash: NEW_HASH }]);
 });
@@ -776,9 +767,9 @@ it("says while the changes are being worked out, and when they could not be, off
   expect(retried).toBe(1);
 });
 
-it("says while the live version is being checked", async () => {
+it("leaves the live loading state to the editor header", async () => {
   const el = await mount({ status: null });
-  expect(text(q(el, '[data-test="live"]'))).toBe(t("menu_preview.live_loading"));
+  expect(q(el, '[data-test="live"]')).toBeNull();
 });
 
 /** The message is read inside the case, in the case's language. */
@@ -933,7 +924,9 @@ it("lists unresolved clashes above Publish and disables publishing", async () =>
   const publish = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
   expect(publish.disabled).toBe(true);
   expect(text(q(el, '[data-test="clashes"]'))).toContain("Burger");
-  expect(text(q(el, '[data-test="clash-count"]'))).toBe("Resolve 1 clash before publishing.");
+  expect(text(q(el, '[data-test="clash-count"]'))).toBe(
+    "1 price has a clash. Resolve it before publishing this menu.",
+  );
   const heard = vi.fn();
   el.addEventListener("wt-menu-publish", heard);
   publish.dispatchEvent(new MouseEvent("click"));
@@ -947,34 +940,31 @@ function capture(el: HTMLElement, type: string): unknown[] {
 }
 
 it.each([
-  ["en", "Price override", "Menu price"],
-  ["es-ES", "Precio propio", "Precio de la carta"],
-])(
-  "names a publication clash with today's override wording in %s",
-  async (locale, wanted, retired) => {
-    setLocale(locale);
-    const value = preview([]);
-    value.clashes = [
-      {
-        productId: "p-burger",
-        variantId: null,
-        field: "price",
-        candidates: [
-          { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
-          {
-            place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
-            value: "14.00" as never,
-            source: { kind: "own" },
-          },
-        ],
-      },
-    ];
-    const el = await mount({ preview: value });
-    expect(text(q(el, '[data-test="clashes"]'))).toContain(wanted);
-    expect(text(q(el, '[data-test="clashes"]'))).not.toContain(retired);
-    expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(true);
-  },
-);
+  ["en", "price set to", "Price override —"],
+  ["es-ES", "precio fijado", "Precio propio —"],
+])("names each publication clash by its set prices in %s", async (locale, wanted, retired) => {
+  setLocale(locale);
+  const value = preview([]);
+  value.clashes = [
+    {
+      productId: "p-burger",
+      variantId: null,
+      field: "price",
+      candidates: [
+        { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
+        {
+          place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+          value: "14.00" as never,
+          source: { kind: "own" },
+        },
+      ],
+    },
+  ];
+  const el = await mount({ preview: value });
+  expect(text(q(el, '[data-test="clashes"]'))).toContain(wanted);
+  expect(text(q(el, '[data-test="clashes"]'))).not.toContain(retired);
+  expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(true);
+});
 
 it.each([
   ["en", "included menu", "also on Dinner"],

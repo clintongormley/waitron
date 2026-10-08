@@ -61,9 +61,16 @@ const changes: MenuPreview = {
 
 const states: Record<string, Partial<MenuPreviewPanel>> = {
   loading: { status: null, preview: null },
-  "live version unread": { status: null, statusFailed: true, preview: changes },
+  "live version unread": { status: null, preview: changes },
   failed: { preview: null, failed: true },
   "changes and a warning": { preview: changes },
+  "included by other menus": {
+    preview: changes,
+    includedBy: [
+      { id: "lunch", name: "Lunch" },
+      { id: "terrace", name: "Terraza" },
+    ],
+  },
   unpublished: { status: { state: "unpublished", clashes: 0 }, preview: changes },
   "nothing to publish": {
     status: { ...live, state: "current", clashes: 0, hash: changes.hash },
