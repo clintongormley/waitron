@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
@@ -16,6 +16,45 @@ const BRAND = "Waitron";
 export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
 
 type ActionVariant = "secondary" | "ghost";
+
+/** An item of the bar that can move into More; "transfers" is the count and its button together,
+ * "operator" the name and Log out together. */
+type BarItem =
+  | "transfers"
+  | "find-bill"
+  | "station"
+  | "expo"
+  | "schedule"
+  | "profile"
+  | "equipment"
+  | "allergens"
+  | "operator";
+
+/** First to leave the bar first: occasional tools, then service actions, then who is signed in. */
+const LEAVE_ORDER: readonly BarItem[] = [
+  "allergens",
+  "equipment",
+  "profile",
+  "schedule",
+  "expo",
+  "station",
+  "find-bill",
+  "transfers",
+  "operator",
+];
+
+/** Properties whose change can alter the bar's width, so may let items come back. A transfer count
+ * is not one: a count changing while More is open must not rebuild the menu under the finger. */
+const CONTENT_PROPERTIES: readonly PropertyKey[] = [
+  "tabs",
+  "affordances",
+  "operatorName",
+  "transferAvailable",
+  "canSwitchProfile",
+  "loadLocales",
+  "phone",
+  "kiosk",
+];
 
 /**
  * Presentational: `till-app` owns data, active-tab state and the drill-in stack; the shell only emits
@@ -48,7 +87,7 @@ export class TillTabShell extends LitElement {
 
       .head {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
@@ -57,18 +96,24 @@ export class TillTabShell extends LitElement {
       }
 
       .brand {
+        flex: none;
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
       }
 
       .tabs {
         display: flex;
-        flex-wrap: wrap;
+        flex: 0 1 auto;
+        min-width: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
         align-items: center;
         gap: var(--wt-space-2);
       }
 
       .tab {
+        flex: none;
+        white-space: nowrap;
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-4);
         border: 1px solid transparent;
@@ -91,7 +136,9 @@ export class TillTabShell extends LitElement {
 
       .session {
         display: flex;
-        flex-wrap: wrap;
+        flex: none;
+        flex-wrap: nowrap;
+        white-space: nowrap;
         align-items: center;
         gap: var(--wt-space-3);
       }
@@ -100,29 +147,20 @@ export class TillTabShell extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* One row on a phone: the tabs scroll sideways rather than wrap. */
       .head.phone {
-        flex-wrap: nowrap;
         gap: var(--wt-space-2);
         padding: var(--wt-space-2) var(--wt-space-3);
       }
 
       .head.phone .tabs {
         flex: 1;
-        min-width: 0;
-        flex-wrap: nowrap;
-        overflow-x: auto;
       }
 
       .head.phone .tab {
-        flex: none;
         padding: var(--wt-space-2) var(--wt-space-3);
-        white-space: nowrap;
       }
 
       .head.phone .session {
-        flex: none;
-        flex-wrap: nowrap;
         gap: var(--wt-space-2);
       }
 
@@ -200,6 +238,146 @@ export class TillTabShell extends LitElement {
     super.disconnectedCallback();
     this.#phoneWidth?.removeEventListener("change", this.#onPhoneWidth);
     this.#phoneWidth = undefined;
+    this.#observer?.disconnect();
+    this.#observer = undefined;
+    this.#observedChooser = undefined;
+    this.#run += 1;
+  }
+
+  /** 0: everything on the bar; 1: the name hidden; n: the name hidden and the first n − 1 present
+   * items of `LEAVE_ORDER` in More. Above phone width it is the fewest steps that keep one row. */
+  @state() private steps = 0;
+  #run = 0;
+  #stepBackOwed = false;
+  #fittedWidth = 0;
+  #fittedLocale?: string;
+  #observer?: ResizeObserver;
+  #observedChooser?: Element;
+  #watchedPopup?: Element;
+  readonly #onPopupToggle = () => {
+    if (this.#stepBackOwed && !this.#menuOpen()) void this.#fit();
+  };
+
+  #present(): BarItem[] {
+    const has: Record<BarItem, boolean> = {
+      transfers: this.transferCount !== undefined || this.transferAvailable,
+      "find-bill": this.affordances.includes("find-bill"),
+      station: this.affordances.includes("station"),
+      expo: this.affordances.includes("expo"),
+      schedule: this.affordances.includes("schedule"),
+      profile: this.canSwitchProfile,
+      equipment: true,
+      allergens: true,
+      operator: true,
+    };
+    return LEAVE_ORDER.filter((item) => has[item]);
+  }
+
+  #moved(): ReadonlySet<BarItem> {
+    const present = this.#present();
+    return new Set(this.phone ? present : present.slice(0, Math.max(0, this.steps - 1)));
+  }
+
+  override updated(changed: PropertyValues): void {
+    super.updated(changed);
+    this.#observe();
+    const contentChanged = CONTENT_PROPERTIES.some((key) => changed.has(key));
+    if (contentChanged || currentLocale() !== this.#fittedLocale) {
+      this.#stepBackOwed = true;
+      void this.#fit();
+    } else if (changed.has("transferCount")) {
+      void this.#fit();
+    }
+  }
+
+  /** The host's width does not depend on the bar's contents, so a fit never re-triggers it. The
+   * chooser is observed because its label can change once its language list loads. */
+  #observe(): void {
+    if (this.#observer === undefined) {
+      this.#observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.target === this) {
+            if (entry.contentRect.width > this.#fittedWidth) this.#stepBackOwed = true;
+            this.#fittedWidth = entry.contentRect.width;
+          } else {
+            this.#stepBackOwed = true;
+          }
+        }
+        void this.#fit();
+      });
+      this.#observer.observe(this);
+    }
+    const chooser = this.renderRoot.querySelector(".head wt-language-chooser") ?? undefined;
+    if (chooser !== this.#observedChooser) {
+      if (this.#observedChooser) this.#observer.unobserve(this.#observedChooser);
+      if (chooser) this.#observer.observe(chooser);
+      this.#observedChooser = chooser;
+    }
+    const popup = this.#popup();
+    if (popup !== this.#watchedPopup) {
+      this.#watchedPopup?.removeEventListener("toggle", this.#onPopupToggle);
+      popup?.addEventListener("toggle", this.#onPopupToggle);
+      this.#watchedPopup = popup;
+    }
+  }
+
+  #popup(): Element | undefined {
+    return (
+      this.renderRoot
+        .querySelector('wt-row-actions[data-test="more-menu"]')
+        ?.shadowRoot?.querySelector("[popover]") ?? undefined
+    );
+  }
+
+  #menuOpen(): boolean {
+    return this.#popup()?.matches(":popover-open") ?? false;
+  }
+
+  /** Resolves once this element and the Lit elements in its bar have rendered. */
+  async #settled(): Promise<void> {
+    await this.updateComplete;
+    const children = this.renderRoot.querySelectorAll(
+      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge",
+    );
+    await Promise.all([...children].map((child) => (child as Partial<LitElement>).updateComplete));
+  }
+
+  #wraps(): boolean {
+    const head = this.renderRoot.querySelector<HTMLElement>(".head");
+    const tabs = this.renderRoot.querySelector<HTMLElement>(".head .tabs");
+    if (!head || !tabs) return false;
+    return head.scrollWidth > head.clientWidth || tabs.scrollWidth > tabs.clientWidth;
+  }
+
+  /** Adds steps while the bar wraps. Takes steps away only when owed — the host grew, the content
+   * or the language changed — and never while More is open, which would rebuild it under the
+   * finger; the owed step-back runs when it closes. */
+  async #fit(): Promise<void> {
+    const run = ++this.#run;
+    await this.#settled();
+    if (run !== this.#run || this.kiosk || this.phone || !this.isConnected) return;
+    this.#fittedLocale = currentLocale();
+    const stale = async (): Promise<boolean> => {
+      await this.#settled();
+      return run !== this.#run;
+    };
+    if (this.#stepBackOwed && !this.#menuOpen()) {
+      this.#stepBackOwed = false;
+      while (this.steps > 0) {
+        this.steps -= 1;
+        if (await stale()) return;
+        if (this.#wraps()) {
+          this.steps += 1;
+          if (await stale()) return;
+          break;
+        }
+      }
+    }
+    const most = this.#present().length + 1;
+    while (this.#wraps() && this.steps < most) {
+      this.steps += 1;
+      if (await stale()) return;
+    }
   }
 
   #emit(type: string, detail?: unknown): void {
@@ -221,54 +399,59 @@ export class TillTabShell extends LitElement {
       : t("department_transfer.open").replace("{count}", String(this.transferCount));
   }
 
-  /** On a phone the visible count sits in the closed menu, out of the accessibility tree, so this
-   * region is the one a screen reader hears. */
+  /** While the transfers are in More the visible count sits in the closed menu, out of the
+   * accessibility tree, so this region is the one a screen reader hears. */
   #transferStatus(): TemplateResult {
     return html`<span class="visually-hidden" role="status" data-test="department-transfers-status"
       >${this.#transferText()}</span
     >`;
   }
 
-  #tools(variant: ActionVariant): TemplateResult {
-    const action = (cls: string, type: string, label: string): TemplateResult =>
+  /** The bar's items in the bar's order, those in More when `inMore`, else those on the bar. */
+  #items(moved: ReadonlySet<BarItem>, inMore: boolean): TemplateResult {
+    const variant: ActionVariant = inMore ? "ghost" : "secondary";
+    const here = (item: BarItem) => moved.has(item) === inMore;
+    const button = (
+      cls: string | typeof nothing,
+      type: string,
+      label: string,
+      opensTransfers = false,
+    ): TemplateResult =>
       html`<wt-button
         class=${cls}
+        ?data-open-transfers=${opensTransfers}
         variant=${variant}
-        align=${variant === "ghost" ? "start" : nothing}
+        align=${inMore ? "start" : nothing}
         @click=${() => this.#emit(type)}
         >${label}</wt-button
       >`;
+    const affordance = (item: ShellAffordance & BarItem, type: string, label: string) =>
+      here(item) && this.affordances.includes(item) ? button(item, type, label) : nothing;
     return html`${
-      this.transferCount === undefined
-        ? nothing
-        : html`<span
-            data-test="department-transfers"
-            role=${variant === "ghost" ? nothing : "status"}
+      here("transfers") && this.transferCount !== undefined
+        ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
             >${this.#transferText()}</span
           >`
+        : nothing
     }${
-      this.transferAvailable
-        ? html`<wt-button
-            data-open-transfers
-            variant=${variant}
-            align=${variant === "ghost" ? "start" : nothing}
-            @click=${() => this.#emit("open-transfers")}
-            >${t("department_transfer.title")}</wt-button
-          >`
+      here("transfers") && this.transferAvailable
+        ? button(nothing, "open-transfers", t("department_transfer.title"), true)
         : nothing
-    }${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}${
-      this.affordances.includes("station")
-        ? action("station", "show-station", t("station.open"))
+    }${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
+      "station",
+      "show-station",
+      t("station.open"),
+    )}${affordance("expo", "show-expo", t("expo.open"))}${affordance(
+      "schedule",
+      "show-schedule",
+      t("schedule.open"),
+    )}${
+      here("profile") && this.canSwitchProfile
+        ? button("profile", "open-profile", t("profile.open"))
         : nothing
-    }${this.affordances.includes("expo") ? action("expo", "show-expo", t("expo.open")) : nothing}${
-      this.affordances.includes("schedule")
-        ? action("schedule", "show-schedule", t("schedule.open"))
-        : nothing
-    }${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open")) : nothing}${action(
-      "equipment",
-      "open-equipment",
-      t("equipment.open"),
-    )}${action("allergens", "open-allergens", t("allergens.open"))}`;
+    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open")) : nothing}${
+      here("allergens") ? button("allergens", "open-allergens", t("allergens.open")) : nothing
+    }`;
   }
 
   #operatorAndLogout(variant: ActionVariant): TemplateResult {
@@ -282,10 +465,11 @@ export class TillTabShell extends LitElement {
       >`;
   }
 
-  #menu(): TemplateResult {
-    const pending = this.transferCount !== undefined && this.transferCount > 0;
+  #menu(moved: ReadonlySet<BarItem>): TemplateResult {
+    const pending =
+      moved.has("transfers") && this.transferCount !== undefined && this.transferCount > 0;
     return html`<wt-row-actions
-      icon="kebab"
+      icon="hamburger"
       align="end"
       data-test="more-menu"
       .iconSize=${"lg"}
@@ -304,7 +488,7 @@ export class TillTabShell extends LitElement {
             ></wt-count-badge>`
           : nothing
       }
-      ${this.#tools("ghost")}${this.#operatorAndLogout("ghost")}
+      ${this.#items(moved, true)}${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
     </wt-row-actions>`;
   }
 
@@ -324,6 +508,7 @@ export class TillTabShell extends LitElement {
 
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
+    const moved = this.#moved();
     // Mirrors `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body rendered.
     const activeKey = this.tabs.some((tab) => tab.key === this.activeTabKey)
       ? this.activeTabKey
@@ -337,7 +522,7 @@ export class TillTabShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.phone ? nothing : html`<span class="brand">${BRAND}</span>`}
+                  ${this.phone || this.steps > 0 ? nothing : html`<span class="brand">${BRAND}</span>`}
                   <nav class="tabs" role="tablist">
                     ${this.tabs.map(
                       (tab) => html`
@@ -354,11 +539,11 @@ export class TillTabShell extends LitElement {
                     )}
                   </nav>
                   <div class="session">
-                    ${this.phone ? nothing : this.#tools("secondary")}${this.#chooser()}${
-                      this.phone ? this.#menu() : this.#operatorAndLogout("secondary")
-                    }
+                    ${this.#items(moved, false)}${this.#chooser()}${
+                      moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")
+                    }${moved.size > 0 ? this.#menu(moved) : nothing}
                   </div>
-                  ${this.phone ? this.#transferStatus() : nothing}
+                  ${this.phone || moved.has("transfers") ? this.#transferStatus() : nothing}
                 </header>
               `
         }

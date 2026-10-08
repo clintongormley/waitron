@@ -398,60 +398,63 @@ it("translates standard tabs on a language switch and retains custom titles", as
   }
 });
 
+const threeTabs: TabDef[] = [...tabs, { key: "order", title: "Order", columns: 12, cards: [] }];
+
+const full: Partial<TillTabShell> = {
+  tabs: threeTabs,
+  activeTabKey: "counter",
+  operatorName: "Ana Fernández",
+  affordances: ["find-bill", "station", "expo", "schedule"],
+  transferAvailable: true,
+  transferCount: 2,
+  canSwitchProfile: true,
+  loadLocales: async () => [
+    { code: "en-GB", label: "English" },
+    { code: "es-ES", label: "Español" },
+  ],
+};
+
+// Menu order: each button's selector and the event it emits.
+const menuActions = [
+  ["[data-open-transfers]", "open-transfers"],
+  [".find-bill", "find-bill"],
+  [".station", "show-station"],
+  [".expo", "show-expo"],
+  [".schedule", "show-schedule"],
+  [".profile", "open-profile"],
+  [".equipment", "open-equipment"],
+  [".allergens", "open-allergens"],
+  [".logout", "logout"],
+] as const;
+
+/** Wide enough for `full`'s whole bar, in either language, to fit on one row. */
+const ROOMY_WIDTH = 2560;
+
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+async function atViewport(width: number, run: () => Promise<void>, height = 844): Promise<void> {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, height);
+  await frame();
+  try {
+    await run();
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+}
+
+const menuOf = (el: TillTabShell) =>
+  el.shadowRoot!.querySelector('header wt-row-actions[data-test="more-menu"]');
+const triggerOf = (el: TillTabShell) =>
+  menuOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+
+function deepActive(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+
 describe("till-tab-shell at phone width", () => {
-  const threeTabs: TabDef[] = [...tabs, { key: "order", title: "Order", columns: 12, cards: [] }];
-
-  const full: Partial<TillTabShell> = {
-    tabs: threeTabs,
-    activeTabKey: "counter",
-    operatorName: "Ana Fernández",
-    affordances: ["find-bill", "station", "expo", "schedule"],
-    transferAvailable: true,
-    transferCount: 2,
-    canSwitchProfile: true,
-    loadLocales: async () => [
-      { code: "en-GB", label: "English" },
-      { code: "es-ES", label: "Español" },
-    ],
-  };
-
-  // Menu order: each button's selector and the event it emits.
-  const menuActions = [
-    ["[data-open-transfers]", "open-transfers"],
-    [".find-bill", "find-bill"],
-    [".station", "show-station"],
-    [".expo", "show-expo"],
-    [".schedule", "show-schedule"],
-    [".profile", "open-profile"],
-    [".equipment", "open-equipment"],
-    [".allergens", "open-allergens"],
-    [".logout", "logout"],
-  ] as const;
-
-  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-  async function atViewport(width: number, run: () => Promise<void>, height = 844): Promise<void> {
-    const before = { width: window.innerWidth, height: window.innerHeight };
-    await page.viewport(width, height);
-    await frame();
-    try {
-      await run();
-    } finally {
-      await page.viewport(before.width, before.height);
-    }
-  }
-
-  const menuOf = (el: TillTabShell) =>
-    el.shadowRoot!.querySelector('header wt-row-actions[data-test="more-menu"]');
-  const triggerOf = (el: TillTabShell) =>
-    menuOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-
-  function deepActive(): Element | null {
-    let active = document.activeElement;
-    while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
-    return active;
-  }
-
   it.each(["en-GB", "es-ES"] as const)(
     "keeps the header to one row at most 64 px tall in %s",
     async (locale) => {
@@ -487,7 +490,7 @@ describe("till-tab-shell at phone width", () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
       const menu = menuOf(el)!;
       expect(menu).not.toBeNull();
-      expect(menu.getAttribute("icon")).toBe("kebab");
+      expect(menu.getAttribute("icon")).toBe("hamburger");
       expect(menu.shadowRoot!.querySelector("wt-icon")!.getAttribute("size")).toBe("lg");
       expect(menu.getAttribute("align")).toBe("end");
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
@@ -696,7 +699,7 @@ describe("till-tab-shell at phone width", () => {
   });
 
   it("leaves the wide header as it was: brand, and every button straight in the session row", async () => {
-    await atViewport(1280, async () => {
+    await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
       expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
@@ -733,7 +736,7 @@ describe("till-tab-shell at phone width", () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(menuOf(el)).not.toBeNull();
-      await page.viewport(1280, 844);
+      await page.viewport(ROOMY_WIDTH, 844);
       await vi.waitFor(() => expect(menuOf(el)).toBeNull());
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
@@ -741,6 +744,379 @@ describe("till-tab-shell at phone width", () => {
       await vi.waitFor(() => expect(menuOf(el)).not.toBeNull());
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
+    });
+  });
+});
+
+describe("till-tab-shell above phone width", () => {
+  /** The order in which the bar's items leave for More, first to leave first: each item's key and
+   * the selector of its button. */
+  const leaveOrder = [
+    ["allergens", ".allergens"],
+    ["equipment", ".equipment"],
+    ["profile", ".profile"],
+    ["schedule", ".schedule"],
+    ["expo", ".expo"],
+    ["station", ".station"],
+    ["find-bill", ".find-bill"],
+    ["transfers", "[data-open-transfers]"],
+    ["operator", ".logout"],
+  ] as const;
+
+  const settle = async (el: TillTabShell) => {
+    await frame();
+    await frame();
+    await el.updateComplete;
+  };
+
+  const inMore = (el: TillTabShell): string[] => {
+    const menu = menuOf(el);
+    return menu === null
+      ? []
+      : leaveOrder.filter(([, selector]) => menu.querySelector(selector) !== null).map(([k]) => k);
+  };
+
+  const withLocale = async (locale: string, run: () => Promise<void>) => {
+    const original = currentLocale();
+    setLocale(locale);
+    try {
+      await run();
+    } finally {
+      setLocale(original);
+    }
+  };
+
+  function expectOneRow(el: TillTabShell): void {
+    const header = el.shadowRoot!.querySelector("header")!;
+    const box = header.getBoundingClientRect();
+    const parts = [
+      ...header.querySelectorAll<HTMLElement>(
+        ":scope > .brand, :scope > .tabs, :scope > .session > *",
+      ),
+    ]
+      .map((part) => ({ name: part.className || part.localName, r: part.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && r.height > 0);
+    expect(parts.length).toBeGreaterThanOrEqual(3);
+    const centres = parts.map(({ r }) => r.top + r.height / 2);
+    expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(2);
+    for (const { name, r } of parts) {
+      expect(r.top, name).toBeGreaterThanOrEqual(box.top);
+      expect(r.bottom, name).toBeLessThanOrEqual(box.bottom);
+      expect(r.left, name).toBeGreaterThanOrEqual(box.left);
+      expect(r.right, name).toBeLessThanOrEqual(box.right);
+    }
+    expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  }
+
+  /** Each action is in the header exactly once — on the bar and on screen, or in More — and its
+   * click emits its event. */
+  async function expectEachActionOnce(el: TillTabShell): Promise<void> {
+    const header = el.shadowRoot!.querySelector("header")!;
+    const fired: string[] = [];
+    for (const [, type] of menuActions) el.addEventListener(type, () => fired.push(type));
+    for (const [selector] of menuActions) {
+      const found = [...header.querySelectorAll<HTMLElement>(selector)];
+      expect(found, selector).toHaveLength(1);
+      const target = found[0]!;
+      const menu = menuOf(el);
+      if (menu?.contains(target)) {
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        await userEvent.click(target);
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("false"));
+      } else {
+        const r = target.getBoundingClientRect();
+        expect(r.width, selector).toBeGreaterThan(0);
+        expect(r.left, selector).toBeGreaterThanOrEqual(0);
+        expect(r.right, selector).toBeLessThanOrEqual(window.innerWidth);
+        await userEvent.click(target);
+      }
+    }
+    expect(fired).toEqual(menuActions.map(([, type]) => type));
+  }
+
+  for (const width of [700, 1024, 1280]) {
+    for (const locale of ["en-GB", "es-ES"]) {
+      it(`keeps the bar to one row at ${width} wide in ${locale}, every action reachable once`, async () => {
+        await withLocale(locale, () =>
+          atViewport(width, async () => {
+            const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+            await settle(el);
+            expectOneRow(el);
+            await expectEachActionOnce(el);
+          }),
+        );
+      });
+    }
+  }
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "moves items into More in a fixed order as the screen narrows, in %s",
+    async (locale) => {
+      await withLocale(locale, () =>
+        atViewport(1600, async () => {
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await settle(el);
+          let before: string[] = [];
+          const seen = new Set<number>();
+          for (let width = 1600; width >= 660; width -= 40) {
+            await page.viewport(width, 844);
+            await settle(el);
+            const now = inMore(el);
+            expect(now, `${width}`).toEqual(leaveOrder.slice(0, now.length).map(([k]) => k));
+            expect(now.length, `${width}`).toBeGreaterThanOrEqual(before.length);
+            if (now.length > 0)
+              expect(el.shadowRoot!.querySelector(".brand"), `${width}`).toBeNull();
+            expectOneRow(el);
+            seen.add(now.length);
+            before = now;
+          }
+          // The walk saw a bar with some items left and some still on it.
+          expect([...seen].some((n) => n > 0 && n < leaveOrder.length)).toBe(true);
+        }),
+      );
+    },
+  );
+
+  it("keeps More in the bar's order, showing only the items that left", async () => {
+    await atViewport(1024, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      await settle(el);
+      const menu = menuOf(el)!;
+      const order = [...menu.children]
+        .filter((c) => c.slot !== "badge")
+        .map(
+          (c) =>
+            (c.getAttribute("data-test") ??
+              (c.hasAttribute("data-open-transfers") ? "data-open-transfers" : c.className)) ||
+            c.localName,
+        );
+      const barOrder = [
+        "department-transfers",
+        "data-open-transfers",
+        "find-bill",
+        "station",
+        "expo",
+        "schedule",
+        "profile",
+        "equipment",
+        "allergens",
+        "operator",
+        "logout",
+      ];
+      expect(order.length).toBeGreaterThan(0);
+      expect(order).toEqual(barOrder.filter((key) => order.includes(key)));
+      expect(order.length).toBeLessThan(barOrder.length);
+      for (const key of order) {
+        const selector = key.startsWith("data-") ? `[${key}]` : `.${key}`;
+        if (key === "department-transfers") continue;
+        expect(el.shadowRoot!.querySelectorAll(`header ${selector}`), key).toHaveLength(1);
+      }
+      for (const button of menu.querySelectorAll("wt-button")) {
+        expect(button.getAttribute("variant")).toBe("ghost");
+        expect(button.getAttribute("align")).toBe("start");
+      }
+      for (const button of el.shadowRoot!.querySelectorAll("header .session > wt-button")) {
+        expect(button.getAttribute("variant")).toBe("secondary");
+      }
+      const session = el.shadowRoot!.querySelector("header .session")!;
+      expect(session.lastElementChild).toBe(menu);
+    });
+  });
+
+  it("puts every item back on the bar, and the name, once the screen is wide enough", async () => {
+    await atViewport(700, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      await settle(el);
+      expect(menuOf(el)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
+      await page.viewport(ROOMY_WIDTH, 844);
+      await settle(el);
+      expect(menuOf(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
+      expectOneRow(el);
+    });
+  });
+
+  it("refits when the operator's name grows", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1280, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const was = inMore(el).length;
+        el.operatorName = "María de los Ángeles Fernández-Villaverde y Castro";
+        await settle(el);
+        expectOneRow(el);
+        expect(inMore(el).length).toBeGreaterThan(was);
+        await expectEachActionOnce(el);
+      }),
+    );
+  });
+
+  it("refits when actions are added, and gives them back when they go", async () => {
+    await atViewport(1280, async () => {
+      const few: Partial<TillTabShell> = {
+        ...full,
+        affordances: [],
+        canSwitchProfile: false,
+        transferAvailable: false,
+        transferCount: undefined,
+      };
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", few);
+      await settle(el);
+      expect(menuOf(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
+      Object.assign(el, full);
+      await settle(el);
+      expectOneRow(el);
+      expect(menuOf(el)).not.toBeNull();
+      await expectEachActionOnce(el);
+      Object.assign(el, few);
+      await settle(el);
+      expectOneRow(el);
+      expect(menuOf(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
+    });
+  });
+
+  it("refits when the language changes", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1280, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        expectOneRow(el);
+        setLocale("es-ES");
+        await settle(el);
+        expectOneRow(el);
+        await expectEachActionOnce(el);
+        setLocale("en-GB");
+        await settle(el);
+        expectOneRow(el);
+      }),
+    );
+  });
+
+  const statuses = (el: TillTabShell) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="status"]'),
+  ];
+
+  it("keeps the visible count as the status while the transfers are on the bar", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1280, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const menu = menuOf(el)!;
+        expect(menu).not.toBeNull();
+        expect(menu.querySelector("[data-open-transfers]")).toBeNull();
+        expect(menu.querySelector("wt-count-badge")).toBeNull();
+        await (menu as LitElement).updateComplete;
+        expect(triggerOf(el).getAttribute("aria-label")).toBe("More");
+        const [status, ...rest] = statuses(el);
+        expect(rest).toEqual([]);
+        expect(status!.getAttribute("data-test")).toBe("department-transfers");
+        expect(status!.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
+        expect(status!.getBoundingClientRect().width).toBeGreaterThan(1);
+        expect(status!.textContent).toContain(
+          t("department_transfer.open").replace("{count}", "2"),
+        );
+      }),
+    );
+  });
+
+  it("badges More and announces from one region outside it once the transfers have left", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(700, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const menu = menuOf(el)!;
+        expect(menu.querySelector("[data-open-transfers]")).not.toBeNull();
+        const badge = menu.querySelector<HTMLElement>('wt-count-badge[slot="badge"]')!;
+        expect(badge.getAttribute("tone")).toBe("warning");
+        await (menu as LitElement).updateComplete;
+        expect(triggerOf(el).getAttribute("aria-label")).toBe(
+          "More, 2 department transfers pending",
+        );
+        const [status, ...rest] = statuses(el);
+        expect(rest).toEqual([]);
+        expect(menu.contains(status!)).toBe(false);
+        expect(status!.checkVisibility()).toBe(true);
+        expect(status!.textContent).toContain(
+          t("department_transfer.open").replace("{count}", "2"),
+        );
+      }),
+    );
+  });
+
+  it.each([
+    [1024, "in More"],
+    [1280, "on the bar"],
+  ] as const)(
+    "keeps an open More open, and the same status region, when the transfer count changes at %i wide (transfers %s)",
+    async (width, where) => {
+      await withLocale("en-GB", () =>
+        atViewport(width, async () => {
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await settle(el);
+          const menu = menuOf(el)!;
+          expect(menu.querySelector("[data-open-transfers]") !== null).toBe(where === "in More");
+          const [status] = statuses(el);
+          await userEvent.click(triggerOf(el));
+          await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+          el.transferCount = 3;
+          await settle(el);
+          expect(menuOf(el)).toBe(menu);
+          expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
+          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+          expect(statuses(el)).toEqual([status]);
+          expect(status!.textContent).toContain(
+            t("department_transfer.open").replace("{count}", "3"),
+          );
+        }),
+      );
+    },
+  );
+
+  it("waits for an open More to close before giving items back to a wider bar", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1024, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const menu = menuOf(el)!;
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        const held = inMore(el);
+        await page.viewport(ROOMY_WIDTH, 844);
+        await settle(el);
+        expect(menuOf(el)).toBe(menu);
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+        expect(inMore(el)).toEqual(held);
+        await userEvent.keyboard("{Escape}");
+        await settle(el);
+        expect(menuOf(el)).toBeNull();
+        expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
+        expectOneRow(el);
+      }),
+    );
+  });
+
+  it("reports no ResizeObserver loop while the screen narrows and widens across the phone width", async () => {
+    await atViewport(1280, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      await settle(el);
+      const errors: string[] = [];
+      const record = (event: ErrorEvent) => errors.push(event.message);
+      addEventListener("error", record);
+      try {
+        for (const width of [1024, 700, 641, 640, 390, 700, 1280, ROOMY_WIDTH, 390, 1280]) {
+          await page.viewport(width, 844);
+          await settle(el);
+          expect(errors, `${width}`).toEqual([]);
+        }
+        expectOneRow(el);
+      } finally {
+        removeEventListener("error", record);
+      }
     });
   });
 });
