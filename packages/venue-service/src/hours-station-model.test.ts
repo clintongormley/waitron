@@ -238,7 +238,7 @@ describe("station-only Hours writers", () => {
         replaceWeekHours(
           tx,
           f.cfg,
-          { kind: "department", id: f.department },
+          { kind: "department" as never, id: f.department },
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
             cell: { mode: "closed", periods: [] },
@@ -270,7 +270,7 @@ describe("station-only Hours writers", () => {
             closeWholeVenue: false,
             cells: [
               {
-                subject: { kind: "department", id: f.department },
+                subject: { kind: "department" as never, id: f.department },
                 cell: { mode: "closed", periods: [] },
               },
             ],
@@ -292,7 +292,7 @@ describe("station-only Hours readers", () => {
     const f = await fixture();
     await expect(
       withTransaction(suite.db, (tx) =>
-        readWeekHours(tx, f.cfg, { kind: "department", id: f.department }),
+        readWeekHours(tx, f.cfg, { kind: "department" as never, id: f.department }),
       ),
     ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "subject.kind" } });
   });
@@ -392,4 +392,35 @@ it("ignores retained department clashes when editing a station-hours named date"
   });
   const read = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special));
   expect(read.cells).toEqual([]);
+});
+
+it("keeps local department names for timetable refusals outside the editable station columns", async () => {
+  const f = await fixture();
+  const inactive = await withTransaction(suite.db, async (tx) => {
+    const [row] = await tx
+      .insert(departments)
+      .values({
+        locationId: f.cfg.locationId,
+        name: "Closed dining",
+        tradingName: "Closed dining",
+        defaultServiceMode: "table_tab",
+        active: false,
+      })
+      .returning();
+    await tx.insert(departments).values({
+      locationId: f.other,
+      name: "Foreign dining",
+      tradingName: "Foreign dining",
+      defaultServiceMode: "table_tab",
+    });
+    return row!.id;
+  });
+  const model = await withTransaction(suite.db, (tx) =>
+    readHoursModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
+  );
+  expect(model.departments).toEqual([
+    { id: f.department, name: "Dining" },
+    { id: inactive, name: "Closed dining" },
+  ]);
+  expect(model.subjects.every(({ kind }) => kind === "station")).toBe(true);
 });

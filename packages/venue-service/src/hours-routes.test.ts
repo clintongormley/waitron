@@ -290,6 +290,10 @@ describe("reading Hours", () => {
       dayCutover: "06:00",
       civilDate: model.civilDate,
       clockReadable: true,
+      departments: [
+        { id: fx.departmentIds.restaurant, name: "Restaurant" },
+        { id: fx.departmentIds.deli, name: "Deli" },
+      ],
       subjects: [
         { ...fx.kitchen, name: "Kitchen", active: true, isDefault: true },
         { ...fx.bar, name: "Bar", active: true, isDefault: false },
@@ -1010,7 +1014,7 @@ describe("station-only Hours request boundary", () => {
     const fx = await fixture();
     await refused(
       await send(fx, "PUT", "/hours/week", fx.manager, {
-        subject: { kind: "department", id: fx.departmentIds.restaurant },
+        subject: { kind: "department" as never, id: fx.departmentIds.restaurant },
         days: week(),
       }),
       400,
@@ -1029,7 +1033,7 @@ describe("station-only Hours request boundary", () => {
         input({
           cells: [
             {
-              subject: { kind: "department", id: fx.departmentIds.restaurant },
+              subject: { kind: "department" as never, id: fx.departmentIds.restaurant },
               cell: { mode: "closed", periods: [] },
             },
           ],
