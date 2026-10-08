@@ -106,13 +106,41 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
     },
   );
 
-  it("the full bar at 1280 wide has no violations", async () => {
-    await atViewport(1280, 844, async () => {
+  it("the full bar, wide enough for everything, has no violations", async () => {
+    await atViewport(2560, 844, async () => {
       const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full, theme);
       expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
       await expectNoA11yViolations(host);
     });
   });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "the bar at 1280 wide in %s, some items in More, its menu closed and open, has no violations",
+    async (locale) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        await atViewport(1280, 844, async () => {
+          const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full, theme);
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          await el.updateComplete;
+          const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+          expect(menu).not.toBeNull();
+          expect(el.shadowRoot!.querySelector("header .session > .logout")).not.toBeNull();
+          await expectNoA11yViolations(host);
+          menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+          await vi.waitFor(() =>
+            expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(
+              true,
+            ),
+          );
+          await expectNoA11yViolations(host);
+        });
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
 
   it("kiosk mode with its language chooser has no violations", async () => {
     const { host } = await mountWidget<TillTabShell>(
