@@ -1507,6 +1507,7 @@ export interface ReaderRow {
   active: boolean;
   canEnable: boolean;
   deviceCount: number;
+  deviceNames: string[];
 }
 
 /** A reader some device holds or has a payment in progress on. */

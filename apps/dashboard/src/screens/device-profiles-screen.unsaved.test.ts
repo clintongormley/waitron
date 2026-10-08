@@ -532,6 +532,7 @@ const readerRow = (id: string, name: string) => ({
   active: true,
   canEnable: true,
   deviceCount: 0,
+  deviceNames: [],
 });
 async function mountWithEquipment(overrides: Partial<DashboardApi> = {}) {
   const mounted = await mount({

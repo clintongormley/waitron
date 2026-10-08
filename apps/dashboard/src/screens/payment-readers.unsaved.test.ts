@@ -16,6 +16,7 @@ const reader: ReaderRow = {
   active: true,
   canEnable: true,
   deviceCount: 0,
+  deviceNames: [],
 };
 const available: AvailableReader[] = [
   { providerRef: "a1", name: "Counter", status: "available", model: "Solo", serial: "SN1" },

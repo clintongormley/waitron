@@ -75,6 +75,7 @@ const READERS: ReaderRow[] = [
     active: true,
     canEnable: true,
     deviceCount: 2,
+    deviceNames: ["Bar till", "Terrace till"],
   },
 ];
 
@@ -210,6 +211,41 @@ const qCell = (el: PaymentsScreen, selector: string) =>
   el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelector<HTMLElement>(selector);
 
 describe("payments-screen", () => {
+  it.each([
+    ["en", "In use by"],
+    ["es-ES", "En uso por"],
+  ])("shows configured device names, shortening a long list, in %s", async (locale, heading) => {
+    const readers = [
+      { ...READERS[0]!, id: "none", name: "Unused", deviceCount: 0, deviceNames: [] },
+      {
+        ...READERS[0]!,
+        id: "two",
+        name: "Two tills",
+        deviceCount: 2,
+        deviceNames: ["Bar till", "Terrace till"],
+      },
+      {
+        ...READERS[0]!,
+        id: "many",
+        name: "Many tills",
+        deviceCount: 5,
+        deviceNames: ["Bar till", "Terrace till", "Counter", "Garden", "Upstairs"],
+      },
+    ];
+    const { el } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue(readers) }));
+    setLocale(locale);
+    el.requestUpdate();
+    await flush(el);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.shadowRoot!.querySelector("thead")!.textContent).toContain(heading);
+    expect(qCell(el, "[data-test=reader-use-none]")!.textContent).toBe("");
+    expect(qCell(el, "[data-test=reader-use-two]")!.textContent).toBe("Bar till, Terrace till");
+    expect(qCell(el, "[data-test=reader-use-many]")!.textContent).toBe("Bar till, Terrace till +3");
+    expect(qCell(el, "[data-test=reader-use-many]")!.getAttribute("title")).toBe(
+      "Bar till, Terrace till, Counter, Garden, Upstairs",
+    );
+  });
+
   it("lists providers with their state badges", async () => {
     const { el, api } = await mount();
 
@@ -262,7 +298,7 @@ describe("payments-screen", () => {
     const body = table.shadowRoot!.querySelector("tbody")!;
     expect(body.textContent).toContain("Front counter");
     expect(body.textContent).toContain("Acme Pay");
-    expect(body.textContent).toContain("2");
+    expect(body.textContent).toContain("Bar till, Terrace till");
     expect(api.readerStatus).toHaveBeenCalledWith("r-1");
     expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toContain("Online");
     expect(qCell(el, "[data-test=disable-r-1]")).not.toBeNull();
@@ -1106,7 +1142,7 @@ describe("payments-screen remaining edges", () => {
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Pairing…");
   });
 
-  it("sorts the readers by name, by provider display name and by default count", async () => {
+  it("sorts the readers by name, by provider display name and by configured device count", async () => {
     const panels = [fakePanel("zz", "test.acme.name"), fakePanel("aa", "test.zeta.name")];
     const readers: ReaderRow[] = [
       {
@@ -1116,8 +1152,38 @@ describe("payments-screen remaining edges", () => {
         active: true,
         canEnable: true,
         deviceCount: 10,
+        deviceNames: [
+          "Till 1",
+          "Till 2",
+          "Till 3",
+          "Till 4",
+          "Till 5",
+          "Till 6",
+          "Till 7",
+          "Till 8",
+          "Till 9",
+          "Till 10",
+        ],
       },
-      { id: "r-b", provider: "aa", name: "Bar", active: true, canEnable: true, deviceCount: 9 },
+      {
+        id: "r-b",
+        provider: "aa",
+        name: "Bar",
+        active: true,
+        canEnable: true,
+        deviceCount: 9,
+        deviceNames: [
+          "Till 1",
+          "Till 2",
+          "Till 3",
+          "Till 4",
+          "Till 5",
+          "Till 6",
+          "Till 7",
+          "Till 8",
+          "Till 9",
+        ],
+      },
     ];
     const { el } = await mount(
       stubApi({
@@ -1652,6 +1718,7 @@ describe("the readers table at phone width", () => {
       active: true,
       canEnable: true,
       deviceCount: 0,
+      deviceNames: [],
     },
   ];
   it.each(["en-GB", "es-ES"])(

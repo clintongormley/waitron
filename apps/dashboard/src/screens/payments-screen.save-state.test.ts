@@ -31,6 +31,7 @@ const readers: ReaderRow[] = [
     active: true,
     canEnable: true,
     deviceCount: 1,
+    deviceNames: ["Front till"],
   },
 ];
 const available: AvailableReader[] = [

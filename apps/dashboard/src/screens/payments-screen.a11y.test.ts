@@ -51,8 +51,17 @@ const READERS: ReaderRow[] = [
     active: true,
     canEnable: true,
     deviceCount: 2,
+    deviceNames: ["Bar till", "Terrace till"],
   },
-  { id: "r-2", provider: "acme", name: "Terrace", active: false, canEnable: true, deviceCount: 0 },
+  {
+    id: "r-2",
+    provider: "acme",
+    name: "Terrace",
+    active: false,
+    canEnable: true,
+    deviceCount: 0,
+    deviceNames: [],
+  },
 ];
 
 const STUCK: StuckPaymentRow[] = [

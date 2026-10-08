@@ -253,8 +253,17 @@ const readers: ReaderRow[] = [
     active: true,
     canEnable: true,
     deviceCount: 1,
+    deviceNames: ["Front till"],
   },
-  { id: "r2", provider: "zeta", name: "Bar", active: true, canEnable: true, deviceCount: 0 },
+  {
+    id: "r2",
+    provider: "zeta",
+    name: "Bar",
+    active: true,
+    canEnable: true,
+    deviceCount: 0,
+    deviceNames: [],
+  },
   // Retired: must be excluded from the picker's options.
   {
     id: "r3",
@@ -263,6 +272,7 @@ const readers: ReaderRow[] = [
     active: false,
     canEnable: true,
     deviceCount: 0,
+    deviceNames: [],
   },
 ];
 

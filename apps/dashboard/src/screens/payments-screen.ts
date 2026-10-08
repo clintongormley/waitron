@@ -1535,9 +1535,11 @@ export class PaymentsScreen extends LitElement {
       {
         key: "deviceCount",
         choosable: "shown",
-        label: t("payments.reader_col_default_count"),
-        align: "end",
-        cell: (reader) => String(reader.deviceCount),
+        label: t("payments.reader_col_in_use_by"),
+        cell: (reader) =>
+          html`<span data-test=${`reader-use-${reader.id}`} title=${reader.deviceNames.join(", ")}
+            >${reader.deviceNames.slice(0, 2).join(", ")}${reader.deviceNames.length > 2 ? ` +${reader.deviceNames.length - 2}` : ""}</span
+          >`,
         sortValue: (reader) => reader.deviceCount,
       },
       {

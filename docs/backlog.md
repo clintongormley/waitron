@@ -2816,7 +2816,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   pending a human, unbounded — nothing re-sweeps a closed period.
 
 - **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
-  2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/payments-screen.ts`.
+  2026-10-08; in progress; campaign lane D).** `apps/dashboard/src/screens/payments-screen.ts`.
   [Detail](backlog/payments.md#a421--the-card-payments-screen-tabs-who-uses-a-reader-disconnect-disable)
 
 - **The card refund path records only after the provider call, with a fresh key each time.** **Next

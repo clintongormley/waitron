@@ -2022,8 +2022,17 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       active: true,
       canEnable: true,
       deviceCount: 0,
+      deviceNames: [],
     },
-    { id: "r2", provider: "acme", name: "Terraza", active: true, canEnable: true, deviceCount: 0 },
+    {
+      id: "r2",
+      provider: "acme",
+      name: "Terraza",
+      active: true,
+      canEnable: true,
+      deviceCount: 0,
+      deviceNames: [],
+    },
   ];
 
   const listedProfile: DeviceProfile = {

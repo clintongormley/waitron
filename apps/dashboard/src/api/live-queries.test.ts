@@ -37,6 +37,8 @@ it.each([
   ["listStuckBillRefunds", [], "bill_payment_refunds"],
   ["listStuckBillRefunds", [], "payments"],
   ["listStuckBillRefunds", [], "working_orders"],
+  ["listReaders", [], "devices"],
+  ["listReaders", [], "device_profile_card_readers"],
   ["listServers", [], "node_membership"],
   ["listServers", [], "nodes"],
   ["getReceiptLanguage", [], "locations"],
