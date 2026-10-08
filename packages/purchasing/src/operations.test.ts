@@ -387,6 +387,71 @@ describe("purchase-invoice operations", () => {
       "F-2026/001",
     );
   });
+
+  it("maps an edit onto another invoice's supplier number to purchase.duplicate, naming the resulting pair", async () => {
+    const a = await asApp((tx) =>
+      createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, supplierTaxId: "B11111111", supplierInvoiceNumber: "A-1" },
+        lines: baseInput().lines,
+      }),
+    );
+    const b = await asApp((tx) =>
+      createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, supplierTaxId: "B11111111", supplierInvoiceNumber: "B-2" },
+        lines: baseInput().lines,
+      }),
+    );
+
+    const error = await captureAppError(() =>
+      asApp((tx) =>
+        updatePurchaseInvoice(tx, b.id, {
+          header: { supplierInvoiceNumber: a.supplierInvoiceNumber },
+        }),
+      ),
+    );
+    expect(hasCode(error, "purchase.duplicate") && error.params).toEqual({
+      supplierTaxId: "B11111111",
+      supplierInvoiceNumber: "A-1",
+    });
+
+    const stored = await asApp((tx) => getPurchaseInvoice(tx, b.id));
+    expect(stored).toEqual(b);
+  });
+
+  it("maps an edit onto another invoice's supplier tax id to purchase.duplicate, naming the resulting pair", async () => {
+    await asApp((tx) =>
+      createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, supplierTaxId: "B11111111", supplierInvoiceNumber: "N-7" },
+        lines: baseInput().lines,
+      }),
+    );
+    const b = await asApp((tx) =>
+      createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, supplierTaxId: "B22222222", supplierInvoiceNumber: "N-7" },
+        lines: baseInput().lines,
+      }),
+    );
+
+    const error = await captureAppError(() =>
+      asApp((tx) => updatePurchaseInvoice(tx, b.id, { header: { supplierTaxId: "B11111111" } })),
+    );
+    expect(hasCode(error, "purchase.duplicate") && error.params).toEqual({
+      supplierTaxId: "B11111111",
+      supplierInvoiceNumber: "N-7",
+    });
+  });
+
+  it("propagates a non-unique DB error from the header update (not swallowed as a duplicate)", async () => {
+    const created = await asApp((tx) => createPurchaseInvoice(tx, baseInput()));
+    const error = await captureThrown(() =>
+      asApp((tx) =>
+        updatePurchaseInvoice(tx, created.id, {
+          header: { regime: "wombat" as PurchaseRegime },
+        }),
+      ),
+    );
+    expect(isAppError(error)).toBe(false);
+  });
 });
 
 /** Runs `fn`, returning the AppError it throws — failing loudly if it does not throw one. */

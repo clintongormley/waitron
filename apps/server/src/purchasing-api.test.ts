@@ -498,6 +498,19 @@ describe("mountPurchasingApi — update", () => {
     });
   });
 
+  it("PATCH /:id to another invoice's supplier number → 409 purchase.duplicate", async () => {
+    const app = mountApp();
+    await createVia(app, { supplierInvoiceNumber: "TAKEN-1" });
+    const created = await createVia(app, { supplierInvoiceNumber: "MOVING-1" });
+    const res = await send(app, "PATCH", `/management-api/purchase-invoices/${created.id}`, {
+      body: { header: { supplierInvoiceNumber: "TAKEN-1" } },
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "purchase.duplicate" },
+    });
+  });
+
   it("PATCH /:id with a non-uuid id → 400 shared.invalid_id", async () => {
     const res = await send(mountApp(), "PATCH", "/management-api/purchase-invoices/not-a-uuid", {
       body: {},
