@@ -1521,10 +1521,10 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 6 audited with no
-stored-setting editors; batch 7 unreserved forms audited; batches 2, 3b, 4b and 5 OPEN.** The owner:
-"open a form with the Save button transparent (and disabled?). but as soon as you make a change,
-make the Save button active/blue",
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 5 (the till) built;
+batch 6 audited with no stored-setting editors; batch 7 unreserved forms audited; batches 2, 3b and
+4b OPEN.** The owner: "open a form with the Save button transparent (and disabled?). but as soon as
+you make a change, make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
 pressable, and undoing the change turns it quiet and disabled again. "Changed" is what the form's
@@ -1573,8 +1573,21 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   and SumUp Connect/Pair/Try again remain provider operations;
   [classification and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
 - **Batch 4b — OPEN.** Venue-service module screens.
-- **Batch 5 — OPEN.** The till; many of its dialogs act (pay, refund, find) rather than save, and
-  the batch says which ones save.
+- **Batch 5 — BUILT (A331-5).** The till's five forms that save an edit: the party name dialog,
+  the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
+  when it edits a line, and the station dialog's Make at. Adding a dish never waits for a change
+  (the extras picker passes `savableAtOpen` when it adds), and the station dialog's Move keeps its
+  own rule. Every other till dialog that tracks unsaved changes takes an action and is unchanged;
+  the decision for each is in
+  [the Batch 5 table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5);
+  the till's other forms wait for Batch 7's follow-up audit below.
+  Looked at on 2026-10-08 in 24 screenshots of the forms mounted with test data in Chromium (each
+  unchanged and after one edit at 1280px, light, English; the party name and the extras picker
+  also at 390px, dark, Spanish; the invoice dialog pressed while incomplete), kept outside the
+  repository in `~/waitron-campaign-c/a331-5-shots/`: no defect found. The extras picker's add
+  mode and the station dialog's Move were byte-identical to screenshots of the code before the
+  batch. Left open: the station dialog widens or narrows with the chosen station's name, so its
+  buttons shift a little as a station is picked (it did so before this batch).
 - **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.
   Admin, venue and certificate Next buttons contribute to the provisioning draft; Connect adopts
   with credentials; Import stages configuration; reset, file/bucket/Cloud restore and provisioning

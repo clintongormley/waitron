@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -60,7 +60,7 @@ export class TillStationChoiceDialog extends LitElement {
   }
 
   override willUpdate(): void {
-    if (!this.active) return;
+    if (!this.isConnected || !this.active) return;
     if (this.#scope) {
       const choice = this.#choice();
       if (choice !== this.#observedChoice) {
@@ -69,18 +69,18 @@ export class TillStationChoiceDialog extends LitElement {
       }
       return;
     }
-    this.#leave = leaveCoordinatorFor(this);
-    if (!this.#leave) return;
     this.#baseline ??= { stationId: this.#choice() };
     if (this.selected === undefined) this.selected = this.#baseline.stationId;
-    this.#scope = this.#leave.register<string | null>({
+    const { coordinator, scope } = draftScopeFor<string | null>(this, {
       id: this,
       current: () => this.#choice(),
       snapshot: (value) => value,
       equal: (a, b) => a === b,
       restore: (value) => (this.selected = value),
     });
-    this.#scope.commit(this.#baseline.stationId);
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#baseline.stationId);
     this.#observedChoice = this.#choice();
   }
 
@@ -93,7 +93,7 @@ export class TillStationChoiceDialog extends LitElement {
 
   #cancel(): void {
     if (!this.isConnected || !this.active) return;
-    if (this.#scope) {
+    if (this.#leave) {
       void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
       return;
     }
@@ -132,6 +132,7 @@ export class TillStationChoiceDialog extends LitElement {
     )
       return;
     if (this.mode === "make-at") {
+      if (saveActionState(this.#scope).unchanged) return;
       this.#baseline = { stationId: choice };
       this.#scope?.commit(choice);
     }
@@ -147,6 +148,7 @@ export class TillStationChoiceDialog extends LitElement {
   override render() {
     const choice = this.#choice();
     const moving = this.mode === "move";
+    const saveAction = saveActionState(this.#scope);
     const currentListed = this.stations.some((station) => station.id === this.currentStationId);
     const label = t(moving ? "move_station.move_to" : "move_station.make_at");
     const firstOption = moving
@@ -170,7 +172,7 @@ export class TillStationChoiceDialog extends LitElement {
       <wt-dialog
         ${trackDialog()}
         .open=${this.active}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         .heading=${`${label}: ${this.dishName}`}
         @wt-close=${(event: Event) => this.#closed(event)}
       >
@@ -201,7 +203,11 @@ export class TillStationChoiceDialog extends LitElement {
         <wt-button
           slot="footer"
           data-submit
-          ?disabled=${this.busy || (moving && (choice === null || choice === this.currentStationId))}
+          variant=${moving ? "secondary" : saveAction.variant}
+          ?disabled=${
+            this.busy ||
+            (moving ? choice === null || choice === this.currentStationId : saveAction.unchanged)
+          }
           @click=${() => this.#submit()}
         >
           ${t(moving ? "move_station.move" : "move_station.save")}

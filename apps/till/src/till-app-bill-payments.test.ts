@@ -494,6 +494,22 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
+    const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    for (const [name, value] of [
+      ["taxId", "12345678Z"],
+      ["legalName", "Ana García"],
+      ["address", "Calle Mayor 1"],
+      ["postalCode", "28013"],
+      ["locality", "Madrid"],
+      ["province", "Madrid"],
+    ]) {
+      const input = form
+        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+      input.value = value!;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await form.updateComplete;
+    }
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",

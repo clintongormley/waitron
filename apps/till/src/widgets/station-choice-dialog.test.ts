@@ -73,10 +73,11 @@ describe("till-station-choice-dialog", () => {
     ]);
     expect(displayed(el)).toBe("Where the rules send it");
     expect(submit(el).textContent?.trim()).toBe("Save");
+    expect(submit(el).disabled).toBe(true);
     const chosen: unknown[] = [];
     el.addEventListener("station-chosen", (event) => chosen.push((event as CustomEvent).detail));
     submit(el).click();
-    expect(chosen).toEqual([{ stationId: null }]);
+    expect(chosen).toEqual([]);
   });
 
   it("marks the current station and holds Move until a different one is chosen", async () => {

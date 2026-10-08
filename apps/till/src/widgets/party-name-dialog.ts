@@ -2,7 +2,13 @@ import { LitElement, css, html } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  draftScopeFor,
+  saveActionState,
+} from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -48,17 +54,18 @@ export class TillPartyNameDialog extends LitElement {
   }
 
   override willUpdate(): void {
-    if (!this.active || this.#scope) return;
+    if (!this.isConnected || !this.active || this.#scope) return;
     this.#baseline ??= this.savedValue ?? this.value;
-    this.#leave = leaveCoordinatorFor(this);
-    this.#scope = this.#leave?.register<string>({
+    const { coordinator, scope } = draftScopeFor<string>(this, {
       id: this,
       current: () => this.value,
       snapshot: (value) => value,
       equal: (a, b) => a.trim() === b.trim(),
       restore: (value) => (this.value = value),
     });
-    this.#scope?.commit(this.#baseline);
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#baseline);
   }
 
   override disconnectedCallback(): void {
@@ -92,6 +99,7 @@ export class TillPartyNameDialog extends LitElement {
 
   async #save(): Promise<void> {
     if (!this.isConnected || !this.active) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.refusal = "";
     if (this.#tooLong()) {
@@ -112,7 +120,7 @@ export class TillPartyNameDialog extends LitElement {
 
   #cancel(): void {
     if (!this.isConnected || !this.active) return;
-    if (this.#scope) {
+    if (this.#leave) {
       void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
       return;
     }
@@ -134,10 +142,11 @@ export class TillPartyNameDialog extends LitElement {
 
   override render() {
     const error = this.#fieldError();
+    const saveAction = saveActionState(this.#scope);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       .heading=${t("table.name_title").replace("{tables}", () => this.tables)}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
@@ -165,8 +174,8 @@ export class TillPartyNameDialog extends LitElement {
           </wt-button>
           <wt-button
             data-name-save
-            variant="primary"
-            ?disabled=${this.attempted && this.#tooLong()}
+            variant=${saveAction.variant}
+            ?disabled=${saveAction.unchanged || (this.attempted && this.#tooLong())}
             @click=${() => void this.#save()}
           >
             ${t("table.name_save")}

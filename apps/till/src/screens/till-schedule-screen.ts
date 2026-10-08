@@ -5,7 +5,8 @@ import {
   type ComboboxOption,
   type DraftScope,
   type LeaveCoordinator,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   submitOnEnter,
   baseStyles,
 } from "@waitron/ui";
@@ -196,8 +197,7 @@ export class TillScheduleScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#leave = leaveCoordinatorFor(this);
-    this.#coverScope = this.#leave?.register<CoverDraft>({
+    const cover = draftScopeFor<CoverDraft>(this, {
       id: {},
       parent: this,
       current: () => this.#coverDraft(),
@@ -208,7 +208,7 @@ export class TillScheduleScreen extends LitElement {
         this.coverColleagueId = value.toPersonId;
       },
     });
-    this.#absenceScope = this.#leave?.register<AbsenceDraft>({
+    const absence = draftScopeFor<AbsenceDraft>(this, {
       id: {},
       parent: this,
       current: () => this.#absenceDraft(),
@@ -221,6 +221,9 @@ export class TillScheduleScreen extends LitElement {
         this.absNote = value.note ?? "";
       },
     });
+    this.#leave = cover.coordinator;
+    this.#coverScope = cover.scope;
+    this.#absenceScope = absence.scope;
     void this.#reload();
   }
 
@@ -307,6 +310,7 @@ export class TillScheduleScreen extends LitElement {
 
   #submitCover(): void {
     if (!this.isConnected || this.coverShiftId === "" || this.coverColleagueId === "") return;
+    if (saveActionState(this.#coverScope).unchanged) return;
     const submitted = this.#coverDraft();
     const connection = this.#connection;
     void this.#act(async () => {
@@ -322,6 +326,7 @@ export class TillScheduleScreen extends LitElement {
 
   #submitAbsence(): void {
     if (!this.isConnected || this.absFrom === "" || this.absTo === "") return;
+    if (saveActionState(this.#absenceScope).unchanged) return;
     const submitted = this.#absenceDraft();
     const connection = this.#connection;
     void this.#act(async () => {
@@ -453,6 +458,7 @@ export class TillScheduleScreen extends LitElement {
   #coverSection() {
     const shifts = this.shifts ?? [];
     const colleagues = this.#colleagues();
+    const save = saveActionState(this.#coverScope);
     return html`<section class="cover">
       <h2>${t("schedule.cover_title")}</h2>
       <div class="form">
@@ -484,8 +490,10 @@ export class TillScheduleScreen extends LitElement {
         )}
         <wt-button
           class="cover-submit"
-          variant="primary"
-          ?disabled=${this.busy || this.coverShiftId === "" || this.coverColleagueId === ""}
+          variant=${save.variant}
+          ?disabled=${
+            save.unchanged || this.busy || this.coverShiftId === "" || this.coverColleagueId === ""
+          }
           @click=${() => this.#submitCover()}
         >
           ${t("schedule.cover_submit")}
@@ -545,6 +553,7 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #absenceForm() {
+    const save = saveActionState(this.#absenceScope);
     return html`<section class="request-absence">
       <h2>${t("schedule.absence_title")}</h2>
       <div class="form">
@@ -601,8 +610,8 @@ export class TillScheduleScreen extends LitElement {
         ></wt-input>
         <wt-button
           class="abs-submit"
-          variant="primary"
-          ?disabled=${this.busy || this.absFrom === "" || this.absTo === ""}
+          variant=${save.variant}
+          ?disabled=${save.unchanged || this.busy || this.absFrom === "" || this.absTo === ""}
           @click=${() => this.#submitAbsence()}
         >
           ${t("schedule.absence_submit")}

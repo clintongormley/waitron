@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
@@ -161,6 +161,27 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
       },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations in edit mode with Save quiet and disabled, then changed", async () => {
+    setLocale("es-ES");
+    const { el, host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      {
+        product: burger,
+        initialSelections: { options: [{ listId: "list-cooked", labelId: "label-medium" }] },
+      },
+      theme,
+    );
+    const save = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-rare")!.click();
+    await el.updateComplete;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
     await expectNoA11yViolations(host);
   });
 

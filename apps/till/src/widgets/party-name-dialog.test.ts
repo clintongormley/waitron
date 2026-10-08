@@ -76,10 +76,12 @@ describe("till-party-name-dialog", () => {
 
     await type(el, "");
     save(el).click();
+    await type(el, "Bo");
+    save(el).click();
     await type(el, "   ");
     save(el).click();
 
-    expect(seen.named).toEqual([{ name: null }, { name: null }]);
+    expect(seen.named).toEqual([{ name: null }, { name: "Bo" }, { name: null }]);
   });
 
   it("refuses a 41-character name beside the field without sending it, and works again once fixed", async () => {
@@ -106,7 +108,11 @@ describe("till-party-name-dialog", () => {
   });
 
   it("shows the server's refusal beside the field, keeping Save available, until the field changes", async () => {
-    const el = await mountDialog({ value: "Ana", refusal: t("table.name_too_long") });
+    const el = await mountDialog({
+      value: "Ana",
+      savedValue: "Bea",
+      refusal: t("table.name_too_long"),
+    });
 
     expect(field(el).error).toBe(t("table.name_too_long"));
     expect(bottom(el).error).toBe(t("form.fix_fields"));

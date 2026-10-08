@@ -1533,6 +1533,14 @@ written per screen:
   (`beforeClose`, Cancel's `requestClose`) on the coordinator, not on the scope. The scope's
   `commit` and `dispose` redraw the host, so a form left open after a save draws its action quiet
   again;
+- a form that takes its scope in `willUpdate` and disposes it on disconnect returns before
+  `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
+  return a form taken out of the page takes a new scope while detached, and once put back it does
+  not ask before discarding. The till's party name, invoice recipient, extras picker and station
+  dialogs do this; with the return deleted, a reconnect case in each one's `*.unsaved.test.ts`
+  fails. The dashboard forms that take their scope in `willUpdate` (person edit and new person,
+  product editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether
+  they show the fault is untested;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;
 - return early from the save handler while `saveActionState(scope).unchanged`. `disabled` stops a
@@ -1559,7 +1567,14 @@ and nothing guards it across screens:
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
   form; the shift dialog;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
-  upload and names edit.
+  upload and names edit;
+- batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
+  invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
+  change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look).
+  Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, sign
+  in, seat, send — and keeps its own rules; the list, with the reason for each, is in
+  [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
+  The till's forms that track no unsaved changes wait for Batch 7's follow-up audit.
 
 The backup settings editor is the one form here that can open already savable: when the stored
 schedule is not a wall-clock one, or no retention is stored, the form cannot show what is running,

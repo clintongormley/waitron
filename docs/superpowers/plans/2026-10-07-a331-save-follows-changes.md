@@ -631,3 +631,142 @@ These checks do not validate reserved forms or package-wide coverage. No behavio
 Validate this appendix with `git diff --check` and an append-only comparison against the base.
 The implementation change also records this audit and its remaining reservations in the backlog
 and Forms contract. It changes documentation only.
+
+## Batch 5 — the till app (Lane C, A331-5)
+
+Branch `feat/save-follows-changes-till`, worktree
+`/Users/clintongormley/workspace/worktrees/waitron-feat-save-follows-changes-till`. Line numbers
+(~NNN) were read at `75d3a6d5f` on 2026-10-08. On that day the open pull requests' file lists and
+lane D's `feat/service-periods-slice-1` touched no till file below; lane E's #1399 changes
+`apps/till/src/i18n/codes.ts` and `codes.test.ts`, which this batch does not edit.
+
+**The 3a rules block applies to every task**, with `pnpm --filter @waitron/till typecheck` in place
+of the dashboard's. Three more rules, learnt in 3b (they live in lane B's 3b section, not yet on
+`main`, so they are repeated here):
+
+- Read the whole run output for `Unhandled error` lines. Vitest can report every test passing while
+  it prints one, and that is a failure: find what threw and fix it.
+- To find the tests that press an untouched Save, make the new early return THROW for a moment
+  (`if (s.unchanged) throw new Error("untouched save")`) and run the task's suites. Every test that
+  then fails pressed an untouched Save: each is a changed check (one edit before the press, or an
+  assertion that Save is disabled) or a fix. Put the plain `return` back afterwards. The predicted
+  changed checks below came from reading; the throw-probe is the list that counts.
+- Once a scope always exists, every `if (scope) … else …` branch in a save handler whose `else` stood
+  for "no coordinator" changes what runs in a widget test. Where both branches end the same way,
+  delete the `else`; where they differ, gate on the coordinator. A widget test that relied on the old
+  `else` is a changed check; a failure showing that the scope branch is wrong in the app is a
+  regression: stop and report it.
+
+Till widget tests mount through `mountWidget` (`apps/till/src/widgets/test-helpers.ts`
+~61–80) with no `LeaveController` above, exactly like the dashboard's; each `*.unsaved.test.ts` holds
+its own controller. The till's suites run in real Chromium (`apps/till/vitest.config.ts`).
+
+**Which till dialogs are saves** (reviewed once by a fresh-context reader, 2026-10-08; its findings
+are folded in). `git grep -ln leaveCoordinatorFor apps/till/src` lists 19 non-test
+files. Five forms edit or submit staged input and are gated; every other form in that list takes an action and
+keeps today's behaviour:
+
+| Form | Decision | Why |
+| --- | --- | --- |
+| Party name (`party-name-dialog.ts`, `data-name-save`) | SAVE | Renames a stored party (`till-app.ts` ~6887, `api.setPartyName`); pre-filled from the stored name. |
+| Schedule: Request cover, Request time off (`till-schedule-screen.ts`, `.cover-submit`, `.abs-submit`) | SAVE | The same submissions of staged input that 3a.2b gated on the dashboard (`api.requestSwap` ~313, `api.requestAbsence` ~328). |
+| Invoice recipient (`invoice-recipient-dialog.ts`, `data-invoice-save`) | SAVE | Captures the customer's tax details; on a bill it writes `setOrderInvoiceChoice` (`till-app.ts` ~7587). Every field is required and it always opens empty, so — like 3b's bill attestation — an untouched press can never send anything; gating changes only the look of the empty dialog. Its counter path feeds the details into the sale request (`till-app.ts` ~3118–3120, ~3235), so this PR takes the FULL review path and changes nothing the payment or sale request is sent. |
+| Modifier picker, edit mode (`modifier-picker.ts`, `.confirm`, when `initialSelections` is set) | SAVE | Edits a basket line's modifiers (`basket.ts` ~559–570) or a held/sent line's (`till-table-order-screen.ts` ~2388–2401, `change-line`); pre-filled from the line. |
+| Modifier picker, add mode | ACTION (unchanged look and behaviour) | Adding a dish is a pick with no earlier choice to compare with. Pass `savableAtOpen: initialSelections === undefined`, so add mode stays `primary` and never returns early. |
+| Station choice, Make at mode (`station-choice-dialog.ts`, `data-submit`, `!moving`) | SAVE | Edits an unsent basket line's station (`till-app.ts` ~5999–6008, `setLineMakeAt`); pre-filled with the line's `makeAt`. |
+| Station choice, Move mode | ACTION | Moves a sent ticket; its `?disabled` already refuses an unchanged choice (~201–205). Keep its look and behaviour. |
+| Seat a table (`seat-dialog.ts`) | ACTION | Creates a party; an empty guest count is a valid seat (`seat-dialog.test.ts` ~57–65), so gating would block seating. |
+| Supervisor override, lock screen, enrol screen | ACTION | A PIN authorisation, a sign-in, a device enrolment. |
+| Bill pay, tender pay, bill refund, find bill, cancel and credit, unpaid departure, adjustment | ACTION | Take, refund or write off money, or cancel a document. |
+| Dead ends, department transfers | ACTION | Answer a send-or-pay question; request, accept or decline a transfer (workflow replies, like acknowledge). |
+| Table order: mark served, split and transfer, order preview/send | ACTION | Act on the order (serve, move lines between bills, send to the kitchen). |
+| The till app's dead-end question after a line edit (`till-app.ts` ~6476, dialog ~6532–6560; it uses the app's coordinator directly, so the 19-file grep misses it) | ACTION | Retries a refused line change. |
+
+The enrol screen is an action for a second reason too: a refused join returns to the name step
+holding the same name (`till-enrol-screen.ts` ~128), and pressing again is the operator's intent.
+
+### Task 5.1 — party name (`apps/till/src/widgets/party-name-dialog.ts`)
+
+Register through `draftScopeFor` (~53–61; baseline stays `savedValue ?? value`). Leave paths that
+read "a scope exists": `#leave!` (~43), `#cancel`'s `if (this.#scope)` (~115),
+`.beforeClose=${this.#scope ? …}` (~140) — gate them on the coordinator. `data-name-save`
+(~166–170, fixed `variant="primary"`) binds the helper; keep `attempted && #tooLong()`. The early
+return goes in the save handler before `attempted` is set. An empty name is a valid save (it
+clears the name) when the stored name was not empty. A refused save reopens the dialog holding the
+refused value beside the stored one (`till-table-order-screen.ts` ~1604), so it opens changed:
+add a save-state case for that. Predicted changed checks (`party-name-dialog.test.ts`): ~73–80
+(a second press after the first save), ~108–113 (mounted with a refusal and `value` but no
+`savedValue` — give it the stored value the app passes). Suites: `src/widgets/party-name-dialog
+src/screens/party-name.unsaved src/screens/till-table-order-screen src/till-app-parties`.
+
+### Task 5.2 — schedule requests (`apps/till/src/screens/till-schedule-screen.ts`)
+
+Two `this.#leave?.register` calls in `connectedCallback` (~199–221) become two `draftScopeFor`
+calls; `.cover-submit` (~486–491) gates on the cover scope and `.abs-submit` (~603–608) on the
+absence scope, each keeping its existing `busy || <empty field>` conditions. Early returns in both
+submit handlers. `#back` already gates on the coordinator (~343). The absence kind defaults to
+`holiday`, so a kind-only change makes the scope changed while dates are empty: the existing empty
+date condition keeps it disabled. Suites: `src/screens/till-schedule-screen`.
+
+### Task 5.3 — invoice recipient (`apps/till/src/widgets/invoice-recipient-dialog.ts`)
+
+`?.register` (~97–114) becomes `draftScopeFor`; leave paths `#leave!` (~57) and `.beforeClose`
+(~223) gate on the coordinator. `data-invoice-save` (~321–326) binds the helper, keeping
+`attempted && invalid`; the early return goes before `attempted` is set. No `savableAtOpen`: it
+never opens pre-filled (the app passes only `refusal` and `refusalField`, `till-app.ts` ~8854–8858).
+`#errors` requires all six fields (~134–143), so an untouched press sends nothing today either; what
+DOES change is that today an empty press sets `attempted` (~147), marking all six fields and showing
+the fields sentence (~218), and after this task that press does nothing — the button is disabled.
+Check `writeCompletion` (~75–92) against the third rule above. Predicted changed checks:
+`invoice-recipient-dialog.test.ts` ~68–73 presses an untouched form carrying a server refusal;
+`invoice-recipient-dialog.a11y.test.ts` ~28–31 presses the empty dialog to reach its invalid states
+(type an invalid tax id first, or axe passes on the wrong state); `till-app-bill-payments.test.ts`
+~488–526 sends the confirm event without typing and then asserts Save enabled (~518–520) — type the
+six fields first. A parked order also sends the invoice choice (`till-app.ts` ~3529–3532). Also run `src/till-app-bill-payments.test.ts` and
+`src/till-app.test.ts` (both open the dialog) — a failure there for any reason but an untouched
+press (or the predicted ones above) is a STOP: this path feeds the sale request. Suites:
+`src/widgets/invoice-recipient-dialog src/till-app-bill-payments src/till-app.test
+src/till-app-boot-and-counter`.
+
+### Task 5.4 — modifier picker, edit mode (`apps/till/src/widgets/modifier-picker.ts`)
+
+`?.register` (~214–233) becomes `draftScopeFor`; leave paths (~193, ~465, ~494) gate on the
+coordinator. `.confirm` (~569–576) binds
+`saveActionState(scope, { savableAtOpen: this.initialSelections === undefined })`, keeping
+`!#satisfied(stale, totals)`; the early return reads the same state. Edit mode has no
+already-savable opening: `#stalePicks` reads the line's STORED selections (~300–310) and
+`#satisfied` is false while any stale pick exists (~326), so such a line could never be saved from
+the picker, gate or no gate; and a stored answer whose option is gone is not counted (~380–387), so
+the operator must pick one, which is itself a change. Predicted changed checks
+(`till-table-order-screen.test.ts`): "saving unchanged sends the extras back" (~2376–2430) and the
+weighed-child reopen (~2432–2462) press untouched — change the note first and keep their extras
+assertions; "changed and changed back" (~2496–2507) becomes: Save disabled, no event sent. Tests: edit mode opens quiet and
+disabled, one choice enables it, undoing disables it; add mode opens `primary` and enabled (the
+`savableAtOpen` case). Suites: `src/widgets/modifier-picker src/widgets/basket
+src/widgets/tender-pay src/widgets/menu-browser src/screens/till-table-order-screen
+src/till-app-table-service` (grep `till-modifier-picker` for any other mounter).
+
+### Task 5.5 — station choice, Make at mode (`apps/till/src/widgets/station-choice-dialog.ts`)
+
+`if (!this.#leave) return;` (~73) skips both the scope and `this.selected = baseline` (~75): make
+the scope exist without a coordinator and keep setting `selected`. "Scope exists" leave paths
+~55, ~96, ~173 gate on the coordinator. `data-submit` (~201–205, no variant today, so `secondary`
+in both modes by `wt-button`'s default) binds `variant=${moving ? "secondary" : s.variant}`, and the
+gate in Make at mode only; in Move mode it keeps today's `?disabled`. Accepted edge, named in the
+PR: `#loadStations` swallows a failed read (`till-app.ts` ~2556–2558) and `#choice()` turns a
+station missing from the list into "rules" (~112–120), so a stored station missing from an
+out-of-date list opens unchanged and clearing it cannot be saved until the list loads. Opened with
+no station chosen, it starts at "rules" and saving that changes nothing, so the gate is right. The early return
+applies in Make at mode only. Predicted changed check: `station-choice-dialog.test.ts` ~65–79
+presses Make at's Save untouched. Suites: `src/widgets/station-choice-dialog src/till-app.test
+src/till-app-counter-adjustments` (it opens the real Make at dialog, ~335–726).
+
+### Task 5.6 — look, docs, backlog
+
+LOOK (dev stack from the worktree; check port 8080 and the venue folder's holders first): the five
+forms unchanged and changed at desktop, light, EN; then 390px, dark and ES on party name and the
+modifier picker's edit mode. design-system.md → Forms: add the batch 5 forms and the till's
+action list (a pointer to this table); the root `CLAUDE.md` §3 forms clause ("batches 1 and 3a
+follow it") and `docs/developers/conventions-ui.md` (~19) name batch 5. Update the A331 backlog
+entry (batch 5 landed). Lane B's 3b branch edits the same lines: whichever lands second rebases and
+keeps both. FULL review path because of the invoice recipient (5.3).

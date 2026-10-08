@@ -240,3 +240,15 @@ it("departed input events cannot change the retained recipient on reconnection",
   ).toBe("Opening edit");
   expect(unload()).toBe(true);
 });
+
+it("a recipient left detached for a moment still asks before discarding once reattached", async () => {
+  const { app, form } = await mount();
+  await fill(form, "legalName", "Opening edit");
+  form.remove();
+  await form.updateComplete;
+  app.shadowRoot!.appendChild(form);
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+});
