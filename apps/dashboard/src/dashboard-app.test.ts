@@ -1051,6 +1051,7 @@ describe("dashboard-app", () => {
   it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
     // A save's profile-updated re-probes the session while the URL still reads "profile"; the
     // screen under the modal must survive that.
+    const saveProfile = vi.fn().mockResolvedValue({ emailVerificationSent: false });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
@@ -1067,7 +1068,7 @@ describe("dashboard-app", () => {
           hasGoogle: false,
           passkeys: [],
         }),
-        saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: false }),
+        saveProfile,
         getLocales: vi.fn().mockResolvedValue({
           locales: [{ code: "en-GB", label: "English" }],
           venueDefault: "en-GB",
@@ -1088,9 +1089,14 @@ describe("dashboard-app", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-profile-details"]')!.click();
     await profileScreen.updateComplete;
 
+    profileScreen
+      .shadowRoot!.querySelector("wt-input[name=telephone]")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "+34 600 000 001" } }));
+    await profileScreen.updateComplete;
     profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     await flush(el); // the save's own profile-updated -> #probeSession() round trip
+    expect(saveProfile).toHaveBeenCalledOnce();
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);

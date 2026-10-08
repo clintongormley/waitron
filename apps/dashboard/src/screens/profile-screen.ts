@@ -8,9 +8,10 @@ import {
 import { toDataURL } from "qrcode";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
+  saveActionState,
   submitOnEnter,
-  leaveCoordinatorFor,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -250,8 +251,8 @@ export class ProfileScreen extends LitElement {
   #leave?: LeaveCoordinator;
   readonly requestLeave = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
-    (!this.#scope ||
-      (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded");
+    (!this.#leave ||
+      (await this.#leave.request({ scopes: [this], reason, proceed() {} })) === "proceeded");
 
   #draftValue(fields = this.fields): Record<Field, string> {
     const normalized = {
@@ -273,8 +274,7 @@ export class ProfileScreen extends LitElement {
     this.#scope = undefined;
     this.#leave = undefined;
     if (this.mode === "view" || this.mode === "codes") return;
-    this.#leave = leaveCoordinatorFor(this);
-    this.#scope = this.#leave?.register<Record<Field, string>>({
+    const { coordinator, scope } = draftScopeFor<Record<Field, string>>(this, {
       id: this,
       current: () => this.#draftValue(),
       snapshot: (value) => ({ ...value }),
@@ -283,6 +283,8 @@ export class ProfileScreen extends LitElement {
         this.fields = { ...value };
       },
     });
+    this.#leave = coordinator;
+    this.#scope = scope;
   }
 
   override disconnectedCallback(): void {
@@ -395,7 +397,7 @@ export class ProfileScreen extends LitElement {
   #closingModal = false;
   async #closeModal(): Promise<void> {
     if (this.busy) return;
-    if (this.#scope) await this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) await this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else {
       this.#closingModal = true;
       this.#edit("view");
@@ -584,7 +586,7 @@ export class ProfileScreen extends LitElement {
   }
 
   async #save(): Promise<void> {
-    if (this.busy) return;
+    if (this.busy || saveActionState(this.#scope).unchanged) return;
     const f = this.fields;
     const operation = ++this.#operation;
     const scope = this.#scope;
@@ -1082,6 +1084,7 @@ export class ProfileScreen extends LitElement {
   }
   #renderModal(p: OwnProfile) {
     const form = this.#formState();
+    const s = saveActionState(this.#scope);
     this.#fieldErrors = form.fields;
     return html`
       <wt-modal
@@ -1089,7 +1092,7 @@ export class ProfileScreen extends LitElement {
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
         .dismissible=${!this.busy}
-        .beforeClose=${this.#scope ? this.requestLeave : undefined}
+        .beforeClose=${this.#leave ? this.requestLeave : undefined}
         @wt-close=${(e: Event) => {
           // wt-close is composed: without this guard a nested modal's close would close this one.
           if (e.target !== e.currentTarget) return;
@@ -1120,9 +1123,9 @@ export class ProfileScreen extends LitElement {
                   >${t("action.download")}</wt-button
                 >`
               : html`<wt-button
-                  variant="primary"
+                  variant=${s.variant}
                   data-test="save"
-                  ?disabled=${this.busy || form.blocked}
+                  ?disabled=${s.unchanged || this.busy || form.blocked}
                   @click=${() => void this.#save()}
                   >${t(this.mode === "remove" ? "action.remove" : "action.save")}</wt-button
                 >`
