@@ -391,7 +391,9 @@ export function createCloudReplacement(options: ReplacementOptions) {
         try {
           saved = await read();
         } catch {
-          // Resume and check refuse the file while it stays unreadable; a repaired file comes back without the stop (docs/backlog.md).
+          // Resume and check refuse the file while it stays unreadable; a repaired file comes back
+          // without the stop (`docs/backlog/replication-cloud.md`, "A stop made while
+          // `cloud-replacement.json` is unreadable is not recorded in it").
           return;
         }
         if (!saved || (await options.connection.status()).requestId !== saved.requestId) return;

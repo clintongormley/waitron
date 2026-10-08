@@ -57,7 +57,7 @@ export interface IssuedAccountAction {
 /**
  * Issue a fresh action and invalidate any still-live predecessor of the same purpose. It also
  * deletes the person's used or expired actions of that purpose, so retiring a known person's link
- * walks no history the unknown-address decoy lacks (A159 in `docs/backlog.md`).
+ * walks no history the unknown-address decoy lacks (A159, #986).
  */
 export async function issueAccountAction(
   tx: Transaction,
@@ -365,11 +365,11 @@ export async function requestAccountRecoveryAction(
 /**
  * The statements `issueAccountAction` runs for an active account's password reset (read, delete
  * dead links, retire, insert with the password_reset lifetime), against a person id nobody has,
- * plus a final delete, so an unknown address's commit writes too (measured: A159 in
- * `docs/backlog.md`). A pending account's invitation lifetime is not copied. The foreign key is
- * checked at commit, when the row is already gone. The deferral lasts until the ENCLOSING
- * transaction ends (rolling back a savepoint does not end it), so the caller must end the
- * transaction straight after; `issueRecovery` (`apps/server/src/management-api.ts`) does.
+ * plus a final delete, so an unknown address's commit writes too (measured: A159, #986). A
+ * pending account's invitation lifetime is not copied. The foreign key is checked at commit, when
+ * the row is already gone. The deferral lasts until the ENCLOSING transaction ends (rolling back a
+ * savepoint does not end it), so the caller must end the transaction straight after;
+ * `issueRecovery` (`apps/server/src/management-api.ts`) does.
  */
 async function writeAndRemoveDecoyAction(tx: Transaction, now: Date): Promise<void> {
   const personId = randomUUID();

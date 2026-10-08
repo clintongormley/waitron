@@ -29,7 +29,7 @@ review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
 0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:310` and
 `packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
 `packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:280` and
-this file (the 0.45.2 unnamed-`unique()` note in Track C), none of them re-checked against 0.45.3.
+`docs/backlog.md` (the 0.45.2 unnamed-`unique()` note under _CI, tests and developer tooling_), none of them re-checked against 0.45.3.
 **Next action:** read each claim against the installed 0.45.3, then update the number or the claim.
 
 ## Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7

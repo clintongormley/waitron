@@ -100,7 +100,7 @@ describe("catalogue provisioning", () => {
     // A venue starts with its default language, the languages Waitron keeps enabled for its area,
     // and English. The Spanish rows vary both inputs the seed could plausibly read — province AND
     // receipt locale — and the receipt column must never change the result, so do not level it.
-    // See docs/backlog.md → "Content languages per region".
+    // See docs/developers/products.md → "Content languages per region".
     ["ES", "Madrid", "en-GB", "es", ["es", "en"]],
     ["ES", "Barcelona", "es-ES", "ca", ["ca", "es", "en"]],
     ["ES", "Valencia", "en-GB", "ca", ["ca", "es", "en"]],

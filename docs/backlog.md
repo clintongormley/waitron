@@ -4232,7 +4232,7 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 
 - **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
   Either stamp the label in that rig or accept cleaning it by hand — but the rig's schema is three
-  storage decisions out of date anyway (its own entry in Track C), so the two decisions belong
+  storage decisions out of date anyway (its own entry, _The PGlite throughput bench no longer matches the shape it says it matches_), so the two decisions belong
   together. [Detail](backlog/ci.md#benchpglite-throughput-starts-a-container-pnpm-reap-cannot-see)
 
 - **A throwaway script found six comments that described code that was no longer there, and it is
@@ -4456,7 +4456,7 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   moves `vitest` and `@vitest/*` together, majors included; closing #766 stored an ignore of
   `@vitest/browser-playwright` 5.x, and whether the group's Vitest 5 PR obeys it is untested (how to
   check and clear it: workflow-guide → Dependabot pull requests); such a PR also has to re-measure
-  mutation first (Track C, _Left behind by the Stryker upgrade (#447, 2026-09-19)_).
+  mutation first (the entry below, _A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it_).
 
 - **Open Dependabot pull requests — low priority, not queued (owner, 2026-10-08: take them from here
   when a lane has room).** #1179 (Vitest 5) waits on Stryker (owner). The rest: **sharp 0.35.5
@@ -5068,7 +5068,7 @@ the named venue. The rule is in CLAUDE.md §6; detail in
 
 ## How to keep this file honest
 
-Update it in the change that makes it stale (CLAUDE.md §7). In particular:
+Update it in the change that makes it stale (CLAUDE.md §6, _Docs_). In particular:
 
 - **A change that finishes an entry deletes it** — never mark it landed, done, built or merged.
   Each point it leaves open becomes its own short entry in the same area, titled from the point's

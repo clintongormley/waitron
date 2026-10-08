@@ -170,7 +170,7 @@ track is separate, in `docs/compliance/action-plan.md`.
 Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/` — **committed,
 deliberately**, because a plan doubles as an operator's runbook here. Session handoffs in
 `docs/handoffs/` are **gitignored**: write one, leave it uncommitted, delete it when the work is
-done; never open a PR for one. Anything durable in a handoff belongs here (§7) or in the backlog.
+done; never open a PR for one. Anything durable in a handoff belongs in the root `CLAUDE.md` (§7) or in the backlog.
 
 Historical docs record what was true when written. Add a dated pointer rather than rewriting them.
 

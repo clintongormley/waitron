@@ -3,7 +3,8 @@
  * in one place. Permission ids are never renamed once shipped.
  */
 export const PERMISSIONS = [
-  // Held by every role until the permissions review (backlog A7) decides who keeps it.
+  // Held by every role until the permissions review (`docs/backlog.md` → "Review every permission:
+  // fewer, coarser, and consistently named") decides who keeps it.
   "sale.take_payment",
   "sale.void",
   "sale.refund",

@@ -79,7 +79,8 @@ function requireDecimal(v: unknown, field: string): Decimal {
 /**
  * This screens the decimal LITERAL; the op range-checks `deductibleProportion` and each line. The
  * header's `total` is not checked for sign on the server, deliberately: a negative total is a
- * supplier credit note (owner ruling 2026-09-21, docs/backlog.md → Track C).
+ * supplier credit note (owner ruling 2026-09-21, `docs/backlog.md` → "Purchasing, recipes, stock
+ * and reports").
  */
 function screenHeaderCreate(v: unknown): PurchaseInvoiceHeaderInput {
   if (!isPlainObject(v)) throw new AppError("management.request_invalid", { field: "header" });

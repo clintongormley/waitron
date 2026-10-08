@@ -131,7 +131,7 @@ their full text.
   never match; `bench/sqlite-failover` is the only rig that stamps `com.waitron.reapable`
   ([ci-and-gates.md](../developers/ci-and-gates.md) carries the receipt naming each rig). Either stamp
   the label in that rig or accept cleaning it by hand — but the rig's schema is three storage
-  decisions out of date anyway (its own entry in Track C), so the two decisions belong together.
+  decisions out of date anyway (its own entry, _The PGlite throughput bench no longer matches the shape it says it matches_), so the two decisions belong together.
 
 ## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
 

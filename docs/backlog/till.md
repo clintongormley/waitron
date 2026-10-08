@@ -98,7 +98,7 @@ their full text.
   `public/icon-192.png` and `public/icon-512.png`, which the generator writes.
   `packages/ui/vitest.config.ts` and `stryker.config.json` still exclude
   `src/tokens/token-test-helpers.ts`, which moved to `packages/ui-core` in #519 (the
-  entry "`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests" in Track C still
+  entry "`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests" in [ci.md](ci.md) still
   names it there too). A reviewer believes the `demo/**` coverage exclusion matches nothing and
   that `**/ui-core/**` is there because `packages/ui-core` starts with `packages/ui` (CLAUDE.md
   §4's unanchored-include trap); neither was tested.

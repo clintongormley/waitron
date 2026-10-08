@@ -1048,7 +1048,8 @@ shapes separated, measured 2026-09-23 on `node:sqlite` (Node v26.7.0) with the s
 create-copy-drop-rename sequence inside `begin`: a trigger ON `products` raised nothing and was gone
 afterwards, while a trigger on another table whose body reads `products` failed the rename with
 `error in trigger t_body: no such table: main.products`. What that means for venues is in
-`docs/backlog.md`, Track A, the paragraph opening **Task 1 LANDED as #511**.
+`docs/backlog/box.md`, the point _A rebuild of a table another set's trigger BODY reads is still
+refused_ under _Upgrade testing — blocking before go-live_.
 
 **A drizzle table rebuild runs with foreign keys ON, so its `DROP TABLE` acts on every row that
 points at the table.** Drizzle rebuilds a SQLite table to change a column's nullability, with the

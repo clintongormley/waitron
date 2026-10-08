@@ -46,8 +46,7 @@ export interface RecordedDeparture {
  * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
  * A bill owing nothing once invoiced (its credit notes cancel its invoice, or every line was given
  * away) gets no row and is settled as collecting it settles it ({@link settleIssuedOwingNothing}),
- * so the party closes with no departure rows when every bill owes nothing (why: the B17 entry in
- * docs/backlog.md).
+ * so the party closes with no departure rows when every bill owes nothing (why: B17, #991).
  *
  * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill is still to pay
  * ({@link billOwes}), which is no bill Finish table refuses as unpaid,

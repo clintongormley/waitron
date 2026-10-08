@@ -236,15 +236,15 @@ const GALICIA: LanguageRules = {
 };
 
 // The owner's choice, stricter than the law, which asks for at least one official language
-// (docs/compliance/regional-language-rules.md, "Balearic Islands"); docs/backlog.md → "Content
-// languages per region".
+// (docs/compliance/regional-language-rules.md, "Balearic Islands"); docs/developers/products.md →
+// "Content languages per region".
 const BALEARIC_ISLANDS: LanguageRules = {
   requiredContentLocales: ["ca-ES", "es-ES"],
   defaultContentLocale: "ca-ES",
 };
 
-// The owner's choice, not a law: service is offered in Spanish; docs/backlog.md → "Content
-// languages per region".
+// The owner's choice, not a law: service is offered in Spanish; docs/developers/products.md →
+// "Content languages per region".
 const SPANISH: LanguageRules = {
   requiredContentLocales: ["es-ES"],
   defaultContentLocale: "es-ES",
@@ -255,8 +255,8 @@ function languageRulesFor(code: string): LanguageRules {
   if (VALENCIAN_PROVINCES.has(code)) return VALENCIAN_COMMUNITY;
   if (GALICIAN.has(code)) return GALICIA;
   if (BALEARIC_PROVINCES.has(code)) return BALEARIC_ISLANDS;
-  // No content language is required in the Basque Country or Navarre (owner; docs/backlog.md →
-  // "Content languages per region").
+  // No content language is required in the Basque Country or Navarre (owner;
+  // docs/developers/products.md → "Content languages per region").
   if (BASQUE.has(code) || NAVARRE_PROVINCES.has(code)) return {};
   return SPANISH;
 }

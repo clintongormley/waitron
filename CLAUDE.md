@@ -840,7 +840,10 @@ before treating an implementation as a rule violation.
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
 unprompted, and **update it in the same change that makes it stale** (the moment it goes stale most
-reliably is a MERGE). Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
+reliably is a MERGE). A change that finishes an entry DELETES it rather than marking it done, and
+each point it leaves open becomes its own short entry in the same area; an entry's long detail goes
+in its area's file under `docs/backlog/`. How: `docs/backlog.md` → _How to keep this file honest_.
+Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
 both committed deliberately because a plan doubles as an operator's runbook. Session handoffs in
 `docs/handoffs/` are gitignored — never open a PR for one. Historical docs record what was true when
 written: add a dated pointer rather than rewriting them. The legal track is separate, in

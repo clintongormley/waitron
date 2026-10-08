@@ -80,8 +80,8 @@
      table cell and sizes its open panel to its trigger.
 
      So the uses genuinely disagree about the scroll, and whether the floor should be a token of
-     its own is an open question (docs/backlog.md, under what Task 11 left open). Grep before
-     quoting a list of consumers here: it has gone stale once already. */
+     its own is an open question (docs/backlog.md, the `--wt-cell-name-max-width` entry). Grep
+     before quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
   /* The narrowest box: both buttons and room for a three-digit number between them. */
