@@ -27,8 +27,8 @@ import {
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
-// case reading mutation.yml, and a token-permissions case and two apt cases reading every .yml file
-// in .github/workflows/. A transcription tests this file's copy of a workflow rather than the
+// case reading mutation.yml, and a token-permissions case, two apt cases and a `--with-deps` case
+// reading every .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than the
 // workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
 // each shard's filters are handed to the real `pnpm ls` and the answer is read back.
@@ -1537,6 +1537,28 @@ function aptWaits(text) {
   );
 }
 
+/**
+ * Every `--with-deps` in a step's `run:` command, which makes Playwright run apt-get itself, and
+ * whether the command it belongs to runs under `timeout <n>` on the same line (`if`, `!` and `sudo`
+ * allowed before `timeout`; a `;`, `&&`, `|` or `(` between them starts another command).
+ */
+function withDepsWaits(text) {
+  const limited = /^\s*(?:if\s+|!\s*)?(?:sudo\s+)?timeout\s+\d+\s/;
+  return workflowSteps(text).flatMap(({ step, command }) =>
+    command.split("\n").flatMap((line) =>
+      [...line.matchAll(/--with-deps\b/g)].map((found) => ({
+        step,
+        bounded: limited.test(
+          line
+            .slice(0, found.index)
+            .split(/;|&&|\|\||\||\(/)
+            .at(-1),
+        ),
+      })),
+    ),
+  );
+}
+
 const workflowsDir = join(repoRoot, ".github", "workflows");
 const workflowFiles = readdirSync(workflowsDir)
   .filter((name) => /\.ya?ml$/.test(name))
@@ -1885,6 +1907,50 @@ describe("the workflows' apt waits", () => {
       "run each apt-get as `sudo timeout <seconds> apt-get -o Acquire::http::Timeout=<n> " +
         "-o Acquire::https::Timeout=<n> …` inside a retry loop: apt's own read timeout did not " +
         "end a wait on a mirror sending a byte every 5 s",
+    ).toEqual([]);
+  });
+});
+
+/**
+ * `playwright install --with-deps` runs apt-get where no apt option or guard above reaches it, so
+ * it takes the same outer limit. Reads TEXT through the same step reader, line by line, and does not
+ * check that the step retries or judge the number.
+ */
+describe("the workflows' playwright --with-deps waits", () => {
+  const workflow = (run) =>
+    `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n      - name: browsers\n        run: ${run}\n`;
+
+  it.each([
+    ["timeout 600 pnpm exec playwright install --with-deps chromium", true],
+    ["if sudo timeout 600 npx playwright install --with-deps chromium; then :; fi", true],
+    ["pnpm exec playwright install --with-deps chromium", false],
+    ["timeout 60 true && pnpm exec playwright install --with-deps chromium", false],
+    [
+      "|\n          timeout 600 true\n          pnpm exec playwright install --with-deps chromium",
+      false,
+    ],
+  ])("reads %j as bounded: %s", (run, bounded) => {
+    expect(withDepsWaits(workflow(run))).toEqual([{ step: "browsers", bounded }]);
+  });
+
+  it("finds no --with-deps without an outer timeout in any workflow", () => {
+    const steps = workflowFiles.flatMap((name) =>
+      workflowSteps(readFileSync(join(workflowsDir, name), "utf8")).map((step) => ({
+        ...step,
+        name,
+      })),
+    );
+    expect(
+      steps.some((step) => /playwright install/.test(step.command)),
+      "expected the playwright install steps to still be read",
+    ).toBe(true);
+    expect(
+      workflowFiles.flatMap((name) =>
+        withDepsWaits(readFileSync(join(workflowsDir, name), "utf8"))
+          .filter((wait) => !wait.bounded)
+          .map((wait) => `${name}: ${wait.step}`),
+      ),
+      '--with-deps runs apt-get: run it under `timeout <seconds>` (docs/developers/ci-and-gates.md, "Every apt wait is bounded")',
     ).toEqual([]);
   });
 });

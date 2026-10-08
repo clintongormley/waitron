@@ -448,6 +448,80 @@ describe("the Dockerfile's apt waits", () => {
   });
 });
 
+/**
+ * What a box script misses of the bounded apt shape: every `apt-get` runs inside `apt_get()`, whose
+ * body runs it under `"$limit" <n>` with `limit` resolved from gtimeout or timeout. Reads TEXT: a
+ * `command -v apt-get` lookup and whole-line comments are skipped, and it does not run the shell,
+ * check the retries, or see apt reached any other way (`apt`, `eval`, a variable).
+ */
+function shAptGaps(script: string): string[] {
+  const gaps: string[] = [];
+  const lines = script.split("\n");
+  const start = lines.findIndex((line) => /^apt_get\(\) \{$/.test(line));
+  const end = start === -1 ? -1 : lines.indexOf("}", start);
+  if (end === -1) return ["defines no multi-line apt_get() { … } function"];
+  const body = lines
+    .slice(start + 1, end)
+    .join("\n")
+    .replace(/\\\n\s*/g, " ");
+  if (
+    !/\blimit="\$\(command -v gtimeout \|\| command -v timeout\)"/.test(body) ||
+    !/"\$limit"\s+\d+\s[^\n]*\bapt-get\b/.test(body)
+  ) {
+    gaps.push('apt_get() does not run apt-get under "$limit" <n>, limit from gtimeout or timeout');
+  }
+  lines.forEach((line, index) => {
+    if ((index > start && index < end) || /^\s*#/.test(line)) return;
+    if (/\bapt-get\b/.test(line.replaceAll("command -v apt-get", ""))) {
+      gaps.push(`line ${index + 1} runs apt-get outside apt_get(): ${line.trim()}`);
+    }
+  });
+  return gaps;
+}
+
+describe("waitron.sh's apt waits", () => {
+  const script = [
+    "# apt-get, in a comment",
+    "apt_get() {",
+    '  local limit; limit="$(command -v gtimeout || command -v timeout)" || die "need timeout"',
+    '  as_root "$limit" 300 env apt-get \\',
+    '    -o Acquire::Retries=3 "$@"',
+    "}",
+    "command -v apt-get >/dev/null && apt_get install -y qrencode",
+  ].join("\n");
+
+  it("passes a script whose only apt-get runs inside a bounded apt_get()", () => {
+    expect(shAptGaps(script)).toEqual([]);
+  });
+
+  it.each([
+    [
+      "a direct apt-get call",
+      `${script}\n  apt-get install -y curl`,
+      "line 8 runs apt-get outside apt_get(): apt-get install -y curl",
+    ],
+    [
+      "an apt_get() with no limit",
+      script.replace('"$limit" 300 ', ""),
+      'apt_get() does not run apt-get under "$limit" <n>, limit from gtimeout or timeout',
+    ],
+    [
+      "no apt_get() at all",
+      script.replace("apt_get() {", "apt_get () {"),
+      "defines no multi-line apt_get() { … } function",
+    ],
+  ])("reports %s", (_shape, fixture, gap) => {
+    expect(shAptGaps(fixture)).toEqual([gap]);
+  });
+
+  it("runs every apt-get in deploy/waitron.sh through the bounded apt_get()", () => {
+    expect(
+      shAptGaps(WAITRON_SH),
+      'docs/developers/ci-and-gates.md, "Every apt wait is bounded"',
+    ).toEqual([]);
+  });
+});
+
 describe("the waitron.sh box command", () => {
   it("is a bash script", () => {
     expect(WAITRON_SH).toMatch(/^#!.*\bbash\b/);

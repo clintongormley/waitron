@@ -194,6 +194,16 @@ function quietStub(name, body) {
 const REAL_CMP = spawnSync("bash", ["-c", "command -v cmp"], { encoding: "utf8" }).stdout.trim();
 quietStub("cmp", `[ "\${WT_CMP_FAIL}" = "1" ] && exit 2\nexec "${REAL_CMP}" "$@"`);
 stub("qrencode", "exit 0");
+// `apt-get` fails, exiting 100 as apt does, for the first WT_APT_FAIL calls in a case, counted in a
+// file beside the case's log. `timeout` and `gtimeout` drop the limit and run the rest.
+stub(
+  "apt-get",
+  `n=$(cat "\${WT_LOG}.apt" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.apt"
+[ "$n" -le "\${WT_APT_FAIL:-0}" ] && exit 100
+exit 0`,
+);
+stub("timeout", `shift; exec "$@"`);
+stub("gtimeout", `shift; exec "$@"`);
 stub("aa-enabled", `[ "\${WT_AA_ENABLED}" = "1" ]`);
 stub("apparmor_parser", `[ "\${WT_AA_PARSE_FAIL}" = "1" ] && exit 1; exit 0`);
 stub(
@@ -1549,6 +1559,90 @@ describe("the venue stamp reader inside waitron.sh", () => {
   it("fails when neither the venue directory nor the state directory is set", () => {
     const r = readStamp({});
     expect(r.status).not.toBe(0);
+  });
+});
+
+// No install case reaches apt: the stub bin carries `qrencode` and a working `docker compose`, which
+// ensure_docker reads as a box with nothing to install. So these take `apt_get` and the two helpers it
+// calls out of the shipped script and run them under the suite's stubs.
+describe("the apt_get wrapper inside waitron.sh", () => {
+  const SHIPPED = readFileSync(SCRIPT, "utf8");
+  const fn = (name) => {
+    const m =
+      new RegExp(`^${name}\\(\\) \\{.*\\}$`, "m").exec(SHIPPED) ??
+      new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?\\n\\}$`, "m").exec(SHIPPED);
+    if (!m) throw new Error(`deploy/waitron.sh no longer defines ${name}()`);
+    return m[0];
+  };
+  const PROGRAM = `set -euo pipefail\n${fn("die")}\n${fn("as_root")}\n${fn("apt_get")}\napt_get "$@"\n`;
+  const BASH = spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim();
+  const EMPTY_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-empty-bin-"));
+  afterAll(() => rmSync(EMPTY_BIN, { recursive: true, force: true }));
+
+  function aptGet(args, { fail = 0, path = `${STUB_BIN}${delimiter}${process.env.PATH}` } = {}) {
+    const root = mkdtempSync(join(tmpdir(), "waitron-sh-apt-"));
+    dirs.push(root);
+    const log = join(root, "calls.log");
+    writeFileSync(log, "");
+    const result = spawnSync(BASH, ["-c", PROGRAM, "apt_get", ...args], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: path, WT_LOG: log, WT_APT_FAIL: String(fail) },
+      timeout: RUN_TIMEOUT_MS,
+    });
+    if (result.error) throw result.error;
+    const calls = readFileSync(log, "utf8").trimEnd().split("\n");
+    return {
+      ...result,
+      limits: calls.filter((c) => /^g?timeout /.test(c)),
+      apts: calls.filter((c) => c.startsWith("apt-get ")),
+    };
+  }
+
+  const OPTIONS =
+    "-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30";
+
+  it("runs a healthy call once, under a 300 s limit, with apt's retry and read-timeout options", () => {
+    const r = aptGet(["update"]);
+    expect(r.status).toBe(0);
+    expect(r.limits).toHaveLength(1);
+    expect(r.limits[0]).toMatch(
+      new RegExp(`^g?timeout 300 env DEBIAN_FRONTEND=noninteractive apt-get ${OPTIONS} update$`),
+    );
+    expect(r.apts).toEqual([`apt-get ${OPTIONS} update`]);
+  });
+
+  it("tries a call that fails twice a third time, says so twice, and succeeds", () => {
+    const r = aptGet(["install", "-y", "qrencode"], { fail: 2 });
+    expect(r.status).toBe(0);
+    expect(r.apts).toHaveLength(3);
+    expect(r.stderr).toContain(
+      "waitron.sh: attempt 1 of 3 failed or stalled: apt-get install -y qrencode",
+    );
+    expect(r.stderr).toContain(
+      "waitron.sh: attempt 2 of 3 failed or stalled: apt-get install -y qrencode",
+    );
+    expect(r.stderr).not.toContain("attempt 3 of 3");
+  });
+
+  it("stops after three failed attempts, naming the arguments, and makes no fourth", () => {
+    const r = aptGet(["install", "-y", "qrencode"], { fail: 4 });
+    expect(r.status).not.toBe(0);
+    expect(r.apts).toHaveLength(3);
+    expect(r.stderr).toContain(
+      "waitron.sh: apt-get install -y qrencode failed or stalled on all three attempts",
+    );
+  });
+
+  it("stops before running apt, and says what it needs, when no timeout command is on PATH", () => {
+    const probe = spawnSync(BASH, ["-c", "command -v gtimeout || command -v timeout"], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: EMPTY_BIN },
+    });
+    expect(probe.status, "the empty PATH must really hide both timeout commands").not.toBe(0);
+    const r = aptGet(["update"], { path: EMPTY_BIN });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("waitron.sh: need timeout (GNU coreutils) to bound apt-get");
+    expect(r.apts).toEqual([]);
   });
 });
 

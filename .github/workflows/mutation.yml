@@ -61,8 +61,9 @@ jobs:
       # shard, where the full receipt lives. This job's own real-Chromium mutation run below is the
       # proof for THIS workflow: if a library were missing, Stryker's first mutant would fail to launch
       # the browser. Proven on dispatch run 32304224136, where this step took 1s and the `mutation` job
-      # then ran the real-Chromium suite green. Restore `--with-deps` (here and in ci.yml) if a
-      # runner-image or Playwright bump ever drops one.
+      # then ran the real-Chromium suite green. If a runner-image or Playwright bump drops one, apt-get
+      # it, or run `--with-deps`, under the bounded wait in docs/developers/ci-and-gates.md, "Every apt
+      # wait is bounded".
       - run: pnpm --filter @waitron/${{ matrix.package }} exec playwright install chromium
 
       # stryker.config.json sets thresholds.break to 90, so this step FAILS the
