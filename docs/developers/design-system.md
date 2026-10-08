@@ -1122,7 +1122,13 @@ row it holds the category's colour square, centred, and on All products the venu
 square, an empty outline when there is none; on a product row, the product's photo with a
 colour ring, or a filled colour square when it has no photo. Both use the product's own colour,
 falling back to its category's inherited colour, then to the venue's default; without any of them
-the frame is empty. Clicking
+the frame is empty. A category with no colour of its own shows the colour it inherits the same way:
+from the nearest coloured category above it, else the venue's default, else an empty outline. An
+inherited colour is marked, not by colour alone (owner, 2026-10-08, A423): its square keeps its size
+but takes a dashed 1px `--wt-color-text-muted` outline with a `--wt-space-1` gap before the fill
+(an `inherited` part beside `color-swatch`), and a photo's coloured ring is dashed. Its accessible name says
+where it comes from (`folders.edit_color_inherited`, `product.edit_named_inherited`), naming the
+category or All products. Opening an inheriting category's colour picker starts on No colour. Clicking
 the product slot opens the product's Edit dialog with its photo field focused. Category squares and
 All products' square open their colour picker directly. On a category being added or renamed the slot holds the name box's colour square (below). No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the

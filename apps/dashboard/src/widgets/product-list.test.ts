@@ -4682,10 +4682,14 @@ describe("a category row's leading slot", () => {
         expect(at.b!.outline.width).toBeGreaterThan(0);
         expect(at.b!.outline.style).not.toBe("none");
         expect(at.b!.outline.color).not.toBe("rgba(0, 0, 0, 0)");
+        expect(at.b!.outline.style).toBe("dashed");
+        expect(
+          root.querySelector('[data-test="color-b"] [part~="color-swatch"]')!.getAttribute("part"),
+        ).toBe("color-swatch inherited");
         expect(Object.fromEntries(levels.map((id) => [id, at[id]!.paint]))).toEqual({
           root: "rgb(119, 119, 119)",
           d: "rgb(177, 37, 37)",
-          b: "rgba(0, 0, 0, 0)",
+          b: "rgb(177, 37, 37)",
           c: "rgb(42, 157, 143)",
           ipa: "rgb(42, 157, 143)",
           pint: "rgb(42, 157, 143)",
@@ -4976,6 +4980,199 @@ describe("product media link", () => {
     await page.viewport(390, 844);
     await expect.poll(() => media!.getBoundingClientRect().width).toBe(0);
     expect((await tableRoot(el)).querySelector('[data-test="edit-plain"]')).not.toBeNull();
+  });
+});
+
+describe("a colour a row inherits", () => {
+  const partsOf = (element: Element) => element.getAttribute("part")!.split(" ");
+  const chipOf = (root: ShadowRoot, id: string) =>
+    root.querySelector<HTMLElement>(`[data-test="color-${id}"] [part~="color-swatch"]`)!;
+  const swatchButton = (root: ShadowRoot, id: string) =>
+    root.querySelector<HTMLButtonElement>(`[data-test="color-${id}"]`)!;
+  const categoryInheritedName = (name: string, from: string) =>
+    t("folders.edit_color_inherited")
+      .replace("{name}", () => name)
+      .replace("{from}", () => from);
+  const productInheritedName = (name: string, from: string) =>
+    t("product.edit_named_inherited")
+      .replace("{name}", () => name)
+      .replace("{from}", () => from);
+  /** The muted text colour as the swatch's own tree resolves it, to compare an outline against. */
+  function mutedText(beside: HTMLElement): string {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    beside.after(probe);
+    onTestFinished(() => probe.remove());
+    return getComputedStyle(probe).color;
+  }
+  function expectMarkedInherited(element: HTMLElement, fill: string) {
+    expect(partsOf(element)).toContain("inherited");
+    expect(partsOf(element)).not.toContain("empty");
+    const style = getComputedStyle(element);
+    expect(style.backgroundColor).toBe(fill);
+    expect(style.borderTopStyle).toBe("dashed");
+    expect(style.borderTopWidth).toBe("1px");
+    expect(style.borderTopColor).toBe(mutedText(element));
+    expect(style.backgroundClip).toBe("content-box");
+    expect(parseFloat(style.paddingTop)).toBeGreaterThan(0);
+  }
+  function expectOwn(element: HTMLElement, fill: string) {
+    expect(partsOf(element)).not.toContain("inherited");
+    const style = getComputedStyle(element);
+    expect(style.backgroundColor).toBe(fill);
+    expect(style.borderTopStyle).toBe("solid");
+    expect(style.backgroundClip).toBe("border-box");
+  }
+
+  it("shows an uncoloured category its parent's colour, marked inherited and named after the parent", async () => {
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, color: "#b12525" }, beer, food],
+    });
+    await openRow(el, "folder:d");
+    expectMarkedInherited(chipOf(root, "b"), "rgb(177, 37, 37)");
+    expect(swatchButton(root, "b").getAttribute("aria-label")).toBe(
+      categoryInheritedName("Beer", "Drinks"),
+    );
+    expectOwn(chipOf(root, "d"), "rgb(177, 37, 37)");
+    expect(chipOf(root, "d").getAttribute("part")).toBe("color-swatch");
+    expect(swatchButton(root, "d").getAttribute("aria-label")).toBe(
+      t("folders.edit_color").replace("{name}", "Drinks"),
+    );
+  });
+
+  it("keeps an uncoloured top-level category empty and plainly named when there is no venue default", async () => {
+    const { root } = await mountTree();
+    expect(chipOf(root, "f").getAttribute("part")).toBe("color-swatch empty");
+    expect(getComputedStyle(chipOf(root, "f")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(swatchButton(root, "f").getAttribute("aria-label")).toBe(
+      t("folders.edit_color").replace("{name}", "Food"),
+    );
+  });
+
+  it("shows an uncoloured top-level category the venue default, marked inherited from All products", async () => {
+    const { root } = await mountTree({ defaultColor: "#777777" });
+    expectMarkedInherited(chipOf(root, "f"), "rgb(119, 119, 119)");
+    expect(swatchButton(root, "f").getAttribute("aria-label")).toBe(
+      categoryInheritedName("Food", t("folders.all_products")),
+    );
+    expect(chipOf(root, "root").getAttribute("part")).toBe("color-swatch");
+  });
+
+  it("keeps a category name with a replacement pattern literal in the inherited name", async () => {
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, name: "$& Co", color: "#b12525" }, beer, food],
+    });
+    await openRow(el, "folder:d");
+    expect(swatchButton(root, "b").getAttribute("aria-label")).toBe(
+      t("folders.edit_color_inherited").replace("{name}", "Beer").split("{from}").join("$& Co"),
+    );
+  });
+
+  it("marks a product without a colour of its own as inheriting, and names where its colour comes from", async () => {
+    const { el, root } = await mountTree({
+      defaultColor: "#777777",
+      categories: [{ ...drinks, color: "#256bb1" }, beer, food],
+      products: [
+        product({ id: "cola", name: "Cola", primaryCategoryId: "b", image: null }),
+        product({ id: "plain", name: "Plain", primaryCategoryId: null, image: null }),
+        product({ id: "own", name: "Own", primaryCategoryId: "b", image: null, color: "#b12525" }),
+      ],
+    });
+    await openRow(el, "folder:d");
+    await openRow(el, "folder:b");
+    const frame = (id: string) =>
+      root.querySelector<HTMLElement>(`[data-test="color-${id}"] [data-test="thumb-placeholder"]`)!;
+    const link = (id: string) => root.querySelector<HTMLElement>(`[data-test="color-${id}"]`)!;
+    expectMarkedInherited(frame("cola"), "rgb(37, 107, 177)");
+    expect(link("cola").getAttribute("aria-label")).toBe(productInheritedName("Cola", "Drinks"));
+    expectMarkedInherited(frame("plain"), "rgb(119, 119, 119)");
+    expect(link("plain").getAttribute("aria-label")).toBe(
+      productInheritedName("Plain", t("folders.all_products")),
+    );
+    expectOwn(frame("own"), "rgb(177, 37, 37)");
+    expect(link("own").getAttribute("aria-label")).toBe(
+      t("product.edit_named").replace("{name}", "Own"),
+    );
+  });
+
+  it("dashes the coloured ring around an inheriting product's photo, keeping its colour and width", async () => {
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, color: "#256bb1" }, beer, food],
+      products: [
+        product({ id: "cola", name: "Cola", primaryCategoryId: "d", image: "cola.webp" }),
+        product({
+          id: "own",
+          name: "Own",
+          primaryCategoryId: "d",
+          image: "own.webp",
+          color: "#b12525",
+        }),
+      ],
+    });
+    await openRow(el, "folder:d");
+    const ring = (id: string) =>
+      root.querySelector<HTMLElement>(`[data-test="color-${id}"] [data-test="thumb"]`)!;
+    expect(partsOf(ring("cola"))).toContain("inherited");
+    const inherited = getComputedStyle(ring("cola"));
+    expect(inherited.borderTopStyle).toBe("dashed");
+    expect(inherited.borderTopColor).toBe("rgb(37, 107, 177)");
+    expect(inherited.borderTopWidth).toBe(getComputedStyle(ring("own")).borderTopWidth);
+    expect(parseFloat(inherited.paddingTop)).toBe(0);
+    expect(partsOf(ring("own"))).not.toContain("inherited");
+    expect(getComputedStyle(ring("own")).borderTopStyle).toBe("solid");
+  });
+
+  it("leaves a product with nothing to inherit unmarked and plainly named", async () => {
+    const { root } = await mountTree({
+      categories: [],
+      products: [product({ id: "plain", name: "Plain", primaryCategoryId: null, image: null })],
+    });
+    const link = root.querySelector<HTMLElement>('[data-test="color-plain"]')!;
+    expect(partsOf(link.querySelector('[data-test="thumb-placeholder"]')!)).toContain("empty");
+    expect(partsOf(link.querySelector('[data-test="thumb-placeholder"]')!)).not.toContain(
+      "inherited",
+    );
+    expect(link.getAttribute("aria-label")).toBe(
+      t("product.edit_named").replace("{name}", "Plain"),
+    );
+  });
+
+  it("marks a variant as its product is marked", async () => {
+    const { el, table, root } = await mountTree({
+      categories: [{ ...drinks, color: "#256bb1" }, beer, food],
+      products: [
+        product({
+          id: "wine",
+          name: "Wine",
+          primaryCategoryId: "d",
+          image: null,
+          variants: [{ ...bunVariant, id: "glass", name: "Glass" }],
+        }),
+        product({
+          id: "cava",
+          name: "Cava",
+          primaryCategoryId: "d",
+          image: null,
+          color: "#b12525",
+          variants: [{ ...bunVariant, id: "flute", name: "Flute" }],
+        }),
+      ],
+    });
+    await openRow(el, "folder:d");
+    for (const key of ["wine", "cava"]) {
+      root.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-toggle`)!.click();
+      await table.updateComplete;
+    }
+    const frame = (id: string) =>
+      root.querySelector<HTMLElement>(`[data-test="color-${id}"] [data-test="thumb-placeholder"]`)!;
+    expectMarkedInherited(frame("glass"), "rgb(37, 107, 177)");
+    expect(root.querySelector('[data-test="color-glass"]')!.getAttribute("aria-label")).toBe(
+      productInheritedName("Glass", "Drinks"),
+    );
+    expectOwn(frame("flute"), "rgb(177, 37, 37)");
+    expect(root.querySelector('[data-test="color-flute"]')!.getAttribute("aria-label")).toBe(
+      t("product.edit_named").replace("{name}", "Flute"),
+    );
   });
 });
 

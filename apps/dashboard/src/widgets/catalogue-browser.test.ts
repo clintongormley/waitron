@@ -1289,6 +1289,25 @@ it("sends nothing when a row's colour chooser is left with Esc or Cancel", async
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(el.api.updateCategory).not.toHaveBeenCalled();
 });
+it("opens an uncoloured category's chooser on No colour, not the colour it inherits, and sends nothing until one is chosen", async () => {
+  const el = await mountBrowser({
+    categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
+  });
+  await toggleCategory(el, "d");
+  expect((await rowChip(el, "b")).getAttribute("part")).toBe("color-swatch inherited");
+  await menuAction(el, "color-b");
+  const form = await colorChooser(el);
+  const checked = (color: string) =>
+    form.shadowRoot!.querySelector(`[data-color="${color}"]`)!.getAttribute("aria-checked");
+  expect(checked("")).toBe("true");
+  expect(checked("#b12525")).toBe("false");
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  expect(el.api.updateCategory).not.toHaveBeenCalled();
+  await menuAction(el, "color-b");
+  await choose(el, "#256bb1");
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["b", { color: "#256bb1" }]]);
+});
 it.each([
   ["en-GB", "Colour of All products"],
   ["es", "Color de Todos los productos"],

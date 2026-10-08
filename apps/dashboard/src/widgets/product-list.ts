@@ -23,7 +23,7 @@ import {
 } from "../i18n/domain.js";
 import { categoryPathSearchText, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
-import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { categoryColorSource, isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
@@ -109,6 +109,12 @@ export function acceptsCatalogueDrop(
           categoryWithDescendants(key.slice(7), categories).has(folderId),
       ))
   );
+}
+
+/** A row's colour, and the name of where it comes from when it is not the row's own. */
+interface ShownColor {
+  color: string | null;
+  inheritedFrom: string | undefined;
 }
 
 @customElement("dashboard-product-list")
@@ -1010,9 +1016,10 @@ export class ProductList extends LitElement {
             this.#categorySearchText(product.primaryCategoryId),
           ].join(" "),
         cell: ({ product, variant }, { ancestorOnly }) => {
-          const color =
-            product.color ??
-            categoryColor(product.primaryCategoryId, this.#categoryById, this.defaultColor);
+          const { color, inheritedFrom } =
+            product.color === null
+              ? this.#inheritedColor(product.primaryCategoryId)
+              : { color: product.color, inheritedFrom: undefined };
           return variant
             ? html`<span part="variant-cell"
                 >${productMedia({
@@ -1020,6 +1027,7 @@ export class ProductList extends LitElement {
                   name: variant.name,
                   image: variant.image ?? product.image,
                   color,
+                  inheritedFrom,
                   busy: false,
                   open: () => this.#send("edit-product", { productId: variant.id, field: "image" }),
                 })}<span part="variant-name">${variant.name}</span></span
@@ -1030,6 +1038,7 @@ export class ProductList extends LitElement {
                   name: product.name,
                   image: product.image,
                   color,
+                  inheritedFrom,
                   busy: false,
                   open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
                 })}<span part="name-stack"
@@ -1281,7 +1290,7 @@ export class ProductList extends LitElement {
               >${this.#swatchButton(
                 ROOT_KEY,
                 t("folders.all_products"),
-                this.defaultColor,
+                { color: this.defaultColor, inheritedFrom: undefined },
                 "root-color",
                 {},
               )}<span part="folder-name"
@@ -1323,9 +1332,15 @@ export class ProductList extends LitElement {
                       part="name-after"
                       >${after}</span
                     >`
-                : html`${this.#swatchButton(folder.id, folder.name, folder.color, "folder-color", {
-                      folderId: folder.id,
-                    })}<span part="folder-name"
+                : html`${this.#swatchButton(
+                      folder.id,
+                      folder.name,
+                      folder.color === null
+                        ? this.#inheritedColor(folder.parentId)
+                        : { color: folder.color, inheritedFrom: undefined },
+                      "folder-color",
+                      { folderId: folder.id },
+                    )}<span part="folder-name"
                       ><span><strong>${folder.name}</strong>${after}</span></span
                     >`
             }</span
@@ -1406,19 +1421,41 @@ export class ProductList extends LitElement {
     return this.shadowRoot?.querySelector<WtDataTable<ListRow>>("wt-data-table") ?? null;
   }
 
-  #swatchButton(key: string, name: string, color: string | null, event: string, detail: unknown) {
+  /** The colour a row without its own takes from the categories above `categoryId`, and the name
+   * of where it comes from: that category, or All products for the venue default. */
+  #inheritedColor(categoryId: string | null): ShownColor {
+    const source = categoryColorSource(categoryId, this.#categoryById, this.defaultColor);
+    if (source.color === null) return { color: null, inheritedFrom: undefined };
+    const from = source.categoryId === null ? undefined : this.#categoryById.get(source.categoryId);
+    return { color: source.color, inheritedFrom: from?.name ?? t("folders.all_products") };
+  }
+
+  #swatchButton(
+    key: string,
+    name: string,
+    { color, inheritedFrom }: ShownColor,
+    event: string,
+    detail: unknown,
+  ) {
+    const inherited = inheritedFrom !== undefined && isStoredColor(color);
     return html`<span part="folder-frame"
       ><button
         part="swatch-button"
         type="button"
         data-test=${`color-${key}`}
-        aria-label=${t("folders.edit_color").replace("{name}", name)}
+        aria-label=${
+          inherited
+            ? t("folders.edit_color_inherited")
+                .replace("{name}", () => name)
+                .replace("{from}", () => inheritedFrom)
+            : t("folders.edit_color").replace("{name}", name)
+        }
         @click=${(clicked: Event) => {
           clicked.stopPropagation();
           this.#send(event, detail);
         }}
       >
-        ${swatchChip(color)}
+        ${swatchChip(color, inherited)}
       </button></span
     >`;
   }
