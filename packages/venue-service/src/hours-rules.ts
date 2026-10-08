@@ -157,7 +157,7 @@ function assertDistinctPeriodIds(cells: { cell: { periods: HourPeriod[] }; field
 export function parseSubject(value: unknown, field: string): HoursSubject {
   if (typeof value !== "object" || value === null) invalidHours(field);
   const { kind, id } = value as Record<string, unknown>;
-  if (kind !== "department" && kind !== "station") invalidHours(`${field}.kind`);
+  if (kind !== "station") invalidHours(`${field}.kind`);
   if (typeof id !== "string") invalidHours(field);
   return { kind, id };
 }

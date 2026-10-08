@@ -399,17 +399,20 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 
 **2026-10-08, A366 slice 1:** `readHoursModel` now returns station subjects, weeks and
 special-date cells only. `hours-station-model.test.ts` exercises retained department cells
-and another venue's station cells alongside exact local station periods. The department
-writers and other readers described below remain pending Task 10 retirement on the feature
-branch; follow the [slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md).
+and another venue's station cells alongside exact local station periods. Hours requests and weekly reads now refuse department subjects with `hours.invalid`
+at the subject's `kind` field. Special-date reads and copies ignore retained department
+cells; station-hours clash checks omit department weeks and cells. The new checks in
+`hours-station-model.test.ts` exercise each path with real stored rows. The Hours public
+types, obsolete resolver and screen remain pending Task 10 retirement; follow the
+[slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md).
 
 **2026-10-08, Task 10 import boundary:** an hours cell in a configuration bundle must name
 one of its stations and carry no department owner. `configuration-transfer.test.ts` checks
 both `hours_week_cells` and `special_date_hours`; the server's same-named suite checks
 `setup.request_invalid` with the table's `department_id` field and no persisted target
 taxpayer row. The former department schedule fixtures now belong to Pass and Grill stations,
-with their time, clash, default-station and fresh-ID assertions retained. The remaining
-Hours request and reader retirement is still pending on this feature branch.
+with their time, clash, default-station and fresh-ID assertions retained. The remaining Hours public-type, obsolete-resolver and screen retirement is still
+pending on this feature branch.
 
 Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
 `hours_week_cells` and `hours_week_periods` for each department's and non-default station's

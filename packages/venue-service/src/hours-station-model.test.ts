@@ -1,10 +1,18 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, kitchenStations, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import { readHoursModel } from "./hours.js";
+import {
+  readHoursModel,
+  readSpecialDate,
+  readWeekHours,
+  duplicateSpecialDate,
+  replaceWeekHours,
+  saveSpecialDate,
+} from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   hoursWeekCells,
@@ -220,4 +228,168 @@ describe("station-only Hours page model", () => {
       },
     ]);
   });
+});
+
+describe("station-only Hours writers", () => {
+  it("refuses department weeks at subject.kind without storing hours", async () => {
+    const f = await fixture();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        replaceWeekHours(
+          tx,
+          f.cfg,
+          { kind: "department", id: f.department },
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            cell: { mode: "closed", periods: [] },
+          })),
+          at,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "subject.kind" } });
+    expect(
+      await suite.db
+        .select()
+        .from(hoursWeekCells)
+        .where(eq(hoursWeekCells.departmentId, f.department)),
+    ).toEqual([]);
+  });
+
+  it("refuses department special-date cells before changing the named date", async () => {
+    const f = await fixture();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveSpecialDate(
+          tx,
+          f.cfg,
+          f.special,
+          {
+            date: "2026-10-09",
+            name: "Changed",
+            colour: "red",
+            closeWholeVenue: false,
+            cells: [
+              {
+                subject: { kind: "department", id: f.department },
+                cell: { mode: "closed", periods: [] },
+              },
+            ],
+          },
+          at,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "cells.0.subject.kind" } });
+    const saved = await suite.db.select().from(specialDates);
+    expect(saved.find((row) => row.id === f.special)).toMatchObject({
+      name: "Festival",
+      colour: "green",
+    });
+  });
+});
+
+describe("station-only Hours readers", () => {
+  it("refuses a department week read at subject.kind", async () => {
+    const f = await fixture();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        readWeekHours(tx, f.cfg, { kind: "department", id: f.department }),
+      ),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "subject.kind" } });
+  });
+
+  it("reads and duplicates station cells without copying retained department hours", async () => {
+    const f = await fixture();
+    const station = await withTransaction(suite.db, async (tx) => {
+      const [station] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: f.cfg.locationId, name: "Pass" })
+        .returning();
+      await tx.insert(specialDateHours).values([
+        { specialDateId: f.special, departmentId: f.department, mode: "closed" },
+        { specialDateId: f.special, stationId: station!.id, mode: "all_day" },
+      ]);
+      return station!.id;
+    });
+    const read = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special));
+    expect(read.cells).toEqual([
+      { subject: { kind: "station", id: station }, cell: { mode: "all_day", periods: [] } },
+    ]);
+    const [copy] = await withTransaction(suite.db, (tx) =>
+      duplicateSpecialDate(tx, f.cfg, f.special, ["2026-10-16"], at),
+    );
+    const copied = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, copy!.id));
+    expect(copied.cells).toEqual([
+      { subject: { kind: "station", id: station }, cell: { mode: "all_day", periods: [] } },
+    ]);
+    expect(
+      await suite.db
+        .select()
+        .from(specialDateHours)
+        .where(eq(specialDateHours.specialDateId, copy!.id)),
+    ).toEqual([
+      expect.objectContaining({ departmentId: null, stationId: station, mode: "all_day" }),
+    ]);
+  });
+});
+
+it("ignores retained department clashes when editing a station-hours named date", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, async (tx) => {
+    const [legacyWeek] = await tx
+      .insert(hoursWeekCells)
+      .values({ departmentId: f.department, weekday: 5, mode: "periods" })
+      .returning();
+    await tx.insert(hoursWeekPeriods).values({
+      id: randomUUID(),
+      cellId: legacyWeek!.id,
+      position: 0,
+      opensAt: "22:00",
+      closesAt: "03:00",
+    });
+    const [next] = await tx
+      .insert(specialDates)
+      .values({
+        locationId: f.cfg.locationId,
+        date: "2026-10-10",
+        name: "Legacy",
+        colour: "blue",
+        closeWholeVenue: false,
+      })
+      .returning();
+    const [legacyDate] = await tx
+      .insert(specialDateHours)
+      .values({ specialDateId: next!.id, departmentId: f.department, mode: "periods" })
+      .returning();
+    await tx.insert(specialDateHoursPeriods).values({
+      id: randomUUID(),
+      cellId: legacyDate!.id,
+      position: 0,
+      opensAt: "01:00",
+      closesAt: "02:00",
+    });
+  });
+  const saved = await withTransaction(suite.db, (tx) =>
+    saveSpecialDate(
+      tx,
+      f.cfg,
+      f.special,
+      {
+        date: "2026-10-09",
+        name: "Renamed",
+        colour: "purple",
+        closeWholeVenue: false,
+        cells: [],
+      },
+      at,
+    ),
+  );
+  expect(saved).toEqual({
+    id: f.special,
+    date: "2026-10-09",
+    name: "Renamed",
+    colour: "purple",
+    closeWholeVenue: false,
+  });
+  const read = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special));
+  expect(read.cells).toEqual([]);
 });
