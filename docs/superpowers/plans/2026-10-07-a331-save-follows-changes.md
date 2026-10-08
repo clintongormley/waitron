@@ -516,3 +516,118 @@ registrations or credentials after the provider step.
   use the no-migration light path, including the required Claude whole-branch run-it review after
   initial rebase, normal push hook and current-head CI/coverage. Preserve other appended batches on
   rebase. Land only with owner authorization through `land-branch`, verify merge CI and managed cleanup.
+
+## Batch 7 — remaining forms and string pages (Lane E, A331-7)
+
+**Audit-only documentation result, 2026-10-08.** Base/HEAD `ed7a94cb111b08f746d7583ee4d792eec4fcf8c7`,
+branch `feat/save-follows-changes-remaining`: no eligible Save editor in the unreserved scope; reserved forms remain outstanding.
+Retain all owner rules above. No implementation, new tests, migration or helper rollout.
+
+**Inventory commands.** Intersect the labelled and button file lists, then remove scope-helper files
+and the two fully reserved groups. Exclude test/spec files and generated/dependency directories:
+
+```sh
+rg -li '\b(save|create|add|submit)\b' apps packages -g '*.{ts,tsx,js,mjs,html}' -g '!*.test.*' -g '!*.spec.*'
+rg -l '<(wt-button|button)\b' apps packages -g '*.{ts,tsx,js,mjs,html}' -g '!*.test.*' -g '!*.spec.*'
+rg -l 'leaveCoordinatorFor|draftScopeFor' apps packages -g '*.{ts,tsx,js,mjs,html}' -g '!*.test.*' -g '!*.spec.*'
+rg -n '<(wt-button|button|form)\b|type="submit"' apps/server/src apps/print-agent/src -g '*.ts' -g '!*.test.ts'
+```
+
+Result: **26 labelled no-scope files**, **72 all-button files**, before the remaining reservations.
+The broader scan removed 77 scoped files and 32 in `apps/till` / `packages/venue-service`.
+The word scan includes identifiers/prose: classify handlers and computed labels, not matches.
+Dashboard paths in the next two bullets are under `apps/dashboard/src/`.
+
+- Labelled inventory: `dashboard-app.ts`; screens `alerts`, `catalogue`, `content-languages`,
+  `modifiers`, `purchases`, `recipe`, `roster`, `staff` (`*-screen.ts`); widgets
+  `add-content-language`, `allergen-picker`, `category-color-form`, `course-list`, `product-list`,
+  `variant-table`, `menu-prices-table`, `menu-structure-table` (`*.ts`). Also the two string pages,
+  `packages/bookings/src/dashboard/bookings-screen.ts`, shared `wt-{button,combobox,data-table,disclosure}`,
+  `packages/ui/demo/main.ts` and `packages/ui-core/test/consumer/main.ts`.
+- Broader inventory adds screens `approvals`, `cloud-services`, `dashboard-sales`, `demo-printer`,
+  `demo-reader`, `diagnostics`, `email`, `orders`, `servers`, `vat-return`, plus `screens/canvas-editor/canvas-grid-preview.ts`;
+  widgets `alerts-bell`, `allergen-dietary-picker`,
+  `color-field`, `customer-menu-renderer`, `device-home-preview`, `equipment-label`, `hold-notice`,
+  `ingredient-list`, `menu-preview`, `order-detail-dialog`, `order-reprint-dialog`, `print-job-preview`,
+  `purchase-list`, `staff-list`; setup's eight unscoped screens listed in Batch 6;
+  `packages/adjustments/src/dashboard/adjustment-report-screen.ts`, shared `reorder-table.ts` and
+  `wt-{choice-row,floor-canvas,help-tooltip,language-chooser,number-stepper,price-input,relative-time,row-actions,tabs,toast,unsaved-changes}`.
+
+**Classification receipts (source call paths, not labels):**
+
+- `apps/dashboard/src/widgets/add-content-language.ts:107` calls `#add` on selection, then the
+  supplied save at `:51`; `apps/dashboard/src/screens/content-languages-screen.ts:406` supplies `#saveAdded`,
+  reaching `#write` / `updateContentLanguages` at `:277` / `:285`, then `apps/server/src/catalogue-api.ts:871` / `:887`.
+  Add opens the chooser (`content-languages-screen.ts:395`);
+  default/remove act immediately (`:363`, `:375`). There is no staged primary Save to gate.
+- `apps/dashboard/src/widgets/course-list.ts:291` opens an inline row. Enter/blur commits at
+  `:354` / `:373`; `:320` skips an unchanged existing name before create/update at `:331` / `:332`.
+  These reach `apps/server/src/management-api.ts:2134` / `:2186`, then `apps/server/src/kitchen.ts:373` / `:454`. Preserve inline commits; Add opens.
+- `apps/dashboard/src/widgets/category-color-form.ts:85` emits the chosen color immediately.
+  `apps/dashboard/src/widgets/catalogue-browser.ts:987` reaches `#chooseColor`: row selection
+  updates the category at `:803` (server `apps/server/src/catalogue-api.ts:1282`); box selection
+  only stages its color at `:795`. The chooser has Cancel, no Save.
+- `apps/dashboard/src/widgets/product-list.ts:1199` / `:1206` dispatch Add. Product Add reaches
+  `apps/dashboard/src/screens/catalogue-screen.ts:744` / `:747`, opening the scoped product editor;
+  category Add opens inline naming (`apps/dashboard/src/widgets/catalogue-browser.ts:859`).
+  Enter/blur emits `name-commit` (`product-list.ts:748`, `:759`, `:700`), reaching create/update
+  (`catalogue-browser.ts:761`, `:775`, `:776`; server `catalogue-api.ts:1232`, `:1282`). No primary Save.
+- `apps/dashboard/src/widgets/allergen-picker.ts:101` emits a parent-draft change, consumed by
+  `apps/dashboard/src/widgets/ingredient-form.ts:307` / `:194`, whose scope is registered at `:161`.
+  `variant-table.ts:315` likewise emits events consumed by `product-editor.ts:1602`–`:1654`;
+  that editor owns the Save gate (`:516`, `:868`). Neither child is an independent Save editor.
+- Screen/list Add/Edit opens scoped children: staff (`staff-screen.ts:351`, `:476`), purchase (`purchases-screen.ts:201`, `:217`),
+  ingredient (`recipe-screen.ts:360`, `:428`), shift (`roster-screen.ts:448`, `:320`),
+  modifiers (`modifiers-screen.ts:588`), booking (`packages/bookings/src/dashboard/bookings-screen.ts:412`).
+- Other unreserved buttons navigate/open/close, retry reads, delete/enable, print/download or perform
+  operations. Computed labels: cloud's request-button factory (`cloud-services-screen.ts:244`, `:330`, `:360`),
+  server removal/clear (`servers-screen.ts:175`, `:265`), staff resets/invitations
+  (`staff-screen.ts:120`), booking lifecycle (`bookings-screen.ts:332`, `:357`). Approval, roster Publish
+  and diagnostic verbosity call operations (`approvals-screen.ts:142`, `roster-screen.ts:305`,
+  `diagnostics-screen.ts:137`); VAT downloads (`vat-return-screen.ts:122`). Retain Batch 6's setup exclusions.
+  Shared primitives, previews, demo and consumer fixtures are not product Save editors.
+- Server trust is download/navigation links (`apps/server/src/trust-page.ts:84`, `:131`). Recovery's
+  computed Retry posts at `apps/server/src/recovery-surface.ts:446`, reaches `onRetry` at `:481`, then persists state and exits (`apps/server/src/node-entry.ts:426`).
+
+**Print-agent Save is an ACTION: connect or re-enrol, including an unchanged saved-URL retry.**
+`apps/print-agent/src/setup-page.ts:100` / `:105` posts to `:208` / `:225`;
+`apps/print-agent/src/bin.ts:37` calls `packages/print-agent/src/agent.ts:587`.
+Configure clears the token, writes configuration, resets runtime (including halted at `:123`) and
+wakes the loop (`:592`–`:602`); subsequent ticks attempt self-enrol/join (`:347`, `:380`). No equality gate.
+Joined agents cannot configure (`setup-page.ts:211`, `agent.ts:591`); keep the saved-URL retry available for re-enrolment after denial.
+The exclusion follows the operation, not native HTML/helper availability. Reset/cancel are operations (`setup-page.ts:233`, `:245`).
+
+**Reserved forms and next audit.** Paths here are relative to the repository. Leave these
+for after their owning branches land; rerun the two inventories, inspect each primary Save and
+adopt `draftScopeFor` / `saveActionState` test-first where its owning batch has not done so:
+
+- Hardware batch 3b, `feat/save-follows-changes-hardware`: the agent/name/connection/calibration
+  and printer forms in `apps/dashboard/src/screens/printers-screen.ts`; device and profile forms
+  in `devices-screen.ts` / `device-profiles-screen.ts`; reader settings in `payments-screen.ts`;
+  canvas create/edit in `canvas-editor-screen.ts` and `screens/canvas-editor/`.
+- Till batch 5, `feat/save-follows-changes-till`: all `apps/till/`, including schedule and
+  party-name forms. Its owner classifies the other dialogs before changing their actions.
+- A339, `fix/home-column-ranges`, and the following Preview work: catalogue device-home files;
+  `apps/dashboard/src/widgets/device-home-preview.ts`; `screens/menus-screen.ts` and its tests;
+  menu widgets `menu-preview`, `menu-prices-table`, `menu-structure-table`, `menu-publications`,
+  `customer-menu*`, `add-to-menus`, `include-folder-form` and `section-*` under that widgets folder.
+- Venue-service batch 4b / `feat/service-periods-slice-1`: all `packages/venue-service/`, including
+  hours/date/holiday/menu-slot editors, watcher, service settings, venue operations, timetable
+  and preparation-station forms.
+- Parked invoice part 1, [#1399](https://github.com/clintongormley/waitron/pull/1399):
+  `apps/server/src/configuration-transfer*`, `apps/server/src/setup-api.ts`,
+  `packages/db/src/configuration-transfer.ts`, `apps/till/src/i18n/codes*`, and print-agent
+  `packages/print-agent/src/{agent,client,index}.ts`. Read the agent only to trace setup; no edits.
+
+Other already scoped dashboard forms remain earlier-batch work. This audit completes only the
+unreserved no-scope and string-page inventory; the listed follow-up remains open in the backlog.
+
+**Verification run for exclusions (existing tests, unchanged):**
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/add-content-language.test.ts src/widgets/course-list.test.ts src/widgets/category-color-form.test.ts`
+passed 112 tests in 3 Chromium files; `pnpm --filter @waitron/print-agent-app exec vitest run src/setup-page.test.ts`
+passed 33 tests; `pnpm --filter @waitron/print-agent exec vitest run src/agent.test.ts -t 'setup reset drops|reconfigures a denied agent|refuses a queued configure'`
+passed 4 tests, with 114 skipped by selection (including same-URL reset/rejoin cases at `agent.test.ts:1483`, `:1511`).
+These checks do not validate reserved forms or package-wide coverage. No behavior/visual change is claimed.
+Validate this appendix with `git diff --check` and an append-only comparison against the base.
+The implementation change also records this audit and its remaining reservations in the backlog
+and Forms contract. It changes documentation only.
