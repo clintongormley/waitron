@@ -304,9 +304,8 @@ this menu's or another's, as a target. `menu_section.not_found` names a missing 
 member the menu's Device Home Page does not hold; a product target must be a stored top-level
 product or it answers `menu_section.membership_invalid` (400). A repeated target answers
 `menu_section.member_duplicate` (409), and a negative or fractional position answers
-`menu_section.invalid` (400, `field`). The dashboard adds, removes and moves shortcuts from the
-menu's Structure tab and edits the displays on its Home page tab; it does not call the replace
-route.
+`menu_section.invalid` (400, `field`). The dashboard adds, removes and moves shortcuts, and edits
+the displays, on a menu's Home page tab; it does not call the replace route.
 
 No device profile chooses anything here. A device uses `handheld` when its profile's form factor is
 a phone or a tablet (`kindOfFormFactor`, `apps/till/src/layout.ts`) and `till` otherwise.

@@ -268,7 +268,7 @@ The menu editor has four views:
 | --- | --- |
 | Structure | Add products and categories, edit categories in place, duplicate them, and reorder members. |
 | Prices | Review each distinct product and set or clear its menu price override. |
-| Home page | Manage the default and alternative layouts, arrange tiles, and preview device sizes. *(Superseded 2026-10-05 by W93: the shortcuts are edited in the Structure tree, and this tab sets the Handheld and Till displays over a preview.)* |
+| Home page | Manage the default and alternative layouts, arrange tiles, and preview device sizes. *(Superseded 2026-10-05 by W93: the shortcuts are edited in the Structure tree, and this tab sets the Handheld and Till displays over a preview.)* *(Superseded again 2026-10-08 by A336: the shortcuts are edited in this tab's preview, and the Structure tree no longer shows them.)* |
 | Preview | Review the proposed menu and its differences from the published version, then publish. |
 
 The standalone Categories screen remains the reusable library: organise groups, find usages,

@@ -673,7 +673,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   home display's slider and radios and the menu price fields write at once; Delete section and
   Publish confirm an operation; the rest open a form or only show (list:
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b)).
-  The Add products window and the publication schedule do save; they are batch 2a's.
+  The Add products window and the publication schedule do save; they are batch 2a's. The Home
+  page tab's shortcut window also saves: its Add follows the rule since A336.
   Test checks that pressed or asserted on an untouched form now edit first or expect Save
   disabled; each is listed in its commit message. Looked at on 2026-10-08 in 33 screenshots of the forms mounted with
   test data (each unchanged, after one edit, and changed but blocked — an emptied required name

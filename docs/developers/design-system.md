@@ -286,13 +286,13 @@ the left, the device choice and display settings on the right. In the preview's 
 shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a ⋮ holding Remove shortcut.
 On the grip, the arrow keys move the shortcut one position, Up and Down included, and a drag moves
 it among the shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu
-no longer reaches is a dashed tile reading "Missing: <name>"; one the menu reaches but a device
-would not show (an empty section, a product with no price) is a muted tile reading "Not shown on
-devices". After the last shortcut come two dashed add tiles, Add product shortcuts and Add section
-shortcuts, drawn even when there are none, so an empty shortcut block shows in the dashboard but
-never on a device. Each opens a window whose one multi-select list offers what the menu reaches and
-is not already a shortcut, and one Add adds every choice in the order chosen. The Structure tab
-shows no shortcuts.
+no longer reaches and one the menu reaches but a device would not show (an empty section, a product
+with no price) are both dashed, muted tiles; the first reads "Missing: <name>", the second "Not
+shown on devices". After the last shortcut come two dashed add tiles, Add products and Add
+sections, drawn even when there are none, so an empty shortcut block shows in the dashboard but
+never on a device. Each opens a window whose one multi-select list offers the active products, or
+the sections, the menu reaches that are not already shortcuts, and one Add adds every choice in the
+order chosen. The Structure tab shows no shortcuts.
 
 **Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",
@@ -1572,8 +1572,9 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   page takes a new scope while detached, and once put back it does not ask before discarding an
   edit made after that. The till's party name, invoice recipient, extras picker and station
   dialogs, the venue-service watcher form, the dashboard's unit, ingredient, extras list, option
-  list and option label forms, recipe editor, Add to menus picker and a section's Add products
-  picker, the menus screen's section and menu details form and an include's Edit dialog, the staff
+  list and option label forms, recipe editor, Add to menus picker, a section's Add products picker
+  and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
+  include's Edit dialog, the staff
   edit and new person forms, the variant, purchase and shift forms, the bookings form and the
   product editor do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
@@ -1584,8 +1585,8 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase, shift, bookings and watcher forms, the product
-  editor, the unit form, the menus screen's section and menu details form and an include's Edit
-  dialog do this, each with an edit-first reconnect case. The recipe editor
+  editor, the unit form, the menus screen's section and menu details form, an include's Edit
+  dialog and the Home page tab's shortcut picker do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
   extras picker and station dialogs keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
@@ -1662,7 +1663,8 @@ and nothing guards it across screens:
   edit (one form, `dashboard-section-details-form`, mounted twice); and an include's Edit dialog.
   The screen's other windows, the menu price fields and Publish act at once, confirm an operation or
   only show, so they have no Save to gate, except the Add products window and the publication
-  schedule, which are batch 2a's; the list is in
+  schedule, which are batch 2a's, and the Home page tab's shortcut window, whose Add follows the rule
+  since A336; the list is in
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
