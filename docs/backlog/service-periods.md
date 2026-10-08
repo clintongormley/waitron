@@ -24,6 +24,13 @@ their full text.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
   in two pull requests — each department's receipt with translated subtitle and footer after
   slice 1, the department page's Receipt tab after slice 6 — with its open decisions at its top.
+  Slice 3's plan is written ahead of lane D (A366-3p, 2026-10-08): [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md),
+  in two pull requests — keeping a period open and closing a station for today after slice 1, keeping
+  a zone open after slice 2 — with its open decisions at its top.
+  Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
+  in two pull requests — combined tickets on shared printers, period choices in routing cells and
+  the station editor after slice 1; station hours, fallbacks and the tester removed, with each
+  station's worked-out times, after slices 2 and 3 — with its open decisions at its top.
 
 ## A432 — a service period's signed end offset
 
