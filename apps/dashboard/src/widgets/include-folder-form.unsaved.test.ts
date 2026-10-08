@@ -274,13 +274,21 @@ it("an include reopened on another folder after a put-back save opens quiet with
   await edit(form, "names-en", "Cellar");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("an include saved while open and then taken out and put back stays quiet", async () => {
+it("an include put back keeps its last saved values as the ones an edit is compared with", async () => {
   const { app, form } = await mount();
   await edit(form, "names-es", "Barra");
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await edit(form, "names-es", "Barra nueva");
   form.commitSaved(app.submissions[0]!);
   await reattachAfterDetachedUpdate(form);
-  expect(nameValue(form, "names-es")).toBe("Barra");
+  expect(nameValue(form, "names-es")).toBe("Barra nueva");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await edit(form, "names-es", "Barra");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(await saveState(form)).toEqual(quietSave);
 });

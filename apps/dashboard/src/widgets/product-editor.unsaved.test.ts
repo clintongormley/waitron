@@ -684,12 +684,61 @@ it("a Product reopened on another product after a put-back save opens quiet with
   await edit(editor, "name", "Tea");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("a Product saved while open and then taken out and put back stays quiet", async () => {
+it("a Product put back keeps its last saved values as the ones an edit is compared with", async () => {
   const { app, editor } = await mount();
   await edit(editor, "name", "Saved coffee");
-  editor.commitSaved({ ...product, name: "Saved coffee" });
+  let submitted: ProductEditorDraft | undefined;
+  editor.addEventListener("wt-submit", (event) => {
+    submitted = (event as CustomEvent<{ value: ProductEditorDraft }>).detail.value;
+  });
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  expect(submitted!.name).toBe("Saved coffee");
+  await edit(editor, "name", "Newer coffee");
+  editor.commitSaved(submitted!);
   await reattachAfterDetachedUpdate(editor);
-  expect(editor.currentValue.name).toBe("Saved coffee");
+  expect(editor.currentValue.name).toBe("Newer coffee");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(editor)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await edit(editor, "name", "Saved coffee");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(await saveState(editor)).toEqual(quietSave);
+});
+it("a Product put back with an edited Variant open keeps both edits unsaved, and discarding the Variant leaves the Product's", async () => {
+  const { app, editor } = await mount();
+  await edit(editor, "name", "Parent draft");
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+  await editor.updateComplete;
+  const child = editor.shadowRoot!.querySelector("dashboard-variant-form")!;
+  await child.updateComplete;
+  const field =
+    child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!;
+  await field.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(field.shadowRoot!.querySelector("input")!),
+    "Child draft",
+  );
+  await child.updateComplete;
+  await reattachAfterDetachedUpdate(editor);
+  await child.updateComplete;
+  expect(editor.currentValue.name).toBe("Parent draft");
+  expect(field.shadowRoot!.querySelector("input")!.value).toBe("Child draft");
+  expect(app.leave.coordinator.isDirty([child])).toBe(true);
+  expect(app.leave.coordinator.isDirty([editor])).toBe(true);
+  child.shadowRoot!.querySelector<HTMLElement>("[data-test=variant-cancel]")!.click();
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+  await expect.poll(() => child.open).toBe(false);
+  await closeReportsDelivered();
+  expect(editor.currentValue.name).toBe("Parent draft");
+  expect(editor.currentValue.variants).toEqual([]);
+  expect(app.leave.coordinator.isDirty([child])).toBe(false);
+  expect(app.leave.coordinator.isDirty([editor])).toBe(true);
+  expect(app.cancelled).toBe(0);
+  await cancel(editor);
+  expect((await question(app)).open).toBe(true);
 });

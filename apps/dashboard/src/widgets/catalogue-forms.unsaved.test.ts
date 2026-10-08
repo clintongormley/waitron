@@ -288,12 +288,21 @@ it("a Unit reopened on another unit after a put-back save opens quiet with that 
   await edit(form, "name-en", "Gram");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("a Unit saved while open and then taken out and put back stays quiet", async () => {
+it("a Unit put back keeps its last saved values as the ones an edit is compared with", async () => {
   const { app, form } = await mount();
   await edit(form, "name-en", "Saved kilogram");
-  form.commitSaved({ ...unitInput, name: { ...unit.name, en: "Saved kilogram" } });
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+  await edit(form, "name-en", "Newer kilogram");
+  form.commitSaved(app.submitted[0] as UnitInput);
   await reattachAfterDetachedUpdate(form);
-  expect(unitNameEn(form)).toBe("Saved kilogram");
+  expect(unitNameEn(form)).toBe("Newer kilogram");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await unitSaveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await edit(form, "name-en", "Saved kilogram");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(await unitSaveState(form)).toEqual(quietUnitSave);
 });

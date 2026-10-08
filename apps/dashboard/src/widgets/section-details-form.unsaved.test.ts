@@ -348,17 +348,21 @@ it("a Section reopened on another section after a put-back save opens quiet with
   await edit(form, "internalName", "Desserts");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("a Section saved while open and then taken out and put back stays quiet", async () => {
+it("a Section put back keeps its last saved values as the ones an edit is compared with", async () => {
   const { app, form } = await mount();
   await edit(form, "internalName", "Saved starters");
-  form.commitSaved({
-    internalName: "Saved starters",
-    names: section.names,
-    image: null,
-    color: null,
-  });
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await edit(form, "internalName", "Newer starters");
+  form.commitSaved(app.submissions[0]!);
   await reattachAfterDetachedUpdate(form);
-  expect(internalName(form)).toBe("Saved starters");
+  expect(internalName(form)).toBe("Newer starters");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await edit(form, "internalName", "Saved starters");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(await saveState(form)).toEqual(quietSave);
 });
