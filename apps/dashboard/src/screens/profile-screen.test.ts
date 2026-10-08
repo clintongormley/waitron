@@ -209,7 +209,7 @@ describe("your profile", () => {
     { locale: "es-ES", width: 310 },
     { locale: "es-ES", width: 390 },
   ])(
-    "keeps the Security tab whole in its strip and level with Add passkey at $width px ($locale)",
+    "keeps the Security tab whole in its strip and level with Add passkey on a $width px screen ($locale)",
     async ({ locale, width }) => {
       const before = currentLocale();
       setLocale(locale);

@@ -271,6 +271,46 @@ it("puts only the active tab's Add action beside the tablist", async () => {
   expect(tabs.querySelector('[slot="options"] [data-test="add-option-list"]')).toBeNull();
 });
 
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    [310, 390].flatMap((width) =>
+      [
+        { tab: "extras", add: "add-extra-list" },
+        { tab: "options", add: "add-option-list" },
+      ].map(({ tab, add }) => ({ locale, width, tab, add })),
+    ),
+  ),
+)(
+  "keeps the $tab tab whole in its strip and level with its Add button on a $width px screen ($locale)",
+  async ({ locale, width, tab, add }) => {
+    const before = currentLocale();
+    try {
+      setLocale(locale);
+      const el = await mount();
+      el.parentElement!.style.width = `${width}px`;
+      await selectTab(el, tab);
+      const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+      await tabs.updateComplete;
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+      const strip = tabs.shadowRoot!.querySelector("[role=tablist]")!.getBoundingClientRect();
+      const selected = tabs
+        .shadowRoot!.querySelector('[aria-selected="true"]')!
+        .getBoundingClientRect();
+      const action = tabs
+        .querySelector(`[slot="actions"] [data-test="${add}"]`)!
+        .getBoundingClientRect();
+      expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
+      expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
+      expect(
+        Math.abs(action.top + action.height / 2 - (selected.top + selected.height / 2)),
+      ).toBeLessThanOrEqual(1);
+    } finally {
+      setLocale(before);
+    }
+  },
+);
+
 it("switches to the Options tab and lists options lists there", async () => {
   const el = await mount();
   await selectTab(el, "options");
@@ -2180,46 +2220,6 @@ describe("the modifier list tables at phone width", () => {
     },
   );
 });
-
-it.each(
-  ["en-GB", "es-ES"].flatMap((locale) =>
-    [310, 390].flatMap((width) =>
-      [
-        { tab: "extras", add: "add-extra-list" },
-        { tab: "options", add: "add-option-list" },
-      ].map(({ tab, add }) => ({ locale, width, tab, add })),
-    ),
-  ),
-)(
-  "keeps the $tab tab whole in its strip and level with its Add button at $width px ($locale)",
-  async ({ locale, width, tab, add }) => {
-    const before = currentLocale();
-    try {
-      setLocale(locale);
-      const el = await mount();
-      el.parentElement!.style.width = `${width}px`;
-      await selectTab(el, tab);
-      const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-      await tabs.updateComplete;
-      await new Promise(requestAnimationFrame);
-      await new Promise(requestAnimationFrame);
-      const strip = tabs.shadowRoot!.querySelector("[role=tablist]")!.getBoundingClientRect();
-      const selected = tabs
-        .shadowRoot!.querySelector('[aria-selected="true"]')!
-        .getBoundingClientRect();
-      const action = tabs
-        .querySelector(`[slot="actions"] [data-test="${add}"]`)!
-        .getBoundingClientRect();
-      expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
-      expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
-      expect(
-        Math.abs(action.top + action.height / 2 - (selected.top + selected.height / 2)),
-      ).toBeLessThanOrEqual(1);
-    } finally {
-      setLocale(before);
-    }
-  },
-);
 
 it.each([
   ["extras", "extra-lists"],
