@@ -49,6 +49,49 @@ describe("seedDemoRestaurant", () => {
     vi.unstubAllEnvs();
   });
 
+  it("seeds department service periods instead of a second opening-hours grid", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+    const { rows } = await suite.db.execute<{
+      department: string;
+      period: string;
+      weekday: number;
+      starts_at: string;
+      ends_at: string;
+    }>(sql`
+      select d.name as department, p.name as period, t.weekday, s.starts_at, s.ends_at
+      from menu_slots s join menu_periods p on p.id = s.period_id
+      join menu_day_timetables t on t.id = s.timetable_id
+      join departments d on d.id = p.department_id
+      where d.location_id = ${venue.locationId}
+      order by d.name, t.weekday, s.starts_at`);
+    expect(rows).toEqual([
+      ...[1, 2, 3, 4, 5, 6].map((weekday) => ({
+        department: "Deli",
+        period: "Open",
+        weekday,
+        starts_at: "09:00:00",
+        ends_at: "18:00:00",
+      })),
+      ...[0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        department: "Restaurant and bar",
+        period: "Open",
+        weekday,
+        starts_at: "09:00:00",
+        ends_at: "00:00:00",
+      })),
+    ]);
+    const { rows: separate } = await suite.db.execute<{ count: number }>(sql`
+      select cast(count(*) as integer) as count from hours_week_cells where department_id is not null`);
+    expect(separate).toEqual([{ count: 0 }]);
+  });
+
   it("connects the demo printer to every device profile and the preparation stations", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
@@ -282,18 +325,39 @@ describe("seedDemoRestaurant", () => {
         where location_id = ${venue.locationId} and name = 'Upstairs bar'
         order by name`);
       const weeks: Record<string, string[]> = {};
-      for (const subject of subjects)
-        weeks[subject.name] = (
-          await readWeekHours(tx, cfg, { kind: subject.kind, id: subject.id })
-        ).map(({ cell }) =>
-          cell.mode === "periods"
-            ? cell.periods.map((period) => `${period.opensAt}-${period.closesAt}`).join(",")
-            : cell.mode,
-        );
+      for (const subject of subjects) {
+        if (subject.kind === "department") {
+          const { rows: ranges } = await tx.execute<{
+            weekday: number;
+            starts_at: string;
+            ends_at: string;
+          }>(sql`
+            select t.weekday, s.starts_at, s.ends_at from menu_day_timetables t
+            join menu_slots s on s.timetable_id = t.id
+            where t.department_id = ${subject.id} and t.weekday is not null
+            order by t.weekday, s.starts_at`);
+          weeks[subject.name] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
+            const slots = ranges.filter((range) => range.weekday === weekday);
+            return slots.length === 0
+              ? "closed"
+              : slots
+                  .map((slot) => `${slot.starts_at.slice(0, 5)}-${slot.ends_at.slice(0, 5)}`)
+                  .join(",");
+          });
+        } else {
+          weeks[subject.name] = (
+            await readWeekHours(tx, cfg, { kind: "station", id: subject.id })
+          ).map(({ cell }) =>
+            cell.mode === "periods"
+              ? cell.periods.map((period) => `${period.opensAt}-${period.closesAt}`).join(",")
+              : cell.mode,
+          );
+        }
+      }
       // Sunday first.
       expect(weeks).toEqual({
         Deli: ["closed", ...Array<string>(6).fill("09:00-18:00")],
-        "Restaurant and bar": Array<string>(7).fill("12:00-01:00"),
+        "Restaurant and bar": Array<string>(7).fill("09:00-00:00"),
         "Upstairs bar": [...Array<string>(5).fill("closed"), "19:00-21:00", "19:00-21:00"],
       });
 
@@ -366,7 +430,11 @@ describe("seedDemoRestaurant", () => {
         from zone_service_policies p
         join floor_zones z on z.id = p.zone_id
         join departments d on d.id = p.department_id
-        join department_menus dm on dm.department_id = p.department_id
+        join (
+          select department_id, menu_id, 0 as display_order from menu_periods
+          union
+          select department_id, menu_id, display_order + 1 from menu_period_staff_menus
+        ) dm on dm.department_id = p.department_id
         join catalogues c on c.id = dm.menu_id
         group by z.name, d.name, p.service_mode, d.default_service_mode, p.is_counter_default
         order by z.name`);
@@ -377,9 +445,9 @@ describe("seedDemoRestaurant", () => {
       }));
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, cast(count(distinct h.weekday) as integer) as days
-        from hours_week_cells h
+        from menu_day_timetables h
+        join menu_slots s on s.timetable_id = h.id
         join departments d on d.id = h.department_id
-        where h.mode = 'periods'
         group by d.name
         order by d.name`);
       const { rows: stationRows } = await tx.execute<{ name: string }>(sql`
