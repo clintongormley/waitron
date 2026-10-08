@@ -1931,17 +1931,18 @@ dirty.
 (`apps/till/src/widgets/party-name-dialog.ts`) is the model:
 
 - R: `connectedCallback` calls `requestUpdate()` (Lit runs no update on reconnect), and
-  `willUpdate` returns before `draftScopeFor`, and before any branch that re-seeds the fields, while
-  `!this.isConnected`.
+  `willUpdate` takes a scope only while `this.isConnected` (`else if (this.isConnected &&
+  !this.#scope)`); the re-seed branch above it is not guarded by `isConnected`.
 - E: keep the value the scope last committed — the opened value, then each saved value — in a
   field that `disconnectedCallback` does not clear (`#baseline`), and after taking a new scope call
   `scope.commit(this.#baseline)` so the kept edit compares against it (`register` takes the current
   value as its first baseline and `commit` replaces it with a snapshot,
   `packages/ui/src/unsaved-changes.ts`). The till dialog's `#baseline ??=` works only because that
-  dialog is used once; every form here is reopened, so CLEAR `#baseline` wherever the scope is
-  disposed for any reason other than a disconnect — every reopen or re-seed branch, the `!open`
-  branch, person edit's `#loadPerson` — or a reopened form starts dirty and Discard restores the
-  previous opening's values. Add a case per form: save or discard, reopen, and the form opens
+  dialog is used once; every form here is reopened, so CLEAR `#baseline` wherever the form really
+  reopens or re-seeds (and person edit's `#loadPerson`), or a reopened form starts dirty and Discard
+  restores the previous opening's values. A reset in the `!open` branch as well is optional where
+  every reopen already passes through the reopen branch (measured on the variant form,
+  `~/waitron-campaign-c/item-a397-measurements.md`). Add a case per form: save or discard, reopen, and the form opens
   quiet with the reopened values.
 - Four forms clear their opening identity on disconnect and so re-seed their fields on reconnect,
   replacing the edit: purchase (`#identity`), shift dialog (`#identity`), booking form
@@ -1958,9 +1959,9 @@ dirty.
   question", "removed form cannot submit" and "departed … cannot release" cases stay unedited and
   green.
 
-**Proof by deletion, per fixed form:** delete the `!this.isConnected` return — R fails; restore.
+**Proof by deletion, per fixed form:** delete `this.isConnected &&` from the scope-taking branch — R fails; restore.
 Stop committing the kept baseline — E fails; restore. (The detached update R needs comes from the
-scope's `dispose()` on disconnect, which redraws the host; if deleting the return does not fail R,
+scope's `dispose()` on disconnect, which redraws the host; if deleting `this.isConnected &&` does not fail R,
 the case is not reaching that update — fix the case, not the proof.) Where a case passes on `main` with no fix,
 keep it as the guard and say so in the measurements file; that it is not vacuous is shown by the
 same case failing on a fixed form with its fix deleted.
@@ -1987,8 +1988,8 @@ afterwards"); add Case E only. `pnpm --filter @waitron/bookings exec vitest run 
 
 ### Task A397.4 — docs, backlog
 
-`docs/developers/design-system.md` → Forms: move the forms fixed here into the list that returns
-while detached; say which keep an edit made before removal (Case E) and which forms remain
+`docs/developers/design-system.md` → Forms: move the forms fixed here into the list that takes a
+scope only while connected; say which keep an edit made before removal (Case E) and which forms remain
 untried for it. `docs/backlog.md`: mark #1418's watcher-form point and #1414's point (2) done for
 the forms covered, and leave the product editor and unit form named as part 2. Changed test
 checks (if any) listed in `~/waitron-campaign-c/item-a397-changed-tests.md` and the PR. No visual

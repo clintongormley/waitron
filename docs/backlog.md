@@ -1637,8 +1637,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   when taken out of the page and put back, and take what they then hold as the new starting point.
   Run on the branch on 2026-10-08 (a throwaway case: edit, remove, re-add): the edit was still in
   the field, Save was quiet, and Cancel closed the form without asking; main was not run. Related
-  to, but not the same as, the watcher form's point in batch 4c, where the edit may be replaced by
-  the stored watcher. It matters only if the menus screen ever moves an open form.
+  to, but not the same as, the watcher form's point in batch 4c, where the edit was replaced when
+  the form was put back (fixed on `fix/forms-reconnect-keep-asking`). It matters only if the menus screen ever moves an open form.
 - **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
   floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
   flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
@@ -1750,11 +1750,14 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   variant, purchase and shift forms and the bookings form. Each one failed both cases on main (an
   edit made after the form is put back, and one made before it was taken out) and passes with the
   fix; the purchase and shift forms and the bookings form also replaced an edit made before
-  removal with the stored values. Still open: the product editor, and the unit form's edit-first
+  removal with the stored values. Still open (A397 part 2): the product editor, and the unit form's edit-first
   point under batch 2a, both waiting for lane B's A332 (`feat/all-products-colour`), which changes
   their unsaved suites. Also seen in the purchase and shift forms' tests, not changed and not
   tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
-  neither asks nor closes until a field is clicked again.
+  neither asks nor closes until focus is back on a field inside the dialog (the tests put it there
+  with `focus()`; a click was not tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`,
+  A397.2): after a put-back, focus is on the page body and the dialog is no longer modal; the
+  measurements attribute this to how `wt-dialog` handles being put back.
 - **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.
   Admin, venue and certificate Next buttons contribute to the provisioning draft; Connect adopts
   with credentials; Import stages configuration; reset, file/bucket/Cloud restore and provisioning

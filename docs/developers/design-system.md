@@ -1561,7 +1561,11 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase, shift, bookings and watcher forms do this, each
   with an edit-first reconnect case. The unit form keeps such an edit on screen but stops counting
-  it (measured in batch 2a, backlog A331); the other forms in the list above are untried;
+  it (measured in batch 2a, backlog A331); batch 2b records the same for the menus screen's section
+  and menu details form and an include's Edit dialog from one throwaway case. The recipe editor
+  clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
+  extras picker and station dialogs keep it and count it, each with a reconnect case in its
+  `*.unsaved.test.ts`. The other forms in the list above are untried;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;
 - return early from the save handler while `saveActionState(scope).unchanged`. `disabled` stops a
