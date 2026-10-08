@@ -327,6 +327,33 @@ test("a selected tab wider than the strip shows its start, cut where the action 
   expect(strip.right).toBeLessThanOrEqual(action.left + 1);
 });
 
+test("right to left, a selected tab wider than the strip shows its start at the strip's right edge", async () => {
+  const el = await wideAction(300);
+  host.dir = "rtl";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const strip = tablist(el).getBoundingClientRect();
+  const tab = buttons(el)[2]!.getBoundingClientRect();
+  expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
+  expect(tablist(el).scrollLeft).toBeLessThan(0);
+  expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+});
+
+test("right to left, a selected tab that fits scrolls in only as far as its end", async () => {
+  const el = await setup();
+  host.dir = "rtl";
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const strip = tablist(el).getBoundingClientRect();
+  const tab = buttons(el)[2]!.getBoundingClientRect();
+  expect(tab.width).toBeLessThan(tablist(el).clientWidth);
+  expect(tablist(el).scrollLeft).toBeLessThan(0);
+  expect(Math.abs(tab.left - strip.left)).toBeLessThanOrEqual(1);
+});
+
 test("control: at 1280 px the tabs and a wide action sit on one line with nothing scrolling", async () => {
   const el = await wideAction(1280);
   expect(tablist(el).scrollWidth).toBeLessThanOrEqual(tablist(el).clientWidth);
