@@ -2011,13 +2011,47 @@ required. A translated field inherited as ONE value across its languages (a vari
 shows the parent's text as its placeholder hints only while every language is blank; once any
 language has text, the record's own value applies: a blank language other than the default shows
 the record's own default-language text where there is some, as a product's does, and no hint while
-the default language is blank (owner decision 2026-10-03, A220b in `docs/backlog.md`).
+the default language is blank (owner decision 2026-10-03, A220b, below).
 A blank description in a language other than the venue's default shows the
 default language's description as its placeholder — a product's or a variant's own, as it is typed,
 or, on a variant still blank in every language, the parent's where the parent has none in that
 language (`defaultLanguageHint`, `apps/dashboard/src/widgets/form-fields.ts`). That hint is the owner's
 decision (A220); no reader fills a missing language with it, and nothing outside the product editor
-shows a product description today (the reader check in A220, `docs/backlog.md`).
+shows a product description today (the reader check in A220, below).
+
+A220's reader check and the owner's decisions behind these hints (#1069, #1073), moved here from
+`docs/backlog.md`:
+
+**What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test
+built a product described only in Spanish (the default), a variant with its own Spanish description
+and a variant with none, then read them through `listProducts`'s effective read, the product
+editor's read, the published menu (`buildMenuDocument`) and the live offers the till receives
+(`applyLiveFields`). Nothing fills a missing language anywhere: (a) the product carries `{ es: … }`
+only; (b) the described variant's effective description is its own `{ es: … }`, not the parent's;
+(c) the bare variant's effective description is the parent's map. The published menu and the till's
+offers carry only the dish's own description and NO variant description at all, and nothing outside
+the product editor shows a product description today — no till screen, receipt, ticket or menu.
+This command printed nothing:
+`grep -rn "\.description\b\|description:" apps/till/src apps/server/src --include='*.ts' | grep -v '\.test\.ts'`
+(a control over `apps/dashboard/src` printed 30 lines). The wider `grep -rln description` hits in
+those folders, read one by one, include no product description (they are names of lines, options,
+sections, products and units, a location's operation description, and comments); under
+`packages/*/src` the first command's only product-description hits are in `packages/catalogue` and
+the column's declaration in `packages/db`. So the hint and the reader disagree in one way: the hint
+shows the default-language description in another language, while every reader carries nothing
+there — there is no printed menu text to match yet.
+Precedence on a variant with both: its own description wins, as (b) showed, and wins as one value
+across every language (the coalesce of the whole column in `effectiveProductColumns.description`,
+`packages/catalogue/src/variant-fallback.ts`, read, not run with a parent in a second language).
+**Decided (owner, 2026-10-02):** a customer-name field in another language shows the
+default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
+(the owner's account of the menu; check it against the reader before relying on it). The kitchen
+name shows its hint too: the staff name, which is what `kitchenPresentationName` prints. A
+description field in a secondary language shows the default-language description as its hint.
+**Decided (owner, 2026-10-03, A220b):** on a variant's page whose own description has text, a
+blank language other than the default shows the variant's own default-language description as its
+hint, where there is one, as a product's does; the parent's description is a hint only while the
+variant describes itself in no language.
 
 - **Text and price fields** (`wt-input`, `wt-price-input`, `wt-textarea`): the fallback value is the
   field's `placeholder`. All three primitives paint it `--wt-color-text-muted`, because Chromium's

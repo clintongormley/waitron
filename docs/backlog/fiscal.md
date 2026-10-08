@@ -647,6 +647,22 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
   asesor Q31 (2026-09-30), not decided.
 
+## "No tax (0%)" is an open fiscal question, and it must be answered before the first live filing
+
+From **The product editor and catalogue (#345, #379, #387) — what is left open.**
+[Operator guide](../products.md); [developer guide](../developers/products.md).
+
+- **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
+  filing.** The selector shows the catalogue's zero-rate class under that name; pricing puts the
+  whole gross in the base with zero VAT, and Veri\*Factu files it as `S1` — taxable, not exempt — at
+  a 0.00 rate. AEAT separately requires a _non-subject_ operation to record its cause (`N1`,
+  Articles 7, 14 and others; `N2`, place-of-supply rules), and nothing established that any of this
+  venue's products is legally non-subject. Asesor question Q20 asks which intended cases belong in
+  `S1` and which need `N1` or `N2`, and whether the label should read "IVA 0%" rather than "Sin
+  impuestos". **Non-blocking while pre-production; blocking before going live.** If the answer moves
+  a case to `N1`/`N2`, that is an explicit classification threaded through sale facts, reporting and
+  every Veri\*Factu sale, correction and substitution path — never a quiet redefinition of `zero`.
+
 ## Decisions and deliberate limits
 
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,

@@ -1165,6 +1165,17 @@ it before implementation (`red.log`, campaign receipts `w69-adjustment-20261006`
 `git show 26b67286a:apps/till/src/widgets/adjustment-dialog.ts` lines 287–289 shows the same call.
 W69 leaves the amount validation and request conversion unchanged.
 
+## Reopening a held order still removes a sold-out extra on the first edit
+
+From **Variants as products (#511–#556) — what is left open.** How the model works is in
+[products.md](../developers/products.md), under _Variants_.
+
+- **Reopening a held order still removes a sold-out extra on the first edit.** The owner chose
+  option A on 2026-09-23 (lane B question Q1): keep a sold-out line in held work, flag it on the
+  till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
+  now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
+  `held.product_gone`, and the first edit of the order removes such an extra.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no

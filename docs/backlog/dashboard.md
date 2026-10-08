@@ -849,6 +849,41 @@ EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell
 unverified. W69 changes no field sizing. Next action: reproduce in Venue settings → Tables and
 adjust the colour-field width using the shared field contract without changing status colour data.
 
+## Text size after A179 (#988)
+
+**Text size after A179 (#988).** The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
+system font, for the dashboard, setup and the till (owner: _"yes for now, then we can revisit
+later"_). Open: page headings follow the Typography roles table in
+`docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part — setup's and
+some dashboard screens' headings (the content languages screen's, for one) take the browser's own
+`<h1>` size, 28px; approvals and email set theirs to `--wt-font-size-lg`; menus and modifiers to
+`--wt-font-size-xl`. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
+cloud-recovery code. **Phone check, the
+owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely reported to
+zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
+the usual remedy is to keep field text at 16px on small screens only.
+
+## Dragging a row (A180, #994 and #1003) — two things seen, left as they were
+
+**Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
+reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
+at each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its list
+has its shadow cut off where the table ends. Whether A180's lifting (`position: relative`,
+`z-index: 1`) contributes is not known; the likely cause, not checked, is the sideways-scroll
+wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant table;
+`overflow-x: auto`). The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182
+plans to retire the editor.
+
+## The overview's top-sellers table can reach into its card's padding at desktop width
+
+From **Variants as products (#511–#556) — what is left open.** How the model works is in
+[products.md](../developers/products.md), under _Variants_.
+
+- **The overview's top-sellers table can reach into its card's padding at desktop width** when a
+  variant has a long one-word name and the figures run to five digits (12px into the 17px padding,
+  measured 2026-09-24 at 1280px). **Next action:** decide whether a long name there may wrap
+  mid-word.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'

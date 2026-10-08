@@ -397,6 +397,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   future Tabs · Bill choice (2026-10-04, A261 step 2 decision).
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
+- **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
+  filing.** Asesor question Q20 asks which intended cases belong in `S1` and which need `N1` or
+  `N2`, and whether the label should read "IVA 0%" rather than "Sin impuestos". **Non-blocking while
+  pre-production; blocking before going live.**
+  [Detail](backlog/fiscal.md#no-tax-0-is-an-open-fiscal-question-and-it-must-be-answered-before-the-first-live-filing)
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -583,6 +589,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The look left a switched-off printer named "A331 look Epson" (the owner's Epson at
   192.168.10.81) in the shared demo venue.** Left open by A331 batch 3b (#1415).
+
+- **Setup's recovery kit lost `autocomplete="off"`, which `wt-textarea` does not offer** — left open
+  by A178 (#1010 to #1019), seen while building, not changed.
 
 ### Menus and the catalogue
 
@@ -1112,6 +1121,105 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   the "VAT class for new products" default, the ingredient form, the options list and its option
   window, the extras list, Add to menus, Add products, Schedule and Change time. It matters only if a
   screen ever moves an open form. Left open by A331 batch 2a (#1422).
+
+- **A menu published before this keeps a variant's own unit, frozen in its published copy, until the
+  menu is next published** — left open by A222 (#1101) (`applyLiveFields`,
+  `packages/catalogue/src/menu-document.ts`, serves that copy; read, not run).
+
+- **A configuration import still copies `product_units` rows as they are** — left open by A222
+  (#1101) (`packages/catalogue/src/configuration-transfer.ts`), so an imported variant can arrive
+  with a unit row, which those reads then ignore.
+
+- **At 390px the items table is wider than its scrolling box with or without the mark** — left open
+  by A223 (#1098, an extras list's product dropdown greys a product with variants), seen, not
+  changed (scroll width 496 in a 356 box), and the mark wraps in the narrow product column, so a
+  marked row is about twice as tall as its neighbours.
+
+- **At 390px the extras list form's item table runs past the dialog's edge, its headings cut
+  ("Preselecc…")** — left open by A178g (#1021), seen in its LOOK, not changed and not checked
+  against `main` before it (screenshots kept outside the repository).
+
+- **From #541's review, neither blocking:** the product list shows a variant's blank price as its
+  parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
+  the owner's call. [Detail](backlog/catalogue.md#from-541s-review-neither-blocking)
+
+- **Review suggestions on the product editor not taken (Task 6):** split the editor's types into a
+  product shape and a variant shape, derive `InheritedValues` from the product type, and write a
+  parent's variant republishes in one statement. Nothing waits on them.
+
+- **The product list.** It leaves a variant's allergen cell empty (`ListedVariant`,
+  `packages/catalogue/src/product-types.ts`) — decide whether it should read a variant's effective
+  allergens. [Detail](backlog/catalogue.md#the-product-list)
+
+- **A variant image usage's `productId` has no reader in the dashboard**
+  (`packages/media/src/dashboard/client.ts`). **Next action:** drop the field, or say what it is
+  kept for.
+
+- **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
+  (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
+  action:** decide whether the picker should list variants.
+
+- **A configuration transfer copies `extra_list_items` as a table**, so it does not ask
+  `extras.product_has_variants`; a venue holding data written before #578 would carry such an item
+  across. Read, not run; nothing unless transfers from older venues matter.
+
+- **A location's menu list is read by no sale.** **Next action:** owner to decide whether to retire
+  `location_catalogues` and those routes with `GET /api/products`.
+  [Detail](backlog/catalogue.md#a-locations-menu-list-is-read-by-no-sale)
+
+- **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
+  the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`.
+  **Next action:** keep it in step with the unit or drop it.
+  [Detail](backlog/catalogue.md#two-signals-say-whether-a-dish-is-sold-by-weight-and-they-can-disagree-in-storage)
+
+- **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
+  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/unit-validation.ts` and the
+  till's `product-name.ts` with nothing pinning them equal.
+  [Detail](backlog/catalogue.md#createproduct-and-updateproduct-duplicate-the-legacy-pricingunit-fallback)
+
+- **The combined end-to-end journey has not been walked**: creating a unit, a category and the
+  extras and options a product carries from inside a dirty product draft, through the actual routes
+  against a real database, and taking the result through the till. **Next action:** walk it once on
+  a dev stack.
+
+- **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
+  (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
+  product is created in; with two, the second becomes unreachable from the dashboard. **Next
+  action:** decide whether more than one catalogue is a case Waitron supports.
+
+- **There is no permanent delete** for a product that was never sold and was created by mistake.
+  **Next action:** decide whether that is worth a second, differently-worded action.
+
+- **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
+  and only the editor's parser refuses a blank; `option_lists.name`, `option_labels.name` and
+  `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
+  action:** decide whether the columns want a check constraint and the write paths a domain refusal.
+
+- **A refused customer name cannot say which value it refused.** `content.translation_required`
+  carries only the language, so the editor resolves the field from the body it submitted — exact for
+  one missing value, the first of several otherwise. An owner call if it ever bites.
+
+- **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
+  dish name above modifier text resolved in the device's own locale. A joined customer-facing line
+  can mix languages when a locale exists on one half only.
+  [Detail](backlog/catalogue.md#smaller-things-379-surfaced-and-did-not-take)
+
+- **Pass 2 — icons — is not started.** Pass 1 renders allergens and diets as text pills; pass 2
+  replaces them with Material Design icons across the dashboard, waiter basket and kitchen/expo
+  screens. **Next action:** write the pass-2 spec when the icon work is picked up.
+
+- **"May contain" survives in the data with no way to see or set it.** **Next action:** decide
+  whether "may contain" stays a real product claim — if it does, the picker needs a control for it;
+  if not, the field and its readers go.
+  [Detail](backlog/catalogue.md#may-contain-survives-in-the-data-with-no-way-to-see-or-set-it)
+
+- **The product editor summarises the same values twice.** **Next action:** whoever adopts the
+  shared picker for ingredients and the till picks ONE shape, and decides whether the product editor
+  keeps both summaries.
+  [Detail](backlog/catalogue.md#the-product-editor-summarises-the-same-values-twice)
+
+- **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
+  snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
 ### Service periods, opening hours and departments
 
@@ -2292,6 +2400,54 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   validation and request conversion unchanged.
   [Detail](backlog/till.md#a-separate-finding-remains-entering-0550-for-an-amount-discount-and-pressing-continue-raises-sharedinvalid_decimal-from-the-existing-amount-check)
 
+- **Reopening a held order still removes a sold-out extra on the first edit.** The till now keeps
+  such a line marked "Not offered now"; a line with no stored snapshot whose product the till no
+  longer offers is still dropped with `held.product_gone`, and the first edit of the order removes
+  such an extra.
+  [Detail](backlog/till.md#reopening-a-held-order-still-removes-a-sold-out-extra-on-the-first-edit)
+
+- **No kept test pins the refusal of a raise for an Unavailable size or an inactive menu** — left
+  open by "Raising a held line's quantity checks the line's variant and its menu" (#696). Since W90
+  a menu has no switch of its own to check.
+
+- **A held order brought back to the till shows a variant line with its PARENT's VAT class,
+  category and allergens**, read from the offer snapshot in `working_line_contexts`. Filing is
+  unaffected. **Next action:** save or read the chosen variant's values for a retrieved line.
+
+- **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
+  parked in** (`#onRetrieveOrder`, `apps/till/src/till-app.ts`; `HeldOrder` carries no zone), so it
+  can mark lines "Not offered now" when their own zone still offers them. Traced, not run. **Next
+  action:** send the order's zone with the retrieved order and read that zone's offer.
+
+- **A label typed when re-holding an unedited retrieved order is never saved**, because re-holding
+  saves only through `#syncIfDirty` (`apps/till/src/till-app.ts`), and a label change does not count
+  as a line edit. **Next action:** a way to save a label without re-sending the lines.
+
+- **The two `till-sale.test.ts` cases named "…gained an Active variant" pass with the variant left
+  Inactive.** **Next action:** give each an assertion that fails when the variant is Inactive, or
+  rename them to what they prove.
+
+- **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
+  path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
+  stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. **Next
+  action:** decide whether to retire the route and move the till's tests onto zone-offer fixtures.
+
+- **A table in no zone still opens a tab, and nothing can be added to it** (`seatTable`, and
+  `seatBooking` in `packages/bookings/src/bookings.ts`); every round is refused
+  `order.service_context_missing` (pinned in `apps/server/src/till-api.zone-required.test.ts`).
+  **Next action:** owner to decide whether to refuse opening a tab on a table in no zone, or to
+  require every table to have a zone.
+
+- **Two branches still read a held line that names no menu offer**, which only an order parked
+  before B4 should have: `getHeldOrder` (`apps/server/src/working-order.ts`) and the till's retrieve
+  (`liveByProduct` in `#onRetrieveOrder`). **Next action:** delete both, since no
+  backwards-compatibility code is owed before production (CLAUDE.md §3), or say what keeps them.
+
+- **The basket's "not fully reviewed" allergen warning depends on whether an option was picked**
+  (`#allergenRow`, `apps/till/src/widgets/basket.ts`), a leftover of the old dish-and-extras fold.
+  **Next action (owner decision):** whether an unreviewed dish shows that warning always, then make
+  `#allergenRow` depend on the review state alone and update the test.
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -3284,6 +3440,29 @@ _Formerly A7, and Track A's dashboard part; part of A9._ Detail: [backlog/dashbo
   borders, a category row's maker link and the prep stations screen remains unmeasured. Left open by
   A319 (hover contrast after A306, #1347).
 
+- **The two dropdown explanations on venue service's Kitchen panel in Venue settings ("Applies to
+  new kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`**
+  — left open by A178 (#1010 to #1019), seen while building, not changed; for the owner: which a
+  field that always holds a value never shows, so only screen readers read them while the two
+  switches beside them keep visible lines.
+
+- **Text size after A179 (#988).** Open: page headings follow the Typography roles table in
+  `docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part. **Phone
+  check, the owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely
+  reported to zoom the page in when a field whose text is under 16px is focused — not yet tried
+  here. [Detail](backlog/dashboard.md#text-size-after-a179-988)
+
+- **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
+  reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint
+  line at each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its
+  list has its shadow cut off where the table ends.
+  [Detail](backlog/dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
+
+- **The overview's top-sellers table can reach into its card's padding at desktop width** (12px into
+  the 17px padding, measured 2026-09-24 at 1280px). **Next action:** decide whether a long name
+  there may wrap mid-word.
+  [Detail](backlog/dashboard.md#the-overviews-top-sellers-table-can-reach-into-its-cards-padding-at-desktop-width)
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
@@ -3382,6 +3561,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
   numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
 
+- **A10. Clocking in and out — the working-time record** — **Staff cannot clock in or out today.**
+  The _registro de jornada_ is a legal duty from the first day the deli employs anyone
+  ([design](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)). **Before building,
+  ask the labour advisor** whether the digital-registro decree is in force and which fields it
+  requires ([asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)).
+  [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
+
 ### Purchasing, recipes, stock and reports
 
 _Formerly entries spread across the old sections._ Detail: [backlog/back-office.md](backlog/back-office.md).
@@ -3408,6 +3594,15 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 - With no day picked, a screen left open past the day's cutover moves to the new, empty day; the
   date inputs show it, nothing announces it. **Next action:** decide whether it should keep the day
   it opened on. Left open by service Task 12 (#923).
+
+- **Recipe authoring is gone from the dashboard, and nothing replaces it as a surface.** The parked
+  recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
+  surface that no longer exists. **Next action:** whoever reopens recipe depth decides first whether
+  recipe authoring returns as its own surface.
+
+- **Once other fields in a purchase line show errors, its VAT-kind dropdown sits lower than its
+  neighbours** (`.line { align-items: flex-end }` in `purchase-form.ts`) — left open by A178 (#1010
+  to #1019), seen while building, not changed.
 
 ### The box: backups, upgrades and recovery
 
@@ -3727,6 +3922,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `zone_menus` and rebuilds `zone_service_policies`, and nothing carries the old per-zone menus
   across. The shared dev venue was reset when it landed (2026-10-07); the owner's box needs a reset
   too.
+
+- **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by
+  A178 (#1010 to #1019), seen while building, not changed: the same parsing is on `main` before
+  A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
 
 ### Replication, failover and the cloud
 
@@ -4644,317 +4843,6 @@ _Formerly entries spread across the old sections._
 ### Later and parked
 
 _Formerly _Later and parked_._
-
----
-
-## Track A — UI and application
-
-**The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
-— DONE (#1069, and #1073 for a variant's own description, A220b).**
-**What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test
-built a product described only in Spanish (the default), a variant with its own Spanish description
-and a variant with none, then read them through `listProducts`'s effective read, the product
-editor's read, the published menu (`buildMenuDocument`) and the live offers the till receives
-(`applyLiveFields`). Nothing fills a missing language anywhere: (a) the product carries `{ es: … }`
-only; (b) the described variant's effective description is its own `{ es: … }`, not the parent's;
-(c) the bare variant's effective description is the parent's map. The published menu and the till's
-offers carry only the dish's own description and NO variant description at all, and nothing outside
-the product editor shows a product description today — no till screen, receipt, ticket or menu.
-This command printed nothing:
-`grep -rn "\.description\b\|description:" apps/till/src apps/server/src --include='*.ts' | grep -v '\.test\.ts'`
-(a control over `apps/dashboard/src` printed 30 lines). The wider `grep -rln description` hits in
-those folders, read one by one, include no product description (they are names of lines, options,
-sections, products and units, a location's operation description, and comments); under
-`packages/*/src` the first command's only product-description hits are in `packages/catalogue` and
-the column's declaration in `packages/db`. So the hint and the reader disagree in one way: the hint
-shows the default-language description in another language, while every reader carries nothing
-there — there is no printed menu text to match yet.
-Precedence on a variant with both: its own description wins, as (b) showed, and wins as one value
-across every language (the coalesce of the whole column in `effectiveProductColumns.description`,
-`packages/catalogue/src/variant-fallback.ts`, read, not run with a parent in a second language).
-**Decided (owner, 2026-10-02):** a customer-name field in another language shows the
-default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
-(the owner's account of the menu; check it against the reader before relying on it). The kitchen
-name shows its hint too: the staff name, which is what `kitchenPresentationName` prints. A
-description field in a secondary language shows the default-language description as its hint.
-**Decided (owner, 2026-10-03, A220b):** on a variant's page whose own description has text, a
-blank language other than the default shows the variant's own default-language description as its
-hint, where there is one, as a product's does; the parent's description is a hint only while the
-variant describes itself in no language.
-
-**Variants in the Products list look like part of their product (A221, owner 2026-10-02) — DONE (#1081).**
-**Also check:** tried in the list widget on a test variant, not the owner's data: the arrow showed
-under a search, an ordering filter, for an Unavailable variant and for one with its own main
-category; it was missing only for a variant saved Inactive and for a product with no variant.
-`listProducts` lists Inactive and other-category variants
-(`packages/catalogue/src/variant-fallback.test.ts`, run). Read, not run: Cancel closes the product
-editor with no prompt, so a variant added and not saved is lost silently — the likeliest cause; ask
-the owner if it recurs.
-_2026-10-07: W69 (#1325) delivered the shared discard warning; see its entry and dated owner
-audit above for the current editor behavior._
-
-**A variant always has its product's unit (A222, owner 2026-10-02) — DONE (#1101).**
-**Left open:**
-
-- No migration clears the unit rows variants already store: the owner chose this on 2026-10-03,
-  as for A209's categories (no data-migration code before go-live, CLAUDE.md §3). The product, menu and unit
-  reads ignore such a row, and the next save of the variant's own page, or its unit's deletion,
-  removes it.
-- A menu published before this keeps a variant's own unit, frozen in its published copy, until the
-  menu is next published (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`, serves that
-  copy; read, not run).
-- A configuration import still copies `product_units` rows as they are
-  (`packages/catalogue/src/configuration-transfer.ts`), so an imported variant can arrive with a
-  unit row, which those reads then ignore.
-
-**An extras list's product dropdown greys a product with variants and says why (A223, owner
-2026-10-02) — DONE (#1098).** Seen, not changed: at 390px the items table is wider than its scrolling box with or without the
-mark (scroll width 496 in a 356 box), and the mark wraps in the narrow product column, so a marked
-row is about twice as tall as its neighbours.
-
-**Form fields after A178 (#1010 to #1019).** Done: A178g (#1021) and A178h (#1023). **Seen while
-building, not changed:**
-
-- a blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is
-  on `main` before A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not
-  checked;
-- once other fields in a purchase line show errors, its VAT-kind dropdown sits lower than its
-  neighbours (`.line { align-items: flex-end }` in `purchase-form.ts`);
-- setup's recovery kit lost `autocomplete="off"`, which `wt-textarea` does not offer;
-- the till's fallback unit for a product with no `unit` (`productUnit`,
-  `apps/till/src/widgets/product-name.ts`) names itself in English only, so a Spanish till drawing
-  such a product shows the unit's id — seen only with test products; whether the server ever sends
-  a product without a unit was not checked;
-  **2026-10-08:** A385 supplies Spanish legacy-unit text and removes the id fallback;
-  helper and rendered-tile cases cover the legacy product shape.
-- **for the owner:** the two dropdown explanations on venue service's Kitchen panel in Venue
-  settings ("Applies to new kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`,
-  which a field that always holds a value never shows, so only screen readers read them while the
-  two switches beside them keep visible lines.
-
-Seen in A178g's LOOK, not changed and not checked against `main` before it (screenshots kept
-outside the repository): at 390px the extras list form's item table runs past the dialog's edge,
-its headings cut ("Preselecc…"). (The venue operations "Make available" dialog this note also
-named was removed by W98, 2026-10-07.)
-
-**Text size after A179 (#988).** The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
-system font, for the dashboard, setup and the till (owner: _"yes for now, then we can revisit
-later"_). Open: page headings follow the Typography roles table in
-`docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part — setup's and
-some dashboard screens' headings (the content languages screen's, for one) take the browser's own
-`<h1>` size, 28px; approvals and email set theirs to `--wt-font-size-lg`; menus and modifiers to
-`--wt-font-size-xl`. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
-cloud-recovery code. **Phone check, the
-owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely reported to
-zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
-the usual remedy is to keep field text at 16px on small screens only.
-
-**Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
-reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
-at each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its list
-has its shadow cut off where the table ends. Whether A180's lifting (`position: relative`,
-`z-index: 1`) contributes is not known; the likely cause, not checked, is the sideways-scroll
-wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant table;
-`overflow-x: auto`). The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182
-plans to retire the editor.
-
-**Variants as products (#511–#556) — what is left open.** How the model works is in
-[products.md](developers/products.md), under _Variants_.
-
-- **Reopening a held order still removes a sold-out extra on the first edit.** The owner chose
-  option A on 2026-09-23 (lane B question Q1): keep a sold-out line in held work, flag it on the
-  till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
-  now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
-  `held.product_gone`, and the first edit of the order removes such an extra.
-- **Raising a held line's quantity checks the line's variant and its menu — DONE (#696).** Since
-  W90 a menu has no switch of its own to check. **Left open:** no kept test pins the refusal of a
-  raise for an Unavailable size or an inactive menu.
-- **A menu offer created with no price field at all is refused** (`management.request_invalid`);
-  only an explicit `null` means "blank, charge the product's own price" — **decided 2026-09-23 by
-  the owner:** _"we don't want to confuse 0.00 with `""`"_.
-- **From #541's review, neither blocking:** the product list shows a variant's blank price as its
-  parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
-  the owner's call; and the rule that hides screen-reader text is copied into each widget that
-  needs it (`grep -rln "clip: rect(0, 0, 0, 0)"`), where a shared one in
-  `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
-- **A held order brought back to the till shows a variant line with its PARENT's VAT class,
-  category and allergens**, read from the offer snapshot in `working_line_contexts`. Filing is
-  unaffected. **Next action:** save or read the chosen variant's values for a retrieved line.
-- **Review suggestions on the product editor not taken (Task 6):** split the editor's types into a
-  product shape and a variant shape, derive `InheritedValues` from the product type, and write a
-  parent's variant republishes in one statement. Nothing waits on them.
-- **The product list.** It leaves a variant's allergen cell empty (`ListedVariant`,
-  `packages/catalogue/src/product-types.ts`) — decide whether it should read a variant's effective
-  allergens; a variant's name may sit a few pixels low in its row at 390px, not yet looked at;
-  `listedVariantsOfProducts` (`packages/catalogue/src/operations.ts`) repeats the grouping
-  `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does — share one helper.
-- **A variant image usage's `productId` has no reader in the dashboard**
-  (`packages/media/src/dashboard/client.ts`). **Next action:** drop the field, or say what it is
-  kept for.
-- **The overview's top-sellers table can reach into its card's padding at desktop width** when a
-  variant has a long one-word name and the figures run to five digits (12px into the 17px padding,
-  measured 2026-09-24 at 1280px). **Next action:** decide whether a long name there may wrap
-  mid-word.
-- **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
-  parked in** (`#onRetrieveOrder`, `apps/till/src/till-app.ts`; `HeldOrder` carries no zone), so it
-  can mark lines "Not offered now" when their own zone still offers them. Traced, not run. **Next
-  action:** send the order's zone with the retrieved order and read that zone's offer.
-- **A label typed when re-holding an unedited retrieved order is never saved**, because re-holding
-  saves only through `#syncIfDirty` (`apps/till/src/till-app.ts`), and a label change does not count
-  as a line edit. **Next action:** a way to save a label without re-sending the lines.
-- **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
-  (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
-  action:** decide whether the picker should list variants.
-- **A configuration transfer copies `extra_list_items` as a table**, so it does not ask
-  `extras.product_has_variants`; a venue holding data written before #578 would carry such an item
-  across. Read, not run; nothing unless transfers from older venues matter.
-- **The two `till-sale.test.ts` cases named "…gained an Active variant" pass with the variant left
-  Inactive.** **Next action:** give each an assertion that fails when the variant is Inactive, or
-  rename them to what they prove.
-
-**A sale needs a zone (lane B's B4, #571) — what is left open.** Every sale line is priced from the
-menu offers of its order's service zone. Since W97 (2026-10-06), a sale with no `zoneId` takes its
-device profile's starting zone when the profile has a department — the first of the profile's zones
-still usable when that one is not — and is refused `device_profile.no_service_zone` when none is;
-otherwise it takes the venue's counter-default zone, and a venue with none is refused
-`service_zone.default_missing` (`resolveNewOrderZone`, `packages/venue-service/src/operations.ts`).
-
-- **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
-  path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
-  stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. **Next
-  action:** decide whether to retire the route and move the till's tests onto zone-offer fixtures.
-- **A location's menu list is read by no sale.** The location's list (`locations.catalogue_id`
-  plus `location_catalogues`) is still read and written by `GET /api/products`, the management API's
-  location routes (`apps/server/src/catalogue-api.ts`; no dashboard screen calls them since #297),
-  configuration transfer, both provisioning seeds, two dev scripts and the `offerProducts` test
-  helper. **Next action:** owner to decide whether to retire `location_catalogues` and those routes
-  with `GET /api/products`.
-- **A table in no zone still opens a tab, and nothing can be added to it** (`seatTable`, and
-  `seatBooking` in `packages/bookings/src/bookings.ts`); every round is refused
-  `order.service_context_missing` (pinned in `apps/server/src/till-api.zone-required.test.ts`).
-  **Next action:** owner to decide whether to refuse opening a tab on a table in no zone, or to
-  require every table to have a zone.
-- **Two branches still read a held line that names no menu offer**, which only an order parked
-  before B4 should have: `getHeldOrder` (`apps/server/src/working-order.ts`) and the till's retrieve
-  (`liveByProduct` in `#onRetrieveOrder`). **Next action:** delete both, since no
-  backwards-compatibility code is owed before production (CLAUDE.md §3), or say what keeps them.
-
-**Units and the old `pricing_unit` (#342, #375, #382) — what is left open.**
-
-- **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
-  the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`;
-  `assignProductUnit` writes `product_units` without touching it, and reassigning a unit's products
-  to another real unit does not update it either. The column is still written, derived from whether
-  the unit has a scale mapping, which is lossy: a product sold by the litre records `each`. **Next
-  action:** keep it in step with the unit or drop it; its removal is listed under the #297
-  departments-and-menus row in A9, and whoever does it also cleans up the demo scripts and tests
-  that use `pricingUnit` to pick a product.
-- **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
-  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/unit-validation.ts` and the
-  till's `product-name.ts` with nothing pinning them equal. Since W75 (2026-10-04) `EACH_UNIT_ID`
-  lives in that module, which the till already imports (`apps/till/src/state/working-order.ts`), so
-  the till could import it instead of keeping its own literal.
-- **Only kilograms, grams and milligrams can ever come from a scale** — a fixed list enforced by a
-  database check, separate from the editable name. A unit you invent, and the volume units, are
-  typed, never weighed. Intended, not an oversight.
-
-**The product editor and catalogue (#345, #379, #387) — what is left open.**
-[Operator guide](products.md); [developer guide](developers/products.md).
-
-- **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
-  filing.** The selector shows the catalogue's zero-rate class under that name; pricing puts the
-  whole gross in the base with zero VAT, and Veri\*Factu files it as `S1` — taxable, not exempt — at
-  a 0.00 rate. AEAT separately requires a _non-subject_ operation to record its cause (`N1`,
-  Articles 7, 14 and others; `N2`, place-of-supply rules), and nothing established that any of this
-  venue's products is legally non-subject. Asesor question Q20 asks which intended cases belong in
-  `S1` and which need `N1` or `N2`, and whether the label should read "IVA 0%" rather than "Sin
-  impuestos". **Non-blocking while pre-production; blocking before going live.** If the answer moves
-  a case to `N1`/`N2`, that is an explicit classification threaded through sale facts, reporting and
-  every Veri\*Factu sale, correction and substitution path — never a quiet redefinition of `zero`.
-- **Recipe authoring is gone from the dashboard, and nothing replaces it as a surface.** The parked
-  recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
-  surface that no longer exists. **Next action:** whoever reopens recipe depth decides first whether
-  recipe authoring returns as its own surface.
-- **The combined end-to-end journey has not been walked**: creating a unit, a category and the
-  extras and options a product carries from inside a dirty product draft, through the actual routes
-  against a real database, and taking the result through the till. **Next action:** walk it once on
-  a dev stack.
-- **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
-  (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
-  product is created in; with two, the second becomes unreachable from the dashboard. **Next
-  action:** decide whether more than one catalogue is a case Waitron supports.
-- **There is no permanent delete** for a product that was never sold and was created by mistake.
-  **Next action:** decide whether that is worth a second, differently-worded action.
-- **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
-  and only the editor's parser refuses a blank; `option_lists.name`, `option_labels.name` and
-  `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
-  action:** decide whether the columns want a check constraint and the write paths a domain refusal.
-- **A refused customer name cannot say which value it refused.** `content.translation_required`
-  carries only the language, so the editor resolves the field from the body it submitted — exact for
-  one missing value, the first of several otherwise. An owner call if it ever bites.
-- **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
-  dish name above modifier text resolved in the device's own locale. A joined customer-facing line
-  can mix languages when a locale exists on one half only. `wt-price-input` was built from scratch
-  rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
-  ones. And four interface faults seen then: the products list heads its Name column "Description",
-  "Top sellers" is rendered
-  twice on the overview, the login screen shows an error before anything is submitted, and the
-  recipe screen is not routed from anywhere.
-
-**Allergens and nutrition (#370, #377, #385) — what is left open.**
-
-- **Pass 2 — icons — is not started.** Pass 1 renders allergens and diets as text pills; pass 2
-  replaces them with Material Design icons across the dashboard, waiter basket and kitchen/expo
-  screens. **Next action:** write the pass-2 spec when the icon work is picked up.
-- **The basket's "not fully reviewed" allergen warning depends on whether an option was picked**
-  (`#allergenRow`, `apps/till/src/widgets/basket.ts`), a leftover of the old dish-and-extras fold.
-  **Next action (owner decision):** whether an unreviewed dish shows that warning always, then make
-  `#allergenRow` depend on the review state alone and update the test.
-- **"May contain" survives in the data with no way to see or set it.** A product's stored
-  allergens carry a `presence` field that can read `may_contain`, and the compact picker cannot
-  show or set it; an allergen a manager adds is written as `contains`. Ingredients and the till
-  still carry the old contains/may-contain distinction and the reviewed toggle; the old
-  `dashboard-allergen-picker`'s one non-test consumer is the ingredient form
-  (`apps/dashboard/src/widgets/ingredient-form.ts`). **Next action:** decide whether "may contain"
-  stays a real product claim — if it does, the picker needs a control for it; if not, the field and
-  its readers go. Decide in the same change whether to show again the dietary labels that follow
-  from the ones picked (vegan implies vegetarian), which the old editor showed as "inferred" badges;
-  the derivation still runs (`expandDietaryDeclarations`,
-  `packages/catalogue/src/dietary-declarations.ts`).
-- **The product editor summarises the same values twice.** `renderNutrition`
-  (`apps/dashboard/src/widgets/product-editor.ts`) renders a `wt-disclosure` whose `summary` joins
-  the allergen and dietary names, and puts `<dashboard-allergen-dietary-picker>` inside it, which
-  summarises the same two fields again; the ingredient form renders the older picker expanded.
-  **Next action:** whoever adopts the shared picker for ingredients and the till picks ONE shape,
-  and decides whether the product editor keeps both summaries.
-- **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
-  snapping shut mid-selection, make the collapse depend on `relatedTarget`.
-
-### A10. Clocking in and out — the working-time record
-
-**Staff cannot clock in or out today.** The _registro de jornada_ is a legal duty from the first day
-the deli employs anyone ([design](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)).
-Built: the append-only, hash-chained time entries (per node since #268), contracts, the daily
-projection of worked time, correction requests and approvals, the Spanish export
-(`packages/workforce-es`), and the rota, absences, swaps, planned-versus-actual view and staff portal.
-But `clockIn`, `clockOut`, the break events and the correction functions in
-`packages/workforce/src/clocking.ts` have no caller outside the package:
-`apps/server/src/workforce-api.ts` serves the rota and says it is "plumbed ahead of a clock-in
-route". So the planned-versus-actual view has no actual hours to compare.
-
-Left, as the legal minimum:
-
-- a till clock-in and clock-out screen and its routes;
-- correction requests and their approval, as routes and screens;
-- read access for the worker, their representatives and the labour inspectorate, with four years'
-  retention, and a route that produces the export.
-
-Then: shift templates and availability (the tables exist and the configuration export copies them,
-but no feature uses them); wages (A9); the payroll export, which waits on the gestoría's import
-format. **Before building, ask the labour
-advisor** whether the digital-registro decree is in force and which fields it requires
-([asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)). The time record cannot be
-edited once written, so its chain and correction paths take the owner's sign-off at land.
 
 ---
 

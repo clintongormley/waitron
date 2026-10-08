@@ -689,6 +689,108 @@ the product editor uses it; (4) the test title "…when the table's heading drop
 says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled while
 saving (same on `main` before W66, not checked further).
 
+## From #541's review, neither blocking
+
+From **Variants as products (#511–#556) — what is left open.** How the model works is in
+[products.md](../developers/products.md), under _Variants_.
+
+- **From #541's review, neither blocking:** the product list shows a variant's blank price as its
+  parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
+  the owner's call; and the rule that hides screen-reader text is copied into each widget that
+  needs it (`grep -rln "clip: rect(0, 0, 0, 0)"`), where a shared one in
+  `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
+
+## The product list
+
+From **Variants as products (#511–#556) — what is left open.** How the model works is in
+[products.md](../developers/products.md), under _Variants_.
+
+- **The product list.** It leaves a variant's allergen cell empty (`ListedVariant`,
+  `packages/catalogue/src/product-types.ts`) — decide whether it should read a variant's effective
+  allergens; a variant's name may sit a few pixels low in its row at 390px, not yet looked at;
+  `listedVariantsOfProducts` (`packages/catalogue/src/operations.ts`) repeats the grouping
+  `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does — share one helper.
+
+## A location's menu list is read by no sale
+
+From **A sale needs a zone (lane B's B4, #571) — what is left open.** Every sale line is priced from the
+menu offers of its order's service zone. Since W97 (2026-10-06), a sale with no `zoneId` takes its
+device profile's starting zone when the profile has a department — the first of the profile's zones
+still usable when that one is not — and is refused `device_profile.no_service_zone` when none is;
+otherwise it takes the venue's counter-default zone, and a venue with none is refused
+`service_zone.default_missing` (`resolveNewOrderZone`, `packages/venue-service/src/operations.ts`).
+
+- **A location's menu list is read by no sale.** The location's list (`locations.catalogue_id`
+  plus `location_catalogues`) is still read and written by `GET /api/products`, the management API's
+  location routes (`apps/server/src/catalogue-api.ts`; no dashboard screen calls them since #297),
+  configuration transfer, both provisioning seeds, two dev scripts and the `offerProducts` test
+  helper. **Next action:** owner to decide whether to retire `location_catalogues` and those routes
+  with `GET /api/products`.
+
+## Two signals say whether a dish is sold by weight, and they can disagree in storage
+
+From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open.**
+
+- **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
+  the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`;
+  `assignProductUnit` writes `product_units` without touching it, and reassigning a unit's products
+  to another real unit does not update it either. The column is still written, derived from whether
+  the unit has a scale mapping, which is lossy: a product sold by the litre records `each`. **Next
+  action:** keep it in step with the unit or drop it; its removal is listed under the #297
+  departments-and-menus row in A9, and whoever does it also cleans up the demo scripts and tests
+  that use `pricingUnit` to pick a product.
+
+## `createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback
+
+From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open.**
+
+- **`createProduct` and `updateProduct` duplicate the legacy-`pricingUnit` fallback**, and the
+  synthetic `EACH_UNIT` id is a literal in both `packages/catalogue/src/unit-validation.ts` and the
+  till's `product-name.ts` with nothing pinning them equal. Since W75 (2026-10-04) `EACH_UNIT_ID`
+  lives in that module, which the till already imports (`apps/till/src/state/working-order.ts`), so
+  the till could import it instead of keeping its own literal.
+
+## Smaller things #379 surfaced and did not take
+
+From **The product editor and catalogue (#345, #379, #387) — what is left open.**
+[Operator guide](../products.md); [developer guide](../developers/products.md).
+
+- **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
+  dish name above modifier text resolved in the device's own locale. A joined customer-facing line
+  can mix languages when a locale exists on one half only. `wt-price-input` was built from scratch
+  rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
+  ones. And four interface faults seen then: the products list heads its Name column "Description",
+  "Top sellers" is rendered
+  twice on the overview, the login screen shows an error before anything is submitted, and the
+  recipe screen is not routed from anywhere.
+
+## "May contain" survives in the data with no way to see or set it
+
+From **Allergens and nutrition (#370, #377, #385) — what is left open.**
+
+- **"May contain" survives in the data with no way to see or set it.** A product's stored
+  allergens carry a `presence` field that can read `may_contain`, and the compact picker cannot
+  show or set it; an allergen a manager adds is written as `contains`. Ingredients and the till
+  still carry the old contains/may-contain distinction and the reviewed toggle; the old
+  `dashboard-allergen-picker`'s one non-test consumer is the ingredient form
+  (`apps/dashboard/src/widgets/ingredient-form.ts`). **Next action:** decide whether "may contain"
+  stays a real product claim — if it does, the picker needs a control for it; if not, the field and
+  its readers go. Decide in the same change whether to show again the dietary labels that follow
+  from the ones picked (vegan implies vegetarian), which the old editor showed as "inferred" badges;
+  the derivation still runs (`expandDietaryDeclarations`,
+  `packages/catalogue/src/dietary-declarations.ts`).
+
+## The product editor summarises the same values twice
+
+From **Allergens and nutrition (#370, #377, #385) — what is left open.**
+
+- **The product editor summarises the same values twice.** `renderNutrition`
+  (`apps/dashboard/src/widgets/product-editor.ts`) renders a `wt-disclosure` whose `summary` joins
+  the allergen and dietary names, and puts `<dashboard-allergen-dietary-picker>` inside it, which
+  summarises the same two fields again; the ingredient form renders the older picker expanded.
+  **Next action:** whoever adopts the shared picker for ingredients and the till picks ONE shape,
+  and decides whether the product editor keeps both summaries.
+
 ## Decisions and deliberate limits
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
@@ -759,3 +861,22 @@ From A204's W99 (#1358, queued menu publication), left open after W99:
   serve the previous version again until the clock catches up. A Codex review reproduced it against
   the real migrations. Closing it means reads recording what they serve, or a never-decreasing
   clock in the process.
+
+From A222 (#1101, a variant always has its product's unit):
+
+- No migration clears the unit rows variants already store: the owner chose this on 2026-10-03,
+  as for A209's categories (no data-migration code before go-live, CLAUDE.md §3). The product, menu and unit
+  reads ignore such a row, and the next save of the variant's own page, or its unit's deletion,
+  removes it.
+
+From variants as products (#511–#556):
+
+- **A menu offer created with no price field at all is refused** (`management.request_invalid`);
+  only an explicit `null` means "blank, charge the product's own price" — **decided 2026-09-23 by
+  the owner:** _"we don't want to confuse 0.00 with `""`"_.
+
+From units and the old `pricing_unit` (#342, #375, #382):
+
+- **Only kilograms, grams and milligrams can ever come from a scale** — a fixed list enforced by a
+  database check, separate from the editable name. A unit you invent, and the volume units, are
+  typed, never weighed. Intended, not an oversight.
