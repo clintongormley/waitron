@@ -3553,8 +3553,10 @@ passed 630 cases without the warning, and the unedited fiscal pair passed 20 cas
 eight revised EN/ES/theme/width screenshots were inspected. The normal push hook passed 5,406 root
 checks. CI, licence and CodeQL completed successfully on the final head
 `dd4e3702171268b76649341ee2f46028b3723bef`; the UI job passed 2,287 UI and 504 UI-core cases,
-and the dashboard job passed 9,588 cases. The merge has its own CI run (37771042263);
-its result was pending at landing.
+and the dashboard job passed 9,588 cases. The merge's CI run 37771042263 was cancelled on
+2026-10-08 after image smoke's `apt-get update` stopped printing output for more than fourteen
+minutes; all package jobs passed, image smoke and publishing were cancelled. The closure commit's
+CI 37771257874 and both CodeQL runs passed. The package-index stall remains open under B9.
 Review follow-up: the initial geometry includes currency-part inline padding/borders and ancestor scaling,
 where later `contentRect` does not; scaled ancestors or currency-part padding can cause an initial
 width adjustment. A source search found no `part(currency)`, `transform: scale` or `zoom:` consumer
@@ -6765,6 +6767,15 @@ approved.
 
 ### B9. CI and test infra
 
+- **Image smoke's package-index refresh can consume its whole job limit — OPEN (2026-10-08,
+  observed while checking A407's merge; no action queued).** In main run 37771042263, job
+  113290522107 entered the AppArmor/BlueZ setup step at 11:35:49 UTC. Its last output at
+  11:36:22 was from `apt-get update`, including an ignored `noble InRelease` from
+  `azure.archive.ubuntu.com`; it printed nothing else before cancellation at 11:50:57.
+  The same step took eleven seconds in successful main run 37767334613. No image build or smoke
+  ran in the cancelled job; its log does not establish the network fault. Lane E retained the log
+  and did not rerun it unchanged. **Next action:** queue a scoped change that bounds the package
+  refresh's network waits, with a deliberately stalled command as the timeout control.
 - **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
   watcher/owner 2026-10-08, "active monitoring") — DONE (#1427).** PR #1399's image smoke sat
   46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
