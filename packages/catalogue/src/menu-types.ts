@@ -90,10 +90,10 @@ export interface MenuVariant {
   price: string | null;
 }
 
-/** One Active size's price setting on one menu. */
+/** One Active variant's price setting on one menu. */
 export interface MenuPriceVariant extends MenuVariant {
   active: boolean;
-  /** The size's own Available flag (`products.available` on its row). */
+  /** The variant's own Available flag (`products.available` on its row). */
   available: boolean;
 }
 
@@ -112,11 +112,11 @@ export interface MenuPriceRow {
   /** The price this menu sets, or null when it sets none. */
   override: string | null;
   effectivePrice: string;
-  /** The product's own Active state. A size's is on its `variants` entry. */
+  /** The product's own Active state. A variant's is on its `variants` entry. */
   active: boolean;
-  /** The product's own Available flag (`products.available`). A size's is on its `variants` entry. */
+  /** The product's own Available flag (`products.available`). A variant's is on its `variants` entry. */
   available: boolean;
-  /** Every Active size, in variant order; an Inactive one is on no menu. */
+  /** Every Active variant, in variant order; an Inactive one is on no menu. */
   variants: MenuPriceVariant[];
 }
 

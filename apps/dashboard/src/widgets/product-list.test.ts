@@ -350,7 +350,7 @@ describe("product-list", () => {
     const products = [
       product({ id: "plain", unitPrice: "12.5", pricingUnit: "weight" }),
       product({
-        id: "sized",
+        id: "with-variants",
         variants: [
           {
             id: "small",
@@ -400,7 +400,7 @@ describe("product-list", () => {
           products: [
             product({ id: "plain", unitPrice: "12.5" }),
             product({
-              id: "sized",
+              id: "with-variants",
               variants: [
                 { ...bunVariant, id: "small", unitPrice: "4.00" },
                 { ...bunVariant, id: "large", name: "Large", unitPrice: "7.50" },
@@ -414,10 +414,10 @@ describe("product-list", () => {
           cellUnder(root, key, t("product.price")).querySelector('[data-test="price"]')!
             .textContent;
         expect(price("plain")).toBe(want.plain);
-        expect(price("sized")).toBe(want.range);
+        expect(price("with-variants")).toBe(want.range);
         root.querySelector<HTMLElement>(".tree-toggle")!.click();
         await table.updateComplete;
-        expect(price("sized:large")).toBe(want.variant);
+        expect(price("with-variants:large")).toBe(want.variant);
       } finally {
         setLocale("es-ES");
       }

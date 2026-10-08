@@ -1800,13 +1800,13 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  it("sets or clears one size's price on a menu alone", async () => {
+  it("sets or clears one variant's price on a menu alone", async () => {
     const app = mountApp();
-    const menuId = await createCatalogueVia(app, "Size prices");
+    const menuId = await createCatalogueVia(app, "Variant prices");
     const productId = await createNamedProductVia(app, `Wine ${crypto.randomUUID()}`);
     const editorPath = `/management-api/products/${productId}/editor`;
     const editor = (await (await send(app, "GET", editorPath)).json()) as Record<string, unknown>;
-    const size = {
+    const variantDefaults = {
       customerName: null,
       kitchenName: null,
       image: null,
@@ -1818,8 +1818,8 @@ describe("mountCatalogueApi — products", () => {
       body: {
         ...editor,
         variants: [
-          { ...size, name: "Glass" },
-          { ...size, name: "Bottle" },
+          { ...variantDefaults, name: "Glass" },
+          { ...variantDefaults, name: "Bottle" },
         ],
       },
     });
@@ -1875,7 +1875,7 @@ describe("mountCatalogueApi — products", () => {
     expect(
       (await send(app, "PATCH", path, { body: { price: "9.90" }, cookie: staffCookie })).status,
     ).toBe(403);
-    const otherMenuId = await createCatalogueVia(app, "Other size prices");
+    const otherMenuId = await createCatalogueVia(app, "Other variant prices");
     const elsewhere = await send(
       app,
       "PATCH",

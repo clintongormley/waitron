@@ -108,7 +108,7 @@ declare module "@waitron/shared" {
     "menu_item.variant_not_allowed": { productId: string };
     /** A variant field is malformed or a submitted variant identity is duplicated. */
     "product.variant_invalid": { field: string };
-    /** A submitted variant identity is not a variant of the product or, in a menu's size prices,
+    /** A submitted variant identity is not a variant of the product or, in a menu's variant prices,
      * not an Active one. */
     "product.variant_not_found": { variantId: string };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */

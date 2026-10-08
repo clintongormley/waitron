@@ -54,20 +54,21 @@ export function combineOffer(input: CombineInput): CombinedOffer {
       : { state: "decided", value: setting.value, source: { kind: "parent" }, otherwise };
   const variants = catalogue.variants.map((variant) => {
     const override = input.own.variants.find((v) => v.variantId === variant.variantId);
-    const sizeCandidates: Candidate<Decimal>[] = [];
+    const variantCandidates: Candidate<Decimal>[] = [];
     if (placedInOwnSections && variant.price !== null)
-      sizeCandidates.push({
+      variantCandidates.push({
         place: { kind: "own_sections" },
         value: variant.price,
         source: { kind: "product" },
       });
     for (const i of included) {
-      const size = i.offer.variants.find((v) => v.variantId === variant.variantId);
-      if (size?.price.level === "size") sizeCandidates.push(includedCandidate(i, size.price));
+      const includedVariant = i.offer.variants.find((v) => v.variantId === variant.variantId);
+      if (includedVariant?.price.level === "variant")
+        variantCandidates.push(includedCandidate(i, includedVariant.price));
     }
     const fallback =
-      sizeCandidates.length > 0
-        ? resolve(sizeCandidates, moneyEqual)
+      variantCandidates.length > 0
+        ? resolve(variantCandidates, moneyEqual)
         : parent(price, input.own.price === null ? null : parent(otherwisePrice, null));
     const variantPrice = own(override?.price ?? null, fallback);
     return {
@@ -75,8 +76,8 @@ export function combineOffer(input: CombineInput): CombinedOffer {
       price: {
         ...variantPrice,
         level:
-          override?.price != null || sizeCandidates.length > 0
-            ? ("size" as const)
+          override?.price != null || variantCandidates.length > 0
+            ? ("variant" as const)
             : ("product" as const),
       },
     };

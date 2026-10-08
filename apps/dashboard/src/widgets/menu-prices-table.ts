@@ -12,9 +12,9 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   followsClash,
   productInherited,
-  sizeClash,
-  sizeSetting,
-  sizesInheritedFrom,
+  variantClash,
+  variantSetting,
+  variantsInheritedFrom,
   variantInherited,
   variantInheritedFrom,
   withoutOwn,
@@ -52,7 +52,7 @@ export interface PriceSave {
   key: string;
   menuItemId: string;
   variantId: string | null;
-  /** The product's staff name, or "<product> — <size>", for a message away from the field. */
+  /** The product's staff name, or "<product> — <variant>", for a message away from the field. */
   name: string;
   price: string | null;
   previous: string | null;
@@ -65,7 +65,7 @@ export type PriceOutcome =
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 
-/** A product field's text as the price its sizes follow: undefined while untouched or holding text
+/** A product field's text as the price its variants follow: undefined while untouched or holding text
  * that is not a price, null once emptied, else the price typed. */
 const parentPriceOf = (draft: string | undefined): ParentPrice => {
   const text = draft?.trim();
@@ -82,7 +82,7 @@ const samePrice = (a: string | null, b: string | null): boolean =>
  * otherwise only a resize of the table measures it. */
 const RESHAPES = ["rows", "products", "sections", "categories", "loading", "failed"];
 
-/** A table row: an Active product the menu reaches, or one of its Active sizes, drawn under it. */
+/** A table row: an Active product the menu reaches, or one of its Active variants, drawn under it. */
 interface Line {
   item: MenuPriceRow;
   variant: MenuPriceVariant | null;
@@ -99,7 +99,7 @@ const toggleLabel = ({ item }: Line, expanded: boolean): string =>
   t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name);
 const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
 
-/** The row as a published menu holds it: Inactive sizes left out. */
+/** The row as a published menu holds it: Inactive variants left out. */
 const activeOffer = (item: MenuPriceRow): MenuPriceRow["combined"] => {
   const active = new Set(item.variants.filter((v) => v.active).map((v) => v.variantId));
   return {
@@ -109,12 +109,12 @@ const activeOffer = (item: MenuPriceRow): MenuPriceRow["combined"] => {
 };
 
 /** Whether a clash in the product's own price, as its field reads now, stops publishing: it has
- * no Active size, or an Active size charges that clashing price. */
+ * no Active variant, or an Active variant charges that clashing price. */
 const ownPriceSold = (item: MenuPriceRow, parent: ParentPrice = undefined): boolean =>
   item.variants.every((v) => !v.active) || followsClash(item, parent);
 
-/** Whether this menu stores a price for any of the product's sizes. */
-const pricesASize = (item: MenuPriceRow): boolean =>
+/** Whether this menu stores a price for any of the product's variants. */
+const pricesAVariant = (item: MenuPriceRow): boolean =>
   item.variants.some(({ price }) => price !== null);
 
 const candidatesText = (setting: Setting<Decimal>): string =>
@@ -149,7 +149,7 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
 const placeholderOf = (span: Span): string => spanText(span, (amount) => amount);
 
 /**
- * One menu's price overrides: a row per Active product the menu reaches, with its Active sizes
+ * One menu's price overrides: a row per Active product the menu reaches, with its Active variants
  * under it, each showing whether it is Available and a field for the price this menu sets for it.
  * A field asks for its own save on Enter or on leaving it, through `wt-price-save`; the host
  * performs the writes and says which are out (`saving`), which were refused for the price typed
@@ -253,7 +253,7 @@ export class MenuPricesTable extends LitElement {
          leave beside the cell's padding and the tree's toggle. The row-menu column is as wide as
          its heading in the current language, so its width is measured into --actions-width. While
          no field shows a range, the price field gives up width first, down to the base field's. A
-         size's name is indented one tree step further. */
+         variant's name is indented one tree step further. */
       @container (max-width: 30rem) {
         wt-data-table {
           --name-and-field-room: calc(
@@ -349,15 +349,15 @@ export class MenuPricesTable extends LitElement {
   #lines: Line[] = [];
   #lineOf: ReadonlyMap<string, Line> = new Map();
   #columns: DataTableColumn<Line>[] = [];
-  /** Per product, what it charges with its field blank and where each Active size's price comes
+  /** Per product, what it charges with its field blank and where each Active variant's price comes
    * from, neither of which typing changes. */
   #productInheritance: ReadonlyMap<
     MenuPriceRow,
-    { inherited: Inherited; sizes: ReturnType<typeof sizesInheritedFrom> }
+    { inherited: Inherited; variants: ReturnType<typeof variantsInheritedFrom> }
   > = new Map();
   /** Each row that clashes as this menu stores it, drafts aside, so a row under the Clashes filter
    * stays while a price is typed into it. */
-  #clashing: ReadonlyMap<string, "size" | "own"> = new Map();
+  #clashing: ReadonlyMap<string, "variant" | "own"> = new Map();
   /** Clashing prices, as the publish check counts them. */
   #clashCount = 0;
   /** Whether the price filter starts on Clashes, decided on the first loaded update of each load;
@@ -372,7 +372,7 @@ export class MenuPricesTable extends LitElement {
       parent: ParentPrice;
       from?: InheritedFrom;
       inherited?: Inherited;
-      sizeClash?: boolean;
+      variantClash?: boolean;
       ownSold?: boolean;
     }
   >();
@@ -387,7 +387,7 @@ export class MenuPricesTable extends LitElement {
       this.#productInheritance = new Map(
         this.rows.map((row) => [
           row,
-          { inherited: productInherited(row), sizes: sizesInheritedFrom(row) },
+          { inherited: productInherited(row), variants: variantsInheritedFrom(row) },
         ]),
       );
       this.#underParent.clear();
@@ -427,7 +427,7 @@ export class MenuPricesTable extends LitElement {
   }
 
   #readClashes(): void {
-    const clashing = new Map<string, "size" | "own">();
+    const clashing = new Map<string, "variant" | "own">();
     let count = 0;
     for (const item of this.rows) {
       if (!item.active) continue;
@@ -437,7 +437,7 @@ export class MenuPricesTable extends LitElement {
         ownPriceSold(item) &&
         (item.combined.price.state === "clash" ||
           this.#productInheritance.get(item)!.inherited.state === "clash");
-      const product = sizeClash(item) ? "size" : own ? "own" : null;
+      const product = variantClash(item) ? "variant" : own ? "own" : null;
       if (product !== null) clashing.set(item.menuItemId, product);
       for (const { variantId, price, active } of item.variants) {
         if (!active || price !== null) continue;
@@ -646,7 +646,7 @@ export class MenuPricesTable extends LitElement {
     return this.shadowRoot?.querySelector("wt-data-table") ?? null;
   }
 
-  /** Null for a size under a collapsed product, whose row is not drawn. */
+  /** Null for a variant under a collapsed product, whose row is not drawn. */
   #field(key: string): HTMLElementTagNameMap["wt-price-input"] | null {
     return (
       this.#table()?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
@@ -696,7 +696,7 @@ export class MenuPricesTable extends LitElement {
   }
 
   #priceSetting({ item, variant }: Line): Setting<Decimal> {
-    return variant ? sizeSetting(item, variant.variantId) : item.combined.price;
+    return variant ? variantSetting(item, variant.variantId) : item.combined.price;
   }
 
   #readLines(): void {
@@ -716,9 +716,9 @@ export class MenuPricesTable extends LitElement {
     return variant ? variant.price : item.override;
   }
 
-  /** Whether this menu stores a price for the row, or, on a product, for any of its sizes. */
+  /** Whether this menu stores a price for the row, or, on a product, for any of its variants. */
   #overridden(line: Line): boolean {
-    return this.#stored(line) !== null || (line.variant === null && pricesASize(line.item));
+    return this.#stored(line) !== null || (line.variant === null && pricesAVariant(line.item));
   }
 
   /** What depends on the row's product's field, worked out again only once that field reads
@@ -735,7 +735,7 @@ export class MenuPricesTable extends LitElement {
           from: variantInheritedFrom(item, variant.variantId, parent),
           inherited: variantInherited(item, variant.variantId, parent),
         }
-      : { parent, sizeClash: sizeClash(item, parent), ownSold: ownPriceSold(item, parent) };
+      : { parent, variantClash: variantClash(item, parent), ownSold: ownPriceSold(item, parent) };
     this.#underParent.set(key, worked);
     return worked;
   }
@@ -753,12 +753,12 @@ export class MenuPricesTable extends LitElement {
     return stored === null ? this.#inherited(line) : { state: "price", low: stored, high: stored };
   }
 
-  /** An Active row's mark, its product's field as it reads now: "size" on a product row by
-   * `sizeClash`; "own" on a row whose field holds no price and whose own price, or what it
+  /** An Active row's mark, its product's field as it reads now: "variant" on a product row by
+   * `variantClash`; "own" on a row whose field holds no price and whose own price, or what it
    * inherits, clashes, on a product row only while `ownPriceSold`. */
-  #clash(line: Line): "size" | "own" | null {
+  #clash(line: Line): "variant" | "own" | null {
     if (!this.#active(line)) return null;
-    if (line.variant === null && this.#withParent(line).sizeClash) return "size";
+    if (line.variant === null && this.#withParent(line).variantClash) return "variant";
     if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
     if (line.variant === null && !this.#withParent(line).ownSold) return null;
     return (line.variant === null && this.#priceSetting(line).state === "clash") ||
@@ -767,21 +767,21 @@ export class MenuPricesTable extends LitElement {
       : null;
   }
 
-  #clashSentence(line: Line, clash: "size" | "own"): string {
+  #clashSentence(line: Line, clash: "variant" | "own"): string {
     const { item, variant } = line;
     if (variant) return pricesSentence(this.#withParent(line).from!.setting);
     const own = withoutOwn(item.combined.price);
     if (clash === "own" && own.state === "clash") return pricesSentence(own);
-    const sizes =
-      clash === "size"
+    const variants =
+      clash === "variant"
         ? item.variants
             .filter(({ active }) => active)
-            .map(({ variantId }) => ({ variantId, setting: sizeSetting(item, variantId) }))
-            .filter(({ setting }) => setting.level === "size")
-        : this.#productInheritance.get(item)!.sizes;
+            .map(({ variantId }) => ({ variantId, setting: variantSetting(item, variantId) }))
+            .filter(({ setting }) => setting.level === "variant")
+        : this.#productInheritance.get(item)!.variants;
     return [
-      t("menu_prices.size_clash_lead"),
-      ...sizes
+      t("menu_prices.variant_clash_lead"),
+      ...variants
         .filter(({ setting }) => setting.state === "clash")
         .map(({ variantId, setting }) =>
           t("menu_prices.variant_clash")
@@ -851,7 +851,7 @@ export class MenuPricesTable extends LitElement {
     const inherited = this.#inherited(line);
     let placeholder: string;
     let hint: string;
-    if (clash === "size") {
+    if (clash === "variant") {
       placeholder = "—";
       hint = sentence;
     } else if (inherited.state === "clash" || clash === "own") {
@@ -863,7 +863,7 @@ export class MenuPricesTable extends LitElement {
         ? t("menu_prices.override_help").replace("{price}", priceText(inherited.low))
         : t("menu_prices.override_help_range").replace("{range}", spanText(inherited));
     }
-    const sizesSetOne = variant === null && item.override === null && pricesASize(item);
+    const variantsSetOne = variant === null && item.override === null && pricesAVariant(item);
     const labelKey =
       this.#stored(line) !== null ? "menu_prices.override_label_set" : "menu_prices.override_label";
     return html`<span part="price-cell"
@@ -885,14 +885,14 @@ export class MenuPricesTable extends LitElement {
         @focusout=${() => this.#commit(line, "leave")}
       ></wt-price-input
       >${
-        clash !== null || sizesSetOne
+        clash !== null || variantsSetOne
           ? html`<span part="price-notes"
               >${
                 clash === null
                   ? nothing
                   : html`<span part="clash" aria-hidden="true">${sentence}</span>`
               }${
-                sizesSetOne
+                variantsSetOne
                   ? html`<span part="muted price-note">${t("menu_prices.variant_overrides")}</span>`
                   : nothing
               }</span

@@ -267,7 +267,7 @@ function withOrder(
  * The menus, and one menu's editor. Its Structure tab shows the menu as one tree, each list edited
  * from its own row, and each change is its own request, sent in order through one queue, because a
  * move leaves focus on the row. Its Price overrides tab lists every Active product the menu reaches,
- * with its Active sizes, and edits the price this menu sets for each product and size.
+ * with its Active variants, and edits the price this menu sets for each product and variant.
  */
 @customElement("dashboard-menus-screen")
 export class MenusScreen extends LitElement {

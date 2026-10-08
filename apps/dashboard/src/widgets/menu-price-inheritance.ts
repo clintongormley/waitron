@@ -22,7 +22,7 @@ export function withoutOwn(setting: Setting<Decimal>): Setting<Decimal> {
 }
 
 /** Where a blank field takes its price from, and whether that is the product's price, which the
- * size follows. */
+ * variant follows. */
 export interface InheritedFrom {
   setting: Setting<Decimal>;
   follows: boolean;
@@ -38,17 +38,17 @@ function parentSetting(row: MenuPriceRow, parent: ParentPrice): Setting<Decimal>
     : { state: "decided", value: parent as Decimal, source: { kind: "own" }, otherwise: under };
 }
 
-type SizeSetting = MenuPriceRow["combined"]["variants"][number]["price"];
+type VariantSetting = MenuPriceRow["combined"]["variants"][number]["price"];
 
-/** Each row's size settings by variant id, so a lookup does not search the sizes. A row is an
+/** Each row's variant settings by variant id, so a lookup does not search the variants. A row is an
  * answer read from the server and never changed in place, so its index stays right. */
-const sizeIndex = new WeakMap<MenuPriceRow, ReadonlyMap<string, SizeSetting>>();
+const variantIndex = new WeakMap<MenuPriceRow, ReadonlyMap<string, VariantSetting>>();
 
-export function sizeSetting(row: MenuPriceRow, variantId: string): SizeSetting {
-  let index = sizeIndex.get(row);
+export function variantSetting(row: MenuPriceRow, variantId: string): VariantSetting {
+  let index = variantIndex.get(row);
   if (index === undefined) {
     index = new Map(row.combined.variants.map((v) => [v.variantId, v.price]));
-    sizeIndex.set(row, index);
+    variantIndex.set(row, index);
   }
   return index.get(variantId)!;
 }
@@ -58,12 +58,12 @@ export function variantInheritedFrom(
   variantId: string,
   parent: ParentPrice,
 ): InheritedFrom {
-  const setting = sizeSetting(row, variantId);
+  const setting = variantSetting(row, variantId);
   const under = withoutOwn(setting);
-  // A size with no size price from any source carries its product's setting, a clash included
+  // A variant with no variant price from any source carries its product's setting, a clash included
   // (`parent` in packages/catalogue/src/menu-combine.ts). Its own override sets its level to
-  // "size", so under one a clash follows the product only when it is the product's clash; the
-  // read carries nothing finer, and a size clash listing exactly the product's candidates reads
+  // "variant", so under one a clash follows the product only when it is the product's clash; the
+  // read carries nothing finer, and a variant clash listing exactly the product's candidates reads
   // as following it.
   const follows =
     setting.level === "product" ||
@@ -80,7 +80,7 @@ export function variantInherited(
   return single(variantInheritedFrom(row, variantId, parent).setting);
 }
 
-/** An Active size with no price of its own here charges the product's price, as its field reads
+/** An Active variant with no price of its own here charges the product's price, as its field reads
  * now, and that price clashes: a price for the product would settle it. */
 export function followsClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
   return row.variants.some((v) => {
@@ -90,34 +90,36 @@ export function followsClash(row: MenuPriceRow, parent: ParentPrice = undefined)
   });
 }
 
-/** An Active size's own price clashes, which a price for the product would not settle, and no
- * Active size waits on a price for the product. */
-export function sizeClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
+/** An Active variant's own price clashes, which a price for the product would not settle, and no
+ * Active variant waits on a price for the product. */
+export function variantClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
   return (
     !followsClash(row, parent) &&
     row.variants.some((v) => {
-      const setting = sizeSetting(row, v.variantId);
-      return v.active && setting.state === "clash" && setting.level === "size";
+      const setting = variantSetting(row, v.variantId);
+      return v.active && setting.state === "clash" && setting.level === "variant";
     })
   );
 }
 
-/** What each Active size charges if this menu sets no price for the product: its own price on this
+/** What each Active variant charges if this menu sets no price for the product: its own price on this
  * menu, else what it inherits. */
-export function sizesInheritedFrom(row: MenuPriceRow): (InheritedFrom & { variantId: string })[] {
+export function variantsInheritedFrom(
+  row: MenuPriceRow,
+): (InheritedFrom & { variantId: string })[] {
   return row.variants
     .filter((v) => v.active)
     .map(({ variantId }) => {
-      const setting = sizeSetting(row, variantId);
+      const setting = variantSetting(row, variantId);
       return setting.state === "decided" && setting.source.kind === "own"
         ? { variantId, setting, follows: false }
         : { variantId, ...variantInheritedFrom(row, variantId, null) };
     });
 }
 
-/** What the product charges across its Active sizes if this menu sets no price for the product. */
+/** What the product charges across its Active variants if this menu sets no price for the product. */
 export function productInherited(row: MenuPriceRow): Inherited {
-  const each = sizesInheritedFrom(row).map(({ setting }) => single(setting));
+  const each = variantsInheritedFrom(row).map(({ setting }) => single(setting));
   if (each.length === 0) return single(withoutOwn(row.combined.price));
   const prices = each.filter((value): value is Priced => value.state === "price");
   if (prices.length < each.length) return CLASH;

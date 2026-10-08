@@ -30,7 +30,7 @@ describe("combined menu decisions", () => {
     });
     expect(clashesOf(offer)).toEqual([]);
   });
-  it("reports disagreement once on the unpriced size", () => {
+  it("reports disagreement once on the unpriced variant", () => {
     const offer = combineOffer(input({}, { placedInOwnSections: true, included: via() }));
     expect(offer.price).toMatchObject({
       state: "clash",
@@ -92,7 +92,7 @@ describe("combined menu decisions", () => {
     });
   });
   it.each([false, true])(
-    "size price beats product price with own placement %s",
+    "variant price beats product price with own placement %s",
     (placedInOwnSections) => {
       const drinks = local({ variants: [{ variantId: "pint", price: d("3.80") }] });
       const offer = combineOffer(
@@ -101,18 +101,18 @@ describe("combined menu decisions", () => {
       expect(offer.variants[0]!.price).toMatchObject({
         state: "decided",
         value: "3.80",
-        level: "size",
+        level: "variant",
         source: { kind: "menu", menuId: "drinks" },
       });
       expect(clashesOf(offer)).toEqual([]);
     },
   );
-  it("unpriced sizes follow this menu's product decision", () => {
+  it("unpriced variants follow this menu's product decision", () => {
     expect(
       combineOffer(input({ price: d("4") }, { included: via() })).variants[0]!.price,
     ).toMatchObject({ state: "decided", value: "4", level: "product", source: { kind: "parent" } });
   });
-  it("catalogue size prices participate in size clashes", () => {
+  it("catalogue variant prices participate in variant clashes", () => {
     const offer = combineOffer(
       input(
         {},
@@ -123,7 +123,7 @@ describe("combined menu decisions", () => {
         },
       ),
     );
-    expect(offer.variants[0]!.price).toMatchObject({ state: "clash", level: "size" });
+    expect(offer.variants[0]!.price).toMatchObject({ state: "clash", level: "variant" });
     expect(clashesOf(offer).map((c) => c.variantId)).toEqual(["pint"]);
   });
   it("accepts zero and compares decimal values", () => {
@@ -145,8 +145,8 @@ describe("combined menu decisions", () => {
     });
   });
 });
-it("propagates an unresolved size-level candidate even beside an unpriced own placement", () => {
-  const size = input(
+it("propagates an unresolved variant-level candidate even beside an unpriced own placement", () => {
+  const variant = input(
     {},
     {
       placedInOwnSections: true,
@@ -154,13 +154,13 @@ it("propagates an unresolved size-level candidate even beside an unpriced own pl
       included: via(local({ variants: [{ variantId: "pint", price: d("6") }] })),
     },
   );
-  const child = combineOffer(size);
+  const child = combineOffer(variant);
   const parent = combineOffer(
     input({ price: d("4") }, { placedInOwnSections: true, included: via(child) }),
   );
   expect(parent.variants[0]!.price).toEqual({
     state: "clash",
-    level: "size",
+    level: "variant",
     candidates: [
       { place: { kind: "menu", menuId: "drinks", menuName: "Drinks" }, undecided: true },
     ],
@@ -168,8 +168,8 @@ it("propagates an unresolved size-level candidate even beside an unpriced own pl
   expect(clashesOf(parent).map((c) => [c.field, c.variantId])).toEqual([["price", "pint"]]);
 });
 describe("price clashes, with no menu on/off setting", () => {
-  const noSizes = { price: d("3.00"), variants: [] };
-  const sized = {
+  const noVariants = { price: d("3.00"), variants: [] };
+  const withVariants = {
     price: d("3.00"),
     variants: [
       { variantId: "pint", price: null },
@@ -184,7 +184,7 @@ describe("price clashes, with no menu on/off setting", () => {
   ];
 
   it("reports two included menus' different prices, though the parent places nothing itself", () => {
-    const offer = combineOffer(input({}, { catalogue: noSizes, included: both(noSizes) }));
+    const offer = combineOffer(input({}, { catalogue: noVariants, included: both(noVariants) }));
     expect(clashesOf(offer)).toEqual([
       {
         productId: "lager",
@@ -207,7 +207,9 @@ describe("price clashes, with no menu on/off setting", () => {
   });
 
   it("reports the price clash once for every variant", () => {
-    const offer = combineOffer(input({}, { catalogue: sized, included: both(sized) }));
+    const offer = combineOffer(
+      input({}, { catalogue: withVariants, included: both(withVariants) }),
+    );
     expect(clashesOf(offer).map((c) => [c.field, c.variantId])).toEqual([
       ["price", "pint"],
       ["price", "half"],
@@ -215,7 +217,9 @@ describe("price clashes, with no menu on/off setting", () => {
   });
 
   it("carries no on/off setting for the offer or any variant", () => {
-    const offer = combineOffer(input({}, { catalogue: sized, included: both(sized) }));
+    const offer = combineOffer(
+      input({}, { catalogue: withVariants, included: both(withVariants) }),
+    );
     expect(offer).not.toHaveProperty("offered");
     for (const variant of offer.variants) expect(variant).not.toHaveProperty("offered");
   });

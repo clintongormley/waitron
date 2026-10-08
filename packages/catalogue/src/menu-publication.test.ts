@@ -1892,7 +1892,7 @@ it("filters inactive top-level and transitive menus before combining", async () 
   expect(await app((tx) => operations.listMenuOffers(tx, [outer]))).toEqual([]);
 });
 
-it("attributes included size decisions to the directly included menu", async () => {
+it("attributes included variant decisions to the directly included menu", async () => {
   const f = await menusFixture(fx.db);
   await publish(f.dinner);
   await app(async (tx) =>
@@ -2079,7 +2079,7 @@ describe("review regressions", () => {
   );
 
   it.each(["own", "shared"])(
-    "retains %s variant attribution beside an included size edit",
+    "retains %s variant attribution beside an included variant edit",
     async (otherSource) => {
       const f = await menusFixture(fx.db);
       const small = await app(async (tx) => {
@@ -2171,7 +2171,7 @@ describe("review regressions", () => {
   );
 });
 
-it("retains two direct included sources for independent size edits", async () => {
+it("retains two direct included sources for independent variant edits", async () => {
   const f = await menusFixture(fx.db);
   const setup = await app(async (tx) => {
     const [large, small] = await setProductVariants(
