@@ -952,3 +952,95 @@ it("an old passive scan refusal cannot replace a newer successful explicit revie
   expect(q(el, "[data-test=read-error]")).toBeNull();
   expect(field(el, "one").value).toBe("Draft");
 });
+
+it("returns to a populated page when live departures remove the last page", async () => {
+  let rows = Array.from({ length: 60 }, (_, n) => target(String(n), { defaultRequired: false }));
+  const liveData = new LiveData();
+  const read = vi.fn(async (_language: string, query: { after?: string }) =>
+    query.after
+      ? result(rows.slice(50))
+      : result(rows.slice(0, 50), rows.length > 50 ? "second" : null),
+  );
+  const { el } = await mount(rows, { liveData, getContentTranslationTargets: read });
+  await click(el, "next");
+  expect(field(el, "50")).not.toBeNull();
+  rows = rows.slice(0, 45);
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+  await vi.waitFor(() => expect(field(el, "0")).not.toBeNull());
+  expect(q(el, "[data-test=next]")).toBeNull();
+});
+
+it.each(["reopen", "reconnect"] as const)("ignores an old PUT refusal after %s", async (mode) => {
+  let refuse!: (value: unknown) => void;
+  const save = vi.fn(
+    () =>
+      new Promise<{ saved: TranslationTarget[] }>((_resolve, reject) => {
+        refuse = reject;
+      }),
+  );
+  const { el, host } = await mount([target("one", { defaultRequired: false })], {
+    saveContentTranslations: save,
+  });
+  await edit(el, "one", "Old draft");
+  await click(el, "save");
+  if (mode === "reopen") {
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+  } else {
+    el.remove();
+    host.append(el);
+    await el.updateComplete;
+  }
+  await vi.waitFor(() => expect(field(el, "one")?.disabled).toBe(false));
+  await edit(el, "one", "New draft");
+  refuse({
+    code: "content.translation_refused",
+    params: {
+      kind: "product",
+      id: "one",
+      field: "text",
+      language: "es",
+      causeCode: "content.translation_required",
+    },
+  });
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await el.updateComplete;
+  expect(field(el, "one").error).toBe("");
+  expect(field(el, "one").value).toBe("New draft");
+  expect(el.open).toBe(true);
+  expect(q<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error).toBe("");
+});
+
+it("keeps an unresolved review visible with the newest passive values and the held draft", async () => {
+  const one = target("one", { defaultRequired: false });
+  let current = one;
+  const liveData = new LiveData();
+  const read = vi.fn(async () => result([current]));
+  const { el, api } = await mount([one], { liveData, getContentTranslationTargets: read });
+  await edit(el, "one", "My draft");
+  current = { ...one, selectedText: "Their first name", expected: "first" };
+  await click(el, "review");
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("Their first name"),
+  );
+  current = { ...one, selectedText: "Their newest name", expected: "newest" };
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(read.mock.calls.length).toBeGreaterThanOrEqual(4));
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=review-product-one]")?.textContent ?? "").toContain(
+      "Their newest name",
+    ),
+  );
+  expect(field(el, "one").value).toBe("My draft");
+  await click(el, "save");
+  expect(api.saveContentTranslations).not.toHaveBeenCalled();
+  await click(el, "keep-product-one");
+  await click(el, "save");
+  await vi.waitFor(() => expect(el.open).toBe(false));
+  expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+    edits: [{ kind: "product", id: "one", expected: "newest", text: "My draft" }],
+  });
+});

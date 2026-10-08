@@ -911,6 +911,73 @@ const translations = (el: ContentLanguagesScreen) =>
 const translationModal = (el: ContentLanguagesScreen) =>
   translations(el).shadowRoot!.querySelector("wt-modal")!;
 
+it("opens fresh translation fields for a language just added", async () => {
+  let config = CONFIG;
+  const client = api({
+    getContentLanguages: vi.fn(async () => config),
+    updateContentLanguages: vi.fn(async (value: ContentLanguages) => {
+      config = value;
+    }),
+    getContentTranslationGaps: vi.fn(async () =>
+      config.languages.map((language) => ({
+        language,
+        gaps:
+          language === "fr"
+            ? [{ kind: "product", id: "cheese", name: "STAFF Cheese", reason: "partial" }]
+            : [],
+      })),
+    ),
+    getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
+      language,
+      config,
+      required: [],
+      next: null,
+      total: language === "fr" ? 1 : 0,
+      rows:
+        language === "fr"
+          ? [
+              {
+                kind: "product",
+                id: "cheese",
+                name: "STAFF Cheese",
+                reason: "partial",
+                selectedText: null,
+                defaultText: "Formatge",
+                effectiveSelectedText: null,
+                effectiveDefaultText: "Formatge",
+                defaultRequired: false,
+                eligible: true,
+                unavailableReason: null,
+                owners: { kind: "product", parentId: null },
+                expected: "fresh-fr",
+              },
+            ]
+          : [],
+    })),
+  });
+  const el = await mount(client);
+  q(el, "[data-test=add-language]")!.click();
+  await flush(el);
+  const add = dialog(el);
+  await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
+  await vi.waitFor(() => expect(q(el, "[data-test=edit-translations-fr]")).not.toBeNull());
+  q(el, "[data-test=edit-translations-fr]")!.click();
+  await flush(el);
+  await vi.waitFor(() =>
+    expect(translations(el).shadowRoot!.querySelector("wt-data-table")).not.toBeNull(),
+  );
+  const table = translations(el).shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  expect(translationModal(el).heading).toContain("Francés");
+  const field = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "[name=translation-text-product-cheese]",
+  );
+  expect(field).not.toBeNull();
+  expect(field!.value).toBe("");
+  expect(field!.getAttribute("lang")).toBe("fr");
+  expect(table.shadowRoot!.textContent).toContain("STAFF Cheese");
+});
+
 it("opens only the clicked language's staged editor, keeping it closed until asked", async () => {
   const client = api();
   const el = await mount(client);

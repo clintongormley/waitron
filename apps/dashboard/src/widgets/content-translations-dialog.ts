@@ -308,9 +308,17 @@ export class ContentTranslationsDialog extends LitElement {
               value.config.defaultLanguage,
               value.rows,
             );
+          this.page = Math.min(this.page, Math.max(0, Math.ceil(this.#visible().length / 50) - 1));
           this.readError = "";
           this.loading = false;
-          this.reviewRows = [];
+          this.reviewRows = this.reviewRows.length
+            ? [
+                ...value.rows,
+                ...value.retained.filter(
+                  (row) => !value.rows.some((gap) => translationKey(gap) === translationKey(row)),
+                ),
+              ]
+            : [];
           this.reviewing = false;
           this.#choices.clear();
           this.requestUpdate();

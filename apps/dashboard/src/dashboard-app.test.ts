@@ -6801,7 +6801,7 @@ it.each(["home", "clash"] as const)(
 );
 
 describe("inline translation application leave paths", () => {
-  it.each(["navigation", "locale", "logout"] as const)(
+  it.each(["navigation", "locale", "logout", "editor"] as const)(
     "%s retains translation edits on Keep and performs the action after Discard",
     async (route) => {
       const config = { defaultLanguage: "en", languages: ["en", "es"] };
@@ -6867,6 +6867,8 @@ describe("inline translation application leave paths", () => {
       await form.updateComplete;
       const act = () => {
         if (route === "navigation") navStaff(el)!.click();
+        else if (route === "editor")
+          inputs.shadowRoot!.querySelector<HTMLAnchorElement>("tbody a")!.click();
         else if (route === "locale")
           emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
         else logoutBtn(el)!.click();
@@ -6889,6 +6891,8 @@ describe("inline translation application leave paths", () => {
       warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
       if (route === "navigation")
         await vi.waitFor(() => expect(location.pathname).toBe("/manage/staff"));
+      else if (route === "editor")
+        await vi.waitFor(() => expect(location.pathname).toBe("/manage/catalogue/product/dish"));
       else if (route === "locale") await vi.waitFor(() => expect(currentLocale()).toBe("en-GB"));
       else await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
     },

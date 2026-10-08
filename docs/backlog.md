@@ -604,31 +604,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A420 part 2 — fill missing translations in place (lane E, in progress).** The owner approved
-  [the spec](superpowers/specs/2026-10-08-a420-inline-translations.md) on 2026-10-08: one selected
-  language, all nine name kinds, retained Kind/Why/search, default-language companion where
-  required, and a bounded all-or-nothing save. The table and read-only report dialog landed in
-  #1448. The [implementation plan](superpowers/plans/2026-10-08-a420-inline-translations.md)
-  divides the remaining work into bounded target reads, names-only writers, an atomic route and
-  a staged dialog with its unsaved checks. The internal target reads, all nine names-only
-  commands and atomic domain save are built locally, including cell/owner/configuration conflicts,
-  equivalent retries and projected root/include defaults. The authenticated GET/PUT route and
-  dashboard transport are built locally: actual-byte request limits, manager rechecks, live-query
-  dependencies and English/Spanish refusal wording. Task 5 adds the staged single-language
-  dialog locally: retained filters and editor links, 50-row pages, up to 100 drafts, explicit
-  default-language companions, field refusals and shared close protection. Focused browser and
-  model checks pass. Task 6 adds passive whole-scan snapshots, retained-reference review,
-  explicit old/current/draft choices, unsaved application leave paths and protection against
-  replies from earlier openings or scans. Reconnect retains the original draft baseline.
-  Task 7 adds all-nine-kind working-menu/publication consumer checks and a real sale followed
-  by an authenticated translation save and reprint. Stored sale/fiscal/series/publication rows
-  remain equal in that fixture. The built dashboard opens and saves against controlled HTTP
-  fixtures in English/Spanish, both themes and 390/1280 widths. Final branch review, the normal
-  push hook, current-head CI and authorised locked landing remain in Task 8. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
-  no saved language configuration, the existing menu-root writer uses English while section and
-  include writers use their supplied Spanish fallback; inline saves use the resolver's context.
-  No inline translation route or editable dialog has landed. Exercise full-app Open navigation
-  and newly added language refresh when replacing the report; #1448's review did not independently run those paths.
+- **Menu-root default fallback when content languages are unset (A420 review).**
+  `updateMenuDetails` validates against English; section and include-folder writers use
+  their supplied venue fallback. Decide whether the menu-root writer should take that
+  fallback too. `content-translations.test.ts`, “existing menu, section and folder checks
+  expose the unset default fallback”, exercises the difference. Inline saves already use
+  their resolved venue context.
 
 - **Translation report excludes image names (C122, #1006).** The media module's
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs

@@ -205,8 +205,8 @@ Retain catalogue report/API assertions unchanged. In `content-languages-screen.t
 
 ## Task 8: One final review, normal hook, current-head CI; landing locked
 
-- [ ] Check clean tree, spec coverage and consumers/prose. Execute finish-branch inline: fetch/rebase feature branch for initial review, capture literal base SHA, build an independent disposable candidate containing the complete tree, install locked dependencies.
-- [ ] Run one completed Claude whole-branch review through `~/workspace/tools/claude-seat.sh review-run <candidate> <brief> <report>`. Include deletion receipts/unverified claims; require completed findings and experiment results. Fix findings with red/green and `git commit -s`. Do not repeat review solely for later rebases.
+- [x] Check clean tree, spec coverage and consumers/prose. Execute finish-branch inline: fetch/rebase feature branch for initial review, capture literal base SHA, build an independent disposable candidate containing the complete tree, install locked dependencies.
+- [x] Run one completed Claude whole-branch review through `~/workspace/tools/claude-seat.sh review-run <candidate> <brief> <report>`. Include deletion receipts/unverified claims; require completed findings and experiment results. Fix findings with red/green and `git commit -s`. Do not repeat review solely for later rebases.
 - [ ] Push through the normal hook once; never bypass it or duplicate whole-workspace package tests locally. Require current-head CI, expected package selections/coverage, resolved conversations and matching SHA. Handle origin/main advances here only: inspect overlap/conflicts; focused checks, hook/CI after required rebases.
 - [ ] Report ready PR/receipts. **Landing stays locked:** this plan authorizes no merge, main-checkout work or branch cleanup. Hand off to locked landing. End the firing with a clean tree and no owned processes.
 
@@ -258,3 +258,13 @@ Task 6 still supplies `review`, complete live/leave/reconnect/reply handling; Ta
 still supplies recorded-name consumer checks and built-app visual acceptance. Task 5
 uses shared close protection now and covers its basic Close/Escape/Keep/Discard path.
 Receipts are local to lane E under `receipts/a420-part2/task5-*`.
+
+Task 8 review checkpoint, 2026-10-08: the completed Claude run-it review took 608 seconds.
+Live departures reproduced an empty last page; the callback now clamps the page. A second
+failing case reproduced a disappearing unresolved review; passive snapshots now show the
+newest current values while retaining the draft and requiring an explicit choice. Reopen
+and reconnect refusal tests catch deletion of the late-save guard. Full application editor
+links and fields for a newly added language are exercised. Five installed controls each fail
+assertions; restored candidate dialog126 and shell4 pass. The misplaced error-code comment
+was deleted. The unset menu-root fallback remains a separate backlog entry. Normal push
+and current-head CI still own the final gate; landing uses the runner's authorised lock.

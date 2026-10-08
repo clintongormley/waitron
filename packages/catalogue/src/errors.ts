@@ -39,7 +39,6 @@ declare module "@waitron/shared" {
     "unit.translation_required": { field: "name" | "abbreviation"; language: string };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
-    /** A translation map contains a non-text value. */
     "content.translation_stale": { kind: string; id: string };
     "content.translation_unavailable": { kind: string; id: string };
     "content.translation_batch_invalid": Record<string, never>;
