@@ -892,11 +892,11 @@ closed port. If the setting did nothing, the bounded run would exit 0 after one 
 Guards: the "apt waits" and "playwright --with-deps waits" cases in `scripts/ci-workflow.test.mjs`,
 and "the Dockerfile's apt waits" (which also reads the bench's CA probe image) and "waitron.sh's apt
 waits" cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — all read TEXT. The
-`--with-deps` case asks only that the command holding it start with `timeout <n>` on the same line
-(a lone `&` ends a command; the `&` in `2>&1` does not), not for a retry. The waitron.sh case asks
+`--with-deps` case asks only that the command holding it start with `timeout <n>` (after an
+optional `if`, `!` or `sudo`) on the same line (a lone `&` ends a command; the `&` in `2>&1` does not), not for a retry. The waitron.sh case asks
 that every `apt-get` outside a whole-line comment or a `command -v apt-get` sits inside `apt_get()`,
 and that every `apt-get` in that body, other than one named inside quotes, runs under
-`"$limit" <n>` in its own command; it does not run the shell. The numbers it hands to `timeout`,
+`"$limit" <n>` in its own command; it does not run the shell. The numbers `apt_get` hands to `timeout`,
 its retries and its stop are run with stubs (the `timeout` stub drops the limit, so no stall is ever
 cut off) by "the apt_get wrapper inside waitron.sh" cases in `scripts/waitron-sh.test.mjs`. Both
 workflow cases read steps through the same reader as the "apt installs" case, which takes the quotes

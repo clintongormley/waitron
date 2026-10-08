@@ -990,8 +990,8 @@ jobs:
       # miss), so a library missing from the image would still break every cache-HIT run — passing on
       # the version-bump PR that misses the cache, then failing everything after it. If a future image
       # or Playwright bump does drop a library Chromium needs, these shards fail to launch it and go red
-      # loudly; the fix is to apt-get the missing library, or run `--with-deps`, under an outer `timeout`
-      # (docs/developers/ci-and-gates.md, "Every apt wait is bounded").
+      # loudly; the fix is to apt-get the missing library, or run `--with-deps`, as
+      # docs/developers/ci-and-gates.md, "Every apt wait is bounded", requires.
       - run: pnpm --filter @waitron/ui exec playwright install chromium
       - run: pnpm --filter @waitron/ui-core exec playwright install chromium
 

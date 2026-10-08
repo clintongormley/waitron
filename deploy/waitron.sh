@@ -57,7 +57,7 @@ apt_get() {
       -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" && return 0
     echo "waitron.sh: attempt $attempt of 3 failed or stalled: apt-get $*" >&2
   done
-  die "apt-get $* failed or stalled on all three attempts"
+  die "apt-get $* failed or stalled on all three attempts — check the network and re-run this command"
 }
 
 RESET_BEFORE_INSTALL=0 RESET_ALL=0 RESET_YES=0 RESET_FORCE=0
