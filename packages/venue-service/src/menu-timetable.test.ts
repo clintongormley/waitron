@@ -1747,8 +1747,8 @@ describe("the offers a zone lists at an instant", () => {
     const at = madrid(MONDAY, "10:00");
     const served = (ids: string[]) =>
       scoped((tx) => resolveDefaultMenu(tx, v.cfg, v.barra, at, ids));
-    expect(await served([v.menus.Desayunos, v.menus.Café])).toBe(v.menus.Café);
-    expect(await served([v.menus.Bebidas, v.menus.Desayunos])).toBe(v.menus.Bebidas);
+    expect(await served([v.menus.Desayunos, v.menus.Café])).toBe(v.menus.Desayunos);
+    expect(await served([v.menus.Bebidas, v.menus.Desayunos])).toBe(v.menus.Desayunos);
     expect(await served([])).toBeNull();
   });
 });

@@ -2234,7 +2234,7 @@ describe("zone offers from the published menus", () => {
       code: "menu.reset_required",
       params: { menuId: venue.dinner },
     });
-    await expect(scoped((tx) => menuState(tx, venue.diningZone))).rejects.toMatchObject({
+    await expect(scoped((tx) => menuState(tx, venue.cfg, venue.diningZone))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: venue.dinner },
     });
@@ -2348,7 +2348,7 @@ describe("zone offers from the published menus", () => {
         venue.lemonadeOffer,
         venue.burgerOffer,
       ]);
-      expect((await menuState(tx, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
+      expect((await menuState(tx, venue.cfg, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ]);
       await expect(
@@ -2384,15 +2384,28 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("lists what the zone's live menus hold that cannot be sold now, one query per table", async () => {
+  it("returns no menu state for a zone outside the requested location", async () => {
+    const venue = await seedTwoMenuVenue();
+    const otherLocation = brandLocationId(await seedLocation("Other location"));
+    await expect(
+      scoped((tx) => menuState(tx, { locationId: otherLocation }, venue.diningZone)),
+    ).resolves.toEqual({
+      service: { open: false, periodName: null },
+      menus: [],
+      unavailable: { products: [], optionLabels: [] },
+    });
+  });
+
+  it("reads the service state and batches live menu availability", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
       const menus = [
         { menuId: venue.menuId, versionId: venue.versionId },
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ];
-      const before = await menuState(tx, venue.diningZone);
+      const before = await menuState(tx, venue.cfg, venue.diningZone);
       expect({ ...before, menus: before.menus.map(stateVersionOf) }).toEqual({
+        service: { open: false, periodName: null },
         menus,
         unavailable: { products: [], optionLabels: [] },
       });
@@ -2442,14 +2455,15 @@ describe("zone offers from the published menus", () => {
       );
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
-      expect(prepared).toHaveBeenCalledTimes(4);
+      const { menus: served, unavailable } = await menuState(tx, venue.cfg, venue.diningZone);
+      expect(prepared).toHaveBeenCalledTimes(11);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
       });
-      await expect(menuState(tx, UNKNOWN_ID)).resolves.toEqual({
+      await expect(menuState(tx, venue.cfg, UNKNOWN_ID)).resolves.toEqual({
+        service: { open: false, periodName: null },
         menus: [],
         unavailable: { products: [], optionLabels: [] },
       });
@@ -2469,7 +2483,9 @@ describe("zone offers from the published menus", () => {
         },
         "en",
       );
-      expect((await menuState(tx, venue.diningZone)).unavailable.optionLabels).toEqual([WITH_ICE]);
+      expect((await menuState(tx, venue.cfg, venue.diningZone)).unavailable.optionLabels).toEqual([
+        WITH_ICE,
+      ]);
       const lemonade = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.id === venue.lemonadeOffer,
       )!;
@@ -2590,7 +2606,7 @@ describe("each served menu's structure and Device Home Page", () => {
           till: HOME_DISPLAY_DEFAULTS.till,
         },
       });
-      expect((await menuState(tx, venue.diningZone)).menus).toEqual([
+      expect((await menuState(tx, venue.cfg, venue.diningZone)).menus).toEqual([
         { menuId: venue.menuId, versionId: venue.versionId },
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ]);

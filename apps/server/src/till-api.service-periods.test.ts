@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
+  locations,
   workingOrderLines,
   workingOrders,
   withTransaction,
@@ -11,7 +12,12 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addProductToMenu, createCatalogue, createProduct } from "@waitron/catalogue";
+import {
+  addProductToMenu,
+  createCatalogue,
+  createProduct,
+  deactivateCatalogue,
+} from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -24,6 +30,8 @@ import {
 import {
   createDepartment,
   createServiceZone,
+  deleteMenuPeriod,
+  menuPeriods,
   orderServiceContexts,
   replaceMenuWeek,
   saveMenuPeriod,
@@ -44,9 +52,6 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
-
-// Browsing follows the department's menu timetable; ordering accepts any menu on the department's
-// list, whatever the timetable says, and only those.
 
 const LOCALE = "es-ES";
 
@@ -76,7 +81,7 @@ beforeAll(() => {
       };
     },
     anchor: () => {
-      throw new Error("till-api.menu-timetable.test: anchor() is not used");
+      throw new Error("till-api.service-periods.test: anchor() is not used");
     },
     currentAnchor: () => null,
   };
@@ -86,7 +91,7 @@ beforeAll(() => {
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
-      Promise.reject(new Error("till-api.menu-timetable.test: resolveClient is never called")),
+      Promise.reject(new Error("till-api.service-periods.test: resolveClient is never called")),
   });
 });
 
@@ -133,7 +138,7 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
  * A provisioned venue with Restaurant (Barra, Sala, Terraza) listing Desayunos, Almuerzo, Bebidas
  * and Café, all-day Bebidas, and Deli (Mostrador deli) listing Deli para llevar. With `timetable`,
  * Restaurant runs Mañanas (Desayunos) 09:00–12:00 and Mediodía (Almuerzo) 12:00–16:00 every day,
- * and Barra serves Café for Mañanas. Ana's till has a Restaurant profile starting at Barra.
+ * Ana's till has a Restaurant profile starting at Barra.
  */
 async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
   const venue = await applyVenue(
@@ -183,6 +188,20 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
     ).id;
     const deli = (await createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "prepay" }))
       .id;
+    for (const departmentId of [restaurant, deli]) {
+      const initialPeriods = await tx
+        .select({ id: menuPeriods.id })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, departmentId));
+      await replaceMenuWeek(
+        tx,
+        cfg,
+        departmentId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+        MONDAY_10_00,
+      );
+      for (const period of initialPeriods) await deleteMenuPeriod(tx, cfg, period.id);
+    }
     const zone = async (name: string, departmentId: string) =>
       (await createServiceZone(tx, cfg, { name, departmentId })).id;
     const barra = await zone("Barra", restaurant);
@@ -474,7 +493,7 @@ describe("GET /api/menu-state", () => {
   it("names the zone's default menu at the moment it is read", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_10_00);
-    expect(await defaultMenu(v, `?zoneId=${v.barra}`)).toBe(v.menus["Café"]);
+    expect(await defaultMenu(v, `?zoneId=${v.barra}`)).toBe(v.menus.Desayunos);
     expect(await defaultMenu(v, `?zoneId=${v.sala}`)).toBe(v.menus.Desayunos);
     vi.setSystemTime(MONDAY_12_30);
     expect(await defaultMenu(v, `?zoneId=${v.barra}`)).toBe(v.menus.Almuerzo);
@@ -483,6 +502,112 @@ describe("GET /api/menu-state", () => {
   it("names the starting zone's default when no zone is asked for", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_10_00);
-    expect(await defaultMenu(v, "")).toBe(v.menus["Café"]);
+    expect(await defaultMenu(v, "")).toBe(v.menus.Desayunos);
+  });
+});
+
+describe("menu-state follows department service periods", () => {
+  const setupPeriods = async () => {
+    const v = await setupVenue({ timetable: true });
+    await withTransaction(suite.db, async (tx) => {
+      const lunch = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Lunch",
+        menuId: v.menus.Almuerzo,
+        staffMenuIds: [v.menus.Bebidas],
+      });
+      const afternoon = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Afternoon",
+        menuId: v.menus["Café"],
+        staffMenuIds: [],
+      });
+      const night = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Night",
+        menuId: v.menus.Desayunos,
+        staffMenuIds: [],
+      });
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            slot(lunch.id, "12:00", "14:00"),
+            slot(afternoon.id, "14:00", "19:00"),
+            slot(night.id, "21:00", "03:00"),
+          ],
+        })),
+        MONDAY_10_00,
+      );
+    });
+    return v;
+  };
+
+  it.each([
+    ["2026-10-09T11:59:00Z", "Lunch", "Almuerzo"],
+    ["2026-10-09T12:00:00Z", "Afternoon", "Café"],
+    ["2026-10-10T00:30:00Z", "Night", "Desayunos"],
+  ] as const)("reports the running department period at %s", async (instant, periodName, menu) => {
+    const v = await setupPeriods();
+    at(new Date(instant));
+    for (const query of ["", `?zoneId=${v.barra}`, `?zoneId=${v.sala}`]) {
+      const answer = await send(v, "GET", `/api/menu-state${query}`);
+      expect(answer.status).toBe(200);
+      expect(answer.body).toMatchObject({
+        defaultMenuId: v.menus[menu],
+        service: { open: true, periodName },
+        menus: expect.arrayContaining([{ menuId: v.menus[menu], versionId: v.versions[menu] }]),
+        unavailable: { products: [], optionLabels: [] },
+      });
+    }
+  });
+
+  it("reports a closed department without choosing an all-day default", async () => {
+    const v = await setupPeriods();
+    at(new Date("2026-10-09T18:00:00Z"));
+    const answer = await send(v, "GET", `/api/menu-state?zoneId=${v.barra}`);
+    expect(answer.status).toBe(200);
+    expect(answer.body).toMatchObject({
+      defaultMenuId: null,
+      service: { open: false, periodName: null },
+    });
+    expect(answer.body.menus).toEqual([
+      { menuId: v.menus.Desayunos, versionId: v.versions.Desayunos },
+      { menuId: v.menus.Almuerzo, versionId: v.versions.Almuerzo },
+      { menuId: v.menus.Bebidas, versionId: v.versions.Bebidas },
+      { menuId: v.menus["Café"], versionId: v.versions["Café"] },
+    ]);
+  });
+  it.each([
+    ["2026-10-09T11:59:00Z", "Almuerzo", "Bebidas", "Lunch"],
+    ["2026-10-09T12:00:00Z", "Café", null, "Afternoon"],
+  ] as const)(
+    "never falls back to another period after %s loses its customer menu",
+    async (instant, inactive, fallback, periodName) => {
+      const v = await setupPeriods();
+      await withTransaction(suite.db, (tx) => deactivateCatalogue(tx, v.menus[inactive]));
+      at(new Date(instant));
+      const answer = await send(v, "GET", `/api/menu-state?zoneId=${v.sala}`);
+      expect(answer.status).toBe(200);
+      expect(answer.body).toMatchObject({
+        defaultMenuId: fallback === null ? null : v.menus[fallback],
+        service: { open: true, periodName },
+      });
+    },
+  );
+
+  it("reports open service when the location clock cannot be read", async () => {
+    const v = await setupPeriods();
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "not/a-zone" })
+      .where(eq(locations.id, v.cfg.locationId));
+    at(new Date("2026-10-09T18:00:00Z"));
+    const answer = await send(v, "GET", `/api/menu-state?zoneId=${v.sala}`);
+    expect(answer.status).toBe(200);
+    expect(answer.body).toMatchObject({
+      defaultMenuId: null,
+      service: { open: true, periodName: null },
+    });
   });
 });
