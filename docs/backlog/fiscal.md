@@ -597,6 +597,14 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
     not resolved, nor one captured and not yet filed; the cancel had no payment check at all
     before C126.
 
+## "the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it reproduces itself.
+
+- **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it
+  reproduces itself.** Two compliance-track documents carry the same shape about tips
+  (`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`); their tip
+  claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
+  compliance track widens those two sentences.
+
 ## Decisions and deliberate limits
 
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,

@@ -924,6 +924,74 @@ arriving, but open periods are told apart only by their start time, to the milli
   handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
   A238 (landed as #1164) and A239.
 
+## The till's schedule screen does not follow the forms rule yet
+
+  (6) the till's schedule screen (`apps/till/src/screens/till-schedule-screen.ts`) does not follow
+  the rule yet: its cover request keeps its button disabled until a shift and a colleague are
+  chosen, and its absence request until both dates are filled, before any press; neither shows a
+  message beside its fields; and a refusal shows as a `role="alert"` notice at the top of the card.
+  Other till surfaces were not checked against the rule either, and whether a number pad or a
+  choice picker counts as a form under it is open: the payment and weighing steps
+  (`apps/till/src/widgets/tender-pay.ts`) keep Confirm payment disabled while the cash entered is
+  below the total and Add disabled while the weight is invalid, before any press, with no message;
+  the dish options picker (`apps/till/src/widgets/modifier-picker.ts`) keeps Add or Save disabled
+  until its required choices are made, and shows changed or unavailable choices as `role="alert"`
+  paragraphs rather than beside a field; and the supervisor override dialog
+  (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
+  empty and shows a refusal as a `role="alert"` paragraph.
+
+## The till's schedule screen tells the person to try again and gives them no way to
+
+- **The till's schedule screen tells the person to try again and gives them no way to** (found
+  2026-10-03 by review of lane C's W14; read, not run). A failed load shows
+  `schedule.load_failed`, "Could not load your schedule, try again" (Spanish: "No se pudo cargar tu
+  horario, inténtalo de nuevo"; `apps/till/src/i18n/strings.ts`), but
+  `apps/till/src/screens/till-schedule-screen.ts` has no retry control. After a failed FIRST load
+  the shifts, swaps and time-off lists show only their headings, and the cover form's shift picker
+  offers only "—", so no cover request can be sent. `#reload` runs only when the screen is attached
+  and after a successful action, and the only action still possible then is a time-off request — so
+  one the server accepts, or leaving the screen and coming back, is the only way to load again. The
+  dashboard's My Schedule screen has a "Try again" button (`#retry`,
+  `apps/dashboard/src/screens/my-schedule-screen.ts`, added in 4bfbf03ea, #876) and also puts a
+  failure line under each failed list's own heading. **Next action:** add a retry button the
+  way the dashboard does, and decide whether each failed list gets its own line.
+
+## Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner button
+
+- **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
+  button** (found 2026-10-03 in review of lane C's W23; read, not run). `wt-button`
+  (`packages/ui-core/src/components/wt-button.ts`) forwards `aria-label`, `aria-haspopup`,
+  `aria-expanded` and `aria-invalid` to its inner `<button>`, not `aria-pressed`. The two are the
+  station picker (`#pick`, `apps/till/src/screens/till-station-screen.ts`) and the card-simulation
+  result buttons (`apps/till/src/widgets/tender-pay.ts`). **Next action:** make them native buttons
+  with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft line toggle are.
+
+## Three till loading lines may not be announced
+
+- **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).
+  The schedule screen (`apps/till/src/screens/till-schedule-screen.ts`, #1103), the lock screen and
+  the device chooser each insert a `role="status"` element already holding the loading text and
+  remove it when loading ends. W3C's technique ARIA22
+  (https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22) tests: _"Check that the container destined
+  to hold the status message has a role attribute with a value of status before the status message
+  occurs."_ The review's run-it seat watched the lock screen's and device chooser's DOM in Chromium:
+  each status element was inserted already holding its text and removed when loading ended. The
+  schedule screen's was read, not run, and no real screen reader was tried. **Next action:** decide
+  whether to keep an empty status region on the page and fill it later, and test that sequence.
+
+## The counter till may start in a zone its service zone dropdown does not list
+
+- **The counter till may start in a zone its service zone dropdown does not list** (found
+  2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
+  in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
+  (`packages/venue-service/src/operations.ts`): the profile's starting zone when the profile has a
+  department, else the zone marked `is_counter_default`, neither filtered by service mode. Since
+  A178d the box is a `wt-combobox`, which shows an empty box for a value with no matching option
+  (read, not run). W97 retired the per-device default zone and the dashboard control #1004 added
+  for it (2026-10-06).
+  **Next action:** find whether a `table_tab` zone can be the counter default or a profile's
+  starting zone; if it can, decide whether that is refused where it is set or handled by the till.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no

@@ -72,3 +72,11 @@ enums, but a user-definable kitchen-status list does not exist.
   - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
     correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
     never printed that group's HOLD ticket.
+
+## Is a `+` sub-line enough for a doneness answer on the kitchen ticket?
+
+- **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** Doneness is a modifier
+  the venue adds itself (Task 10); an options answer prints on the kitchen ticket as an indented
+  `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a real
+  service:** whether that is enough for something a cook must not miss, or whether an options answer
+  deserves its own prominent form on the ticket. Nobody has watched a real kitchen read one.

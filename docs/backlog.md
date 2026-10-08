@@ -361,6 +361,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   open by the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
+- **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and
+  it reproduces itself.** Two compliance-track documents carry the same shape about tips
+  (`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`). **Next
+  action:** whoever next works the compliance track widens those two sentences.
+  [Detail](backlog/fiscal.md#the-fiscal-record-is-built-from-total--vat_breakdown-is-a-false-narrow-enumeration-and-it-reproduces-itself)
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -883,6 +889,11 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere._ Detail: [backl
   switched-off course the send path and the move path can file a dish with no course under different
   courses (owner, 2026-09-29: not queued). Left open by the table actions plan's Task 9 (#874,
   dishes arriving in a party get a kitchen group).
+
+- **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** **Open, and worth a
+  cook's eye before a real service:** whether that is enough for something a cook must not miss, or
+  whether an options answer deserves its own prominent form on the ticket.
+  [Detail](backlog/kitchen.md#is-a--sub-line-enough-for-a-doneness-answer-on-the-kitchen-ticket)
 
 ### The till, devices and table service
 
@@ -1568,6 +1579,35 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   (landed as #1164) and A239.
   [Detail](backlog/till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
 
+- **The till's schedule screen does not follow the forms rule yet** — left open by C47
+  (#838/#839/#840/#841). Other till surfaces were not checked against the rule either, and whether a
+  number pad or a choice picker counts as a form under it is open.
+  [Detail](backlog/till.md#the-tills-schedule-screen-does-not-follow-the-forms-rule-yet)
+
+- **The till's schedule screen tells the person to try again and gives them no way to** (found
+  2026-10-03 by review of lane C's W14; read, not run). **Next action:** add a retry button the way
+  the dashboard does, and decide whether each failed list gets its own line.
+  [Detail](backlog/till.md#the-tills-schedule-screen-tells-the-person-to-try-again-and-gives-them-no-way-to)
+
+- **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
+  button** (found 2026-10-03 in review of lane C's W23; read, not run). **Next action:** make them
+  native buttons with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft
+  line toggle are.
+  [Detail](backlog/till.md#two-till-controls-put-aria-pressed-on-a-wt-button-which-does-not-pass-it-to-its-inner-button)
+
+- **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).
+  The schedule screen (`apps/till/src/screens/till-schedule-screen.ts`, #1103), the lock screen and
+  the device chooser each insert a `role="status"` element already holding the loading text and
+  remove it when loading ends. **Next action:** decide whether to keep an empty status region on the
+  page and fill it later, and test that sequence.
+  [Detail](backlog/till.md#three-till-loading-lines-may-not-be-announced)
+
+- **The counter till may start in a zone its service zone dropdown does not list** (found
+  2026-09-14; read, not run). **Next action:** find whether a `table_tab` zone can be the counter
+  default or a profile's starting zone; if it can, decide whether that is refused where it is set or
+  handled by the till.
+  [Detail](backlog/till.md#the-counter-till-may-start-in-a-zone-its-service-zone-dropdown-does-not-list)
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -1942,6 +1982,16 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
   choose the right one; the current page shows amounts alone.** Left open by A247 (a pretend
   connected card reader in Demo mode, W38, #1172).
 
+- **A bad Stripe reader id reaches the add-reader dialog as `server.internal`, so it cannot be told
+  from a server fault** — found during C47 part 2 and not fixed: the Stripe seat's `readers.add`
+  (`packages/payments-stripe/src/card-provider.ts`) lets the Stripe library's own error through, and
+  the error boundary (`packages/server-kit/src/error-boundary.ts`) answers anything that is not an
+  `AppError` with `server.internal`.
+
+- **The Stripe add-reader dialog (`packages/payments-stripe/src/dashboard/stripe-add-reader.ts`)
+  shows "Reader ID" twice** — found during C47 part 2 and not fixed: a separate label carrying the
+  help icon and then the input's own label, where `wt-input`'s `help` slot would do.
+
 ### Users, sign-in and the dashboard shell
 
 _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
@@ -2112,6 +2162,131 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   `wt-disclosure`'s heading row (the product editor's Kitchen, Descriptors and Nutrition sections,
   among others) and a screen's own paragraphs still run the modal's full width.
   [Detail](backlog/dashboard.md#a-form-in-a-modal-stops-at---wt-form-max-width-c105-965--left-open)
+
+- **`wt-form-error-summary` is deleted once nothing uses it** — left open by C47
+  (#838/#839/#840/#841). Besides its own files and exports in `packages/ui-core` and `packages/ui`,
+  the `packages/ui` workbench demo (`packages/ui/demo/main.ts`) and the consumer test page
+  `packages/ui-core/test/consumer/main.ts`, which `packages/ui-core/test/package-consumer.test.mjs`
+  loads, still use it.
+
+- **The profile screen, opened with required details missing, marks those fields at once, before any
+  press** (two existing tests pin it), unlike every other form. Left open by C47
+  (#838/#839/#840/#841).
+
+- **The form plumbing is hand-written per form** — left open by C47 (#838/#839/#840/#841):
+  assembling the bottom message, waiting for the render and then calling `focusFirstInvalid`, and
+  the state that remembers the first press and which refusals the person has since changed, in
+  several different shapes.
+  [Detail](backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form)
+
+- **The image picker's error message is not read to a screen reader** — left open by C47
+  (#838/#839/#840/#841). The Choose image button inside it carries `aria-invalid` and takes focus,
+  so a screen reader hears "invalid" with no reason. Since A200 the product editor's photo button
+  (`apps/dashboard/src/widgets/product-editor.ts`) has the same defect.
+  [Detail](backlog/dashboard.md#the-image-pickers-error-message-is-not-read-to-a-screen-reader)
+
+- **A refused save of a venue service setting that saves at once shows twice** — found during C47
+  part 2 and not fixed: beside the control and at the top of the panel (`render`,
+  `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
+  `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both.
+
+- **`wt-switch` cannot be marked invalid** — found during C47 part 2 and not fixed: a server refusal
+  of an adjustment reason's note-required switch would show its message but move focus nowhere.
+  [Detail](backlog/dashboard.md#what-c47-part-2-found-and-did-not-fix)
+
+- **A blue line along the top of a `wt-modal` editor's footer** — found during C47 part 2 and not
+  fixed: in a screenshot of a `wt-modal` editor after a refusal that names no field, a blue line
+  runs along the top of the footer, which looks like the modal's scrolling body showing a focus ring
+  — not traced, and not checked against `main`; an observation from the implementer's session.
+
+- **Request refusals that still land in the bottom message, or under a field in generic words — OPEN
+  (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
+  adjustments, venue-service and media module screens) it kept the action working after a request's
+  refusal and put a refusal naming a shown field under that field. **Next action:** the owner says
+  which of these are worth doing.
+  [Detail](backlog/dashboard.md#request-refusals-that-still-land-in-the-bottom-message-or-under-a-field-in-generic-words--open-left-by-c54-853)
+
+- **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — the rule is in
+  CLAUDE.md §3 and `docs/developers/conventions-ui.md`. Still open: the membership route, the
+  adjustment approver, the refund override and the manual-refund confirmer have no one-answer test
+  case of their own. Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no
+  `reason`.
+  [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
+
+- **The profile's "Current password" fills the signed-in person's saved password (C98, #934) — still
+  open:** the sign-in page keeps its three inline copies of the hidden username field
+  (`apps/dashboard/src/screens/login-screen.ts`). Also unknown: which browser and address the owner
+  saw the empty field in.
+  [Detail](backlog/dashboard.md#the-profiles-current-password-fills-the-signed-in-persons-saved-password-c98-934--still-open)
+
+- **A new passkey is listed under the person's email, with their name as its display name (C99,
+  #939) — still open:** the result has not yet been seen in a password manager.
+  [Detail](backlog/dashboard.md#a-new-passkey-is-listed-under-the-persons-email-with-their-name-as-its-display-name-c99-939--still-open)
+
+- **The passkey list says when each passkey was last used and which password manager holds it (C100,
+  #945) — known limits:** neither the "Last used" behaviour after a passkey is deleted in the
+  password manager nor the password-manager naming was tried with a real browser (the tests stand in
+  for the WebAuthn library).
+  [Detail](backlog/dashboard.md#the-passkey-list-says-when-each-passkey-was-last-used-and-which-password-manager-holds-it-c100-945--known-limits)
+
+- **The browser's password manager is told which passkeys Waitron still accepts (C101, #948) — still
+  open:** not observed in a real password manager — the tests replace the browser's methods.
+  [Detail](backlog/dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
+
+- **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner
+  2026-10-08: take it from here when a lane has room):** **Choosing a passkey on the password step
+  asks to discard unsaved changes.** **Remove the passkey name field.**
+  [Detail](backlog/dashboard.md#a403--sign-in-and-passkey-fixes-owner-2026-10-08-open-low-priority-not-queued--owner-2026-10-08-take-it-from-here-when-a-lane-has-room)
+
+- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The
+  review should propose the whole list: which permissions to merge, the names, and which role holds
+  each, and then rename the call sites in one change. **Do it before the editable-roles item below**
+  (owner, 2026-09-26).
+  [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
+
+- **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
+  decision 2026-09-12, restated 2026-09-28: "especially because I want roles to be definable by the
+  customer"; design not written). Detail under [Roles the admin can
+  edit](backlog/dashboard.md#roles-the-admin-can-edit-a7): the ladder question decides the schema.
+  [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
+
+- **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
+  says so** (owner decision 2026-09-12). Still open: `wt-combobox` does not sort its options, and
+  `compareLabels`, now used by `wt-data-table`, passes no locale to `localeCompare`.
+  [Detail](backlog/dashboard.md#dropdowns-sort-by-the-label-the-person-reads-with-intlcollator-a-list-in-a-lifecycle-order-says-so)
+
+- **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
+  first). 50 per page with a server-enforced maximum; search and sort over the whole dataset;
+  debounce, reset on filter change, ignore superseded responses, keep passive live refreshes.
+  [Detail](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting)
+
+- **Tell people by email when their account's security changes** (owner, 2026-09-12): password changed,
+  passkey or authenticator added or removed, recovery codes regenerated, email changed, Google login
+  connected or disconnected. No link, one line on what to do if it was not them. Open: notify the OLD
+  address on an email change; wording when an admin made the change; grouping a burst.
+
+- **Permission-based dashboard navigation** (owner, 2026-09-09; `NAV_GROUPS` in
+  `apps/dashboard/src/dashboard-app.ts` mostly uses role checks): map every built-in destination to
+  its server permission, hide unavailable items and empty groups, same rule for direct URLs and the
+  landing screen.
+
+- **Dashboard-wide location context** — one persistent location dropdown in the banner; classify
+  every screen and API as venue-wide (the whole database) or location-scoped first.
+
+- **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
+  profile.
+
+- **Typed values are only partly checked — a generic phone-format check landed, a country-specific
+  one has not.** Still open: the country-pack seat (`CountryPack.telephone`, filled by
+  `validateSpanishPhone`) is still not called, so a Spanish mobile that fails the national rule but
+  passes the generic one is still accepted.
+  [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)
+
+- Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
+  passwordless account; an operator screen for Google provider credentials; native passkey prompts on
+  real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
+  intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
+  from code only; nobody has shown a real pointer can get there.
 
 ### Interface languages
 
@@ -5404,358 +5579,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
   and decides whether the product editor keeps both summaries.
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
-
-### A7. Users, roles and the dashboard shell
-
-- **Forms explain a failed submission under each field and once at the bottom (C47, #838/#839/#840/
-  #841; C48, #892; C54, #853; owner rule 2026-09-28, restated 2026-09-29).**
-  `docs/developers/design-system.md` → Forms states the rule. Decided and kept:
-  - **DECIDED (owner, 2026-09-29): leave** the image library's bottom message as "The image could
-    not be saved." followed by the refusal's own sentence (`image.save_error`), where the design
-    guide asks for the refusal's sentence alone.
-  - **DECIDED (owner, 2026-09-29): leave Connect working** after a refused card-provider key
-    (`payment.provider_credential_rejected`), because the code carries only the provider's id.
-  - Deliberate exceptions in `apps/dashboard`: the add-to-menus dialog
-    (`apps/dashboard/src/widgets/add-to-menus.ts`) keeps its list of places that failed, and its
-    menu-load error, at the top of the dialog; the backups panel's refusal paragraph
-    (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays directly under the form's
-    buttons, because it also reports a refused Turn off, when no form is open; the cloud services
-    screen (`apps/dashboard/src/screens/cloud-services-screen.ts`) has no form, only buttons, and
-    shows a refusal as a plain alert. The setup wizard's screens with no fields — review, fiscal
-    test, connection and provisioning — keep their refusal paragraph, and in Demo the venue screen's
-    "Demo invoice settings have not loaded yet." alert stays above the form, as a load failure
-    rather than a refusal.
-  - The till's split step keeps its Split button disabled before any press until a dish is picked,
-    on purpose, because it counts a selection rather than checking a field; the transfer step's
-    confirm button does the same.
-
-  Left open, not done:
-  (1) the setup wizard's Demo gaps, listed under _Demo gaps on the setup wizard's venue screen_
-  earlier in this file;
-  (2) `wt-form-error-summary` is deleted once nothing uses it — besides its own files and exports in
-  `packages/ui-core` and `packages/ui`, the `packages/ui` workbench demo (`packages/ui/demo/main.ts`)
-  and the consumer test page `packages/ui-core/test/consumer/main.ts`, which
-  `packages/ui-core/test/package-consumer.test.mjs` loads, still use it;
-  (3) the profile screen, opened with required details missing, marks those fields at once, before
-  any press (two existing tests pin it), unlike every other form;
-  (4) the form plumbing is hand-written per form: assembling the bottom message, waiting for the
-  render and then calling `focusFirstInvalid`, and the state that remembers the first press and
-  which refusals the person has since changed, in several different shapes across `apps/dashboard`,
-  the image library, the Stripe and SumUp forms, adjustment reasons in Venue settings,
-  Departments and zones, and the till's forms. A dashboard-only helper could live in
-  `apps/dashboard/src/widgets/form-fields.ts`, but `packages/media` cannot import from
-  `apps/dashboard` (it would be a dependency loop), so a helper meant to cover the module screens
-  and the image library too would have to live in a package they can all reach, such as
-  `@waitron/ui`;
-  (5) the image picker's error message is not read to a screen reader:
-  `apps/dashboard/src/widgets/section-details-form.ts` puts `aria-describedby="section-image-error"`
-  on the `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
-  (`docs/developers/design-system.md` → Forms); the Choose image button inside it carries
-  `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason. Since A200 the
-  product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`) has the same
-  defect: it carries `aria-invalid` and takes focus, while the reason is a `data-test="image-error"`
-  line in the editor's own shadow root that nothing points to;
-  (6) the till's schedule screen (`apps/till/src/screens/till-schedule-screen.ts`) does not follow
-  the rule yet: its cover request keeps its button disabled until a shift and a colleague are
-  chosen, and its absence request until both dates are filled, before any press; neither shows a
-  message beside its fields; and a refusal shows as a `role="alert"` notice at the top of the card.
-  Other till surfaces were not checked against the rule either, and whether a number pad or a
-  choice picker counts as a form under it is open: the payment and weighing steps
-  (`apps/till/src/widgets/tender-pay.ts`) keep Confirm payment disabled while the cash entered is
-  below the total and Add disabled while the weight is invalid, before any press, with no message;
-  the dish options picker (`apps/till/src/widgets/modifier-picker.ts`) keeps Add or Save disabled
-  until its required choices are made, and shows changed or unavailable choices as `role="alert"`
-  paragraphs rather than beside a field; and the supervisor override dialog
-  (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
-  empty and shows a refusal as a `role="alert"` paragraph.
-
-  Found during C47 part 2 and not fixed: (a) a bad Stripe reader id reaches the add-reader dialog as
-  `server.internal`, so it cannot be told from a server fault — the Stripe seat's `readers.add`
-  (`packages/payments-stripe/src/card-provider.ts`) lets the Stripe library's own error through,
-  and the error boundary (`packages/server-kit/src/error-boundary.ts`) answers anything that is not
-  an `AppError` with `server.internal`; (b) the Stripe add-reader dialog
-  (`packages/payments-stripe/src/dashboard/stripe-add-reader.ts`) shows "Reader ID" twice, a
-  separate label carrying the help icon and then the input's own label, where `wt-input`'s `help`
-  slot would do; (c) a refused save of a venue service setting that saves at once shows twice,
-  beside the control and at the top of the panel (`render`,
-  `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
-  `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both;
-  (d) `wt-switch` cannot be marked invalid, so a server refusal of an adjustment reason's
-  note-required switch would show its message but move focus nowhere — though the server refuses
-  `noteRequired` only when it is not a true/false value (`requireFlag`,
-  `packages/adjustments/src/routes.ts`) and the screen always sends one from its switch, so the
-  refusal is not expected from this screen; (e) in a screenshot of a `wt-modal` editor after a
-  refusal that names no field, a blue line runs along the top of the footer, which looks like the
-  modal's scrolling body showing a focus ring — not traced, and not checked against `main`; an
-  observation from the implementer's session.
-
-- **Request refusals that still land in the bottom message, or under a field in generic words —
-  OPEN (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
-  adjustments, venue-service and media module screens) it kept the action working after a request's
-  refusal and put a refusal naming a shown field under that field. What it left:
-  (1) the product editor and the venue operations editors put a refused field's message under it in
-  their generic words (`editor.field_rejected` in `apps/dashboard/src/screens/catalogue-screen.ts`
-  `#rejectedField`; `venue.field_refused` in
-  `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not the refusal's own
-  sentence;
-  (2) controls with no place for an error keep their refusal in the bottom message — `wt-switch`
-  (`active` on the ingredient, extras and options forms; `available` on the product
-  editor), the allergen and dietary-origin pickers on the ingredient form, and the purchase form's
-  VAT regime select;
-  (3) refusals naming two fields or a row the refusal does not number stay at the bottom:
-  `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate, base, tax or
-  type,
-  `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
-  (4) on the backup screen: a refusal naming
-  `destinationDir` or `schedule` still shows in the page banner rather than under the folder field
-  or above the button (both seen by running, in the Codex run-it review of C63), and so, read and
-  not run, does every other refusal; the backup folder is required but not marked, and Turn on
-  backups stays disabled before the first press until the folder is filled and the key is saved —
-  the same shape as (7) (both seen by running, in the Codex run-it review); and, read and not run:
-  the settings editor's Save changes is also disabled before any press while the folder is blank
-  (`#saveSettingsDisabled` in `apps/dashboard/src/screens/backup-screen.ts`); the destination
-  folder, the saved-it tick and the weekday ticks carry no `name`; the screen does not submit on
-  Enter (`submitOnEnter`, which design-system.md → "Submit ordinary forms with Enter" asks for and
-  `stream-settings-panel.ts` uses); and no test covers only the second box being invalid, or where
-  focus lands after a failed check on the Save form;
-  (5) FIXED (A310): the closed phone drawer no longer shows in the page's 24 px margin;
-  (6) the setup live-source screen's refusals go through a catch-all in
-  `#onConfigurationRequested` that drops the code, so a wrong passphrase cannot be placed under its
-  field;
-  (7) the profile screen opens with Save disabled when required details are missing — the form's
-  own check, before any press (also point (3) of the entry above);
-  (8) on the add-person and edit-person forms `profile.invalid` reads "Check your profile details",
-  which is about someone else's details there;
-  (9) after a refusal under a field the bottom message still reads "Correct the highlighted fields to
-  continue" while the action works — kept as it was;
-  (10) the bookings form was not in C54's survey (read, not run): a save refusal becomes the
-  screen's `errorKey` (`packages/bookings/src/dashboard/bookings-screen.ts` `#onCreate`/`#onUpdate`)
-  and shows as a paragraph on the screen outside the dialog, never under a field — including those
-  naming one, `management.request_invalid` with a `field`, `booking.invalid` with `partySize`, and
-  `table.not_found` with `tableId` for an inactive table (`table.inactive` comes only from
-  seating); the form's Save is disabled only while a save is in flight (`busy`), so no refusal
-  disables it, and its own check shows one paragraph in the dialog rather than a message under the
-  field; and the payment-provider forms were not in C54's survey either (read, not run): the
-  connect and add-reader forms in `packages/payments-stripe` and `packages/payments-sumup`
-  (`stripe-connect-form.ts`, `stripe-add-reader.ts`, `sumup-connect-form.ts`, `sumup-add-reader.ts`)
-  put a refused request's message in the bottom message, except that SumUp's connect form answers a
-  key spanning several merchants by showing a merchant picker, and none of them disables its action
-  on a refusal;
-  (11) the backup screen's configuration export drops the refusal's code in a catch-all
-  (`apps/dashboard/src/screens/backup-screen.ts` `#exportConfiguration`), so a
-  `management.request_invalid` naming `passphrase` would read only "The configuration export could
-  not be created." at the bottom — read, not run, as unreachable from this form, because the client
-  refuses a passphrase shorter than 12 (`MIN_KEY_LENGTH`) before sending and the server's check is
-  the same `length < 12` (`apps/server/src/configuration-export-api.ts`).
-  **Next action:** the owner says which of these are worth doing.
-
-- **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — the rule is in
-  CLAUDE.md §3 and `docs/developers/conventions-ui.md`. Kept on purpose, each reachable only after a
-  credential was proved: `totp.required` (the dashboard's code step, after a right password),
-  `google.second_factor_required` (after a valid Google sign-in), `authorization.not_permitted`
-  (right credentials, a role without the permission) and the adjustment approver's
-  `adjustment.approval_required` for a right PIN whose role is too low; a signed-in person's
-  re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
-  - The membership route, the adjustment approver, the refund override and the manual-refund
-    confirmer have no one-answer test case of their own.
-  - Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no `reason`.
-  - After a refused login the setup wizard's Connect form leaves the cursor where it was (an
-    existing test pins that), while Reset and the dashboard sign-in move it to the password; the
-    owner's rule covers marking fields, not the cursor, so whether Connect should match is the
-    owner's call (left by A153, #952).
-  - The password throttle (A154, #977): a real address with 4 wrong tries, once forgotten, comes
-    back with a fresh count if a made-up address with 5 wrong tries lands on its counter (measured
-    by simulation; the figures are in #977's description). The PIN back-off
-    (`packages/identity/src/pin-throttle.ts`) still refuses every new person for 60 seconds while
-    one of its slots is full, fed by paired tills and signed-in routes rather than strangers.
-  - Password-reset timing (A147, #942; A159, #986): the real mail-server conversation, which only a
-    known address starts, was not measured, and no way to match it was tried. Nothing pins that the
-    unknown-address decoy (`writeAndRemoveDecoyAction`, `packages/identity/src/account-action.ts`)
-    runs the same statements as a known address: its read, its dead-link delete and its retire
-    change no row, so deleting any one of them left the suites green; only a timing script (not in
-    the tree) shows them. A copy of the database is not unchanged by a decoy: with `secure_delete`
-    at 0 a reviewer found the decoy's random person id and token hash still in the file's bytes
-    after commit and checkpoint. It follows, though it was not separately measured, that a copy can
-    show that, and when, an unknown-address request happened — not for which address, since the
-    row's values are taken from no part of the address (read from the code, not measured).
-
-- **The profile's "Current password" fills the signed-in person's saved password (C98, #934) —
-  still open:** the sign-in page keeps its three inline copies of the hidden username field
-  (`apps/dashboard/src/screens/login-screen.ts`); moving them onto the `autofillUsername` helper
-  (`apps/dashboard/src/widgets/autofill-username.ts`) needs at least a `name` parameter (the
-  sign-in page's tests pin `email`; the profile's field is named `username`), the
-  `data-autofill-username` hook those tests find the field by, and a decision about an empty email,
-  for which the helper renders nothing while the sign-in copies always render. Also unknown: which
-  browser and address the owner saw the empty field in. The payments screen's manager-PIN prompt
-  now says `autocomplete="off"` (owner, 2026-09-30, C110 #940); nobody checked in a real browser
-  whether it then stops offering the dashboard password there.
-
-- **A new passkey is listed under the person's email, with their name as its display name (C99,
-  #939) — still open:** the result has not yet been seen in a password manager. The dashboard calls
-  `PublicKeyCredential.signalCurrentUserDetails`, where the browser has it, after every sign-in and
-  after a passkey is added or removed (C101), but not after the email or display name is changed on
-  the Profile screen; nobody has yet seen whether a real password manager then shows the new names.
-
-- **The passkey list says when each passkey was last used and which password manager holds it
-  (C100, #945) — known limits:** neither the "Last used" behaviour after a passkey is deleted in the
-  password manager nor the password-manager naming was tried with a real browser (the tests stand in
-  for the WebAuthn library). A browser following the older WebAuthn Level 2 rules zeroes the
-  authenticator identifier under `@simplewebauthn/server`'s default "none" attestation preference,
-  which Waitron does not override, and the passkey then shows no password manager. The names are a
-  snapshot of the community list at github.com/passkeydeveloper/passkey-authenticator-aaguids
-  (commit `3ff200d`, fetched 2026-09-30), names only; that repository states no licence, which is
-  recorded at the top of `packages/identity/src/passkey-providers.ts`. Nothing refreshes it, and
-  security keys such as a YubiKey show no name, because the FIDO Alliance's metadata was not copied.
-
-- **The browser's password manager is told which passkeys Waitron still accepts (C101, #948) —
-  still open:** not observed in a real password manager — the tests replace the browser's methods,
-  and Chrome's feature entry says it acts "Initially ... only for Google Password Manager (GPM)
-  credentials", which a test browser does not hold. The browser's own methods are called directly
-  rather than through `@simplewebauthn/browser`'s `sendSignal()`, which adds only renamed errors and
-  throws where a method is missing. Left open from the review, both predating C101: a suspended or
-  pending person's passkey is refused before the signature check and an active person's bad
-  signature after it, so the two do different work — whether that can be timed from outside was not
-  measured; and an expired sign-in challenge answers its own `passkey.challenge_expired`. Not taken:
-  after a passkey is added or removed, the Profile screen makes one request more than it needs (the
-  signals read beside the profile reload); folding the signal data into the profile response would
-  remove it.
-
-- **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
-  1. **Choosing a passkey on the password step asks to discard unsaved changes.** On the dashboard
-     sign-in: enter an email, press Next, then press "Log in with passkey" on the password step — the
-     "discard unsaved changes" dialog appears. Moving between sign-in methods loses nothing the
-     person would want kept, so no dialog.
-  2. **Remove the passkey name field.** Each passkey already shows which password manager holds it
-     (C100, #945), so a name typed by the person is no longer needed.
-
-- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Input
-  since C128 (#1031): `sale.take_payment` gates every till payment route and is held by every role,
-  staff included, chosen so nobody lost the ability to take payment; the review decides who keeps
-  it, and whether to rename it — it is the only permission whose action is two words (a reviewer
-  suggested e.g. `payment.take`). The list in
-  `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
-  too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
-  `node.promote` split today (adding a machine, promoting a standby and, since #708, removing a
-  standby that never finished joining all use one or the other). Machine permissions are to be named
-  `node.*`, not `mirror.*` — the owner's preference. The review should propose the whole list: which
-  permissions to merge, the names, and which role holds each, and then rename the call sites in one
-  change. **Renaming is allowed now:** the file's header says permission ids are "never renamed once
-  shipped", but a search (2026-09-26, reading, not running) found them stored nowhere — the database
-  stores a person's ROLE (`packages/identity/src/schema/persons.ts`), and the names appear only in
-  code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
-  backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
-  by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
-  below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
-  roles would name their permissions (the roles design is not written yet), so a rename after that
-  has to rewrite those rows as well.
-  **Restated by the owner 2026-10-02: "review all permissions and the roles they're assigned to"** —
-  the review covers BOTH halves: every permission, and which of the built-in roles holds each. Two
-  role questions from that morning's dashboard Orders screen answers (B27s, lane C questions.md
-  2026-10-02 ~09:40 and ~09:50) belong in it: the staff role holds no `report.view`, so the Orders
-  screen gave staff a narrower view of their own (unfinished bills plus today's finished ones) rather
-  than the permission deciding; and `print.resend`, held only by managers and admins, was the name
-  that first came up for the dashboard's DUPLICADO copy until it was settled that the copy uses the
-  till copy's own permission — two permissions for one kind of print is a merge candidate.
-- **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
-  decision 2026-09-12, restated 2026-09-28: "especially because I want roles to be definable by the
-  customer"; design not written). Detail under
-  [Roles the admin can edit](backlog/dashboard.md#roles-the-admin-can-edit-a7): the ladder question decides the
-  schema. The dashboard's role lists (the add-person and edit-person forms and the Staff screen's
-  role filter) sort by the displayed name in the current language (`rolesByName`,
-  `apps/dashboard/src/i18n/domain.ts`), so a custom role's name would take its place among them; the
-  adjustments module's reasons screen sorts its two role dropdowns the same way with its own copy of
-  the `Intl.Collator` options. Its client-side seniority check keeps a separate ordering; the roles
-  design still needs to decide where custom roles belong in that check.
-- **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
-  says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
-  is the one dropdown (A178b–f). Still open:
-  `wt-combobox` does not sort its options, and `compareLabels`, now used by `wt-data-table`,
-  passes no locale to `localeCompare`.
-- **The till's schedule screen tells the person to try again and gives them no way to** (found
-  2026-10-03 by review of lane C's W14; read, not run). A failed load shows
-  `schedule.load_failed`, "Could not load your schedule, try again" (Spanish: "No se pudo cargar tu
-  horario, inténtalo de nuevo"; `apps/till/src/i18n/strings.ts`), but
-  `apps/till/src/screens/till-schedule-screen.ts` has no retry control. After a failed FIRST load
-  the shifts, swaps and time-off lists show only their headings, and the cover form's shift picker
-  offers only "—", so no cover request can be sent. `#reload` runs only when the screen is attached
-  and after a successful action, and the only action still possible then is a time-off request — so
-  one the server accepts, or leaving the screen and coming back, is the only way to load again. The
-  dashboard's My Schedule screen has a "Try again" button (`#retry`,
-  `apps/dashboard/src/screens/my-schedule-screen.ts`, added in 4bfbf03ea, #876) and also puts a
-  failure line under each failed list's own heading. **Next action:** add a retry button the
-  way the dashboard does, and decide whether each failed list gets its own line.
-- **Two till controls put `aria-pressed` on a `wt-button`, which does not pass it to its inner
-  button** (found 2026-10-03 in review of lane C's W23; read, not run). `wt-button`
-  (`packages/ui-core/src/components/wt-button.ts`) forwards `aria-label`, `aria-haspopup`,
-  `aria-expanded` and `aria-invalid` to its inner `<button>`, not `aria-pressed`. The two are the
-  station picker (`#pick`, `apps/till/src/screens/till-station-screen.ts`) and the card-simulation
-  result buttons (`apps/till/src/widgets/tender-pay.ts`). **Next action:** make them native buttons
-  with `aria-pressed`, as the Tab drawer's transfer and split pickers and the draft line toggle are.
-- **Three till loading lines may not be announced** (found 2026-10-03 in review of lane C's W23).
-  The schedule screen (`apps/till/src/screens/till-schedule-screen.ts`, #1103), the lock screen and
-  the device chooser each insert a `role="status"` element already holding the loading text and
-  remove it when loading ends. W3C's technique ARIA22
-  (https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22) tests: _"Check that the container destined
-  to hold the status message has a role attribute with a value of status before the status message
-  occurs."_ The review's run-it seat watched the lock screen's and device chooser's DOM in Chromium:
-  each status element was inserted already holding its text and removed when loading ended. The
-  schedule screen's was read, not run, and no real screen reader was tried. **Next action:** decide
-  whether to keep an empty status region on the page and fill it later, and test that sequence.
-- **The counter till may start in a zone its service zone dropdown does not list** (found
-  2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
-  in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
-  (`packages/venue-service/src/operations.ts`): the profile's starting zone when the profile has a
-  department, else the zone marked `is_counter_default`, neither filtered by service mode. Since
-  A178d the box is a `wt-combobox`, which shows an empty box for a value with no matching option
-  (read, not run). W97 retired the per-device default zone and the dashboard control #1004 added
-  for it (2026-10-06).
-  **Next action:** find whether a `table_tab` zone can be the counter default or a profile's
-  starting zone; if it can, decide whether that is refused where it is set or handled by the till.
-- **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** Doneness is a modifier
-  the venue adds itself (Task 10); an options answer prints on the kitchen ticket as an indented
-  `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a real
-  service:** whether that is enough for something a cook must not miss, or whether an options answer
-  deserves its own prominent form on the ticket. Nobody has watched a real kitchen read one.
-- **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it
-  reproduces itself.** Two compliance-track documents carry the same shape about tips
-  (`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`); their tip
-  claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
-  compliance track widens those two sentences.
-- **`wt-combobox`** (#351): a searchable dropdown in `packages/ui` — pick one option or several
-  (`multiple`), and optionally offer to add what was typed when nothing matches. Left out on
-  purpose, per its design: searching on the server, disabling single options, taking part in a
-  native `<form>`, and showing chosen options as chips (it shows a count instead).
-- **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
-  first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
-  reset on filter change, ignore superseded responses, keep passive live refreshes.
-  `wt-data-table`'s toolbar search box and filter dropdowns (#362) filter the rows already in the
-  browser and emit no `wt-*` event of their own when the search text or a filter changes (only
-  sorting and row selection do), so server-backed paging cannot reuse them as they stand.
-- **Tell people by email when their account's security changes** (owner, 2026-09-12): password changed,
-  passkey or authenticator added or removed, recovery codes regenerated, email changed, Google login
-  connected or disconnected. No link, one line on what to do if it was not them. Open: notify the OLD
-  address on an email change; wording when an admin made the change; grouping a burst.
-- **Permission-based dashboard navigation** (owner, 2026-09-09; `NAV_GROUPS` in
-  `apps/dashboard/src/dashboard-app.ts` mostly uses role checks): map every built-in destination to
-  its server permission, hide unavailable items and empty groups, same rule for direct URLs and the
-  landing screen.
-- **Dashboard-wide location context** — one persistent location dropdown in the banner; classify
-  every screen and API as venue-wide (the whole database) or location-scoped first.
-- **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
-  profile.
-- **Typed values are only partly checked — a generic phone-format check landed, a country-specific
-  one has not.** `isValidTelephone` in `@waitron/shared` runs on both the browser forms and the
-  server write paths (`person.telephone_invalid`), and a number is kept exactly as typed. Still open:
-  the country-pack seat (`CountryPack.telephone`, filled by `validateSpanishPhone`) is still not
-  called, so a Spanish mobile that fails the national rule but passes the generic one is still
-  accepted; other typed fields (email aside) are still unchecked; the tax identifier stays fiscal.
-  Confirm with owner: an existing malformed number now blocks an otherwise-unrelated edit, because
-  both forms re-validate the telephone field on every submit.
-- Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
-  passwordless account; an operator screen for Google provider credentials; native passkey prompts on
-  real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
-  intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
-  from code only; nobody has shown a real pointer can get there.
 
 ### A8. Receipts
 
