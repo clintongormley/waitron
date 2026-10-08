@@ -15,6 +15,7 @@ function queueCurrencyMeasurement(currency: Element, write: (width: number) => v
       // Read all rows before writing padding: interleaving them forces layout for every row.
       const measured = [...initialCurrencyMeasurements].map(([element, apply]) => ({
         apply,
+        // This agrees with the observer's content box only without sign padding/border or scaling.
         width: element.getBoundingClientRect().width,
       }));
       initialCurrencyMeasurements.clear();
@@ -67,8 +68,8 @@ export class WtPriceInput extends LitElement {
         min-width: var(--wt-tap-min);
       }
 
-      /* Padding follows the sign before paint; width growth waits for the next frame so a
-         surrounding resize observer is not retriggered by this field's notification. */
+      /* Text padding and field-width growth use separate measurements so width growth can
+         wait for the next frame while the field's width rule still applies. */
       .before .field-control,
       .after .field-control {
         width: calc(var(--wt-price-field-width) + var(--currency-space, 0px) + var(--wt-space-1));

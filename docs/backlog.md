@@ -3497,8 +3497,15 @@ recorded 23/23/19.2 ms after batching; the initial candidate recorded 103.9/88.4
 the original code 18.2/14.3/14.2 ms in earlier disposable-checkout runs. These are local mounting
 experiments, not a measured delay on a real menu. Five disposable deletion controls failed;
 restoring the implementation passed 119 price-field cases. The updated eight-suite dashboard run
-passed 630 cases without the warning, and the unedited fiscal pair passed 20 cases. Updated review,
-final visual inspection, normal hook and current-head CI remain before landing.
+passed 630 cases without the warning, and the unedited fiscal pair passed 20 cases. The revised Claude review ran 396 seconds and found no correctness bug in its tested arrangements;
+eight revised EN/ES/theme/width screenshots were inspected. Normal hook and current-head CI remain.
+Review follow-up: the initial geometry includes currency-part padding/border and ancestor scaling,
+where later `contentRect` does not; scaled ancestors or currency-part padding can cause an initial
+width adjustment. A source search found no `part(currency)`, `transform: scale` or `zoom:` consumer
+in app/package TypeScript/CSS. Keep that limitation documented; use a consistent measurement box
+if such styling is introduced. The reviewer also reproduced warnings on both base and candidate
+when a consumer makes the amount's width automatic or moves a field during delivery; these paths
+remain outside the warning-free receipts above.
 The original-main catalogue-only command passed 270 cases without the warning; its historical
 occurrence was not reproduced and is not attributed to currency fields.
 See [the focused experiment](developers/conventions-ui.md#currency-measurements-and-resize-notifications-a407).

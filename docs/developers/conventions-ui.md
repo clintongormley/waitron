@@ -896,5 +896,12 @@ currency-removal check on an uncaught null-parent write. Removing both frame can
 the target/connection guard failed the disconnect check: reserved width changed from 8.671875
 to 24.5625 px after removal. Restoring the candidate passed 119 price-field cases. The combined
 disconnect control does not prove each safeguard independently; neither does it establish that
-every queued callback in every component is cancelled. The updated review and final branch
-checks are still pending; this branch has not landed.
+every queued callback in every component is cancelled. The revised review ran 396 seconds and confirmed warning removal in two additional watched-wrapper
+arrangements. Its scaled-ancestor/currency-part-padding probes found initial geometry different
+from the later observer content box. No matching app/package TypeScript/CSS consumer was found
+with `rg -n 'part\(currency\)|transform:\s*scale|zoom:' apps packages --glob '*.ts' --glob '*.css'`.
+The initial measurement assumes an unpadded, unbordered sign and unscaled ancestors; a consumer
+adding those styles needs a consistent measurement box. A consumer overriding the amount to
+`width:auto`, or moving a field during notification, still produced warnings on both base and
+candidate in the review probes. This fix's warning-free receipts do not cover those arrangements.
+The final push gate and CI remain; this branch has not landed.
