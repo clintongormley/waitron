@@ -1563,10 +1563,12 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
 - **Batch 4b — OPEN.** Venue-service module screens.
 - **Batch 5 — BUILT (A331-5).** The till's five forms that save an edit: the party name dialog,
   the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
-  when it edits a line, and the station dialog's Make at. Adding a dish keeps Add ready (the extras
-  picker passes `savableAtOpen` when it adds), and the station dialog's Move keeps its own rule.
-  Every other till dialog takes an action and is unchanged; the decision for each is in
-  [the Batch 5 table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
+  when it edits a line, and the station dialog's Make at. Adding a dish never waits for a change
+  (the extras picker passes `savableAtOpen` when it adds), and the station dialog's Move keeps its
+  own rule. Every other till dialog that tracks unsaved changes takes an action and is unchanged;
+  the decision for each is in
+  [the Batch 5 table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5);
+  the till's other forms wait for Batch 7's follow-up audit below.
   Looked at on 2026-10-08 in 24 screenshots of the forms mounted with test data in Chromium (each
   unchanged and after one edit at 1280px, light, English; the party name and the extras picker
   also at 390px, dark, Spanish; the invoice dialog pressed while incomplete), kept outside the

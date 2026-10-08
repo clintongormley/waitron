@@ -18,6 +18,8 @@ describe.each(["light", "dark"] as const)("till-party-name-dialog a11y (%s theme
       { tables: "Mesa 4, 5", value: "Ana", savedValue: "Ana" },
       theme,
     );
+    await saveButton(el).updateComplete;
+    expect(saveButton(el).variant).toBe("secondary");
     expect(saveButton(el).disabled).toBe(true);
     await expectNoA11yViolations(host);
   });

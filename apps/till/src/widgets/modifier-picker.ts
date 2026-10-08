@@ -480,7 +480,7 @@ export class TillModifierPicker extends LitElement {
     this.#reportCancel();
   }
 
-  /** A fresh open is adding a dish, and its defaults are valid to send; only an edit waits for a change. */
+  /** Adding a dish has no earlier choice to compare with, so Add never waits for a change; only an edit does. */
   #saveAction() {
     return saveActionState(this.#scope, { savableAtOpen: this.initialSelections === undefined });
   }

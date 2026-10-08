@@ -663,7 +663,7 @@ its own controller. The till's suites run in real Chromium (`apps/till/vitest.co
 
 **Which till dialogs are saves** (reviewed once by a fresh-context reader, 2026-10-08; its findings
 are folded in). `git grep -ln leaveCoordinatorFor apps/till/src` lists 19 non-test
-files. Five forms edit or submit staged input and are gated; every other form takes an action and
+files. Five forms edit or submit staged input and are gated; every other form in that list takes an action and
 keeps today's behaviour:
 
 | Form | Decision | Why |
@@ -672,7 +672,7 @@ keeps today's behaviour:
 | Schedule: Request cover, Request time off (`till-schedule-screen.ts`, `.cover-submit`, `.abs-submit`) | SAVE | The same submissions of staged input that 3a.2b gated on the dashboard (`api.requestSwap` ~313, `api.requestAbsence` ~328). |
 | Invoice recipient (`invoice-recipient-dialog.ts`, `data-invoice-save`) | SAVE | Captures the customer's tax details; on a bill it writes `setOrderInvoiceChoice` (`till-app.ts` ~7587). Every field is required and it always opens empty, so — like 3b's bill attestation — an untouched press can never send anything; gating changes only the look of the empty dialog. Its counter path feeds the details into the sale request (`till-app.ts` ~3118–3120, ~3235), so this PR takes the FULL review path and changes nothing the payment or sale request is sent. |
 | Modifier picker, edit mode (`modifier-picker.ts`, `.confirm`, when `initialSelections` is set) | SAVE | Edits a basket line's modifiers (`basket.ts` ~559–570) or a held/sent line's (`till-table-order-screen.ts` ~2388–2401, `change-line`); pre-filled from the line. |
-| Modifier picker, add mode | ACTION (unchanged look and behaviour) | Adding a dish is a pick; its defaults are valid to send. Pass `savableAtOpen: initialSelections === undefined`, so add mode stays `primary` and never returns early. |
+| Modifier picker, add mode | ACTION (unchanged look and behaviour) | Adding a dish is a pick with no earlier choice to compare with. Pass `savableAtOpen: initialSelections === undefined`, so add mode stays `primary` and never returns early. |
 | Station choice, Make at mode (`station-choice-dialog.ts`, `data-submit`, `!moving`) | SAVE | Edits an unsent basket line's station (`till-app.ts` ~5999–6008, `setLineMakeAt`); pre-filled with the line's `makeAt`. |
 | Station choice, Move mode | ACTION | Moves a sent ticket; its `?disabled` already refuses an unchanged choice (~201–205). Keep its look and behaviour. |
 | Seat a table (`seat-dialog.ts`) | ACTION | Creates a party; an empty guest count is a valid seat (`seat-dialog.test.ts` ~57–65), so gating would block seating. |
