@@ -394,6 +394,9 @@ async function readBasketOffers(
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 
+// Only server-planned quantity increases carry this marker; a JSON request cannot opt into it.
+const CURRENT_PERIOD_ONLY = Symbol("currentPeriodOnly");
+
 /**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
  * options alike, each at the VAT class the version froze — and classify each line's product as it
@@ -419,11 +422,13 @@ export async function priceOrderLines(
     frozenOptions?: OptionSnapshot[];
     frozenExtras?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
+    [CURRENT_PERIOD_ONLY]?: true;
   } & LineExtras)[],
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
   snapshot?: ZoneOffers,
   invalidMakeAt: "refuse" | "ignore" = "refuse",
+  periodCheck: "added" | "none" = "added",
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
@@ -456,6 +461,15 @@ export async function priceOrderLines(
       requestedLines,
       requestedLines.map((line) => line.menuItemId),
     ));
+  const service =
+    periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)
+      ? await VENUE_SERVICE.resolveDepartmentService(
+          tx,
+          cfg,
+          (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!)).departmentId,
+          new Date(),
+        )
+      : null;
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line) => {
@@ -468,6 +482,17 @@ export async function priceOrderLines(
       throw new AppError("service_zone.offer_not_allowed", {
         zoneId: zoneId!,
         menuItemId: line.menuItemId,
+      });
+    }
+    if (
+      service !== null &&
+      line[ADDED_EXTRAS_ONLY] !== true &&
+      !service.orderableMenuIds.includes(offer.menuId) &&
+      (line[CURRENT_PERIOD_ONLY] === true || !service.endedMenuIds.includes(offer.menuId))
+    ) {
+      throw new AppError("menu_period.not_running", {
+        departmentId: service.departmentId,
+        menuId: offer.menuId,
       });
     }
     // Every asserted version is live, so one naming another menu is not this line's.
@@ -4785,6 +4810,7 @@ async function applyLineEdits(
     if (action === "raise" || (action === "change" && rise > 0) || addedApart) {
       pricing.push({
         ...asOffered(subtractDecimal(requested, parent.quantity)),
+        [CURRENT_PERIOD_ONLY]: true,
         courseId: parent.courseId,
       });
       pricedAs.push(
@@ -4804,7 +4830,8 @@ async function applyLineEdits(
             },
       );
     }
-    if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
+    if (action === "free" && rise > 0 && !addedApart)
+      raised.push({ ...asOffered(requested), [CURRENT_PERIOD_ONLY]: true });
     if (action === "change") {
       // The changed line goes to the kitchen again, which a sold-out dish never does.
       resent.push(parent.productId!, ...extras.kept.map(({ child }) => child.productId!));

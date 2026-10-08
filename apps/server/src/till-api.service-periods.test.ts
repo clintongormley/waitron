@@ -6,6 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   locations,
+  parties,
   workingOrderLines,
   workingOrders,
   withTransaction,
@@ -17,6 +18,8 @@ import {
   addProductToMenu,
   createCatalogue,
   createProduct,
+  createExtraList,
+  writeProductModifiers,
   deactivateCatalogue,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -30,6 +33,7 @@ import {
 } from "@waitron/shared";
 import {
   createDepartment,
+  departments,
   createServiceZone,
   deleteMenuPeriod,
   menuPeriods,
@@ -42,6 +46,8 @@ import {
   type MenuSlot,
 } from "@waitron/venue-service";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { createTable } from "./tables.js";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
@@ -491,6 +497,562 @@ describe("ordering uses period membership while browsing follows the timetable",
       .from(workingOrders)
       .where(eq(workingOrders.id, held.id));
     expect(settled).toEqual({ status: "settled" });
+  });
+});
+
+async function mealVenue(): Promise<Venue> {
+  const v = await setupVenue({ timetable: true });
+  await withTransaction(suite.db, async (tx) => {
+    const periods = await tx
+      .select()
+      .from(menuPeriods)
+      .where(eq(menuPeriods.departmentId, v.restaurant));
+    const lunch = periods.find((period) => period.menuId === v.menus.Almuerzo)!;
+    const dinner = periods.find((period) => period.menuId === v.menus.Desayunos)!;
+    await updateMenuPeriod(tx, v.cfg, lunch.id, { name: "Lunch" });
+    await updateMenuPeriod(tx, v.cfg, dinner.id, { name: "Dinner" });
+    await replaceMenuWeek(
+      tx,
+      v.cfg,
+      v.restaurant,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots:
+          weekday === 1
+            ? [slot(lunch.id, "12:00", "14:00"), slot(dinner.id, "19:00", "23:00")]
+            : [],
+      })),
+      MONDAY_10_00,
+    );
+  });
+  return v;
+}
+
+const mondayAt = (time: string) => new Date(`2026-10-05T${time}:00+02:00`);
+
+async function editMealLine(v: Venue, id: string, patch: { quantity?: string; note?: string }) {
+  const read = await send(v, "GET", `/api/working-orders/${id}`);
+  expect(read.status).toBe(200);
+  const order = read.body as {
+    revision: number;
+    lines: {
+      workingOrderLineId: string;
+      menuItemId: string;
+      quantity: string;
+      note: string | null;
+    }[];
+  };
+  return send(v, "PUT", `/api/working-orders/${id}`, {
+    revision: order.revision,
+    lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity, note }) => ({
+      workingOrderLineId,
+      menuItemId,
+      quantity,
+      ...(note === null ? {} : { note }),
+      ...patch,
+    })),
+  });
+}
+
+describe("service periods gate only added dishes and added stored quantities", () => {
+  it.each(["13:50", "17:00"])(
+    "accepts a new Lunch line at %s at its published price",
+    async (time) => {
+      at(mondayAt(time));
+      const v = await mealVenue();
+      const held = await park(v, v.sala, v.tostada.almuerzo, v.versions.Almuerzo);
+      expect(held.status).toBe(200);
+      expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
+        { unitPriceGross: 400, menuName: "Almuerzo", menuVersionId: v.versions.Almuerzo },
+      ]);
+    },
+  );
+
+  it("refuses a Dinner line before Dinner starts and writes no order", async () => {
+    at(mondayAt("13:00"));
+    const v = await mealVenue();
+    const held = await park(v, v.sala, v.tostada.desayunos, v.versions.Desayunos);
+    expect(held).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "menu_period.not_running",
+          params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+        },
+      },
+    });
+    expect(
+      await suite.db
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, held.id)),
+    ).toEqual([]);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([]);
+  });
+
+  it("accepts a stored Lunch quantity increase while Lunch runs, keeping its id and price", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const held = await park(v, v.sala, v.tostada.almuerzo);
+    expect(held.status).toBe(200);
+    const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
+    at(mondayAt("13:55"));
+    expect((await editMealLine(v, held.id, { quantity: "2" })).status).toBe(200);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual(before);
+    const rows = await suite.db
+      .select({ quantity: workingOrderLines.quantity })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, held.id));
+    expect(rows).toEqual([{ quantity: 2000 }]);
+  });
+
+  it.each(["14:00", "14:05", "19:05"])(
+    "refuses a stored Lunch quantity increase at %s without changing the order",
+    async (time) => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      const held = await park(v, v.sala, v.tostada.almuerzo);
+      expect(held.status).toBe(200);
+      const before = await send(v, "GET", `/api/working-orders/${held.id}`);
+      at(mondayAt(time));
+      expect(await editMealLine(v, held.id, { quantity: "2" })).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: "menu_period.not_running",
+            params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+          },
+        },
+      });
+      expect(await send(v, "GET", `/api/working-orders/${held.id}`)).toEqual(before);
+    },
+  );
+
+  it("edits a stored Lunch note after Lunch ends, without repricing the dish", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const held = await park(v, v.sala, v.tostada.almuerzo);
+    expect(held.status).toBe(200);
+    const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
+    at(mondayAt("15:00"));
+    expect((await editMealLine(v, held.id, { note: "No salt" })).status).toBe(200);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual(before);
+    const rows = await suite.db
+      .select({ note: workingOrderLines.note })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, held.id));
+    expect(rows).toEqual([{ note: "No salt" }]);
+  });
+
+  it("refuses a new line on a business day when no period has run", async () => {
+    at(new Date("2026-10-04T13:00:00+02:00"));
+    const v = await mealVenue();
+    expect(await park(v, v.sala, v.tostada.almuerzo)).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "menu_period.not_running",
+          params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+        },
+      },
+    });
+  });
+
+  it("uses one service resolution for repeated new lines", async () => {
+    at(mondayAt("13:00"));
+    const v = await mealVenue();
+    const resolve = vi.spyOn(VENUE_SERVICE, "resolveDepartmentService");
+    try {
+      const id = randomUUID();
+      expect(
+        (
+          await send(v, "POST", "/api/working-orders", {
+            id,
+            zoneId: v.sala,
+            lines: [1, 2, 3].map(() => ({ menuItemId: v.tostada.almuerzo, quantity: "1" })),
+          })
+        ).status,
+      ).toBe(200);
+      expect(resolve).toHaveBeenCalledTimes(1);
+      expect(resolve.mock.calls[0]![2]).toBe(v.restaurant);
+      expect(
+        (await withTransaction(suite.db, (tx) => linesOf(tx, id))).map(
+          (line) => line.unitPriceGross,
+        ),
+      ).toEqual([400, 400, 400]);
+    } finally {
+      resolve.mockRestore();
+    }
+  });
+
+  it("refuses a future-period fresh line appended to a stored order without changing it", async () => {
+    at(mondayAt("13:00"));
+    const v = await mealVenue();
+    const held = await park(v, v.sala, v.tostada.almuerzo);
+    expect(held.status).toBe(200);
+    const before = await send(v, "GET", `/api/working-orders/${held.id}`);
+    const order = before.body as {
+      revision: number;
+      lines: { workingOrderLineId: string; menuItemId: string; quantity: string }[];
+    };
+    expect(
+      await send(v, "PUT", `/api/working-orders/${held.id}`, {
+        revision: order.revision,
+        lines: [
+          ...order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
+            workingOrderLineId,
+            menuItemId,
+            quantity,
+          })),
+          { menuItemId: v.tostada.desayunos, quantity: "1" },
+        ],
+      }),
+    ).toEqual({
+      status: 400,
+      body: {
+        error: {
+          code: "menu_period.not_running",
+          params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+        },
+      },
+    });
+    expect(await send(v, "GET", `/api/working-orders/${held.id}`)).toEqual(before);
+  });
+
+  it("refuses a future-period direct sale before storing an order", async () => {
+    at(mondayAt("13:00"));
+    const v = await mealVenue();
+    const id = randomUUID();
+    expect(
+      await send(v, "POST", "/api/sales", {
+        id,
+        zoneId: v.sala,
+        lines: [{ menuItemId: v.tostada.desayunos, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    ).toEqual({
+      status: 400,
+      body: {
+        error: {
+          code: "menu_period.not_running",
+          params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+        },
+      },
+    });
+    expect(
+      await suite.db
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id)),
+    ).toEqual([]);
+  });
+
+  it("keeps Lunch quantity decreases and notes editable when its timetable is cleared", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const held = await park(v, v.sala, v.tostada.almuerzo);
+    expect(held.status).toBe(200);
+    expect((await editMealLine(v, held.id, { quantity: "2" })).status).toBe(200);
+    const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
+    await withTransaction(suite.db, (tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+        MONDAY_10_00,
+      ),
+    );
+    at(mondayAt("15:00"));
+    expect((await editMealLine(v, held.id, { quantity: "1", note: "No salt" })).status).toBe(200);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual(before);
+    expect(
+      await suite.db
+        .select({ quantity: workingOrderLines.quantity, note: workingOrderLines.note })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, held.id)),
+    ).toEqual([{ quantity: 1000, note: "No salt" }]);
+  });
+
+  it.each(["13:00", "17:00"])("accepts a period's staff menu at %s", async (time) => {
+    at(mondayAt(time));
+    const v = await mealVenue();
+    const read = await send(v, "GET", `/api/service-zones/${v.sala}/offers`);
+    const offers = read.body.offers as { id: string; menuId: string }[];
+    const water = offers.find((offer) => offer.menuId === v.menus.Bebidas)!;
+    const held = await park(v, v.sala, water.id);
+    expect(held.status).toBe(200);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
+      { menuName: "Bebidas", unitPriceGross: 200 },
+    ]);
+  });
+
+  it("accepts all period menus when the location clock cannot be read", async () => {
+    at(mondayAt("13:00"));
+    const v = await mealVenue();
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Unreadable/Zone" })
+      .where(eq(locations.id, v.cfg.locationId));
+    const held = await park(v, v.sala, v.tostada.desayunos);
+    expect(held.status).toBe(200);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
+      { menuName: "Desayunos", unitPriceGross: 250 },
+    ]);
+  });
+
+  it.each(["fired", "adjusted"] as const)(
+    "refuses more of a %s Lunch line after Lunch ends",
+    async (kind) => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      let id: string;
+      let path: string;
+      if (kind === "fired") {
+        await suite.db
+          .update(departments)
+          .set({ defaultServiceMode: "table_tab" })
+          .where(eq(departments.id, v.restaurant));
+        const { id: tableId } = await withTransaction(suite.db, (tx) =>
+          createTable(tx, v.cfg, { label: "Fired meal table", zoneId: v.sala }),
+        );
+        const seated = await send(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
+        expect(seated.status).toBe(200);
+        const { partyId, tabId, revision } = seated.body as {
+          partyId: string;
+          tabId: string;
+          revision: number;
+        };
+        const saved = await send(v, "PUT", `/api/parties/${partyId}/drafts`, {
+          draftId: null,
+          revision: 0,
+          lines: [{ menuItemId: v.tostada.almuerzo, quantity: "1" }],
+        });
+        expect(saved.status).toBe(200);
+        const draft = saved.body as { id: string; revision: number; lines: { id: string }[] };
+        const sent = await send(v, "POST", `/api/parties/${partyId}/drafts/${draft.id}/submit`, {
+          submissionId: randomUUID(),
+          draftRevision: draft.revision,
+          expectedPartyRevision: revision,
+          groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+        });
+        expect(sent.status).toBe(200);
+        id = tabId;
+        path = `/api/working-orders/${id}/lines`;
+        expect(
+          await suite.db
+            .select({ sentAt: workingOrderLines.sentAt })
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, id)),
+        ).toEqual([{ sentAt: mondayAt("13:50").toISOString() }]);
+      } else {
+        const held = await park(v, v.sala, v.tostada.almuerzo);
+        expect(held.status).toBe(200);
+        id = held.id;
+        await suite.db
+          .update(workingOrderLines)
+          .set({ listUnitPriceGross: 400 })
+          .where(eq(workingOrderLines.workingOrderId, id));
+        path = `/api/working-orders/${id}`;
+      }
+      const before = await send(v, "GET", path);
+      expect(before.status).toBe(200);
+      at(mondayAt("14:05"));
+      expect(
+        await send(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+          revision: before.body.revision,
+          quantity: "2",
+        }),
+      ).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: "menu_period.not_running",
+            params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+          },
+        },
+      });
+      expect(await send(v, "GET", path)).toEqual(before);
+    },
+  );
+
+  it.each(["lunch", "dinner"] as const)(
+    "retains a %s draft after Lunch ends and gates its submission",
+    async (meal) => {
+      at(mondayAt("13:50"));
+      const v = await mealVenue();
+      await suite.db
+        .update(departments)
+        .set({ defaultServiceMode: "table_tab" })
+        .where(eq(departments.id, v.restaurant));
+      const { id: tableId } = await withTransaction(suite.db, (tx) =>
+        createTable(tx, v.cfg, { label: "Meal table", zoneId: v.sala }),
+      );
+      const seated = await send(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
+      expect(seated.status).toBe(200);
+      const { partyId, tabId } = seated.body as { partyId: string; tabId: string };
+      const menuItemId = meal === "lunch" ? v.tostada.almuerzo : v.tostada.desayunos;
+      const saved = await send(v, "PUT", `/api/parties/${partyId}/drafts`, {
+        draftId: null,
+        revision: 0,
+        lines: [{ menuItemId, quantity: "1" }],
+      });
+      expect(saved.status).toBe(200);
+      const draft = saved.body as { id: string; revision: number; lines: { id: string }[] };
+      at(mondayAt("17:00"));
+      const read = await send(v, "GET", `/api/parties/${partyId}/drafts`);
+      expect(read.status).toBe(200);
+      expect(read.body).toEqual({ drafts: [saved.body] });
+      expect(saved.body).toMatchObject({
+        lines: [{ menuItemId, quantity: "1.000", unavailable: false }],
+      });
+      const [party] = await suite.db
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, partyId));
+      const submitted = await send(v, "POST", `/api/parties/${partyId}/drafts/${draft.id}/submit`, {
+        submissionId: randomUUID(),
+        draftRevision: draft.revision,
+        expectedPartyRevision: party!.revision,
+        groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+      });
+      if (meal === "lunch") {
+        expect(submitted.status).toBe(200);
+        expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toMatchObject([
+          { menuName: "Almuerzo", unitPriceGross: 400 },
+        ]);
+      } else {
+        expect(submitted).toEqual({
+          status: 400,
+          body: {
+            error: {
+              code: "menu_period.not_running",
+              params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+            },
+          },
+        });
+        expect(await send(v, "GET", `/api/parties/${partyId}/drafts`)).toEqual(read);
+        expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toEqual([]);
+      }
+    },
+  );
+
+  it("adds an extra to a stored Lunch dish after all its periods are cleared", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const read = await send(v, "GET", `/api/service-zones/${v.sala}/offers`);
+    const dish = (read.body.offers as { id: string; productId: string }[]).find(
+      (offer) => offer.id === v.tostada.almuerzo,
+    )!;
+    const { extraId, listId } = await withTransaction(suite.db, async (tx) => {
+      const extra = await createProduct(tx, {
+        catalogueId: v.menus.Almuerzo,
+        categoryId: null,
+        name: "Butter",
+        pricingUnit: "each",
+        unitPrice: "0.50",
+        vatClass: "general",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Spreads",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 1,
+          active: true,
+          items: [{ productId: extra.id, maxQuantity: 1, preselected: false, price: "0.50" }],
+        },
+        LOCALE,
+      );
+      await writeProductModifiers(tx, dish.productId, [{ kind: "extras", id: list.id }]);
+      await publishWorkingMenu(tx, v.menus.Almuerzo);
+      return { extraId: extra.id, listId: list.id };
+    });
+    const held = await park(v, v.sala, v.tostada.almuerzo);
+    expect(held.status).toBe(200);
+    const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
+    await withTransaction(suite.db, (tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+        MONDAY_10_00,
+      ),
+    );
+    at(mondayAt("15:00"));
+    expect(
+      (
+        await send(v, "PUT", `/api/working-orders/${held.id}/lines/1`, {
+          revision: 0,
+          extras: [{ listId, picks: [{ productId: extraId, quantity: 1 }] }],
+        })
+      ).status,
+    ).toBe(200);
+    const after = await suite.db
+      .select({
+        id: workingOrderLines.id,
+        parentLineId: workingOrderLines.parentLineId,
+        productId: workingOrderLines.productId,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, held.id));
+    expect(after).toEqual(
+      expect.arrayContaining([
+        { id: before[0]!.id, parentLineId: null, productId: dish.productId, unitPriceGross: 400 },
+        {
+          id: expect.any(String),
+          parentLineId: before[0]!.id,
+          productId: extraId,
+          unitPriceGross: 50,
+        },
+      ]),
+    );
+    expect(after).toHaveLength(2);
+  });
+
+  it("previews routing of an unchanged stored line when its periods have been cleared", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const held = await park(v, v.sala, v.tostada.almuerzo);
+    expect(held.status).toBe(200);
+    const [line] = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
+    await withTransaction(suite.db, (tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+        MONDAY_10_00,
+      ),
+    );
+    at(mondayAt("15:00"));
+    const before = await send(v, "GET", `/api/working-orders/${held.id}`);
+    expect(
+      await send(v, "POST", "/api/dead-ends/sale", {
+        workingOrderId: held.id,
+        step: "edit",
+        lines: [{ workingOrderLineId: line!.id, menuItemId: v.tostada.almuerzo, quantity: "1" }],
+      }),
+    ).toMatchObject({ status: 200, body: { sends: true, deadEnds: [] } });
+    expect(await send(v, "GET", `/api/working-orders/${held.id}`)).toEqual(before);
+  });
+
+  it("keeps the zone refusal for an item on no period's menu", async () => {
+    at(mondayAt("13:00"));
+    const v = await mealVenue();
+    expect(await park(v, v.sala, v.bocadillo)).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "service_zone.offer_not_allowed",
+          params: { zoneId: v.sala, menuItemId: v.bocadillo },
+        },
+      },
+    });
   });
 });
 

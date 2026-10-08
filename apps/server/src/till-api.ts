@@ -1490,6 +1490,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 zoneId ?? undefined,
                 undefined,
                 "ignore",
+                "none",
               )
             : null;
         const parents = priced?.lineRows.filter((line) => line.parentLineId === null) ?? [];
@@ -2690,6 +2691,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           zoneId ?? undefined,
           undefined,
           "ignore",
+          "none",
         );
         const parents = priced.lineRows.filter((line) => line.parentLineId === null);
         return {

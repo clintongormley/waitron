@@ -432,6 +432,16 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
+  resolveDepartmentService(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    departmentId: string,
+    at: Date,
+  ): Promise<{
+    departmentId: string;
+    orderableMenuIds: readonly string[];
+    endedMenuIds: readonly string[];
+  }>;
   resolveSalePolicy(
     tx: Transaction,
     cfg: { locationId: LocationId },
