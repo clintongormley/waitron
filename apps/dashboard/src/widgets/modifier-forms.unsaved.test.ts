@@ -5,7 +5,12 @@ import { LeaveController, registerIcons } from "@waitron/ui";
 import type { ExtraList, OptionList, ExtraListInput, OptionListInput } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./extra-list-form.js";
 import "./option-list-form.js";
 registerIcons(DASHBOARD_ICONS);
@@ -387,4 +392,33 @@ it("extras keep positional rows distinct after a move and restore them on Discar
       row.getAttribute("data-item"),
     ),
   ).toEqual(["one", "two"]);
+});
+for (const kind of ["extras", "options"] as const) {
+  it(`${kind} put back after a detached update still asks before Cancel discards an edit`, async () => {
+    const { app, form } = await mount(kind);
+    await reattachAfterDetachedUpdate(form);
+    await edit(form, "name", "Draft list");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    cancel(form);
+    expect((await question(app)).open).toBe(true);
+    expect(app.cancelled).toBe(0);
+  });
+}
+it("an option label put back after a detached update still asks before Cancel discards an edit", async () => {
+  const { app, form } = await mount("options");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=open-label-0]")!.click();
+  await form.updateComplete;
+  const label = form.shadowRoot!.querySelector("dashboard-option-label-form")!;
+  await label.updateComplete;
+  await reattachAfterDetachedUpdate(label);
+  // Put back, the child's dialog is open but not modal and a typed edit fires no change event there,
+  // so the edit is sent as the field's own change event.
+  label
+    .shadowRoot!.querySelector('[name="label-name"]')!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Child draft" } }));
+  await label.updateComplete;
+  expect(app.leave.coordinator.isDirty([label])).toBe(true);
+  cancel(label);
+  expect((await question(app)).open).toBe(true);
+  expect(label.open).toBe(true);
 });

@@ -96,7 +96,7 @@ export class RecipeEditor extends LitElement {
         this.#scope?.commit(fetched);
       }
     }
-    if (this.product && !this.#scope) {
+    if (this.isConnected && this.product && !this.#scope) {
       const { coordinator, scope } = draftScopeFor<string[]>(this, {
         id: this,
         current: () => [...this.checked],

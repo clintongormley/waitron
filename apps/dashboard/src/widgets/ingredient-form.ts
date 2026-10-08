@@ -163,7 +163,7 @@ export class IngredientForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
       this.#baseline = undefined;
-    } else if (!this.#scope) {
+    } else if (this.isConnected && !this.#scope) {
       this.#baseline ??= structuredClone(this.#current());
       const { coordinator, scope } = draftScopeFor<IngredientPatch>(this, {
         id: this,

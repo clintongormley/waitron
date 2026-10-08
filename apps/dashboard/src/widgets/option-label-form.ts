@@ -95,6 +95,11 @@ export class OptionLabelForm extends LitElement {
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -107,7 +112,7 @@ export class OptionLabelForm extends LitElement {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
+    } else if (this.isConnected && !this.#scope) {
       const { coordinator, scope } = draftScopeFor<Omit<DraftLabel, "id">>(this, {
         id: this,
         parent: this.draftParent,

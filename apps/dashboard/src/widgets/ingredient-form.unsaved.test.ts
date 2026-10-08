@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, Ingredient, IngredientInput } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, reattachAfterDetachedUpdate } from "./test-helpers.js";
 import "./ingredient-form.js";
 import "../screens/recipe-screen.js";
 
@@ -384,4 +384,13 @@ it("a detached ingredient control cannot change the body submitted after reconne
   expect(sent).toEqual([
     { id: "salt", patch: { name: "Sea salt", active: true, allergens: null, dietaryOrigin: null } },
   ]);
+});
+it("an ingredient put back after a detached update still asks before Escape discards an edit", async () => {
+  const { app, form } = await fixture();
+  await reattachAfterDetachedUpdate(form);
+  await name(form, "Sea salt");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await escape(form);
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
 });

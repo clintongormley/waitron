@@ -136,6 +136,11 @@ export class SectionAddProducts extends LitElement {
   #within: ReadonlySet<string> | null = null;
   #scope?: DraftScope<string[]>;
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -147,7 +152,7 @@ export class SectionAddProducts extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
-    if (!this.#scope) {
+    if (this.isConnected && !this.#scope) {
       this.#scope = draftScopeFor<string[]>(this, {
         id: this,
         current: () => [...this.selected].sort(),

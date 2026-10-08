@@ -1545,11 +1545,13 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
   return a form taken out of the page takes a new scope while detached, and once put back it does
   not ask before discarding. The till's party name, invoice recipient, extras picker and station
-  dialogs and the venue-service watcher form do this, each also asking for an update when it is put
-  back (Lit runs none on reconnect); with the return deleted, a reconnect case in each one's `*.unsaved.test.ts`
-  fails. The dashboard forms that take their scope in `willUpdate` (person edit and new person,
-  product editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether
-  they show the fault is untested;
+  dialogs, the venue-service watcher form, and the dashboard's unit, ingredient, extras list, option
+  list and option label forms, recipe editor, Add to menus picker and a section's Add products
+  picker do this, each also asking for an update when it is put back (Lit runs none on reconnect);
+  with the return deleted, a reconnect case in the `*.unsaved.test.ts` that covers it fails. The
+  other dashboard forms that take their scope in `willUpdate` (person edit and new person, product
+  editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether they show
+  the fault is untested;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;
 - return early from the save handler while `saveActionState(scope).unchanged`. `disabled` stops a

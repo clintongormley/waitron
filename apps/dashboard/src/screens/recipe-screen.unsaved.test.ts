@@ -9,7 +9,11 @@ import type {
   Product,
   RecipeLine,
 } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "../widgets/test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -389,6 +393,17 @@ it("disconnect releases recipe protection and reconnect starts with no selected 
   expect(editor(screen).product).toBeNull();
   expect(box(screen, "catalogueId").value).toBe("");
   expect(unload()).toBe(false);
+});
+it("a recipe editor put back after a detached update still asks before Cancel discards a change", async () => {
+  const { app, screen } = await mount();
+  await reattachAfterDetachedUpdate(editor(screen));
+  await toggle(screen, "i2", true);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  let closed = 0;
+  editor(screen).addEventListener("wt-close", () => closed++);
+  click(screen, "cancel");
+  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
+  expect(closed).toBe(0);
 });
 for (const result of ["success", "refusal"] as const) {
   it(`a departed recipe save's ${result} cannot read or alter a reconnected editor`, async () => {
