@@ -3809,8 +3809,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      (A405), and changes there too.
 
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority, campaign
-  lane B after A404).** A modal means the printer page is no longer a sub-page, which overlaps
-  lane B's A398 (the printer page takes the sub-page heading pattern).
+  lane B after A404).** A modal means the printer page is no longer a sub-page, so the owner
+  dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
   1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
      Edit opens the name field off to the right, away from the title it changes; whether the
      printer is active shows three times (a "Status" heading, "Status: Active" and an Active
