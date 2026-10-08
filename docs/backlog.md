@@ -1558,7 +1558,7 @@ receipt was recorded; do not treat its complete main run as green.
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
 venue-service forms and the till's profile dialog) in #1418; batch 5 (the till) in #1414; batch 6 audited with no
-stored-setting editors; batch 7 unreserved forms audited; batch 2a built, pull request pending; batches 2b and 4b OPEN.** The owner:
+stored-setting editors; batch 7 unreserved forms audited; batch 2a landed as #1422; batches 2b and 4b OPEN.** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
@@ -1577,7 +1577,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   no defect found. In the same mount, the first screen frame after `closeSaved` (what the
   Products screen calls once a save succeeds) already has the product editor closed, so its Save
   is not seen turning quiet as the dialog goes.
-- **Batch 2a — BUILT, pull request pending (A331-2a, 2026-10-08).** The catalogue and menus forms
+- **Batch 2a — LANDED as #1422 (A331-2a, 2026-10-08).** The catalogue and menus forms
   that lane D's menus Preview work does not touch: the "VAT class for new products" default on
   Venue settings, the recipe editor and the ingredient form, the unit form (new and existing), the
   options list and its option window, the extras list, Add to menus after a product is created, a
