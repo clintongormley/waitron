@@ -643,7 +643,6 @@ export class PrintersScreen extends LitElement {
   #calibrationScope?: DraftScope<CalibrationSettings>;
   #calibrationLeave?: LeaveCoordinator;
   #calibrationOpening = 0;
-  /** An add opened the wizard to confirm the settings it filled in, so its Save is ready untouched. */
   #calibrationOpenedByAdd = false;
   readonly #beforeCalibrationClose = async (reason: LeaveReason): Promise<boolean> =>
     this.submitting ||

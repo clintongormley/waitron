@@ -1632,8 +1632,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   saved address. Existing behavior remains unchanged. The
   [audit and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
   list each classification. **Reserved forms still need their owning batch and a follow-up audit:**
-  printer/agent/calibration, device/profile, reader and canvas forms left for after
-  `feat/save-follows-changes-hardware` lands; till dialogs left for after
+  printer/agent/calibration, device/profile, reader and canvas forms (gated by batch 3b) still await
+  a rerun of Batch 7's two inventories; till dialogs left for after
   `feat/save-follows-changes-till` lands; device-home, menus and Preview widgets left for after
   `fix/home-column-ranges` and its following Preview work land; hours/date/holiday/slot, watcher,
   service settings, operations, timetable and preparation-station forms left for after

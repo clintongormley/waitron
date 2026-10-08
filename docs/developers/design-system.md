@@ -1586,8 +1586,9 @@ These open already savable:
   stored: the form cannot show what is running, so it opens with its own defaults and Save ready
   (`#policyReplaced` in `apps/dashboard/src/screens/backup-screen.ts`);
 - the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
-- the calibration wizard when an add opened it, a fresh add or a re-add, because it confirms the
-  settings the server filled in (`#calibrationOpenedByAdd` in
+- the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
+  default settings, and after a re-add pressing Save is what keeps the printer on, because closing
+  the wizard switches it off again (`#calibrationOpenedByAdd` in
   `apps/dashboard/src/screens/printers-screen.ts`). This is the campaign runner's ruling of
   2026-10-08, still awaiting the owner's word. Opened from a printer's page, it opens quiet;
 - the device pairing dialog's Pair: its settings step opens holding the name the device asked

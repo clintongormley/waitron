@@ -825,14 +825,14 @@ an add opened it: 3b.1b converts its registration, and its early return reads th
   `#readdingId` live in the render: set a flag of the wizard's own beside `#readdingId = disabled.id`
   (~1399) and clear it in `#disposeCalibrationDraft` (~661), or Save turns quiet while its
   request is in flight. **Ruling (runner, 2026-10-08, after the plan review): after a FRESH add the
-  wizard is savable at open too.** The wizard exists to confirm the defaults the server filled in
+  wizard is savable at open too.** The wizard exists to confirm a new printer's default settings
   (80mm, 180dpi, no drawer, not portable, ~1376–1398) — a pre-filled value the operator must
   confirm. Today an untouched Save there closes the wizard with no request (`#savePrinter` builds
   an empty patch, ~1700–1711); gating it would leave Cancel as the only way to finish, while Cancel
   after a re-add means "switch it off again". So set ONE "opened by an add" flag in both branches
   of `#registerDiscovered` (fresh and re-add), beside `#openPrinter`, and read it for
   `savableAtOpen`. This changes no current behaviour. Editing an existing printer's calibration
-  (`edit-printer-*`) opens quiet. The PR names this ruling for the owner.
+  (`calibrate-printer-details`) opens quiet. The PR names this ruling for the owner.
 - **Devices, the pairing dialog's settings step** (`pair-submit`, ~1890–1897). `#toSettings`
   (~798–817) fills the name with the device's own asked-for name (`waitingName(request)`) and, for a
   returning device, its old profile and station; pressing Pair approves the device as it asked. The
@@ -849,7 +849,7 @@ an add opened it: 3b.1b converts its registration, and its early return reads th
 with the edit scope and the reader scope — true (~510–511; the save handler already reads both,
 ~1413). Device profiles' Save backs the draft scope and the reader scope — true (~501–504, ~1352).
 "Printers' calibration wizard and name-printer modal open savable after an add" — half true: the
-name dialog always opens savable; the wizard does only after a RE-add (above). "Canvas
+name dialog always opens savable; the wizard does after any add (above, ruling). "Canvas
 create/duplicate savable at open" — duplicate is; the create dialog is not a save at all
 (`#confirmCreate`, ~496–511, sends no request: it opens the editor on a default canvas), and the
 editor it opens already reports a change, because its scope's baseline is `null` (~502, ~312)
@@ -904,10 +904,10 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
 - `save-printer-${id}` (~3440–3446, fixed `variant="primary"`, no `?disabled` today, shown on step
   3 only) on `#calibrationScope` (`?.register`, ~2251–2264): make it `draftScopeFor`; bind
   `variant` and `?disabled=${s.unchanged}` (keep `?loading`) with
-  `saveActionState(this.#calibrationScope, { savableAtOpen: <the re-add flag> })` (see "Forms that
+  `saveActionState(this.#calibrationScope, { savableAtOpen: <the opened-by-an-add flag> })` (see "Forms that
   open already savable"). Early return in `#savePrinter` (~1691) after its `submitting` check,
-  on `saveActionState(…)` with the SAME `savableAtOpen` flag as the render, so a re-added
-  printer's untouched Save still sends. Clear that flag where a save succeeds (beside
+  on `saveActionState(…)` with the SAME `savableAtOpen` flag as the render, so an added or re-added
+  printer's untouched Save still works. Clear that flag where a save succeeds (beside
   `scope?.commit(submitted)`, ~1720): a wizard a newer edit keeps open (`scope.isDirty()`) must
   turn quiet again when that edit is undone, as any form left open after a save does.
   `submitOnEnter` on the wizard (~3248) already skips a disabled button
@@ -919,7 +919,7 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
 - Not gated: `calibration-next` and `calibration-back` (step navigation), `print-ruler-*`,
   `print-sample-receipt-*`, `test-printer-drawer`, `cancel-edit-printer`, and on the printer rows
   `print-test-page-*`, `deactivate-printer-*`, `forget-pairing-*`, `edit-printer-*` (opens the
-  wizard), `calibrate-printer-details`.
+  name editor), `calibrate-printer-details`.
 - Save-state cases: an existing printer's wizard reaches step 3 with Save quiet and disabled;
   changing paper width on step 1 makes it primary on step 3; changing it back makes it quiet; a re-added printer's wizard opens with Save enabled and primary, and pressing it untouched keeps
   the printer on (no `deactivatePrinter`) and stays primary while the request is in flight; a
@@ -1041,7 +1041,7 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   `!this.#readerLeave ||`.
 - **Bill attestation** (`confirm-bill-attest`, ~1250–1256, no `variant` today, `?disabled=${invalid}`)
   on `#billScope` (`this.#billLeave?.register`, ~847–855): make it `draftScopeFor`, gate it (see
-  "Two calls flagged"). Early return in `#attestBill` (~903) BEFORE `billAttempted = true`. Leave
+  "Two calls the plan reviewer agreed with"). Early return in `#attestBill` (~903) BEFORE `billAttempted = true`. Leave
   path: `.beforeClose=${this.#billScope ? …}` (~1166) — gate on `#billLeave`; `#beforeBillClose`
   (~401–405) already starts with `!this.#billLeave ||`.
 - **Add a reader** rows (`adopt-*`) open savable — see above; their per-row scopes (~638–645) stay.
@@ -1111,8 +1111,8 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   follow the rule, and name the 3b forms that open already savable beside the backup paragraph
   (the name-a-printer dialog, the calibration wizard when an add opened it, device pairing, Add a reader,
   duplicate a canvas).
-- Root `CLAUDE.md` §3: the clause becomes "batches 1, 3a and 3b follow it (list:
-  design-system.md)". It is format-checked: run `pnpm format:check`.
-- `docs/backlog.md` A331: batches 1, 3a and 3b landed (with their pull requests); 2 and 4–7 open;
+- Root `CLAUDE.md` §3: the clause becomes "the forms that follow it are listed in
+  design-system.md", naming no batches. It is format-checked: run `pnpm format:check`.
+- `docs/backlog.md` A331: batch 3b's status in the headline, and
   a 3b bullet listing the forms, the ones that open savable, and what the look found.
 - Light review path (no risk trigger).
