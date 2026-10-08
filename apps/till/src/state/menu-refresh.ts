@@ -12,6 +12,7 @@ import type { OrderLine } from "./working-order.js";
 
 /** Why a basket line cannot be paid as it stands (D9). */
 export type BlockReason =
+  | "period_ended"
   | "removed"
   | "not_sold_separately"
   | "unavailable"

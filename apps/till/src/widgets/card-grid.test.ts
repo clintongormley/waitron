@@ -152,7 +152,11 @@ const gatedBigCard: TabDef = {
 describe("till-card-grid", () => {
   it("renders each card element in a spanning cell on a fluid grid", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: counterTab, store });
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: counterTab,
+      store,
+      menus: servedMenus([{ id: "lunch", name: "Lunch", versionId: "v1", isDefault: true }], []),
+    });
     const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
     expect(grid.style.gridTemplateColumns).toBe("repeat(12, 1fr)");
     expect(el.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
@@ -164,7 +168,11 @@ describe("till-card-grid", () => {
 
   it("threads the SAME store into every store-backed card", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: counterTab, store });
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: counterTab,
+      store,
+      menus: servedMenus([{ id: "lunch", name: "Lunch", versionId: "v1", isDefault: true }], []),
+    });
     const grid = el.shadowRoot!.querySelector<HTMLElement & { store: unknown }>(
       "till-menu-browser",
     )!;
@@ -177,7 +185,11 @@ describe("till-card-grid", () => {
 
   it("threads the product-grid columns config", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: counterTab, store });
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: counterTab,
+      store,
+      menus: servedMenus([{ id: "lunch", name: "Lunch", versionId: "v1", isDefault: true }], []),
+    });
     const grid = el.shadowRoot!.querySelector<HTMLElement & { columns?: number }>(
       "till-menu-browser",
     )!;

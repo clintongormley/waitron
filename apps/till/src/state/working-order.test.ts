@@ -32,6 +32,39 @@ const jamon: TillProduct = {
 };
 
 describe("WorkingOrderStore", () => {
+  it.each(["addProduct", "addMerging"] as const)(
+    "period selection refuses %s after the picker opened",
+    (method) => {
+      const store = new WorkingOrderStore();
+      let selectable = true;
+      store.canSelectProduct = () => selectable;
+      store[method](cafe, "1");
+      selectable = false;
+      const refusals: unknown[] = [];
+      store.on("refused", (value) => refusals.push(value));
+      store[method](cafe, "1");
+      expect(store.lines).toEqual([{ product: cafe, quantity: "1" }]);
+      expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
+    },
+  );
+
+  it("period selection refuses increases but keeps decreases, unchanged quantity and removal", () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    store.canSelectProduct = () => false;
+    const refusals: unknown[] = [];
+    store.on("refused", (value) => refusals.push(value));
+    store.setLineQuantity(0, "3");
+    expect(store.lines[0]?.quantity).toBe("2");
+    expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
+    store.setLineQuantity(0, "2");
+    store.setLineQuantity(0, "1");
+    expect(store.lines[0]?.quantity).toBe("1");
+    expect(refusals).toHaveLength(1);
+    store.removeLine(0);
+    expect(store.lines).toEqual([]);
+  });
+
   it("adds an each line and previews the total via priceBasket", () => {
     const s = new WorkingOrderStore();
     s.addProduct(cafe, "2");

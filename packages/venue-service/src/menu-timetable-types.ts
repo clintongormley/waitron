@@ -32,6 +32,7 @@ export interface DepartmentService {
   periodName: string | null;
   customerMenuId: string | null;
   orderableMenuIds: readonly string[];
+  sendableMenuIds: readonly string[];
   endedMenuIds: readonly string[];
 }
 

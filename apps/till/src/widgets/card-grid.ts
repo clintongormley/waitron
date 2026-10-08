@@ -327,12 +327,19 @@ export class TillCardGrid extends LitElement {
         if (this.service?.open !== true) return nothing;
         const configured = card.config.columns;
         const menu = shownMenu(this.menus, this.selectedMenuId);
+        if (menu === undefined) return nothing;
         return html`<till-menu-browser
           .menu=${menu}
           .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
           .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}
           .menus=${this.menus}
-          .servedProducts=${this.#searchProducts(this.products, "", this.selectedDiet)}
+          .servedProducts=${this.#searchProducts(
+            this.products.filter((product) =>
+              this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
+            ),
+            "",
+            this.selectedDiet,
+          )}
           .store=${this.store}
           .columns=${typeof configured === "number" ? configured : undefined}
           .handheld=${this.handheld}

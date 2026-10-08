@@ -814,6 +814,7 @@ export interface ServiceZoneOffers extends ZoneOffers {
   readonly menus: readonly (ServedMenu & {
     readonly audience: "customer" | "staff";
     readonly orderable: boolean;
+    readonly sendable: boolean;
   })[];
 }
 
@@ -858,6 +859,7 @@ export async function listZoneOffers(
       (row) => row.menuId === menuId && row.periodId === service?.periodId,
     ) ?? membership.find((row) => row.menuId === menuId))!.audience,
     orderable: service === null || service.orderableMenuIds.includes(menuId),
+    sendable: service === null || service.sendableMenuIds.includes(menuId),
     versionId,
     structure: document.root,
     home: document.home,
@@ -895,7 +897,12 @@ export async function menuState(
   const published = await zoneLiveDocuments(tx, zoneId);
   return {
     service: { open: service.open, periodName: service.periodName },
-    menus: published.map(({ menuId, versionId }) => ({ menuId, versionId })),
+    menus: published.map(({ menuId, versionId }) => ({
+      menuId,
+      versionId,
+      orderable: service.orderableMenuIds.includes(menuId),
+      sendable: service.sendableMenuIds.includes(menuId),
+    })),
     unavailable: await readUnavailable(
       tx,
       published.map((menu) => menu.document),

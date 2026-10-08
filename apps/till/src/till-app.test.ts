@@ -5565,6 +5565,7 @@ describe("till-app", () => {
   it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
     const homeFields = {
       orderable: true,
+      sendable: true,
       audience: "customer" as const,
       structure: { members: [] },
       home: {

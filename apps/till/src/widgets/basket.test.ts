@@ -221,6 +221,22 @@ describe("till-basket", () => {
     expect(store.lines[0]!.product).toBe(jamon);
   });
 
+  it("period selection disables plus while keeping decrease and remove usable", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    store.canSelectProduct = () => false;
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const plus = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".step-inc")!;
+    expect(plus.disabled).toBe(true);
+    const minus = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".step-dec")!;
+    expect(minus.disabled).toBe(false);
+    minus.click();
+    await el.updateComplete;
+    expect(store.lines[0]?.quantity).toBe("1");
+    el.shadowRoot!.querySelector<HTMLElement>(".remove")!.click();
+    expect(store.lines).toEqual([]);
+  });
+
   it("an each line renders a −/count/+ stepper and + increments the line quantity via the store", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");

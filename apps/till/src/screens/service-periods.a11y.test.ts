@@ -14,6 +14,9 @@ import type { TillProduct } from "../api/client.js";
 
 const coffee: TillProduct = {
   id: "coffee",
+  catalogueId: "breakfast",
+  menuItemId: "coffee-offer",
+  menuVersionId: "v1",
   productId: "coffee",
   name: "Staff coffee",
   customerName: { en: "Customer coffee", es: "Café para el cliente" },
@@ -95,6 +98,72 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               await page.viewport(1280, 768);
             }
           });
+          for (const state of ["last-orders", "grace", "expired"] as const) {
+            it(`${kind} ${state} keeps period eligibility and its basket readable`, async () => {
+              const previousLocale = currentLocale();
+              try {
+                setLocale(locale);
+                await page.viewport(width, 900);
+                const store = new WorkingOrderStore();
+                store.addProduct(coffee, "2");
+                store.canSelectProduct = () => false;
+                if (state === "expired") store.setBlocked(["period_ended"]);
+                const shared = {
+                  service: {
+                    open: state === "last-orders",
+                    periodName: state === "last-orders" ? "Breakfast" : null,
+                  },
+                  departmentName: "Restaurant",
+                  products: [coffee],
+                  menus: menus.map((menu) => ({
+                    ...menu,
+                    orderable: false,
+                    sendable: state === "grace",
+                  })),
+                };
+                const { el, host } =
+                  kind === "counter"
+                    ? await mountWidget<TillCounterScreen>(
+                        "till-counter-screen",
+                        {
+                          ...shared,
+                          embedded: true,
+                          store,
+                          counterTab: {
+                            key: "counter",
+                            title: "Counter",
+                            columns: 4,
+                            cards: [
+                              { type: "product-grid", colSpan: 2, rowSpan: 2, config: {} },
+                              { type: "basket", colSpan: 2, rowSpan: 2, config: {} },
+                            ],
+                          },
+                        },
+                        theme,
+                      )
+                    : await mountWidget<TillTableOrderScreen>(
+                        "till-table-order-screen",
+                        { ...shared, draftStore: store },
+                        theme,
+                      );
+                expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+                if (state === "last-orders")
+                  expect(
+                    el.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim(),
+                  ).toBe(
+                    locale === "en-GB" ? "Last orders have ended" : "Ya no se admiten pedidos",
+                  );
+                expect(store.lines.map((line) => line.quantity)).toEqual(["2"]);
+                await expectNoA11yViolations(host);
+                await page.screenshot({
+                  path: `../__screenshots__/a432-service/${kind}-${state}-${locale}-${theme}-${width}.png`,
+                });
+              } finally {
+                setLocale(previousLocale);
+                await page.viewport(1280, 768);
+              }
+            });
+          }
         }
       });
     }

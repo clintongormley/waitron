@@ -1056,6 +1056,9 @@ export const en = {
   "boot.error": "Could not load the till, reload to try again",
   // Menu and service-zone names are server data, not keys here.
   "menu.period_not_running": "{menu} is not available in the current period.",
+  "menu.last_orders_ended": "Last orders have ended",
+  "basket.blocked.period_ended": "Last orders have ended",
+  "basket_refresh.period_ended": "{name}: last orders have ended",
   "menu.department_closed": "{department} is closed: no period is running",
   "menu.switcher": "Menu",
   // The menu browser: search, the Device Home Page's shortcuts and the menu's sections.
@@ -2120,6 +2123,9 @@ export const es: Record<StringKey, string> = {
   "party.try_again": "Revísala e inténtalo de nuevo.",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
   "menu.period_not_running": "{menu} no está disponible en el periodo actual.",
+  "menu.last_orders_ended": "Ya no se admiten pedidos",
+  "basket.blocked.period_ended": "Ya no se admiten pedidos",
+  "basket_refresh.period_ended": "{name}: ya no se admiten pedidos",
   "menu.department_closed": "{department} está cerrado: no hay ningún periodo en curso",
   "menu.switcher": "Carta",
   "menu.search": "Buscar",

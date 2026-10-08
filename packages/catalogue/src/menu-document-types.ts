@@ -368,6 +368,7 @@ export interface ServedMenu {
   /** Whether this is the zone's default menu, which the till selects first. */
   isDefault: boolean;
   readonly orderable: boolean;
+  readonly sendable: boolean;
   readonly audience: "customer" | "staff";
   versionId: string;
   /** The live document's `root`. */
@@ -380,6 +381,6 @@ export interface ServedMenu {
  * now. */
 export interface MenuState {
   service: { open: boolean; periodName: string | null };
-  menus: { menuId: string; versionId: string }[];
+  menus: { menuId: string; versionId: string; orderable: boolean; sendable: boolean }[];
   unavailable: MenuUnavailable;
 }
