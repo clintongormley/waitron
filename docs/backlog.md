@@ -5170,18 +5170,20 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   is unverified. Unassigned Profile cells stay blank; the None profile filter selects them. No
   cell-wording change was queued.
 
-- **A429 — floor plans: a saved plan per zone, today's plan on the till (owner, 2026-10-08; spec
-  approved; plan written, awaiting the owner's review; not queued).** A Square-style editor on the
-  dashboard (one saved plan per zone, tables created in bulk, saved joins, Undo/Redo), and a till
-  map whose job is status and rearranging: today's plan is the saved plan plus today's moves,
-  joins, spares and seat changes, reset at the day cutover and on a button, with occupied tables
-  waiting for their tab to close. Table names are copied as text when a party closes, and onto
-  past orders and bookings when their table is deleted, so a table can really be deleted. Five slices, each its own pull request; only slice 5
-  (removing the old floor screen tabs, placement routes and columns) needs a venue reset.
-  [Spec](superpowers/specs/2026-10-08-floor-plan-design.md),
-  [plan](superpowers/plans/2026-10-08-floor-plan.md) — its "Decisions this plan makes" list is
-  what the owner confirms. Overlaps: A366-6 rebuilds the Departments and zones screen the editor
-  opens from; A182 (canvases retired) and A414 touch the till's floor screen that slice 3 replaces.
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; spec
+  approved; plan written; being queued).** A Square-style editor on the dashboard for each zone's
+  master plan (tables created in bulk, saved joins, Undo/Redo), and a till map whose job is status
+  and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
+  is edited freely and is copied into today's plan at the day's reset or on a button; everything
+  live points at today's plan; staff move, join, split and take off tables on today's plan but
+  never add or rename one (they keep spares in reserve); a table a party sits at waits and catches
+  up when its tab closes. Table names are copied as text when a party closes, and onto past orders
+  and bookings when a table is removed, so a table the master no longer has can really go. Five
+  slices, each its own pull request; only slice 5 (removing the old floor screen tabs, placement
+  routes and columns) needs a venue reset. [Spec](superpowers/specs/2026-10-08-floor-plan-design.md),
+  [plan](superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A366-6 rebuilds the Departments
+  and zones screen the editor opens from; A182 (canvases retired) and A414 touch the till's floor
+  screen that slice 3 replaces.
 
 - **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1 lands).**
   1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,

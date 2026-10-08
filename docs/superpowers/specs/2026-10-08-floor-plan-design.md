@@ -1,7 +1,9 @@
 # Floor plans: the saved plan, today's plan and the till's map
 
 **Status:** owner decisions of 2026-10-08, from one brainstorm that used Square for Restaurants'
-floor plan editor as the reference. The owner approved this written spec on 2026-10-08. Not built. Behaviour below is the target design, not a claim
+floor plan editor as the reference. The owner approved this written spec on 2026-10-08, and changed it the same day while
+reviewing the implementation plan: the master plan and today's plan are separate plans (§3, §6.3,
+§8, §9, §15 items 12–14). Not built. Behaviour below is the target design, not a claim
 about what runs today; section 2 is the only part that describes today's code, and it cites where.
 
 **What this replaces.** Where this document disagrees with an earlier one, this one wins:
@@ -58,9 +60,11 @@ the details one tap away.
 
 - **Zone**: what Square calls a section. Zones are still created on Departments (A366 §9.1). A zone
   has at most one floor plan; a counter-only zone has none.
-- **Saved plan**: the zone's plan as the owner laid it out in the editor.
-- **Today's plan**: what the till shows: the saved plan plus today's changes made on the till.
-  Nobody sees "changes"; staff see one map.
+- **Saved plan** (the master plan): the zone's plan as the owner laid it out in the editor. It is
+  edited freely and nothing live reads it.
+- **Today's plan**: what the till shows and everything live points at: a copy of the saved plan
+  made at the last reset, as staff have changed it since. (Owner, 2026-10-08: the two are separate
+  plans; this replaces "the saved plan plus today's changes".)
 - **Spare table**: a table of the zone that the saved plan does not place.
 - **Fixed table**: a table marked "Fixed in place", such as a bar stool or a seat at a communal
   table. It never moves on today's plan.
@@ -92,9 +96,9 @@ the details one tap away.
   place, and:
   - **Joins:** the saved joins this table is part of ("with 5 · seats 6"), with Add (which tables,
     how many seats) and Remove. A saved join's tables are all in this zone.
-  - **Remove from plan:** the table becomes a spare. A table a party sits at keeps its place on
-    today's plan until the party leaves (owner, 2026-10-08).
-  - **Delete:** section 8.
+  - **Remove from plan:** the table becomes a spare in the saved plan; today's plan changes at its
+    next reset.
+  - **Delete:** section 8. It is part of the draft, so Undo brings it back until Save.
 - **New table defaults:** a square of 8 × 8 grid squares, not rotated, movable.
 - **Saving** writes the whole plan, its tables, their positions and its saved joins in one
   transaction. A save made from a copy older than the plan's last save is refused
@@ -176,9 +180,12 @@ undone at the next reset anyway.
 - **Occupied tables wait.** A table with an open tab, a merge included, keeps today's position
   until its tab closes, then returns to the saved plan. A placed spare goes back to being unplaced
   the same way.
-- Nothing runs at the cutover: section 9's "today" rule makes it so.
-- **The owner's edits show through.** Saving the saved plan mid-service changes at once every table
-  nobody has changed today.
+- Nothing runs at the cutover itself: the first read or change of the floor in a new business day
+  makes the copy.
+- **The saved plan reaches the till only at a reset** (owner, 2026-10-08, replacing "the owner's
+  edits show through": saving mid-service changes nothing on the till). A table added, moved,
+  renamed or deleted in the saved plan changes on the till at the next reset — at once with Reset
+  to saved plan, and for an occupied table when its tab closes after that.
 
 ## 7. Seats
 
@@ -199,14 +206,14 @@ undone at the next reset anyway.
   as text.
 - **Everything about the past reads the copied text**, so a later rename never changes history,
   including a future report by table, and nothing in the past needs the table's row.
-- **Delete** removes the table, its saved positions, its saved joins and its rows in today's plan.
-  It is refused only while an upcoming booking is assigned to the table. **Changed by the owner,
+- **Delete** removes the table from the saved plan, with its saved joins. **Changed by the owner,
   2026-10-08** (this replaces "allowed only on a free table" and "its name can be used again at
-  once"): an open party is tied to the table on today's plan, not on the saved plan, so Delete
-  always takes the table off the saved plan at once; a table a party sits at stays where it stood
-  on today's plan until the party leaves, and takes no new party. The table is gone for good, and
-  its name free again, once no open party holds it or used it earlier in its meal and no order to
-  it is unpaid or on its way. The plan, decision 5, has the detail. Because nothing in the past points at a table, Disable and Enable go away: a table
+  once"): everything live points at today's plan, so Delete in the saved plan is never refused
+  because of a party. The table stays on today's plan until the next reset, or, if a party sits
+  there then, until the party leaves; it is gone for good once no open party holds it or used it
+  earlier in its meal and no order to it is unpaid or on its way, and its name is free on today's
+  plan from then. Delete is refused while an upcoming booking is assigned to the table: the
+  booking is moved first (owner, 2026-10-08); bookings are otherwise later work. Because nothing in the past points at a table, Disable and Enable go away: a table
   is placed, a spare, or deleted.
 - **Before building**, every reader of a closed party's tables and of `orders.delivery_table_id` is
   listed. Each one either moves to the copied text or is shown to read only open parties. If any of
@@ -218,22 +225,24 @@ All new tables are venue-wide and classified `state`. They live in the core besi
 and `floor_zones`, not in a module: tables and zones are core, and the till's live floor reads them
 on every screen. The commit adding them states this reason.
 
-- **`dining_tables`:** `zone_id` becomes required; `capacity` becomes `seats`; a `fixed` flag is
-  added; `pos_x`, `pos_y`, `shape`, `rotation` and `active` go. `status_id` and
-  `needs_clearing_since` stay.
+- **`dining_tables`** are today's plan's tables, which parties, orders and bookings already point
+  at. Each names the saved-plan table it follows. `zone_id` becomes required; `capacity`, `pos_x`,
+  `pos_y`, `shape`, `rotation` and `active` go. `status_id` and `needs_clearing_since` stay.
 - **Floor plan:** one per zone for now, with the time of its last save, which the save check
   compares. The later department-level named plans add a column here and today's plans become their
   defaults.
-- **Saved positions:** plan, table, x, y, width, height (whole grid squares), shape, rotation
-  (0–345, a multiple of 15). One row per table on a plan; a spare has none.
+- **Saved-plan tables:** plan, name, seats, fixed, and x, y, width, height (whole grid squares),
+  shape, rotation (0–345, a multiple of 15); a spare has no position.
 - **Saved joins:** a join of a plan, with its seats, and its member tables.
-- **Today's changes:** a table, a business day, and only what changed: position, rotation, taken
-  off, placed as a spare, seats for today.
-- **Today's joins:** a business day, its seats, and its member tables, each with where it stood
-  before the join.
-- **The "today" rule:** a row applies on its own business day, and on a later day only while its
-  table has an open tab. Stale rows are ignored on read and deleted by the next write to that
-  zone's today's plan.
+- **Today's tables:** one row per live table: seats, fixed, position, size, shape, rotation, taken
+  off, and which reset it last caught up with. Each zone records the business day of its today's
+  plan and a count of its resets.
+- **Today's joins:** a zone, its seats, and its member tables, each with where it stood before the
+  join.
+- **The reset** copies the saved plan onto every table nobody sits at, adds the tables the saved
+  plan gained, and removes those it lost; a table a party sits at catches up when its tab closes.
+  (Owner, 2026-10-08: this replaces "today's changes stamped with the business day" and the
+  "today" rule.)
 - **The migration** drops columns from `dining_tables`, which drizzle may do by rebuilding the
   table. Before shipping, every foreign key pointing at `dining_tables` is listed and the generated
   SQL is read (CLAUDE.md's rebuild rule). Pre-live, nothing is carried forward: the seeds are
@@ -278,9 +287,10 @@ Each claim is checked by running something, not by reading.
 
 - **Every new till route** is tried without `take-orders`, without the ordering permission and
   outside the profile's zones, and is refused each time.
-- **The "today" rule**, on a venue whose cutover is not midnight: yesterday's change on a free table
-  is ignored; on a table with an open tab it still applies; once the tab closes the table returns
-  to the saved plan.
+- **The reset**, on a venue whose cutover is not midnight: the first read of a new business day
+  copies the saved plan onto every free table; a table with an open tab keeps today's place; once
+  the tab closes it catches up with the saved plan. Saving the saved plan changes nothing on the
+  till until a reset.
 - **Joins:** seats from a saved join, and the till asking without one; free + free, seated + free,
   seated + seated; Split puts each table back; a fixed table never moves, including when a move is
   sent straight to the route; a fixed join ends when the party leaves.
@@ -288,9 +298,8 @@ Each claim is checked by running something, not by reading.
   tab to close.
 - **Saving:** a save from an older copy is refused; a duplicate name is refused beside its field;
   automatic names number on from the highest in use.
-- **Delete:** a free table goes and its name is reusable; a seated table leaves the saved plan at
-  once, stays on today's plan until its party leaves, then goes and frees its name; refused with
-  an upcoming booking.
+- **Delete:** the table leaves the saved plan at once and today's plan at the next reset, or when
+  its party leaves after that; its name is then free; refused with an upcoming booking.
 - **History:** renaming a table after its party closed leaves the party's name and a reprinted
   receipt unchanged.
 - **Migration:** the upgrade test, and the foreign-key list and generated SQL above.
@@ -328,4 +337,11 @@ Each claim is checked by running something, not by reading.
 9. Spare tables instead of made-up temporary ones; staff never create tables.
 10. Tables are created in bulk in the editor; table names are copied as text when a party closes,
     so a rename never changes history and a free table can be deleted.
-11. Storage is the saved plan plus today's changes stamped with the business day.
+11. Storage is the saved plan plus today's changes stamped with the business day. (Replaced by 12.)
+12. Added while reviewing the plan: the saved plan and today's plan are separate plans. The saved
+    plan is edited freely; it is copied into today's plan at the reset; everything live points at
+    today's plan only.
+13. Added while reviewing the plan: deleting a table in the saved plan is never refused because of
+    a party; it leaves today's plan at the next reset, or when its party leaves after that.
+14. Added while reviewing the plan: an upcoming booking must be moved before its table can be
+    deleted; bookings are otherwise left for later.
