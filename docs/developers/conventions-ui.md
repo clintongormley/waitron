@@ -861,3 +861,47 @@ failed, while English dot entry submitted 150 seconds. Decimal mode and the shar
 handle the field; the full screen family passed 138 cases, including its unchanged blank and
 non-numeric clearing checks. The numeric minute state and seconds conversion are retained; bad
 numeric text is a separate draft field, included in snapshots, restoration and the form's checks.
+
+
+### Currency measurements and resize notifications (A407)
+
+When a measured sign changes a field's padding and width together inside its resize observer,
+a surrounding table can resize during that delivery. A407 separates these updates: padding
+reserves sign space immediately, while field-width growth waits for an animation frame. Initial
+measurements are batched in a microtask, with every width read before any field is written.
+The EN/ES watched-container cases in `packages/ui/src/components/wt-price-input.test.ts`
+failed against main `c7624e1b4396fe6123cdbe26487b3b06134e6bc0` on Chromium's
+"ResizeObserver loop completed with undelivered notifications" message.
+
+The 2026-10-08 instrumented phone-price experiment observed a currency callback increase its
+field from 141.4375 to 150.109375 px and a subsequent scroll-area notification reduce its height
+by 17 px in that delivery. It does not establish that either size was painted or that a permanent
+loop existed. The earlier eight-suite catalogue/Preview/prices/navigation run passed 630 cases
+without that warning; its EN/ES light/dark screenshots were inspected at measured 390/1280 px.
+These results covered those fixtures, not every resize observer.
+
+The first review found that waiting two frames hid a spacing regression. A later native observer
+saw a newly revealed sign measure 8.671875 px while its reserved padding still held 0; the same
+probe passed against the original implementation. The revised EN/ES tests check actual sign and
+input-content geometry at the first visible delivery and after increasing the font. A separate
+mount test intercepts real geometry reads and detects a width write between rows' measurements.
+It failed with 38 interleaved reads before batching. The focused revised UI/axe command passed
+155 cases. The retained timing probe at 400 fields recorded 23/23/19.2 ms after batching,
+compared with 103.9/88.4/66.6 ms for the first candidate and 18.2/14.3/14.2 ms for the original
+code in earlier runs. These local mounting measurements do not establish a real menu's delay.
+
+Removing immediate padding failed four first-delivery hidden/font checks; interleaving initial
+measurements and writes failed the row-mount check. Removing the stale-target guard failed the
+currency-removal check on an uncaught null-parent write. Removing both frame cancellation and
+the target/connection guard failed the disconnect check: reserved width changed from 8.671875
+to 24.5625 px after removal. Restoring the candidate passed 119 price-field cases. The combined
+disconnect control does not prove each safeguard independently; neither does it establish that
+every queued callback in every component is cancelled. The revised review ran 396 seconds and confirmed warning removal in two additional watched-wrapper
+arrangements. Its scaled-ancestor/currency-part-padding probes found initial geometry different
+from the later observer content box. No matching app/package TypeScript/CSS consumer was found
+with `rg -n 'part\(currency\)|transform:\s*scale|zoom:' apps packages --glob '*.ts' --glob '*.css'`.
+The initial measurement assumes no inline sign padding/borders or ancestor scaling; a consumer
+adding those styles needs a consistent measurement box. A consumer overriding the amount to
+`width:auto`, or moving a field during notification, still produced warnings on both base and
+candidate in the review probes. This fix's warning-free receipts do not cover those arrangements.
+The final push gate and CI remain; this branch has not landed.

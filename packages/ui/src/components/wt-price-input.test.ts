@@ -1,4 +1,4 @@
-import { expect, test, afterEach } from "vitest";
+import { expect, test, afterEach, onTestFinished } from "vitest";
 import { stringToCents } from "@waitron/shared";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { applyTokens } from "../tokens/index.js";
@@ -1167,3 +1167,191 @@ for (const locale of ["en", "es"]) {
     expect(input.selectionEnd).toBe(3);
   });
 }
+
+test.each(["en-GB", "es-ES"])(
+  "measuring the %s currency keeps a watched container clear of resize errors",
+  async (locale) => {
+    const errors: string[] = [];
+    const record = (event: ErrorEvent) => {
+      if (event.message.includes("ResizeObserver")) errors.push(event.message);
+    };
+    addEventListener("error", record);
+    onTestFinished(() => removeEventListener("error", record));
+    const el = await mount(
+      `<wt-price-input label="Price" name="price" locale="${locale}" value="12.50"></wt-price-input>`,
+    );
+    host.style.display = "inline-block";
+    onTestFinished(() => {
+      host.style.display = "";
+    });
+    const observer = new ResizeObserver(() => {});
+    observer.observe(host);
+    onTestFinished(() => observer.disconnect());
+    for (let i = 0; i < 4; i++)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const input = el.shadowRoot!.querySelector("input")!;
+    const currency = el.shadowRoot!.querySelector(".currency")!;
+    expect(input.value).toBe(locale === "es-ES" ? "12,50" : "12.50");
+    expectSignClearOfText(currency as HTMLElement, input);
+    expect(errors).toEqual([]);
+    host.style.setProperty("--wt-font-family", "monospace");
+    host.style.setProperty("--wt-font-size-base", "24px");
+    for (let i = 0; i < 4; i++)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expectSignClearOfText(currency as HTMLElement, input);
+    expect(errors).toEqual([]);
+  },
+);
+
+test.each(["en-GB", "es-ES"])(
+  "a hidden %s amount reserves sign space at the first visible resize delivery",
+  async (locale) => {
+    const errors: string[] = [];
+    const record = (event: ErrorEvent) => {
+      if (event.message.includes("ResizeObserver")) errors.push(event.message);
+    };
+    addEventListener("error", record);
+    onTestFinished(() => removeEventListener("error", record));
+    const hidden = await mount(
+      `<div style="display: none"><wt-price-input locale="${locale}" value="12.50"></wt-price-input></div>`,
+    );
+    const el = hidden.querySelector("wt-price-input")!;
+    await el.updateComplete;
+    await settled();
+    const currency = el.shadowRoot!.querySelector<HTMLElement>(".currency")!;
+    const input = el.shadowRoot!.querySelector("input")!;
+    const delivered = new Promise<boolean>((resolve) => {
+      const observer = new ResizeObserver(([entry]) => {
+        if (!entry!.contentRect.width) return;
+        const sign = currency.getBoundingClientRect();
+        const content = contentBox(input);
+        resolve(sign.right <= content.left || sign.left >= content.right);
+      });
+      observer.observe(currency);
+      onTestFinished(() => observer.disconnect());
+    });
+    hidden.style.display = "";
+    expect(await delivered).toBe(true);
+    await settled();
+    expect(errors).toEqual([]);
+  },
+);
+
+test("mounting price rows reads their sign widths before changing any row's width", async () => {
+  const wrapper = await mount("<div></div>");
+  const read = Element.prototype.getBoundingClientRect;
+  let readsAfterWrite = 0;
+  let signReads = 0;
+  Element.prototype.getBoundingClientRect = function () {
+    if (
+      this.matches(".currency") &&
+      wrapper.contains(
+        this.getRootNode() instanceof ShadowRoot ? (this.getRootNode() as ShadowRoot).host : this,
+      )
+    ) {
+      signReads++;
+      if (
+        [...wrapper.querySelectorAll("wt-price-input")].some((el) =>
+          el.shadowRoot
+            ?.querySelector<HTMLElement>(".amount-box")
+            ?.style.getPropertyValue("--currency-width"),
+        )
+      ) {
+        readsAfterWrite++;
+      }
+    }
+    return read.call(this);
+  };
+  onTestFinished(() => {
+    Element.prototype.getBoundingClientRect = read;
+  });
+  wrapper.innerHTML = Array.from(
+    { length: 20 },
+    () => '<wt-price-input locale="en-GB" value="12.50"></wt-price-input>',
+  ).join("");
+  for (const el of wrapper.querySelectorAll("wt-price-input")) await el.updateComplete;
+  expect(signReads).toBeGreaterThan(0);
+  expect(readsAfterWrite).toBe(0);
+  Element.prototype.getBoundingClientRect = read;
+  for (const el of wrapper.querySelectorAll("wt-price-input"))
+    expectSignClearOfText(
+      el.shadowRoot!.querySelector<HTMLElement>(".currency")!,
+      el.shadowRoot!.querySelector("input")!,
+    );
+});
+
+test.each(["en-GB", "es-ES"])(
+  "a %s amount reserves a larger sign before its font resize is painted",
+  async (locale) => {
+    const { input, currency } = await mountPrice(
+      `<wt-price-input locale="${locale}" value="12.50"></wt-price-input>`,
+    );
+    const originalWidth = currency!.getBoundingClientRect().width;
+    const delivered = new Promise<boolean>((resolve) => {
+      const observer = new ResizeObserver(([entry]) => {
+        if (entry!.contentRect.width <= originalWidth) return;
+        const sign = currency!.getBoundingClientRect();
+        const content = contentBox(input);
+        resolve(sign.right <= content.left || sign.left >= content.right);
+      });
+      observer.observe(currency!);
+      onTestFinished(() => observer.disconnect());
+    });
+    host.style.setProperty("--wt-font-size-md", "40px");
+    expect(await delivered).toBe(true);
+    await settled();
+    expectSignClearOfText(currency!, input);
+  },
+);
+
+test("removing the currency during a font resize leaves no stale frame writing to it", async () => {
+  const { el, currency } = await mountPrice(
+    '<wt-price-input locale="en-GB" value="12.50"></wt-price-input>',
+  );
+  const originalWidth = currency!.getBoundingClientRect().width;
+  const errors: string[] = [];
+  const record = (event: ErrorEvent) => errors.push(event.message);
+  addEventListener("error", record);
+  onTestFinished(() => removeEventListener("error", record));
+  const removed = new Promise<void>((resolve) => {
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry!.contentRect.width <= originalWidth) return;
+      observer.disconnect();
+      (el as WtPriceInput).locale = "";
+      void (el as WtPriceInput).updateComplete.then(() => resolve());
+    });
+    observer.observe(currency!);
+    onTestFinished(() => observer.disconnect());
+  });
+  host.style.setProperty("--wt-font-size-md", "40px");
+  await removed;
+  await settled();
+  expect(el.shadowRoot!.querySelector(".currency")).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test("disconnecting during a font resize cancels the pending width write", async () => {
+  const { el, currency } = await mountPrice(
+    '<wt-price-input locale="en-GB" value="12.50"></wt-price-input>',
+  );
+  const box = currency!.parentElement!;
+  const reserved = box.style.getPropertyValue("--currency-space");
+  const originalWidth = currency!.getBoundingClientRect().width;
+  const removed = new Promise<void>((resolve) => {
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry!.contentRect.width <= originalWidth) return;
+      observer.disconnect();
+      el.remove();
+      resolve();
+    });
+    observer.observe(currency!);
+    onTestFinished(() => observer.disconnect());
+  });
+  host.style.setProperty("--wt-font-size-md", "40px");
+  await removed;
+  await settled();
+  expect(box.style.getPropertyValue("--currency-space")).toBe(reserved);
+  host.append(el);
+  await settled();
+  expectSignClearOfText(currency!, el.shadowRoot!.querySelector("input")!);
+});
