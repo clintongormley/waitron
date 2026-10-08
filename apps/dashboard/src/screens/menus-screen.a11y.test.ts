@@ -363,6 +363,8 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const form = q(el, '[data-test="include-folder-form"]');
     await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-modal")!.open).toBe(true));
     if (refused) {
+      form.shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+      await (form as HTMLElementTagNameMap["dashboard-include-folder-form"]).updateComplete;
       form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await vi.waitFor(() =>
         expect(

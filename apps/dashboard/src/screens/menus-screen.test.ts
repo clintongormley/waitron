@@ -4275,6 +4275,8 @@ describe("an include's Edit dialog", () => {
     );
     const el = await mountLunch(client);
     await openWines(el);
+    includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+    await includeForm(el).updateComplete;
     includeSave(el).click();
     await vi.waitFor(() =>
       expect(includeField(el, "names-en").error).toBe(
@@ -4313,6 +4315,8 @@ describe("an include's Edit dialog", () => {
       );
       const el = await mountLunch(client);
       await openWines(el);
+      includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+      await includeForm(el).updateComplete;
       includeSave(el).click();
       await vi.waitFor(() =>
         expect(includeForm(el).shadowRoot!.querySelector(`#${errorId}`)?.textContent?.trim()).toBe(
@@ -4331,6 +4335,8 @@ describe("an include's Edit dialog", () => {
     );
     const el = await mountLunch(client);
     await openWines(el);
+    includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+    await includeForm(el).updateComplete;
     includeSave(el).click();
     await vi.waitFor(async () =>
       expect(await bottomIn(includeModal(el))).toBe(codeMessage("menu_section.not_found")),

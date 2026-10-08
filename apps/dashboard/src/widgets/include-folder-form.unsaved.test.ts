@@ -202,3 +202,15 @@ it("Discard restores a starting point with the switch off, filling the hidden fi
   expect(nameValue(form, "names-en")).toBe("Bar");
   expect(nameValue(form, "names-es")).toBe("Bebidas");
 });
+it("an include taken out of the page and put back asks before discarding an edit made afterwards", async () => {
+  const { app, form } = await mount();
+  const parent = form.parentNode!;
+  form.remove();
+  await form.updateComplete;
+  parent.appendChild(form);
+  await form.updateComplete;
+  await edit(form, "names-es", "Barra");
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
+});

@@ -130,9 +130,11 @@ it("keeps a fixed name in a language the form does not show", async () => {
   const el = await includeForm({
     value: { showAsFolder: true, overrides: { names: { en: "Bar", fr: "Boissons" } } },
   });
+  el.shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+  await el.updateComplete;
   expect(submitted(el)).toEqual({
     showAsFolder: true,
-    overrides: { names: { en: "Bar", fr: "Boissons" } },
+    overrides: { names: { en: "Bar", fr: "Boissons" }, color: "#256bb1" },
   });
 });
 it("hints a blank name with the default language's name, then the included menu's name", async () => {
@@ -206,6 +208,7 @@ it.each(Object.keys(besideField))(
   async (key) => {
     const el = await includeForm();
     const message = `Refused: ${key}`;
+    await type(el, "names-es", "Barra");
     expect(besideField[key]!(el)).toEqual(["", false]);
     el.fieldErrors = { [key]: message };
     await el.updateComplete;
