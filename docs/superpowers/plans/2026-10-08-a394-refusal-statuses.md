@@ -1441,6 +1441,8 @@ answering `[]` (`recipes.test.ts`, the variant case).
    - `setProductRecipe` with an unknown product id, once with an empty list and once with a real
      ingredient → `product.not_found` `{ productId }`; nothing written (the real ingredient has no
      `recipe_lines` row afterwards).
+   - `setProductRecipe` with the same real ingredient id twice → `management.request_invalid`
+     `{ field: "ingredientIds" }`, recipe unchanged.
    - `setProductRecipe` on a real product with one real and one unknown ingredient id →
      `management.request_invalid` `{ field: "ingredientIds" }`; the product's existing recipe
      unchanged (set a recipe first, then try the bad one, then read it back).
@@ -1456,9 +1458,11 @@ answering `[]` (`recipes.test.ts`, the variant case).
      `parentId`; no row → `product.not_found`, a variant → `product.not_found` as today. Then, before
      the delete, read the ingredient ids that exist among the DISTINCT body ids (one `inArray`
      select, skipped for an empty list); fewer than the distinct count →
-     `management.request_invalid` `{ field: "ingredientIds" }`. A duplicate id in the body is NOT
-     changed by this item (it still meets `recipe_lines_product_ingredient_key`); say so in the PR
-     as an open point.
+     `management.request_invalid` `{ field: "ingredientIds" }`. A body naming the same id twice
+     meets `recipe_lines_product_ingredient_key` today (a 500); it answers the same 400 instead,
+     checked before the read (plan review, 2026-10-08). Delete the clause "an unknown id is
+     deliberately left to its existing answer" from the comment above the variant read: it stops
+     being true.
    - `getProductRecipe`: one existence read of the product first; no row → `product.not_found`.
    - `updateIngredient`: add `.returning({ id: ingredients.id })` to the update; no row →
      `ingredient.not_found` `{ ingredientId: id }`, thrown before the fan-out. Body validation
@@ -1466,15 +1470,19 @@ answering `[]` (`recipes.test.ts`, the variant case).
      before any read.
    - New `packages/recipes/src/errors.ts` declaring `"ingredient.not_found": { ingredientId: string }`
      in the shared registry (same shape as `packages/workforce/src/errors.ts`), imported for its side
-     effect by `ingredients.ts`, so it is reachable from `src/index.ts`.
-     `management.request_invalid` and `product.not_found` are declared elsewhere — confirm where, and
-     that `recipes.ts` already reaches each declaring module.
+     effect by `ingredients.ts`, so it is reachable from `src/index.ts` (the reachability guard
+     finds packages itself). `product.not_found` is declared at `packages/catalogue/src/errors.ts`,
+     reached through `recipes.ts`'s `@waitron/catalogue` import; `management.request_invalid` at
+     `packages/shared/src/errors.ts`, reached through `AppError`'s import.
 3. **Route, test first.** In `apps/server/src/recipe-api.test.ts`, assert status AND `{ code, params }`:
    `GET /management-api/products/:id/recipe` unknown → 404 `product.not_found`;
    `PUT …/recipe` unknown product (empty list, and with a real ingredient) → 404
    `product.not_found`; `PUT` real product with an unknown ingredient → 400
    `management.request_invalid` `{ field: "ingredientIds" }`; `PATCH /management-api/ingredients/:id`
-   unknown → 404 `ingredient.not_found`. Run them on `main` first: 200/204/500/204. Add
+   unknown → 404 `ingredient.not_found`; `PUT` with the same real ingredient twice → 400
+   `management.request_invalid`. Run them on `main` first: GET 200, PUT unknown product with an
+   empty list 204, with a real ingredient 500, real product with an unknown ingredient 500, a
+   repeated ingredient 500, PATCH 204 — each 500 as `server.internal`. Add
    `"ingredient.not_found": 404` to `recipe-api.ts`'s `STATUS`.
 4. **Dashboard wording.** `ingredient.not_found` in `apps/dashboard/src/i18n/codes.ts`, English and
    Spanish, beside `ingredient.name_required`, saying the ingredient no longer exists and to refresh;
@@ -1482,8 +1490,10 @@ answering `[]` (`recipes.test.ts`, the variant case).
 5. **Proof by deletion.** Remove each new check in turn (product existence in set and get, the
    ingredient-id check, the update's row check) and confirm its package and route cases fail;
    restore.
-6. **Guards.** `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`
-   from the root; the golden huella and `inmutabilidad` unedited.
+6. **Guards.** `pnpm exec vitest run scripts/errors-reachable.test.ts` from the root; the golden huella and `inmutabilidad` unedited.
+
+`product.not_found` has no dashboard wording, so the recipe screen shows the generic message for
+it, as it already does for a variant; not this item's to add — say so in the PR.
 
 Clients: none read these statuses. No migration. Tests changed: none expected; any that change go in
 `~/waitron-campaign-c/item-a394-2-changed-tests.md`.
