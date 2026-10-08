@@ -1149,7 +1149,7 @@ unused `units` property is gone (it closes W75's leftover).
   - For A348 — DONE except `#active` (A346 + A348): `viaParent`, the
     `menu_prices.status_parent_disabled` strings and the "Disabled" row case are gone; `#active` is
     carried to A348's Open bullet below.
-- **A346 + A348, owner 2026-10-07 — DONE (a menu's Price overrides tab: a price this menu sets
+- **A346 + A348, owner 2026-10-07 — DONE (#1408) (a menu's Price overrides tab: a price this menu sets
   stands out, an Available column, and Edit product):** a field holding a price this menu sets is
   drawn bold and upright with a bar in `--wt-color-primary` at its start edge, through
   `wt-price-input`'s new `overriding` state, and a stored one is named "…, set on this menu"; an
