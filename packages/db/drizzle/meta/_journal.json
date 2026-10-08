@@ -817,57 +817,15 @@
     {
       "idx": 116,
       "version": "6",
-      "when": 1791377264809,
-      "tag": "0116_invoice_delivery_metadata",
+      "when": 1791420191595,
+      "tag": "0116_invoice_delivery_foundation",
       "breakpoints": true
     },
     {
       "idx": 117,
       "version": "6",
-      "when": 1791378213483,
-      "tag": "0117_invoice_receipt_correlation",
-      "breakpoints": true
-    },
-    {
-      "idx": 118,
-      "version": "6",
-      "when": 1791378416453,
-      "tag": "0118_invoice_receipt_agent",
-      "breakpoints": true
-    },
-    {
-      "idx": 119,
-      "version": "6",
-      "when": 1791384532634,
-      "tag": "0119_invoice_receipt_optional_issuer",
-      "breakpoints": true
-    },
-    {
-      "idx": 120,
-      "version": "6",
-      "when": 1791391802340,
-      "tag": "0120_invoice_page_printers",
-      "breakpoints": true
-    },
-    {
-      "idx": 121,
-      "version": "6",
-      "when": 1791391821046,
-      "tag": "0121_invoice_page_printer_key",
-      "breakpoints": true
-    },
-    {
-      "idx": 122,
-      "version": "6",
-      "when": 1791392662529,
-      "tag": "0122_bill_invoice_delivery",
-      "breakpoints": true
-    },
-    {
-      "idx": 123,
-      "version": "6",
-      "when": 1791392745795,
-      "tag": "0123_bill_invoice_delivery_transition",
+      "when": 1791420200716,
+      "tag": "0117_bill_invoice_delivery_transition",
       "breakpoints": true
     }
   ]

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1ecfae59-0a68-4bae-99c3-65da2e803eb0",
+  "id": "c32d6289-f4be-431d-9061-1b596a28f5cc",
   "prevId": "a54400fa-82e3-4f38-a846-a4875f884b82",
   "tables": {
     "locations": {
@@ -881,6 +881,13 @@
         },
         "recipient_country_code": {
           "name": "recipient_country_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "invoice_delivery": {
+          "name": "invoice_delivery",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -8249,6 +8256,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "print_job_id": {
+          "name": "print_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "page_printer_id": {
+          "name": "page_printer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "request_key": {
           "name": "request_key",
           "type": "text",
@@ -8311,7 +8332,7 @@
           "name": "person_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "created_at": {
@@ -8344,6 +8365,13 @@
         },
         "claimed_by": {
           "name": "claimed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claimed_agent_id": {
+          "name": "claimed_agent_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -8393,6 +8421,13 @@
         }
       },
       "indexes": {
+        "invoice_deliveries_print_job_uq": {
+          "name": "invoice_deliveries_print_job_uq",
+          "columns": [
+            "print_job_id"
+          ],
+          "isUnique": true
+        },
         "invoice_deliveries_request_uq": {
           "name": "invoice_deliveries_request_uq",
           "columns": [
@@ -8419,6 +8454,45 @@
         }
       },
       "foreignKeys": {
+        "invoice_deliveries_print_job_id_print_jobs_id_fk": {
+          "name": "invoice_deliveries_print_job_id_print_jobs_id_fk",
+          "tableFrom": "invoice_deliveries",
+          "tableTo": "print_jobs",
+          "columnsFrom": [
+            "print_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_deliveries_page_printer_id_page_printers_id_fk": {
+          "name": "invoice_deliveries_page_printer_id_page_printers_id_fk",
+          "tableFrom": "invoice_deliveries",
+          "tableTo": "page_printers",
+          "columnsFrom": [
+            "page_printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_deliveries_claimed_agent_id_print_agents_id_fk": {
+          "name": "invoice_deliveries_claimed_agent_id_print_agents_id_fk",
+          "tableFrom": "invoice_deliveries",
+          "tableTo": "print_agents",
+          "columnsFrom": [
+            "claimed_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "invoice_deliveries_sale_fk": {
           "name": "invoice_deliveries_sale_fk",
           "tableFrom": "invoice_deliveries",
@@ -8456,9 +8530,143 @@
           "name": "invoice_deliveries_attempts_ck",
           "value": "\"invoice_deliveries\".\"attempts\" >= 0"
         },
+        "invoice_deliveries_person_ck": {
+          "name": "invoice_deliveries_person_ck",
+          "value": "\"invoice_deliveries\".\"person_id\" is not null or \"invoice_deliveries\".\"medium\" = 'receipt'"
+        },
         "invoice_deliveries_email_ck": {
           "name": "invoice_deliveries_email_ck",
           "value": "(\"invoice_deliveries\".\"medium\" = 'email') = (\"invoice_deliveries\".\"recipient\" is not null and \"invoice_deliveries\".\"consent\" is not null)"
+        }
+      }
+    },
+    "page_printers": {
+      "name": "page_printers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "host": {
+          "name": "host",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "port": {
+          "name": "port",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource_path": {
+          "name": "resource_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_format": {
+          "name": "document_format",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "supported_formats": {
+          "name": "supported_formats",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "media": {
+          "name": "media",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resolution_dpi": {
+          "name": "resolution_dpi",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        }
+      },
+      "indexes": {
+        "page_printers_endpoint_uq": {
+          "name": "page_printers_endpoint_uq",
+          "columns": [
+            "location_id",
+            "host",
+            "port",
+            "resource_path"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "page_printers_location_id_locations_id_fk": {
+          "name": "page_printers_location_id_locations_id_fk",
+          "tableFrom": "page_printers",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "page_printers_format_ck": {
+          "name": "page_printers_format_ck",
+          "value": "\"page_printers\".\"document_format\" in ('application/pdf', 'image/pwg-raster', 'image/urf')"
+        },
+        "page_printers_media_ck": {
+          "name": "page_printers_media_ck",
+          "value": "\"page_printers\".\"media\" in ('iso_a4_210x297mm', 'na_letter_8.5x11in')"
+        },
+        "page_printers_port_ck": {
+          "name": "page_printers_port_ck",
+          "value": "\"page_printers\".\"port\" between 1 and 65535"
+        },
+        "page_printers_resolution_ck": {
+          "name": "page_printers_resolution_ck",
+          "value": "\"page_printers\".\"resolution_dpi\" > 0"
         }
       }
     }

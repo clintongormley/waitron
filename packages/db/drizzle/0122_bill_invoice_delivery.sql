@@ -1,1 +1,0 @@
-ALTER TABLE `working_orders` ADD `invoice_delivery` text;
