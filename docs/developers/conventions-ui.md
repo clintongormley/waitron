@@ -865,32 +865,36 @@ numeric text is a separate draft field, included in snapshots, restoration and t
 
 ### Currency measurements and resize notifications (A407)
 
-A currency field can change a surrounding table's layout when it reserves room for its sign.
-The initial A407 candidate measures the sign after rendering and defers subsequent writes from
-its resize observer to an animation frame. This candidate is still under review; its timing is
-not the approved prescription. The EN/ES watched-container cases in
-`packages/ui/src/components/wt-price-input.test.ts` exercise the real browser observer and retain
-sign clearance after changing the font. Running them against main
-`c7624e1b4396fe6123cdbe26487b3b06134e6bc0` failed on Chromium's
+When a measured sign changes a field's padding and width together inside its resize observer,
+a surrounding table can resize during that delivery. A407 separates these updates: padding
+reserves sign space immediately, while field-width growth waits for an animation frame. Initial
+measurements are batched in a microtask, with every width read before any field is written.
+The EN/ES watched-container cases in `packages/ui/src/components/wt-price-input.test.ts`
+failed against main `c7624e1b4396fe6123cdbe26487b3b06134e6bc0` on Chromium's
 "ResizeObserver loop completed with undelivered notifications" message.
 
 The 2026-10-08 instrumented phone-price experiment observed a currency callback increase its
 field from 141.4375 to 150.109375 px and a subsequent scroll-area notification reduce its height
-by 17 px within that delivery. It does not establish that either size was painted or that a
-permanent loop existed. The changed implementation passed the existing two-frame sign-placement
-assertions, hidden/show and font-change cases. The command
-`pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-preview.test.ts
-src/widgets/menu-preview-top.test.ts src/widgets/menu-preview-navigation.test.ts
-src/widgets/menu-preview.a11y.test.ts src/widgets/menu-prices-table.test.ts src/navigation.test.ts
-src/widgets/catalogue-browser.test.ts src/widgets/folder-made-at.test.ts` ran 630 cases without
-that warning. Final price-table screenshots were inspected in EN/ES, light/dark, at measured
-390/1280 px browser widths. Those results cover the selected fixtures, not every resize observer.
+by 17 px in that delivery. It does not establish that either size was painted or that a permanent
+loop existed. The earlier eight-suite catalogue/Preview/prices/navigation run passed 630 cases
+without that warning; its EN/ES light/dark screenshots were inspected at measured 390/1280 px.
+These results covered those fixtures, not every resize observer.
 
+The first review found that waiting two frames hid a spacing regression. A later native observer
+saw a newly revealed sign measure 8.671875 px while its reserved padding still held 0; the same
+probe passed against the original implementation. The revised EN/ES tests check actual sign and
+input-content geometry at the first visible delivery and after increasing the font. A separate
+mount test intercepts real geometry reads and detects a width write between rows' measurements.
+It failed with 38 interleaved reads before batching. The focused revised UI/axe command passed
+155 cases. The retained timing probe at 400 fields recorded 23/23/19.2 ms after batching,
+compared with 103.9/88.4/66.6 ms for the first candidate and 18.2/14.3/14.2 ms for the original
+code in earlier runs. These local mounting measurements do not establish a real menu's delay.
 
-The review exposed the limit of waiting two frames in the existing hidden/font cases. A separate
-native observer, registered after the field's observer, saw a newly revealed sign measure
-8.671875 px while `--currency-width` still held 0. The driver reproduced that failing comparison
-on the candidate and a passing comparison with the original implementation in an installed
-disposable checkout. This observes spacing during resize delivery, not a screenshot of a painted
-frame. The initial-measurement strategy and the deferred hidden/font update still need correction
-before A407 lands; pending disconnect and stale-frame handling also need behavioural coverage.
+Removing immediate padding failed four first-delivery hidden/font checks; interleaving initial
+measurements and writes failed the row-mount check. Removing the stale-target guard failed the
+currency-removal check on an uncaught null-parent write. Removing both frame cancellation and
+the target/connection guard failed the disconnect check: reserved width changed from 8.671875
+to 24.5625 px after removal. Restoring the candidate passed 119 price-field cases. The combined
+disconnect control does not prove each safeguard independently; neither does it establish that
+every queued callback in every component is cancelled. The updated review and final branch
+checks are still pending; this branch has not landed.

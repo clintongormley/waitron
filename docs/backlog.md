@@ -3484,23 +3484,23 @@ That comparison does not establish which observer causes it or its effect on the
 
 **A407: currency measurements, IN PROGRESS (2026-10-08), branch `fix/resize-observer-loop`.** On main
 `c7624e1b4396fe6123cdbe26487b3b06134e6bc0`, the four-suite catalogue/Preview/prices command
-ran 561 passing cases and logged the warning. Instrumenting real observers attributed the
+ran 561 passing cases and logged the warning. Instrumenting native observers attributed the
 phone-price cases to `wt-price-input`: its currency callback increased a field from
-141.4375 to 150.109375 px; the table's scroll area then lost 17 px of height in the same
-observer delivery. This is a layout change during notification, not evidence of a permanent loop
-or of a painted jump. The field now measures its initial sign during rendering and schedules
-later measurement writes for an animation frame, cancelling that work on disconnect.
-The EN/ES watched-container regressions failed on the original code and pass with the change;
-existing sign-placement, hidden-field and font-change assertions are retained.
-The eight-suite catalogue/Preview/prices/navigation run passed 630 cases without this warning.
-The catalogue-only command on the original main commit passed 270 cases without the warning.
-Its historical occurrence was not reproduced here; this receipt does not attribute it to
-currency fields.
-The whole-branch review found repeated initial layout reads and a hidden-field spacing gap.
-The driver reproduced the latter in a disposable checkout: a later observer saw the sign at
-8.671875 px while its reserved width was still 0; the same check passed on the original code.
-The candidate is not ready to push or land. Next: batch initial measurements, address first-frame
-hidden/font spacing, and exercise pending disconnect/stale measurement work before finishing.
+141.4375 to 150.109375 px; the table's scroll area then lost 17 px of height in that
+observer delivery. These measurements do not establish a permanent loop or a painted jump.
+The field now batches initial sign measurements, reads all widths before writing them, and
+separates immediate text padding from field-width growth deferred to the next animation frame.
+The review's hidden-field spacing failure is covered at the first visible resize delivery in
+both languages, alongside font changes and pending currency removal/disconnect/reconnect.
+The focused UI and axe run passed 155 cases without the warning. The 400-field timing probe
+recorded 23/23/19.2 ms after batching; the initial candidate recorded 103.9/88.4/66.6 ms and
+the original code 18.2/14.3/14.2 ms in earlier disposable-checkout runs. These are local mounting
+experiments, not a measured delay on a real menu. Five disposable deletion controls failed;
+restoring the implementation passed 119 price-field cases. The updated eight-suite dashboard run
+passed 630 cases without the warning, and the unedited fiscal pair passed 20 cases. Updated review,
+final visual inspection, normal hook and current-head CI remain before landing.
+The original-main catalogue-only command passed 270 cases without the warning; its historical
+occurrence was not reproduced and is not attributed to currency fields.
 See [the focused experiment](developers/conventions-ui.md#currency-measurements-and-resize-notifications-a407).
 
 

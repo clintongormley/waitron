@@ -7,6 +7,23 @@ import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
+const initialCurrencyMeasurements = new Map<Element, (width: number) => void>();
+
+function queueCurrencyMeasurement(currency: Element, write: (width: number) => void): void {
+  if (initialCurrencyMeasurements.size === 0) {
+    queueMicrotask(() => {
+      // Read all rows before writing padding: interleaving them forces layout for every row.
+      const measured = [...initialCurrencyMeasurements].map(([element, apply]) => ({
+        apply,
+        width: element.getBoundingClientRect().width,
+      }));
+      initialCurrencyMeasurements.clear();
+      for (const { apply, width } of measured) apply(width);
+    });
+  }
+  initialCurrencyMeasurements.set(currency, write);
+}
+
 /**
  * The unit button's visible text is its accessible name, so an empty `unit` leaves it nameless.
  * `fixed-unit` shows the unit as text instead, for a field whose unit is not chosen here. The
@@ -50,11 +67,11 @@ export class WtPriceInput extends LitElement {
         min-width: var(--wt-tap-min);
       }
 
-      /* The sign is measured into --currency-width, so the typed amount is padded clear of it, and
-         an unstretched box grows by that padding so the amount keeps the room it had without it. */
+      /* Padding follows the sign before paint; width growth waits for the next frame so a
+         surrounding resize observer is not retriggered by this field's notification. */
       .before .field-control,
       .after .field-control {
-        width: calc(var(--wt-price-field-width) + var(--currency-width, 0px) + var(--wt-space-1));
+        width: calc(var(--wt-price-field-width) + var(--currency-space, 0px) + var(--wt-space-1));
       }
 
       .before .field-control {
@@ -180,14 +197,20 @@ export class WtPriceInput extends LitElement {
 
   private currencyFrame = 0;
   private readonly currencyObserver = new ResizeObserver((entries) => {
+    for (const { target, contentRect } of entries) {
+      (target.parentElement as HTMLElement).style.setProperty(
+        "--currency-width",
+        `${contentRect.width}px`,
+      );
+    }
     cancelAnimationFrame(this.currencyFrame);
-    // Padding changes the field's width, so a container watching it must get a new frame.
+    // Text padding is needed before paint; growing the field must wait for a new frame.
     this.currencyFrame = requestAnimationFrame(() => {
       this.currencyFrame = 0;
       for (const { target, contentRect } of entries) {
         if (target !== this.observedCurrency || !this.isConnected) continue;
         (target.parentElement as HTMLElement).style.setProperty(
-          "--currency-width",
+          "--currency-space",
           `${contentRect.width}px`,
         );
       }
@@ -195,17 +218,17 @@ export class WtPriceInput extends LitElement {
   });
   private observedCurrency: Element | null = null;
 
-  /** Watched rather than measured once, so a field first rendered hidden, or whose font changes
-   * later, still pads its amount clear of the sign. */
   private observeCurrency(): void {
     const currency = this.renderRoot.querySelector(".currency");
     if (currency === this.observedCurrency) return;
     if (this.observedCurrency) this.currencyObserver.unobserve(this.observedCurrency);
     if (currency) {
-      (currency.parentElement as HTMLElement).style.setProperty(
-        "--currency-width",
-        `${currency.getBoundingClientRect().width}px`,
-      );
+      queueCurrencyMeasurement(currency, (width) => {
+        if (currency !== this.observedCurrency || !this.isConnected) return;
+        const box = currency.parentElement as HTMLElement;
+        box.style.setProperty("--currency-width", `${width}px`);
+        box.style.setProperty("--currency-space", `${width}px`);
+      });
       this.currencyObserver.observe(currency);
     }
     this.observedCurrency = currency;
