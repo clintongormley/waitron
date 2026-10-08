@@ -118,7 +118,24 @@ What still needs a person:
   allows only `typed-rest-client` `~2.3.0`, while `typed-rest-client` 3.1.2 declares `qs`
   `^6.16.0`. Fix it with a root `pnpm.overrides` entry scoped to that parent (`parent>child`), after
   running the parent's code that uses the child on both versions, as the 2026-09-28 security-alert
-  fix did; receipts: [backlog.md](../backlog.md) → B9, the Dependabot entry.
+  fix did; receipts: _The receipt for the two overrides_, below.
+
+  **The receipt for the two overrides** (A107, PR #796, 2026-09-28): four alerted packages were
+  moved inside the ranges their parents already declare, and two are forced by root
+  `pnpm.overrides` entries — `typed-rest-client>qs` to `^6.16.0` (6.16.0), and
+  `@esbuild-kit/core-utils>esbuild` to `^0.25.0` (the 0.25.12 already in the tree). What was run for
+  the two overrides: `typed-rest-client`'s query-string builder over eight parameter shapes gave the
+  same URLs under `qs` 6.15.1 and 6.16.0 except one, where 6.15.1 threw a `TypeError` and 6.16.0
+  does not (the `arrayFormat: 'comma'` null-entry fix in `qs` 6.15.2's changelog); a search of
+  Stryker's installed `dist` found `typed-rest-client` imported in two of its JavaScript files,
+  `initializer/npm-registry.js` and `reporters/dashboard-reporter/index.js`, and no
+  `stryker.config.json` here names the dashboard reporter. `drizzle-kit` 0.31.11's shipped code never
+  names `@esbuild-kit` (only its `package.json` does): with both `@esbuild-kit` folders renamed away,
+  `drizzle-kit generate` in all fourteen migration sets printed the same as before; each set
+  generated from nothing gave the same SQL and snapshots before and after the override (ids and
+  timestamps aside); and the loader itself still runs a TypeScript file on esbuild 0.25.12. A full
+  Stryker run over `packages/shared` gave the same 990 mutants with the same results on the old and
+  new lockfile.
 
 **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
 approval; nothing else is.
@@ -295,10 +312,10 @@ Do NOT use a root-level `pnpm link --global @waitron/verifactu` here. At the wor
 and `packages/provisioning` go on resolving the published release — so it looks applied while
 changing nothing that matters. (This was proven by the extraction branch's run-it reviewer.)
 
-Keep that entry out of the commit (the other `pnpm.overrides` entries are committed security
-fixes; see the Dependabot entry under B9 in [backlog.md](../backlog.md)): the manifests that land
-always reference the published version, and CI installs that version, so an override left in a diff
-would make CI and the box build a version they cannot fetch.
+Keep that entry out of the commit (the other `pnpm.overrides` entries are committed security fixes;
+see _The receipt for the two overrides_ under _Commits, pull requests and merging_): the manifests
+that land always reference the published version, and CI installs that version, so an override left
+in a diff would make CI and the box build a version they cannot fetch.
 
 ## Model selection
 

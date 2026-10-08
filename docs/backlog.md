@@ -344,13 +344,19 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
   boundary and a domain refusal, then test invalid values before they reach storage.
 
+- **#1042 needs every venue migrated before it reset** — the owner's box included (dev venues:
+  `wa-wt reset demo <name>`): it changed the hashes of
+  `packages/db/drizzle/0001_behavioural_triggers.sql` and
+  `packages/media/drizzle/0001_image_references.sql`, so boot refuses such a venue with
+  `provisioning.database_ahead`. Left open by C127 (#1036, #1042).
+
 ### Replication, failover and the cloud
 
 _Formerly _Afterwards_ and _Cloud connection integration_._
 
 ### CI, tests and developer tooling
 
-_Formerly B9, and Track C's development-stack and house-rules items._
+_Formerly B9, and Track C's development-stack and house-rules items._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
   `wa-wt reset demo <name>` rebuilds it as the demo business, tax ID `B00000000` (W108). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
@@ -359,13 +365,134 @@ _Formerly B9, and Track C's development-stack and house-rules items._
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
   A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
 
+- **The Dockerfile's `bounded()` does not retry an `apt-get update` that cannot connect**, because
+  apt prints "Failed to fetch" and still exits 0 (measured in the A422 probes; apt's own
+  `Acquire::Retries=3` still applies); `APT::Update::Error-Mode=any` would make it fail and be
+  retried, at the cost of failing on any one broken index. Left open by A422 (#1442); queued as A431
+  (campaign lane A, 2026-10-08).
+
+- **`deploy/waitron.sh` (its `apt_get update` / `install` calls for Docker, curl and qrencode) and
+  `bench/sqlite-failover/src/probes/linux-binaries.ts` (`CA_DOCKERFILE`) run apt with no outer
+  limit**; the rule and its guards cover only the workflows and `deploy/Dockerfile`. Left open by
+  A422 (#1442); queued as A431 (campaign lane A, 2026-10-08).
+
+- **Comments in `.github/workflows/ci.yml` (the Chromium install, "restore `--with-deps`") and
+  `mutation.yml` suggest restoring `playwright install --with-deps`**, which runs apt with no outer
+  limit and which neither guard reads. Left open by A422 (#1442); queued as A431 (campaign lane A,
+  2026-10-08).
+
+- **Both image jobs still run `docker/setup-buildx-action`**, whose only stated reason was the
+  cache export #1427 removed. Whether the builds still need it (for example for `load: true` or the
+  print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
+  action queued.
+
+- **A new branch pushed while the refresh fails still has its range start at the local
+  `origin/main`'s merge base** — left open by the pre-push hook's sign-off fixes, A392 (#1421) and
+  A411 (#1445), after which the hook refreshes `origin/main` from the remote first; no action
+  queued.
+
+- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
+  attempt 1, job 111163230954, 2026-10-03; passed on re-run).** The original one-off race has not
+  been reproduced locally. If the control fails again, retain that run's log and inspect the child
+  state before naming another cause. [Detail](backlog/ci.md#the-stream-pause-tests-frozen-bucket-control-failed-once-in-ci)
+
+- **What the stream pause test's last-restore fix (A387, #1398) left open:** a local Linux run
+  keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
+  box's restore over a real network was not measured.
+
+- **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
+  `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
+  runner `scripts/scratch-dir.mjs` measures 83% of branches. Neither is queued. [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open)
+
+- **Would the package suites' databases gain from memory too?** Not measured for them. Next
+  action: time one database-heavy package's `test:coverage` in CI with its folders on the disk and
+  under `/dev/shm`, and adopt it in `useVenueDb` only if the shard times move and a suite's
+  databases fit in `/dev/shm` (Docker's default is 64 MiB). [Detail](backlog/ci.md#would-the-package-suites-databases-gain-from-memory-too)
+
+- **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)` holds every probe until
+  the last port is drawn, but a port is still released before the server binds it, so another test
+  worker drawing or connecting in that gap can take it; nothing has measured how often.
+  [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open)
+
+- **`bundle-smoke` builds only the credentials and server bundles**, so a change to
+  `scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
+  through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
+  in CI.
+
+- **The table-service, boot-and-counter and three `tender-pay-*` suites are separate files** that
+  can be folded back into `till-app.test.ts` and `tender-pay.test.ts` once `feat/variants-sale-line`
+  lands. Left open by `apps/till`'s move to the high coverage bar (#536).
+
+- **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
+  (2026-09-23).** **The new file's runtime was not measured and no `HEAVY_FILES` entry was added**,
+  so whether it drags a job out the way `sales.ts` did is unknown. **Next action:** read the job
+  durations from the next weekly run, and add a `HEAVY_FILES` entry if that file's job is the long
+  one. [Detail](backlog/ci.md#nobody-has-timed-packagesdbsrctestingschema-conformancets-under-a-mutation-run)
+
+- **The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum — OPEN,
+  and the guard cannot close it.** A case that waits several times can still outlast a bound that
+  passes this check. [Detail](backlog/ci.md#the-spawn-timeout-guard-compares-a-bound-against-the-largest-single-wait-never-the-sum)
+
+- **What the per-push CI concurrency groups (#384) left open:** two states stop publishing until a
+  person intervenes; the repair is to delete or retag `:main` by hand. Nothing alerts on it. [Detail](backlog/ci.md#what-the-per-push-ci-concurrency-groups-384-left-open)
+
+- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
+  retrying** (standing rule: a flaky test is fixed at the root). The original log and screenshot were
+  kept; the cause is unexplained, so retain them again on the next sighting rather than re-running to
+  green. [Detail](backlog/ci.md#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying)
+
+- **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
+  pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
+  with no colour evidence, so nothing here explains it — treat it as still unexplained. And
+  `packages/ui` and `apps/till` have the same harness with no pointer reset, so the same flake is
+  waiting there. [Detail](backlog/ci.md#a-fifth-a-stray-hover-state-in-test-dashboards-browser-a11y-suite)
+
+- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the
+  Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Keep the job log on the
+  next sighting — it is the cheapest evidence there is. [Detail](backlog/ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414)
+
+- **Whether to add a browser rule to `pnpm reap` anyway, for a shape not observed** — owner
+  question, left open by A426 (owner 2026-10-08; measured, no code change). It would have to tell a
+  test browser from the Playwright MCP's `mcp-chrome-*` browser, which lives under the same
+  `ms-playwright` cache folder.
+
+- **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
+  Either stamp the label in that rig or accept cleaning it by hand — but the rig's schema is three
+  storage decisions out of date anyway (its own entry in Track C), so the two decisions belong
+  together. [Detail](backlog/ci.md#benchpglite-throughput-starts-a-container-pnpm-reap-cannot-see)
+
+- **A throwaway script found six comments that described code that was no longer there, and it is
+  not a guard yet** (written 2026-09-14 during the tenant-column removal). **Next action:** rewrite it
+  as a real root guard with an allowlist for that header-then-member shape, and its own tests, rather
+  than re-running a scratch script. [Detail](backlog/ci.md#a-throwaway-script-found-six-comments-that-described-code-that-was-no-longer-there-and-it-is-not-a-guard-yet)
+
+- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative
+  control.** **Next action:** find a failure the empty database still causes without the guard, and
+  name it; if there is none, say so in the comment and stop calling the case a guard test.
+  [Detail](backlog/ci.md#appsserversrcbootmirrortesttss-adoption-pending-case-no-longer-has-a-negative-control)
+
+- _Small:_ `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
+  output line is read by no consumer.
+
 ### Dependency upgrades
 
-_Formerly parts of B9 and Track C._
+_Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
+
+- **Whether the Dependabot `vitest` group's Vitest 5 PR obeys the stored `@vitest/browser-playwright`
+  5.x ignore is untested** — left open by Dependabot's switch-on (#760, 2026-09-27). A `vitest` group
+  moves `vitest` and `@vitest/*` together, majors included; closing #766 stored an ignore of
+  `@vitest/browser-playwright` 5.x, and whether the group's Vitest 5 PR obeys it is untested (how to
+  check and clear it: workflow-guide → Dependabot pull requests); such a PR also has to re-measure
+  mutation first (Track C, _Left behind by the Stryker upgrade (#447, 2026-09-19)_).
+
+- **Open Dependabot pull requests — low priority, not queued (owner, 2026-10-08: take them from here
+  when a lane has room).** #1179 (Vitest 5) waits on Stryker (owner). The rest: **sharp 0.35.5
+  (#1299 root, #1423 `apps/server`) and the compose group (#1178)**; **the npm minor-and-patch group
+  (#1267, 13 updates)**; **stripe 22.6.2 → 23.0.0 (#1181, a major)**. [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
 
 ### Modules, data and code health
 
-_Formerly B8, and Track C's correctness items._
+_Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
@@ -382,6 +509,27 @@ _Formerly B8, and Track C's correctness items._
 - **The tax-model system** — the `tax` slot is an inert label today; the intended shape puts the tax
   MODEL in core with the fiscal module supplying rates and labels. A prerequisite for any non-ES
   venue, so parked.
+
+- **Copies of the patterns A105 and C27 replaced — OPEN.** The same two SQL patterns (the
+  block-comment one A105 replaced, and `/--.*$/`, the one C27 replaced) are copied in
+  `scripts/module-graph-honesty.test.ts`, a guard reading the repository's own SQL. [Detail](backlog/architecture.md#copies-of-the-patterns-a105-and-c27-replaced)
+
+- **The two SQL scanners named `stripSql` blank block comments before `--` comments — OPEN (split
+  from A95).** Read, not run; whether any file they scan has a `/*` inside a `--` comment or a string
+  is not measured. [Detail](backlog/architecture.md#the-two-sql-scanners-named-stripsql-blank-block-comments-before----comments)
+
+- **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
+  `scripts/write-path-tables.test.ts` (#430) covers the tables request code may read and never write
+  and nothing else. **Next action:** decide before the flip between three shapes. [Detail](backlog/architecture.md#what-the-grants-refuse-one-operation-at-a-time-is-not-guarded)
+
+- **Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites**, which
+  name no engine. Left open by C127 (#1036, #1042), after which no comment or test title names a
+  PostgreSQL SQLSTATE as today's behaviour.
+
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23;
+  narrowed by A92 and #1039).** Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps
+  its `.sqlite.` infix because the approved slice 3d plan ran it by that name. The
+  `provisioning.invalid_identifier` error registry entry remains. [Detail](backlog/architecture.md#small-renames-and-dead-exports-the-sweep-found-and-could-not-make)
 
 ### Data protection and legal compliance
 
@@ -6734,199 +6882,6 @@ TLS and backup code, `packages/media`, the module framework, CI and test infra. 
 
 ### B9. CI and test infra
 
-- **Image smoke's package-index refresh can consume its whole job limit — DONE (A422, #1442,
-  2026-10-08) (observed while checking A407's merge).** In main
-  run 37771042263, job 113290522107 entered the AppArmor/BlueZ setup step at 11:35:49 UTC. Its last output at
-  11:36:22 was from `apt-get update`, including an ignored `noble InRelease` from
-  `azure.archive.ubuntu.com`; it printed nothing else before cancellation at 11:50:57.
-  The same step took eleven seconds in successful main run 37767334613. No image build or smoke
-  ran in the cancelled job; its log does not establish the network fault. Lane E retained the log
-  and did not rerun it unchanged. **Fix (A422):** a local probe showed apt's own read timeout did
-  not end a wait on a mirror sending a byte every 5 s. Each apt-get in `image-smoke.yml` and
-  `deploy/Dockerfile` now runs under an outer `timeout`, and a call that stalls or exits non-zero is
-  retried; guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts` fail on
-  one with no outer timeout. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
-  bounded".
-  **Open points (queued as A431, campaign lane A, 2026-10-08):** (1) the Dockerfile's `bounded()` does not retry an
-  `apt-get update` that cannot connect, because apt prints "Failed to fetch" and still exits 0
-  (measured in the A422 probes; apt's own `Acquire::Retries=3` still applies);
-  `APT::Update::Error-Mode=any` would make it fail and be retried, at the cost of failing on any one
-  broken index. (2) `deploy/waitron.sh` (its `apt_get update` / `install` calls for Docker, curl and
-  qrencode) and `bench/sqlite-failover/src/probes/linux-binaries.ts` (`CA_DOCKERFILE`) run apt with
-  no outer limit; the rule and its guards cover only the workflows and `deploy/Dockerfile`.
-  (3) Comments in `.github/workflows/ci.yml` (the Chromium install, "restore `--with-deps`") and
-  `mutation.yml` suggest restoring `playwright install --with-deps`, which runs apt with no outer
-  limit and which neither guard reads.
-- **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
-  watcher/owner 2026-10-08, "active monitoring") — DONE (#1427).** PR #1399's image smoke sat
-  46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
-  would have let it run six hours. Every job that had no limit now carries one of twice its longest
-  measured run, rounded up to a multiple of 5 (minimum 5), and a job calling a reusable workflow has
-  none, since github/docs lists no `timeout-minutes` among the keywords such a job takes; a case in `scripts/ci-workflow.test.mjs` fails on a job without
-  one; and neither the image smoke's builds nor `publish`'s import or export the `type=gha` layer
-  cache, which reused only the layers before `COPY . .`. See
-  [ci-and-gates.md](developers/ci-and-gates.md), "Every job has a time limit" and "Neither image
-  build uses the remote layer cache".
-  **Open point (no action queued):** both image jobs still run `docker/setup-buildx-action`, whose
-  only stated reason was the cache export #1427 removed. Whether the builds still need it (for
-  example for `load: true` or the print-agent build reusing the app build's layers) was not tried.
-- **A rebased branch's push was refused for an unsigned commit already on main (A392, owner
-  2026-10-08) — DONE (#1421).** Main's squash `6797bc03a` (#1377) has no `Signed-off-by`; the pre-push
-  hook checked every commit from the remote's old tip, so a rebase over it refused the push, and
-  lanes D and E replaced their pull requests instead (#1379 → #1381, #1374 → #1399). The
-  sign-off range now leaves out commits already on `origin/main`, and the typecheck scope adds the
-  branch's own changes since it left `origin/main` — in the hook's test fixture the old-tip..new-tip
-  diff of a rebased push named only main's file. See
-  [ci-and-gates.md](developers/ci-and-gates.md), "The pre-push hook" and "After a rebase, the
-  old-tip..new-tip diff can leave out the branch's own changes".
-  **Follow-up — DONE (A411, #1445).** The hook trusted the checkout's own `origin/main`: in #1421's Codex
-  review, an unsigned commit placed by hand on a local `origin/main` that the real remote lacked
-  passed it. The hook now refreshes `origin/main` from the remote first and, when it cannot,
-  does not leave main's commits out of the sign-off range; licence.yml's `dco` job now runs on every push to `main`
-  as well as on pull requests. See [ci-and-gates.md](developers/ci-and-gates.md), "Why the
-  sign-off check leaves out main's commits, and why only a refreshed main".
-  **Open point (no action queued):** a new branch pushed while the refresh fails still has its
-  range start at the local `origin/main`'s merge base.
-- **The `ci` step passes only when every needed job succeeded or was skipped, and prints each
-  result (A274, owner 2026-10-06) — DONE (#1283).**
-- **A job GitHub never acquired a runner for may still let `ci` pass (A274 follow-up) — DONE
-  (A276, #1286).** GitHub's own "not acquired" cancellation could not be produced on
-  demand, so that exact case is not demonstrated. See
-  [ci-and-gates.md](developers/ci-and-gates.md), "The `ci` check passes only when every needed job
-  succeeded or was skipped".
-- **A Payments screen test checked a reader's row before the browser had granted that reader's Web
-  Lock (main CI run 37585788177; a local failure on 2026-10-05 on W111's branch,
-  `feat/receipt-top-block`, kept no message and is assumed to be the same) — DONE (A320,
-  #1342, 2026-10-07).**
-  `apps/dashboard/src/screens/payments-screen.test.ts`, "isolates a status request failure to its
-  row", failed once while the till's coverage run ran beside the dashboard's; it passed three runs
-  of its own, and the whole dashboard suite passed when re-run alone. W111's branch changes no
-  Payments screen file. It recurred in A284's exact merge CI on
-  `1b9c38397d35427c222e55f5aaac65cb94df2f25`
-  ([run 37585788177](https://github.com/clintongormley/waitron/actions/runs/37585788177),
-  2026-10-07, job `test-dashboard`): the second reader's row read `Checking…` where the test
-  expected `Offline`; 8,416 other dashboard tests passed. Lane E retained the failed-job log.
-  Cause: where Web Locks exist, a reader's status read waits for the browser's answer to its Web
-  Lock request before it starts, and the file's `flush` helper gave that answer a fixed 10 ms (the
-  same race W59 fixed for six other cases by counting calls). `flush` now tracks every lock request
-  the page makes and waits until each one is granted or queued behind one of the page's own
-  callbacks that still holds its lock; no assertion changed. Receipts, all in real Chromium on the
-  owner's Mac: with every grant made to reach the page 40 ms late, the old file failed 29 of its
-  109 tests (this one with the CI failure's `Checking…`) and the new one passed all 109; the new
-  one also passed 5 plain runs and 5 runs beside 16 busy CPU loops.
-  Accepted limit (#1342's Codex review): the wait counts only this page's own lock holders, so a
-  lock another page held and never gave back would keep `flush` waiting until the test's timeout.
-  No dashboard test file that mounts the Payments screen holds one that long (listed in #1342).
-  The rule it taught — a test waits for a browser grant by tracking it, never a fixed sleep — is
-  in CLAUDE.md §4, with this receipt in `docs/developers/testing-guide.md` (A340, #1356).
-- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
-  attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
-  `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
-  `s3.pause()` answered before the bound, so the assertion at line 540 read
-  `expected 'answered' to be 'unanswered'`. W30 makes `pause()` await the stopped state before its
-  caller starts that control. The original one-off race has not been reproduced locally; the
-  changed real-binary stream pause and loop suites passed together on 2026-10-03. If the control
-  fails again, retain that run's log and inspect the child state before naming another cause.
-- **The stream pause test's last restore failed in CI (runs 37042034082 and 37690377712) — DONE
-  (A387, #1398, 2026-10-08).** `test-server-stream` sets loopback's MTU to 1500, under which the
-  reproducing harness never hung. Receipt:
-  [testing-guide.md](developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
-  Left open: a local Linux run keeps the machine's own loopback and can still meet the stall (how
-  often was not measured), and a box's restore over a real network was not measured. No timeout
-  increase or retry was introduced.
-- **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
-  `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
-  container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
-  `scripts/scratch-dir.mjs` measures 83% of branches, because the line for a missing `/dev/shm` runs
-  only on macOS; the root project's thresholds still pass. Neither is queued. Receipt:
-  [ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
-- **Would the package suites' databases gain from memory too?** `useVenueDb`
-  (`packages/db/src/testing/venue-db.ts`) makes each suite's venue folder under the system temporary
-  directory, and the root suites `scripts/append-only-triggers.test.ts` and
-  `scripts/behavioural-triggers.test.ts` make theirs there too, so they all commit to the runner's
-  disk. Not measured for them. Next action: time one database-heavy package's `test:coverage` in CI
-  with its folders on the disk and under `/dev/shm` (`scratchParent()` in `scripts/scratch-dir.mjs`
-  is the choice the upgrade test makes), and adopt it in `useVenueDb` only if the shard times move
-  and a suite's databases fit in `/dev/shm` (Docker's default is 64 MiB). One data point from
-  A130: on a CI runner a stream test's commit took 1,017 ms while Linux's pressure counters showed
-  every process stalled on the disk ([testing-guide.md](developers/testing-guide.md), "In CI their
-  temporary files are in memory").
-- **Dependabot, switched on by #760 (2026-09-27); its 15 security alerts fixed by A107 (PR #796,
-  2026-09-28).** Config: `.github/dependabot.yml`; how to land one of its PRs:
-  `docs/developers/workflow-guide.md` → Dependabot pull requests. A `vitest` group moves `vitest` and
-  `@vitest/*` together, majors included; closing #766 stored an ignore of
-  `@vitest/browser-playwright` 5.x, and whether the group's Vitest 5 PR obeys it is untested (how to
-  check and clear it: workflow-guide → Dependabot pull requests); such a PR also has to re-measure
-  mutation first (Track C, _Left behind by the Stryker upgrade (#447, 2026-09-19)_). The
-  `versioning-strategy` question is recorded under #432's loose ends in Track C.
-  **The receipt for the two overrides** (workflow-guide points here): four alerted packages were
-  moved inside the ranges their parents already declare, and two are forced by root
-  `pnpm.overrides` entries — `typed-rest-client>qs` to `^6.16.0` (6.16.0), and
-  `@esbuild-kit/core-utils>esbuild` to `^0.25.0` (the 0.25.12 already in the tree). What was run for
-  the two overrides: `typed-rest-client`'s query-string builder over eight parameter shapes gave the
-  same URLs under `qs` 6.15.1 and 6.16.0 except one, where 6.15.1 threw a `TypeError` and 6.16.0
-  does not (the `arrayFormat: 'comma'` null-entry fix in `qs` 6.15.2's changelog); a search of
-  Stryker's installed `dist` found `typed-rest-client` imported in two of its JavaScript files,
-  `initializer/npm-registry.js` and `reporters/dashboard-reporter/index.js`, and no
-  `stryker.config.json` here names the dashboard reporter. `drizzle-kit` 0.31.11's shipped code never
-  names `@esbuild-kit` (only its `package.json` does): with both `@esbuild-kit` folders renamed away,
-  `drizzle-kit generate` in all fourteen migration sets printed the same as before; each set
-  generated from nothing gave the same SQL and snapshots before and after the override (ids and
-  timestamps aside); and the loader itself still runs a TypeScript file on esbuild 0.25.12. A full
-  Stryker run over `packages/shared` gave the same 990 mutants with the same results on the old and
-  new lockfile.
-- **Open Dependabot pull requests — low priority, not queued (owner, 2026-10-08: take them from here
-  when a lane has room).** #1179 (Vitest 5) waits on Stryker (owner). The rest, each landed per
-  workflow-guide → Dependabot pull requests:
-  1. **sharp 0.35.5 (#1299 root, #1423 `apps/server`) and the compose group (#1178).** Land the two
-     sharp PRs together. sharp is copied into the box image and left out of every bundle, so the
-     image smoke's sharp step is the proof — and a PR that changed no image input builds no image
-     (CLAUDE.md §2): say how the image was built for it (a `workflow_dispatch` on the head, with its
-     `headSha`). For compose, check the dev stack still starts if a service image moved.
-  2. **The npm minor-and-patch group (#1267, 13 updates).** Rebase first. Read every package's notes
-     across its whole range; list anything that changes behaviour, a default or built output, and
-     diff built artefacts for anything in a bundle. A bump that breaks is dropped from the group,
-     with the reason recorded.
-  3. **stripe 22.6.2 → 23.0.0 (#1181, a major).** Map each breaking change to
-     `packages/payments-stripe` call sites; test through the real client as well as a fake (CLAUDE.md
-     §4). Payments: full review path.
-- **Copies of the patterns A105 and C27 replaced — OPEN.** The same two SQL patterns (the
-  block-comment one A105 replaced, and `/--.*$/`, the one C27 replaced) are copied in
-  `scripts/module-graph-honesty.test.ts`, a guard reading the repository's own SQL;
-  `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/` on the till's locale (CodeQL did
-  not flag it); and `/\/+$/` (written `/\/+$/u` in `mailpit-client.ts`) is still used in
-  `apps/server/src/boot.ts` (a peer relay URL from `mirror_config`, owner-written config),
-  `apps/server/src/mailpit-client.ts` (the loopback Mailpit base URL) and
-  `apps/server/src/mirror-bundle-fetch.ts` (a URL already parsed by `assertSafePrimaryUrl`) — none of
-  the three timed; and the email pattern itself is still copied six times in `apps/dashboard`
-  (`login-preference.ts` twice, `screens/login-screen.ts`, `screens/profile-screen.ts`,
-  `widgets/person-edit.ts`, `widgets/person-form.ts`), run in the browser on an address the person
-  typed or the browser saved (CodeQL did not flag them either). See also the OPEN bullet "The two
-  SQL scanners named `stripSql`…": a fix to one touches the other's code.
-- **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)`
-  (`apps/server/src/testing/free-ports.ts`) holds every probe until the last port is drawn, but a
-  port is still released before the server binds it, so another test worker drawing or connecting
-  in that gap can take it; nothing has measured how often. Removing that would need the server to
-  accept port 0 and report the port it bound (`WAITRON_HTTP_PORT` refuses `"0"` today).
-  `bench/sqlite-failover/src/unreachable-store.ts`'s `reservePort` and the inline copy in
-  `apps/server/scripts/cloud-integration-fixture.ts` have the same release-then-use shape and were
-  not changed. C88 (#920) reproduced this gap as one way the pause test's single CI failure could
-  happen, and `startS3TestServer` now recovers from it; the Waitron servers' own ports still have the
-  gap.
-- **`bundle-smoke` builds only the credentials and server bundles**, so a change to
-  `scripts/bundle-node.mjs` selects print-agent and provisioning for typecheck and tests (#593,
-  through `ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`) but builds neither of their bundles
-  in CI.
-- **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
-  floor retired 2026-09-24 by PR #549).** First promotion PR #498 (21 packages); then one pull
-  request each: `printing` (#500), `bookings` (#503), `tunnel` (#506), `print-agent-app` (#508),
-  `provisioning` (#510), `payments-sumup` (#512), `payments-stripe` (#514), `server-kit` (#515),
-  `sync-enrolment` (#518), `dashboard-kit` (#521), `fiscal-none` (#522), `setup` (#523),
-  `print-agent` (#525), `identity` (#526), `catalogue` (#530), `apps/server` (#534), `apps/till`
-  (#536), `apps/dashboard` (#538), `venue-service` (#546) and `media` (#547).
-  - From #536: the table-service, boot-and-counter and three `tender-pay-*` suites are separate
-    files that can be folded back into `till-app.test.ts` and `tender-pay.test.ts` once
-    `feat/variants-sale-line` lands.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
   §1). Every pruning pull request passes `scripts/comments-only.mjs <base>`; its header states what
@@ -7541,162 +7496,6 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
 every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `media`,
     `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the
     `DrizzleQueryError` entry under _Afterwards_).
-
-- **The two SQL scanners named `stripSql` blank block comments before `--` comments — OPEN (split
-  from A95).** `scripts/module-graph-honesty.test.ts` and
-  `packages/sync-enrolment/src/migration-tables.ts` (product code, not a guard) blank `/*…*/` before
-  `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not run;
-  whether any file they scan has a `/*` inside a `--` comment or a string is not measured. The
-  TypeScript reader in `packages/shared/src/source-comments.ts` knows nothing of `--` comments, so
-  it is not a drop-in fix. See also the OPEN bullet "Copies of the patterns A105 and C27
-  replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
-  one touches the other's code.
-
-- **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
-  (2026-09-23).** `packages/db`'s mutation run is split across ten parallel CI jobs by
-  `scripts/mutation-shard.mjs`, which packs whole files into jobs by file size in bytes. That file is
-  now the largest file the run mutates — recompute with
-  `find packages/db/src -name '*.ts' ! -name '*.test.ts' -exec wc -lc {} + | sort -k2 -nr | head`
-  rather than trusting a figure written here. `sales.ts` is the single entry in that script's
-  `HEAVY_FILES`, the mechanism for splitting one file across several jobs. **The new file's runtime
-  was not measured and no `HEAVY_FILES` entry was added**, so whether it drags a job out the way
-  `sales.ts` did is unknown — and size alone does not settle it, since what dominated `sales.ts` was
-  that nearly the whole suite covers its mutants. Nothing on a pull request will say either:
-  `packages/db`'s mutation score and its job durations belong to the weekly `mutation.yml` run
-  (`CLAUDE.md` §2). **Next action:** read the job durations from the next weekly run, and add a
-  `HEAVY_FILES` entry if that file's job is the long one.
-
-- **The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum — OPEN,
-  and the guard cannot close it.** A case that waits several times can still outlast a bound that
-  passes this check. Only reading catches that shape; if it recurs, the answer is probably a runtime
-  check rather than a text reader. (Its `packages/` and `apps/` half went with the real-PostgreSQL
-  harness; re-extending the scan is worth doing only if suites under those roots start declaring
-  long waits again — `CLAUDE.md` §4.)
-
-- **What the per-push CI concurrency groups (#384) left open:**
-  - **No run has exercised the `hold` answer** — an older run publishing after a newer one — which
-    needs two merges close enough together to overlap and is not worth forcing.
-  - **Two states stop publishing until a person intervenes:** a `:main` carrying no
-    `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
-    image built outside CI, or a rewritten history). Both wedge every later publish identically; the
-    `sha-` tags keep coming. The repair is to delete or retag `:main` by hand. Nothing alerts on it.
-  - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
-    for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
-    exactly the broadening that would publish a backwards tag. It matters only to a fork.
-  - **The guard's concurrency cases see ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that
-    one file as text for them, so a future push-triggered workflow that groups by ref is seen by
-    nothing.
-
-- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
-  retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
-  "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); a test PostgreSQL
-  container with no published port (2026-09-12 — capture `docker inspect` and check the Docker
-  Desktop VM's ephemeral ports); bookings' browser freeze, never reproduced locally after #291. A
-  fourth, from #334's validation run (2026-09-12): the service-status browser suite failed with
-  Playwright's "Frame was detached" during a whole-workspace run, and then passed on its own with no
-  code change. The original log and screenshot were kept; the cause is unexplained, so retain them
-  again on the next sighting rather than re-running to green.
-- **A sixth: `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and cancels on
-  Escape from a focused field" — FIXED (A220f, #1075).**
-- **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
-  pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
-  with no colour evidence, so nothing here explains it — treat it as still unexplained. And
-  `packages/ui` and `apps/till` have the same harness with no pointer reset (the dashboard's is
-  `parkPointer`, guarded by `apps/dashboard/src/widgets/pointer-reset.test.ts`), with
-  `packages/ui/src/components/wt-button.test.ts` ending a test hovering a button, so the same flake
-  is waiting there.
-- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the
-  Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Under vitest 3.2.7 one
-  worker's `onTaskUpdate` reporting call timed out on birpc's 60-second default. On 4.1.11 an answer
-  that never came would leave the shard waiting until the job's 15-minute `timeout-minutes`
-  cancelled it, rather than failing it when the run ends. Written up in
-  [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
-  the job log on the next sighting — it is the cheapest evidence there is.
-- **A seventh: `apps/server/src/adjustments-apply.test.ts` → "applies it with a manager's PIN"
-  failed the CI run on main that merged #1325 (W69), 2026-10-07 — FIXED (A308, #1330).** It searched the
-  whole stored command row for the PIN `7777`, and that run's random submission id contained
-  `7777`. The check now walks the row: no value may be the PIN, and only a generated id, digest or
-  timestamp, in a field whose name marks it as one, may contain its digits.
-- **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
-  `scripts/write-path-tables.test.ts` (#430) covers the tables request code may read and never
-  write — those `scripts/write-path-tables.json` lists, `tenants`, `nodes`, `deployment`,
-  `mirror_config` and `node_roles` — and nothing else. The slice-1 design asks for more: everything
-  else should become a guard that reads the source, not a convention with nothing checking it. Many
-  tables refuse an insert, an update or a delete only through the grant, with no trigger backing it,
-  and TRUNCATE is wider still — no table grants it and only ten carry a trigger blocking it. The
-  per-table matrix is read from `packages/fiscal-verifactu/src/privileges.expected.ts`, which goes
-  when the grants do.
-
-  **What #430's review left behind, none of it taken there.** The allowance list is a JSON file
-  rather than the annotated TypeScript constant every sibling guard uses, because the plan named a
-  file that outlives the grants; the justification for each entry is a doc comment beside the
-  `JSON.parse` instead, which no test reads. The detector only reads a builder call whose receiver
-  looks like a database handle, so a write through a handle named something else is invisible; that
-  was the price of not reporting `cache.delete(nodes)` on an ordinary `Set`.
-
-  **Next action:** decide before the flip between three shapes. Grow the guard an operation column,
-  which means encoding a privilege matrix as regexes. Give the tables that lack one a `reject_mutation`
-  trigger, as the core baseline already does for eight tables in a single migration. Or brand the owner handle as its own type
-  so `tsc` refuses the write instead of a text scan reporting it. Today the distinction is carried by
-  a NAME and nothing else: `apps/server` declares `ownerDb: Database` at half a dozen call sites and
-  hands it to write helpers in `packages/db` that take a plain `Database`, which is the same gap
-  `CLAUDE.md` §3 names for the neighbouring `Database`/`Transaction` case. The third also closes
-  the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
-  than a call chain.
-
-- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, #1036, #1042); left open:**
-  **#1042 needs every venue migrated before it reset** — the owner's box included (dev venues: `wa-wt reset demo <name>`): it changed the hashes of `packages/db/drizzle/0001_behavioural_triggers.sql` and `packages/media/drizzle/0001_image_references.sql`, so boot refuses such a venue with `provisioning.database_ahead`.
-  Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites, which name
-  no engine.
-
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and #1039).**
-  Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
-  because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`)
-  ran it by that name. PF8 landed as #1088; rename the file and its references in the next T2
-  sweep. The `pg` handle
-  stays in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts`,
-  the fiscal gates no runner edits.
-  `generatePassword` has a caller in `apps/server/src/break-glass.ts` and remains exported.
-  The `provisioning.invalid_identifier` error registry entry remains; the A92 tree search
-  (`rg -n provisioning.invalid_identifier packages apps`) found no product throw site. Retire it
-  with the broader dead-code sweep, checking stored-code consumers first.
-
-- **`pnpm reap` and an interrupted browser test run's Chromium (A426, owner 2026-10-08) — MEASURED,
-  no code change.** Queued to make the sweep kill an orphaned Playwright test browser. Reproducing it
-  first, three interrupts of a `packages/ui` browser run (vitest killed, its `pnpm` killed, the
-  browser's main process killed) left no test browser with ppid 1: the browser exits with its vitest
-  process, and the existing sweep already kills an orphaned vitest. Receipt:
-  [testing-guide.md](developers/testing-guide.md), "An interrupted run also ORPHANS its vitest
-  workers". **Open point (owner):** whether to add a browser rule anyway, for a shape not observed;
-  it would have to tell a test browser from the Playwright MCP's `mcp-chrome-*` browser, which lives
-  under the same `ms-playwright` cache folder.
-
-- **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
-  `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
-  stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
-  never match; `bench/sqlite-failover` is the only rig that stamps `com.waitron.reapable`
-  ([ci-and-gates.md](developers/ci-and-gates.md) carries the receipt naming each rig). Either stamp
-  the label in that rig or accept cleaning it by hand — but the rig's schema is three storage
-  decisions out of date anyway (its own entry in Track C), so the two decisions belong together.
-
-- **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
-  together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
-  dominates.
-- **A throwaway script found six comments that described code that was no longer there, and it is
-  not a guard yet** (written 2026-09-14 during the tenant-column removal). It flags a comment whose
-  subject has gone from the lines beneath it. It is not usable as it stands: 13 of its 19 hits
-  were the legitimate shape where a block comment heads a group of members rather than describing
-  the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
-  header-then-member shape, and its own tests, rather than re-running a scratch script.
-- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
-  The case boots a mirror on an empty database and checks it serves a status surface. Its receipt
-  used to be a foreign key from `persons` to `tenants` — remove the guard and the boot would die on
-  it — and #378 removed every foreign key to that table, so nothing now says what
-  would break if the guard went. The test's own comment says this plainly and claims nothing more.
-  **Next action:** find a failure the empty database still causes without the guard, and name it;
-  if there is none, say so in the comment and stop calling the case a guard test.
-- _Small:_ `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
-  output line is read by no consumer.
 
 ---
 
@@ -8903,7 +8702,7 @@ conflict.
   tests that assert nothing useful** (owner, 2026-09-23): "we never want to add junk tests just to
   meet a coverage bar. the tests added must actually test something useful."
 - **Every package and the root project hold the high coverage bar, `98/98/98/95`** (owner,
-  2026-09-23) — see B9 → _Every package to the high coverage bar_.
+  2026-09-23) — see [ci-and-gates.md](developers/ci-and-gates.md#coverage-thresholds-one-bar-for-every-package).
 
 ---
 

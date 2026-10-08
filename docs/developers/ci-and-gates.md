@@ -140,13 +140,20 @@ unfiltered `main` run, not a wrong hook.
 
 **Every package, and the root project, holds `statements 98 / lines 98 / functions 98 / branches
 95`** (owner decision 2026-09-23). That retired the split of 2026-09-05, which reserved the high bar
-for the fiscal core and the data-layer foundations on the grounds of consequence, and put every other
-package, browser packages included, at a `90/90/85/85` floor. The owner chose the whole bar over two
-narrower answers to the questions task T3 left open — raising only the floor's functions minimum, to
-95 or to 90. Each package under it was brought up in a pull request of its own (listed in
-`docs/backlog.md` → *Every package to the high coverage bar*), and on 2026-09-24, once none was left
-on it, the floor was removed from the guard and retired as policy: live prose mentions it only as
-retired, and dated history still records it. A new package holds the bar from its first commit.
+for the fiscal core and the data-layer foundations on the grounds of consequence, and put every
+other package, browser packages included, at a `90/90/85/85` floor. The owner chose the whole bar
+over two narrower answers to the questions task T3 left open — raising only the floor's functions
+minimum, to 95 or to 90. Each package under it was brought up in a pull request of its own (listed
+below), and on 2026-09-24, once none was left on it, the floor was removed from the guard and
+retired as policy: live prose mentions it only as retired, and dated history still records it. A new
+package holds the bar from its first commit.
+
+First promotion PR #498 (21 packages); then one pull request each: `printing` (#500), `bookings`
+(#503), `tunnel` (#506), `print-agent-app` (#508), `provisioning` (#510), `payments-sumup` (#512),
+`payments-stripe` (#514), `server-kit` (#515), `sync-enrolment` (#518), `dashboard-kit` (#521),
+`fiscal-none` (#522), `setup` (#523), `print-agent` (#525), `identity` (#526), `catalogue` (#530),
+`apps/server` (#534), `apps/till` (#536), `apps/dashboard` (#538), `venue-service` (#546) and
+`media` (#547).
 
 The bar is negotiable only where the rest of a package's gap could be closed solely by tests that
 assert nothing useful (owner, 2026-09-23: "we never want to add junk tests just to meet a coverage

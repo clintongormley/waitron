@@ -1,0 +1,159 @@
+# CI, tests and developer tooling — detail
+
+The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
+their full text.
+
+## The stream pause test's frozen-bucket control failed once in CI
+
+- **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
+  attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
+  `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after
+  `s3.pause()` answered before the bound, so the assertion at line 540 read
+  `expected 'answered' to be 'unanswered'`. W30 makes `pause()` await the stopped state before its
+  caller starts that control. The original one-off race has not been reproduced locally; the
+  changed real-binary stream pause and loop suites passed together on 2026-10-03. If the control
+  fails again, retain that run's log and inspect the child state before naming another cause.
+
+## What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open
+
+- **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
+  `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
+  container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
+  `scripts/scratch-dir.mjs` measures 83% of branches, because the line for a missing `/dev/shm` runs
+  only on macOS; the root project's thresholds still pass. Neither is queued. Receipt:
+  [ci-and-gates.md](../developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
+
+## Would the package suites' databases gain from memory too?
+
+- **Would the package suites' databases gain from memory too?** `useVenueDb`
+  (`packages/db/src/testing/venue-db.ts`) makes each suite's venue folder under the system temporary
+  directory, and the root suites `scripts/append-only-triggers.test.ts` and
+  `scripts/behavioural-triggers.test.ts` make theirs there too, so they all commit to the runner's
+  disk. Not measured for them. Next action: time one database-heavy package's `test:coverage` in CI
+  with its folders on the disk and under `/dev/shm` (`scratchParent()` in `scripts/scratch-dir.mjs`
+  is the choice the upgrade test makes), and adopt it in `useVenueDb` only if the shard times move
+  and a suite's databases fit in `/dev/shm` (Docker's default is 64 MiB). One data point from
+  A130: on a CI runner a stream test's commit took 1,017 ms while Linux's pressure counters showed
+  every process stalled on the disk ([testing-guide.md](../developers/testing-guide.md), "In CI their
+  temporary files are in memory").
+
+## What the landing-port fix (A80, PR #740) left open
+
+- **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)`
+  (`apps/server/src/testing/free-ports.ts`) holds every probe until the last port is drawn, but a
+  port is still released before the server binds it, so another test worker drawing or connecting
+  in that gap can take it; nothing has measured how often. Removing that would need the server to
+  accept port 0 and report the port it bound (`WAITRON_HTTP_PORT` refuses `"0"` today).
+  `bench/sqlite-failover/src/unreachable-store.ts`'s `reservePort` and the inline copy in
+  `apps/server/scripts/cloud-integration-fixture.ts` have the same release-then-use shape and were
+  not changed. C88 (#920) reproduced this gap as one way the pause test's single CI failure could
+  happen, and `startS3TestServer` now recovers from it; the Waitron servers' own ports still have the
+  gap.
+
+## Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run
+
+- **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
+  (2026-09-23).** `packages/db`'s mutation run is split across ten parallel CI jobs by
+  `scripts/mutation-shard.mjs`, which packs whole files into jobs by file size in bytes. That file is
+  now the largest file the run mutates — recompute with
+  `find packages/db/src -name '*.ts' ! -name '*.test.ts' -exec wc -lc {} + | sort -k2 -nr | head`
+  rather than trusting a figure written here. `sales.ts` is the single entry in that script's
+  `HEAVY_FILES`, the mechanism for splitting one file across several jobs. **The new file's runtime
+  was not measured and no `HEAVY_FILES` entry was added**, so whether it drags a job out the way
+  `sales.ts` did is unknown — and size alone does not settle it, since what dominated `sales.ts` was
+  that nearly the whole suite covers its mutants. Nothing on a pull request will say either:
+  `packages/db`'s mutation score and its job durations belong to the weekly `mutation.yml` run
+  (`CLAUDE.md` §2). **Next action:** read the job durations from the next weekly run, and add a
+  `HEAVY_FILES` entry if that file's job is the long one.
+
+## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
+
+- **The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum — OPEN,
+  and the guard cannot close it.** A case that waits several times can still outlast a bound that
+  passes this check. Only reading catches that shape; if it recurs, the answer is probably a runtime
+  check rather than a text reader. (Its `packages/` and `apps/` half went with the real-PostgreSQL
+  harness; re-extending the scan is worth doing only if suites under those roots start declaring
+  long waits again — `CLAUDE.md` §4.)
+
+## What the per-push CI concurrency groups (#384) left open
+
+- **What the per-push CI concurrency groups (#384) left open:**
+  - **No run has exercised the `hold` answer** — an older run publishing after a newer one — which
+    needs two merges close enough together to overlap and is not worth forcing.
+  - **Two states stop publishing until a person intervenes:** a `:main` carrying no
+    `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
+    image built outside CI, or a rewritten history). Both wedge every later publish identically; the
+    `sha-` tags keep coming. The repair is to delete or retag `:main` by hand. Nothing alerts on it.
+  - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
+    for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
+    exactly the broadening that would publish a backwards tag. It matters only to a fork.
+  - **The guard's concurrency cases see ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that
+    one file as text for them, so a future push-triggered workflow that groups by ref is seen by
+    nothing.
+
+## Three unexplained incidents, each seen once or twice; on recurrence retain the log before retrying
+
+- **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
+  retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
+  "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); a test PostgreSQL
+  container with no published port (2026-09-12 — capture `docker inspect` and check the Docker
+  Desktop VM's ephemeral ports); bookings' browser freeze, never reproduced locally after #291. A
+  fourth, from #334's validation run (2026-09-12): the service-status browser suite failed with
+  Playwright's "Frame was detached" during a whole-workspace run, and then passed on its own with no
+  code change. The original log and screenshot were kept; the cause is unexplained, so retain them
+  again on the next sighting rather than re-running to green.
+
+## A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite
+
+- **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
+  pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
+  with no colour evidence, so nothing here explains it — treat it as still unexplained. And
+  `packages/ui` and `apps/till` have the same harness with no pointer reset (the dashboard's is
+  `parkPointer`, guarded by `apps/dashboard/src/widgets/pointer-reset.test.ts`), with
+  `packages/ui/src/components/wt-button.test.ts` ending a test hovering a button, so the same flake
+  is waiting there.
+
+## A sixth: a CI shard exited 1 with every test passing (PR #414)
+
+- **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the
+  Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Under vitest 3.2.7 one
+  worker's `onTaskUpdate` reporting call timed out on birpc's 60-second default. On 4.1.11 an answer
+  that never came would leave the shard waiting until the job's 15-minute `timeout-minutes`
+  cancelled it, rather than failing it when the run ends. Written up in
+  [ci-and-gates.md](../developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
+  the job log on the next sighting — it is the cheapest evidence there is.
+
+## `bench/pglite-throughput` starts a container `pnpm reap` cannot see
+
+- **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
+  `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
+  stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
+  never match; `bench/sqlite-failover` is the only rig that stamps `com.waitron.reapable`
+  ([ci-and-gates.md](../developers/ci-and-gates.md) carries the receipt naming each rig). Either stamp
+  the label in that rig or accept cleaning it by hand — but the rig's schema is three storage
+  decisions out of date anyway (its own entry in Track C), so the two decisions belong together.
+
+## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
+
+- **A throwaway script found six comments that described code that was no longer there, and it is
+  not a guard yet** (written 2026-09-14 during the tenant-column removal). It flags a comment whose
+  subject has gone from the lines beneath it. It is not usable as it stands: 13 of its 19 hits
+  were the legitimate shape where a block comment heads a group of members rather than describing
+  the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
+  header-then-member shape, and its own tests, rather than re-running a scratch script.
+
+## `apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control
+
+- **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
+  The case boots a mirror on an empty database and checks it serves a status surface. Its receipt
+  used to be a foreign key from `persons` to `tenants` — remove the guard and the boot would die on
+  it — and #378 removed every foreign key to that table, so nothing now says what
+  would break if the guard went. The test's own comment says this plainly and claims nothing more.
+  **Next action:** find a failure the empty database still causes without the guard, and name it;
+  if there is none, say so in the comment and stop calling the case a guard test.
+
+## Decisions and deliberate limits
+
+- **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
+  together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
+  dominates.
