@@ -273,6 +273,11 @@ it("acceptance commits only submitted values and retains a newer draft", async (
   const modal = await open(screen);
   await field(screen, "name", "First edit");
   await press(screen, "save-editor");
+  const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="save-editor"]',
+  )!;
+  expect(save.variant).toBe("primary");
+  expect(save.disabled).toBe(true);
   await field(screen, "name", "Later edit");
   result.resolve(reason);
   await expect.poll(() => api.listReasons.mock.calls.length).toBe(2);
@@ -280,8 +285,12 @@ it("acceptance commits only submitted values and retains a newer draft", async (
   expect(native(modal).open).toBe(true);
   expect(value(screen, "name")).toBe("Later edit");
   expect(unload()).toBe(true);
+  expect(save.variant).toBe("primary");
+  expect(save.disabled).toBe(false);
   await field(screen, "name", " First edit ");
   expect(unload()).toBe(false);
+  expect(save.variant).toBe("secondary");
+  expect(save.disabled).toBe(true);
   await press(screen, "cancel-editor");
   expect((await question()).open).toBe(false);
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
@@ -527,14 +536,23 @@ it("an accepted settings write retains newer input against its submitted limit",
   const { screen } = await mount(api);
   await field(screen, "maxBillDiscount", "10");
   await press(screen, "save-limit");
+  const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="save-limit"]',
+  )!;
+  expect(save.variant).toBe("primary");
+  expect(save.disabled).toBe(true);
   await field(screen, "maxBillDiscount", "20");
   result.resolve({ maxBillDiscountBp: 1000 });
   await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
   await settle(screen);
   expect(value(screen, "maxBillDiscount")).toBe("20");
   expect(unload()).toBe(true);
+  expect(save.variant).toBe("primary");
+  expect(save.disabled).toBe(false);
   await field(screen, "maxBillDiscount", "010,00");
   expect(unload()).toBe(false);
+  expect(save.variant).toBe("secondary");
+  expect(save.disabled).toBe(true);
 });
 it("saving a reason leaves the independent limit dirty", async () => {
   const { screen } = await mount();
@@ -634,3 +652,23 @@ it("reconnect waits for fresh settings before exposing a limit draft", async () 
   await field(screen, "maxBillDiscount", "30");
   expect(unload()).toBe(true);
 });
+
+it.each([false, true])(
+  "closing Deactivate does not route through a retired reason draft (replaced=%s)",
+  async (replaced) => {
+    const { screen } = await mount();
+    await open(screen);
+    if (!replaced) await press(screen, "cancel-editor");
+    await press(screen, "deactivate-reason-one");
+    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const request = vi.spyOn(app.leave.coordinator, "request");
+    try {
+      await modal.requestClose("cancel");
+      await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+    }
+  },
+);

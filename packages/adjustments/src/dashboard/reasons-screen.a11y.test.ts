@@ -112,6 +112,37 @@ async function press(el: AdjustmentReasonsScreen, test: string): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)", (theme) => {
+  test.each(["add-reason", "edit-c"])("quiet and changed reason Save (%s)", async (action) => {
+    const el = await screen(theme);
+    await press(el, action);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+    expect(save.disabled).toBe(true);
+    expect(save.variant).toBe("secondary");
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Edited complaint" } }),
+    );
+    await settle(el);
+    expect(save.disabled).toBe(false);
+    expect(save.variant).toBe("primary");
+    await expectNoA11yViolations(host);
+  });
+  test("quiet and changed limit Save", async () => {
+    const el = await screen(theme);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-limit]")!;
+    expect(save.disabled).toBe(true);
+    expect(save.variant).toBe("secondary");
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("[name=maxBillDiscount]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "20" } }),
+    );
+    await settle(el);
+    expect(save.disabled).toBe(false);
+    expect(save.variant).toBe("primary");
+    await expectNoA11yViolations(host);
+  });
   test("the list of active reasons", async () => {
     await screen(theme);
     await expectNoA11yViolations(host);
@@ -166,6 +197,10 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
   test("the editor after an invalid submission", async () => {
     const el = await screen(theme);
     await press(el, "add-reason");
+    deep(el, '[name="names-en"]').dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Birthday guest" } }),
+    );
+    await el.updateComplete;
     await press(el, "save-editor");
     expect(el.shadowRoot!.querySelector('[data-field-error="actions"]')).not.toBeNull();
     await expectNoA11yViolations(host);
@@ -176,6 +211,10 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
       updateReason: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     await press(el, "edit-c");
+    deep(el, '[name="name"]').dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Edited complaint" } }),
+    );
+    await el.updateComplete;
     await press(el, "save-editor");
     const actions = el.shadowRoot!.querySelector("wt-modal")!.querySelector("wt-form-actions")!;
     expect(await formMessageOf(actions)).not.toBeNull();
@@ -195,6 +234,10 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
 
   test("the bill discount limit just saved", async () => {
     const el = await screen(theme);
+    deep(el, '[name="maxBillDiscount"]').dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "20" } }),
+    );
+    await el.updateComplete;
     await press(el, "save-limit");
     expect(el.shadowRoot!.querySelector('[data-test="limit-saved"]')).not.toBeNull();
     await expectNoA11yViolations(host);

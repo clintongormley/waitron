@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import { submitOnEnter, baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -169,14 +169,15 @@ export class BookingForm extends LitElement {
     }
     if (!this.open) this.#disposeDraft();
     else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<BookingDraft>({
+      const draft = draftScopeFor<BookingDraft>(this, {
         id: this,
         current: () => this.#value(),
         snapshot: (value) => ({ ...value }),
         equal: (a, b) => comparable(a) === comparable(b),
         restore: (value) => this.#restore(value),
       });
+      this.#leave = draft.coordinator;
+      this.#scope = draft.scope;
     }
   }
 
@@ -212,6 +213,7 @@ export class BookingForm extends LitElement {
   #confirm(event: Event, opening: object): void {
     event.stopPropagation();
     if (this.busy || !this.isConnected || !this.open || opening !== this.#opening) return;
+    if (saveActionState(this.#scope).unchanged) return;
     const error = this.#validate();
     if (error !== null) {
       this.validationError = error;
@@ -259,6 +261,7 @@ export class BookingForm extends LitElement {
 
   override render() {
     const opening = this.#opening;
+    const save = saveActionState(this.#scope);
     return html`${keyed(
       opening,
       html`
@@ -270,7 +273,7 @@ export class BookingForm extends LitElement {
           heading=${this.booking ? t("booking.edit") : t("booking.new")}
           .open=${this.open}
           .dismissible=${!this.busy}
-          .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+          .beforeClose=${this.#leave ? this.#beforeClose : undefined}
           @wt-close=${(e: Event) => this.#onClose(e, opening)}
         >
           <wt-input
@@ -350,9 +353,9 @@ export class BookingForm extends LitElement {
           }
           <wt-button
             slot="footer"
-            variant="primary"
+            variant=${save.variant}
             data-test="confirm"
-            ?disabled=${this.busy}
+            ?disabled=${save.unchanged || this.busy}
             @click=${(e: Event) => this.#confirm(e, opening)}
             >${this.booking ? t("action.save") : t("action.create")}</wt-button
           >

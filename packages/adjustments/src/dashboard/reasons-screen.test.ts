@@ -635,6 +635,7 @@ describe("the editor", () => {
     const api = fakeApi({ updateReason: vi.fn(() => new Promise<AdjustmentReason>(() => {})) });
     const el = await mount(api);
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(roleTrigger(el, "applyRole").disabled).toBe(true);
     expect(roleTrigger(el, "approverRole").disabled).toBe(true);
@@ -790,6 +791,7 @@ describe("the editor", () => {
     const el = await mount(api);
     await press(el, "edit-c");
     expect(el.shadowRoot!.querySelector('[name="names-es"]')).toBeNull();
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(api.updateReason.mock.calls[0]![1].names).toEqual({
       en: "Guest complaint",
@@ -867,6 +869,7 @@ describe("the editor", () => {
     const el = await mount(api);
     await press(el, "edit-c");
     field(el, "name").focus();
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     const save = find(el, '[data-test="save-editor"]') as HTMLElement & { disabled: boolean };
     expect(save.disabled).toBe(true);
@@ -885,6 +888,7 @@ describe("the editor", () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "add-reason");
+    await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Enter a name.");
     await type(el, "name", "Birthday");
@@ -903,6 +907,7 @@ describe("the editor", () => {
       }),
     );
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     const message = "Enter a percentage above 0 and up to 100, with at most two decimals.";
     expect(besideField(el, "maxPercent")).toBe(message);
@@ -928,6 +933,7 @@ describe("the editor", () => {
       }),
     );
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(besideField(el, fieldName)).toBe(message);
     expect(await bottom(el)).toBe(FIX_FIELDS);
@@ -962,6 +968,7 @@ describe("the editor", () => {
       }),
     );
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(await bottom(el)).toBe("That reason could not be found. It may have been removed");
     expect(modal(el)).not.toBeNull();
@@ -973,6 +980,7 @@ describe("the editor", () => {
     });
     const el = await mount(api);
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledTimes(1);
     expect(modal(el)).toBeNull();
@@ -1000,6 +1008,7 @@ describe("the editor", () => {
     await press(el, "edit-c");
     expect(field(el, "maxPercent").value).toBe("12,5");
     expect(field(el, "maxAmount").value).toBe("30,00");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
       maxPercentBp: 1250,
@@ -1063,6 +1072,7 @@ describe("the editor", () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     const input = field(el, "name").shadowRoot!.querySelector("input")!;
     input.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
@@ -1086,6 +1096,7 @@ describe("the editor's messages", () => {
   it("marks the fields on a failed press, says so above Save, focuses the first and holds Save", async () => {
     const el = await mount(fakeApi());
     await press(el, "add-reason");
+    await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Enter a name.");
     expect(besideField(el, "actions")).toBe("Choose at least one action.");
@@ -1109,6 +1120,7 @@ describe("the editor's messages", () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "add-reason");
+    await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
     await type(el, "name", "Birthday");
     expect(besideField(el, "name")).toBe("");
@@ -1141,6 +1153,7 @@ describe("the editor's messages", () => {
       }),
     );
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(button(el, "save-editor").disabled).toBe(false);
     expect(el.shadowRoot!.activeElement).toBe(field(el, "maxPercent"));
@@ -1164,6 +1177,7 @@ describe("the editor's messages", () => {
       }),
     );
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(el.shadowRoot!.activeElement).toBe(field(el, "names-en"));
     await type(el, "names-es", "Queja grave");
@@ -1177,6 +1191,7 @@ describe("the editor's messages", () => {
     });
     const el = await mount(api);
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(await bottom(el)).toBe("Something went wrong, try again");
     expect(button(el, "save-editor").disabled).toBe(false);
@@ -1187,7 +1202,7 @@ describe("the editor's messages", () => {
     expect(await bottom(el)).toBe(`Something went wrong, try again ${FIX_FIELDS}`);
     await press(el, "save-editor");
     expect(await bottom(el)).toBe(FIX_FIELDS);
-    await type(el, "name", "Complaint");
+    await type(el, "name", "Complaint corrected");
     await press(el, "save-editor");
     expect(api.updateReason).toHaveBeenCalledTimes(2);
     expect(modal(el)).toBeNull();
@@ -1198,14 +1213,16 @@ describe("the editor's messages", () => {
       fakeApi({ updateReason: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     );
     await press(el, "add-reason");
+    await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
     await press(el, "cancel-editor");
     await press(el, "add-reason");
     expect(besideField(el, "name")).toBe("");
     expect(await bottom(el)).toBe("");
-    expect(button(el, "save-editor").disabled).toBe(false);
+    expect(button(el, "save-editor").disabled).toBe(true);
     await press(el, "cancel-editor");
     await press(el, "edit-c");
+    await type(el, "name", "Edited complaint");
     await press(el, "save-editor");
     expect(await bottom(el)).toBe("Something went wrong, try again");
     await press(el, "cancel-editor");
@@ -1217,6 +1234,7 @@ describe("the editor's messages", () => {
     setLocale("es");
     const el = await mount(fakeApi());
     await press(el, "add-reason");
+    await type(el, "names-en", "Birthday guest");
     await press(el, "save-editor");
     expect(await bottom(el)).toBe("Corrige los campos marcados para continuar.");
   });
@@ -1767,7 +1785,8 @@ describe("the bill discount limit", () => {
     expect(api.saveSettings).toHaveBeenCalledTimes(1);
     finish({ maxBillDiscountBp: 2000 });
     await settle(el);
-    expect(button(el, "save-limit").disabled).toBe(false);
+    expect(button(el, "save-limit").disabled).toBe(true);
+    expect((limit(el) as Named & { disabled: boolean }).disabled).toBe(false);
   });
 
   it("saves when Enter is pressed in the field", async () => {

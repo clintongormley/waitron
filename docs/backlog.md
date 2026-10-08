@@ -1509,8 +1509,8 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 6 audited with no stored-setting editors;
-batches 2, 3b, 4, 5 and 7 OPEN.** The owner: "open a form with the Save button
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 6 audited with no
+stored-setting editors; batches 2, 3b, 4b, 5 and 7 OPEN.** The owner: "open a form with the Save button
 transparent (and disabled?). but as soon as you make a change, make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
@@ -1555,7 +1555,11 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     `update-shift`) instead of pressing the form's button; they pass, but never prove the button
     works.
 - **Batch 3b — OPEN.** Printers, devices, device profiles, payments, canvases.
-- **Batch 4 — OPEN.** Module screens: venue service, Stripe, SumUp, adjustments, bookings, media.
+- **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
+  booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
+  and SumUp Connect/Pair/Try again remain provider operations;
+  [classification and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
+- **Batch 4b — OPEN.** Venue-service module screens.
 - **Batch 5 — OPEN.** The till; many of its dialogs act (pay, refund, find) rather than save, and
   the batch says which ones save.
 - **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.

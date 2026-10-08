@@ -59,6 +59,25 @@ async function openDialog(library: ImageLibrary, action: string): Promise<HTMLEl
 }
 
 describe.each(["light", "dark"] as const)("image library accessibility (%s)", (theme) => {
+  it.each(["upload", "edit-bread"])(
+    "keeps quiet and changed Save accessible (%s)",
+    async (action) => {
+      const library = await mount(theme);
+      await openDialog(library, action);
+      const save =
+        library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+      expect(save.disabled).toBe(true);
+      expect(save.variant).toBe("secondary");
+      await expectNoA11yViolations(host);
+      library
+        .shadowRoot!.querySelector("[name=name-es]")!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Pan editado" } }));
+      await library.updateComplete;
+      expect(save.disabled).toBe(false);
+      expect(save.variant).toBe("primary");
+      await expectNoA11yViolations(host);
+    },
+  );
   it("labels search, filters, direction and image actions in the populated library", async () => {
     const library = await mount(theme);
     await chooseOption(library.shadowRoot!.querySelector("wt-combobox[name=image-sort]")!, "date");
@@ -68,6 +87,10 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
   it("announces missing upload metadata beside fields and above the Save button", async () => {
     const library = await mount(theme);
     await openDialog(library, "upload");
+    library
+      .shadowRoot!.querySelector("[name=name-en]")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Bread draft" } }));
+    await library.updateComplete;
     library.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await library.updateComplete;
     const actions = library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(

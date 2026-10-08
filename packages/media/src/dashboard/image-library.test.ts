@@ -221,6 +221,8 @@ it("requires file and default-language name", async () => {
   const client = await mount();
   click("[data-test=upload]");
   await el.updateComplete;
+  field("name-fr", "Pain");
+  await el.updateComplete;
   click("[data-test=save]");
   await el.updateComplete;
   expect(client.uploadImage).not.toHaveBeenCalled();
@@ -231,6 +233,10 @@ it("requires file and default-language name", async () => {
   expect(el.shadowRoot!.querySelector("wt-input[name=name-fr]")!.hasAttribute("required")).toBe(
     false,
   );
+  click("wt-modal wt-button[slot=cancel]");
+  await el.updateComplete;
+  click("[data-test=upload]");
+  await el.updateComplete;
   const transfer = new DataTransfer();
   transfer.items.add(new File(["photo"], "bread.jpg", { type: "image/jpeg" }));
   const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
@@ -682,6 +688,8 @@ it("keeps a failed save open, ignores repeated saves while pending and allows re
         reject = rejectPromise;
       }),
   );
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
   click("[data-test=save]");
   expect(client.updateImage).toHaveBeenCalledOnce();
@@ -1012,6 +1020,8 @@ it("keeps the editor open through a close requested mid-save, so a refusal is st
   await el.updateComplete;
   const save = deferred<never>();
   client.updateImage.mockReturnValueOnce(save.promise);
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
   click("wt-modal wt-button[slot=cancel]");
   await el.updateComplete;
@@ -1026,6 +1036,8 @@ it("ignores Escape while a save is in flight and honours it once the save has se
   await el.updateComplete;
   const save = deferred<never>();
   client.updateImage.mockReturnValueOnce(save.promise);
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
   await el.updateComplete;
   (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement).focus();
@@ -1044,11 +1056,15 @@ it("saves the image when Enter is pressed in a name field", async () => {
   const client = await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   const name = el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement;
   name.focus();
   await userEvent.keyboard("{Enter}");
   await vi.waitFor(() =>
-    expect(client.updateImage).toHaveBeenCalledWith("one", { names: image.names }),
+    expect(client.updateImage).toHaveBeenCalledWith("one", {
+      names: { es: "Pan editado", en: "Bread" },
+    }),
   );
 });
 
@@ -1296,7 +1312,7 @@ it("says nothing about errors before the first submission, and Save works", asyn
   await mount();
   click("[data-test=upload]");
   await el.updateComplete;
-  field("name-es", "");
+  field("name-fr", "Pain");
   await el.updateComplete;
 
   expect(fileError()).toBe("");
@@ -1349,6 +1365,8 @@ it("focuses the default-language name when an edit is saved without one", async 
 it("re-checks every change after a failed submission, and Save works again once fixed", async () => {
   await mount();
   click("[data-test=upload]");
+  await el.updateComplete;
+  field("name-fr", "Pain");
   await el.updateComplete;
   click("[data-test=save]");
   await el.updateComplete;
@@ -1421,6 +1439,8 @@ it("puts a refused translation under that language's name until the name changes
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
 
   const message = codeMessage("image.translation_required");
@@ -1455,6 +1475,8 @@ it("sends again when Save is pressed with a refused field unchanged, and drops t
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() =>
     expect(nameInput("es").error).toBe(codeMessage("image.translation_required")),
@@ -1479,6 +1501,8 @@ it("says a refused translation in a language the form does not show above Save, 
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
 
   await vi.waitFor(async () =>
@@ -1496,6 +1520,8 @@ it("says a photo refusal on an edit, which has no photo field, above Save and le
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
 
   await vi.waitFor(async () =>
@@ -1512,6 +1538,8 @@ it("leaves Save working on a refusal that names no field, and drops it on the ne
   client.updateImage.mockRejectedValueOnce(new Error("offline"));
   await mount(client);
   click("[data-test=edit-one]");
+  await el.updateComplete;
+  field("name-es", "Pan editado");
   await el.updateComplete;
   click("[data-test=save]");
 
@@ -1537,6 +1565,8 @@ it("shows the refusal and the generic sentence together when both apply", async 
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
+  field("name-es", "Pan editado");
+  await el.updateComplete;
   click("[data-test=save]");
   const refused = `The image could not be saved. ${codeMessage("image.invalid_metadata")}`;
   await vi.waitFor(async () => expect(await bottomOf()).toBe(refused));
@@ -1547,11 +1577,13 @@ it("shows the refusal and the generic sentence together when both apply", async 
   expect(saveButton().hasAttribute("disabled")).toBe(true);
 });
 
-it("starts again when reopened: no messages and Save working", async () => {
+it("starts again when reopened: no messages and Save quiet", async () => {
   const client = api();
   client.updateImage.mockRejectedValueOnce({ code: "image.invalid_metadata" });
   await mount(client);
   click("[data-test=upload]");
+  await el.updateComplete;
+  field("name-fr", "Pain");
   await el.updateComplete;
   click("[data-test=save]");
   await el.updateComplete;
@@ -1564,11 +1596,13 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(fileError()).toBe("");
   expect(nameInput("es").error).toBe("");
   expect(await bottomOf()).toBe("");
-  expect(saveButton().hasAttribute("disabled")).toBe(false);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
   click("wt-modal wt-button[slot=cancel]");
   await el.updateComplete;
 
   click("[data-test=edit-one]");
+  await el.updateComplete;
+  field("name-es", "Pan editado");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be saved"));
@@ -1577,7 +1611,7 @@ it("starts again when reopened: no messages and Save working", async () => {
   click("[data-test=edit-one]");
   await el.updateComplete;
   expect(await bottomOf()).toBe("");
-  expect(saveButton().hasAttribute("disabled")).toBe(false);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
 });
 
 it("names each language section with a capital letter in Spanish, where the browser's name is lower case", async () => {

@@ -1,5 +1,6 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
+import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 // Node runs before the browser project so Chromium does not compete with the database suites.
 export default defineConfig({
@@ -40,6 +41,7 @@ export default defineConfig({
             provider: playwright({}),
             headless: true,
             instances: [{ browser: "chromium" }],
+            commands: { ...parkPointerCommands },
           },
         },
       },
