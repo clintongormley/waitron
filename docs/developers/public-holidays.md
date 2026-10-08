@@ -1,7 +1,7 @@
 # Public holidays
 
 A venue manager planning opening hours needs to know which days are public holidays where the venue
-is. Waitron shows them on the Hours page (`/manage/hours`) in two layers. The national and regional
+is. Waitron shows them on the Station hours page (`/manage/hours`) in two layers. The national and regional
 holidays come from the official list, transcribed into the country's pack and shipped with the
 application. The town's own local holidays are entered by the venue, because Spain publishes them
 separately for each municipality and Waitron holds no municipality list.

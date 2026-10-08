@@ -2993,21 +2993,24 @@ Make default and Disable/Enable actions belong to the Stations row menu; Routing
 Every zone cell also sets the default station, for someone with `venue.configure`. A supervisor sees only
 Stations.
 
-Hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates` and `calendar`
-at `/manage/hours/view/<key>`; `/manage/hours/department/<id>` and `/manage/hours/station/<id>`
-open the week with focus on that subject's column heading once the hours are read, when that
-column is shown.
+Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates`
+and `calendar` at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
+with focus on the station's heading once it is read. Department opening hours belong to
+`/manage/opening-hours`, with Week, Periods and Day tabs; `/department/<id>` selects the
+department and `/view/periods` selects its periods. The Week and Day editing contract is in
+Forms above. After provisioning, setup's completion screen shows the first saved Open schedule,
+when it is still Monday to Friday, 09:00–17:00, with a link to that department's Opening hours.
 
-- **Standard week.** Days are rows, Monday first, with today marked; departments, then prep
-  stations, are columns. The editable cells share one Tab stop and the arrow keys move between
+- **Standard week.** Days are rows, Monday first, with today marked; prep stations are columns.
+  The editable cells share one Tab stop and the arrow keys move between
   days and columns. Each editable column's heading has its own menu, a separate Tab stop, holding
   Clear schedule, or Configure hours for a subject with no hours.
   The default station's column reads Always open and has nothing to open. A subject with no hours
-  reads "No hours set" (a department) or "No hours restriction" (a station); Prep stations says
+  reads "No hours restriction"; Prep stations says
   "Always open" for that station state. A cell opens that day's editor; a subject with no hours
   opens a seven-day draft that starts Closed and saves only after a confirmation.
-- **Special dates.** A `wt-data-table` of every current and future special date, with Departments
-  and Prep stations column groups; a value kept from the standard week is muted. Its row menu holds
+- **Special dates.** A `wt-data-table` of every current and future special date, with prep station
+  columns; a value kept from the standard week is muted. Its row menu holds
   Edit, Duplicate and Delete, above it sit Add a date and Close the whole venue on a date. With the
   whole-venue closure on, the date editor shows the subjects' cells locked.
 - **Calendar** (`hours-calendar.ts`). A Monday-first month beside the chosen date's panel; on a
@@ -3224,8 +3227,8 @@ including when you reselect them; saved tabs become destinations after persisten
 Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
 an automatic return home after payment replaces the current entry. The till holds the menu choice in
 memory for the tab, retained through new and parked orders. At a counter where nobody has picked
-a menu by hand, the till moves to its zone's default menu (the department's timetable, with the
-zone's own choices), as the till's periodic menu check reports it, provided the basket is empty: it
+a menu by hand, the till moves to its department's current customer menu, as the till's periodic
+menu check reports it, provided the basket is empty: it
 does so when that check arrives, unless a sale, a hold or an order is being sent, and when the
 basket is cleared. A table's menu is not moved to follow the default. A person who signs in again
 with nobody else signed in between comes back to the zone they left, while it is still offered, and

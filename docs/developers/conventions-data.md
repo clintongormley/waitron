@@ -397,22 +397,13 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 
 ## Opening hours store "no claim" as no row
 
-**2026-10-08, A366 slice 1:** `readHoursModel` now returns station subjects, weeks and
-special-date cells only. `hours-station-model.test.ts` exercises retained department cells
-and another venue's station cells alongside exact local station periods. Hours requests and weekly reads now refuse department subjects with `hours.invalid`
-at the subject's `kind` field. Special-date reads and copies ignore retained department
-cells; station-hours clash checks omit department weeks and cells. The new checks in
-`hours-station-model.test.ts` exercise each path with real stored rows. The Hours public
-types, obsolete resolver and screen remain pending Task 10 retirement; follow the
-[slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md).
-
-**2026-10-08, Task 10 import boundary:** an hours cell in a configuration bundle must name
-one of its stations and carry no department owner. `configuration-transfer.test.ts` checks
-both `hours_week_cells` and `special_date_hours`; the server's same-named suite checks
-`setup.request_invalid` with the table's `department_id` field and no persisted target
-taxpayer row. The former department schedule fixtures now belong to Pass and Grill stations,
-with their time, clash, default-station and fresh-ID assertions retained. The remaining Hours public-type, obsolete-resolver and screen retirement is still
-pending on this feature branch.
+**2026-10-08, A366 slice 1:** department opening hours now come from service periods.
+The Hours grid described below now edits station restrictions only. Its `special_dates` calendar
+also anchors department period schedules. `readHoursModel` and the Station hours page omit
+department subjects; hours requests refuse them at `kind`, and
+configuration import refuses a department owner. The old department Hours types and resolver
+have been retired. The earlier A261 account below is historical; use the service-period model
+in the next section for departments.
 
 Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
 `hours_week_cells` and `hours_week_periods` for each department's and non-default station's
@@ -443,12 +434,36 @@ is in production" below).
 
 ## Menu timetables share the special-date calendar
 
-**2026-10-08, A366 slice 1:** the W98 description below records the earlier model. The current
-work replaces all-day and zone-period choices with customer/staff period membership and
-business-day ranges. Configuration-transfer verification is recorded under
-[service-period configuration](#service-period-configuration) below; schema retirement and
-remaining consumers are tracked in the [slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md).
+**2026-10-08, A366 slice 1:** the W98 account below records the earlier model. All-day
+menus, a zone's period-menu choices and separately authored department hours are retired.
+Configuration-transfer verification is recorded under
+[service-period configuration](#service-period-configuration) below.
 
+You set a department's opening hours by placing its periods on the normal week. Each period has
+a name, a colour, one customer menu and zero or more staff-only menus. Its ranges run inside the
+venue's business day, from one changeover to the next. With a 06:00 changeover, Friday's
+21:00–03:00 range ends on Saturday morning; 06:00–06:00 covers the whole business day.
+
+With a readable venue clock, a special date with no timetable row follows the normal weekday. A saved row with no ranges
+closes that department for the date's business day. Closing the whole venue closes every
+department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these cases.
+
+The till offers new items from the running period's customer and staff menus. Sending a new line
+also accepts a menu from a period that ended earlier in this business day or ran on the previous
+one, because the server cannot observe when you put an unsent item in the basket. Increasing a
+stored line's quantity requires the current period; other edits retain the stored line.
+`apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
+Pricing reads static period membership, without resolving ranges, dates or the clock. If the venue
+clock cannot be read, timetable resolution leaves the department's period menus orderable.
+
+Provisioning places the first department's Open period at 09:00–17:00 Monday to Friday when
+there is a catalogue and no existing period. Setup's completion screen shows those normal-week
+hours and links to that department in Opening hours only when its saved schedule matches them.
+A different authored or demo schedule is not described as that first weekday schedule. The checks are in
+`apps/server/src/setup-opening-hours.test.ts`, with the response and completed-request replay in
+`apps/server/src/setup-api.test.ts`.
+
+### Earlier W98 menu timetable model
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"

@@ -904,9 +904,16 @@ Opening hours when provisioning placed the "Open" period. The docs describe peri
 day, a closed special date and sending items after their period, and retire the all-day menu, zone menus and
 department hours (dated pointer where a document is historical).
 
-- [ ] Steps: failing test for the summary; watch it fail; implement; pass; commit
+- [x] Steps: failing test for the summary; watch it fail; implement; pass; commit
 `feat(setup): show the first opening hours (A366)`; then the docs commit
 `docs: Opening hours replaces the menu timetable and department hours (A366)`.
+
+The completion response now carries an optional `openingHours.departmentId`, read from the
+saved default department's normal week. The summary is omitted for another schedule or an
+uninstalled venue-service module. A summary-read failure leaves setup successful, and completed
+request replay keeps the recorded summary. The setup shell passes it to the completion screen,
+which shows English/Spanish wording and a link to that department. Focused receipts for Task 15
+are retained in the campaign ledger; whole-branch review, final validation, CI and landing remain.
 
 ---
 
