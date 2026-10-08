@@ -1,8 +1,8 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
-import { baseStyles, registerIcons } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TabDef } from "../layout.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
@@ -16,11 +16,6 @@ const BRAND = "Waitron";
 export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
 
 type ActionVariant = "secondary" | "ghost";
-
-registerIcons({
-  kebab:
-    "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
-});
 
 /**
  * Presentational: `till-app` owns data, active-tab state and the drill-in stack; the shell only emits
@@ -135,6 +130,16 @@ export class TillTabShell extends LitElement {
         padding: var(--wt-space-2) var(--wt-space-4);
       }
 
+      /* wt-row-actions keeps its popup 8px from each viewport edge; what does not fit scrolls. */
+      wt-row-actions::part(popup) {
+        max-height: calc(100dvh - 2 * var(--wt-space-2));
+        overflow-y: auto;
+      }
+
+      .visually-hidden {
+        ${visuallyHiddenStyles}
+      }
+
       .region {
         position: relative;
         display: flex;
@@ -210,6 +215,20 @@ export class TillTabShell extends LitElement {
       : nothing;
   }
 
+  #transferText(): string {
+    return this.transferCount === undefined
+      ? ""
+      : t("department_transfer.open").replace("{count}", String(this.transferCount));
+  }
+
+  /** On a phone the visible count sits in the closed menu, out of the accessibility tree, so this
+   * region is the one a screen reader hears. */
+  #transferStatus(): TemplateResult {
+    return html`<span class="visually-hidden" role="status" data-test="department-transfers-status"
+      >${this.#transferText()}</span
+    >`;
+  }
+
   #tools(variant: ActionVariant): TemplateResult {
     const action = (cls: string, type: string, label: string): TemplateResult =>
       html`<wt-button
@@ -222,8 +241,10 @@ export class TillTabShell extends LitElement {
     return html`${
       this.transferCount === undefined
         ? nothing
-        : html`<span data-test="department-transfers" role="status"
-            >${t("department_transfer.open").replace("{count}", String(this.transferCount))}</span
+        : html`<span
+            data-test="department-transfers"
+            role=${variant === "ghost" ? nothing : "status"}
+            >${this.#transferText()}</span
           >`
     }${
       this.transferAvailable
@@ -266,9 +287,11 @@ export class TillTabShell extends LitElement {
     return html`<wt-row-actions
       icon="kebab"
       align="end"
+      data-test="more-menu"
+      .iconSize=${"lg"}
       label=${
         pending
-          ? t("shell.more_transfers").replace("{count}", String(this.transferCount))
+          ? countText(this.transferCount!, "shell.more_transfers", "shell.more_transfers_one")
           : t("shell.more")
       }
     >
@@ -335,6 +358,7 @@ export class TillTabShell extends LitElement {
                       this.phone ? this.#menu() : this.#operatorAndLogout("secondary")
                     }
                   </div>
+                  ${this.phone ? this.#transferStatus() : nothing}
                 </header>
               `
         }

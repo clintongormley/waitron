@@ -288,9 +288,14 @@ interface RefreshRetry {
 
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
-// Icons shared primitives draw and their consuming app registers: wt-toast's `close`, and
-// wt-combobox's.
-registerIcons({ close: CROSS_ICON_PATH, ...DROPDOWN_ICONS });
+// Icons shared primitives draw and their consuming app registers: wt-toast's `close`,
+// wt-combobox's, and wt-row-actions' `kebab`.
+registerIcons({
+  close: CROSS_ICON_PATH,
+  ...DROPDOWN_ICONS,
+  kebab:
+    "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+});
 
 /**
  * How long the till waits on a request it bounds, its automatic resends included, before cancelling

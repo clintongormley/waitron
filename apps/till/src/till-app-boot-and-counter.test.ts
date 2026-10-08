@@ -3204,15 +3204,15 @@ describe("department transfers across operator lifetimes", () => {
             await signIn(el);
             setLocale(locale);
             await flush(el);
-            await vi.waitFor(() =>
-              expect(pendingCount(el)?.textContent).toContain(
-                locale === "en-GB"
-                  ? "Department transfers (1 pending)"
-                  : "Traspasos entre departamentos (pendientes: 1)",
-              ),
-            );
-            const status = pendingCount(el)!;
-            expect(status.getAttribute("role")).toBe("status");
+            const pending =
+              locale === "en-GB"
+                ? "Department transfers (1 pending)"
+                : "Traspasos entre departamentos (pendientes: 1)";
+            await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain(pending));
+            // On a phone the visible count is in the closed menu; the status region is outside it.
+            const status = shell(el)!.shadowRoot!.querySelector<HTMLElement>('[role="status"]')!;
+            expect(status.textContent).toContain(pending);
+            expect(status.checkVisibility()).toBe(true);
             expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(width);
             await expectNoA11yViolations(host);
             await page.screenshot({

@@ -29,3 +29,18 @@ test("the till app registers the icons a dropdown draws: its chevron and the cho
     expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d"), selector).toBeTruthy();
   }
 });
+
+test("the till app registers the kebab a menu of more actions draws", async () => {
+  const el = document.createElement("wt-row-actions") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  el.setAttribute("label", "More");
+  document.body.append(el);
+  mounted.push(el);
+  await el.updateComplete;
+  const icon = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    'wt-icon[name="kebab"]',
+  )!;
+  await icon.updateComplete;
+  expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
+});

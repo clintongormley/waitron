@@ -309,7 +309,7 @@ describe("till-tab-shell", () => {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         expect(window.innerWidth).toBe(390);
         const header = el.shadowRoot!.querySelector("header")!;
-        const menu = header.querySelector("wt-row-actions")!;
+        const menu = header.querySelector('wt-row-actions[data-test="more-menu"]')!;
         menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
         await vi.waitFor(() =>
           expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
@@ -430,9 +430,9 @@ describe("till-tab-shell at phone width", () => {
 
   const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-  async function atViewport(width: number, run: () => Promise<void>): Promise<void> {
+  async function atViewport(width: number, run: () => Promise<void>, height = 844): Promise<void> {
     const before = { width: window.innerWidth, height: window.innerHeight };
-    await page.viewport(width, 844);
+    await page.viewport(width, height);
     await frame();
     try {
       await run();
@@ -441,7 +441,8 @@ describe("till-tab-shell at phone width", () => {
     }
   }
 
-  const menuOf = (el: TillTabShell) => el.shadowRoot!.querySelector("header wt-row-actions");
+  const menuOf = (el: TillTabShell) =>
+    el.shadowRoot!.querySelector('header wt-row-actions[data-test="more-menu"]');
   const triggerOf = (el: TillTabShell) =>
     menuOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
 
@@ -487,6 +488,7 @@ describe("till-tab-shell at phone width", () => {
       const menu = menuOf(el)!;
       expect(menu).not.toBeNull();
       expect(menu.getAttribute("icon")).toBe("kebab");
+      expect(menu.shadowRoot!.querySelector("wt-icon")!.getAttribute("size")).toBe("lg");
       expect(menu.getAttribute("align")).toBe("end");
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       const order = [...menu.children]
@@ -575,10 +577,17 @@ describe("till-tab-shell at phone width", () => {
         expect(badge.getAttribute("tone")).toBe("warning");
         expect(badge.shadowRoot!.textContent).toContain("2");
         expect(triggerOf(el).getAttribute("aria-label")).toBe(
-          t("shell.more_transfers").replace("{count}", "2"),
-        );
-        expect(t("shell.more_transfers").replace("{count}", "2")).toBe(
           "More, 2 department transfers pending",
+        );
+
+        el.transferCount = 1;
+        await el.updateComplete;
+        await (menuOf(el) as LitElement).updateComplete;
+        expect(
+          menuOf(el)!.querySelector('wt-count-badge[slot="badge"]')!.shadowRoot!.textContent,
+        ).toContain("1");
+        expect(triggerOf(el).getAttribute("aria-label")).toBe(
+          "More, 1 department transfer pending",
         );
 
         for (const transferCount of [0, undefined]) {
@@ -604,6 +613,12 @@ describe("till-tab-shell at phone width", () => {
         expect(triggerOf(el).getAttribute("aria-label")).toBe(
           "Más, traspasos entre departamentos pendientes: 2",
         );
+        el.transferCount = 1;
+        await el.updateComplete;
+        await (menuOf(el) as LitElement).updateComplete;
+        expect(triggerOf(el).getAttribute("aria-label")).toBe(
+          "Más, traspasos entre departamentos pendientes: 1",
+        );
         el.transferCount = 0;
         await el.updateComplete;
         await (menuOf(el) as LitElement).updateComplete;
@@ -612,6 +627,72 @@ describe("till-tab-shell at phone width", () => {
     } finally {
       setLocale(original);
     }
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "keeps the open menu on a short landscape screen and scrolls it to Log out, in %s",
+    async (locale) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        await atViewport(
+          600,
+          async () => {
+            const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+            await userEvent.click(triggerOf(el));
+            await vi.waitFor(() =>
+              expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"),
+            );
+            const popup = menuOf(el)!
+              .shadowRoot!.querySelector<HTMLElement>("[popover]")!
+              .getBoundingClientRect();
+            expect(popup.top).toBeGreaterThanOrEqual(0);
+            expect(popup.bottom).toBeLessThanOrEqual(window.innerHeight);
+
+            const logout = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
+            logout.scrollIntoView({ block: "nearest" });
+            const box = logout.getBoundingClientRect();
+            expect(box.top).toBeGreaterThanOrEqual(popup.top);
+            expect(box.bottom).toBeLessThanOrEqual(popup.bottom);
+            expect(
+              el.shadowRoot!.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+            ).toBe(logout);
+            let loggedOut = 0;
+            el.addEventListener("logout", () => (loggedOut += 1));
+            await userEvent.click(logout);
+            expect(loggedOut).toBe(1);
+          },
+          390,
+        );
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
+
+  it("announces the transfer count while the menu is closed, from one status region outside it", async () => {
+    await atViewport(390, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const statuses = () => [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="status"]')];
+      expect(statuses()).toHaveLength(1);
+      const status = statuses()[0]!;
+      expect(menuOf(el)!.contains(status)).toBe(false);
+      expect(status.checkVisibility()).toBe(true);
+      expect(status.textContent).toContain(t("department_transfer.open").replace("{count}", "2"));
+      expect(
+        menuOf(el)!.querySelector('[data-test="department-transfers"]')!.hasAttribute("role"),
+      ).toBe(false);
+
+      el.transferCount = 3;
+      await el.updateComplete;
+      expect(statuses()).toEqual([status]);
+      expect(status.textContent).toContain(t("department_transfer.open").replace("{count}", "3"));
+
+      el.transferCount = undefined;
+      await el.updateComplete;
+      expect(statuses()).toEqual([status]);
+      expect(status.textContent!.trim()).toBe("");
+    });
   });
 
   it("leaves the wide header as it was: brand, and every button straight in the session row", async () => {
