@@ -2700,7 +2700,7 @@ controls and preview, and the till's home at a phone's width and on the counter 
 use "carta".
 Left open:
 
-- **A339 is awaiting a test-coordination ruling on `fix/home-column-ranges` (2026-10-08), not landed.** The implementation uses handheld 2–3 and till 4–10; Chromium cases exercise phone tracks, tile size and text containment. The three authorised slider checks pass after A346+A348 landed. Six further retained save, pending-value, late-answer and HTTP read cases still expect handheld five/six and fail because the native slider emits three (`menus-screen.test.ts:7400`, `:7563`, `:7738`, `:7777`, `:8874`, `:8880`); they are outside the watcher’s explicit three-case edit permission. Review, CI and landing remain pending.
+- **A339 — DONE (2026-10-08).** Handheld settings offer 2–3 columns and till settings 4–10, retaining defaults 3 and 6. The handheld home grid uses a 66 px tile minimum; its dashboard preview also uses a 16 px side inset. Chromium cases at 360/390 px exercise two/three tracks, 44 px tap targets, long names, decoded thumbnails and axe in both themes. Real demo phone and preview captures were inspected in EN/ES and both themes; a 1024 px till was inspected at four columns. Existing save, refusal, device/menu switch and shared-read assertions use distinct in-range handheld values.
 - The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
   the menu shares the screen with the order: from 720 px wide the table order screen gives it three
   fifths (`apps/till/src/screens/till-table-order-screen.ts`), and on the demo counter at 1280 px
