@@ -1041,12 +1041,14 @@ unused `units` property is gone (it closes W75's leftover).
 
 - **A390, owner 2026-10-08 — DONE (disclosure animation tests):** every fixed animation
   sleep in `wt-disclosure.test.ts` is replaced by pausing and seeking real height transitions,
-  then observing the component's completion handler, or by an immediate assertion for a path
+  then observing the completion handler's cleared animation flag and released height, or by an
+  immediate assertion for a path
   that does not animate. Intermediate heights, rapid toggles, closing focus exclusion,
   interrupted reopening, validation errors, reduced motion and content growth remain checked.
   Delaying the final close's animation-frame callback by 1200 ms reproduced `expected false
   to be true` in the old rapid-toggle case. The same delayed frame passed with the revised case;
-  waiting for completion also passed with the old component. No component change was needed
+  waiting for completion also passed with the old component. All 35 disclosure cases passed with
+  a 1200 ms delayed observer after each transition capture. No component change was needed
   for that reproduction. Receipts: `~/waitron-campaign-e/receipts/a390/`.
 
 - **A389, owner 2026-10-08 — DONE (disclosure reopening test):** the Chromium test pauses

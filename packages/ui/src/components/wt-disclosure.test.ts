@@ -44,7 +44,9 @@ function pauseHeightTransition(body: HTMLElement, previous?: Animation): Promise
 
 async function finishHeightTransition(body: HTMLElement, animation: Animation): Promise<void> {
   animation.finish();
-  await expect.poll(() => body.classList.contains("animating")).toBe(false);
+  await expect
+    .poll(() => ({ animating: body.classList.contains("animating"), height: body.style.height }))
+    .toEqual({ animating: false, height: "" });
 }
 
 test("the section chevron is large enough to read beside its heading", async () => {
