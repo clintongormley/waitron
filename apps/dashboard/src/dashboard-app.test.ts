@@ -2180,6 +2180,7 @@ describe("dashboard-app", () => {
         el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
         await flush(el);
         expect(sidebar.getBoundingClientRect().width).toBeLessThan(390 * 0.85 + 1);
+        el.style.setProperty("--dashboard-sidebar-width", "100vw");
         await page.viewport(320, 844);
         expect(window.innerWidth).toBe(320);
         expect(sidebar.getBoundingClientRect().width).toBeCloseTo(320 * 0.85, 0);
