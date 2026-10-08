@@ -802,12 +802,18 @@ when that workflow is one of this repository's `.github/workflows/` files.
 
 ### Every apt wait is bounded
 
-Every `apt-get update` and `apt-get install` in a workflow or in `deploy/Dockerfile` runs under an
-outer `timeout`, and runs again when it stalls or exits non-zero (in the workflow, the update and
-the install run again together), because apt's own read timeout did not end a wait on a mirror
-sending a byte every 5 s. An `apt-get update` that could not connect, or timed out waiting, warned
-"Failed to fetch" and exited 0 (apt 2.8.3 and 3.0.3), so the Dockerfile does not retry it; one
-answered 404 for its `Release` file exited 100 and is retried.
+Every `apt-get update` and `apt-get install` in a workflow, in `deploy/Dockerfile`, in
+`deploy/waitron.sh` and in the bench's CA probe image (`bench/sqlite-failover/src/probes/linux-binaries.ts`)
+runs under an outer `timeout`, and runs again when it stalls or exits non-zero (in the workflow, the
+update and the install run again together), because apt's own read timeout did not end a wait on a
+mirror sending a byte every 5 s. A workflow's `playwright install --with-deps` runs apt itself, out
+of reach of any apt option, so it must run under `timeout <n>` too; no workflow runs it today.
+
+An `apt-get update` that could not connect, or timed out waiting, warned "Failed to fetch" and
+exited 0 (apt 2.8.3 and 3.0.3), so a retry loop never saw it fail. The Dockerfile and the bench image
+therefore also set `APT::Update::Error-Mode "any"`, which makes that update exit 100 and be retried.
+`deploy/waitron.sh` does not: the box's apt sources are not ours, and a broken third-party index must
+not fail an install that works without the setting.
 
 The stall: main run `37771042263`, `image / smoke`, step "Load the print agent's AppArmor profile,
 and put a stand-in BlueZ on the system bus", `sudo apt-get update`. From 11:36:22Z the log printed
@@ -843,7 +849,14 @@ The limits chosen:
   commit, over whatever link the box has. In CI one stalled attempt costs 5 minutes and its retry
   fits inside `smoke`'s 15-minute job limit; three stalled attempts (900 s) do not, and the job's
   limit ends the build first. `publish` (`ci.yml`) builds both targets of the same file under a
-  10-minute limit, so one stalled attempt there uses half of it.
+  10-minute limit, so one stalled attempt there uses half of it. The bench's CA probe image uses the
+  same wrapper and settings.
+- In `deploy/waitron.sh`, `apt_get` is the wrapper: three attempts, each under `timeout` (or
+  `gtimeout`) for 300 s for an update and 1800 s for an install, with `Acquire::Retries=3` and the
+  two read timeouts on the command line, so nothing is written to the box. An install gets longer
+  because Docker's packages are about 120 MB, which a slow box link can take more than 300 s to fetch.
+  The script stops with a message after the third failed attempt, or before the first when neither
+  timeout command is installed.
 
 The same probe with the bound, run 2026-10-08 in the same containers. If the bound did nothing, the
 trickling case would print nothing more after its `Get:1` line until an outside limit killed it, as
@@ -864,11 +877,30 @@ The Dockerfile's `bounded()` wrapper and settings file, copied verbatim, run und
 - control, against Debian's own mirror: `bounded apt-get update` and
   `bounded apt-get install -y --no-install-recommends python3-minimal` finished in 4 s, exit 0.
 
-Guards: the "apt waits" cases in `scripts/ci-workflow.test.mjs` and "the Dockerfile's apt waits"
-cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — both read TEXT. The
+`APT::Update::Error-Mode "any"`, measured 2026-10-08 in `ubuntu:24.04` (apt 2.8.3) and `node:26-slim`
+(apt 3.0.3), arm64, with the sources replaced by `deb http://127.0.0.1:9/debian trixie main`, a
+closed port. If the setting did nothing, the bounded run would exit 0 after one attempt:
+
+- without the setting, `apt-get update` printed `W: Failed to fetch … Connection refused` and exited
+  0, in 7 s, in both images;
+- with the settings file exactly as the Dockerfile writes it, it printed `E: Failed to fetch …` and
+  exited 100, in 7 s;
+- through the Dockerfile's `bounded()`, copied verbatim and run under `sh`, it printed
+  `attempt N of 3 failed or stalled: apt-get update` three times and exited 1, in 21 s;
+- control, the image's own sources with the same settings: one attempt, exit 0.
+
+Guards: the "apt waits" and "playwright --with-deps waits" cases in `scripts/ci-workflow.test.mjs`, and "the
+Dockerfile's apt waits" (which also reads the bench's CA probe image) and "waitron.sh's apt waits"
+cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — all read TEXT. The
+`--with-deps` case asks only for `timeout <n>` earlier on the same line, not a retry. The waitron.sh
+case asks that every `apt-get` outside a whole-line comment or a `command -v apt-get` sits inside
+`apt_get()` and that its body runs apt
+under `"$limit" <n>`; it does not run the shell. The wrapper's limits, retries and stop are run, with
+stubs, by "the apt_get wrapper inside waitron.sh" cases in `scripts/waitron-sh.test.mjs`. The
 workflow case reads steps through the same reader as the "apt installs" case, so it misses every
 install that case's comment lists as passing — among them apt run by a script the step calls, by a
-composite or Docker action, by a tool itself (`playwright install --with-deps`), or from a command
+composite or Docker action, by a tool itself (`playwright install --with-deps`, which only the
+`--with-deps` case reads), or from a command
 built from a variable — and it checks neither the retry loop nor the step's `timeout-minutes`. It
 reads each line on its own, so a `timeout` at the end of a `\`-continued line is reported as
 unbounded. The Dockerfile case sees only `apt-get` named in a `RUN`, does not check that `bounded()`
