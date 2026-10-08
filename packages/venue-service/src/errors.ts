@@ -134,6 +134,7 @@ declare module "@waitron/shared" {
     "hours.invalid": { field: string; date?: string; subjectId?: string };
     "special_date.not_found": { specialDateId: string };
     "special_date.date_taken": { date: string };
+    "special_date.keeps_week": { specialDateId: string };
     "station.always_open": { stationId: string };
     "holiday.invalid": { field: string };
     "holiday.not_found": { holidayId: string };

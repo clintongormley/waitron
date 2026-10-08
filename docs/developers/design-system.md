@@ -1566,9 +1566,12 @@ times and period; New period opens the period editor above it, then returns to t
 Save on the week waits while a child chooser is open. A server refusal that names a day sits in
 that day's header, with the form's generic message immediately above Save; the refusal leaves
 Save available for retry. A venue viewer gets the grid without day menus or Save. A special date
-uses one column and stages Closed all day or Follow the normal week before Save. These choices
-compare the override's presence as well as its ranges, so choosing Closed on an inherited empty
-weekday still enables Save. Changing the date or returning to the normal week asks before
+uses one column and stages Closed all day before Save. Its comparison includes
+the override's presence as well as its ranges, so choosing Closed on an inherited empty
+weekday still enables Save. The per-department Follow the normal week action is retired by
+A366 slice 2 Task 7; the named day’s own-hours flag decides whether it keeps the normal week.
+A refusal because that flag is off explains how to give the day its own hours above Save,
+and leaves Save available for retry. Changing the date or returning to the normal week asks before
 discarding a staged draft. A special-date range explains endpoints the venue clock repeats on
 their calendar morning; its ending changeover belongs to the next morning. A skipped-time refusal
 names the clock gap at the date header and keeps Save available for retry. The Day tab starts on the venue's business date and shows one editable column per active

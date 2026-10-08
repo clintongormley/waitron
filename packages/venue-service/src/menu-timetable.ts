@@ -30,6 +30,7 @@ import type {
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
 import { namedDaysOn } from "./named-days.js";
+import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { periodExtensions } from "./schema/period-extensions.js";
@@ -69,7 +70,12 @@ export async function placeOpenPeriod(
 
 async function requireSpecialDate(tx: Transaction, cfg: VenueScope, id: string) {
   const [row] = await tx
-    .select({ id: specialDates.id, date: specialDates.date })
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      ownHours: specialDates.ownHours,
+      repeatOn: specialDates.repeatOn,
+    })
     .from(specialDates)
     .where(and(eq(specialDates.id, id), eq(specialDates.locationId, cfg.locationId)));
   if (row === undefined) throw new AppError("special_date.not_found", { specialDateId: id });
@@ -743,8 +749,13 @@ export async function saveSpecialDateMenus(
   const parsed = parseServiceDay(slots, "slots", clock.cutover);
   const special = await requireSpecialDate(tx, cfg, specialDateId);
   await assertDepartment(tx, cfg, departmentId);
+  if (!special.ownHours) throw new AppError("special_date.keeps_week", { specialDateId });
   await assertOwnPeriods(tx, departmentId, [{ field: "slots", slots: parsed }]);
-  const skipped = skippedSlot(clock, special.date, parsed);
+  const occurrence = nextOccurrence(
+    { date: special.date, repeats: special.repeatOn !== null },
+    clock.today ?? special.date,
+  );
+  const skipped = skippedSlot(clock, occurrence ?? special.date, parsed);
   if (skipped !== null)
     invalidTimetable(`slots.${skipped.position}.${skipped.end}`, { reason: "clock_skips" });
   const [existing] = await tx
@@ -758,31 +769,6 @@ export async function saveSpecialDateMenus(
     );
   await writeDay(tx, existing?.id, { departmentId, specialDateId }, parsed);
   const clash = await endOffsetClash(tx, cfg, departmentId, clock.cutover);
-  if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
-}
-
-export async function clearSpecialDateMenus(
-  tx: Transaction,
-  cfg: VenueScope,
-  specialDateId: string,
-  departmentId: string,
-  at: Date,
-): Promise<void> {
-  void at;
-  await requireSpecialDate(tx, cfg, specialDateId);
-  await assertDepartment(tx, cfg, departmentId);
-  const [existing] = await tx
-    .select({ id: menuDayTimetables.id })
-    .from(menuDayTimetables)
-    .where(
-      and(
-        eq(menuDayTimetables.specialDateId, specialDateId),
-        eq(menuDayTimetables.departmentId, departmentId),
-      ),
-    );
-  if (existing === undefined) return;
-  await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.id, existing.id));
-  const clash = await endOffsetClash(tx, cfg, departmentId);
   if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
 }
 

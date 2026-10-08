@@ -47,6 +47,9 @@ import {
 import { namedDaysBetween, namedDaysOn } from "./named-days.js";
 import { nextOccurrence, occursOn, repeatKey } from "./named-day-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
+import { menuDayTimetables, menuSlots } from "./schema/menus.js";
+import { departments, zoneServicePolicies } from "./schema/service.js";
+import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import "./errors.js";
 
 export { cellIntervals } from "./hours-rules.js";
@@ -644,6 +647,55 @@ async function assertNamedDayAvailable(
   }
 }
 
+async function switchNamedDayHours(
+  tx: Transaction,
+  cfg: VenueScope,
+  specialDateId: string,
+  date: LocalDate,
+  ownHours: boolean,
+): Promise<void> {
+  await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.specialDateId, specialDateId));
+  await tx.delete(zoneClosedTimes).where(eq(zoneClosedTimes.specialDateId, specialDateId));
+  if (!ownHours) return;
+  const weekday = weekdayOf(date);
+  const days = await tx
+    .select({ id: menuDayTimetables.id, departmentId: menuDayTimetables.departmentId })
+    .from(menuDayTimetables)
+    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
+    .where(and(eq(departments.locationId, cfg.locationId), eq(menuDayTimetables.weekday, weekday)));
+  for (const day of days) {
+    const slots = await tx.select().from(menuSlots).where(eq(menuSlots.timetableId, day.id));
+    const timetableId = newId();
+    await tx
+      .insert(menuDayTimetables)
+      .values({ id: timetableId, departmentId: day.departmentId, specialDateId });
+    if (slots.length > 0)
+      await tx.insert(menuSlots).values(
+        slots.map((slot) => ({
+          id: newId(),
+          timetableId,
+          departmentId: day.departmentId,
+          periodId: slot.periodId,
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+        })),
+      );
+  }
+  const closures = await tx
+    .select({
+      zoneId: zoneClosedTimes.zoneId,
+      startsAt: zoneClosedTimes.startsAt,
+      endsAt: zoneClosedTimes.endsAt,
+    })
+    .from(zoneClosedTimes)
+    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
+    .where(
+      and(eq(zoneServicePolicies.locationId, cfg.locationId), eq(zoneClosedTimes.weekday, weekday)),
+    );
+  if (closures.length > 0)
+    await tx.insert(zoneClosedTimes).values(closures.map((row) => ({ ...row, specialDateId })));
+}
+
 export async function saveSpecialDate(
   tx: Transaction,
   cfg: VenueScope,
@@ -723,6 +775,8 @@ export async function saveSpecialDate(
     await tx.update(specialDates).set(values).where(eq(specialDates.id, id));
     specialDateId = id;
   }
+  if ((current?.ownHours ?? false) !== parsed.ownHours)
+    await switchNamedDayHours(tx, cfg, specialDateId, parsed.date, parsed.ownHours);
   const kept = new Set<string>();
   for (const entry of parsed.cells) {
     if (entry.cell.mode === "inherit") continue;

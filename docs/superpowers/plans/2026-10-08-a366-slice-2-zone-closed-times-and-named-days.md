@@ -578,20 +578,20 @@ Rules: turning `ownHours` on copies, in the same transaction, each department's
 `menu_day_timetables` row for the stored date's weekday (with its slots) and each zone's
 `zone_closed_times` rows for that weekday onto the date; turning it off removes them; a save that
 leaves `ownHours` unchanged leaves them alone. `saveSpecialDateMenus` on a day without own hours →
-`special_date.keeps_week` (409); its clock-skip check runs on `nextOccurrence(day, today)`
-(decision 16). The `DELETE …/menu-timetables/:departmentId` route answers 404. Dashboard wording
+`special_date.keeps_week` (409); a repeating day’s clock-skip check runs on `nextOccurrence(day, today)`
+(decision 16). One-off dates retain their stored-date endpoint checks. The `DELETE …/menu-timetables/:departmentId` route answers 404. Dashboard wording
 for `special_date.keeps_week`: "This named day keeps the normal week. Give it its own hours first."
 / "Este día especial sigue la semana normal. Dale primero su propio horario."
 
-- [ ] **Step 1: Failing tests:** on with Lunch on Fridays copies Friday's Lunch onto a Friday named
+- [x] **Step 1: Failing tests:** on with Lunch on Fridays copies Friday's Lunch onto a Friday named
   day (fails today: nothing copies); off removes the dated rows; a dated save on a day keeping the
   week is refused `special_date.keeps_week`; the DELETE route answers 404.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/hours.test.ts src/menu-timetable.test.ts src/menu-timetable-routes.test.ts`.
-- [ ] **Step 3: Implement.** Every `clearSpecialDateMenus` and `clearDateMenus` use listed under
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/hours.test.ts src/menu-timetable.test.ts src/menu-timetable-routes.test.ts`.
+- [x] **Step 3: Implement.** Every `clearSpecialDateMenus` and `clearDateMenus` use listed under
   "Behaviour this slice removes" changes here: the pins of the removed function go in the
   changed-checks commit; the step-only uses get the "own hours off" step.
-- [ ] **Step 4: Run; see them pass;** the package's node project; typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): a named day's own hours start from the normal week (A366)`.
+- [x] **Step 4: Run; see them pass;** the package's node project; typecheck.
+- [x] **Step 5: Commit** — `feat(venue-service): a named day's own hours start from the normal week (A366)`.
 
 ---
 

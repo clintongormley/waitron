@@ -1,5 +1,9 @@
 # Service periods, slice 1 — implementation plan (A366)
 
+> **2026-10-09 follow-up:** slice 2 Task 7 retires per-department timetable clearing and its
+> Follow the normal week action. The named day’s own-hours flag now governs copying and removing
+> dated schedules; see [slice 2 Task 7](2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md#task-7-switching-a-named-days-own-hours).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Each task is test-first: write the failing behavioural test, run it,

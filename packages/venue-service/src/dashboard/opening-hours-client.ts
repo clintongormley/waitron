@@ -62,10 +62,4 @@ export class OpeningHoursApi {
       { slots },
     );
   }
-  clearDateMenus(specialDateId: string, departmentId: string): Promise<void> {
-    return this.request(
-      `${BASE}/special-dates/${at(specialDateId)}/menu-timetables/${at(departmentId)}`,
-      "DELETE",
-    );
-  }
 }

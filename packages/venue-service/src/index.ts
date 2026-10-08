@@ -7,7 +7,6 @@ export type { MenuUse } from "./errors.js";
 export {
   MENU_TIMETABLE_CALENDAR_PARTICIPANT,
   assertPeriodEndOffsets,
-  clearSpecialDateMenus,
   deleteMenuPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,

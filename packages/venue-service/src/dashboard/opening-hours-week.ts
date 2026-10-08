@@ -180,13 +180,6 @@ export class OpeningHoursWeek extends LitElement {
       ? `${formatDate(this.specialDate.date)} · ${this.specialDate.name}`
       : dayName(weekday);
   }
-  private followWeek() {
-    if (!this.editable() || this.opening || !this.specialDate) return;
-    const weekday = weekdayOf(this.specialDate.date);
-    this.stage(weekday, weekOf(this.department)[weekday]!.slots);
-    this.following = true;
-    this.scope?.changed();
-  }
   private periods() {
     return [
       ...this.department.periods,
@@ -281,18 +274,18 @@ export class OpeningHoursWeek extends LitElement {
     this.offsetClash = false;
     try {
       if (this.specialDate) {
-        if (submitted.following)
-          await this.api.clearDateMenus(this.specialDate.id, this.department.id);
-        else
-          await this.api.saveDateMenus(
-            this.specialDate.id,
-            this.department.id,
-            input[weekdayOf(this.specialDate.date)]!.slots,
-          );
+        await this.api.saveDateMenus(
+          this.specialDate.id,
+          this.department.id,
+          input[weekdayOf(this.specialDate.date)]!.slots,
+        );
       } else await this.api.saveWeek(this.department.id, input);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
-      this.error = t("menu.save_error");
+      this.error =
+        codeOf(error) === "special_date.keeps_week"
+          ? t("opening.keeps_week")
+          : t("menu.save_error");
       const field = (error as { params?: { field?: unknown } })?.params?.field;
       if (codeOf(error) === "menu_timetable.invalid" && typeof field === "string") {
         const match = /^days\.(\d+)(?:\.|$)/.exec(field);
@@ -393,12 +386,6 @@ export class OpeningHoursWeek extends LitElement {
                             this.stage(weekdayOf(this.specialDate!.date), []);
                         }}
                         >${t("opening.close_date")}</wt-button
-                      ><wt-button
-                        variant="secondary"
-                        data-test="follow-week"
-                        ?disabled=${this.saving || !!opening}
-                        @click=${() => this.followWeek()}
-                        >${t("opening.follow_week")}</wt-button
                       >
                     </div>`
               }`

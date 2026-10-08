@@ -42,7 +42,6 @@ import {
   writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import {
-  clearSpecialDateMenus,
   deleteMenuPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
@@ -123,6 +122,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "hours.invalid": 400,
   "special_date.not_found": 404,
   "special_date.date_taken": 409,
+  "special_date.keeps_week": 409,
   "station.always_open": 409,
   "holiday.invalid": 400,
   "holiday.not_found": 404,
@@ -1012,17 +1012,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await gated(sessionId, (tx) =>
           saveSpecialDateMenus(tx, ctx.cfg, id, departmentId, body.slots as MenuSlot[], at),
         );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.delete(dateTimetable, (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const at = new Date();
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        await gated(sessionId, (tx) => clearSpecialDateMenus(tx, ctx.cfg, id, departmentId, at));
         return c.body(null, 204);
       }),
     );
