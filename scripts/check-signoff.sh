@@ -16,10 +16,11 @@
 #   stderr   git's own, undisguised, for the second call only (see below).
 #   exit     1 if any commit is missing a trailer, 0 otherwise.
 #
-# What is NOT here is the range: CI diffs a pull request (`git rev-list "$BASE_SHA".."$HEAD_SHA"`)
-# while the hook accumulates one range per pushed ref and has already computed the list by the time
-# it gets here. Those are genuinely different questions, and the reporting is different too — this
-# file is the predicate and the walk, which is the part that has to agree.
+# What is NOT here is the range: CI lists a pull request's range, or a push to main's
+# (`git rev-list "$BASE_SHA".."$HEAD_SHA"`), while the hook accumulates one range per pushed ref and
+# has already computed the list by the time it gets here. Those are genuinely different questions,
+# and the reporting is different too — this file is the predicate and the walk, which is the part
+# that has to agree.
 #
 # Shell rather than node, decided on how the callers invoke it. The hook runs this step FIRST,
 # before `pnpm install` and the classifier; licence.yml's `dco` job is `actions/checkout` plus one

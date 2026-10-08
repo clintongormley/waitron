@@ -111,6 +111,7 @@ if (kind === "ls") {
           PUSH_LOG: log,
           PUSH_FAIL: fail,
           PUSH_EMPTY: emptySelection ? "1" : "0",
+          WAITRON_PRE_PUSH_FETCH_SECONDS: "5",
           ...extraEnv,
         },
       });

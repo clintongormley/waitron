@@ -11,14 +11,14 @@ have_range=0
 range_unknown=0
 commits=""
 changed_paths=""
-# Main's commits leave the sign-off range only when origin/main is fresh from the remote: a local
-# ref can name commits the remote never had. stdin is the pushed refs, so the fetch must not read it.
+# Main's commits leave an existing ref's sign-off range only when origin/main is fresh from the
+# remote: a local ref can name commits the remote never had. stdin is the pushed refs, so the fetch must not read it.
 fetched_main=""
 if node scripts/run-with-deadline.mjs "${WAITRON_PRE_PUSH_FETCH_SECONDS:-20}" -- \
   git fetch -q --no-tags origin '+refs/heads/main:refs/remotes/origin/main' </dev/null; then
   fetched_main=$(git rev-parse --verify -q 'origin/main^{commit}' 2>/dev/null) || fetched_main=""
 else
-  echo "pre-push: could not refresh origin/main — every commit in the push range is sign-off-checked"
+  echo "pre-push: could not refresh origin/main"
 fi
 main_tip=$(git rev-parse --verify -q 'origin/main^{commit}' 2>/dev/null) || main_tip=""
 
