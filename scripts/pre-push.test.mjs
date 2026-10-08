@@ -19,6 +19,8 @@ vi.setConfig({ testTimeout: HOOK_TIMEOUT_MS + 10_000 });
 // Exercise the real shell and classifiers; pnpm records requests without launching nested suites.
 function fixture(path, run, { signed = true, fail = "", emptySelection = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "waitron-push-"));
+  // Outside `dir`, because the fixture runs `git add .` there.
+  const remote = mkdtempSync(join(tmpdir(), "waitron-push-remote-"));
   const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" };
   for (const key of [
     "GIT_DIR",
@@ -85,6 +87,9 @@ if (kind === "ls") {
     git("add", ".");
     git("commit", "-qs", "-m", "Fixture base");
     const base = git("rev-parse", "HEAD");
+    git("init", "-q", "--bare", remote);
+    git("remote", "add", "origin", remote);
+    git("push", "-q", "origin", `${base}:refs/heads/main`);
     git("update-ref", "refs/remotes/origin/main", base);
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), "changed\n");
@@ -93,7 +98,7 @@ if (kind === "ls") {
     const head = git("rev-parse", "HEAD");
     const ref = (local = head, remote = base) =>
       `refs/heads/feature ${local} refs/heads/feature ${remote}\n`;
-    const invoke = (input = ref()) => {
+    const invoke = (input = ref(), extraEnv = {}) => {
       writeFileSync(log, "");
       const result = spawnSync("sh", ["-e", ".husky/pre-push"], {
         cwd: dir,
@@ -106,14 +111,17 @@ if (kind === "ls") {
           PUSH_LOG: log,
           PUSH_FAIL: fail,
           PUSH_EMPTY: emptySelection ? "1" : "0",
+          WAITRON_PRE_PUSH_FETCH_SECONDS: "5",
+          ...extraEnv,
         },
       });
       const calls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
       return { ...result, calls, checks: calls.filter((args) => !args.includes("ls")) };
     };
-    run({ invoke, ref, base, head, git, dir });
+    run({ invoke, ref, base, head, git, dir, remote });
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    rmSync(remote, { recursive: true, force: true });
   }
 }
 
@@ -125,6 +133,7 @@ function rebaseOntoUnsignedMain({ git, dir, base, head }) {
   git("add", "packages/consumer/src/index.ts");
   git("commit", "-q", "-m", "Main squash without a sign-off");
   const main = git("rev-parse", "HEAD");
+  git("push", "-q", "origin", `${main}:refs/heads/main`);
   git("update-ref", "refs/remotes/origin/main", main);
   git("cherry-pick", head);
   return { main, rebased: git("rev-parse", "HEAD") };
@@ -231,9 +240,50 @@ describe("pre-push fast checks", () => {
   it("refuses an unsigned commit in the range when there is no origin/main to leave it out by", () => {
     fixture("packages/source/src/index.ts", ({ invoke, ref, head, git, ...repo }) => {
       const { main, rebased } = rebaseOntoUnsignedMain({ head, git, ...repo });
+      git("--git-dir", repo.remote, "update-ref", "-d", "refs/heads/main");
       git("update-ref", "-d", "refs/remotes/origin/main");
       const result = invoke(ref(rebased, head));
       expect(result.status).not.toBe(0);
+      expect(result.stdout).toContain(main.slice(0, 7));
+      expect(result.calls).toEqual([]);
+    });
+  });
+  it("refuses an unsigned commit placed on a local origin/main the remote never had", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, ref, base, head, git, dir }) => {
+      git("checkout", "-q", "--detach", base);
+      mkdirSync(join(dir, "packages/consumer/src"), { recursive: true });
+      writeFileSync(join(dir, "packages/consumer/src/index.ts"), "forged\n");
+      git("add", "packages/consumer/src/index.ts");
+      git("commit", "-q", "-m", "Unsigned commit on a hand-made origin/main");
+      const forged = git("rev-parse", "HEAD");
+      git("update-ref", "refs/remotes/origin/main", forged);
+      git("cherry-pick", head);
+      const result = invoke(ref(git("rev-parse", "HEAD"), base));
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toContain(forged.slice(0, 7));
+      expect(result.calls).toEqual([]);
+    });
+  });
+  it("checks every commit in the range when origin/main cannot be refreshed", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, ref, head, git, dir, ...repo }) => {
+      const { main, rebased } = rebaseOntoUnsignedMain({ head, git, dir, ...repo });
+      git("remote", "set-url", "origin", join(dir, "no-such-remote"));
+      const result = invoke(ref(rebased, head));
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toContain("could not refresh origin/main");
+      expect(result.stdout).toContain(main.slice(0, 7));
+      expect(result.calls).toEqual([]);
+    });
+  });
+  it("gives up on a fetch that outlasts its deadline and checks every commit in the range", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, ref, head, git, dir, ...repo }) => {
+      const { main, rebased } = rebaseOntoUnsignedMain({ head, git, dir, ...repo });
+      git("config", "remote.origin.uploadpack", "sleep 60 #");
+      const started = Date.now();
+      const result = invoke(ref(rebased, head), { WAITRON_PRE_PUSH_FETCH_SECONDS: "1" });
+      expect(Date.now() - started).toBeLessThan(HOOK_TIMEOUT_MS);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toContain("could not refresh origin/main");
       expect(result.stdout).toContain(main.slice(0, 7));
       expect(result.calls).toEqual([]);
     });

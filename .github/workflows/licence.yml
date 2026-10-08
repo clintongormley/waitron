@@ -32,9 +32,11 @@ jobs:
   #
   # This job installs nothing — no pnpm, no setup-node — which is why the shared file is `sh` and
   # not `.mjs`. See scripts/check-signoff.test.mjs's header for that decision and the tests.
+  #
+  # It checks every push to main as well as every pull request: documentation goes to main by a
+  # direct push, and the hook's sign-off check can be skipped or fooled locally.
   dco:
     name: Every commit is signed off
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -43,15 +45,23 @@ jobs:
           fetch-depth: 0
       - name: Check Signed-off-by trailers
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
+          # Both refusals below fail closed: a range that cannot be listed is not a passed check.
+          case "$BASE_SHA" in
+          *[!0]*) ;;
+          *)
+            echo "::error::This push names no earlier tip (before is all zeros), so its commits cannot be listed"
+            exit 1
+            ;;
+          esac
           if ! commits=$(git rev-list "$BASE_SHA".."$HEAD_SHA"); then
-            echo "::error::Could not enumerate the pull request's commits ($BASE_SHA..$HEAD_SHA)"
+            echo "::error::Could not enumerate the commits in $BASE_SHA..$HEAD_SHA"
             exit 1
           fi
-          # The range stays here rather than in the script: this one is a pull request's, and the
-          # hook's is accumulated per pushed ref. Only the predicate and the walk are shared.
+          # The range stays here rather than in the script: this one is a pull request's or a push's,
+          # and the hook's is accumulated per pushed ref. Only the predicate and the walk are shared.
           if missing=$(printf '%s\n' "$commits" | scripts/check-signoff.sh); then
             echo "All commits signed off."
             exit 0

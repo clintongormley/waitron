@@ -49,11 +49,11 @@ export async function runWithDeadline(
     signals.on("SIGINT", interrupt);
     signals.on("SIGTERM", terminate);
     const deadline = setTimeout(() => {
-      console.error(`Test command exceeded ${timeoutMs / 1000}s: ${command} ${args.join(" ")}`);
+      console.error(`Command exceeded ${timeoutMs / 1000}s: ${command} ${args.join(" ")}`);
       stop(124);
     }, timeoutMs);
     child.once("error", (error) => {
-      console.error(`Cannot start test command: ${error.message}`);
+      console.error(`Cannot start command: ${error.message}`);
       result = 1;
     });
     child.once("close", (code) => {

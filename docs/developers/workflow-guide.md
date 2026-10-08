@@ -45,7 +45,7 @@ index. Nothing else here was re-run.
 
 ## Commits, pull requests and merging
 
-**Every commit needs `git commit -s`**; CI's `dco` job walks the whole PR range. **A PR that goes
+**Every commit needs `git commit -s`**; CI's `dco` job walks the whole PR range, and every push to `main` from its previous tip. **A PR that goes
 `BEHIND` is not rebased for that alone** (owner decision 2026-09-05): with every check green on
 the current head and every conversation resolved, when GitHub still reports it `MERGEABLE` and
 what `main` gained since the merge-base is documentation, or code only in files this branch did

@@ -266,8 +266,65 @@ describe("check-signoff.sh", () => {
 
     it("fails with its own annotation when the range cannot be enumerated", () => {
       const result = runStep("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", sha.signed);
-      expect(result.stdout).toContain("::error::Could not enumerate the pull request's commits");
+      expect(result.stdout).toContain(
+        `::error::Could not enumerate the commits in deadbeefdeadbeefdeadbeefdeadbeefdeadbeef..${sha.signed}`,
+      );
       expect(result.status).toBe(1);
+    });
+
+    // A push that creates the branch has no earlier tip, so there is no range to check.
+    it("fails a push whose previous tip is all zeros, saying why", () => {
+      const result = runStep("0".repeat(40), sha.signed);
+      expect(result.stdout).toContain(
+        "::error::This push names no earlier tip (before is all zeros), so its commits cannot be listed",
+      );
+      expect(result.stdout).not.toContain("All commits signed off.");
+      expect(result.status).toBe(1);
+    });
+
+    it("fails a push to main from its previous tip to its new one that adds an unsigned commit", () => {
+      const result = runStep(sha.signed, sha.unsigned);
+      expect(result.stdout).toContain(
+        `::error::Missing Signed-off-by: ${git(repo, "log", "-1", "--oneline", sha.unsigned)}`,
+      );
+      expect(result.status).toBe(1);
+    });
+
+    // These read licence.yml as TEXT; GitHub's own evaluation of the expressions is not run here.
+    describe("what triggers the job, read as text", () => {
+      let workflow;
+      let dcoJob;
+
+      beforeAll(() => {
+        workflow = readFileSync(
+          join(import.meta.dirname, "..", ".github", "workflows", "licence.yml"),
+          "utf8",
+        );
+        const lines = workflow.split("\n");
+        const start = lines.findIndex((line) => line === "  dco:");
+        expect(start).toBeGreaterThan(-1);
+        const end = lines.findIndex((line, index) => index > start && /^ {2}\S/.test(line));
+        dcoJob = lines.slice(start, end === -1 ? undefined : end).join("\n");
+        expect(dcoJob).toContain("name: Every commit is signed off");
+      });
+
+      it("does not restrict the dco job to pull requests", () => {
+        expect(dcoJob).not.toMatch(/^ {4}if:/m);
+        expect(dcoJob).not.toContain("github.event_name == 'pull_request'");
+      });
+
+      it("falls back to the push's own tips when there is no pull request", () => {
+        expect(dcoJob).toContain(
+          "BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}",
+        );
+        expect(dcoJob).toContain(
+          "HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+        );
+      });
+
+      it("runs on a push to main", () => {
+        expect(workflow).toMatch(/^on:\n(?: {2}.*\n)* {2}push:\n {4}branches: \[main\]\n/m);
+      });
     });
   });
 

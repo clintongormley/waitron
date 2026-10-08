@@ -511,7 +511,7 @@ directory, which costs a `mkdir` rather than an exec.
 
 **It does not pay off everywhere, so measure before rewriting.** The cost only matters when the
 stubs are a large share of the suite's runtime. `scripts/pre-push.test.mjs` writes one stub per case
-but each of its fixtures also runs about eleven real `git` commands, and reusing the stub there
+but each of its fixtures also runs real `git` commands, and reusing the stub there
 measured 10.59s against 12.61s — inside the noise of `git` itself. `scripts/reap-testcontainers.test.mjs`
 writes stubs in a single case out of seventeen, so "once per file" and "once per test" are the same
 thing. Both were left alone deliberately.
