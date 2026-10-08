@@ -219,6 +219,69 @@ bonito", "Luras á romana", "Polbo á feira", "Café só", "Tortilla de patacas"
 choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error en marcar" and
 "Invitació de l'encarregat".
 
+## A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)
+
+**A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
+to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
+that teaches a new user what to set up and in what order — devices, printers, device profiles, and
+the other settings a venue needs before it trades — shown in Demo and Preparation
+(`onboardingIntent` `demo` and `prepare`). The user can leave the tutorial at any point and come back
+later to carry on where they stopped.
+
+Owner decisions from the 2026-10-03 brainstorm:
+
+- **It teaches the real setup, never the pretend devices.** A lesson shows how to set up a real
+  printer or card reader, or at least where to find the screen, even in Demo; it does not route the
+  user through the pretend printer (A241) or the pretend card reader (A247), so it does not depend
+  on them.
+- **Two kinds of lesson.** A _tour_ ("here is where you do this") is ticked off by the person. A
+  _required_ lesson ("you need to do this before going on") ticks itself when the server sees the
+  work done, and the tutorial does not move past it until then. A person can also mark any lesson
+  done or skip it by hand.
+- **Everything the tutorial stores is per person**: each person's marks, skips and whether the
+  tutorial is open. A required lesson still reads the venue's state, so it is ticked for everyone
+  once anyone has done the work.
+
+The owner's starting point for the lessons, in order (owner: "a good starting point"). The order
+follows what depends on what: a newly approved device takes its printers from its profile's lists
+(A238), so printers come before profiles and profiles before devices.
+
+| #   | Lesson                                                            | Kind     | Ticks itself when                                |
+| --- | ----------------------------------------------------------------- | -------- | ------------------------------------------------ |
+| 1   | Products: what you sell, prices, VAT                              | Required | at least one product exists                      |
+| 2   | Extras and options                                                | Tour     | —                                                |
+| 3   | Menus: put products on a menu and publish it                      | Required | a menu is published                              |
+| 4   | Kitchen: preparation stations and where tickets go                | Tour     | —                                                |
+| 5   | Floor plan, for table service                                     | Tour     | —                                                |
+| 6   | Printers: receipt and kitchen printers                            | Tour     | a printer exists (ticks, never blocks)           |
+| 7   | Device profiles: what each kind of device may do, its printers    | Tour     | —                                                |
+| 8   | Devices: open the till on the device, approve it in the dashboard | Required | a device is approved                             |
+| 9   | Card payments: connect a card reader                              | Tour     | a reader exists (ticks, never blocks)            |
+| 10  | Staff: the team and their PINs                                    | Tour     | a second person exists (ticks, never blocks)     |
+| 11  | Receipts: what the receipt says                                   | Tour     | —                                                |
+| 12  | A first sale on the till                                          | Required | a sale from a device (sample sales do not count) |
+| 13  | Backups: a copy off the box                                       | Tour     | backups are set up (ticks, never blocks)         |
+| 14  | Going Live: export the setup, start the Live box (Prepare only)   | Tour     | —                                                |
+
+In Demo, lessons 1 and 3 tick themselves at once (the sample restaurant has products and a published
+menu) and stay open as tours; lesson 14 is not shown, because Demo reaches Prepare by a wipe, not a
+copy. The owner account made at setup already has a till PIN, which is why staff is not required.
+
+Facts found while designing: going Live never happens on the same database — Prepare to Live is a
+fresh database plus the configuration copy (`apps/server/src/configuration-export-api.ts`,
+`apps/server/src/configuration-import.ts`) and Demo to Prepare is a wipe — so progress stored in the
+venue database ends at Live unless the configuration copy is made to carry it. The sample restaurant
+is seeded in Demo only (`seedDemo`, called for `mode === "demo"` in `apps/server/src/setup-api.ts`);
+both modes get the three default device profiles (`DEFAULT_DEVICE_PROFILES`,
+`packages/layouts/src/device-profile.ts`).
+
+Still open for the spec: whether a required lesson blocks every lesson after it or only those that
+depend on it; whether any of content languages, the canvas editor, rosters and working time,
+purchasing or Cloud services gets a lesson; whether a printer or staff should be required; how the
+tutorial is reopened (the Demo bar, A246, W36, is the obvious place); whether it spans the till as
+well as the dashboard; and how each required lesson's check is read without slowing the dashboard.
+It comes after the Demo bar (A246, W36) and A238, whose device and profile model it teaches.
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it

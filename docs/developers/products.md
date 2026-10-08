@@ -295,6 +295,44 @@ switched-off menu owns; the default-change check above still counts all of them 
 variant, which it skips too. Image names (the media module's contribution) are checked on a change
 of default but are not in the list.
 
+## Content languages per region
+
+The owner's decisions (2026-10-06 ~17:23, W109; built in W109-6, #1320, and W109-4, #1322), for real
+venues and the demo. As relayed in lane A's queue (`~/waitron-campaign/queue.md`, WATCHER
+NOTE of 17:23 above W109-1) and `~/waitron-campaign/questions.md` ("2026-10-06 17:23 — OWNER
+ANSWERS"):
+
+- Required content languages, in Spain's pack, for real venues too: _"every area not named below:
+  **Spanish** required"_ (_"service must be offered in Spanish even where the law does not require
+  Spanish on printed menus"_); Catalonia Catalan and Spanish (unchanged); Valencian Community
+  Catalan and Spanish (unchanged), _"'Valenciano' is Catalan (`ca`) for now"_, foreign-language
+  notice kept;
+  **Balearic Islands Spanish + Catalan**, _"Stricter than the law … the owner's choice"_ (the law
+  asks for one official language, `docs/compliance/regional-language-rules.md`); Galicia Galician +
+  Spanish (unchanged), two-foreign-languages notice kept; Basque Country and Navarre _"no change"_.
+- _"English is switched on (not required) in every region. A NEW venue starts with its region's
+  required languages plus English"_ — no more Catalan in Galicia or Madrid.
+- _"The demo fills exactly those languages."_
+- Default content language (owner "a"): the regional language wherever one is required (Catalan in
+  Catalonia, the Valencian Community and the Balearic Islands; Galician in Galicia), Spanish
+  elsewhere; the venue can still change it.
+
+As built (W109-6): Spain's pack requires Spanish in every area it
+does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to the regional
+language in the Valencian Community, the Balearic Islands and Galicia, and a new venue starts with
+`resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`): its default,
+its area's required languages, then English. The dashboard's required-language messages now say
+Waitron keeps the language enabled for the region, not that the region requires it. The new rules reach existing venues
+at their next start; only their stored language list waits for a reset.
+
+As built for the demo (W109-4): a demo keeps the languages setup gives
+its area (except a pack with no data set of its own: English is its default, its languages are
+English plus the area's required ones, and a required language the set has no text in is listed
+as missing, W109-2), writes every customer-facing text in each of them
+(menus' customer names included), and
+saves its row through the required-language check; a Barcelona demo is Catalan (default), Spanish
+and English with nothing listed as missing.
+
 ## Colour
 
 A colour helps staff find a dish on a busy till, so a product has one colour, the same on every

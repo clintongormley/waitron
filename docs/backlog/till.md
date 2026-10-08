@@ -197,6 +197,37 @@ screen is designed.
   `apps/till/src/till-app.ts` calling an idempotent `placeOrder` "a recorded backlog follow-up"
   refers to this entry.
 
+## The till's top bar is one row at every width (A395, #1435): left open
+
+- **A395 DONE (#1435): the till's top bar is one row at every width.** On a phone nothing changed. Wider,
+  the bar moves items into the More menu one at a time, only as many as it needs to stay on one
+  row, in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My
+  schedule, Pass, Kitchen, Find a bill, Department transfers (count and button together), and last
+  the operator's name with Log out. Tabs and the language chooser never leave; once everything
+  else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
+  `design-system.md` says which icon means which menu. While More is open nothing moves out of
+  it; the bar refits when it closes.
+  - **Open, for the owner:** because items leave strictly in that order, a wide item can take
+    narrower ones with it. In screenshots of the demo counter in Spanish at 1024 px, and in both
+    languages at 800 px, the transfer count and its button do not fit, so Find a bill, Kitchen and
+    Pass are in More too, though the bar has empty room for some of them. Option: after the bar fits, bring back any item that left earlier and now fits, so the
+    order is no longer strict. Not done. Screenshots: `~/waitron-campaign/a395-shots/`.
+  - **Open, decided as built:** a change in the pending-transfer count alone never brings items
+    back onto the bar, so when the count shrinks or goes away, items can stay in More although they
+    would now fit, until the next resize or other change refits the bar.
+  - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
+    any one leaves every test passing): the phone-width early return in `#release`, the return
+    after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.
+
+## Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review)
+
+- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).**
+  A unit with no enabled text has an empty label; the tile and basket-refresh price templates
+  still append a slash. Render those empty-label cases before choosing their display.
+  Legacy unit maps cover English and Spanish only. The default Kitchen title remains
+  English when the tab shell is shown in a synthetic Spanish probe; check whether any
+  real kitchen session shows that bar before widening the standard-tab translation.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no

@@ -590,7 +590,7 @@ also applies to pinned columns. Without it, a control in a clickable row's cell 
 a click on it reaches that control and not the row: the Menus list's name button opens its menu once,
 by its own click (the "opens its menu once" cases in `apps/dashboard/src/screens/menus-screen.test.ts`).
 The Menus list's middle-width Status column and phone-width Name column depart from this rule, a
-deviation recorded for the owner in `docs/backlog.md` (W87): each shows the menu's own state or name
+deviation recorded for the owner in `docs/backlog/catalogue.md` (W87): each shows the menu's own state or name
 with the Unpublished changes link under it and does not set `activatesRow: false`, so a click
 beside the link opens the menu while the link opens only Preview. The middle-width half is guarded
 by the "opens the menu once from a click on the Status cell's blank space" cases in

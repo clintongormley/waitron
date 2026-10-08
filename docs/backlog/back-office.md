@@ -39,3 +39,11 @@ design (owner ruling 2026-09-21; task N1). The dashboard form's `inRange(this.to
 (`apps/dashboard/src/widgets/purchase-form.ts`) refuses one, so the form refuses the very document
 the ruling calls legitimate. Nobody has decided whether the form should be relaxed or the credit
 note should become its own document type.
+
+## Decisions and deliberate limits
+
+**Sales: the category report names each category by its full path — DONE (W73, #1212).** Because
+every row carries its whole path, a very deep tree prints far more lines than before (the
+deep-tree case in `apps/server/src/category-sales-page.test.ts`, at 58mm and 203dpi, went from about
+1,000 lines to about 14,500, measured 2026-10-05), and its print preview is cut short; the owner
+chose to leave it as it is rather than shorten deep paths on paper (2026-10-05).

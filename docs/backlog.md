@@ -471,6 +471,17 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   should read it.
   [Detail](backlog/setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
 
+- **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)** — OPEN, partly designed,
+  not to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing. A
+  walk-through that teaches a new user what to set up and in what order — devices, printers, device
+  profiles, and the other settings a venue needs before it trades — shown in Demo and Preparation
+  (`onboardingIntent` `demo` and `prepare`).
+  [Detail](backlog/setup.md#a-guided-tutorial-for-demo-and-preparation-a250-owner-2026-10-03)
+
+- What A2's rework left as constraints on the next change to the wizard is under [Setup wizard — the
+  constraints A2's rework left
+  behind](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2).
+
 ### Menus and the catalogue
 
 _Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
@@ -524,6 +535,167 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   — and check each dashboard form against it before changing the server, since a server stricter
   than its own form is the failure #485 met.
   [Detail](backlog/catalogue.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
+
+- **Cases the content-language decisions leave open, built with the plan's default unless the owner
+  says otherwise** (plan, "Open points"): a Spanish venue with no known province requires nothing
+  (setup cannot create one; the owner's reason for Spanish leans towards requiring it there too);
+  receipts outside Catalonia stay free, Spanish by default. Left by W109 (#1320, #1322); the
+  decisions are in [products.md](developers/products.md#content-languages-per-region).
+
+- **Between 30rem and 50rem a long menu name can still make the Menus table wider than its box**, so
+  the end of the live version's time scrolls under the pinned Actions column; the link and the row
+  menu stay in view. Left open by W87 (#1191).
+  [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
+
+- **In the Menus list's middle layout the Status column, and on a phone the Name column, hold the
+  Unpublished changes link but do not set `activatesRow: false`**, so a click beside the link opens
+  the menu; the design system records this as a deviation from its `activatesRow` rule, and whether
+  it stays is the owner's call. Left open by W87 (#1191).
+  [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
+
+- **The product list's "Made at" column (`apps/dashboard/src/widgets/product-list.ts`) also does not
+  set `activatesRow: false`**, so, judging by the code (not run), a click beside a short station
+  name opens the product editor, which the `activatesRow` rule in `docs/developers/design-system.md`
+  forbids. Left open by W87 (#1191), for an item of its own.
+  [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
+
+- **A menu's Structure tab is one tree (W88, #1209): not checked** — in Spanish at 390 px the Type
+  column scrolls partly under the pinned Actions column, which is the table's own sideways scroll;
+  the heading's height with "Checking…" or "Could not be checked" was not measured against the other
+  states.
+  [Detail](backlog/catalogue.md#a-menus-structure-tab-is-one-tree-w88-1209-not-checked)
+
+- **Not checked: the Price overrides tab on the running dev stack** — a real save and the re-read
+  after it, and Undo against the real server (the look in Chromium used mounted widgets only). Left
+  open by W89 (#1239).
+  [Detail](backlog/catalogue.md#a-menus-prices-are-one-editable-price-overrides-field-per-row-w89-1239-left-open)
+
+- **A size with its own price decides whether its clash comes from its product by matching the two
+  clashes**, which can be misread in a rare setup where they match exactly — telling them apart
+  needs the prices read to say which level a clash came from. Left open, raised in #1239's review
+  (W89) and not taken.
+
+- **In the Structure tree, closing the section form opened from a section's swatch puts focus on the
+  row's ⋮ menu** rather than back on the swatch that opened it. No test pins it. Left open by W92
+  (#1250).
+
+- **At 390 px the Structure tree clips a long product name under the pinned Actions column**, so a
+  long name's swatch needs a sideways scroll to reach; since A294 this no longer applies to
+  sections, and it stays open for products. Left open by W92 (#1250).
+  [Detail](backlog/catalogue.md#a-product-has-one-colour-everywhere-w92-1250-left-open)
+
+- **A339 test-fixture follow-up:** `apps/dashboard/src/api/menu-read-controller.test.ts` and
+  `live-queries.test.ts` still use handheld five/six in fake snapshots, including three distinct
+  snapshots in the invalidation cases.
+  [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
+
+- **The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
+  the menu shares the screen with the order**, so the Till preview can show up to about four more
+  columns than the till does. Not changed, because the real width depends on the till screen's
+  layout. Left open by W93 (#1287).
+  [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
+
+- **Configuration export/import still leaves publications behind.** Reset the venue instead of
+  republishing old menus. Left open by A291 (2026-10-06, removed format-2 preview/republication).
+  [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
+
+- **The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a
+  hand copy of the till's menu browser** (`apps/till/src/widgets/menu-browser.ts`). A change to the
+  till's tiles has to be repeated by hand, and no test sees the two drift apart. Proposed follow-up:
+  move the shared logic and CSS beside `arrangeHome` in `packages/catalogue/src/device-home.ts`.
+  [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
+
+- **A Products drag: a category deleted elsewhere before this screen refreshed is still sent**, and
+  what the server answers to it is not checked. Left open by W88a (#1228).
+
+- **Two copies of the tree pointer drag — OPEN (W88).** Each widget still has its own copy of the
+  drag itself. A shared helper, told how to map a row to a target, would serve both.
+  [Detail](backlog/catalogue.md#two-copies-of-the-tree-pointer-drag--open-w88)
+
+- **The Menus Structure tree notices Collapse all only by watching its table redraw — OPEN (W88).**
+  An event from the table for "these branches changed" would be cleaner; it means a change in
+  `packages/ui`.
+  [Detail](backlog/catalogue.md#the-menus-structure-tree-notices-collapse-all-only-by-watching-its-table-redraw--open-w88)
+
+- **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
+  other items in the tree's row menus are greyed out while a change is out; the link to the included
+  menu's own editor is a link, which has no greyed-out state, so it stays live. (A322 renamed it
+  from "Edit <menu>", so that the include's own Edit could sit beside it.)
+
+- **A folder's fixed photo shows on the till only in Thumbnails mode**, as a section's photo does.
+  Left open by A322 (#1372, an included menu can show its sections directly).
+
+- **A home shortcut to a menu that is included in two lists of one menu opens the top-level copy**,
+  else the copy indexed last. Left open by A322 (#1372).
+
+- **Renaming or clearing the included menu's own customer names is not checked against the folders
+  that fix some languages**, so a folder can end up with no name in the default language. The
+  missing-translations report lists it, and changing the default language is refused while it lasts,
+  but the write that caused it is allowed. Left open by A322 (#1372).
+
+- **A fixed value that happens to equal the included menu's value when the dialog opens is saved
+  back as "follow" the next time the dialog is saved**: the dialog compares with the included menu's
+  value and cannot tell the two apart. Left open by A322 (#1372).
+
+- **The live photo triggers for products and sections (media `0005` to `0007`) look up
+  `products.image` and `sections.image`, which no index covers.** Its own item: a performance fix
+  with a media migration. Left open by A322 (#1372).
+  [Detail](backlog/catalogue.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
+
+- **A configuration import stores a fixed folder name as given, spaces included**, where a save
+  through the dialog or the route trims it. A name of spaces only shows as no name either way. Left
+  open by A380 (#1385).
+
+- **After browser Back to another menu with no edits made, the include's Edit dialog stays open over
+  that menu**, as the section Edit dialog does: choosing another menu does not close either (read in
+  `menus-screen.ts`, not run). Left open by A380 (#1385).
+
+- **At 375×667 the Products table's box gave few rows, short of the item's "enough rows to remain
+  usable"**, and a larger minimum does not fit that screen without the toolbar scrolling away; no
+  kept test covers Select and move mode there. Whether that is enough rows is the owner's call. Left
+  open by W80 (#1187); A303 changed the layout and the 375×667 selection measurement has not been
+  retaken.
+  [Detail](backlog/catalogue.md#products-table-toolbar-and-headings-stay-in-view-w80-1187-left-open)
+
+- **A desktop window narrow enough to leave the Products table under 768px gets the full-screen
+  Filters panel** — at which window width that happens with the sidebar shown was not measured. Left
+  open by W83 (#1193).
+  [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
+
+- **The Products 768px side-panel threshold is tied by hand to token sizes** (768 − 7×44 − 12 = 448,
+  just above the table's 440px narrow-tree width). Left open by W83's review (#1193), not started.
+
+- **Not covered: Select mode's extra controls at the middle widths** of the Products toolbar. Left
+  open by W85d (#1249, the toolbar takes two lines at phone width, not three).
+
+- **Not covered by W85b: while a category is being renamed, its count and asterisk follow the name
+  box and are not capped.** Left open by W85b (#1243).
+  [Detail](backlog/catalogue.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
+
+- **Products at phone width: what W85e left for the owner** (the owner's answer to W85b's open point
+  was a "maybe"): keep, or undo, either half; hide the folder icon too at phone width so product and
+  category names line up again (since A294 that slot holds the category's colour square, so this now
+  means moving or hiding the square); narrow the indent step. Left open by W85e (#1275).
+  [Detail](backlog/catalogue.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
+
+- **Catalogue names (W72): there is no unique index, and no backfill.** A row whose name has not
+  been written since the column was added keeps a null key, and the check does not see it until its
+  name is next written (every product editor save writes it) or the venue is reset. Stored data is
+  not renamed: a venue that already holds duplicates keeps them until someone renames one.
+  [Detail](backlog/catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
+
+- **The Menus screen's two category pickers match only the text the list shows, so a path finds its
+  category there only when typed with " › "**; one category's name alone still finds it. Those
+  pickers are the shared `wt-combobox`, which was left unchanged. Left open by W82 (#1210, the Move
+  dialog's destination categories; W82b, W82c).
+
+- **A category's Made at link is the same `maker-link` as a product's, so the missing `activatesRow:
+  false` recorded under W87 applies to category rows too** (there a click beside the link opens or
+  closes the category; judged from the code, not run; its contrast is fixed with the product's by
+  A306, through the same style rule, not measured on a category row). Left open by W86 (#1203).
+
+- **A person who may not read routing sees "Kitchen routing unavailable" on every category**,
+  because a refused read counts as a failed one. Left open by W86 (#1203, a category's Made at).
 
 ### Service periods, opening hours and departments
 
@@ -664,6 +836,35 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   a helper would collapse it.** Cosmetic, and cheapest alongside the tip-collection work that touches
   `#onPayTab`. Raised by the A1 review wave (A1d).
 
+- **The till's top bar: because items leave strictly in that order, a wide item can take narrower
+  ones with it** — open, for the owner; left open by A395 (#1435). Option: after the bar fits, bring
+  back any item that left earlier and now fits, so the order is no longer strict. Not done.
+  [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
+
+- **The till's top bar: a change in the pending-transfer count alone never brings items back onto
+  the bar**, so when the count shrinks or goes away, items can stay in More although they would now
+  fit, until the next resize or other change refits the bar. Open, decided as built; left open by
+  A395 (#1435).
+
+- **Three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test** (deleting any one
+  leaves every test passing): the phone-width early return in `#release`, the return after re-adding
+  a step in `#fit`, and the unobserve of a replaced language chooser. Left open by A395 (#1435).
+
+- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).** A unit with no
+  enabled text has an empty label; the tile and basket-refresh price templates still append a slash.
+  Render those empty-label cases before choosing their display.
+  [Detail](backlog/till.md#remaining-till-unit-and-tab-edges-open-unqueued-a379a385-run-it-review)
+
+- **A292's look is the owner's to judge** (#1310's "Looks for the owner to judge"; screenshots in
+  lane C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter
+  than a sold-out one, and in the light theme a pale stripe shows mostly through the dark line
+  beside it.
+
+- **On the till, opening a section from lower on the screen leaves the page scrolled**, so the
+  breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
+  `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected). Left
+  open by W93 (#1287).
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -710,6 +911,9 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
 - Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
   migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
   presence light.
+
+- **Since W72c an imported print agent arrives with no node; the importing box's own agent still
+  enrols as a new row beside it**, as it did before (read, not run). Left open by W72c (#1237).
 
 ### Payments and card readers
 
@@ -801,6 +1005,39 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   till's `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These
   are readings, not browser reproductions; reproduce them before changing their displays.
 
+- **Dashboard at 1280 px: the overview's top-row cards have uneven heights.** Seen during A310's
+  look (2026-10-07), OPEN, unqueued — not checked against `main`. Screenshots:
+  `~/waitron-campaign-c/a310-shots/`.
+
+- **`docs/developers/design-system.md` still says a list's Create action goes in a menu beside the
+  table heading**, while Menus, Staff and Units put a text Add button at the heading row's trailing
+  edge; the doc only names the exceptions, and whether the rule itself changes is the owner's call.
+  Left open by W79 (#1186).
+
+- **The row-highlight tests focus only the row's own button**, so nothing tests that a row
+  highlights while another control in it, such as its Actions menu, has focus. Left open by W79
+  (#1186, the Menus list).
+
+- **A link marked `aria-disabled="true"` in a ⋮ menu (`wt-row-actions`) looks greyed out but still
+  opens its page when clicked** (no screen marks one disabled yet; W88's busy-tree point would be
+  the first). Left open by A380 (#1385).
+
+- **`wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.** Other long tables
+  (Orders, Staff, Payments and the rest) keep scrolling with the content column until someone
+  decides they should opt in too; each would need its screen to give the table a bounded height, as
+  the Products screen does. Left open by W80 (#1187).
+  [Detail](backlog/catalogue.md#products-table-toolbar-and-headings-stay-in-view-w80-1187-left-open)
+
+- **The table's Customise columns button is icon-only beside Filters and Select but has neither
+  their look nor a tooltip.** Left open by W83's review (#1193), not started.
+  [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
+
+- **The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not a
+  `wt-icon-button` component** — Select is a native `<button>` because `wt-button` does not pass
+  `aria-pressed` through, and the Structure tab's Reorder toggle is a second hand-built icon button
+  for the same reason. Left open by W83's review (#1193), not started.
+  [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them._
@@ -811,6 +1048,12 @@ _Formerly entries spread across the old sections, C125 among them._
 - **The file pickers' "Choose File / No file chosen" follow the browser's language**, not the
   chooser; the browser draws them. Left open by C42 (#837, the setup wizard in Spanish and
   English).
+
+- **English-only till entry pages, OPEN, unqueued (A379 source audit).** The development device
+  chooser (`apps/till/src/screens/till-device-chooser.ts`) contains fixed English headings and
+  actions, and the certificate trust instructions (`apps/till/src/main.ts`) have fixed English
+  prose. Reproduce in Spanish before deciding their translation scope; this branch changes the
+  standard selling tabs only.
 
 ### Alerts, logging and diagnostics
 
@@ -1601,6 +1844,39 @@ _Formerly B9, and Track C's development-stack and house-rules items._ Detail: [b
   `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
   Left open by SQLite slice 1 (#490 and the preparation tasks).
 
+- **After the onboarding wizard provisions, the stack started by `wa-wt onboarding <worktree>`
+  restarted into setup mode**, because the dev launcher (`apps/server/scripts/dev-server.mjs`)
+  looked for `trading.env` only in the state folder `apps/server/.env` names, not the one `wa-wt`
+  passes; the look worked round it with links. Seen during #1320's and #1322's looks (2026-10-07,
+  not checked against `main`).
+  [Detail](backlog/ci.md#the-dev-launcher-looks-for-tradingenv-only-in-the-state-folder-appsserverenv-names)
+
+- **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
+  apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. Make
+  cross-app links reach the other dev server without changing their deployed same-origin paths; this
+  also affects setup's existing links.
+  [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack)
+
+- **A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
+  before W92) prints "[Unhandled rejection] Error: marker" in passing runs**; the noise should go.
+  Left open by W92 (#1250).
+
+- **Some dashboard pixel and drag cases W92 did not change failed once when run in parallel
+  locally** during the branch's work; the cause was not found. They passed in the PR's dashboard CI
+  shard on its final head. Left open by W92 (#1250).
+
+- **The guard W72d added (`scripts/id-columns-are-references.test.ts`) knows an id column only by
+  its name**, so a reference named otherwise is still unseen. Left open by W72d (#1238).
+
+- **W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered
+  notifications" from the Products tree's category name box.** A261-3 (2026-10-05) and A349
+  (2026-10-08) then saw the message in other dashboard suites, on their own candidates and on the
+  commits before them; that comparison does not establish which observer causes it or its effect on
+  the rendered screen. A407 (#1432) later recorded: "The original-main catalogue-only command passed
+  270 cases without the warning; its historical occurrence was not reproduced and is not attributed
+  to currency fields."
+  [Detail](backlog/catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -1950,6 +2226,11 @@ _Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/ar
   guard suites, from two deletions. Fix whenever a file is open anyway; the comment-pruning sweep
   (B9 → _Prune the comments_) reaches every package and takes these as it goes.
   [Detail](backlog/architecture.md#a1c-dead-pointers-to-deleted-test-suites)
+
+- `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) **is now
+  called only by its own tests; delete it with its cases**: nothing else calls it, because the built
+  Task 6 works out the default itself, and only the demo-data plan's Task 6 sketch still names it.
+  Left by #1320 (W109-6, content languages per region), OPEN, unqueued.
 
 ### Data protection and legal compliance
 
@@ -4009,766 +4290,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
   and decides whether the product editor keeps both summaries.
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
-
-### A2. The setup wizard
-
-**Content languages per region, for real venues and the demo — owner DECIDED 2026-10-06 ~17:23
-(W109; was "Demo languages per region — owner decision pending") — DONE (W109-4, #1322, 2026-10-07); two
-leftovers left open, below.** As relayed in lane A's queue (`~/waitron-campaign/queue.md`, WATCHER
-NOTE of 17:23 above W109-1) and `~/waitron-campaign/questions.md` ("2026-10-06 17:23 — OWNER
-ANSWERS"):
-
-- Required content languages, in Spain's pack, for real venues too: _"every area not named below:
-  **Spanish** required"_ (_"service must be offered in Spanish even where the law does not require
-  Spanish on printed menus"_); Catalonia Catalan and Spanish (unchanged); Valencian Community
-  Catalan and Spanish (unchanged), _"'Valenciano' is Catalan (`ca`) for now"_, foreign-language
-  notice kept;
-  **Balearic Islands Spanish + Catalan**, _"Stricter than the law … the owner's choice"_ (the law
-  asks for one official language, `docs/compliance/regional-language-rules.md`); Galicia Galician +
-  Spanish (unchanged), two-foreign-languages notice kept; Basque Country and Navarre _"no change"_.
-- _"English is switched on (not required) in every region. A NEW venue starts with its region's
-  required languages plus English"_ — no more Catalan in Galicia or Madrid.
-- _"The demo fills exactly those languages."_
-- Default content language (owner "a"): the regional language wherever one is required (Catalan in
-  Catalonia, the Valencian Community and the Balearic Islands; Galician in Galicia), Spanish
-  elsewhere; the venue can still change it.
-
-Planned in `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`: setup's side and the
-pack as **Task 6** (`feat/content-languages-by-region`, built after Task 1 and before Task 3), the
-demo's side in Tasks 3 and 4. Cases the decisions leave open, built with the plan's default unless
-the owner says otherwise (plan, "Open points"): a Spanish venue with no known province requires
-nothing (setup cannot create one; the owner's reason for Spanish leans towards requiring it there
-too); receipts outside Catalonia stay free, Spanish by default. The new rules reach existing venues
-at their next start; only their stored language list waits for a reset. **Setup's side and the
-pack's rules are BUILT (W109-6, #1320, Task 6):** Spain's pack requires Spanish in every area it
-does not otherwise name and Spanish + Catalan in the Balearic Islands, defaults to the regional
-language in the Valencian Community, the Balearic Islands and Galicia, and a new venue starts with
-`resolveInstalledStartingContentLanguages` (`packages/country-packs/src/registry.ts`): its default,
-its area's required languages, then English. The dashboard's required-language messages now say
-Waitron keeps the language enabled for the region, not that the region requires it. **The demo's
-side is BUILT too (W109-4, #1322, Task 4), so this entry is DONE:** a demo keeps the languages setup gives
-its area (except a pack with no data set of its own: English is its default, its languages are
-English plus the area's required ones, and a required language the set has no text in is listed
-as missing, W109-2), writes every customer-facing text in each of them
-(menus' customer names included), and
-saves its row through the required-language check; a Barcelona demo is Catalan (default), Spanish
-and English with nothing listed as missing. Left by #1320, OPEN, unqueued:
-`resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) is now called
-only by its own tests; delete it with its cases: nothing else calls it, because the built Task 6
-works out the default itself, and only the demo-data plan's Task 6 sketch still names it. And seen
-during #1320's look (2026-10-07, not checked against `main`): after the onboarding wizard
-provisions, the stack started by `wa-wt onboarding <worktree>` restarted into setup mode, because
-the dev launcher (`apps/server/scripts/dev-server.mjs`) looked for `trading.env` only in the state
-folder `apps/server/.env` names, not the one `wa-wt` passes; the look worked round it with links. #1322's
-look (2026-10-07, a Barcelona demo) met the same restart. Seen in that look, in files #1322 did not
-touch: **A311 DONE** — the printed allergen sheet requests customer translations in the language
-of its fixed text (the receipt language when the till has wording, else English). A missing or
-disabled translation uses the untagged staff Name. The Missing translations section says
-"a translation in {language}" in English and "una traducción en {language}" in Spanish.
-At 390px the dashboard showed a strip about 24px wide of the hidden side menu along
-the left edge, and the till's basket squeezed into a narrow column that cut off its prices, remove
-buttons and total — both FIXED by A310 (follow-ups below). **A312 DONE:** the shell retains the arriving alerts' codes and parameters and translates its
-visible pop-up when it renders. The bell list observes the shared language choice too. Chromium
-cases switch single-alert and batch pop-ups and open/reopened bell lists between English and
-Spanish in both themes without another alert read; dismissal clears the pop-up message.
-Screenshots: `~/waitron-campaign/w109-4-shots/`.
-
-**A364 DONE: the till has no technical clock notices (owner, 2026-10-07).**
-The till no longer polls for an authority comparison. Measured drift remains an administrator
-alert, `fiscal.clock_drift`, for people with `fiscal.view`. The existing drift-alert test and the
-independent real-database cash-sale check pass in `apps/server/src/time-health.test.ts`.
-**A386 DONE:** `apps/server/src/boot.clock-alert.test.ts` starts the real server and feeds
-its real authority-clock monitor a sample. The authenticated alerts API returns the measured
-drift alert, then no clock alert after a correct sample. Removing the clock-alert registration
-in a disposable checkout makes the drift assertion fail; the restored registration passes.
-That test exposes the monitor's sample input; it does not check boot's filing-observer connection
-or exercise the filing transport. **A406 DONE:** `apps/server/src/boot.clock-wiring.test.ts`
-starts the real server with the fiscal slot's `drain` replaced by a fake that hands the deps'
-`observeAuthorityTime` a sample 121 s off, and waits for that drift alert on the authenticated
-alerts API. Deleting `observeAuthorityTime: authorityClock.observe,` from `boot.ts` made it fail
-(`expected [] to deeply equal [ { key: 'fiscal.clock_drift', …(6) } ]`) while
-`boot.clock-alert.test.ts` still passed in the same run; the restored line passes. It replaces the
-Veri\*Factu slot's own drain, so it exercises neither that drain's handover of the sample input to
-`aeatClientResolver` (`packages/fiscal-verifactu/src/slot.ts`) nor the filing transport.
-**A385 DONE:** the till's legacy unit fallback includes Spanish text. A missing enabled
-abbreviation falls back to the unit's enabled name; with no enabled text the label is
-empty, never an id. Chromium helper and rendered-tile cases cover Spanish, a missing requested
-translation and a legacy product without a unit. The unchanged live demo already supplied
-Spanish unit labels; the UUID was reproduced with the legacy fallback and incomplete unit maps.
-
-**Till and dashboard layout points seen during A310's look (2026-10-07), OPEN, unqueued — not
-checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-shots/`.
-- **A377 DONE: basket rows wrap their controls within the card.** The unchanged demo reproduced
-  the spill at 720 px; Chromium cases keep one-, two- and three-digit totals and long names inside
-  the basket at 390, 720, 1024, 1280 and 1920 px.
-- **A377 DONE: the standard counter canvas keeps Total, Cash, Card and Hold above the fold.**
-  The menu controls, products and held orders share the menu side's scroll area; the basket scrolls
-  separately, and total and payment cards take their content height.
-  Chromium cases cover a long basket at 1280×800 and 1024×768, English and Spanish, both themes,
-  including the demo banner's space, operator controls and simulator reader. Other card arrangements
-  retain their configured row spans. Full invoice and Hold share a row; Cash, Card and Hold use
-  the shared medium button size. Phone cards remain stacked in their configured order.
-- **A378 DONE (#1409): on a phone the till's top bar is one row.** At 390×844 the demo counter's bar
-  measured 293 px before and 61 px after (EN; in a Chromium test of the bar with every button it can show, 322 px EN and
-  378 px ES before). On a phone the bar holds the tabs, which scroll sideways when they do not fit,
-  the language chooser, and a "More" menu with everything else: department transfers, Find a bill,
-  Kitchen, Pass, My schedule, Profile, Equipment, Allergens, the operator's name and Log out. The
-  menu button shows a count of pending transfers. Above 40rem the bar is unchanged.
-  - **Done by A395 (2026-10-08):** at 1280 px the bar wrapped to two rows in English and three in Spanish.
-  - **Done by A395 (2026-10-08):** the More menu used the three-dot icon; it is now the hamburger.
-- **A395 DONE (#1435): the till's top bar is one row at every width.** On a phone nothing changed. Wider,
-  the bar moves items into the More menu one at a time, only as many as it needs to stay on one
-  row, in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My
-  schedule, Pass, Kitchen, Find a bill, Department transfers (count and button together), and last
-  the operator's name with Log out. Tabs and the language chooser never leave; once everything
-  else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
-  `design-system.md` says which icon means which menu. While More is open nothing moves out of
-  it; the bar refits when it closes.
-  - **Open, for the owner:** because items leave strictly in that order, a wide item can take
-    narrower ones with it. In screenshots of the demo counter in Spanish at 1024 px, and in both
-    languages at 800 px, the transfer count and its button do not fit, so Find a bill, Kitchen and
-    Pass are in More too, though the bar has empty room for some of them. Option: after the bar fits, bring back any item that left earlier and now fits, so the
-    order is no longer strict. Not done. Screenshots: `~/waitron-campaign/a395-shots/`.
-  - **Open, decided as built:** a change in the pending-transfer count alone never brings items
-    back onto the bar, so when the count shrinks or goes away, items can stay in More although they
-    would now fit, until the next resize or other change refits the bar.
-  - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
-    any one leaves every test passing): the phone-width early return in `#release`, the return
-    after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.
-- **A379 DONE: standard till tab titles follow the UI language.** Standard key/title pairs
-  Counter, Floor and Order read Mostrador, Sala and Pedido in Spanish; renamed and custom
-  tabs keep their stored titles. The service-area selector reserves room for its full label,
-  including a short selected zone at 390 and 1280 px. An English-seeded demo keeps its
-  English plain staff names when you switch the UI language. A real-database Spanish-seed
-  check reads every dish's Spanish customer and staff names, every stored unit's Spanish
-  labels and an empty Spanish translation-gap report. To practise with Spanish staff names,
-  seed the demo with `WAITRON_SEED_LOCALE=es-ES`; switching UI language does not rewrite names.
-- **Dashboard at 1280 px: the overview's top-row cards have uneven heights.**
-- **English-only till entry pages, OPEN, unqueued (A379 source audit).** The development
-  device chooser (`apps/till/src/screens/till-device-chooser.ts`) contains fixed English
-  headings and actions, and the certificate trust instructions (`apps/till/src/main.ts`)
-  have fixed English prose. Reproduce in Spanish before deciding their translation scope;
-  this branch changes the standard selling tabs only.
-- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).**
-  A unit with no enabled text has an empty label; the tile and basket-refresh price templates
-  still append a slash. Render those empty-label cases before choosing their display.
-  Legacy unit maps cover English and Spanish only. The default Kitchen title remains
-  English when the tab shell is shown in a synthetic Spanish probe; check whether any
-  real kitchen session shows that bar before widening the standard-tab translation.
-
-**Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
-apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
-request for `/manage/devices` on 5190 returned the till HTML, while the same path on 5191 returned
-the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
-server without changing their deployed same-origin paths; this also affects setup's existing links.
-
-**Menus list heading, rows and Customise rows — DONE (W79, #1186, owner 2026-10-04).**
-Left open by W79 (#1186): `docs/developers/design-system.md` still says a list's Create action
-goes in a menu beside the table heading, while Menus, Staff and Units put a text Add button at the
-heading row's trailing edge; the doc only names the exceptions, and whether the rule itself changes
-is the owner's call. And the row-highlight tests focus only the row's own button, so nothing tests
-that a row highlights while another control in it, such as its Actions menu, has focus.
-
-**Menus list Changes column and top-aligned rows — DONE (W87, #1191, owner 2026-10-04).** The Menus list
-has a Changes column when the list is wide enough, holding an "Unpublished changes" link to the
-menu's Preview tab.
-The list takes one of three layouts by its own
-width. From 50rem it has four columns and the name wraps so that they fit without sideways
-scrolling, even for a long name. Between 30rem and 50rem it has Name, Status and Actions, with the
-link on its own line under the state, so the link stays in view beside a long name. At 30rem or less
-the state and then the link stack under the name.
-Left open by W87: between 30rem
-and 50rem a long menu name can still make the table wider than its box (measured in Chromium,
-2026-10-04: by 20 px in English and 29 px in Spanish, at a 600 px window with hyphenated, spaced and
-unbroken names and at 700 px with spaced and unbroken ones, where a hyphenated one did not
-overflow), so the end of the live version's time scrolls under the pinned Actions column; the link
-and the row menu stay in view. The existing 600 px case "keeps every menu row's menu on screen and
-uncovered while the other columns scroll sideways" in
-`apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. In that middle layout the
-Status column, and on a phone the Name column, hold the Unpublished changes link but do not set
-`activatesRow: false`, so a click beside the link opens the menu; the design system records this as
-a deviation from its `activatesRow` rule, and whether it stays is the owner's call. The contrast of
-that link, and of the product list's maker link, on a highlighted row is fixed (A306, #1336). The product
-list's "Made at" column (`apps/dashboard/src/widgets/product-list.ts`) also does not set `activatesRow:
-false`, so, judging by the code (not run), a click beside a short station name opens the product
-editor, which the `activatesRow` rule in `docs/developers/design-system.md` forbids. Both predate
-this branch (5b725d672, ca89633f1) and are left for an item of their own.
-
-**Add products picker selects all listed — DONE (W81, #1189, owner 2026-10-04).**
-
-**A menu's Structure tab is one tree — DONE (W88, #1209, main `21b57d280`, 2026-10-05; owner 2026-10-04).**
-Not checked: a drag with a touch pointer or on a
-real touch screen; a drag does not scroll the page near its edge (nor does Products'); in Spanish at
-390 px the Type column scrolls partly under the pinned Actions column, which is the table's own
-sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
-against the other states.
-(2026-10-08, A334: Products now scrolls at a held drag's edge, with native touch checked at
-390 px in both themes and languages. Menu Structure gained the same helper in A334b after the Preview bundle.)
-
-**A menu no longer switches a product or size off on its own — DONE (W90, #1216, 2026-10-05;
-owner 2026-10-04).**
-
-**A menu's prices are one editable Price overrides field per row — DONE (W89, #1239,
-2026-10-05; owner 2026-10-04).** Not checked:
-the tab on the running dev stack — the product page opening from a Status link, a real save and
-the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
-only). (2026-10-08, A348: the Status link is gone; a row's ⋮ Edit product opens the product instead.)
-W95's implementation now uses Price override / Precio propio for Preview clashes.
-Left open, raised in #1239's review and not taken: a size with its own price decides whether
-its clash comes from its product by matching the two clashes, which can be misread in a
-rare setup where they match exactly — telling them apart needs the prices read to say which level
-a clash came from.
-
-**Resolve follows an unsaved price — DONE (A280, 2026-10-06).** A valid draft hides the
-row's Resolve menu. Blank or invalid text and Escape leave the saved clash available. Product
-and size rows have regression checks; no existing test check changed. A valid draft still hides
-Resolve during a save and after a refusal; clear it or press Escape to restore the candidate list. (A344 removed the Resolve menu, 2026-10-07.)
-
-**Price overrides accept either decimal mark — DONE (A284, A280 visual follow-up).**
-The shared price field converts comma or point to an exact dot-decimal draft and displays the
-screen's decimal mark. The row's `isProductPrice` check receives the canonical draft; invalid
-multiple marks and grouping spaces remain available to the row's existing refusal. A284 adds
-native-input EN/ES regressions to `wt-price-input.test.ts` and runs the menu-prices-table suite.
-
-**A product has one colour everywhere, taken from its category unless it has its own — DONE (W92, #1250,
-2026-10-05).**
-Left open:
-
-- In the Structure tree, closing the section form opened from a section's swatch puts focus on the
-  row's ⋮ menu rather than back on the swatch that opened it. No test pins it.
-- At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
-  swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
-  on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_
-  _(2026-10-06, A294: a section's square now sits before its name, so this no longer applies to
-  sections — A294's look pass saw a long-named section's square at 390 px; a product's square still
-  trails its name, so it stays open for products)_.
-- A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
-  before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
-- Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
-  during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
-  its final head.
-- **Done (W92a, #1259, 2026-10-05) — a sold-out painted till tile stays readable.**
-- **Done (A292, #1310, 2026-10-06) — W92a's four look points.** A sold-out painted tile's stripe is
-  `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
-  palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
-  dark theme's sold-out tile sits at the page's own level (`--wt-color-surface-sunken`); and the
-  labels are centred (products.md, _Colour_).
-- A292's look is the owner's to judge (#1310's "Looks for the owner to judge"; screenshots in lane
-  C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter than a
-  sold-out one, and in the light theme a pale stripe shows mostly through the dark line beside it.
-
-**Menu search lists the shown menu first, then each other menu the device is served — DONE (W94,
-#1291, 2026-10-06).** The till's menu search groups matches by menu, the shown one first, each tile
-that menu's own offer and price; [design-system.md](developers/design-system.md), _The till's menu
-search_. The till and dashboard Home preview label the search field "Search" / "Buscar"
-(A289, 2026-10-06). A thin line separates the menu groups, and the "Search results" heading is hidden
-visually on the till and in the dashboard preview, still naming the results for screen readers
-(A295, #1316, 2026-10-06).
-
-**Each menu has one Device Home Page, shown two ways — DONE (W93, #1287, 2026-10-06).** A menu's one
-Device Home Page is the first row of its Structure tab, and the Home page tab sets a Handheld and a
-Till display for it; named home layouts and the device profile's layout choice are gone. A till
-canvas card that sets no column count of its own follows the menu's setting, and a configuration
-import refuses a display setting a save would refuse (`setup.request_invalid`, naming the column).
-How it works: [product-categories.md](developers/product-categories.md), _Device Home Page routes_;
-[products.md](developers/products.md), _On the till_; and
-[design-system.md](developers/design-system.md), the Structure tab and the Device Home Page
-drawing.
-**Looked at (2026-10-06):** on the demo venue, reset rather than republished (the upgrade-path
-item below): the Structure tab's Device Home Page row and its add-shortcut picker, the Home page tab's
-controls and preview, and the till's home at a phone's width and on the counter at 1280 px.
-**Wording follow-up done (A289, 2026-10-06):** Included menus in the shortcut picker now use
-"Menu: Drinks" / "Carta: Drinks", matching the Structure tree. Spanish restaurant-menu controls
-use "carta".
-Left open:
-
-- **A339 — DONE (2026-10-08).** Handheld Home page settings offer 2–3 columns and till settings 4–10, retaining defaults 3 and 6. Menu-controlled handheld tiles use a 66 px minimum and the dashboard preview uses a 16 px side inset; a canvas card with its own count keeps its 104 px minimum. Chromium cases cover phone tracks, tap targets, long names, decoded thumbnails, short-word wrapping and both themes. Real phone/preview/tablet captures were inspected in EN/ES and both themes. Existing save, refusal, menu-switch, publication and transfer-boundary assertions use distinct in-range values.
-- **A339 test-fixture follow-up:** `apps/dashboard/src/api/menu-read-controller.test.ts` and `live-queries.test.ts` still use handheld five/six in fake snapshots, including three distinct snapshots in the invalidation cases. These files were outside the branch and left unchanged. Replace those with valid, distinguishable snapshots using columns plus another display field, preserving every revision, read-count and late-answer assertion; do not collapse three distinct observations into two.
-- The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
-  the menu shares the screen with the order: from 720 px wide the table order screen gives it three
-  fifths (`apps/till/src/screens/till-table-order-screen.ts`), and on the demo counter at 1280 px
-  its grid was 796 px wide, six columns at a setting of 10. So the Till preview can show up to
-  about four more columns than the till does. Not changed, because the real width depends on the
-  till screen's layout.
-- On the till, opening a section from lower on the screen leaves the page scrolled, so the
-  breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
-  `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected).
-- **A291 DONE (2026-10-06):** removed format-2 preview/republication and silent omission from till
-  reads. Unsupported live documents refuse with `menu.reset_required`, localized in dashboard and
-  till; the Menus list, selected menu, Preview and Home display the reset instruction. Catalogue and real management/till route
-  tests cover the refusal; configuration export/import still leaves publications behind. Reset the
-  venue instead of republishing old menus. Historical W93 Decision 5 has a dated superseding note.
-
-- The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a hand
-  copy of the till's menu browser (`apps/till/src/widgets/menu-browser.ts`): the thumbnail, the tile
-  painting, the section trail, the two-block home arrangement, the breadcrumb and about a hundred lines
-  of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
-  apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
-  `packages/catalogue/src/device-home.ts`.
-- **A290 — DONE (2026-10-06).** Structure
-  and Home page share a menu read subscription after their initial independent loads. The shared
-  endpoint returns each selected part's result or refusal separately, retaining usable Structure
-  and Home content when Preview refuses an old publication. Catalogue responses carry a per-mount
-  revision; a successful write's refresh may reuse a snapshot carrying that revision or a later one
-  from the same mount. Other refreshes still request new data. Remote notifications remain live
-  while writes are pending. A silent stream falls back to an explicit read after 100 ms; a
-  notification arriving after that read can still trigger another one.
-  On 2026-10-06, the same demo probe selected Casa Delgado as the largest active menu (31 structure
-  nodes): before, shortcut removal on Structure and a Home columns edit each produced four menu
-  GETs; after, each produced one. Last-read completion was about 34/32 ms before and 24/37 ms after
-  the input event in those samples, respectively. These samples establish neither a latency bound
-  nor a speed improvement. A subsequent API columns edit appeared in the open Home tab through
-  the real stream. The two tabs were inspected in English and Spanish, both themes, at 390/1280 px.
-  Browser tests cover notifications before and after write responses, an older snapshot requiring
-  another read, server-mount changes, and later remote edits.
-
-**A Products drag does not notice when a refresh removes what it is dragging or where it is going —
-DONE (W88a, #1228, 2026-10-05); left open:** A drag no longer sends a move once a refresh has removed
-the category; one deleted elsewhere before this screen refreshed is still sent, and what the server
-answers to it is not checked.
-
-**Unused editing code in the two widgets the Menus screen no longer edits with — DONE (A299, #1328,
-2026-10-07).** `dashboard-member-list-editor` (drawn by nothing since W93) and
-`dashboard-menu-structure-tree` (no longer drawn by Preview since W95) are deleted with their tests;
-the name helpers the Menus screen and `menu-structure-table.ts` still use moved to
-`apps/dashboard/src/widgets/member-names.ts`, and the strings only the deleted widgets read were
-retired. A314 (#1346) then deleted `documentTree` from `apps/dashboard/src/widgets/menu-preview.ts`, along
-with its test; nothing else called it. It also deleted three checks in
-`apps/dashboard/src/screens/menus-screen.test.ts`: one that no `dashboard-member-list-editor` is
-drawn, and two that no `[name="member-ref"]` field is drawn, the first looking across the whole
-screen and the second inside the structure tree's table. Nothing under `apps/` or `packages/` names
-`documentTree`, `dashboard-member-list-editor` or `member-ref` any more. The test keeps its check
-that nothing sits beside the tabs.
-
-**Two copies of the tree pointer drag — OPEN (W88).** W88 moved what Products and the Menus tree
-draw during a drag into `apps/dashboard/src/widgets/tree-drag.ts` (the ghost, the row and gap marks,
-the click blocked after a release), but each widget still has its own copy of the drag itself: the
-press, the 5 px start, the target under the pointer, Escape, the release and the clean-up
-(`#pointerDown` to `#gap` in `apps/dashboard/src/widgets/product-list.ts`, `#gripDown` to `#gap` in
-`apps/dashboard/src/widgets/menu-structure-table.ts`). A shared helper, told how to map a row to a
-target, would serve both.
-
-**The Menus Structure tree notices Collapse all only by watching its table redraw — OPEN (W88).**
-`wt-data-table` sends no event when Expand all or Collapse all opens or closes branches (only
-`wt-expand-change` for one branch a person toggles), so `menu-structure-table.ts` adds a Lit
-controller to the table and checks after every table update whether the current row is still
-shown. An event from the table for "these branches changed" would be cleaner; it means a change in
-`packages/ui`.
-
-**"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
-other items in the tree's row menus are greyed out while a change is out; the link to the included
-menu's own editor is a link, which has no greyed-out state, so it stays live. (A322 renamed it from
-"Edit <menu>", so that the include's own Edit could sit beside it.)
-
-**An included menu can show its sections directly instead of as one folder — DONE (A322, #1372,
-2026-10-07).** Each include of a menu has its own setting. On the Menus screen the include's row
-says "Shown as a folder" or "Sections shown directly", and its ⋮ holds "Open <menu>" (the included
-menu's own Structure tab), Edit and "Remove from this menu". Edit opens a dialog with a "Show as a
-folder" switch and, while the switch is on, the folder's customer-facing names, colour and photo.
-Each of those follows the included menu until the manager changes it here; a changed one is fixed
-for this include only. With the switch off, the included menu's own sections and products appear in
-the include's place, in their own order, on the till, in the Menus preview and on the device home
-page; an include inside them keeps its own setting. The setting and the fixed values live on the
-include's row (`section_members.show_as_folder` and `folder_overrides`, catalogue migrations `0029`
-and `0030`), a folder's fixed photo is protected like a section's (media `0009`), and the route is
-`PUT /management-api/sections/:id/members/:memberId/folder`. The menu document gains `direct` and
-`fixed` on an include, so a published edition keeps the setting. How it works:
-[design-system.md](developers/design-system.md) (the Structure tab, and Forms on the include dialog's
-switch), [product-categories.md](developers/product-categories.md) (the route) and the dated A322
-notes in the [menus design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md).
-Left open:
-
-- A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
-- A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
-  else the copy indexed last.
-- Renaming or clearing the included menu's own customer names is not checked against the folders
-  that fix some languages, so a folder can end up with no name in the default language. The
-  missing-translations report lists it, and changing the default language is refused while it
-  lasts, but the write that caused it is allowed.
-- A fixed value that happens to equal the included menu's value when the dialog opens is saved
-  back as "follow" the next time the dialog is saved: the dialog compares with the included
-  menu's value and cannot tell the two apart.
-- The live photo triggers for products and sections (media `0005` to `0007`) look up
-  `products.image` and `sections.image`, which no index covers. The lookup stops at the first row
-  naming the photo, so deleting or renaming a photo that nothing uses reads both tables in full.
-  The folder photo's own lookup has an index (`section_members_folder_image_idx`). Its own item: a
-  performance fix with a media migration.
-
-**An included menu's row and Edit dialog read right — DONE (A380, #1385, 2026-10-07).** The owner's
-answers to A322's three look points. In the include's Edit dialog an emptied name now hints what
-the customer menu would show: the default language's name, or the staff name when every name is
-blank, and no hint when the save would be refused (a blank default-language name while another
-language has one). The "Read-only here" note left the include's row. A link in any ⋮ menu
-(`wt-row-actions`) now looks like the outlined button entries beside it, so "Open <menu>" matches
-Edit and Remove. Left open: a link marked `aria-disabled="true"` in a ⋮ menu looks greyed out but
-still opens its page when clicked (no screen marks one disabled yet; W88's busy-tree point above
-would be the first).
-- A configuration import stores a fixed folder name as given, spaces included, where a save
-  through the dialog or the route trims it. A name of spaces only shows as no name either way.
-- After browser Back to another menu with no edits made, the include's Edit dialog stays open over
-  that menu, as the section Edit dialog does: choosing another menu does not close either
-  (read in `menus-screen.ts`, not run).
-
-**Inspect the proposed menu and follow every change — DONE (W95, #1302, 2026-10-06).**
-A390's disclosure follow-up landed separately as #1413 at
-`9164e05d49bec002219f6bfda74377287f9920a2`. Its own main CI run 37730952603 succeeded;
-the earlier A339 merge run remains recorded as failed.
-
-Follow-up Preview bundle (A349/A350/A351/A352/A383/A384), implemented 2026-10-08:
-the repeated Live section is removed; includers are named and linked beside Publish; clashes
-appear as a red sentence with their exact prices and sources. The Clashes link selects that
-Price overrides filter once after loading, overriding a remembered All prices choice. Later
-choices survive refreshes. Changes appear first on phones and to the left on desktop, with
-publication controls outside each pane's keyboard-reachable scroll region.
-
-The proposed menu now uses a frozen, read-only Structure-style tree sharing row presentation,
-indentation and swatch-slot geometry with Structure. Images occupy that slot, with colour
-fallbacks. Content view selects internal or translated names independently of interface language.
-Plain change bullets are grouped by every declared change kind. View opens the named occurrence,
-expands ancestors, scrolls and marks the row while focus stays on the link. Removals point to the
-surviving parent; catalogue deletions with no place have no View. Home links to its settings tab.
-Replacement previews reset tree expansion and highlight. Hide and Show all affect only the list;
-still-present IDs stay hidden across a refresh, new changes appear, and another menu resets them.
-Publish retains the complete preview hash. The card/detail/Before/Return renderer and its unused
-strings and tests are retired. Spanish menu-price copy uses conflicto(s). A failed Preview read
-drops only the heading's stale clash count, retaining publication facts and its refresh error;
-recovery supplies the new count. Real-database includer publication and repeated-preview ID checks
-pass. Whole-screen verification passed 508 cases. The final dense screen checks passed all eight
-EN/ES, light/dark, 390/1280 cases after the column-width changes. The Casa Delgado real-app look
-covered those same combinations with served photos in the shared 44px swatch slot on desktop;
-phone rows follow Structure's hidden-media layout. Demo edits were restored to the original
-preview hash and change count. The whole-branch run-it review reproduced Hide losing its state
-through an empty reload, missing removal targets when their parents were removed, and Home
-bypassing app navigation; new failing tests caught each before the fixes. Hide and content view
-now survive the empty reload, removals select the nearest surviving ancestor, and Home uses the
-shell's normal route. The clash link's own handler also runs inside the shell.
-
-Historical W95 receipt follows. Its card, detail, Before and Return navigation describe the
-2026-10-06 implementation; A350/A351 replace those surfaces with the tree and View links above.
-The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
-[implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
-hierarchy, product inspection and linked before/after changes, with explicit translation
-fallbacks. The preview envelope carries the frozen live
-document, the occurrence index preserves repeated nested paths, and section/list changes carry
-ID paths independent of their displayed names. Changes now carry before/after addresses
-for their actual fields, including repeated dishes and nested variants, extras and option labels;
-focused tests check their document destinations. Text presentation identifies its requested, default
-or staff fallback and actual language, and effective variant prices have a Decimal-compared range.
-The isolated customer-menu renderer now draws frozen hierarchy and read-only product details,
-with local variant and modifier choices and ID-addressed focus. Preview now has bounded,
-keyboard-reachable menu/change panes beside each other on desktop and stacked on phones,
-with publication controls outside their scroll regions. Its clash copy uses Price override /
-Precio propio, and included-menu changes name their source menu. The panes now use the frozen
-customer renderer with a separate content-language selector. Change controls reveal exact
-fields and repeated occurrences, label live before views, show frozen Home settings, and return
-focus to the selected row. Product moves prefer a new path; relocated sections cross-link their
-old and new places. Browser checks now exercise every change kind, removed empty sections and
-nested subjects, disabled translations, separate extra-list occurrences and the native view selector.
-Home targets link to the same menu’s Home settings; unresolved targets receive one focused explanation.
-A replacement preview retains a resolvable selected change without taking focus, resets local
-inspection choices and explains when a selection disappears. Screen/API checks now cover content
-view independence, complete snapshot replacement, late previous-menu responses, stale publish
-hashes and retired controls after a read failure. Shared and included product edits preserve the
-live snapshot and reject the previous hash without adding version or publication rows. The media
-suite separately checks that a refused publication adds no image-reference row.
-Dense screen checks cover both interface languages, both themes and actual widths 390 and 1280;
-real-stack checks inspected eight removal views and received the exact stale-hash refusal. Final
-acceptance audit checks all sixteen change kinds and the exact before/after destinations. Row IDs also retain subject and field identity when a destination is unavailable. Untagged staff names and internal titles do not inherit the interface language; frozen translations retain their actual language tags.
-
-**A menu's Preview tab is wider than a phone for a one-word menu name — FIXED IN W95
-(#1302, 2026-10-06).** Dense full-screen checks in
-`apps/dashboard/src/screens/menus-screen.test.ts` assert no page or pane horizontal overflow at
-390 and 1280 px in English and Spanish, both themes, including Internal/customer content,
-long words, missing translations, removal and Home targets. The embedded Home label now wraps
-unbroken names. The original receipt: at
-390 px, with a menu named as one word longer than the screen, the page scrolls sideways on the
-Preview tab: the page measured 658 px wide on 2026-10-05 (a throwaway test with the heading suite's
-fixtures), while the Structure and Prices (since W89, Price overrides) tabs measured 390 px. The editor's heading holds the word;
-the overflow is inside `dashboard-menu-preview` (`apps/dashboard/src/widgets/menu-preview.ts`).
-
-**Products table toolbar and headings stay in view — DONE (W80, #1187, owner 2026-10-04); left
-open:** `wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.
-At every width the table's box is at least three tap targets tall. The dashboard shell
-test, with a stub catalogue of 40 uncategorised products, no category open and no message above the
-list, finds only the rows scrolling at 390×844 and 375×667, with about 27px to spare at 375×667
-before W83 (a temporary test, not kept, measured 83px after it on 2026-10-04;
-`docs/developers/design-system.md`, `stickyHeader`), so longer toolbar labels, a wrapped banner or a
-message can still make the content column scroll. Not covered: in Select and move mode the toolbar wraps
-taller and the content column overflows at 375×667 (figures below).
-Other long tables (Orders, Staff, Payments and
-the rest) keep scrolling with the content column until someone decides they should opt in too; each
-would need its screen to give the table a bounded height, as the Products screen does.
-Still open: at 375×667 the box gave few rows, short of the item's "enough rows to remain usable",
-and a larger minimum does not fit that screen without the toolbar scrolling away. W83 (below)
-shortened the toolbar. Measured on 2026-10-04 with a temporary test in the shell test's 375×667
-setup (not kept), reading the rows' box below its headings: before W83, 117.5px of row area, which
-held the All products row and no whole product row (rows are 69px); after it, 173.5px, which holds
-the All products row and one whole product row. At 390×844 the whole rows, the All products row included, went from four to five.
-In Select and move mode at 375×667 the content column overflows: by 129px before W83 and 25px after, in the
-same temporary test; no kept test covers Select and move mode there. Whether
-that is enough rows is the owner's call.
-
-_2026-10-06, A303: Select now has its own action bar below Search, and grips occupy a separate
-leading column. The W80/W83 measurements above describe the earlier layout; the 375×667
-selection measurement has not been retaken._
-
-**Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner
-2026-10-04); left open:** While the table is at least 768px wide, Filters opens a panel beside the
-rows at their left; narrower, it opens full screen. One existing test assertion changed, for the
-owner to review: the catalogue browser's toolbar-order test pinned the old order (search, Filters,
-Expand all, Select, Customise) and now pins the new one (Filters, Select, search, Expand all,
-Customise). Left open: on a phone the search is drawn under Expand all
-and Customise while Tab reaches it before them (two reviewers judged this not a WCAG 1.3.2 or 2.4.3
-failure, by stepping through with the keyboard and reading Chromium's accessibility tree; what a
-screen reader says was not checked) _(2026-10-05, W85d: this now happens wherever the list is 40rem
-wide or less, desktop windows with the sidebar showing included; those two reviewers judged it when
-the layout existed only at phone width, #1193)_; and a desktop window narrow enough to leave the table under
-768px gets the full-screen panel — at which window width that happens with the sidebar shown was
-not measured. Also left open by W83's review, none started: (1) the table's Customise columns
-button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
-and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
-component — Select is a native `<button>` because `wt-button` does not pass `aria-pressed`
-through, and the Structure tab's Reorder toggle is a second hand-built icon button for the same
-reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
-(3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
-above the table's 440px narrow-tree width).
-
-_2026-10-08, A368: the search/Tab-order point above is closed. Search now follows Expand all
-and Customise in markup at both widths; the remaining W83 points stay open._
-
-**Products at phone width: the toolbar takes two lines, not three — DONE (W85d, #1249, owner
-2026-10-05).** Not covered: Select mode's extra controls at the middle widths.
-
-**Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
-2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to
-review (listed in the PR). A product whose category the dashboard's category list does not hold
-lists under All products with no "missing" marker; the database refuses a stored product naming a
-category that does not exist (`packages/db/src/schema/catalogue.ts:51`, a foreign key; not tried),
-so this is expected only while the dashboard's category list is behind.
-
-**Products: a product's variants are listed by name — DONE (W85, #1200); replaced by W85a (#1207,
-owner 2026-10-05), which lists them in the product's own order.** The decimal name-order
-follow-up is DONE (A300): `byLabel` compares number runs as exact decimals with either comma or
-point, so "0,25 kg" precedes "0,5 kg". Chromium checks cover both separators, mixed names, equal
-values, integer order and differences below floating-point precision. This changes category
-pickers in the product editor and catalogue browser, the section's Add products list and category
-filter, and menu price section/category filters. A299 (#1328) retired the unused member-list
-editor, which also consumed this helper on A300's initial base. The table follow-up is DONE
-(A309): `@waitron/shared` now exports `compareLabels`, used by both `byLabel` and
-`wt-data-table`'s text sort. Chromium cases check decimal names in both
-directions, equal-decimal ties, and ISO timestamp order; numeric sort values retain their
-separate comparison. Names such as "1.10 Postres" are read as decimals (1.1), so they
-precede "1.2 Sopas"; this change does not infer outline or version numbering from names. Since
-W85a, product variants retain the product's own order.
-The timing follow-up is DONE (A363): one shared `Intl.Collator` reuses the locale comparison
-rules, and each table sort takes a fresh `createLabelComparator` whose name keys are cached only
-for that sort. The pickers keep `byLabel` and also use the reused collator. Existing order checks
-are unchanged; new shared and Chromium cases count one name parse per distinct value per sort.
-Measured 2026-10-07 on macOS, Node v26.7.0, default collation en-US: three warm-up samples per
-comparator, nine alternating runs, 100 sorts per sample for demo lists and one for the generated
-5,000-name list. Times below are median milliseconds per sort (minimum–maximum); they measure
-comparison/sorting, not DOM rendering. Demo product names follow the locale-specific seed's staff-name writer; the English category
-sample and floor labels match stored rows. The additional Spanish category sample reads translated
-seed labels, not the stored reporting-category names: `seed-catalogue.ts:131` writes
-`cat.categoryName ?? cat.name.en` in either locale. Generated names mix number runs, accents and case. The old comparator is the
-pre-A309 table's numeric/base `localeCompare`; "Before A363" is A309's exact-decimal comparator.
-
-| List | Old table comparison | Before A363 | After, direct | After, table cache |
-| --- | --- | --- | --- | --- |
-| products-en (45) | 0.2935 (0.2731–0.3137) | 0.6495 (0.5941–0.6844) | 0.0471 (0.0390–0.0556) | 0.0283 (0.0261–0.0304) |
-| categories-en (10) | 0.0333 (0.0331–0.0350) | 0.0705 (0.0688–0.0735) | 0.0039 (0.0039–0.0061) | 0.0072 (0.0029–0.0106) |
-| products-es (45) | 0.2839 (0.2749–0.2923) | 0.6117 (0.5910–0.6355) | 0.0479 (0.0416–0.0536) | 0.0299 (0.0293–0.0312) |
-| category seed ES labels (10, additional sample) | 0.0330 (0.0316–0.0356) | 0.0765 (0.0681–0.0874) | 0.0044 (0.0041–0.0056) | 0.0034 (0.0031–0.0097) |
-| tables (16) | 0.0360 (0.0354–0.0378) | 0.0500 (0.0461–0.0520) | 0.0077 (0.0066–0.0138) | 0.0050 (0.0048–0.0095) |
-| generated (5000) | 79.8438 (77.2915–88.6754) | 122.6801 (114.0640–133.4943) | 27.1010 (25.9914–37.3585) | 10.8013 (10.4669–16.3828) |
-
-The probe (`node ~/waitron-campaign-d/receipts/a363/benchmark-after.mjs`, bundled with esbuild
-from the recorded `benchmark-after.ts`) also compared every full list and 30,000 deterministic
-pairs against the pre-optimisation comparator: all matched. Raw runs and probe source are retained
-in `~/waitron-campaign-d/receipts/a363/`. These are local measurements, not a browser-wide
-latency bound.
-
-A separate installed Chromium probe repeated the same six lists with three warm-ups and nine
-alternating runs under default locales en-US and es-ES. For 5,000 names, median (range) milliseconds
-were old 59.9 (58.7–114.7), pre-fix 84.7 (83.5–93.4), cached 9.8 (9.5–13.1) in en-US;
-and old 60.2 (57.1–200.2), pre-fix 85.2 (82.2–122.0), cached 9.8 (9.5–11.4) in es-ES.
-Every demo-list median also improved, and both direct and cached full-list orders matched the
-base comparator under each locale. These probe logs and source are retained beside the Node
-receipts; the disposable probe and checkout were removed.
-
-**Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
-DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
-
-- Not covered by W85b: while a category is being renamed, its count and asterisk follow the name
-  box and are not capped _(2026-10-05: since W72g only at desktop width; at phone width they sit on
-  the line above the box and wrap in what the grip and folder icon leave of the room before the
-  pinned column; since A294 the count is hidden at phone width, and the folder icon's slot is
-  blank)_.
-- The owner answered W85b's open point (a name got about 46 px at 390 px) "maybe (b) and (c)" (b:
-  drop the product photo at phone width; c: narrow the tree's leading slots), and **W85e** (#1275,
-  2026-10-06) did (b) and narrowed the arrow slot of (c). Categories kept their folder icon, so at
-  phone width a product's name started one folder slot before a sibling category's. _(2026-10-06:
-  A294 removed the folder icon, but its slot stays and holds the category's colour square, so at
-  phone width a product's name still starts one slot before a sibling category's.)_ The grip and the
-  8 px indent step were left as they were. The Structure tree's long names still clip at 390 px
-  (W92's open point above).
-  Left for the owner (the owner's answer was a "maybe"): keep, or undo, either half; hide the
-  folder icon too at phone width so product and category names line up again (since A294 that
-  slot holds the category's colour square, so this now means moving or hiding the square); narrow the indent
-  step. Before/after screenshots: `~/waitron-campaign/w85e-shots/pair-*.png` (local).
-
-**Catalogue: no two categories with one parent, and no two Active products, share a name — DONE
-(W72, #1214; W72a, #1230; W72b, #1236; W72c, #1237; W72d, #1238; W72e, #1241; W72f, #1252; W72g, #1246;
-W72h, #1247); left open:**
-There is no unique index: each product row stores its folded staff name in `products.name_key`, and
-the product check looks other rows up by that key. There is no
-backfill: a row whose name has not been written since the column was added keeps a null key, and the
-check does not see it until its name is next written (every product editor save writes it) or the
-venue is reset. Stored data is not renamed: a venue that already holds
-duplicates keeps them until someone renames one.
-The guard W72d added (`scripts/id-columns-are-references.test.ts`) knows an id column only by its
-name, so a reference named otherwise is still unseen.
-Since W72c an imported print agent arrives with no node; the importing box's
-own agent still enrols as a new row beside it, as it did before (read, not run).
-
-W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered
-notifications" from the Products tree's category name box.
-On 2026-10-05 A261-3 also observed this message while running
-`pnpm --filter @waitron/dashboard exec vitest run src/widgets/folder-made-at.test.ts
-src/widgets/catalogue-browser.test.ts`: both the transition candidate and the previous
-`c41ed54910fece4add9f1475bf18034992545e99` commit in a frozen-installed disposable checkout
-reported 164 passing tests and logged the message. Its cause on that path has not been established.
-On 2026-10-08 A349's six Preview, price-table and navigation suites also logged the message:
-397 tests passed on its candidate; the same command at the preceding checkpoint
-`43c54024eea8149e789163fdac46f3239300365c` in a frozen-installed disposable checkout passed
-390 tests and logged it too. The command selected `src/widgets/menu-preview.test.ts`,
-`menu-preview-top.test.ts`, `menu-preview-navigation.test.ts`, `menu-preview.a11y.test.ts`,
-`menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
-That comparison does not establish which observer causes it or its effect on the rendered screen.
-
-**A407: currency measurements, DONE (#1432, 2026-10-08; merge `d83b5223bb072ac5c82ad234b73dfd377a967128`).** On main
-`c7624e1b4396fe6123cdbe26487b3b06134e6bc0`, the four-suite catalogue/Preview/prices command
-ran 561 passing cases and logged the warning. Instrumenting native observers attributed the
-phone-price cases to `wt-price-input`: its currency callback increased a field from
-141.4375 to 150.109375 px; the table's scroll area then lost 17 px of height in that
-observer delivery. These measurements do not establish a permanent loop or a painted jump.
-The field now batches initial sign measurements, reads all widths before writing them, and
-separates immediate text padding from field-width growth deferred to the next animation frame.
-The review's hidden-field spacing failure is covered at the first visible resize delivery in
-both languages, alongside font changes and pending currency removal/disconnect/reconnect.
-The focused UI and axe run passed 155 cases without the warning. The 400-field timing probe
-recorded 23/23/19.2 ms after batching; the initial candidate recorded 103.9/88.4/66.6 ms and
-the original code 18.2/14.3/14.2 ms in earlier disposable-checkout runs. These are local mounting
-experiments, not a measured delay on a real menu. Five disposable deletion controls failed;
-restoring the implementation passed 119 price-field cases. The updated eight-suite dashboard run
-passed 630 cases without the warning, and the unedited fiscal pair passed 20 cases. The revised Claude review ran 396 seconds and found no correctness bug in its tested arrangements;
-eight revised EN/ES/theme/width screenshots were inspected. The normal push hook passed 5,406 root
-checks. CI, licence and CodeQL completed successfully on the final head
-`dd4e3702171268b76649341ee2f46028b3723bef`; the UI job passed 2,287 UI and 504 UI-core cases,
-and the dashboard job passed 9,588 cases. The merge's CI run 37771042263 was cancelled on
-2026-10-08 after image smoke's `apt-get update` stopped printing output for more than fourteen
-minutes; all package jobs passed, image smoke and publishing were cancelled. The closure commit's
-CI 37771257874 and both CodeQL runs passed. The package-index stall remains open under B9.
-Review follow-up: the initial geometry includes currency-part inline padding/borders and ancestor scaling,
-where later `contentRect` does not; scaled ancestors or currency-part padding can cause an initial
-width adjustment. A source search found no `part(currency)`, `transform: scale` or `zoom:` consumer
-in app/package TypeScript/CSS. Keep that limitation documented; use a consistent measurement box
-if such styling is introduced. The reviewer also reproduced warnings on both base and candidate
-when a consumer makes the amount's width automatic or moves a field during delivery; these paths
-remain outside the warning-free receipts above.
-The original-main catalogue-only command passed 270 cases without the warning; its historical
-occurrence was not reproduced and is not attributed to currency fields.
-See [the focused experiment](developers/conventions-ui.md#currency-measurements-and-resize-notifications-a407).
-
-
-**Products: the Move dialog's destination categories — DONE (W82, #1210; a tree since W82a, #1229;
-paths joined with " › " in W82b, #1232, and W82c, #1262).** Two sibling categories with the same
-name are left as they are (owner: "leave it"): they still show as two identical entries, in the
-tree and in a search. The search inside the Menus screen's two category pickers — the prices
-table's category filter and the add-products dialog's category list — matches only the text the
-list shows, so a path finds its category there only when typed with " › "; one category's name
-alone still finds it. Those pickers are the shared `wt-combobox`, which was left unchanged.
-
-**Sales: the category report names each category by its full path — DONE (W73, #1212).** Because
-every row carries its whole path, a very deep tree prints far more lines than before (the
-deep-tree case in `apps/server/src/category-sales-page.test.ts`, at 58mm and 203dpi, went from about
-1,000 lines to about 14,500, measured 2026-10-05), and its print preview is cut short; the owner
-chose to leave it as it is rather than shorten deep paths on paper (2026-10-05).
-
-**Products: a category's Made at shows where its dishes are made — DONE (W86, #1203; its asterisk
-W86a, #1223, W86b, #1231, W86c, #1234; a product's blank Made at when the read has no entry, A277,
-#1314); left open:** (2) a category's link is the same `maker-link` as a product's, so the missing
-`activatesRow: false` recorded under W87 applies to category rows too (there a click
-beside the link opens or closes the category; judged from the code, not run; its contrast is fixed
-with the product's by A306, through the same style rule, not measured on a category row); (3) a person who may
-not read routing sees "Kitchen routing unavailable" on every category, because a refused read
-counts as a failed one; (5) the "some items made elsewhere" note does not look at whether the
-categories involved hold any products, so it can claim items that do not exist yet; the owner chose
-to keep these words (2026-10-05).
-
-**A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
-to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
-that teaches a new user what to set up and in what order — devices, printers, device profiles, and
-the other settings a venue needs before it trades — shown in Demo and Preparation
-(`onboardingIntent` `demo` and `prepare`). The user can leave the tutorial at any point and come back
-later to carry on where they stopped.
-
-Owner decisions from the 2026-10-03 brainstorm:
-
-- **It teaches the real setup, never the pretend devices.** A lesson shows how to set up a real
-  printer or card reader, or at least where to find the screen, even in Demo; it does not route the
-  user through the pretend printer (A241) or the pretend card reader (A247), so it does not depend
-  on them.
-- **Two kinds of lesson.** A _tour_ ("here is where you do this") is ticked off by the person. A
-  _required_ lesson ("you need to do this before going on") ticks itself when the server sees the
-  work done, and the tutorial does not move past it until then. A person can also mark any lesson
-  done or skip it by hand.
-- **Everything the tutorial stores is per person**: each person's marks, skips and whether the
-  tutorial is open. A required lesson still reads the venue's state, so it is ticked for everyone
-  once anyone has done the work.
-
-The owner's starting point for the lessons, in order (owner: "a good starting point"). The order
-follows what depends on what: a newly approved device takes its printers from its profile's lists
-(A238), so printers come before profiles and profiles before devices.
-
-| #   | Lesson                                                            | Kind     | Ticks itself when                                |
-| --- | ----------------------------------------------------------------- | -------- | ------------------------------------------------ |
-| 1   | Products: what you sell, prices, VAT                              | Required | at least one product exists                      |
-| 2   | Extras and options                                                | Tour     | —                                                |
-| 3   | Menus: put products on a menu and publish it                      | Required | a menu is published                              |
-| 4   | Kitchen: preparation stations and where tickets go                | Tour     | —                                                |
-| 5   | Floor plan, for table service                                     | Tour     | —                                                |
-| 6   | Printers: receipt and kitchen printers                            | Tour     | a printer exists (ticks, never blocks)           |
-| 7   | Device profiles: what each kind of device may do, its printers    | Tour     | —                                                |
-| 8   | Devices: open the till on the device, approve it in the dashboard | Required | a device is approved                             |
-| 9   | Card payments: connect a card reader                              | Tour     | a reader exists (ticks, never blocks)            |
-| 10  | Staff: the team and their PINs                                    | Tour     | a second person exists (ticks, never blocks)     |
-| 11  | Receipts: what the receipt says                                   | Tour     | —                                                |
-| 12  | A first sale on the till                                          | Required | a sale from a device (sample sales do not count) |
-| 13  | Backups: a copy off the box                                       | Tour     | backups are set up (ticks, never blocks)         |
-| 14  | Going Live: export the setup, start the Live box (Prepare only)   | Tour     | —                                                |
-
-In Demo, lessons 1 and 3 tick themselves at once (the sample restaurant has products and a published
-menu) and stay open as tours; lesson 14 is not shown, because Demo reaches Prepare by a wipe, not a
-copy. The owner account made at setup already has a till PIN, which is why staff is not required.
-
-Facts found while designing: going Live never happens on the same database — Prepare to Live is a
-fresh database plus the configuration copy (`apps/server/src/configuration-export-api.ts`,
-`apps/server/src/configuration-import.ts`) and Demo to Prepare is a wipe — so progress stored in the
-venue database ends at Live unless the configuration copy is made to carry it. The sample restaurant
-is seeded in Demo only (`seedDemo`, called for `mode === "demo"` in `apps/server/src/setup-api.ts`);
-both modes get the three default device profiles (`DEFAULT_DEVICE_PROFILES`,
-`packages/layouts/src/device-profile.ts`).
-
-Still open for the spec: whether a required lesson blocks every lesson after it or only those that
-depend on it; whether any of content languages, the canvas editor, rosters and working time,
-purchasing or Cloud services gets a lesson; whether a printer or staff should be required; how the
-tutorial is reopened (the Demo bar, A246, W36, is the obvious place); whether it spans the till as
-well as the dashboard; and how each required lesson's check is read without slowing the dashboard.
-It comes after the Demo bar (A246, W36) and A238, whose device and profile model it teaches.
-
-What A2's rework left as constraints on the next change to the wizard is under
-[Setup wizard — the constraints A2's rework left behind](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2).
 
 ### A3. Printers from the dashboard
 
