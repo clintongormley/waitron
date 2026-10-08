@@ -3019,7 +3019,7 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   menu button shows a count of pending transfers. Above 40rem the bar is unchanged.
   - **Done by A395 (2026-10-08):** at 1280 px the bar wrapped to two rows in English and three in Spanish.
   - **Done by A395 (2026-10-08):** the More menu used the three-dot icon; it is now the hamburger.
-- **A395 DONE: the till's top bar is one row at every width.** On a phone nothing changed. Wider,
+- **A395 DONE (#1435): the till's top bar is one row at every width.** On a phone nothing changed. Wider,
   the bar moves items into the More menu one at a time, only as many as it needs to stay on one
   row, in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My
   schedule, Pass, Kitchen, Find a bill, Department transfers (count and button together), and last
@@ -3032,6 +3032,12 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
     languages at 800 px, the transfer count and its button do not fit, so Find a bill, Kitchen and
     Pass are in More too, though the bar has empty room for some of them. Option: after the bar fits, bring back any item that left earlier and now fits, so the
     order is no longer strict. Not done. Screenshots: `~/waitron-campaign/a395-shots/`.
+  - **Open, decided as built:** a change in the pending-transfer count alone never brings items
+    back onto the bar, so when the count shrinks or goes away, items can stay in More although they
+    would now fit, until the next resize or other change refits the bar.
+  - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
+    any one leaves every test passing): the phone-width early return in `#release`, the return
+    after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.
 - **A379 DONE: standard till tab titles follow the UI language.** Standard key/title pairs
   Counter, Floor and Order read Mostrador, Sala and Pedido in Spanish; renamed and custom
   tabs keep their stored titles. The service-area selector reserves room for its full label,
