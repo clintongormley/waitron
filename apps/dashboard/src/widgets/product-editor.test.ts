@@ -2108,7 +2108,7 @@ it("describes Use category colour by the draft category's colour, and follows a 
   await describes("#7a25b1");
 });
 
-it("describes Use category colour by the venue default when the product has no category", async () => {
+it("describes the inherited choice by the venue default when the product has no category", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, primaryCategoryId: null },

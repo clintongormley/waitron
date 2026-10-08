@@ -14,8 +14,8 @@ export interface ColorNode {
   color: string | null;
 }
 
-/** The main category's colour, else the nearest coloured category above it, else `fallback` (the
- * venue default). A walk longer than the tree can only be a loop in the data, so it ends there. */
+/** The main category's colour, else the nearest coloured category above it, else `fallback`. A walk
+ * longer than the tree can only be a loop in the data, so it ends there. */
 export function categoryColor(
   categoryId: string | null,
   categories: ReadonlyMap<string, ColorNode>,

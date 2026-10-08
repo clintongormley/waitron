@@ -333,10 +333,9 @@ width the tree hides that square, as it hides the categories'.
 
 **A colour reaches a till only when a menu is published.** Publishing records each offer's colour
 in the menu's version, as it does the photo and description (`freezeOffer`,
-`packages/catalogue/src/menu-document.ts`). Changing a category's colour or the venue's default
-colour, or moving an uncoloured
+`packages/catalogue/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
 category under a coloured one, whether through `updateCategory` or the Products tree's Move
-(`moveCatalogueItems`), makes a published menu read as changed when it holds a product whose worked-out
+(`moveCatalogueItems`), or changing the venue's default colour (`saveCatalogueDefaultColor`), makes a published menu read as changed when it holds a product whose worked-out
 colour this changes (one with no colour of its own and no coloured category nearer to it), and the
 menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
 publish (the "a category's colour" cases in `packages/catalogue/src/menu-publication.test.ts`). The

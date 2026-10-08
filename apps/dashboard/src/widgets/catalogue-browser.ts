@@ -115,7 +115,6 @@ export class CatalogueBrowser extends LitElement {
   /** Fills a bounded flex column, with the Products table's rows scrolling under its headings. */
   @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @property({ type: Boolean }) loaded = false;
-  /** The venue's default colour: All products' own, and what an uncoloured product falls back to. */
   @property({ attribute: false }) defaultColor: string | null = null;
   @state() private search = "";
   @state() private nameDraft: CategoryNameDraft | null = null;

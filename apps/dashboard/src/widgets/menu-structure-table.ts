@@ -193,7 +193,7 @@ export class MenuStructureTable extends LitElement {
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   /** Where members' staff names and images come from. */
   @property({ attribute: false }) products: Product[] = [];
-  /** Where a product without its own colour takes one from. */
+  /** With `defaultColor`, where a product without its own colour takes one from. */
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
   @property() menuName = "";

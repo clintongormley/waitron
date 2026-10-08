@@ -921,7 +921,7 @@ Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
 holds a section's colour square, a product's colour square or photo, or nothing on the Home and
 menu rows. A photo has a ring in the product's own colour, falling back to its category's inherited
-colour. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
+colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
 media in both trees when the tree's box is at most 440px wide. In the Products list the product
