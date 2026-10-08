@@ -1267,7 +1267,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   closes or opens a station with a manager permission or PIN, and reports today's state. The
   kitchen display reads its station's name and today's state, and closes or opens that station
   with a manager PIN, under its profile's preparation permission and the shared PIN limit.
-  Extension request paths and visible controls remain to build.
+  The dashboard keeps today's status without close/open buttons; its today-write route is removed.
+  Extension request paths and till/kitchen visible controls remain to build.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows

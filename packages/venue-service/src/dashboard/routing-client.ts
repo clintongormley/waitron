@@ -260,9 +260,7 @@ export class PrepStationsApi {
       fallbackStationId,
     });
   }
-  setStationToday(id: string, state: "open" | "closed" | null): Promise<void> {
-    return this.request(`/management-api/venue-service/stations/${id}/today`, "PUT", { state });
-  }
+
   readStationHealth(): Promise<StationHealthSnapshot> {
     return this.request<StationHealthSnapshot>(
       "/management-api/stations/health",

@@ -1,5 +1,9 @@
 # Station opening hours and fallbacks (slice 3b) Implementation Plan
 
+> **2026-10-08 update:** A366 slice 3 removes the dashboard's today controls and write route.
+> The Today column keeps status and destination text. See the
+> [slice 3 plan](../plans/2026-10-08-a366-slice-3-station-controls.md#task-a8-dashboard--the-prep-stations-screen-loses-its-today-buttons).
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

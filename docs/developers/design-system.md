@@ -3000,7 +3000,8 @@ mounted, so switching tabs retains their input values. Supply unique, nonempty k
 localized `label` for the tab group.
 
 Prep stations uses `stations`, `routing`, `tickets`, `watchers` and `settings` at
-`/manage/prep-stations/view/<key>`. Stations shows live health and opens read-only dish drilldowns;
+`/manage/prep-stations/view/<key>`. Stations shows live health and opens read-only dish drilldowns.
+Its Today column reports the station's status and destination without close/open controls.
 Routing shows the route tester above the routing grid
 (`packages/venue-service/src/dashboard/routing-grid.ts`): a row for All categories, each category,
 each top-level product and, while a product has no category or the row holds a saved choice, No
@@ -3008,7 +3009,8 @@ category; a column for Every
 zone and each active service zone. A choice that moves products opens a preview listing each one
 with its old and new destination before anything is saved; a choice that moves nothing saves at
 once. Tickets and Watchers own their printer selections. Settings edits each station value in its own
-cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Rename,
+cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. The configured fallback
+field reads "Outside its hours, work goes to". Station Rename,
 Make default and Disable/Enable actions belong to the Stations row menu; Routing's All categories ×
 Every zone cell also sets the default station, for someone with `venue.configure`. A supervisor sees only
 Stations.

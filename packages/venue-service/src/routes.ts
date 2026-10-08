@@ -78,7 +78,7 @@ import type { LocalHolidayInput } from "./holiday-types.js";
 import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { CellAddress, RoutingChange } from "./routing-types.js";
-import { setStationFallback, setStationToday } from "./station-times.js";
+import { setStationFallback } from "./station-times.js";
 import {
   listDepartmentTransferProfiles,
   readDepartmentTransferSettings,
@@ -561,26 +561,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             : requireBodyUuid(body.fallbackStationId, "fallbackStationId");
         await gated(sessionId, (tx) =>
           setStationFallback(tx, ctx.cfg, stationId, fallbackStationId),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/stations/:stationId/today", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        if (body.state !== "open" && body.state !== "closed" && body.state !== null)
-          throw new AppError("management.request_invalid", { field: "state" });
-        await gated(sessionId, (tx) =>
-          setStationToday(
-            tx,
-            ctx.cfg,
-            stationId,
-            body.state as "open" | "closed" | null,
-            new Date(),
-          ),
         );
         return c.body(null, 204);
       }),
