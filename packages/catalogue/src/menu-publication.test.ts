@@ -144,13 +144,13 @@ describe("preview live snapshot", () => {
       { kind: "unit" as const, id: frozen.offers[offerId]!.unit.id },
     ];
     const texts = [
-      "Limonada para clientes",
+      "Limonada para invitados",
       "Vaso grande",
-      "Hielo para clientes",
+      "Hielo para invitados",
       "Sin hielo",
       "Añade algo",
-      "Bebidas para clientes",
-      "Cervezas para clientes",
+      "Bebidas para invitados",
+      "Cervezas para invitados",
       "Bebidas del almuerzo",
       "unidad",
     ];
@@ -172,7 +172,10 @@ describe("preview live snapshot", () => {
     );
     const preview = await app((tx) => previewMenu(tx, f.lunch));
     const offer = preview.document.offers[offerId]!;
-    expect(offer.customerName).toEqual({ en: "Lemonade for guests", es: "Limonada para clientes" });
+    expect(offer.customerName).toEqual({
+      en: "Lemonade for guests",
+      es: "Limonada para invitados",
+    });
     expect(offer.variants[0]!.customerName).toEqual({ en: "A big glass", es: "Vaso grande" });
     expect(offer.unit).toMatchObject({
       name: { en: "each", fr: "unité", es: "unidad" },
@@ -195,7 +198,7 @@ describe("preview live snapshot", () => {
       joinCustomerPresentationText(names.product, names.variant, presentation.variantName),
     ).toEqual({
       en: "Lemonade for guests (A big glass)",
-      es: "Limonada para clientes (Vaso grande)",
+      es: "Limonada para invitados (Vaso grande)",
     });
     expect(staffPresentationName(presentation)).toBe("Lemonade (Large)");
     expect(kitchenPresentationName(presentation)).toBe("LEMONADE (LRG)");
@@ -214,7 +217,7 @@ describe("preview live snapshot", () => {
       },
     ];
     expect(customerOptionSnapshotLabels(snapshot, "es-ES")).toEqual([
-      "Hielo para clientes: Sin hielo",
+      "Hielo para invitados: Sin hielo",
     ]);
     expect(staffOptionSnapshotLabels(snapshot)).toEqual(["Ice: No ice"]);
     expect(optionSnapshotLabels(snapshot)).toEqual(["ICE: NO"]);
@@ -226,7 +229,7 @@ describe("preview live snapshot", () => {
       members: expect.arrayContaining([
         expect.objectContaining({
           kind: "section",
-          names: { en: "On tap", es: "Cervezas para clientes" },
+          names: { en: "On tap", es: "Cervezas para invitados" },
         }),
       ]),
     });
@@ -235,7 +238,7 @@ describe("preview live snapshot", () => {
       Object.values(dinner.document.offers).find((o) => o.productId === f.lemonade)!.customerName,
     ).toEqual(offer.customerName);
     expect(dinner.document.root.members[0]).toMatchObject({
-      names: { en: "Something to drink", es: "Bebidas para clientes" },
+      names: { en: "Something to drink", es: "Bebidas para invitados" },
     });
     expect(await versionRows()).toEqual(beforeVersions);
     expect(await fx.db.select().from(menuPublications)).toEqual(beforePublications);
