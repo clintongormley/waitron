@@ -2428,7 +2428,11 @@ independent real-database cash-sale check pass in `apps/server/src/time-health.t
 its real authority-clock monitor a sample. The authenticated alerts API returns the measured
 drift alert, then no clock alert after a correct sample. Removing the clock-alert registration
 in a disposable checkout makes the drift assertion fail; the restored registration passes.
-The test exposes the monitor's sample input; it does not exercise the filing transport.
+The test exposes the monitor's sample input; it does not check boot's filing-observer connection
+or exercise the filing transport. **Open follow-up from A386's review:** removing
+`observeAuthorityTime: authorityClock.observe` from boot in the disposable review checkout
+left this new test passing. Add a separate boot-level check for that sample-input connection;
+no claim is made here about other suites' coverage of it.
 **A385 DONE:** the till's legacy unit fallback includes Spanish text. A missing enabled
 abbreviation falls back to the unit's enabled name; with no enabled text the label is
 empty, never an id. Chromium helper and rendered-tile cases cover Spanish, a missing requested
