@@ -1690,7 +1690,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   (`fix/profile-zone-off-shows-on-open`): the owner reversed the disabled-zone ruling on 2026-10-08.
   A device profile with no active allowed zone shows its field errors and bottom correction
   message on open. Save stays quiet while unchanged, and a name or reader edit cannot save until
-  an active zone is chosen. Focused Chromium validation, accessibility, review and CI pending. The look left a switched-off printer
+  an active zone is chosen. Focused Chromium checks: 226 pass; fiscal golden and inmutabilidad: 20 unchanged pass.
+  EN/ES, light/dark, 390/1280 views inspected; Claude review found no bugs. CI/landing pending. The look left a switched-off printer
   named "A331 look Epson" (the owner's Epson at 192.168.10.81) in the shared demo venue.
 - **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
   booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
