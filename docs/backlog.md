@@ -1525,6 +1525,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   defect was reproduced for either. Before changing screen caching, exercise those transitions. Left
   open by A331 batch 4d (preparation stations' Save state, #1426).
 
+- **The Prep stations screen's two add buttons ("Nueva estación", "Nuevo punto de seguimiento")
+  share the tab row's action area, which that screen caps at half the row**, so at phone width in
+  Spanish the second button is cut and scrolls within its area. A424 (#1452) kept this screen's old
+  layout rather than squeeze its tabs. A better home — one button per tab, or one Add menu — is the
+  owner's call. Left open by A424.
+
 ### The till, devices and table service
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
@@ -2774,10 +2780,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
   category warns about exactly what will go, #1196).
 
-- **When the Add button wraps under the tabs, the tab row's bottom border runs below the button**,
-  so the selected tab's underline sits above the button rather than on the line. Judged from the
-  old 640 px rule's code to have drawn the same shape before #1437; not measured on the old commit.
-  Unqueued. Left open by A408 (seen in its after-look; the Printers screen's Spanish tabs, #1437).
+- **In Spanish at a 390 px window the Printers screen's selected "Agentes de impresión" tab is
+  cut beside "Añadir un agente"**: the tab (178.5 px) and the button (149 px) are wider together
+  than the 310 px screen, so the tab shows its start and stops where the button begins. On CI's
+  Linux fonts Modifiers' Spanish "Opciones" tab at a 310 px screen is cut the same way. Options
+  for the owner: accept it, a shorter Spanish tab label ("Agentes"), or an icon-only add button
+  at phone width. Left open by A424 (#1452), which put every tab action on the tabs' line.
 
 - **A freshly added printer's wizard opens with a blue Save** — the campaign runner's ruling of
   2026-10-08, for the owner to confirm. Left open by A331 batch 3b (#1415).
