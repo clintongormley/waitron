@@ -1898,3 +1898,77 @@ cycle, changed-test-check inventory or visual change to verify. Browser console
 output includes the ResizeObserver notification-loop message; its cause and screen
 effect remain unverified and belong to A407. Do not infer package coverage or absence
 of other defects from these focused runs.
+
+## A397 — forms keep asking after being taken out of the page and put back (Lane C, part 1)
+
+Branch `fix/forms-reconnect-keep-asking`. Light review path (dashboard and module screens, no risk
+trigger), no migration. Part 1 covers the person edit, new person, variant, purchase and shift
+forms, the bookings form, and the watcher form's edit-first case. The product editor and the unit
+form wait for lane B's A332 (`feat/all-products-colour`), which changes
+`product-editor.unsaved.test.ts` and `unit-owners.unsaved.test.ts`: part 2, after it lands. Do not
+edit either file in part 1.
+
+**Two cases per form**, each in the form's own `*.unsaved.test.ts` (the variant form has none:
+create `apps/dashboard/src/widgets/variant-form.unsaved.test.ts`, mounting the form under a test
+host holding a `LeaveController`, as `ingredient-form.unsaved.test.ts` does):
+
+- **Case R — edit after.** Open the form, take it out of the page and put it back
+  (`reattachAfterDetachedUpdate` in `apps/dashboard/src/widgets/test-helpers.ts`; the modules'
+  suites inline the same remove → await `updateComplete` → re-insert → await), then edit a field.
+  The coordinator reports dirty, and Cancel or Escape opens the discard question with the form
+  still open.
+- **Case E — edit before.** Open the form, edit a field, take it out and put it back. The edit is
+  still shown, the coordinator reports dirty, Save is enabled and drawn `primary`, and Cancel or
+  Escape opens the discard question.
+
+**Run each case on `main` BEFORE any fix** and record pass or fail per form in
+`~/waitron-campaign-c/item-a397-measurements.md` (form, case, result on main, result after the fix,
+the deletion that made a fixed case fail). The failing answer for R is "no question, the form
+closes" (or `isDirty()` false); for E it is the edit replaced by the stored value, or kept but not
+dirty.
+
+**The fix, only where a case fails on `main`** — the till's party name dialog
+(`apps/till/src/widgets/party-name-dialog.ts`) is the model:
+
+- R: `connectedCallback` calls `requestUpdate()` (Lit runs no update on reconnect), and
+  `willUpdate` returns before `draftScopeFor`, and before any branch that re-seeds the fields, while
+  `!this.isConnected`.
+- E: keep the value the scope last committed — the opened value, then each saved value — in a
+  field that `disconnectedCallback` does not clear (`#baseline`), and after taking a new scope call
+  `scope.commit(this.#baseline)` so the kept edit compares against it. Where the form clears an
+  opening identity on disconnect and so re-seeds its fields on reconnect (the purchase form's
+  `#identity`, the watcher form's `identity`), stop clearing it there — but the guards that let a
+  departed write or a departed discard answer touch nothing must still hold: the existing
+  "disconnect aborts its question", "removed form cannot submit" and "departed … cannot release"
+  cases stay unedited and green. Where a guard used that identity, give it its own token rather
+  than editing its test.
+
+**Proof by deletion, per fixed form:** delete the `!this.isConnected` return — R fails; restore.
+Stop committing the kept baseline — E fails; restore. Where a case passes on `main` with no fix,
+keep it as the guard and say so in the measurements file; that it is not vacuous is shown by the
+same case failing on a fixed form with its fix deleted.
+
+### Task A397.1 — people (`apps/dashboard/src/widgets/person-edit.ts`, `person-form.ts`) and the variant form (`variant-form.ts`, new `variant-form.unsaved.test.ts`)
+
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/person-edit.unsaved.test.ts src/widgets/person-form.unsaved.test.ts src/widgets/variant-form.unsaved.test.ts`, then each form's
+other suites (`person-edit*.test.ts`, `person-form*.test.ts`, `variant-form*.test.ts`,
+`product-editor.unsaved.test.ts` and `product-editor.test.ts` unedited).
+
+### Task A397.2 — purchases and shifts (`apps/dashboard/src/widgets/purchase-form.ts`, `shift-dialog.ts`)
+
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/purchase-form.unsaved.test.ts src/widgets/shift-dialog.unsaved.test.ts`, then `purchase-form*.test.ts`, `shift-dialog*.test.ts`
+and the screens that host them (`purchasing`/`schedule` screen suites found by grep).
+
+### Task A397.3 — bookings and the watcher form (`packages/bookings/src/dashboard/booking-form.ts`, `packages/venue-service/src/dashboard/watcher-form.ts`)
+
+The watcher form already has Case R ("taken out of the page and put back keeps an edit made
+afterwards"); add Case E only. `pnpm --filter @waitron/bookings exec vitest run src/dashboard/booking-form.unsaved.test.ts` and `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts`, then each package's other suites for the form.
+
+### Task A397.4 — docs, backlog
+
+`docs/developers/design-system.md` → Forms: move the forms fixed here into the list that returns
+while detached; say which keep an edit made before removal (Case E) and which forms remain
+untried for it. `docs/backlog.md`: mark #1418's watcher-form point and #1414's point (2) done for
+the forms covered, and leave the product editor and unit form named as part 2. Changed test
+checks (if any) listed in `~/waitron-campaign-c/item-a397-changed-tests.md` and the PR. No visual
+change, so no screenshots.
