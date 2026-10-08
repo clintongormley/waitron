@@ -216,3 +216,62 @@ describe.each(["en", "es"])("Retained date save contract (%s)", (locale) => {
     expect(unload()).toBe(true);
   });
 });
+
+it("an inherited date becomes clean again after drafted ranges are returned to Follow", async () => {
+  setLocale("en");
+  const { screen } = await mount();
+  emit(screen.shadowRoot!.querySelector("[name=specialDateId]")!, "wt-change", { value: "s2" });
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "[name=specialDateId]",
+        )!.value,
+    )
+    .toBe("s2");
+  const week =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
+      "opening-hours-week",
+    )!;
+  await week.updateComplete;
+  expect(unload()).toBe(false);
+  week.shadowRoot!.querySelector<HTMLElement>("[data-test=close-date]")!.click();
+  await week.updateComplete;
+  expect(unload()).toBe(true);
+  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-range-select", {
+    columnKey: "2",
+    startsAt: "10:00",
+    endsAt: "14:00",
+  });
+  await week.updateComplete;
+  const dialog =
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["range-dialog"]>("range-dialog")!;
+  await dialog.updateComplete;
+  emit(dialog.shadowRoot!.querySelector("[name=periodId]")!, "wt-change", { value: "p1" });
+  await dialog.updateComplete;
+  dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
+  await week.updateComplete;
+  expect(unload()).toBe(true);
+  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+  await week.updateComplete;
+  expect(unload()).toBe(false);
+  expect(app.writes).toEqual([]);
+});
+
+it("a saved date stays dirty on Follow until its original own ranges are restored", async () => {
+  setLocale("en");
+  const { week } = await mount();
+  expect(unload()).toBe(false);
+  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+  await week.updateComplete;
+  expect(unload()).toBe(true);
+  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+    columnKey: "1",
+    index: 0,
+    startsAt: "12:00",
+    endsAt: "16:00",
+  });
+  await week.updateComplete;
+  expect(unload()).toBe(false);
+  expect(app.writes).toEqual([]);
+});

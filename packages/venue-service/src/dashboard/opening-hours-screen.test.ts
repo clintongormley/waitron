@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens, type WtDataTable } from "@waitron/ui";
+import { applyTokens, NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -827,4 +827,47 @@ it("names every weekday and special date preventing deletion in one sentence", a
     { path: "/management-api/venue-service/menu-periods/p1", method: "DELETE", body: undefined },
   ]);
   expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
+});
+
+it("keeps department selection on Back and Forward through the shared navigation guard", async () => {
+  history.replaceState(null, "", "/manage/before-hours");
+  const guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async () => "proceeded",
+  });
+  try {
+    await guard.write("/manage/opening-hours/view/periods");
+    const el = await mount();
+    const chooser = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+    expect(chooser().value).toBe("restaurant");
+    chooser().dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "deli" }, bubbles: true, composed: true }),
+    );
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/periods/department/deli");
+    expect(new URL(guard.href).pathname).toBe(location.pathname);
+    expect(chooser().value).toBe("deli");
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/periods");
+    await expect.poll(() => chooser().value).toBe("restaurant");
+    expect(new URL(guard.href).pathname).toBe("/manage/opening-hours/view/periods");
+    history.forward();
+    await expect.poll(() => chooser().value).toBe("deli");
+    expect(new URL(guard.href).pathname).toBe("/manage/opening-hours/view/periods/department/deli");
+  } finally {
+    guard.dispose();
+  }
+});
+
+it("shows the Spanish Opening hours title and named-period actions", async () => {
+  setLocale("es");
+  const el = await mount();
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Horario de apertura");
+  expect(el.shadowRoot!.querySelector("[data-test=new-period]")!.textContent).toBe(
+    "Añadir un periodo",
+  );
+  await table(el).updateComplete;
+  expect(table(el).shadowRoot!.textContent).toContain("Lunes, Miércoles");
 });

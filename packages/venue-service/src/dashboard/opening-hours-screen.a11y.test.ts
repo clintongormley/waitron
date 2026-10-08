@@ -13,18 +13,27 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
-  test.each(["periods", "empty", "viewer", "delete", "delete-refused"])("%s", async (state) => {
+  test.each([
+    "periods",
+    "empty",
+    "viewer",
+    "delete",
+    "delete-refused",
+    "load-failed",
+    "unreadable-viewer",
+  ])("%s", async (state) => {
     setLocale("en");
     history.replaceState(null, "", "/manage/opening-hours/view/periods");
     // Assign the API before connecting: the screen attaches its passive model watch on connection.
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     screen.api = new OpeningHoursApi((async (_path, method) => {
+      if (state === "load-failed") throw new Error("offline");
       if (method !== "GET")
         throw { code: "menu_period.in_use", params: { uses: [{ kind: "week", weekday: 1 }] } };
       return {
         timeZone: "Europe/Madrid",
-        clockReadable: true,
+        clockReadable: state !== "unreadable-viewer",
         dayCutover: "06:00",
         specialDates: [],
         menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
@@ -52,8 +61,18 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
         ],
       };
     }) as DashboardRequest);
-    screen.readOnly = state === "viewer";
+    screen.readOnly = state === "viewer" || state === "unreadable-viewer";
     wrapper.appendChild(screen);
+    if (state === "load-failed") {
+      await expect
+        .poll(() => screen.shadowRoot!.querySelector("[data-test=read-error]"))
+        .not.toBeNull();
+      expect(screen.shadowRoot!.querySelector("[data-test=read-error]")!.textContent).toBe(
+        "Opening hours could not be loaded. It will be tried again.",
+      );
+      await expectNoA11yViolations(host);
+      return;
+    }
     await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
     const table =
       screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;

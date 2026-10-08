@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -8,32 +9,42 @@ import "./opening-hours-screen.js";
 
 class OpeningLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
-  readonly api = new OpeningHoursApi((async () => ({
-    timeZone: "Europe/Madrid",
-    clockReadable: true,
-    dayCutover: "06:00",
-    specialDates: [],
-    menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
-    departments: [
-      {
-        id: "restaurant",
-        name: "Restaurant",
-        active: true,
-        week: [],
-        dates: [],
-        periods: [
-          {
-            id: "p1",
-            name: "Lunch",
-            colour: "blue",
-            menuId: "lunch",
-            staffMenuIds: [],
-            weekdays: [1],
-          },
-        ],
-      },
-    ],
-  })) as DashboardRequest);
+  readonly writes: unknown[][] = [];
+  readonly api = new OpeningHoursApi((async (path, method, body) => {
+    if (method !== "GET") {
+      this.writes.push([path, method, body]);
+      return;
+    }
+    return {
+      timeZone: "Europe/Madrid",
+      clockReadable: true,
+      dayCutover: "06:00",
+      specialDates: [],
+      menus: [
+        { id: "lunch", name: "Lunch menu", active: true, includes: [] },
+        { id: "dinner", name: "Dinner menu", active: true, includes: [] },
+      ],
+      departments: [
+        {
+          id: "restaurant",
+          name: "Restaurant",
+          active: true,
+          week: [],
+          dates: [],
+          periods: [
+            {
+              id: "p1",
+              name: "Lunch",
+              colour: "blue",
+              menuId: "lunch",
+              staffMenuIds: [],
+              weekdays: [1],
+            },
+          ],
+        },
+      ],
+    };
+  }) as DashboardRequest);
   override render() {
     return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
@@ -131,4 +142,52 @@ describe.each(["en", "es"])("Opening hours discard (%s)", (locale) => {
       expect(screen.shadowRoot!.querySelector("period-editor")).toBe(editor);
     },
   );
+});
+
+it("changing only the period's menu protects the draft and restoring it makes it clean", async () => {
+  setLocale("en");
+  const { editor } = await mount();
+  const menu =
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=menuId]")!;
+  menu.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "dinner" }, bubbles: true, composed: true }),
+  );
+  await editor.updateComplete;
+  expect(unload()).toBe(true);
+  menu.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "lunch" }, bubbles: true, composed: true }),
+  );
+  await editor.updateComplete;
+  expect(unload()).toBe(false);
+  expect(app.writes).toEqual([]);
+});
+
+it("Cancel and native Escape close a period deletion without creating a draft or a write", async () => {
+  setLocale("en");
+  const { screen, editor } = await mount();
+  await editor
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!
+    .requestClose("cancel");
+  await expect.poll(() => screen.shadowRoot!.querySelector("period-editor")).toBeNull();
+  const table =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
+  for (const reason of ["cancel", "escape"] as const) {
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-period]")!.click();
+    await screen.updateComplete;
+    const dialog =
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("wt-dialog")!;
+    await dialog.updateComplete;
+    expect(dialog.open).toBe(true);
+    expect(unload()).toBe(false);
+    if (reason === "cancel")
+      screen.shadowRoot!.querySelector<HTMLElement>('[slot="cancel"]')!.click();
+    else await userEvent.keyboard("{Escape}");
+    await expect.poll(() => screen.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+    expect(
+      app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!.open,
+    ).toBe(false);
+  }
+  expect(app.writes).toEqual([]);
 });
