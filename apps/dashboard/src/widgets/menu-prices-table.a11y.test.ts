@@ -122,7 +122,6 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     const keys = ["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
     for (const key of keys) {
       const tr = root.querySelector(`tr[data-row-key="${key}"]`)!;
-      expect(tr.querySelector("a[part~=status-link]"), key).not.toBeNull();
       expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
       expect(tr.querySelector('td[data-pinned="end"] wt-row-actions'), key).not.toBeNull();
     }
@@ -131,10 +130,6 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector('[data-test="show-clashes"]')).not.toBeNull(),
     );
-    // An Active size of an Inactive product says why it reads Inactive, muted.
-    expect(
-      root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="status-note"]'),
-    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

@@ -2264,7 +2264,7 @@ describe("variants", () => {
     ]);
   });
 
-  it("offers Appears under, Main category and Status in the column chooser, all shown, and keeps the choice under the menu prices key alone", async () => {
+  it("offers Appears under, Main category and Available in the column chooser, all shown, and keeps the choice under the menu prices key alone", async () => {
     // A choice under either of this table's old keys, or an order under the last one, is not read.
     localStorage.setItem("waitron.menus.prices:columns", JSON.stringify({ category: false }));
     localStorage.setItem(
@@ -2286,9 +2286,9 @@ describe("variants", () => {
     expect(choices).toEqual([
       ["placements", true],
       ["category", true],
-      ["status", true],
+      ["available", true],
     ]);
-    expect(headers(el)).toEqual(["name", "override", "placements", "category", "status", ""]);
+    expect(headers(el)).toEqual(["name", "override", "placements", "category", "available", ""]);
     box(el, "category").click();
     await table(el).updateComplete;
     expect(headers(el)).not.toContain("category");
@@ -2296,10 +2296,10 @@ describe("variants", () => {
       category: false,
     });
     const again = await mountVariants();
-    expect(headers(again)).toEqual(["name", "override", "placements", "status", ""]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "available", ""]);
     table(again).shadowRoot.querySelector<HTMLElement>("[data-restore-columns]")!.click();
     await table(again).updateComplete;
-    expect(headers(again)).toEqual(["name", "override", "placements", "category", "status", ""]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "category", "available", ""]);
   });
 
   it.each(["en-GB", "es-ES"])(
@@ -3185,63 +3185,7 @@ it("marks an Inactive size's clash on neither its own row nor its product's, as 
   expect(el.shadowRoot!.querySelector('[data-test="clash-message"]')).toBeNull();
 });
 
-it("shows each row's own Active state as a link to its product page, a size by its own id", async () => {
-  setLocale("en-GB");
-  try {
-    const el = await mount({
-      rows: [burger, { ...lemonade, active: false }, { ...lager, active: true }],
-    });
-    toggleOf(el, "mi-lemonade")!.click();
-    await table(el).updateComplete;
-    const link = (key: string) =>
-      cell(el, "status", key).querySelector<HTMLAnchorElement>("a[part~=status-link]")!;
-    expect([text(link("mi-burger")), link("mi-burger").getAttribute("href")]).toEqual([
-      "Active",
-      "/manage/catalogue/product/p-burger",
-    ]);
-    expect(link("mi-burger").getAttribute("aria-label")).toBe("Active: open Burger's product page");
-    expect(text(link("mi-lemonade"))).toBe("Disabled");
-    // An Active size of a disabled product is Disabled, and says why.
-    expect(text(link("mi-lemonade:v-small"))).toBe("Disabled");
-    expect(link("mi-lemonade:v-small").getAttribute("href")).toBe(
-      "/manage/catalogue/product/v-small",
-    );
-    expect(visibleText(cell(el, "status", "mi-lemonade:v-small"))).toBe(
-      "Disabled its product is disabled",
-    );
-  } finally {
-    setLocale("es-ES");
-  }
-});
-
-it("in Spanish, words a product's status by the product and a size's by the variant", async () => {
-  setLocale("es-ES");
-  const el = await mount({
-    rows: [burger, { ...lemonade, active: false }],
-  });
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  const link = (key: string) =>
-    cell(el, "status", key).querySelector<HTMLAnchorElement>("a[part~=status-link]")!;
-  expect(text(link("mi-burger"))).toBe("Activo");
-  expect(text(link("mi-lemonade"))).toBe("Deshabilitado");
-  expect(visibleText(cell(el, "status", "mi-lemonade:v-small"))).toBe(
-    "Deshabilitada su producto está deshabilitado",
-  );
-  try {
-    // An Active size of an Active product.
-    const own = await mount({ rows: [lemonade] });
-    toggleOf(own, "mi-lemonade")!.click();
-    await table(own).updateComplete;
-    expect(
-      text(cell(own, "status", "mi-lemonade:v-small").querySelector("a[part~=status-link]")),
-    ).toBe("Activa");
-  } finally {
-    setLocale("es-ES");
-  }
-});
-
-it("reads a disabled size as Disabled under an Active product, and keeps it out of the product's range", async () => {
+it("keeps a disabled size under an Active product out of the product's range", async () => {
   const el = await mount({
     rows: [
       {
@@ -3252,9 +3196,6 @@ it("reads a disabled size as Disabled under an Active product, and keeps it out 
   });
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
-  expect(text(cell(el, "status", "mi-lemonade:v-large").querySelector("a"))).toBe(
-    t("product.variant_disabled_badge"),
-  );
   expect(override(el, "mi-lemonade").placeholder).toBe("3.00");
 });
 
@@ -3387,11 +3328,99 @@ it("keeps the row menu last and pinned when a remembered column order and choice
   }
 });
 
-it("keeps Active apart from Available: a sold-out Active product reads Active", async () => {
-  // `MenuPriceRow` carries no Available; the read lists a sold-out product as Active (Task 1).
-  const el = await mount({ rows: [{ ...burger, active: true }] });
-  expect(text(cell(el, "status", "mi-burger").querySelector("a"))).toBe(t("product.active_badge"));
-  expect(text(cell(el, "status", "mi-burger"))).not.toContain(t("product.unavailable_badge"));
+it.each([
+  ["en-GB", "Yes", "No"],
+  ["es-ES", "Sí", "No"],
+])(
+  "shows Available as Yes or No for a product and for a size, each by its own flag (%s)",
+  async (locale, yes, no) => {
+    setLocale(locale);
+    try {
+      const el = await mount({
+        rows: [
+          { ...burger, available: false },
+          {
+            ...lemonade,
+            available: true,
+            variants: [
+              { ...lemonade.variants[0]!, available: false },
+              { ...lemonade.variants[1]!, available: true },
+            ],
+          },
+        ],
+      });
+      toggleOf(el, "mi-lemonade")!.click();
+      await table(el).updateComplete;
+      expect([t("menus.available_yes"), t("menus.available_no")]).toEqual([yes, no]);
+      const keys = ["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
+      expect(keys.map((key) => text(cell(el, "available", key)))).toEqual([no, yes, no, yes]);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("shows a sold-out size as No under an available product, and an available size as Yes under a sold-out one", async () => {
+  const el = await mount({
+    rows: [
+      {
+        ...lemonade,
+        available: false,
+        variants: [
+          { ...lemonade.variants[0]!, available: true },
+          { ...lemonade.variants[1]!, available: false },
+        ],
+      },
+    ],
+  });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  expect(column(el, "available")).toEqual([
+    t("menus.available_no"),
+    t("menus.available_yes"),
+    t("menus.available_no"),
+  ]);
+});
+
+it("has no Status column: Available takes its place, before the row menu", async () => {
+  const el = await mount();
+  expect(headers(el)).not.toContain("status");
+  expect(headers(el).slice(-2)).toEqual(["available", ""]);
+  const heading = table(el).shadowRoot.querySelector('[data-sort="available"]')!.closest("th")!;
+  expect(text(heading)).toContain(t("editor.available"));
+});
+
+it("does not match a row by its Available value in a search", async () => {
+  const el = await mount({ rows: [{ ...lager, available: false }] });
+  await search(el, "lager");
+  expect(shown(el)).toEqual(["mi-lager"]);
+  // Available sorts an unavailable row as 1; nothing else the row shows holds a 1.
+  await search(el, "1");
+  expect(shown(el)).toEqual([]);
+  expect(text(table(el).shadowRoot.querySelector(".empty .message"))).toBe(
+    tableNoMatches(currentLocale()),
+  );
+});
+
+it("draws Available when a remembered column choice and order still name the old Status column", async () => {
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:columns",
+    JSON.stringify({ status: false }),
+  );
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:column-order",
+    JSON.stringify(["status", "category", "placements", "override"]),
+  );
+  const el = await mount();
+  expect(headers(el)).toContain("available");
+  expect(headers(el)).not.toContain("status");
+  expect(column(el, "available")).toEqual(shown(el).map(() => t("menus.available_yes")));
+});
+
+it("a sold-out product reads No in Available", async () => {
+  const el = await mount({ rows: [{ ...burger, active: true, available: false }] });
+  expect(text(cell(el, "available", "mi-burger"))).toBe(t("menus.available_no"));
+  expect(text(cell(el, "available", "mi-burger"))).not.toContain(t("product.active_badge"));
 });
 
 it("uses the server's variant price and fallback even when the catalogue differs", async () => {
@@ -3532,7 +3561,7 @@ describe("without a switch of the menu's own", () => {
     const choosable = [
       ...table(el).shadowRoot.querySelectorAll<HTMLInputElement>("input[data-column]"),
     ].map((box) => box.dataset.column);
-    expect(choosable).toContain("status");
+    expect(choosable).toContain("available");
     expect(choosable).not.toContain("active");
   });
 

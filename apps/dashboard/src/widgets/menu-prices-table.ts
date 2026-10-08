@@ -35,7 +35,6 @@ import type {
   Product,
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { productStatusName } from "../i18n/domain.js";
 import { leftToBrowser } from "../navigation.js";
 import {
   byLabel,
@@ -144,7 +143,7 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
 
 /**
  * One menu's price overrides: a row per Active product the menu reaches, with its Active sizes
- * under it, each showing its Active state and a field for the price this menu sets for it. A field
+ * under it, each showing whether it is Available and a field for the price this menu sets for it. A field
  * asks for its own save on Enter or on leaving it, through `wt-price-save`; the host performs the
  * writes and says which are out (`saving`), which were refused for the price typed (`refusals`) and
  * the outcome of the last save (`outcome`), which floats over the page: a save for 5 s, with its
@@ -211,15 +210,6 @@ export class MenuPricesTable extends LitElement {
           var(--wt-tap-min) + 2 * var(--wt-space-2),
           var(--outcome-height, 0px) + var(--wt-space-3)
         );
-      }
-      wt-data-table::part(status-link) {
-        display: inline-flex;
-        align-items: center;
-        min-height: var(--wt-tap-min);
-        color: var(--wt-color-primary);
-      }
-      wt-data-table::part(status-note) {
-        font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(clash) {
         color: var(--wt-color-danger);
@@ -723,23 +713,11 @@ export class MenuPricesTable extends LitElement {
     return variant ? `${item.name} — ${this.#variantName(variant.variantId)}` : item.name;
   }
 
-  #status(line: Line) {
-    const active = this.#active(line);
-    const id = line.variant?.variantId ?? line.item.productId;
-    const word = productStatusName(active, line.variant !== null);
-    const viaParent = line.variant !== null && line.variant.active && !line.item.active;
-    return html`<a
-        part="status-link"
-        data-active=${active ? "true" : "false"}
-        href=${`/manage/catalogue/product/${encodeURIComponent(id)}`}
-        aria-label=${`${word}: ${t("menu_prices.open_product").replace("{name}", this.#lineName(line))}`}
-        @click=${(event: MouseEvent) => this.#openProduct(event, id)}
-        >${word}</a
-      >${
-        viaParent
-          ? html` <span part="muted status-note">${t("menu_prices.status_parent_disabled")}</span>`
-          : nothing
-      }`;
+  #availableCell({ item, variant }: Line) {
+    const available = variant ? variant.available : item.available;
+    return html`<span part="available" data-test="available"
+      >${t(available ? "menus.available_yes" : "menus.available_no")}</span
+    >`;
   }
 
   #actionsCell(line: Line) {
@@ -1067,12 +1045,13 @@ export class MenuPricesTable extends LitElement {
         },
       },
       {
-        key: "status",
-        label: t("product.status"),
+        key: "available",
+        label: t("editor.available"),
         choosable: "shown",
-        sortValue: (line) => (this.#active(line) ? 0 : 1),
-        searchValue: (line) => productStatusName(this.#active(line), line.variant !== null),
-        cell: (line) => this.#status(line),
+        sortValue: (line) => ((line.variant ?? line.item).available ? 0 : 1),
+        // Not searchable: a search for "no" would match every unavailable row.
+        searchValue: () => "",
+        cell: (line) => this.#availableCell(line),
       },
       {
         key: "actions",
