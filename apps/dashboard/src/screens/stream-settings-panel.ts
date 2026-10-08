@@ -2,8 +2,9 @@ import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
-  leaveCoordinatorFor,
+  saveActionState,
   submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
@@ -292,8 +293,7 @@ export class StreamSettingsPanel extends LitElement {
 
   #trackForm(): void {
     if (this.#scope) return;
-    this.#leave = leaveCoordinatorFor(this);
-    this.#scope = this.#leave?.register<StreamBucketBody>({
+    const { coordinator, scope } = draftScopeFor<StreamBucketBody>(this, {
       id: this,
       current: () => this.#body(),
       snapshot: (body) => ({ ...body }),
@@ -302,6 +302,13 @@ export class StreamSettingsPanel extends LitElement {
         this.draft = { ...body };
       },
     });
+    this.#leave = coordinator;
+    this.#scope = scope;
+  }
+
+  /** Save reads the scope, so a form on screen without one could never be saved. */
+  #trackShownForm(value: StreamSettingsView): void {
+    if (value.isPrimary && (!value.configured || this.editing)) this.#trackForm();
   }
 
   #releaseForm(): void {
@@ -363,7 +370,7 @@ export class StreamSettingsPanel extends LitElement {
   #arrived(value: StreamSettingsView): void {
     const before = this.settings;
     this.settings = value;
-    if (value.isPrimary && (!value.configured || this.editing)) this.#trackForm();
+    this.#trackShownForm(value);
     if (before !== undefined && bucketKey(before.bucket) !== bucketKey(value.bucket))
       this.#dropKit();
     if (!value.configured) this.turnOffArmed = false;
@@ -497,6 +504,7 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   async #save(): Promise<void> {
+    if (saveActionState(this.#scope).unchanged) return;
     if (!this.#ready()) return;
     this.submitting = true;
     const generation = this.#generation;
@@ -543,6 +551,7 @@ export class StreamSettingsPanel extends LitElement {
       const settings = await this.api.turnOffStream();
       if (!current()) return;
       this.settings = settings;
+      this.#trackShownForm(settings);
       this.#dropKit();
     } catch (error) {
       if (current()) this.#fail(error);
@@ -577,6 +586,8 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   #startEdit(): void {
+    // A new-bucket form a read replaced keeps its scope, whose baseline is not the stored bucket.
+    this.#releaseForm();
     const b = this.settings!.bucket;
     this.draft = {
       endpoint: b?.endpoint ?? "",
@@ -740,6 +751,7 @@ export class StreamSettingsPanel extends LitElement {
     const errors = { ...this.refused, ...checked };
     const marked = FIELDS.some((f) => errors[f.field] !== undefined);
     const invalid = Object.keys(checked).length > 0;
+    const saveAction = saveActionState(this.#scope);
     return html`
       <div class="form" @keydown=${(event: KeyboardEvent) => submitOnEnter(event, save())}>
         ${FIELDS.map((f) => this.#renderField(f, errors[f.field] ?? ""))}
@@ -771,9 +783,9 @@ export class StreamSettingsPanel extends LitElement {
             >${t("stream.form.test")}</wt-button
           >
           <wt-button
-            variant="primary"
+            variant=${saveAction.variant}
             data-test="save"
-            ?disabled=${this.submitting || invalid}
+            ?disabled=${saveAction.unchanged || this.submitting || invalid}
             @click=${() => void this.#save()}
             >${t("stream.form.save")}</wt-button
           >

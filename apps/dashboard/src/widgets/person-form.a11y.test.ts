@@ -23,4 +23,25 @@ describe.each(["light", "dark"] as const)("person-form a11y (%s theme)", (theme)
     expect(emailInput.labels?.length).toBeGreaterThan(0);
     await expectNoA11yViolations(host);
   });
+
+  it("with Create quiet and then ready", async () => {
+    const { el, host } = await mountWidget<PersonForm>(
+      "dashboard-person-form",
+      { open: true },
+      theme,
+    );
+    await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    const create =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+    await create.updateComplete;
+    expect([create.variant, create.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("[data-test=first-names]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Ada" } }),
+    );
+    await el.updateComplete;
+    await create.updateComplete;
+    expect([create.variant, create.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
 });

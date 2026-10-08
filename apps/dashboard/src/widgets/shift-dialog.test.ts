@@ -84,7 +84,7 @@ describe("shift-dialog", () => {
     });
   });
 
-  it("pre-fills a +02:00 shift with its wall-clock times and saves it back unchanged", async () => {
+  it("pre-fills a +02:00 shift with its wall-clock times and saves them back unchanged", async () => {
     const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
       open: true,
       day: "2027-01-04",
@@ -94,6 +94,8 @@ describe("shift-dialog", () => {
     expect(inputValue(el, "shift-start")).toBe("09:00");
     expect(inputValue(el, "shift-end")).toBe("17:00");
     const update = capture(el, "update-shift");
+    setInput(el, "shift-role", "kitchen");
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await el.updateComplete;
     expect(update).toHaveBeenCalledExactlyOnceWith({
@@ -103,7 +105,7 @@ describe("shift-dialog", () => {
         startsOffsetMinutes: 120,
         endsAt: "2027-01-04T15:00:00Z",
         endsOffsetMinutes: 120,
-        role: "bar",
+        role: "kitchen",
       },
     });
   });

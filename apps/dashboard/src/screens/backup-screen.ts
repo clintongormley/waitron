@@ -3,8 +3,10 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
   leaveCoordinatorFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -235,6 +237,9 @@ export class BackupScreen extends LitElement {
   /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
    * reactive state so it is never rendered. */
   #reuseKey: string | null = null;
+  /** The stored policy is one the form cannot write, so the editor shows defaults in its place and
+   * saving it as shown changes the box. */
+  #policyReplaced = false;
   /** The status watcher asks for a key at most once, so a failing mint is not retried on every
    * refresh: the mint is a POST, and a POST is never passive session activity. */
   #watcherAsked = false;
@@ -279,7 +284,7 @@ export class BackupScreen extends LitElement {
   }
 
   #trackArchive(): void {
-    if (!this.isConnected || !this.#leave) return;
+    if (!this.isConnected) return;
     const mode = this.#archiveValue().mode;
     if (!this.status?.isPrimary || this.status.managedByEnvironment) {
       this.#archiveScope?.dispose();
@@ -290,7 +295,7 @@ export class BackupScreen extends LitElement {
     if (this.#archiveMode === mode) return;
     this.#archiveScope?.dispose();
     this.#archiveMode = mode;
-    this.#archiveScope = this.#leave?.register<ArchiveDraft>({
+    this.#archiveScope = draftScopeFor<ArchiveDraft>(this, {
       id: this,
       current: () => this.#archiveValue(),
       snapshot: (value) => ({ ...value, weekdays: [...value.weekdays] }),
@@ -306,7 +311,7 @@ export class BackupScreen extends LitElement {
         this.pastedKey = value.pastedKey;
         this.advancedPaste = value.advancedPaste;
       },
-    });
+    }).scope;
   }
 
   protected override updated(changed: PropertyValues): void {
@@ -522,6 +527,7 @@ export class BackupScreen extends LitElement {
 
   async #apply(): Promise<void> {
     const sendsKey = !this.#reusesHeldKey;
+    if (saveActionState(this.#archiveScope).unchanged) return;
     if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
     if (!this.#checkPolicy()) return;
     this.errorKey = null;
@@ -636,6 +642,7 @@ export class BackupScreen extends LitElement {
   }
 
   async #saveSettings(): Promise<void> {
+    if (this.#settingsAction().unchanged) return;
     if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
     if (!this.#checkPolicy()) return;
     this.errorKey = null;
@@ -655,6 +662,7 @@ export class BackupScreen extends LitElement {
       if (generation !== this.#generation) return;
       this.status = status;
       scope?.commit(submitted);
+      this.#policyReplaced = false;
       if (!scope?.isDirty()) {
         this.editSettings = false;
         this.#reuseKey = null;
@@ -679,6 +687,7 @@ export class BackupScreen extends LitElement {
   /** A non-`wall-clock` running schedule (the box-image `interval` form the UI cannot author) leaves
    * the schedule controls at their defaults. */
   #prefillFromStatus(s: BackupStatusView): void {
+    this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
     this.destinationDir = s.destinations[0]?.dir ?? "";
     if (s.schedule?.kind === "wall-clock") {
       this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
@@ -985,6 +994,7 @@ export class BackupScreen extends LitElement {
   }
 
   #renderConfigure(): TemplateResult {
+    const s = saveActionState(this.#archiveScope);
     return html`
       ${this.#renderDestinationField()}
 
@@ -1005,9 +1015,9 @@ export class BackupScreen extends LitElement {
 
       <wt-form-actions data-test="apply-actions" .error=${this.#policyBottom()}>
         <wt-button
-          variant="primary"
+          variant=${s.variant}
           data-test="apply"
-          ?disabled=${this.#applyDisabled}
+          ?disabled=${s.unchanged || this.#applyDisabled}
           @click=${() => void this.#apply()}
           >${t("backup.apply")}</wt-button
         >
@@ -1015,7 +1025,12 @@ export class BackupScreen extends LitElement {
     `;
   }
 
+  #settingsAction() {
+    return saveActionState(this.#archiveScope, { savableAtOpen: this.#policyReplaced });
+  }
+
   #renderEditSettings(): TemplateResult {
+    const s = this.#settingsAction();
     return html`
       <h2 data-test="edit-title">${t("backup.edit.title")}</h2>
       ${this.#renderDestinationField()}
@@ -1032,9 +1047,9 @@ export class BackupScreen extends LitElement {
           >${t("backup.edit.cancel")}</wt-button
         >
         <wt-button
-          variant="primary"
+          variant=${s.variant}
           data-test="save-settings"
-          ?disabled=${this.#saveSettingsDisabled}
+          ?disabled=${s.unchanged || this.#saveSettingsDisabled}
           @click=${() => void this.#saveSettings()}
           >${t("backup.edit.save")}</wt-button
         >

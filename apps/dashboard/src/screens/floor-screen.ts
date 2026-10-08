@@ -6,7 +6,8 @@ import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 // The `@waitron/ui` barrel registers `<wt-floor-canvas>` and `<wt-table-token>`, used here by tag.
 import {
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   submitOnEnter,
   baseStyles,
@@ -143,7 +144,7 @@ export class FloorScreen extends LitElement {
 
   #registerNew(): void {
     if (this.#newScope) return;
-    this.#newScope = leaveCoordinatorFor(this)?.register({
+    this.#newScope = draftScopeFor<string>(this, {
       id: {},
       parent: this,
       current: () => this.newTable,
@@ -152,7 +153,7 @@ export class FloorScreen extends LitElement {
       restore: (value) => {
         this.newTable = value;
       },
-    });
+    }).scope;
   }
 
   #acceptTables(rows: EditableTable[]): void {
@@ -180,8 +181,6 @@ export class FloorScreen extends LitElement {
     for (const id of dirty) {
       if (!rows.some((row) => row.id === id)) this.tables = [...this.tables, current.get(id)!];
     }
-    const coordinator = leaveCoordinatorFor(this);
-    if (!coordinator) return;
     for (const row of this.tables) {
       const entry = this.#rowScopes.get(row.id);
       if (entry) {
@@ -195,7 +194,7 @@ export class FloorScreen extends LitElement {
           entry.scope.commit(saved);
         }
       } else {
-        const scope = coordinator.register({
+        const { scope } = draftScopeFor<TableDraft>(this, {
           id: {},
           parent: this,
           current: () => tableDraft(this.tables.find((value) => value.id === row.id)!),
@@ -334,10 +333,9 @@ export class FloorScreen extends LitElement {
   }
 
   async #createTable(): Promise<void> {
-    if (this.submitting) return;
+    if (this.submitting || saveActionState(this.#newScope).unchanged) return;
     this.#showError(null);
     const label = this.newTable.trim();
-    if (label === "") return;
     const connection = this.#connection;
     const scope = this.#newScope;
     this.submitting = true;
@@ -361,22 +359,21 @@ export class FloorScreen extends LitElement {
 
   async #saveTable(id: string): Promise<void> {
     if (this.submitting) return;
-    this.#showError(null);
     const row = this.tables.find((tbl) => tbl.id === id);
-    if (row === undefined) return;
+    const entry = this.#rowScopes.get(id);
+    if (row !== undefined && saveActionState(entry?.scope).unchanged) return;
+    this.#showError(null);
+    if (row === undefined || entry === undefined) return;
     const patch: { label: string; capacity?: number } = { label: row.label };
     if (row.capacity !== null) patch.capacity = row.capacity;
     const submitted = tableDraft(row);
-    const entry = this.#rowScopes.get(id);
     const connection = this.#connection;
     this.submitting = true;
     try {
       await this.api.updateTable(row.id, patch);
       if (connection !== this.#connection) return;
-      if (entry) {
-        entry.saved = submitted;
-        entry.scope.commit(submitted);
-      }
+      entry.saved = submitted;
+      entry.scope.commit(submitted);
       await this.#load();
     } catch (error) {
       if (connection === this.#connection) this.#showError(codeOf(error));
@@ -431,6 +428,7 @@ export class FloorScreen extends LitElement {
   // ── Render ─────────────────────────────────────────────────────────────────────────────────────────
 
   #renderTable(tbl: EditableTable): TemplateResult {
+    const save = saveActionState(this.#rowScopes.get(tbl.id)?.scope);
     return html`<li data-test="table-row-${tbl.id}">
       <wt-card>
         <div class="row">
@@ -478,10 +476,10 @@ export class FloorScreen extends LitElement {
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onAssignZone(tbl.id, e)}
           ></wt-combobox>
           <wt-button
-            variant="primary"
+            variant=${save.variant}
             size="sm"
             data-test="table-save-${tbl.id}"
-            ?disabled=${this.submitting}
+            ?disabled=${save.unchanged || this.submitting}
             @click=${() => void this.#saveTable(tbl.id)}
             >${t("action.save")}</wt-button
           >
@@ -623,6 +621,7 @@ export class FloorScreen extends LitElement {
   }
 
   #renderConfig(): TemplateResult {
+    const addAction = saveActionState(this.#newScope);
     return html`
       <div class="panels">
         <section class="panel" data-test="tables-panel">
@@ -644,9 +643,9 @@ export class FloorScreen extends LitElement {
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewTable(e)}
             ></wt-input>
             <wt-button
-              variant="primary"
+              variant=${addAction.variant}
               data-add-table
-              ?disabled=${this.submitting}
+              ?disabled=${addAction.unchanged || this.submitting}
               @click=${() => void this.#createTable()}
               >${t("floor.add_table")}</wt-button
             >

@@ -73,6 +73,13 @@ function typeFooter(el: ReceiptsScreen, value: string): void {
   );
 }
 
+/** An edit outside the receipt texts, so Save can be pressed while both texts stay as loaded. */
+function typeDescription(el: ReceiptsScreen, value: string): void {
+  q(el, "wt-input[name=operationDescription]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
 afterEach(cleanupWidgets);
 
 describe("receipts page: the receipt header and footer", () => {
@@ -134,6 +141,8 @@ describe("receipts page: the receipt header and footer", () => {
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
+    typeDescription(el, "Servicio de mesa");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(lastPut(api)).toEqual({
@@ -162,6 +171,8 @@ describe("receipts page: the receipt header and footer", () => {
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
+    typeDescription(el, "Servicio de mesa");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(lastPut(api)).toEqual({});
@@ -184,6 +195,8 @@ describe("receipts page: the receipt header and footer", () => {
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
+    typeHeader(el, "Calle Mayor 1");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
 
@@ -198,6 +211,8 @@ describe("receipts page: the receipt header and footer", () => {
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
+    typeHeader(el, "Calle Mayor 1");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(errorKey(el)).toBe("server.internal");
@@ -269,9 +284,13 @@ it.each([
     await userEvent.keyboard("{Enter}");
     await flush(el);
     expect(request).toHaveBeenCalledTimes(2);
-    expect((el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton).disabled).toBe(
-      false,
-    );
+    // The retry saved the draft, so Save is quiet until the next edit, which it then follows.
+    const action = el.shadowRoot!.querySelector(button) as import("@waitron/ui").WtButton;
+    expect([action.variant, action.disabled]).toEqual(["secondary", true]);
+    input.value = "Updated again";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(action.disabled).toBe(false);
   },
 );
 

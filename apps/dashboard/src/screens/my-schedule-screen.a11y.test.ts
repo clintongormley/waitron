@@ -1,4 +1,6 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./my-schedule-screen.js";
 import type { MyScheduleScreen } from "./my-schedule-screen.js";
@@ -73,6 +75,41 @@ describe.each(["light", "dark"] as const)("my-schedule-screen a11y (%s theme)", 
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with both submit actions quiet, then changed", async () => {
+    const { el, host } = await mountWidget<MyScheduleScreen>(
+      "dashboard-my-schedule-screen",
+      { api: stubApi(), myPersonId: "me" },
+      theme,
+    );
+    await flush(el);
+    const action = (name: string) =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${name}]`)!;
+    const looks = () =>
+      ["cover-submit", "abs-submit"].map((name) => [action(name).variant, action(name).disabled]);
+    expect(looks()).toEqual([
+      ["secondary", true],
+      ["secondary", true],
+    ]);
+    await expectNoA11yViolations(host);
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=cover-shift]")!, "s1");
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=cover-colleague]")!, "col1");
+    for (const [name, value] of [
+      ["abs-from", "2026-06-01"],
+      ["abs-to", "2026-06-03"],
+    ]) {
+      const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        `[data-test=${name}]`,
+      )!;
+      await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
+    }
+    await flush(el);
+    expect(looks()).toEqual([
+      ["primary", false],
+      ["primary", false],
+    ]);
     await expectNoA11yViolations(host);
   });
 

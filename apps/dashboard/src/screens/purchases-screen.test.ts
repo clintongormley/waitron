@@ -74,6 +74,29 @@ function emitFromChild(child: Element, type: string, detail: unknown): void {
   child.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
+/** Fills the open form with `createDetail()`'s values and presses Create, so the request carries what the form holds. */
+async function createThroughForm(el: PurchasesScreen): Promise<void> {
+  const add = form(el);
+  const { header, lines } = createDetail();
+  const values: Record<string, string> = {
+    "supplier-tax-id": header.supplierTaxId,
+    "supplier-name": header.supplierName,
+    "supplier-invoice-number": header.supplierInvoiceNumber,
+    "issued-on": header.issuedOn,
+    "received-on": header.receivedOn,
+    total: header.total,
+    "line-rate-0": lines[0]!.rate,
+    "line-base-0": lines[0]!.base,
+    "line-tax-0": lines[0]!.tax,
+  };
+  for (const [test, value] of Object.entries(values))
+    add
+      .shadowRoot!.querySelector(`[data-test=${test}]`)!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  await add.updateComplete;
+  add.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+}
+
 afterEach(cleanupWidgets);
 
 describe("purchases-screen", () => {
@@ -210,9 +233,10 @@ describe("purchases-screen", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
     await el.updateComplete;
-    emitFromChild(form(el), "create-purchase", createDetail());
+    await createThroughForm(el);
     await flush(el);
     await form(el).updateComplete;
+    expect(api.createPurchaseInvoice).toHaveBeenCalledExactlyOnceWith(createDetail());
     expect(
       form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(
         "[data-test=deductible-proportion]",

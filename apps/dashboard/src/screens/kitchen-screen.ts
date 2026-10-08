@@ -5,7 +5,8 @@ import {
   baseStyles,
   focusFirstInvalid,
   submitOnEnter,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -157,8 +158,8 @@ export class KitchenScreen extends LitElement {
     const proceed = () => {
       if (this.#timingCurrent(identity) && !this.timingSaving) this.#closeTiming();
     };
-    if (!this.#timingScope) proceed();
-    else void this.#leave!.request({ scopes: [this.#timingScope.id], reason, proceed });
+    if (!this.#leave || !this.#timingScope) proceed();
+    else void this.#leave.request({ scopes: [this.#timingScope.id], reason, proceed });
   }
 
   async #load(): Promise<void> {
@@ -199,8 +200,7 @@ export class KitchenScreen extends LitElement {
     this.timingRefusals = {};
     this.timingSaveError = "";
     const id = (this.#timingIdentity = {});
-    this.#leave ??= leaveCoordinatorFor(this);
-    this.#timingScope = this.#leave?.register({
+    const { coordinator, scope } = draftScopeFor<TimingSnapshot>(this, {
       id,
       parent: this,
       current: () => this.#timingValue(),
@@ -217,6 +217,8 @@ export class KitchenScreen extends LitElement {
         this.timingSaveError = "";
       },
     });
+    this.#leave = coordinator;
+    this.#timingScope = scope;
   }
 
   #timingErrors(): Partial<Record<TimingField, string>> {
@@ -246,6 +248,7 @@ export class KitchenScreen extends LitElement {
   async #saveTiming(identity: object | undefined): Promise<void> {
     const draft = this.timingDraft;
     if (!this.#timingCurrent(identity) || !draft || this.timingSaving || this.readOnly) return;
+    if (saveActionState(this.#timingScope).unchanged) return;
     this.timingAttempted = true;
     this.timingRefusals = {};
     this.timingSaveError = "";
@@ -301,6 +304,7 @@ export class KitchenScreen extends LitElement {
       ...(this.timingAttempted ? this.#timingErrors() : {}),
     };
     const localInvalid = this.timingAttempted && Object.keys(this.#timingErrors()).length > 0;
+    const saveAction = saveActionState(this.#timingScope);
     const message = [Object.keys(errors).length ? t("form.fix_fields") : "", this.timingSaveError]
       .filter(Boolean)
       .join(" ");
@@ -353,7 +357,8 @@ export class KitchenScreen extends LitElement {
                 >
                 <wt-button
                   data-test="save-timing"
-                  ?disabled=${this.timingSaving || localInvalid}
+                  variant=${saveAction.variant}
+                  ?disabled=${saveAction.unchanged || this.timingSaving || localInvalid}
                   @click=${() => void this.#saveTiming(identity)}
                   >${t("action.save")}</wt-button
                 >

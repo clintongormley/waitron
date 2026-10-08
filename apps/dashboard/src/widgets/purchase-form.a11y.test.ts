@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./purchase-form.js";
 import type { PurchaseForm } from "./purchase-form.js";
@@ -50,6 +50,27 @@ describe.each(["light", "dark"] as const)("purchase-form a11y (%s theme)", (them
       theme,
     );
     await settle(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("with Save quiet and then ready", async () => {
+    const { el, host } = await mountWidget<PurchaseForm>(
+      "dashboard-purchase-form",
+      { open: true, invoice: EDIT_INVOICE },
+      theme,
+    );
+    await settle(el);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("[data-test=supplier-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Otro SL" } }),
+    );
+    await el.updateComplete;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
     await expectNoA11yViolations(host);
   });
 });

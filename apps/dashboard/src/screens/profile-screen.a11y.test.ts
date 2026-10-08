@@ -103,4 +103,28 @@ describe.each(["light", "dark"] as const)("profile-screen a11y (%s theme)", (the
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("the edit dialog, with Save quiet and then ready", async () => {
+    const { el, host } = await mountWidget<ProfileScreen>(
+      "dashboard-profile-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    el.editDetails();
+    await el.updateComplete;
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("wt-input[name=telephone]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "+34 600 000 001" } }),
+    );
+    await el.updateComplete;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
 });

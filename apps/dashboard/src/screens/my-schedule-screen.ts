@@ -1,7 +1,13 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  draftScopeFor,
+  saveActionState,
+  type DraftScope,
+} from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -166,8 +172,7 @@ export class MyScheduleScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    const leave = leaveCoordinatorFor(this);
-    this.#coverScope = leave?.register<CoverDraft>({
+    this.#coverScope = draftScopeFor<CoverDraft>(this, {
       id: {},
       parent: this,
       current: () => this.#coverDraft(),
@@ -177,8 +182,8 @@ export class MyScheduleScreen extends LitElement {
         this.coverShiftId = value.fromShiftId;
         this.coverColleagueId = value.toPersonId;
       },
-    });
-    this.#absenceScope = leave?.register<AbsenceDraft>({
+    }).scope;
+    this.#absenceScope = draftScopeFor<AbsenceDraft>(this, {
       id: {},
       parent: this,
       current: () => this.#absenceDraft(),
@@ -190,7 +195,7 @@ export class MyScheduleScreen extends LitElement {
         this.absTo = value.endsOn;
         this.absNote = value.note ?? "";
       },
-    });
+    }).scope;
     void this.#load();
   }
 
@@ -313,6 +318,7 @@ export class MyScheduleScreen extends LitElement {
 
   #submitCover(): void {
     if (this.coverShiftId === "" || this.coverColleagueId === "") return;
+    if (saveActionState(this.#coverScope).unchanged) return;
     const submitted = this.#coverDraft();
     const connection = this.#connection;
     void this.#act(async () => {
@@ -328,6 +334,7 @@ export class MyScheduleScreen extends LitElement {
 
   #submitAbsence(): void {
     if (this.absFrom === "" || this.absTo === "") return;
+    if (saveActionState(this.#absenceScope).unchanged) return;
     const submitted = this.#absenceDraft();
     const connection = this.#connection;
     void this.#act(async () => {
@@ -472,6 +479,7 @@ export class MyScheduleScreen extends LitElement {
   #coverSection(): TemplateResult {
     const shifts = this.shifts ?? [];
     const colleagues = this.#colleagues();
+    const submit = saveActionState(this.#coverScope);
     return html`<section class="cover" aria-labelledby="cover-h">
       <h2 id="cover-h">${t("myschedule.cover_title")}</h2>
       <div class="form">
@@ -512,9 +520,14 @@ export class MyScheduleScreen extends LitElement {
           }}
         ></wt-combobox>
         <wt-button
-          variant="primary"
+          variant=${submit.variant}
           data-test="cover-submit"
-          ?disabled=${this.busy || this.coverShiftId === "" || this.coverColleagueId === ""}
+          ?disabled=${
+            submit.unchanged ||
+            this.busy ||
+            this.coverShiftId === "" ||
+            this.coverColleagueId === ""
+          }
           @click=${() => this.#submitCover()}
           >${t("myschedule.cover_submit")}</wt-button
         >
@@ -555,6 +568,7 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #absenceForm(): TemplateResult {
+    const submit = saveActionState(this.#absenceScope);
     return html`<section class="request-absence" aria-labelledby="request-absence-h">
       <h2 id="request-absence-h">${t("myschedule.absence_title")}</h2>
       <div class="form">
@@ -609,9 +623,9 @@ export class MyScheduleScreen extends LitElement {
           }}
         ></wt-input>
         <wt-button
-          variant="primary"
+          variant=${submit.variant}
           data-test="abs-submit"
-          ?disabled=${this.busy || this.absFrom === "" || this.absTo === ""}
+          ?disabled=${submit.unchanged || this.busy || this.absFrom === "" || this.absTo === ""}
           @click=${() => this.#submitAbsence()}
           >${t("myschedule.absence_submit")}</wt-button
         >

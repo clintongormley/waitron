@@ -101,7 +101,7 @@ it("shows every invalid whole-minute field after submission and re-enables Save 
     true,
   );
   expect(a.setKitchenTimingDefaults).not.toHaveBeenCalled();
-  await change(el, "warmAfterMinutes", "3");
+  await change(el, "warmAfterMinutes", "4");
   await change(el, "overdueAfterMinutes", "7");
   await change(el, "forgottenAfterMinutes", "12");
   expect((q(el, '[data-test="save-timing"]') as HTMLElement & { disabled: boolean }).disabled).toBe(
@@ -136,6 +136,7 @@ it("names the station a venue change would break, marks the returned field and p
   });
   const el = await mount(a);
   await open(el);
+  await change(el, "overdueAfterMinutes", "8");
   await save(el);
   await vi.waitFor(() =>
     expect((q(el, 'wt-input[name="overdueAfterMinutes"]') as WtInput).error).toContain("Grill"),
@@ -197,6 +198,7 @@ it("closes a successful save even when refreshing defaults fails", async () => {
   });
   const el = await mount(a);
   await open(el);
+  await change(el, "warmAfterMinutes", "4");
   await save(el);
   await vi.waitFor(() => expect(q(el, '[data-test="timing-form"]')).toBeNull());
   await vi.waitFor(() =>
@@ -314,6 +316,7 @@ it("sends one defaults write while Save is pending and cannot discard its draft"
   });
   const el = await mount(a);
   await open(el);
+  await change(el, "warmAfterMinutes", "4");
   await save(el);
   await save(el);
   expect(a.setKitchenTimingDefaults).toHaveBeenCalledTimes(1);

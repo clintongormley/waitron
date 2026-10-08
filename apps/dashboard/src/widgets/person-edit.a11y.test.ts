@@ -34,4 +34,25 @@ describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme)
     expect(emailInput.labels?.length).toBeGreaterThan(0);
     await expectNoA11yViolations(host);
   });
+
+  it("with Save quiet and then ready", async () => {
+    const { el, host } = await mountWidget<PersonEdit>(
+      "dashboard-person-edit",
+      { person, open: true },
+      theme,
+    );
+    await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("[data-test=edit-email]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "ada@example.com" } }),
+    );
+    await el.updateComplete;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
 });

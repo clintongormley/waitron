@@ -58,6 +58,9 @@ it.each([
       });
       q('[data-test="edit-timing"]').click();
       await el.updateComplete;
+      const saveAction = q('[data-test="save-timing"]') as HTMLElementTagNameMap["wt-button"];
+      expect([saveAction.variant, saveAction.disabled]).toEqual(["secondary", true]);
+      await expectNoA11yViolations(host);
       const input = q('wt-input[name="overdueAfterMinutes"]') as WtInput;
       input.value = "3";
       input.dispatchEvent(
@@ -74,9 +77,9 @@ it.each([
       await page.screenshot({
         path: `__screenshots__/look/venue-defaults-${locale}-${theme}-${width}-invalid.png`,
       });
-      input.value = "7";
+      input.value = "8";
       input.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "7" }, bubbles: true, composed: true }),
+        new CustomEvent("wt-change", { detail: { value: "8" }, bubbles: true, composed: true }),
       );
       await el.updateComplete;
       q('[data-test="save-timing"]').click();
@@ -86,6 +89,7 @@ it.each([
           false,
         ),
       );
+      expect(saveAction.variant).toBe("primary");
       expect(host.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({

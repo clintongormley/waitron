@@ -31,6 +31,12 @@ function change(el: PersonEdit, testId: string, value: string): void {
   );
 }
 
+/** One real edit, outside every text field, so Save is awake as it is when a refusal comes back. */
+async function edited(el: PersonEdit): Promise<void> {
+  await chooseOption(box(el, "role"), "staff");
+  await el.updateComplete;
+}
+
 async function bottomOf(el: PersonEdit): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
@@ -299,6 +305,7 @@ describe("person-edit server refusals", () => {
 
   it("puts a taken display name beside its field, leaving Save working, until it is edited", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    await edited(el);
     el.error = "person.display_name_taken";
     await el.updateComplete;
     const message = codeMessage("person.display_name_taken");
@@ -315,6 +322,7 @@ describe("person-edit server refusals", () => {
 
   it("keeps any other server refusal in the bottom message alone, leaving Save working", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    await edited(el);
     el.error = "connection.failed";
     await el.updateComplete;
     expect(fieldError(el, "edit-display-name")).toBe("");
@@ -328,6 +336,7 @@ describe("person-edit server refusals", () => {
     ["person.telephone_invalid", "edit-telephone", ""],
   ])("puts %s under %s, leaving Save working, until it is edited", async (code, testId, fixed) => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    await edited(el);
     el.error = code;
     await el.updateComplete;
     expect(fieldError(el, testId)).toBe(codeMessage(code));
@@ -343,6 +352,7 @@ describe("person-edit server refusals", () => {
 
   it("puts a refusal whose params name a shown field under that field, leaving Save working", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    await edited(el);
     el.errorField = "email";
     el.error = "management.request_invalid";
     await el.updateComplete;
@@ -353,6 +363,7 @@ describe("person-edit server refusals", () => {
 
   it("keeps a refusal whose params name a field the form does not show in the bottom message", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    await edited(el);
     el.errorField = "role";
     el.error = "management.request_invalid";
     await el.updateComplete;
@@ -530,7 +541,7 @@ describe("person-edit validation and keyboard submit", () => {
     expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
   });
 
-  it("starts again when reopened: no messages and Save working", async () => {
+  it("starts again when reopened: no messages, Save quiet until an edit and then working", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     change(el, "edit-first-names", "");
     await el.updateComplete;
@@ -543,6 +554,9 @@ describe("person-edit validation and keyboard submit", () => {
 
     expect(fieldError(el, "edit-first-names")).toBe("");
     expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+    change(el, "edit-first-names", "Ada");
+    await el.updateComplete;
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
 

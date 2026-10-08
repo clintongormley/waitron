@@ -1,7 +1,13 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -87,8 +93,7 @@ export class PersonEdit extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<PersonEditDetails>({
+      const { coordinator, scope } = draftScopeFor<PersonEditDetails>(this, {
         id: this,
         current: () => this.#submissionValue(),
         snapshot: (value) => ({ ...value }),
@@ -97,6 +102,8 @@ export class PersonEdit extends LitElement {
           this.details = { ...value };
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -178,7 +185,7 @@ export class PersonEdit extends LitElement {
 
   #save(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
+    if (this.busy || saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.#dismiss("_form");
     if (Object.keys(this.#validate()).length > 0) {
@@ -215,7 +222,7 @@ export class PersonEdit extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#reportClose();
   }
 
@@ -261,6 +268,7 @@ export class PersonEdit extends LitElement {
   override render() {
     const person = this.person;
     const errors = this.#errors();
+    const s = saveActionState(this.#scope);
     const fieldKeys = new Set(FIELDS.filter((key) => Boolean(errors[key])));
     const formMessages = Object.entries(errors)
       .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
@@ -274,7 +282,7 @@ export class PersonEdit extends LitElement {
         heading=${person ? `${t("action.edit")} ${person.displayName}` : t("person.edit")}
         .open=${this.open}
         .dismissible=${!this.busy}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
@@ -376,8 +384,12 @@ export class PersonEdit extends LitElement {
           >
           <wt-button
             data-test="save"
-            variant="primary"
-            ?disabled=${this.busy || (this.attempted && Object.keys(this.#validate()).length > 0)}
+            variant=${s.variant}
+            ?disabled=${
+              s.unchanged ||
+              this.busy ||
+              (this.attempted && Object.keys(this.#validate()).length > 0)
+            }
             @click=${(event: Event) => this.#save(event)}
             >${t("action.save")}</wt-button
           >

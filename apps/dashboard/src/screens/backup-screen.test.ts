@@ -130,6 +130,12 @@ function setInput(el: BackupScreen, sel: string, value: string): void {
   );
 }
 
+/** One edit to the settings editor, so its Save can be pressed: an untouched editor's Save is disabled. */
+async function editDestination(el: BackupScreen, value = "/mnt/usb/waitron-2"): Promise<void> {
+  setInput(el, "[data-test=destination]", value);
+  await el.updateComplete;
+}
+
 function tickCheckbox(el: BackupScreen, sel: string): void {
   const box = q(el, sel) as HTMLInputElement;
   box.checked = true;
@@ -1034,6 +1040,7 @@ describe("the status watcher's key requests and read alerts", () => {
   it("clears the failed-read alert when Save settings starts", async () => {
     const api = stubApi({ applyBackup: vi.fn().mockReturnValue(new Promise(() => {})) }, ENABLED);
     const el = await enterEditAfterAFailedRead(api);
+    await editDestination(el);
 
     q(el, "[data-test=save-settings]")!.click();
     await el.updateComplete;
@@ -1045,6 +1052,7 @@ describe("the status watcher's key requests and read alerts", () => {
     const api = stubApi({}, ENABLED);
     const el = await enterEditAfterAFailedRead(api);
     const readsBeforeSave = vi.mocked(api.getBackupStatus).mock.calls.length;
+    await editDestination(el);
 
     q(el, "[data-test=save-settings]")!.click();
     await flush(el);
@@ -1221,6 +1229,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
   it("keeps the edit form open with a localized alert when saving settings is rejected", async () => {
     const { el, api } = await enterEdit(ENABLED);
     vi.mocked(api.applyBackup).mockRejectedValue({ code: "connection.failed" });
+    await editDestination(el);
 
     q(el, "[data-test=save-settings]")!.click();
 
@@ -1243,6 +1252,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
   it("cancels edit mode back to the status view, clearing the banner", async () => {
     const { el, api } = await enterEdit(ENABLED);
     vi.mocked(api.applyBackup).mockRejectedValueOnce({ code: "connection.failed" });
+    await editDestination(el);
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() => expect(alertText(el)).toBe(codeMessage("connection.failed")));
 
@@ -1254,12 +1264,13 @@ describe("backup-screen failures and edit-mode prefill", () => {
     expect(alertText(el)).toBeUndefined();
     q(el, "[data-test=edit-settings]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    await editDestination(el);
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledTimes(2));
     expect(vi.mocked(api.applyBackup).mock.calls[1]![0].recoveryKey).toBe("OLD-KEY-xyz789012345");
   });
 
-  it("prefills picked weekdays and a fixed time, and re-applies them unchanged", async () => {
+  it("prefills picked weekdays and a fixed time, and re-applies them unchanged beside an edit", async () => {
     const { el, api } = await enterEdit({
       ...ENABLED,
       schedule: { kind: "wall-clock", days: [0, 3], at: { hour: 2, minute: 5 } },
@@ -1272,15 +1283,20 @@ describe("backup-screen failures and edit-mode prefill", () => {
     expect((q(el, "[data-test=weekday-3]") as HTMLInputElement).checked).toBe(true);
     expect((q(el, "[data-test=weekday-1]") as HTMLInputElement).checked).toBe(false);
     expect((q(el, "[data-test=at-time]") as WtInput).value).toBe("02:05");
+    // The pre-fill reads back equal to what the box runs: the editor opens with Save quiet.
+    const save = q(el, "[data-test=save-settings]") as HTMLElementTagNameMap["wt-button"];
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
 
+    setInput(el, "[data-test=retain-count]", "8");
+    await el.updateComplete;
     q(el, "[data-test=save-settings]")!.click();
 
     await vi.waitFor(() =>
-      expect(api.applyBackup).toHaveBeenCalledWith({
+      expect(api.applyBackup).toHaveBeenCalledExactlyOnceWith({
         destinationDir: "/mnt/usb/waitron",
         recoveryKey: "OLD-KEY-xyz789012345",
         schedule: { kind: "wall-clock", days: [0, 3], at: { hour: 2, minute: 5 } },
-        retention: { count: 7, days: 30 },
+        retention: { count: 8, days: 30 },
       }),
     );
   });
@@ -1542,6 +1558,7 @@ describe("backup-screen retention boxes", () => {
     await flush(el);
     q(el, "[data-test=edit-settings]")!.click();
     await flush(el);
+    await editDestination(el);
     q(el, "[data-test=save-settings]")!.click();
     await flush(el);
     expect(boxError(el, "days")).toBe(t("backup.retention_invalid"));
@@ -1553,7 +1570,11 @@ describe("backup-screen retention boxes", () => {
 
     expect(boxError(el, "days")).toBeNull();
     expect(await bottomOf(el, "settings-actions")).toBeNull();
-    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(false);
+    const save = q(el, "[data-test=save-settings]") as HTMLElementTagNameMap["wt-button"];
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await editDestination(el);
+    expect(boxError(el, "days")).toBeNull();
+    expect(save.hasAttribute("disabled")).toBe(false);
   });
 
   it("the server's refusal of the retention shows under both boxes, moves focus to the first, and leaves Apply working", async () => {
@@ -1598,6 +1619,7 @@ describe("backup-screen retention boxes", () => {
     await flush(el);
     q(el, "[data-test=edit-settings]")!.click();
     await flush(el);
+    await editDestination(el);
 
     q(el, "[data-test=save-settings]")!.click();
     await flush(el);

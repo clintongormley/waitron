@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { isValidTelephone, resolveContentText, type ContentLanguages } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, navigationGuardFor } from "@waitron/ui";
-import { leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import { draftScopeFor, saveActionState, type DraftScope } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { observeNavigation } from "@waitron/ui/src/navigation-guard.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -217,7 +217,7 @@ export class ReceiptsScreen extends LitElement {
 
   #registerLanguage(): void {
     if (this.#languageScope) return;
-    this.#languageScope = leaveCoordinatorFor(this)?.register({
+    this.#languageScope = draftScopeFor<string>(this, {
       id: {},
       parent: this,
       current: () => this.#shownLanguage(),
@@ -229,12 +229,12 @@ export class ReceiptsScreen extends LitElement {
         this.languageError = null;
         this.#redrawInSavedLanguage();
       },
-    });
+    }).scope;
   }
 
   #registerDescription(): void {
     if (this.#descriptionScope) return;
-    this.#descriptionScope = leaveCoordinatorFor(this)?.register({
+    this.#descriptionScope = draftScopeFor<string>(this, {
       id: {},
       parent: this,
       current: () => this.description,
@@ -245,7 +245,7 @@ export class ReceiptsScreen extends LitElement {
         this.#dirty = false;
         this.refusal = "";
       },
-    });
+    }).scope;
   }
 
   #trimSnapshot(): { shown: Trim; body: ReceiptConfig } {
@@ -254,7 +254,7 @@ export class ReceiptsScreen extends LitElement {
 
   #registerTrim(): void {
     if (this.#trimScope) return;
-    this.#trimScope = leaveCoordinatorFor(this)?.register({
+    this.#trimScope = draftScopeFor<{ shown: Trim; body: ReceiptConfig }>(this, {
       id: {},
       parent: this,
       current: () => this.#trimSnapshot(),
@@ -266,6 +266,16 @@ export class ReceiptsScreen extends LitElement {
         this.logo = value.shown.logo;
         this.#schedulePreview();
       },
+    }).scope;
+  }
+
+  /** Only called once the form is drawn, which waits for all three reads and so all three scopes. */
+  #saveState() {
+    return saveActionState({
+      isDirty: () =>
+        this.#trimScope!.isDirty() ||
+        this.#languageScope!.isDirty() ||
+        this.#descriptionScope!.isDirty(),
     });
   }
 
@@ -784,7 +794,7 @@ export class ReceiptsScreen extends LitElement {
   }
 
   async #save(): Promise<void> {
-    if (this.saving) return;
+    if (this.saving || this.#saveState().unchanged) return;
     const trimConnection = this.#trimConnection;
     this.saved = false;
     this.saveFailed = false;
@@ -1013,6 +1023,7 @@ export class ReceiptsScreen extends LitElement {
       Object.keys(this.trimRefusals).length > 0 ||
       this.#contactError("phone") !== "" ||
       this.#contactError("email") !== "";
+    const saveAction = this.#saveState();
     const bottom = [
       this.languageError ?? "",
       this.errorKey === null
@@ -1068,7 +1079,7 @@ export class ReceiptsScreen extends LitElement {
             event.stopPropagation();
             this.description = event.detail.value;
             this.#descriptionScope?.changed();
-            this.#dirty = this.#descriptionScope?.isDirty() ?? true;
+            this.#dirty = this.#descriptionScope!.isDirty();
             this.refusal = "";
             this.saved = false;
           }}
@@ -1083,9 +1094,9 @@ export class ReceiptsScreen extends LitElement {
       <wt-form-actions .error=${bottom}
         ><wt-button
           data-test="save"
-          variant="primary"
+          variant=${saveAction.variant}
           ?loading=${this.saving}
-          ?disabled=${this.saving || (this.attempted && this.#failsOwnChecks())}
+          ?disabled=${saveAction.unchanged || this.saving || (this.attempted && this.#failsOwnChecks())}
           @click=${() => void this.#save()}
           >${t("action.save")}</wt-button
         ></wt-form-actions

@@ -1115,31 +1115,43 @@ describe("your profile — validation, refusals and the remaining actions", () =
   it.each([
     ["en-GB", "Enter the code from your email"],
     ["es-ES", "Introduce el código de tu correo"],
-  ])("requires the emailed code before confirming a new address (%s)", async (locale, text) => {
-    const before = currentLocale();
-    setLocale(locale);
-    try {
-      const { el, api } = await mount({
-        getProfile: vi
-          .fn()
-          .mockResolvedValue(await baseProfile({ pendingEmail: "new@example.com" })),
-      });
-      await click(el, "confirm-email");
-      await click(el, "save");
-      expect(api.confirmProfileEmail).not.toHaveBeenCalled();
-      expect(field(el, "setupCode").error).toBe(text);
-    } finally {
-      setLocale(before);
-    }
-  });
+  ])(
+    "marks the emailed code as required when it is cleared after a refused attempt (%s)",
+    async (locale, text) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, api } = await mount({
+          getProfile: vi
+            .fn()
+            .mockResolvedValue(await baseProfile({ pendingEmail: "new@example.com" })),
+          confirmProfileEmail: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
+        });
+        await click(el, "confirm-email");
+        input(el, "setupCode", "000000");
+        await click(el, "save");
+        input(el, "setupCode", "");
+        await flush(el);
+        expect(api.confirmProfileEmail).toHaveBeenCalledOnce();
+        expect(field(el, "setupCode").error).toBe(text);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
-  it("requires the authenticator's code before finishing its setup", async () => {
-    const { el, api } = await mount();
+  it("marks the authenticator's code as required when it is cleared after a refused attempt", async () => {
+    const { el, api } = await mount({
+      finishTotp: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
+    });
     await click(el, "setup-authenticator");
     input(el, "currentPassword", "current");
     await click(el, "save");
+    input(el, "setupCode", "000000");
     await click(el, "save");
-    expect(api.finishTotp).not.toHaveBeenCalled();
+    input(el, "setupCode", "");
+    await flush(el);
+    expect(api.finishTotp).toHaveBeenCalledOnce();
     expect(field(el, "setupCode").error).toBe(t("profile.code_required"));
   });
 
@@ -1310,7 +1322,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     return el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(`wt-input[name=${name}]`)!;
   }
   const save = (el: ProfileScreen) =>
-    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=save]")!;
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
   const focused = (el: ProfileScreen, name: string) =>
     field(el, name).shadowRoot!.activeElement ===
     field(el, name).shadowRoot!.querySelector("input");
@@ -1326,7 +1338,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(field(el, "currentPassword").error).toBe("");
     expect(field(el, "pin").error).toBe("");
     expect(await bottomOf(el)).toBe("");
-    expect(save(el).disabled).toBe(false);
+    expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
 
     input(el, "pin", "12");
     await click(el, "save");
@@ -1499,6 +1511,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
       saveProfile: vi.fn().mockRejectedValue({ code: "locale.unsupported" }),
     });
     await editDetails(el);
+    input(el, "telephone", "+34 600 000 001");
     await click(el, "save");
     const language = el.shadowRoot!.querySelector<HTMLElement>("wt-combobox[name=locale]")!;
     const control = language.shadowRoot!.querySelector(".trigger")!;
@@ -1586,6 +1599,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
   it("starts again when the form is reopened", async () => {
     const { el } = await mount();
     await click(el, "change-pin");
+    input(el, "pin", "12");
     await click(el, "save");
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     await click(el, "cancel");
@@ -1593,7 +1607,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(field(el, "currentPassword").error).toBe("");
     expect(field(el, "pin").error).toBe("");
     expect(await bottomOf(el)).toBe("");
-    expect(save(el).disabled).toBe(false);
+    expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
   });
 
   it("asks nothing of the authenticator code until the code step's own Save", async () => {
@@ -1603,7 +1617,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     await click(el, "save");
     expect(field(el, "setupCode").error).toBe("");
     expect(await bottomOf(el)).toBe("");
-    expect(save(el).disabled).toBe(false);
+    expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
   });
 });
 

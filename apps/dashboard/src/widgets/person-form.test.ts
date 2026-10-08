@@ -245,6 +245,8 @@ describe("person-form", () => {
 
   it("explains every missing required field under it, with one message at the bottom of the form and Create disabled", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "telephone", "+34 600 000 000");
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await el.updateComplete;
     expect(
@@ -527,6 +529,9 @@ describe("person-form validation and keyboard submit", () => {
     });
     expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
 
+    change(el, "telephone", "+34 600 000 000");
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
     confirmOf(el).click();
     await el.updateComplete;
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
@@ -534,6 +539,8 @@ describe("person-form validation and keyboard submit", () => {
 
   it("shows a refusal and the generic sentence together when both apply", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "telephone", "+34 600 000 000");
+    await el.updateComplete;
     confirmOf(el).click();
     await el.updateComplete;
     el.error = "server.internal";
@@ -541,8 +548,10 @@ describe("person-form validation and keyboard submit", () => {
     expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
   });
 
-  it("starts again when reopened: no messages and Create working", async () => {
+  it("starts again when reopened: no messages, Create quiet until an edit and then working", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "telephone", "+34 600 000 000");
+    await el.updateComplete;
     confirmOf(el).click();
     await el.updateComplete;
     el.open = false;
@@ -552,6 +561,9 @@ describe("person-form validation and keyboard submit", () => {
 
     expect(fieldError(el, "first-names")).toBe("");
     expect(await bottomOf(el)).toBe("");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    change(el, "first-names", "Ada");
+    await el.updateComplete;
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
