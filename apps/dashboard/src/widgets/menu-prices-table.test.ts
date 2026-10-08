@@ -2513,6 +2513,39 @@ it.each(["en-GB", "es-ES"])(
     }
   },
 );
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+it("measures the row menu's column when the table resizes, and not on each keystroke in a price field", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  const measured = vi.spyOn(Element.prototype, "getBoundingClientRect");
+  try {
+    const el = await mount();
+    const heading = table(el).shadowRoot.querySelector('thead th[data-pinned="end"]')!;
+    const measures = () => measured.mock.contexts.filter((node) => node === heading).length;
+    // The measurement the first draw's resize asks for, a frame later, is let through first.
+    let settled = measures();
+    for (let quiet = 0; quiet < 3;) {
+      await frame();
+      quiet = measures() === settled ? quiet + 1 : 0;
+      settled = measures();
+    }
+    for (const value of ["2", "2.", "2.8", "2.80"]) {
+      await typeIn(el, "mi-burger", value);
+      await table(el).updateComplete;
+    }
+    await frame();
+    await frame();
+    expect(override(el, "mi-burger").value).toBe("2.80");
+    expect(measures()).toBe(settled);
+    await page.viewport(390, 800);
+    await vi.waitFor(() => expect(measures()).toBeGreaterThan(settled));
+  } finally {
+    measured.mockRestore();
+    await page.viewport(width, height);
+  }
+});
+
 it.each(["product", "size"])(
   "drops the clash sentence while a valid unsaved price fills a clashing %s row, and shows it again for text that is no price and on Escape",
   async (kind) => {
@@ -3388,6 +3421,10 @@ it("has no Status column: Available takes its place, before the row menu", async
   expect(headers(el).slice(-2)).toEqual(["available", ""]);
   const heading = table(el).shadowRoot.querySelector('[data-sort="available"]')!.closest("th")!;
   expect(text(heading)).toContain(t("editor.available"));
+  const filters = table(el).shadowRoot;
+  expect(filters.querySelector('wt-combobox[data-filter="category"]')).not.toBeNull();
+  expect(filters.querySelector('[data-filter="available"]')).toBeNull();
+  expect(filters.querySelector('[data-section="available"]')).toBeNull();
 });
 
 it("does not match a row by its Available value in a search", async () => {
@@ -3400,6 +3437,67 @@ it("does not match a row by its Available value in a search", async () => {
   expect(text(table(el).shadowRoot.querySelector(".empty .message"))).toBe(
     tableNoMatches(currentLocale()),
   );
+});
+
+it.each(["es-ES", "en-GB"])(
+  "does not match a row by its Available word, Yes or No, in a search (%s)",
+  async (locale) => {
+    setLocale(locale);
+    try {
+      // No name, category, section or price here holds either word.
+      const el = await mount({ rows: [{ ...lager, available: false }, burger] });
+      await search(el, "lager");
+      expect(shown(el)).toEqual(["mi-lager"]);
+      await search(el, "burger");
+      expect(shown(el)).toEqual(["mi-burger"]);
+      for (const word of [t("menus.available_no"), t("menus.available_yes")]) {
+        await search(el, word);
+        expect(shown(el), word).toEqual([]);
+      }
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("sorts by Available, available first and then sold out, and keeps each product's sizes in the catalogue's order", async () => {
+  const el = await mount({
+    rows: [
+      { ...burger, available: false },
+      {
+        ...lemonade,
+        available: true,
+        variants: [
+          { ...lemonade.variants[0]!, available: false },
+          { ...lemonade.variants[1]!, available: true },
+        ],
+      },
+      lager,
+    ],
+  });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await sortBy(el, "available");
+  expect(shown(el)).toEqual([
+    "mi-lemonade",
+    "mi-lemonade:v-small",
+    "mi-lemonade:v-large",
+    "mi-lager",
+    "mi-burger",
+  ]);
+  expect(column(el, "available")).toEqual(
+    [true, false, true, true, false].map((yes) =>
+      t(yes ? "menus.available_yes" : "menus.available_no"),
+    ),
+  );
+  await sortBy(el, "available");
+  expect(shown(el)).toEqual([
+    "mi-burger",
+    "mi-lemonade",
+    "mi-lemonade:v-small",
+    "mi-lemonade:v-large",
+    "mi-lager",
+  ]);
 });
 
 it("draws Available when a remembered column choice and order still name the old Status column", async () => {

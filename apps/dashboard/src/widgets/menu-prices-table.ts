@@ -78,6 +78,10 @@ const parentPriceOf = (draft: string | undefined): ParentPrice => {
 const samePrice = (a: string | null, b: string | null): boolean =>
   a === null || b === null ? a === b : stringToCents(a) === stringToCents(b);
 
+/** What changes the table's rows or columns, after which the row menu's column is measured again;
+ * otherwise only a resize of the table measures it. */
+const RESHAPES = ["rows", "products", "sections", "categories", "loading", "failed"];
+
 /** A table row: an Active product the menu reaches, or one of its Active sizes, drawn under it. */
 interface Line {
   item: MenuPriceRow;
@@ -143,11 +147,12 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
 
 /**
  * One menu's price overrides: a row per Active product the menu reaches, with its Active sizes
- * under it, each showing whether it is Available and a field for the price this menu sets for it. A field
- * asks for its own save on Enter or on leaving it, through `wt-price-save`; the host performs the
- * writes and says which are out (`saving`), which were refused for the price typed (`refusals`) and
- * the outcome of the last save (`outcome`), which floats over the page: a save for 5 s, with its
- * Undo; a refusal until it is closed or another outcome replaces it, as it may be said nowhere else.
+ * under it, each showing whether it is Available and a field for the price this menu sets for it.
+ * A field asks for its own save on Enter or on leaving it, through `wt-price-save`; the host
+ * performs the writes and says which are out (`saving`), which were refused for the price typed
+ * (`refusals`) and the outcome of the last save (`outcome`), which floats over the page: a save for
+ * 5 s, with its Undo; a refusal until it is closed or another outcome replaces it, as it may be
+ * said nowhere else.
  */
 @customElement("dashboard-menu-prices-table")
 export class MenuPricesTable extends LitElement {
@@ -255,8 +260,7 @@ export class MenuPricesTable extends LitElement {
           display: block;
           max-inline-size: max(var(--wt-tap-min), var(--name-room));
         }
-        /* A size's name at its floor sets the name column's width, so here its indent is one
-           step smaller, and its floor smaller by as much, keeping the room for its words, or the
+        /* The floor is a step under the tap size: at the full tap size, at 390 px in Spanish, the
            price field runs under the pinned row menu. */
         wt-data-table::part(variant-name) {
           padding-inline-start: var(--wt-space-3);
@@ -510,10 +514,11 @@ export class MenuPricesTable extends LitElement {
 
   protected override updated(changed: PropertyValues): void {
     const table = this.#table();
+    const reshaped = RESHAPES.some((name) => changed.has(name));
     if (table !== null)
       void table.updateComplete.then(() => {
         this.#readFilter();
-        this.#fitActions();
+        if (reshaped) this.#fitActions();
       });
     if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
     // The cells read these, and the table redraws only when its own properties change.
