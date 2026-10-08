@@ -1471,8 +1471,8 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batches 2, 3b and
-4–7 OPEN.** The owner: "open a form with the Save button
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 6 audited with no stored-setting editors;
+batches 2, 3b, 4, 5 and 7 OPEN.** The owner: "open a form with the Save button
 transparent (and disabled?). but as soon as you make a change, make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
@@ -1520,7 +1520,13 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
 - **Batch 4 — OPEN.** Module screens: venue service, Stripe, SumUp, adjustments, bookings, media.
 - **Batch 5 — OPEN.** The till; many of its dialogs act (pay, refund, find) rather than save, and
   the batch says which ones save.
-- **Batch 6 — OPEN.** The setup wizard, only the steps that edit something already stored.
+- **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.
+  Admin, venue and certificate Next buttons contribute to the provisioning draft; Connect adopts
+  with credentials; Import stages configuration; reset, file/bucket/Cloud restore and provisioning
+  confirmation/retry are operations. The other setup controls navigate, check status/readiness or
+  open links. Existing actions keep their validation and refusal behavior. Per-screen call paths
+  and the execution checklist: [Batch 6 audit](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-6--setup-stored-setting-editors-lane-e-a331-6).
+  A future setup editor for stored settings must use the shared helper.
 - **Batch 7 — OPEN.** Forms with a Save that do not track unsaved changes, and the server's and
   print agent's own pages: each brought under the rule, or listed with the reason it is not.
 
