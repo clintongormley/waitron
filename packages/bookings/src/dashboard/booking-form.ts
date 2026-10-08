@@ -84,6 +84,7 @@ export class BookingForm extends LitElement {
   #opening = {};
   #submitted?: BookingDraft;
   #scope?: DraftScope<BookingDraft>;
+  #baseline?: BookingDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy) return false;
@@ -120,9 +121,13 @@ export class BookingForm extends LitElement {
     this.#leave = undefined;
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#disposeDraft();
-    this.#identity = undefined;
     this.#opening = {};
     super.disconnectedCallback();
   }
@@ -137,6 +142,7 @@ export class BookingForm extends LitElement {
       succeeded: () => {
         if (!isCurrent()) return false;
         if (submitted) {
+          this.#baseline = { ...submitted };
           scope?.commit(submitted);
           if (scope?.isDirty()) return false;
         }
@@ -155,6 +161,7 @@ export class BookingForm extends LitElement {
       this.#identity = identity;
       this.#opening = {};
       this.#submitted = undefined;
+      this.#baseline = undefined;
       const b = this.booking;
       this.#restore({
         date: b?.bookingDate ?? this.defaultDate,
@@ -168,7 +175,8 @@ export class BookingForm extends LitElement {
       this.validationError = null;
     }
     if (!this.open) this.#disposeDraft();
-    else if (!this.#scope) {
+    else if (this.isConnected && !this.#scope) {
+      this.#baseline ??= this.#value();
       const draft = draftScopeFor<BookingDraft>(this, {
         id: this,
         current: () => this.#value(),
@@ -178,6 +186,7 @@ export class BookingForm extends LitElement {
       });
       this.#leave = draft.coordinator;
       this.#scope = draft.scope;
+      draft.scope.commit(this.#baseline);
     }
   }
 
