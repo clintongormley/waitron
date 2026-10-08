@@ -959,6 +959,29 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     });
     await expectNoA11yViolations(host);
   });
+
+  it("renders the calibration wizard's quiet and changed Save accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    await openPrinter(el);
+    await openCalibration(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    expect(saveLook(el, "save-printer-p1")).toEqual({ variant: "secondary", disabled: true });
+    await expectNoA11yViolations(host);
+    const portable = q(el, '[name="printer-portable"]')!.shadowRoot!.querySelector("input")!;
+    portable.checked = !portable.checked;
+    portable.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush(el);
+    expect(saveLook(el, "save-printer-p1")).toEqual({ variant: "primary", disabled: false });
+    await expectNoA11yViolations(host);
+  });
 });
 
 describe("printers-screen a11y — the numeric match", () => {

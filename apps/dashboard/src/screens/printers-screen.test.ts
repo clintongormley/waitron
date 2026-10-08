@@ -526,8 +526,7 @@ describe("guided printer calibration", () => {
     });
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
-    q(el, "[data-test=save-printer-p1]")!.click();
-    await flush(el);
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
@@ -818,10 +817,11 @@ describe("guided printer calibration", () => {
   it("does not write unchanged calibration settings", async () => {
     const api = stubApi();
     const el = await openStepThree(api);
-    q(el, "[data-test=save-printer-p1]")!.click();
-    await flush(el);
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
   it("does not resend detail edits when finishing calibration", async () => {
@@ -864,17 +864,21 @@ describe("guided printer calibration", () => {
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
+    toggleSwitch(el, '[name="printer-portable"]', true);
+    await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledTimes(3);
+    expect(api.updatePrinter).toHaveBeenCalledTimes(4);
     expect(api.updatePrinter).toHaveBeenNthCalledWith(1, "p1", { name: "Updated kitchen" });
     expect(api.updatePrinter).toHaveBeenNthCalledWith(2, "p1", { host: "10.0.0.88", port: 9101 });
     expect(api.updatePrinter).toHaveBeenNthCalledWith(3, "p1", { active: false });
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(4, "p1", { portable: true });
     expect(stored).toMatchObject({
       name: "Updated kitchen",
       host: "10.0.0.88",
       port: 9101,
       active: false,
+      portable: true,
     });
   });
 

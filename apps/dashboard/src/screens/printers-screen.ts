@@ -643,14 +643,16 @@ export class PrintersScreen extends LitElement {
   #calibrationScope?: DraftScope<CalibrationSettings>;
   #calibrationLeave?: LeaveCoordinator;
   #calibrationOpening = 0;
+  /** An add opened the wizard to confirm the settings it filled in, so its Save is ready untouched. */
+  #calibrationOpenedByAdd = false;
   readonly #beforeCalibrationClose = async (reason: LeaveReason): Promise<boolean> =>
     this.submitting ||
     this.printingTest ||
     this.printingSample ||
     this.testingDrawer ||
-    !this.#calibrationScope ||
-    (await this.#calibrationLeave!.request({
-      scopes: [this.#calibrationScope.id],
+    !this.#calibrationLeave ||
+    (await this.#calibrationLeave.request({
+      scopes: [this.#calibrationScope!.id],
       reason,
       proceed() {},
     })) === "proceeded";
@@ -662,6 +664,7 @@ export class PrintersScreen extends LitElement {
 
   #disposeCalibrationDraft(): void {
     this.#calibrationOpening++;
+    this.#calibrationOpenedByAdd = false;
     this.#calibrationScope?.dispose();
     this.#calibrationScope = undefined;
     this.#calibrationLeave = undefined;
@@ -1399,6 +1402,7 @@ export class PrintersScreen extends LitElement {
               active: true,
             },
       );
+      this.#calibrationOpenedByAdd = true;
       if (disabled) this.#readdingId = disabled.id;
       await this.#load();
     } catch (error) {
@@ -1693,11 +1697,12 @@ export class PrintersScreen extends LitElement {
   /** Calibration only writes settings changed during this wizard. */
   async #savePrinter(id: string): Promise<void> {
     if (this.submitting) return;
+    if (this.#calibrationSave().unchanged) return;
     this.errorKey = null;
     const row = this.editingPrinter;
     if (row?.id !== id || !this.#validatePrinter(row)) return;
     const opening = this.#calibrationOpening;
-    const scope = this.#calibrationScope;
+    const scope = this.#calibrationScope!;
     const submitted = this.#calibrationValues();
     const active = () => opening === this.#calibrationOpening && this.isConnected;
     const patch: PrinterPatch = {};
@@ -1720,9 +1725,10 @@ export class PrintersScreen extends LitElement {
         return;
       }
       if (active()) {
-        scope?.commit(submitted);
+        this.#calibrationOpenedByAdd = false;
+        scope.commit(submitted);
         this.editingPrinter = { ...this.editingPrinter!, saved: submitted };
-        if (!scope?.isDirty()) {
+        if (!scope.isDirty()) {
           const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
           if (modal) {
             modal.closeAfter("saved");
@@ -2252,20 +2258,24 @@ export class PrintersScreen extends LitElement {
     };
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
     if (modal) modal.open = true;
-    this.#calibrationLeave = leaveCoordinatorFor(this);
-    this.#calibrationScope = this.#calibrationLeave?.register<CalibrationSettings>({
-      id: {},
-      current: () => this.#calibrationValues(),
-      snapshot: (value) => ({ ...value }),
-      equal: (a, b) =>
-        a.paperWidth === b.paperWidth &&
-        a.resolution === b.resolution &&
-        a.hasCashDrawer === b.hasCashDrawer &&
-        a.portable === b.portable,
-      restore: (value) => {
-        this.editingPrinter = { ...this.editingPrinter!, ...value };
-      },
-    });
+    ({ coordinator: this.#calibrationLeave, scope: this.#calibrationScope } =
+      draftScopeFor<CalibrationSettings>(this, {
+        id: {},
+        current: () => this.#calibrationValues(),
+        snapshot: (value) => ({ ...value }),
+        equal: (a, b) =>
+          a.paperWidth === b.paperWidth &&
+          a.resolution === b.resolution &&
+          a.hasCashDrawer === b.hasCashDrawer &&
+          a.portable === b.portable,
+        restore: (value) => {
+          this.editingPrinter = { ...this.editingPrinter!, ...value };
+        },
+      }));
+  }
+
+  #calibrationSave(): ReturnType<typeof saveActionState> {
+    return saveActionState(this.#calibrationScope, { savableAtOpen: this.#calibrationOpenedByAdd });
   }
 
   #renderTestPageSent(): TemplateResult | typeof nothing {
@@ -3156,7 +3166,7 @@ export class PrintersScreen extends LitElement {
       await modal.requestClose("cancel");
       return;
     }
-    if (id === "edit-printer-modal" && this.#calibrationScope) {
+    if (id === "edit-printer-modal" && this.#calibrationLeave) {
       await modal.requestClose("cancel");
       return;
     }
@@ -3231,7 +3241,7 @@ export class PrintersScreen extends LitElement {
       heading=${`${t("printers.calibrate")}: ${p.name}`}
       .open=${true}
       .opener=${this.#tabAction("open-add-printer")}
-      .beforeClose=${this.#calibrationScope ? this.#beforeCalibrationClose : undefined}
+      .beforeClose=${this.#calibrationLeave ? this.#beforeCalibrationClose : undefined}
       @wt-close=${() => {
         this.#finishCalibration(opening, p.id);
       }}
@@ -3428,8 +3438,9 @@ export class PrintersScreen extends LitElement {
               >`
             : html`
                 <wt-button
-                  variant="primary"
+                  variant=${this.#calibrationSave().variant}
                   data-test=${`save-printer-${p.id}`}
+                  ?disabled=${this.#calibrationSave().unchanged}
                   ?loading=${this.submitting}
                   @click=${() => void this.#savePrinter(p.id)}
                   >${t("action.save")}</wt-button
