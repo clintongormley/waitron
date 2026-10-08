@@ -2058,3 +2058,80 @@ mark #1414's point (2) under batch 5 (~line 1820) done for the product editor (t
 note done for the unit form (say which other batch 2a forms remain untried for Case E), and batch
 2b's (#1424) edit-first point done for the two menus forms. Changed test checks (if any) in
 `~/waitron-campaign-c/item-a397-2-changed-tests.md` and the PR. No visual change, so no screenshots.
+
+## Batch 4b — the venue-service screens slice 1 rewrote (Lane B, A331 4b)
+
+Audited on `main` 8d52162e3, after lane D's A366-1 landed (#1460, 685a6074b). Read with `grep -n
+'saveActionState\|draftScopeFor\|leaveCoordinatorFor\|wt-button'` over each file, then each save
+handler and its `*.unsaved.test.ts`.
+
+| File (`packages/venue-service/src/dashboard/`) | What it saves | State |
+| --- | --- | --- |
+| `hours-screen.ts` (Station hours) | weekday and Configure editors, special date Add/Edit, Duplicate | follows the rule (slice 1); reconnect cases in `hours-screen.unsaved.test.ts` |
+| `opening-hours-week.ts`, `opening-hours-day.ts`, `period-editor.ts`, `range-dialog.ts` (Opening hours, new in #1460) | the normal week, a day, a period, a date range | follow the rule: `saveActionState` bound and an early return in each save; each has a `*.unsaved.test.ts` that takes the form out of the page and puts it back |
+| `opening-hours-screen.ts` | nothing: Edit and Add period open the period editor, Delete is a confirmation | not a form |
+| `menu-timetable-screen.ts` | — | deleted by #1460 |
+| `service-grid.ts`, `hours-cell-editor.ts`, `hours-calendar.ts` | nothing of their own: parts of the forms above | — |
+| `venue-operations-screen.ts` (Departments and zones) | the editor window (Add department, Edit department, Add zone, Configure zone, Transfers) and three inline name editors (department name, zone name, trading name) | **does NOT follow the rule**: Save is drawn blue and enabled on an untouched form, and the inline Saves are enabled on open |
+
+Not saves on Departments and zones, so not gated: the Disable confirmation (`danger`, confirms an
+operation), the tree's controls that write at once (Print it, Paid when, Collection number,
+Receipt printing), every Enable action, and the name clash's "Enable <name>".
+
+**Decisions this batch makes (defaults; the owner may override):**
+
+1. The editor window's Save takes `saveActionState` for the four editing kinds and Transfers. The
+   Disable confirmation keeps `danger` and stays enabled.
+2. Add department opens with its service style already chosen ("prepay"); that is the opened
+   value, so it opens unchanged. No form on this screen opens already savable.
+3. The scopes come from `draftScopeFor`, not `this.#leave?.register`, so a screen with no
+   `LeaveController` above it still follows its draft — with `register` alone its scope would be
+   `undefined` and Save would stay disabled for ever. The leave paths (`#beforeEditorClose`,
+   `#leaveName`) then gate on the coordinator (`this.#leave`), not on whether a scope exists,
+   because a scope now always exists.
+4. The editor window's fields are not reactive properties (their values are read from the DOM), so
+   the window's change handler asks for an update after `scope.changed()`, or Save would not turn
+   blue until something else redrew the screen.
+5. The inline name editors' Save and Cancel are native `<button>`s drawn by the browser. They
+   become `wt-button`s — Save with `saveActionState`'s variant, Cancel `secondary` — so Save is
+   quiet until a change and blue after, as the rule says. Their `data-test` names stay.
+6. The A366 slices build the rule into each form they create or rewrite (owner, 2026-10-08), so this
+   audit is repeated ONCE, after A366-7, not after each slice; a backlog entry says so.
+
+**Changed test checks.** A test that presses an untouched Save (to see a required-field message, or
+to save an unchanged form) now edits first or expects Save disabled; each change is listed in the
+commit message and the pull request.
+
+### Task 4b.1 — the editor window (`venue-operations-screen.ts`)
+
+Test first, in a new `venue-operations-screen.save-state.test.ts` (the shape of
+`watcher-form.save-state.test.ts`), for each of Add department, Edit department, Add zone,
+Configure zone and Transfers: Save is `secondary` and disabled on open; one edit makes it
+`primary` and enabled; typing the opened value back makes it quiet and disabled again; an untouched
+Save `.click()` on the host sends nothing (the early return); a committed save with the window
+still open (newer input kept) draws it as the newer input says. Also: the screen mounted WITHOUT a
+`LeaveController` still turns Save blue on an edit (decision 3); the Disable confirmation is
+`danger` and enabled. Then: `draftScopeFor` for the editor scope, coordinator-gated
+`#beforeEditorClose`, `requestUpdate` after `changed()` in the window's change handler, Save bound
+through `saveActionState`, and `#submit` returns early while unchanged. Run the screen's three
+existing suites (`venue-operations-screen.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`) and fix
+the checks the rule changes, listing each.
+
+### Task 4b.2 — the inline name editors (`venue-operations-screen.ts`)
+
+Test first, in the same new file, for each of department name, zone name and trading name: Save
+is `secondary` and disabled on open, `primary` and enabled after an edit, quiet again when the
+opened value is typed back (trimmed, as the scope compares); an untouched Save sends nothing.
+Then: `draftScopeFor` in `#registerName`, `#leaveName` gated on the coordinator, Save and Cancel as
+`wt-button` (decision 5), and `#saveName` returns early while unchanged. The existing
+reconnect case ("a departed inline write cannot commit or close a reconnected draft") must still
+pass unedited.
+
+### Task 4b.3 — look, docs, backlog
+
+LOOK at Departments and zones in the dev stack: the editor window unchanged and after one edit
+(Add department, Edit department, Configure zone), and an inline name editor unchanged and after
+one edit, in English light 1280px and Spanish dark 390px. Add the screen, and the Opening hours
+forms the audit found already following the rule, to design-system.md → Forms' list. Backlog: batch
+4b's bullet in the A331 entry, and the one re-check after A366-7 (decision 6) as its own short
+entry.
