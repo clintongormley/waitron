@@ -135,6 +135,24 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("draws a set price bold and upright and an inherited one as a muted italic placeholder", async () => {
+    const { el, host } = await mount(theme, {});
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const input = (key: string) =>
+      table
+        .shadowRoot!.querySelector(`wt-price-input[data-row="${key}"]`)!
+        .shadowRoot!.querySelector("input")!;
+    const set = input("mi-lemonade");
+    const inherited = input("mi-burger");
+    expect(Number(getComputedStyle(set).fontWeight)).toBeGreaterThan(
+      Number(getComputedStyle(inherited).fontWeight),
+    );
+    expect(getComputedStyle(inherited, "::placeholder").fontStyle).toBe("italic");
+    expect(getComputedStyle(set).fontStyle).toBe("normal");
+    await expectNoA11yViolations(host);
+  });
+
   it("accessible clash row with an unsaved valid price", async () => {
     const { el, host } = await mount(theme, {
       rows: [{ ...rows[0]!, combined: { ...rows[0]!.combined, price: clash } }],

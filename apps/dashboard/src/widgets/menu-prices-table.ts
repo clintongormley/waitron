@@ -737,6 +737,8 @@ export class MenuPricesTable extends LitElement {
         : t("menu_prices.override_help_range").replace("{range}", spanText(inherited));
     }
     const sizesSetOne = variant === null && item.override === null && pricesASize(item);
+    const labelKey =
+      this.#stored(line) !== null ? "menu_prices.override_label_set" : "menu_prices.override_label";
     return html`<span part="price-cell"
       ><wt-price-input
         part="override-field"
@@ -745,7 +747,8 @@ export class MenuPricesTable extends LitElement {
         hide-label
         fixed-unit
         locale=${currentLocale()}
-        label=${t("menu_prices.override_label").replace("{name}", this.#lineName(line))}
+        label=${t(labelKey).replace("{name}", this.#lineName(line))}
+        ?overriding=${this.#holds(line, this.drafts.get(key))}
         .value=${live(this.drafts.get(key) ?? this.#stored(line) ?? "")}
         .error=${this.#error(key)}
         placeholder=${placeholder}

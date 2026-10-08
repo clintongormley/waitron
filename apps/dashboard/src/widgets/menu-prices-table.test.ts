@@ -1128,7 +1128,7 @@ it("names a size the product list does not hold as missing, in its row and its f
   await table(el).updateComplete;
   expect(visibleText(cell(el, "name", "mi-lemonade:v-large"))).toBe(t("members.missing"));
   expect(override(el, "mi-lemonade:v-large").label).toBe(
-    t("menu_prices.override_label").replace("{name}", `Lemonade — ${t("members.missing")}`),
+    t("menu_prices.override_label_set").replace("{name}", `Lemonade — ${t("members.missing")}`),
   );
   expect(override(el, "mi-lemonade:v-large").placeholder).toBe("3.40");
 });
@@ -2546,9 +2546,14 @@ it("offers one labelled price override field per product and per size, the inher
     await table(el).updateComplete;
     const want = [
       ["mi-burger", "Price override for Burger", "", "12.00"],
-      ["mi-lemonade", "Price override for Lemonade", "2.50", "3.00 – 3.75"],
+      ["mi-lemonade", "Price override for Lemonade, set on this menu", "2.50", "3.00 – 3.75"],
       ["mi-lemonade:v-small", "Price override for Lemonade — Small", "", "2.50"],
-      ["mi-lemonade:v-large", "Price override for Lemonade — Large", "3.75", "3.40"],
+      [
+        "mi-lemonade:v-large",
+        "Price override for Lemonade — Large, set on this menu",
+        "3.75",
+        "3.40",
+      ],
       ["mi-lager", "Price override for Lager", "", "2.00"],
     ];
     for (const [key, label, value, placeholder] of want) {
@@ -2565,6 +2570,79 @@ it("offers one labelled price override field per product and per size, the inher
     expect(hintOf(override(el, "mi-lemonade"))).toBe(
       "Leave it empty to use the inherited prices, €3.00 – €3.75.",
     );
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+const plainLabel = (name: string) => t("menu_prices.override_label").replace("{name}", name);
+const setLabel = (name: string) => t("menu_prices.override_label_set").replace("{name}", name);
+const innerLabel = (field: HTMLElement) =>
+  field.shadowRoot!.querySelector("input")!.getAttribute("aria-label");
+
+it("marks a price this menu sets as overriding and names it set on this menu; an inherited one is neither", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const want: [string, string, boolean][] = [
+    ["mi-lemonade", "Lemonade", true],
+    ["mi-lemonade:v-large", "Lemonade — Large", true],
+    ["mi-burger", "Burger", false],
+    ["mi-lemonade:v-small", "Lemonade — Small", false],
+  ];
+  for (const [key, name, set] of want) {
+    const field = override(el, key);
+    await field.updateComplete;
+    const label = set ? setLabel(name) : plainLabel(name);
+    expect([field.overriding, field.label, innerLabel(field)], key).toEqual([set, label, label]);
+  }
+});
+
+it("a price typed into an inherited field is drawn as set but named plainly until it is stored; Escape, malformed text and a cleared field put the look back", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-burger", "4.00");
+  expect([override(el, "mi-burger").overriding, override(el, "mi-burger").label]).toEqual([
+    true,
+    plainLabel("Burger"),
+  ]);
+  await press(el, "mi-burger", "Escape");
+  expect([override(el, "mi-burger").overriding, override(el, "mi-burger").label]).toEqual([
+    false,
+    plainLabel("Burger"),
+  ]);
+  await typeIn(el, "mi-burger", "abc");
+  expect(override(el, "mi-burger").overriding).toBe(false);
+  await typeIn(el, "mi-lemonade", "");
+  expect([override(el, "mi-lemonade").overriding, override(el, "mi-lemonade").label]).toEqual([
+    false,
+    setLabel("Lemonade"),
+  ]);
+  el.rows = [{ ...burger, override: "4.00" }, lemonade, lager];
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").label).toBe(setLabel("Burger"));
+});
+
+it("a refused well-formed price stays marked set while its error shows", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-burger", "4.00");
+  await press(el, "mi-burger", "Enter");
+  el.refusals = { "mi-burger": "Refused here" };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  const field = override(el, "mi-burger");
+  expect([field.error, field.overriding, field.label]).toEqual([
+    "Refused here",
+    true,
+    plainLabel("Burger"),
+  ]);
+});
+
+it("names a set price in English and in Spanish", async () => {
+  expect(setLabel("Lemonade")).toBe("Precio propio de Lemonade, fijado en esta carta");
+  setLocale("en-GB");
+  try {
+    expect(setLabel("Lemonade")).toBe("Price override for Lemonade, set on this menu");
   } finally {
     setLocale("es-ES");
   }
