@@ -1,6 +1,7 @@
 # UI review — the polished-product walkthrough tracker
 
-The authoritative state of the walkthrough in **Track A — UI and application** of [backlog.md](backlog.md).
+The authoritative state of the UI walkthrough, one piece of the open work [backlog.md](backlog.md) lists by
+area.
 
 We walk every chunk of functionality in **customer-journey order**: Claude boots the app and shows
 the owner how each area works today (screenshots + plain English), the owner then plays with it and
@@ -66,7 +67,7 @@ stack). The front-end vite servers can stay up.
 
 **Sequencing (revised 2026-09-12, from `backlog.md` → *What to work on next*):** the goal is a
 standalone on-prem primary, so the setup wizard (area 1) is no longer parked — its corrections are
-listed under the backlog's Track A item A2. Walk areas 2–20 at the real box; area 19 (device
+listed under the backlog's _The setup wizard, onboarding and the demo venue_ (formerly A2). Walk areas 2–20 at the real box; area 19 (device
 management) carries the register-versus-device decision
 (`superpowers/specs/2026-09-05-register-and-device-model-decision.md`: keep both — register = the
 drawer, device = the screen; the no-migration half landed #269; _2026-10-03: superseded by A238 —

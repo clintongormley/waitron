@@ -721,7 +721,7 @@ they never rewrite the record. Regression: `packages/shared/src/content-language
 Use the shared registry for staged modal, page and credential input, including keypad PIN
 entry. The application shells share one confirmation and accepted-history adapter. The
 [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md) records behavioral
-checks and their limits; the [backlog](../backlog.md) tracks delivery. Use `beforeClose`
+checks and their limits. Use `beforeClose`
 with a scoped ui-core coordinator request and `requestClose(reason)`
 for voluntary dismissal. Commit the exact submitted snapshot after a successful write, before
 refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits

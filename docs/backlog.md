@@ -1,14 +1,14 @@
 # Backlog — what to work on next, and why
 
-This file answers **"what should I work on?"** It is state, not history: what is built (one line each),
-what is open, and the order to take it in. The git log, the PR threads, and the committed
-specs/plans in `docs/superpowers/` hold the detail — do not paste receipts back in here.
+This file answers **"what should I work on?"** It is state, not history: the open work, grouped by
+area under _Open work, by area_, the order to take it in, and one row per sub-project of what is
+built. Finished work is not listed here: the git log, the PR threads, and the committed
+specs/plans in `docs/superpowers/` hold it — do not paste receipts back in here. A long entry keeps
+its first lines here and its whole text in its area's detail file under `docs/backlog/`.
 
 > **The goal is a standalone working primary on prem** (2026-09-12). The on-prem mirror and the
-> cloud primary stay on the list, but they come afterwards. Three build tracks:
-> **A — UI and application**, **B — infrastructure**, **C — smaller items**. Landed work is one line
-> with its PR number as a locator; what a review seat caught and how something was proven stay in
-> the PR thread.
+> cloud primary stay on the list, but they come afterwards. What a review seat caught and how
+> something was proven stay in the PR thread.
 
 **Companion documents, not duplicated here:**
 
@@ -16,7 +16,7 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
   **[Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)**
   own cloud services and infrastructure. This backlog retains the node application's
   integration work and shared technical prerequisites.
-- **[ui-review.md](ui-review.md)** — the live tracker for the UI/UX walkthrough (Track A): which areas
+- **[ui-review.md](ui-review.md)** — the live tracker for the UI/UX walkthrough: which areas
   are examined, which remain, and the corrections logged against each.
 - **[compliance/action-plan.md](compliance/action-plan.md)** — the legal/administrative track
   (certificates, company formation, the declaración responsable).
@@ -40,7 +40,7 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
   so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and de-risking the
   most-reused or most-uncertain foundations first.
 - **Never autonomously land anything touching the unrepairable fiscal core** — hash-chained records,
-  never-reused invoice numbers. Fiscal-adjacent work in any track takes owner sign-off at land.
+  never-reused invoice numbers. Fiscal-adjacent work in any area takes owner sign-off at land.
 - **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
   bypass, so a docs-only change is branched, `commit -s`, fast-forwarded and pushed — no PR, no CI
   wait. Feature and code changes still go through a PR.
@@ -84,38 +84,42 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under _Reference → Specs still in the tree_). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). All eighteen of the service
-   plan's tasks are done, the last being Task 17, a table that leaves without paying (#991).
+1. **Finish table service and paying a bill in parts** (_The till, devices and table service_,
+   lane B). All eighteen of the service plan's tasks are done, the last being Task 17, a table
+   that leaves without paying (#991).
    What Task 16 (counter handover, #981) and Task 17 left open is in their Task 16 and Task 17
-   entries under _The till, devices and table service_.
+   entries under that area.
    **Send asesor Q27–Q29 now:** the owner decided Q28 without the asesor on 2026-10-01 and Task 17
    is built on it, so Q28 is asked to confirm; how Task 11's discount appears on the invoice is
    Q29, and printing the invoice before payment is Q27.
 
-2. **Build good screens for each kind of device, and retire canvases** (A4's A182, owner
-   2026-10-01). The till, handheld, kitchen screen and pass are still built from stored canvases of
-   tabs and cards, against the owner's 2026-09-20 decision for well-designed built-in screens.
-   Owner, 2026-10-08: delete canvases now, keeping today's default layouts as fixed built-in
-   screens, and redesign the screens afterwards; no new feature is built as a canvas card.
+2. **Build good screens for each kind of device, and retire canvases** (A182, under _The till,
+   devices and table service_, owner 2026-10-01). The till, handheld, kitchen screen and pass are
+   still built from stored canvases of tabs and cards, against the owner's 2026-09-20 decision for
+   well-designed built-in screens. Owner, 2026-10-08: delete canvases now, keeping today's default
+   layouts as fixed built-in screens, and redesign the screens afterwards; no new feature is built
+   as a canvas card.
 
-3. **Staff cannot clock in or out** (A10). The working-time record is a legal duty from the first day
-   the deli employs anyone, and only its library is built: nothing in `apps/` calls `clockIn` or
-   `clockOut`.
+3. **Staff cannot clock in or out** (A10, under _Working time and staff_). The working-time record
+   is a legal duty from the first day the deli employs anyone, and only its library is built:
+   nothing in `apps/` calls `clockIn` or `clockOut`.
 
-4. **What a standalone box still lacks before a real venue runs it:**
-   - an off-box home for the backup archive (B2) — the bucket stream of `venue.db` is built, but
+4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
+   upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
+   - an off-box home for the backup archive — the bucket stream of `venue.db` is built, but
      archives can only be saved on the box itself (`LocalFsBackend`);
-   - installing or renewing the AEAT certificate after setup (A9) — today only the setup wizard can
+   - installing or renewing the AEAT certificate after setup — today only the setup wizard can
      set it, and nothing watches when it expires;
-   - upgrade testing with rows the product itself writes and a real older database (B4) —
+   - upgrade testing with rows the product itself writes and a real older database —
      owner-marked blocking before go-live;
    - the bootable USB installer (B3), the last piece of "install without a terminal";
-   - the degraded-but-trading recovery spec (B5).
+   - the degraded-but-trading recovery spec.
 
-5. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
-   run; the box and sale path worked.
+5. **The till does not load its menu until a manual refresh** (_The till, devices and table
+   service_). Seen on the blank-box-to-selling run; the box and sale path worked.
 
-6. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
+6. **The displays and the printers walked at the real box** (_The till, devices and table
+   service_; _Printers, the print agent and receipts_) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut. Since C107 (#974) every printout
    is drawn as pictures, and none of them (the ruler page, the sample receipt, a receipt, a kitchen
@@ -123,26 +127,29 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    cash-settlement drawer job and the feed-before-cut are still unwalked.
 
 7. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
-   enrolled (A4); Logging Slice 2, the one-touch
-   bug report (A9); the first real Bluetooth pairing at the box through the dashboard (A3; the print
-   agent's side, P2b, and the dashboard's, P2c, are built); paying at the table from a handheld (A6,
-   Slice 2).
+   enrolled (_The till, devices and table service_); Logging Slice 2, the one-touch bug report
+   (_Alerts, logging and diagnostics_); the first real Bluetooth pairing at the box through the
+   dashboard (_Printers, the print agent and receipts_; the print agent's side, P2b, and the
+   dashboard's, P2c, are built); paying at the table from a handheld (Slice 2, under _Payments and
+   card readers_).
 
 Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud primary,
-under _Afterwards_. Everything else ranks beneath these.
+under _Replication, failover and the cloud_. Everything else ranks beneath these.
 
 ---
 
 ## Open work, by area
 
-Every open entry is moving here, one area at a time, from the old track sections below (A430,
-[plan](superpowers/plans/2026-10-08-a430-backlog-open-work-only.md)). Until that is finished, an
-area's open work may still be in the old sections. A long entry keeps its first lines here and its
-whole text in the area's detail file under `docs/backlog/`.
+Every open entry is here, under its area. The areas replaced the old Tracks A, B and C,
+_Afterwards_ and _Detail_ (A430,
+[plan](superpowers/plans/2026-10-08-a430-backlog-open-work-only.md)); each area's italic
+"Formerly …" line names the old sections it absorbed, so an old pointer such as "A4" still finds
+its place. A long entry keeps its first lines here and its whole text in the area's detail file
+under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-_Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
+_Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
 - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
   matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
@@ -595,7 +602,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
-_Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
+_Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
 - **A420 part 2 — fill missing translations in place (lane E, pending).** The owner approved
   [the spec](superpowers/specs/2026-10-08-a420-inline-translations.md) on 2026-10-08: one selected
@@ -1298,7 +1305,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 ### The kitchen and preparation
 
-_Formerly Track A's kitchen part, and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
+_Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
 - **The dashboard's read-only Prep stations screen still shows only its Stations tab, so a view-only
   manager does not see the watcher list there** — left open by W110b (#1278) and A285 (#1308): `GET /management-api/watchers`
@@ -2780,7 +2787,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 ### Payments and card readers
 
-_Formerly A6, and Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
+_Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
   the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
@@ -2949,7 +2956,7 @@ _Formerly A6, and Track C's payments items; part of A9._ Detail: [backlog/paymen
 
 ### Users, sign-in and the dashboard shell
 
-_Formerly A7, and Track A's dashboard part; part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
+_Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **`date-utils.test.ts` has a test titled as guarding "against a vacuous pass"** — found by #612
   while pruning comments. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing
@@ -4139,7 +4146,7 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-_Formerly B9, and Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
+_Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
   `wa-wt reset demo <name>` rebuilds it as the demo business, tax ID `B00000000` (W108). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
@@ -4548,7 +4555,7 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 ### Modules, data and code health
 
-_Formerly B8, parts of B9, and Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
+_Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
@@ -4842,13 +4849,30 @@ _Formerly entries spread across the old sections._
 
 ### Later and parked
 
-_Formerly _Later and parked_._
+_Formerly the "Later and parked" paragraph under What's built._
+
+**Later and parked** (no owner decision pending; reopen when work reaches them): Square and
+generic CSV menu import · accounting export (SP17) · opening hours and channel sync (SP19) · tip
+payroll (SP13) · online ordering (SP15) · per-seat ordering and multiple tabs per table (each reopens a
+settled decision — specced with the owner, never landed unattended) · KDS ops polish (routing
+read-back and audit view, station kind, definable kitchen statuses) · recipes depth (nested
+sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and
+procurement (SP20; the AI forecast waits for the deterministic system) · the expo device kind ·
+**Bizum** (research in
+[2026-09-18-online-payment-providers-bizum.md](research/2026-09-18-online-payment-providers-bizum.md)).
+A Bizum payment costs a FLAT per-payment fee, not a percentage, so a provider that passes the
+acquiring cost through and marks it up thinly (Mollie, Sipay) beats one charging a percentage on top
+(Stripe at 1,5 % + 0,25 €, MONEI); SumUp offers Bizum on none of its plans. **To close:** a written
+quote from Mollie and one from the deli's bank (the pass-through figures that would decide it are
+unpublished); and, for in-person Bizum, confirm whether a SumUp or Stripe Tap-to-Pay phone can accept
+a Bizum tap before designing any UX.
 
 ---
 
-## Coordination between tracks
+## Coordination between sessions
 
-Each track is its own worktree so sessions do not edit the same files. Rules, each already paid for:
+Each piece of work runs in its own worktree so sessions do not edit the same files. Rules, each
+already paid for:
 
 - **Concurrency follows measured headroom, never a count** (CLAUDE.md §2). Before a heavy run check
   free memory and the heaviest processes, then scale to what is free.
@@ -4856,10 +4880,10 @@ Each track is its own worktree so sessions do not edit the same files. Rules, ea
   merely `BEHIND` lands as is with `gh pr merge --squash --admin` (CLAUDE.md §6). Module-owned
   migrations are regenerated on rebase per CLAUDE.md §3's recipe.
 - **Shared files:** `apps/server/src/boot.ts`, `CLAUDE.md`, `packages/db`'s core schema and
-  migrations, the dashboard printers screen, and this file (each track edits its own items).
+  migrations, the dashboard printers screen, and this file (each session edits its own entries).
 - **Comments are cut on touch, and pruned deliberately one package per pull request** (CLAUDE.md
-  §1) — see B9 → _Prune the comments_.
-- **Update this file as items land**, in the same PR.
+  §1) — see _Modules, data and code health_ → _Prune the comments_.
+- **Update this file as entries finish**, in the same PR (_How to keep this file honest_).
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default till
 <http://localhost:5190>, dashboard <http://localhost:5191>, setup <http://localhost:5192>, server
@@ -4896,7 +4920,7 @@ conflict.
 - **No relay.** Remote access is the cloud instance forwarding the box's name down the box↔instance
   WireGuard link without terminating TLS. Litestream streams the venue database to the owner's
   bucket, not over this link; a promoted node following that stream is future work — see
-  _Afterwards_.
+  _Replication, failover and the cloud_.
 - **Handheld kiosk mode is optional, never required** (owner, 2026-09-08) — the baseline is an
   installed home-screen web app plus the till's staff PIN. **The venue OWNS the handhelds** (owner,
   2026-09-18): a member of staff's broken phone is the venue's liability, so lockdown and a
@@ -4904,7 +4928,7 @@ conflict.
   is optional and Android-only. Decisions and receipts:
   [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md).
 - **Comments carry invariants, not history, and deliberate pruning sweeps are wanted** (owner,
-  2026-09-23; CLAUDE.md §1) — see B9 → _Prune the comments_.
+  2026-09-23; CLAUDE.md §1) — see _Modules, data and code health_ → _Prune the comments_.
 - **The coverage bar is negotiable only where the rest of a package's gap could be closed solely by
   tests that assert nothing useful** (owner, 2026-09-23): "we never want to add junk tests just to
   meet a coverage bar. the tests added must actually test something useful."
@@ -4916,23 +4940,23 @@ conflict.
 ## What's built (state per sub-project)
 
 Architecture §2's twenty sub-projects, plus the cross-cutting infra. "Remaining" is the unstarted or
-partial scope; the detail for a live thread is in its track.
+partial scope; the detail for a live thread is in its area.
 
 | #   | Sub-project                  | State                                                                                                                                                                                                                                                                                                                                                                                                                             | Remaining                                                                                                                                                                     |
 | --- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Design system                | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333)                                                                                                                                                                                                                                | sorting `wt-combobox` options (A7)                                                                                                                                            |
+| 1   | Design system                | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333)                                                                                                                                                                                                                                | sorting `wt-combobox` options (_Users, sign-in and the dashboard shell_)                                                                                                      |
 | 2   | Sales spine                  | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model                                                                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
-| 3   | Fiscal layer                 | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`)                                                                                                                                                                                                                                                                                   | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup (A9); cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
-| 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6)                                                                                        |
+| 3   | Fiscal layer                 | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`)                                                                                                                                                                                                                                                                                   | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup; cert distribution to a promoted node; a foreign business customer's identifier type (A1a)      |
+| 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (_Payments and card readers_)                                                               |
 | 5   | Identity                     | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby                                                        | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce                                                                |
 | 6   | Locations                    | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297)                                                                                                                                                                                                                                                                                                                                       | multiple-location creation/editing/deactivation; then location-scope the by-id verb family                                                                                    |
 | 7   | Counter POS                  | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end                                                                                                                                                                                                                                                        | —                                                                                                                                                                             |
-| 8   | Reporting                    | daily close, frozen _cierre Z_, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home                                                                                                                                                 | fiscal filing remainder parked (_Detail → Reporting_)                                                                                                                         |
+| 8   | Reporting                    | daily close, frozen _cierre Z_, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home                                                                                                                                                 | fiscal filing remainder parked (_Reporting — the fiscal remainder_)                                                                                                           |
 | 9   | Deployment                   | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272)                                                                                                                                                                                     | USB installer (B3); cloud standby live link + the Waitron Cloud boundary                                                                                                      |
 | 10  | Tabs / table service         | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324)                                                                                                                                                                                                                                                                                                             | core COMPLETE; owner-added extensions parked                                                                                                                                  |
 | 11  | Floor plan                   | FP-1 live floor + FP-2 spatial canvas/editor                                                                                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                                             |
 | 12  | KDS / devices                | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts; device identity + profiles (#199, #231, #269)                                                                                                                                                                                                                                                                        | routing audit view; expo device kind; device-scoped fire/collect routes                                                                                                       |
-| 13  | Tips                         | attribution stored (`tenders.tip_amount`) — UI collection ONLY on the integrated-card idle screen                                                                                                                                                                                                                                                                                                                                 | tip-collection UI for cash / manual card / handheld (A8); payroll export (integrate-not-build)                                                                                |
+| 13  | Tips                         | attribution stored (`tenders.tip_amount`) — UI collection ONLY on the integrated-card idle screen                                                                                                                                                                                                                                                                                                                                 | tip-collection UI for cash / manual card / handheld (_Payments and card readers_); payroll export (integrate-not-build)                                                       |
 | 14  | Bookings                     | Bookings-1, now the `@waitron/bookings` module (#270, #273)                                                                                                                                                                                                                                                                                                                                                                       | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits                                                                                            |
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
 | 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), D2 scheduling, roster authoring + approvals, staff request path + portal                                                                                                                                                                                                                                                                                               | **clocking in and out — no route or screen (A10)**; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
@@ -4951,22 +4975,6 @@ slice 2) · SIF topology (`#33`, `node_id` re-key) · the module system (#212–
 (scoped CI, pre-push hook, shared-container tests, job-sharding, root scope) · localisation
 (per-user `persons.locale`, live language switch, venue-default derivation) · logging and
 diagnostics (Slice 1, #192).
-
-**Later and parked** (no owner decision pending; reopen when a track reaches them): Square and
-generic CSV menu import · accounting export (SP17) · opening hours and channel sync (SP19) · tip
-payroll (SP13) · online ordering (SP15) · per-seat ordering and multiple tabs per table (each reopens a
-settled decision — specced with the owner, never landed unattended) · KDS ops polish (routing
-read-back and audit view, station kind, definable kitchen statuses) · recipes depth (nested
-sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and
-procurement (SP20; the AI forecast waits for the deterministic system) · the expo device kind ·
-**Bizum** (research in
-[2026-09-18-online-payment-providers-bizum.md](research/2026-09-18-online-payment-providers-bizum.md)).
-A Bizum payment costs a FLAT per-payment fee, not a percentage, so a provider that passes the
-acquiring cost through and marks it up thinly (Mollie, Sipay) beats one charging a percentage on top
-(Stripe at 1,5 % + 0,25 €, MONEI); SumUp offers Bizum on none of its plans. **To close:** a written
-quote from Mollie and one from the deli's bank (the pass-through figures that would decide it are
-unpublished); and, for in-person Bizum, confirm whether a SumUp or Stripe Tap-to-Pay phone can accept
-a Bizum tap before designing any UX.
 
 ---
 
@@ -5031,27 +5039,27 @@ while it holds decisions still open.
 | Spec                                                                                                                                                                                              | State                                                                                                                                                                      | Open work lives in                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [POS architecture](superpowers/specs/2026-07-18-pos-architecture-design.md)                                                                                                                       | the strategy; §2's sub-projects                                                                                                                                            | _What's built_                                                            |
-| [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | partly built; no clocking in                                                                                                                                               | A10, A9 (wages)                                                           |
-| [Deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md)                                                                                                                             | partly built; the outage path changed 2026-09-11                                                                                                                           | A6                                                                        |
+| [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | partly built; no clocking in                                                                                                                                               | A10 and _Wages / labour cost (SP16)_ (_Working time and staff_)                 |
+| [Deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md)                                                                                                                             | partly built; the outage path changed 2026-09-11                                                                                                                           | _Payments and card readers_                                               |
 | [Nested sub-recipes](superpowers/specs/2026-08-16-nested-sub-recipes-design.md) and its plan                                                                                                      | not started; parked; the plan predates SQLite and Vitest 4                                                                                                                 | _Later and parked_ (recipes depth)                                        |
 | [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md)                                                                                                                       | not started; parked; written before device profiles                                                                                                                        | _Later and parked_                                                        |
-| [Star CloudPRNT](superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md) and [Epson Server Direct Print](superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md) | not started beyond the `cloud_poll` columns; low priority                                                                                                                  | B6                                                                        |
-| [Failover printing](superpowers/specs/2026-08-26-failover-printing-design.md)                                                                                                                     | partly built (the job lease, network printers any agent may claim, unprinted kitchen tickets shown on the till, #750)                                                      | B6, _Afterwards_                                                          |
+| [Star CloudPRNT](superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md) and [Epson Server Direct Print](superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md) | not started beyond the `cloud_poll` columns; low priority                                                                                                                  | _Printers, the print agent and receipts_                                  |
+| [Failover printing](superpowers/specs/2026-08-26-failover-printing-design.md)                                                                                                                     | partly built (the job lease, network printers any agent may claim, unprinted kitchen tickets shown on the till, #750)                                                      | _Printers, the print agent and receipts_, _Replication, failover and the cloud_ |
 | [Every device enrolled, fail closed](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)                                                                                    | partly built; deferred                                                                                                                                                     | The till, devices and table service                                       |
-| [Language fallback](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)                                                                                                     | partly built                                                                                                                                                               | A9                                                                        |
+| [Language fallback](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)                                                                                                     | partly built                                                                                                                                                               | _Menus and the catalogue_ (_Language resolution follow-ons_)              |
 | [Native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md)                                                                                                                | reference; nothing committed                                                                                                                                               | the go-native decision                                                    |
-| [Logging and diagnostics](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md)                                                                                                  | Slice 1 built (#192)                                                                                                                                                       | A9, _Alerts, logging and diagnostics_                                     |
-| [Fiscal certificate distribution](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) and its plan                                                                                   | reverted (#281); describes a removed mechanism                                                                                                                             | _Afterwards_                                                              |
+| [Logging and diagnostics](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md)                                                                                                  | Slice 1 built (#192)                                                                                                                                                       | _Alerts, logging and diagnostics_                                         |
+| [Fiscal certificate distribution](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) and its plan                                                                                   | reverted (#281); describes a removed mechanism                                                                                                                             | _Replication, failover and the cloud_                                     |
 | [Handheld app store and kiosk](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md)                                                                                             | reference; its own-phones decision reversed 2026-09-18                                                                                                                     | —                                                                         |
-| [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)                                                                                          | discussion record; not started                                                                                                                                             | B3                                                                        |
-| [Failover prototype](superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md) and its plan                                                                                               | done (#425); `bench/sqlite-failover` points at it                                                                                                                          | _Afterwards_                                                              |
-| [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)                                                                                               | slices 1 and 2 built; 3 to 5 not started                                                                                                                                   | _Afterwards_                                                              |
-| [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)                                                                                      | decisions; the reader dropdown exists                                                                                                                                      | A6 (Slice 2)                                                              |
-| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan                                                                         | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](superpowers/specs/2026-10-05-w93-device-home-page-design.md) | Track A (_Sales classification and the menus plan — what they left open_) |
+| [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)                                                                                          | discussion record; not started                                                                                                                                             | _The box: backups, upgrades and recovery_                                 |
+| [Failover prototype](superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md) and its plan                                                                                               | done (#425); `bench/sqlite-failover` points at it                                                                                                                          | _Replication, failover and the cloud_                                     |
+| [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)                                                                                               | slices 1 and 2 built; 3 to 5 not started                                                                                                                                   | _Replication, failover and the cloud_                                     |
+| [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)                                                                                      | decisions; the reader dropdown exists                                                                                                                                      | _Payments and card readers_ (Slice 2)                                     |
+| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan                                                                         | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](superpowers/specs/2026-10-05-w93-device-home-page-design.md) | _Menus and the catalogue_ (_Sales classification and the menus plan — what they left open_) |
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan                                                                                 | all 18 tasks landed (Task 17 last, #991); what they left open is under The till, devices and table service                                                                 | The till, devices and table service                                       |
-| [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan                                                                             | built (#738 last); a code comment points at it                                                                                                                             | Track A (_Sales classification and the menus plan — what they left open_) |
+| [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan                                                                             | built (#738 last); a code comment points at it                                                                                                                             | _Menus and the catalogue_ (_Sales classification and the menus plan — what they left open_) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md)                                                                                                                             | server built (#721); the till side built by lane B item B15 (#956)                                                                                                         | The till, devices and table service                                       |
-| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan                                                                                      | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go                                                                             | A3                                                                        |
+| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan                                                                                      | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go                                                                             | _Printers, the print agent and receipts_                                  |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` starts up to two isolated
 stacks. `wa-wt ls` shows their ports; `wa-wt reset demo|onboarding <worktree-name>` rebuilds only
@@ -5062,9 +5070,16 @@ the named venue. The rule is in CLAUDE.md §6; detail in
 
 Update it in the change that makes it stale (CLAUDE.md §7). In particular:
 
-- When a piece lands, move it out of _What to work on next_, its track, and the _What's built_
-  "Remaining" column — do not add a receipt paragraph. **This is state, not history; the git log is
-  the history.**
+- **A change that finishes an entry deletes it** — never mark it landed, done, built or merged.
+  Each point it leaves open becomes its own short entry in the same area, titled from the point's
+  own words and naming the finished entry's id and PR once ("left open by A231d part 1, #1399").
+  Take the finished piece out of _What to work on next_ and the _What's built_ "Remaining" column
+  too, and do not add a receipt paragraph. **This is state, not history; the git log is the
+  history.**
+- **A new entry goes under its area in _Open work, by area_.** One that runs past four lines keeps
+  its title, its status and one to three of its own sentences here, with a `[Detail]` link; its
+  whole text goes under a `##` heading of the same title in the area's file under
+  `docs/backlog/`.
 - The moment it goes stale most reliably is a **merge**: `/land-branch` carries a step to update this
   file. A merge deletes the branch the in-flight rows named, so refresh them then.
 - When a question is closed on primary source, say so and stop calling it blocked.
