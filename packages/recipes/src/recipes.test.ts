@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, ingredients, products, recipeLines, withTransaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
+import { AppError } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS, setProductVariants, type DietaryOrigin } from "@waitron/catalogue";
 import { createIngredient, updateIngredient } from "./ingredients.js";
@@ -321,6 +322,32 @@ describe("recipe composition and allergen derivation", () => {
       });
       expect(await recipeNames(productId)).toEqual(["salt"]);
     });
+
+    it.each([
+      ["the same ingredient twice", (egg: string) => [egg, egg]],
+      ["an unknown ingredient", (egg: string) => [egg, unknownIngredientId]],
+    ])(
+      "refuses %s before touching the saved recipe, even when the caller commits",
+      async (_label, body) => {
+        const egg = await withTransaction(fx.db, (tx) => createIngredient(tx, { name: "egg" }));
+        const salt = await withTransaction(fx.db, (tx) => createIngredient(tx, { name: "salt" }));
+        await withTransaction(fx.db, (tx) => setProductRecipe(tx, productId, [salt.id]));
+        const refusal = await withTransaction(fx.db, async (tx) => {
+          try {
+            await setProductRecipe(tx, productId, body(egg.id));
+          } catch (err) {
+            return err;
+          }
+          return undefined;
+        });
+        expect(refusal).toBeInstanceOf(AppError);
+        expect(refusal).toMatchObject({
+          code: "management.request_invalid",
+          params: { field: "ingredientIds" },
+        });
+        expect(await recipeNames(productId)).toEqual(["salt"]);
+      },
+    );
 
     it("names the unknown product before an unknown ingredient", async () => {
       await expect(
