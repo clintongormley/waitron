@@ -6,7 +6,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
 import {
   baseStyles,
+  draftScopeFor,
   leaveCoordinatorFor,
+  saveActionState,
   focusFirstInvalid,
   submitOnEnter,
   visuallyHiddenStyles,
@@ -550,8 +552,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #registerEditDraft(): void {
-    this.#editLeave = leaveCoordinatorFor(this);
-    this.#editScope = this.#editLeave?.register({
+    const { coordinator, scope } = draftScopeFor(this, {
       id: {},
       current: () => this.#editSnapshot(),
       snapshot: (value) => ({
@@ -575,6 +576,15 @@ export class DevicesScreen extends LitElement {
             a.madeHereStationIds.length === b.madeHereStationIds.length &&
             a.madeHereStationIds.every((id) => b.madeHereStationIds!.includes(id))),
       restore: () => {},
+    });
+    this.#editLeave = coordinator;
+    this.#editScope = scope;
+  }
+
+  /** One Save covers the device and, once it has loaded, its card reader. */
+  #editSaveState() {
+    return saveActionState({
+      isDirty: () => Boolean(this.#editScope?.isDirty() || this.#readerScope?.isDirty()),
     });
   }
 
@@ -1092,13 +1102,13 @@ export class DevicesScreen extends LitElement {
       this.#storedReaderId = readerId;
       this.chosenReaderId = readerId ?? "";
       this.readerState = "ready";
-      this.#readerScope = this.#editLeave?.register({
+      this.#readerScope = draftScopeFor(this, {
         id: {},
         current: () => this.chosenReaderId,
-        snapshot: (value) => value,
+        snapshot: (value: string) => value,
         equal: (a, b) => a === b,
         restore: () => {},
-      });
+      }).scope;
       if (this.#profileChangedWhileReaderLoads) {
         this.chosenReaderId = "";
         this.#readerScope?.changed();
@@ -1322,7 +1332,7 @@ export class DevicesScreen extends LitElement {
 
   async #submitEdit(): Promise<void> {
     const device = this.editing;
-    if (device === null || this.editSaving) return;
+    if (device === null || this.editSaving || this.#editSaveState().unchanged) return;
     this.editAttempted = true;
     const own = this.#editOwnErrors();
     if (own.name || own.profile || own.binding) {
@@ -1888,7 +1898,7 @@ export class DevicesScreen extends LitElement {
         ${
           settings
             ? html`<wt-button
-                variant="primary"
+                variant=${saveActionState(this.#pairScope, { savableAtOpen: true }).variant}
                 data-test="pair-submit"
                 ?loading=${this.submitting}
                 ?disabled=${blocked || this.#pairSettled}
@@ -1909,6 +1919,7 @@ export class DevicesScreen extends LitElement {
     const errors = this.#editErrors();
     const own = this.#editOwnErrors();
     const blocked = own.name !== "" || own.profile !== "" || own.binding !== "";
+    const save = this.#editSaveState();
     const marked = Object.values(errors).some((error) => error !== "");
     const profile = this.deviceProfiles.find((p) => p.id === form.profileId);
     const kitchen = this.#editBindingShown();
@@ -1918,7 +1929,7 @@ export class DevicesScreen extends LitElement {
       heading=${t("devices.edit_title").replace("{name}", device.label)}
       .open=${true}
       .dismissible=${!this.editSaving}
-      .beforeClose=${this.#editScope || this.#readerScope ? this.#beforeEditClose : undefined}
+      .beforeClose=${this.#editLeave ? this.#beforeEditClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         if (epoch === this.#editEpoch) this.#endEdit();
@@ -1986,10 +1997,10 @@ export class DevicesScreen extends LitElement {
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          variant="primary"
+          variant=${save.variant}
           data-test="edit-save"
           ?loading=${this.editSaving}
-          ?disabled=${blocked}
+          ?disabled=${save.unchanged || blocked}
           @click=${() => void this.#submitEdit()}
           >${t("action.save")}</wt-button
         >

@@ -1163,6 +1163,19 @@ describe("the Edit dialog", () => {
     await flush(el);
   }
 
+  /** Save on a dialog as it opened: drawn quiet, and nothing to press. */
+  async function expectSaveQuiet(el: DevicesScreen): Promise<void> {
+    const button = q(el, "[data-test=edit-save]") as HTMLElementTagNameMap["wt-button"];
+    await button.updateComplete;
+    expect([button.variant, button.disabled]).toEqual(["secondary", true]);
+  }
+
+  /** One edit, so Save has a change to send. */
+  async function rename(el: DevicesScreen, name: string): Promise<void> {
+    wtChange(el, "[data-test=edit-name]", name);
+    await flush(el);
+  }
+
   // At 1280px wide the standard size is not capped by the window: 42rem (672px).
   it("is the standard width on desktop", async () => {
     await page.viewport(1280, 900);
@@ -1308,10 +1321,12 @@ describe("the Edit dialog", () => {
       { value: "station:s-off", label: "Old (Deshabilitada)", group: t("devices.stations_group") },
       { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
     ]);
+    await expectSaveQuiet(el);
+    await rename(el, "Pantalla 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k1", {
-      name: "Pantalla Cocina",
+      name: "Pantalla 2",
       profileId: "pk",
       stationId: "s-off",
       watcherId: null,
@@ -1346,11 +1361,13 @@ describe("the Edit dialog", () => {
         group: t("devices.watchers_group"),
       },
     ]);
+    await expectSaveQuiet(el);
+    await rename(el, "Pantalla 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith(
       "k1",
-      expect.objectContaining({ stationId: null, watcherId: "w-off" }),
+      expect.objectContaining({ name: "Pantalla 2", stationId: null, watcherId: "w-off" }),
     );
     expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("madeHereStationIds");
 
@@ -1359,6 +1376,7 @@ describe("the Edit dialog", () => {
     await flush(el);
     expect(field(el, "edit-binding").value).toBe("");
     expect(field(el, "edit-binding").options.map((o) => o.value)).not.toContain("watcher:w-off");
+    await rename(el, "Pantalla 3");
     await save(el);
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
     expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
@@ -1686,9 +1704,12 @@ describe("the Edit dialog", () => {
     it("Save keeps both, unchanged", async () => {
       const api = holdingApi();
       const el = await openEdit(api);
+      await expectSaveQuiet(el);
+      await rename(el, "Caja 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+        name: "Caja 2",
         receiptPrinterId: "pr4",
         paymentSlipPrinterId: "pr3",
       });
@@ -1726,6 +1747,8 @@ describe("the Edit dialog", () => {
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.value).toBe("pr4");
       expect(receipt.options.map((o) => o.value)).toEqual(["", "pr1", "pr2"]);
+      await expectSaveQuiet(el);
+      await rename(el, "Caja 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1].receiptPrinterId).toBe("pr4");
@@ -1868,6 +1891,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
     expect(await bottom(el)).toBe("");
     expect(q(el, "[data-test=page-error]")).toBeNull();
+    await rename(el, "Caja 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.setDeviceReader).not.toHaveBeenCalled();
@@ -1890,6 +1914,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
     expect(api.getDeviceReader).not.toHaveBeenCalled();
     expect(api.listReaders).not.toHaveBeenCalled();
+    await rename(el, "Caja 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
@@ -1925,6 +1950,9 @@ describe("the Edit dialog", () => {
     el.canManageReaders = false;
     await flush(el);
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    // The reader change went with the field, so Save waits for another edit.
+    await expectSaveQuiet(el);
+    await rename(el, "Caja 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
@@ -1996,6 +2024,7 @@ describe("the Edit dialog", () => {
     el.canManageReaders = false;
     await flush(el);
     expect(await bottom(el)).toBe("");
+    await rename(el, "Caja 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(2);
@@ -2018,6 +2047,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-reader").disabled).toBe(true);
     expect(field(el, "edit-reader").error).toBe("");
     expect(await bottom(el)).toBe(codeMessage("connection.failed"));
+    await rename(el, "Caja 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
@@ -2057,6 +2087,7 @@ describe("the Edit dialog", () => {
       updateDevice: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
     });
     const el = await openEdit(api);
+    await rename(el, "Barra 1");
     await save(el);
 
     await vi.waitFor(() =>
@@ -2084,6 +2115,7 @@ describe("the Edit dialog", () => {
           .mockRejectedValue({ code: "device.binding_invalid", params: { field: param } }),
       });
       const el = await openEdit(api);
+      await rename(el, "Caja 2");
       await save(el);
       await vi.waitFor(() =>
         expect(field(el, under).error).toBe(codeMessage("device.binding_invalid")),
@@ -2106,6 +2138,7 @@ describe("the Edit dialog", () => {
   ])("a $code refusal shows under the field it is about", async ({ code, params, under }) => {
     const api = editApi({ updateDevice: vi.fn().mockRejectedValue({ code, params }) });
     const el = await openEdit(api, "k1");
+    await rename(el, "Pantalla 2");
     await save(el);
     await vi.waitFor(() => expect(field(el, under).error).toBe(codeMessage(code)));
     expect(field(el, "edit-name").error).toBe("");
@@ -2127,6 +2160,7 @@ describe("the Edit dialog", () => {
   ])("a refusal about $name goes at the bottom", async ({ device, error }) => {
     const api = editApi({ updateDevice: vi.fn().mockRejectedValue(error) });
     const el = await openEdit(api, device);
+    await rename(el, "Renamed");
     await save(el);
     await vi.waitFor(async () => expect(await bottom(el)).toBe(codeMessage(error.code)));
     expect(field(el, "edit-name").error).toBe("");
@@ -2174,6 +2208,8 @@ describe("the Edit dialog", () => {
     it("Save leaves the approvals out while they and the profile are unchanged", async () => {
       const api = approvalApi();
       const el = await openEdit(api);
+      await expectSaveQuiet(el);
+      await rename(el, "Caja 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
@@ -2233,6 +2269,7 @@ describe("the Edit dialog", () => {
         }),
       });
       const el = await openEdit(api);
+      await rename(el, "Caja 2");
       await save(el);
       await vi.waitFor(() =>
         expect(text(el, "[data-test=edit-approved-error]")).toBe(
@@ -2253,6 +2290,7 @@ describe("the Edit dialog", () => {
         }),
       });
       const el = await openEdit(api);
+      await rename(el, "Caja 2");
       await save(el);
       await vi.waitFor(() =>
         expect(text(el, "[data-test=edit-approved-error]")).toBe(
@@ -2284,6 +2322,7 @@ describe("the Edit dialog", () => {
     const api = editApi();
     const el = await openEdit(api);
     vi.mocked(api.listDevices).mockRejectedValue({ code: "connection.failed" });
+    await rename(el, "Caja 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     await vi.waitFor(() =>
@@ -2362,6 +2401,8 @@ describe("the Edit dialog", () => {
         );
         expect(field(el, "edit-reader").value).toBe("r2");
         // Unchanged, so Save does not write the reader.
+        await expectSaveQuiet(el);
+        await rename(el, "Pantalla 2");
         await save(el);
         await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
         expect(api.setDeviceReader).not.toHaveBeenCalled();
@@ -2430,6 +2471,7 @@ describe("the Edit dialog", () => {
       const pending = deferred<undefined>();
       const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
       const el = await openEdit(api);
+      await rename(el, "Caja 2");
       await save(el);
       await save(el);
       q(el, "[data-test=edit-name]")!.focus();
@@ -2482,6 +2524,7 @@ describe("the Edit dialog", () => {
         expect(Object.keys(before)).toEqual(expect.arrayContaining(shown));
         expect(before).toEqual(all(before, false));
 
+        await rename(el, "Renamed");
         await save(el);
         expect(api.updateDevice).toHaveBeenCalledTimes(1);
         expect(editControlsDisabled(el)).toEqual(all(before, true));
@@ -2553,6 +2596,7 @@ describe("the Edit dialog", () => {
       const pending = deferred<undefined>();
       const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
       const el = await openEdit(api);
+      await rename(el, "Caja 2");
       await save(el);
 
       expect((q(el, "[data-test=edit-cancel]") as Button).disabled).toBe(true);
@@ -2816,6 +2860,8 @@ describe("the Edit dialog", () => {
     it("sends no drawer choice a save leaves alone", async () => {
       const api = equipmentApi();
       const el = await openEdit(api);
+      await expectSaveQuiet(el);
+      await rename(el, "Caja 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
