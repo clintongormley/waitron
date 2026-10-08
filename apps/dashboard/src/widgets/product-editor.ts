@@ -448,11 +448,17 @@ export class ProductEditor extends LitElement {
   #categoryNodes: ReadonlyMap<string, CategorySummary> = new Map();
 
   #draftScope?: DraftScope<ProductEditorDraft>;
+  #baseline?: ProductEditorDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.suspended) return false;
     return (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
   };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
 
   override disconnectedCallback(): void {
     this.#draftScope?.dispose();
@@ -508,12 +514,14 @@ export class ProductEditor extends LitElement {
       if (this.open && this.initialField === "image") this.#focusField = this.initialField;
       this.#draftScope?.dispose();
       this.#draftScope = undefined;
+      this.#baseline = undefined;
     }
     if (!this.open) {
       this.#draftScope?.dispose();
       this.#draftScope = undefined;
       this.#leave = undefined;
-    } else if (!this.#draftScope) {
+    } else if (this.isConnected && !this.#draftScope) {
+      this.#baseline ??= structuredClone(this.currentValue);
       const { coordinator, scope } = draftScopeFor(this, {
         id: this,
         current: () => this.currentValue,
@@ -525,6 +533,7 @@ export class ProductEditor extends LitElement {
       });
       this.#leave = coordinator;
       this.#draftScope = scope;
+      scope.commit(this.#baseline);
     }
     if ((changed.has("busy") && !this.busy) || changed.has("fieldErrors")) this.submitted = false;
     // A field error the SERVER reported is surfaced the same way a local one is: its section opens
@@ -913,6 +922,7 @@ export class ProductEditor extends LitElement {
   }
 
   commitSaved(submitted: ProductEditorDraft): void {
+    this.#baseline = structuredClone(submitted);
     this.#draftScope?.commit(submitted);
   }
 

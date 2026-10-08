@@ -9,7 +9,12 @@ import type {
   IncludeFolderInput,
   Presentation,
 } from "@waitron/catalogue/src/section-types.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./include-folder-form.js";
 import "@waitron/dashboard-modules";
 
@@ -220,4 +225,70 @@ it("an include taken out of the page and put back asks before discarding an edit
   cancel(form);
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
+});
+async function saveState(form: Form) {
+  await form.updateComplete;
+  const save = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=save]",
+  )!;
+  await save.updateComplete;
+  return {
+    variant: save.variant,
+    disabled: save.disabled,
+    innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+const quietSave = { variant: "secondary", disabled: true, innerDisabled: true };
+it("an include keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, form } = await mount();
+  await edit(form, "names-es", "Barra");
+  await reattachAfterDetachedUpdate(form);
+  expect(nameValue(form, "names-es")).toBe("Barra");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
+});
+it("an include reopened on another folder after a put-back save opens quiet with that folder", async () => {
+  const { app, form } = await mount();
+  await edit(form, "names-es", "Barra");
+  await reattachAfterDetachedUpdate(form);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  form.closeSaved(app.submissions[0]!);
+  expect(form.open).toBe(false);
+  await closeReportsDelivered();
+  form.value = { showAsFolder: true, overrides: { names: { en: "Cellar" } } };
+  form.open = true;
+  await form.updateComplete;
+  expect(nameValue(form, "names-en")).toBe("Cellar");
+  expect(nameValue(form, "names-es")).toBe("Bebidas");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await saveState(form)).toEqual(quietSave);
+  await edit(form, "names-en", "Wine cellar");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await edit(form, "names-en", "Cellar");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("an include put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  await edit(form, "names-es", "Barra");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await edit(form, "names-es", "Barra nueva");
+  form.commitSaved(app.submissions[0]!);
+  await reattachAfterDetachedUpdate(form);
+  expect(nameValue(form, "names-es")).toBe("Barra nueva");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await edit(form, "names-es", "Barra");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await saveState(form)).toEqual(quietSave);
 });

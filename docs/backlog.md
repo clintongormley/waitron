@@ -1686,7 +1686,10 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   these forms is taken out of the page and put back stays on screen but no longer counts as
   unsaved: measured 2026-10-08 on the unit form, the same before and after this batch's fix; the
   other forms were not tried, and the recipe editor clears its choice on removal by design. It
-  matters only if a screen ever moves an open form.
+  matters only if a screen ever moves an open form. DONE for the unit form in A397 part 2: its
+  edit-first case in `catalogue-forms.unsaved.test.ts` failed before the fix and passes after.
+  Still untried: the "VAT class for new products" default, the ingredient form, the options list
+  and its option window, the extras list, Add to menus, Add products, Schedule and Change time.
 - **Batch 2b — LANDED in #1424 (A331-2b, 2026-10-08).** The menus screen: the menu details
   form (new and rename) and the section form (new and edit), which are one form mounted twice, and
   an include's Edit dialog. Each opens quiet, turns blue on the first edit, goes quiet again when
@@ -1707,7 +1710,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   the field, Save was quiet, and Cancel closed the form without asking; main was not run. Related
   to, but not the same as, the watcher form's point in batch 4c, where the edit was replaced when
   the form was put back (fixed in #1429). It matters only if the menus screen ever moves an open
-  form.
+  form. DONE for both forms in A397 part 2: each one's edit-first case
+  (`section-details-form.unsaved.test.ts`, `include-folder-form.unsaved.test.ts`) failed before the
+  fix (not counted as unsaved) and passes after.
 - **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
   floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
   flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
@@ -1824,9 +1829,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   variant, purchase and shift forms and the bookings form. Each one failed both cases on main (an
   edit made after the form is put back, and one made before it was taken out) and passes with the
   fix; the purchase and shift forms and the bookings form also replaced an edit made before
-  removal with the stored values. Still open (A397 part 2): the product editor, and the unit form's edit-first
-  point under batch 2a, which waited for lane B's A332 because it changes their unsaved suites; A332 landed as #1430,
-  so they can start. Also seen in the purchase and shift forms' tests, not changed and not
+  removal with the stored values. DONE for the seventh in A397 part 2: the product editor failed
+  both cases before its fix (`product-editor.unsaved.test.ts`) and passes after. The same branch
+  closed the unit form's edit-first point under batch 2a. Also seen in the purchase and shift forms' tests, not changed and not
   tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
   neither asks nor closes until focus is back on a field inside the dialog (the tests put it there
   with `focus()`; a click was not tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`,
@@ -1858,7 +1863,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   wait for lane D's A366 slices and batch 4b. Local holiday and watcher forms landed in #1418,
   preparation stations in #1426. Next action: after the relevant A366 slices land, finish batch
   4b and rerun the inventories on the rewritten forms. A396's disabled-zone profile ruling is
-  done in #1428; A397's reconnect work and A231q's future invoice screens remain separate tasks.
+  done in #1428; A231q's future invoice screens remain a separate task.
 
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected

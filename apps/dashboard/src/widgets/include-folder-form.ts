@@ -102,6 +102,7 @@ export class IncludeFolderForm extends LitElement {
   @state() private dismissed = new Set<string>();
   @state() private pickerOpen = false;
   #scope?: DraftScope<IncludeFolderInput>;
+  #baseline?: IncludeFolderInput;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -140,6 +141,7 @@ export class IncludeFolderForm extends LitElement {
     if (changes.has("open") && this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
+      this.#baseline = undefined;
       this.#loaded = structuredClone({ own: this.own, stored: this.value ?? FOLLOWING_FOLDER });
       this.#show(this.#loaded.stored.showAsFolder, this.#loaded.stored.overrides);
       this.dismissed = new Set();
@@ -150,6 +152,7 @@ export class IncludeFolderForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope && this.isConnected) {
+      this.#baseline ??= structuredClone(this.#submissionValue());
       const { coordinator, scope } = draftScopeFor<IncludeFolderInput>(this, {
         id: this,
         parent: this.draftParent,
@@ -163,6 +166,7 @@ export class IncludeFolderForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
   protected override updated(changes: PropertyValues<this>): void {
@@ -240,6 +244,7 @@ export class IncludeFolderForm extends LitElement {
     return { showAsFolder: true, overrides: this.#overrides() };
   }
   commitSaved(submitted: IncludeFolderInput): void {
+    this.#baseline = structuredClone(submitted);
     this.#scope?.commit(submitted);
   }
   closeSaved(submitted: IncludeFolderInput): void {

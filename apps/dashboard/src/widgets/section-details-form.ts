@@ -87,6 +87,7 @@ export class SectionDetailsForm extends LitElement {
   @state() private dismissed = new Set<string>();
   @state() private pickerOpen = false;
   #scope?: DraftScope<SectionInput>;
+  #baseline?: SectionInput;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -113,6 +114,7 @@ export class SectionDetailsForm extends LitElement {
     ) {
       this.#scope?.dispose();
       this.#scope = undefined;
+      this.#baseline = undefined;
       this.names = { ...this.value?.names };
       this.internalName = this.value?.internalName ?? "";
       for (const locale of this.languages.languages) this.names[locale] ??= "";
@@ -127,6 +129,7 @@ export class SectionDetailsForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope && this.isConnected) {
+      this.#baseline ??= structuredClone(this.#submissionValue());
       const { coordinator, scope } = draftScopeFor<SectionInput>(this, {
         id: this,
         parent: this.draftParent,
@@ -142,6 +145,7 @@ export class SectionDetailsForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
   protected override updated(changes: PropertyValues<this>): void {
@@ -214,6 +218,7 @@ export class SectionDetailsForm extends LitElement {
     };
   }
   commitSaved(submitted: SectionInput): void {
+    this.#baseline = structuredClone(submitted);
     this.#scope?.commit(submitted);
   }
   closeSaved(submitted: SectionInput): void {

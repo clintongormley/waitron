@@ -5,7 +5,12 @@ import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { SectionDetails, SectionInput } from "../api/client.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./section-details-form.js";
 import "@waitron/dashboard-modules";
 
@@ -292,4 +297,72 @@ it("a Section taken out of the page and put back asks before discarding an edit 
   cancel(form);
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
+});
+async function saveState(form: HTMLElementTagNameMap["dashboard-section-details-form"]) {
+  await form.updateComplete;
+  const save = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=save]",
+  )!;
+  await save.updateComplete;
+  return {
+    variant: save.variant,
+    disabled: save.disabled,
+    innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+const quietSave = { variant: "secondary", disabled: true, innerDisabled: true };
+function internalName(form: HTMLElement) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=internalName]")!
+    .value;
+}
+it("a Section keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, form } = await mount();
+  await edit(form, "internalName", "Changed");
+  await reattachAfterDetachedUpdate(form);
+  expect(internalName(form)).toBe("Changed");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
+});
+it("a Section reopened on another section after a put-back save opens quiet with that section", async () => {
+  const { app, form } = await mount();
+  await edit(form, "internalName", "Changed");
+  await reattachAfterDetachedUpdate(form);
+  form.closeSaved({ internalName: "Changed", names: section.names, image: null, color: null });
+  expect(form.open).toBe(false);
+  await closeReportsDelivered();
+  form.value = { ...section, id: "desserts", internalName: "Desserts" };
+  form.open = true;
+  await form.updateComplete;
+  expect(internalName(form)).toBe("Desserts");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await saveState(form)).toEqual(quietSave);
+  await edit(form, "internalName", "Puddings");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await edit(form, "internalName", "Desserts");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("a Section put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  await edit(form, "internalName", "Saved starters");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await edit(form, "internalName", "Newer starters");
+  form.commitSaved(app.submissions[0]!);
+  await reattachAfterDetachedUpdate(form);
+  expect(internalName(form)).toBe("Newer starters");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await edit(form, "internalName", "Saved starters");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await saveState(form)).toEqual(quietSave);
 });

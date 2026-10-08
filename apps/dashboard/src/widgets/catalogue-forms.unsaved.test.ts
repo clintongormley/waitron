@@ -233,3 +233,76 @@ it("a Unit put back after a detached update still asks before Cancel discards an
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });
+async function unitSaveState(form: HTMLElement & { updateComplete: Promise<unknown> }) {
+  await form.updateComplete;
+  const save = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=submit]",
+  )!;
+  await save.updateComplete;
+  return {
+    variant: save.variant,
+    disabled: save.disabled,
+    innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+const unitInput: UnitInput = {
+  name: unit.name,
+  abbreviation: unit.abbreviation,
+  precision: unit.precision,
+};
+const quietUnitSave = { variant: "secondary", disabled: true, innerDisabled: true };
+function unitNameEn(form: HTMLElement) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name-en"]')!
+    .value;
+}
+it("a Unit keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, form } = await mount();
+  await edit(form, "name-en", "Edited kilogram");
+  await reattachAfterDetachedUpdate(form);
+  expect(unitNameEn(form)).toBe("Edited kilogram");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await unitSaveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
+});
+it("a Unit reopened on another unit after a put-back save opens quiet with that unit", async () => {
+  const { app, form } = await mount();
+  await edit(form, "name-en", "Edited kilogram");
+  await reattachAfterDetachedUpdate(form);
+  form.closeSaved({ ...unitInput, name: { ...unit.name, en: "Edited kilogram" } });
+  expect(form.open).toBe(false);
+  await closeReportsDelivered();
+  form.value = { ...unit, id: "g", name: { en: "Gram", es: "Gramo" }, precision: 0 };
+  form.open = true;
+  await form.updateComplete;
+  expect(unitNameEn(form)).toBe("Gram");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await unitSaveState(form)).toEqual(quietUnitSave);
+  await edit(form, "name-en", "Grams");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await edit(form, "name-en", "Gram");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("a Unit put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  await edit(form, "name-en", "Saved kilogram");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+  await edit(form, "name-en", "Newer kilogram");
+  form.commitSaved(app.submitted[0] as UnitInput);
+  await reattachAfterDetachedUpdate(form);
+  expect(unitNameEn(form)).toBe("Newer kilogram");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await unitSaveState(form)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await edit(form, "name-en", "Saved kilogram");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await unitSaveState(form)).toEqual(quietUnitSave);
+});

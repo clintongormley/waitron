@@ -1558,20 +1558,18 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   dialogs, the venue-service watcher form, the dashboard's unit, ingredient, extras list, option
   list and option label forms, recipe editor, Add to menus picker and a section's Add products
   picker, the menus screen's section and menu details form and an include's Edit dialog, the staff
-  edit and new person forms, the variant, purchase and shift forms, and the bookings form do this;
-  with the check deleted, a reconnect case in the `*.unsaved.test.ts` that covers it fails. The
-  product editor does not yet, and whether it shows the fault is untested (backlog A331, batch 5's
-  open points);
+  edit and new person forms, the variant, purchase and shift forms, the bookings form and the
+  product editor do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
+  covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
   scope last committed — the opened value, then each saved value — in a field the disconnect does
   not clear, commit it into the new scope, and clear it wherever the form really reopens, or a
   reopened form starts changed. A form that forgets on disconnect which record it opened re-seeds
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
-  The staff edit and new person, variant, purchase, shift, bookings and watcher forms do this, each
-  with an edit-first reconnect case. The unit form keeps such an edit on screen but stops counting
-  it (measured in batch 2a, backlog A331); batch 2b records the same for the menus screen's section
-  and menu details form and an include's Edit dialog from one throwaway case. The recipe editor
+  The staff edit and new person, variant, purchase, shift, bookings and watcher forms, the product
+  editor, the unit form, the menus screen's section and menu details form and an include's Edit
+  dialog do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
   extras picker and station dialogs keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
