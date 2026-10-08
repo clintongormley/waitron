@@ -1686,7 +1686,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   these forms is taken out of the page and put back stays on screen but no longer counts as
   unsaved: measured 2026-10-08 on the unit form, the same before and after this batch's fix; the
   other forms were not tried, and the recipe editor clears its choice on removal by design. It
-  matters only if a screen ever moves an open form. DONE for the unit form in A397 part 2: its
+  matters only if a screen ever moves an open form. DONE for the unit form in A397 part 2 (#1439): its
   edit-first case in `catalogue-forms.unsaved.test.ts` failed before the fix and passes after.
   Still untried: the "VAT class for new products" default, the ingredient form, the options list
   and its option window, the extras list, Add to menus, Add products, Schedule and Change time.
@@ -1710,7 +1710,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   the field, Save was quiet, and Cancel closed the form without asking; main was not run. Related
   to, but not the same as, the watcher form's point in batch 4c, where the edit was replaced when
   the form was put back (fixed in #1429). It matters only if the menus screen ever moves an open
-  form. DONE for both forms in A397 part 2: each one's edit-first case
+  form. DONE for both forms in A397 part 2 (#1439): each one's edit-first case
   (`section-details-form.unsaved.test.ts`, `include-folder-form.unsaved.test.ts`) failed before the
   fix (not counted as unsaved) and passes after.
 - **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
@@ -1829,7 +1829,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   variant, purchase and shift forms and the bookings form. Each one failed both cases on main (an
   edit made after the form is put back, and one made before it was taken out) and passes with the
   fix; the purchase and shift forms and the bookings form also replaced an edit made before
-  removal with the stored values. DONE for the seventh in A397 part 2: the product editor failed
+  removal with the stored values. DONE for the seventh in A397 part 2 (#1439): the product editor failed
   both cases before its fix (`product-editor.unsaved.test.ts`) and passes after. The same branch
   closed the unit form's edit-first point under batch 2a. Also seen in the purchase and shift forms' tests, not changed and not
   tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
