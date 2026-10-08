@@ -18,6 +18,9 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { ServiceRange } from "../service-day.js";
 import { t } from "./strings.js";
+import { format } from "./hours-view.js";
+import { addDays } from "../hours-rules.js";
+import { localTimeOccurrences } from "../hours-occurrences.js";
 
 type Field = keyof ServiceRange;
 const copy = (input: ServiceRange): ServiceRange => ({ ...input });
@@ -48,6 +51,8 @@ export class RangeDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) deletable = false;
+  @property({ attribute: false }) businessDate?: string;
+  @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
   @property({ attribute: false }) range: ServiceRange = { startsAt: "", endsAt: "", periodId: "" };
   @property({ attribute: false }) periods: readonly { id: string; name: string }[] = [];
@@ -125,6 +130,18 @@ export class RangeDialog extends LitElement {
     if (!this.periods.some((period) => period.id === this.draft.periodId))
       errors.periodId = t("menu.period_required");
     return errors;
+  }
+  private repeatedTimes(): string[] {
+    if (!this.businessDate || !this.timeZone || this.errors.startsAt || this.errors.endsAt)
+      return [];
+    const times = new Set<string>();
+    for (const field of ["startsAt", "endsAt"] as const) {
+      const time = this.draft[field];
+      const nextDay = time < this.dayCutover || (field === "endsAt" && time === this.dayCutover);
+      const date = nextDay ? addDays(this.businessDate, 1) : this.businessDate;
+      if (localTimeOccurrences(date, time, this.timeZone).length > 1) times.add(time);
+    }
+    return [...times];
   }
   private changed(field: Field, value: string) {
     this.draft = { ...this.draft, [field]: value };
@@ -221,6 +238,7 @@ export class RangeDialog extends LitElement {
                 this.emit("range-new-period", { input: copy(this.draft) });
             }}
           ></wt-combobox>
+          ${this.repeatedTimes().map((time) => html`<p data-test="repeat-note">${format("menu.time_repeats", { time })}</p>`)}
         </div>
         <wt-form-actions
           slot="footer"

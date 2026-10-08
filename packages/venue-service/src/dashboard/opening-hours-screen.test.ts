@@ -25,6 +25,8 @@ afterEach(() => {
 
 function model(): OpeningHoursModel {
   return {
+    timeZone: "Europe/Madrid",
+    clockReadable: true,
     dayCutover: "06:00",
     menus: [
       { id: "lunch", name: "Lunch menu", active: true, includes: ["desserts", "drinks"] },

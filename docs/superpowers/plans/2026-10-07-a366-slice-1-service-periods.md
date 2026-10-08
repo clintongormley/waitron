@@ -769,7 +769,7 @@ Tasks 13 and 14. Leave Task 12 unchecked until its remaining work and verificati
 - Changes are staged and saved with one "Save" (`PUT .../menu-week`, or the special-date routes); a
   refusal is shown on the day it names; a draft scope; leaving with staged changes asks.
 
-- [ ] Steps: failing tests per bullet; watch them fail; implement; pass; look in both themes and at
+- [x] Steps: failing tests per bullet; watch them fail; implement; pass; look in both themes and at
 phone width; commit `feat(venue-service): edit a department's week of periods (A366)`.
 
 ---
@@ -823,6 +823,25 @@ This is not a package-wide coverage result. Final 390/1280-width captures includ
 Save, refusal, inherited/closed states, viewer and empty picker in both languages and themes.
 The legacy week/date/slot assertions still require migration and a complete acceptance audit;
 keep Task 13 unchecked. Task 14's Day consumer and Tasks 12/15 also remain.
+
+**Checkpoint 2026-10-08: Task 13 acceptance complete.** The retained Week/date checks now have
+explicit counterparts in the new grid, range and parent-save suites. A new complete seven-day
+body checks preservation of six other weekdays, including an overnight range. EN/ES save checks
+keep the exact submitted body and discard protection after a refusal, and commit before a failed
+refresh. The old sources and tests remain until Task 12 retires them together; none is removed here.
+
+The model now carries the venue timezone and whether its clock can be read. The special-date range
+editor explains a repeated endpoint on its actual calendar morning, including an end exactly at
+the changeover. The unreadable-clock and UTC controls show no invented repetition. A skipped-time
+refusal explains the clock gap at the date header and leaves the staged ranges retryable. These
+missing behaviors were observed failing before implementation; existing assertions remain intact.
+
+The focused editor/grid/model/route run passes 380 tests; the unedited fiscal pair passes 20.
+Five safeguard deletions fail their intended assertions, with 48 passing after restoration.
+The two measured editor files exceed their coverage bars; this is not package-wide coverage.
+The task's Week/date, nested editor, copy, menu, refused and clock-change states were inspected
+in English and Spanish, both themes and measured 390/1280 widths. Task 14's Day tab, Task 12's
+source retirement and Task 15 still precede branch review, CI and landing.
 
 ### Task 14: Opening hours — Day tab, and the Departments page
 

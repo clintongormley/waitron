@@ -10,7 +10,7 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Range dialog (%s)", (theme) => {
-  test.each(["new", "edit", "invalid", "busy"])("%s", async (state) => {
+  test.each(["new", "edit", "invalid", "busy", "repeated"])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed("<range-dialog></range-dialog>", theme)) as RangeDialog;
     el.periods = [{ id: "lunch", name: "Lunch" }];
@@ -19,6 +19,11 @@ describe.each(["light", "dark"] as const)("Range dialog (%s)", (theme) => {
       endsAt: "10:00",
       periodId: state === "new" || state === "invalid" ? "" : "lunch",
     };
+    if (state === "repeated") {
+      el.businessDate = "2026-10-24";
+      el.timeZone = "Europe/Madrid";
+      el.range = { startsAt: "01:00", endsAt: "02:30", periodId: "lunch" };
+    }
     el.deletable = state === "edit";
     el.open = true;
     await el.updateComplete;

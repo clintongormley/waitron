@@ -23,6 +23,8 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       if (method !== "GET")
         throw { code: "menu_period.in_use", params: { uses: [{ kind: "week", weekday: 1 }] } };
       return {
+        timeZone: "Europe/Madrid",
+        clockReadable: true,
         dayCutover: "06:00",
         specialDates: [],
         menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],

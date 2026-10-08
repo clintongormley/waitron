@@ -2378,6 +2378,20 @@ describe("department service periods", () => {
     ).toEqual([used.id, unused.id, yesterday.id]);
   });
 
+  it("gives the opening-hours editor the venue clock for special-date notes", async () => {
+    const v = await serviceVenue();
+    const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(model).toMatchObject({ timeZone: "Europe/Madrid", clockReadable: true });
+    await db
+      .update(locations)
+      .set({ timeZone: "unreadable" })
+      .where(eq(locations.id, v.cfg.locationId));
+    expect(await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).toMatchObject({
+      timeZone: "unreadable",
+      clockReadable: false,
+    });
+  });
+
   it("names direct menu inclusions without treating nested inclusions as direct", async () => {
     const v = await serviceVenue();
     await scoped(async (tx) => {

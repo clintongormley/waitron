@@ -98,6 +98,7 @@ export class OpeningHoursWeek extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) department!: Department;
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
+  @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
   @property({ attribute: false }) specialDate?: OpeningHoursModel["specialDates"][number];
   @state() private following = false;
@@ -111,6 +112,7 @@ export class OpeningHoursWeek extends LitElement {
   @state() private creating = false;
   @state() private error = "";
   @state() private errorDay?: number;
+  @state() private skippedTime = false;
   private scope?: DraftScope<Draft>;
   private baseline: Draft = { days: [], following: false };
   private source?: Department;
@@ -274,6 +276,7 @@ export class OpeningHoursWeek extends LitElement {
     this.saving = true;
     this.error = "";
     this.errorDay = undefined;
+    this.skippedTime = false;
     try {
       if (this.specialDate) {
         if (submitted.following)
@@ -294,6 +297,9 @@ export class OpeningHoursWeek extends LitElement {
         if (this.specialDate && /^(?:slots(?:\.|$)|date$)/.test(field))
           this.errorDay = weekdayOf(this.specialDate.date);
         else if (match) this.errorDay = input[Number(match[1])]?.weekday;
+        this.skippedTime =
+          this.errorDay !== undefined &&
+          (error as { params?: { reason?: unknown } }).params?.reason === "clock_skips";
       }
       return;
     } finally {
@@ -433,7 +439,7 @@ export class OpeningHoursWeek extends LitElement {
                               >${t("opening.clear_day")}</wt-button
                             >
                           </wt-row-actions>`
-                    }${this.errorDay === weekday ? html`<p class="day-errors" data-day-error=${weekday}>${this.dayLabel(weekday)}: ${t("opening.check_day")}</p>` : nothing}
+                    }${this.errorDay === weekday ? html`<p class="day-errors" data-day-error=${weekday}>${this.dayLabel(weekday)}: ${t(this.skippedTime ? "menu.time_skipped" : "opening.check_day")}</p>` : nothing}
                   </div>`,
               )
         }</service-grid
@@ -448,6 +454,8 @@ export class OpeningHoursWeek extends LitElement {
                 .range=${opening.input}
                 .periods=${this.periods()}
                 .dayCutover=${this.dayCutover}
+                .businessDate=${this.specialDate?.date}
+                .timeZone=${this.timeZone}
                 .occupied=${this.draft[opening.weekday]!.slots.filter((_, index) => index !== opening.index)}
                 .deletable=${opening.index !== undefined}
                 .busy=${!!this.periodOpening || this.creating}

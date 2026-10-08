@@ -15,6 +15,8 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
     const screen = document.createElement("dashboard-opening-hours-screen");
     screen.readOnly = state === "viewer";
     const model = {
+      timeZone: "Europe/Madrid",
+      clockReadable: true,
       dayCutover: "06:00",
       specialDates:
         state === "empty"

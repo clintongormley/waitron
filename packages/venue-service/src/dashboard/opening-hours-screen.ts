@@ -385,7 +385,7 @@ export class OpeningHoursScreen extends LitElement {
               >
                 <div slot="week">
                   ${this.view === "week" ? this.weekChooser() : nothing}
-                  ${this.view === "week" && department && (this.weekMode === "week" || special) ? keyed(`${department.id}:${this.weekMode}:${special?.id ?? ""}`, html`<opening-hours-week .api=${this.api} .department=${department} .menus=${this.model!.menus} .dayCutover=${this.model!.dayCutover} .specialDate=${special} .readOnly=${this.readOnly}></opening-hours-week>`) : nothing}
+                  ${this.view === "week" && department && (this.weekMode === "week" || special) ? keyed(`${department.id}:${this.weekMode}:${special?.id ?? ""}`, html`<opening-hours-week .api=${this.api} .department=${department} .menus=${this.model!.menus} .dayCutover=${this.model!.dayCutover} .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined} .specialDate=${special} .readOnly=${this.readOnly}></opening-hours-week>`) : nothing}
                 </div>
                 <div slot="periods">
                   ${this.view === "periods" && department ? this.periods(department) : nothing}

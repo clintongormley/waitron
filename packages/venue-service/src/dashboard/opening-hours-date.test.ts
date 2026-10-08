@@ -16,6 +16,8 @@ const special = {
 };
 function fixture(own = true): OpeningHoursModel {
   return {
+    timeZone: "Europe/Madrid",
+    clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     specialDates: [special, { ...special, id: "s2", date: "2026-10-13", name: "Party" }],

@@ -103,6 +103,8 @@ export interface DepartmentService {
 }
 
 export interface OpeningHoursModel {
+  timeZone: string;
+  clockReadable: boolean;
   dayCutover: string;
   menus: readonly { id: string; name: string; active: boolean; includes: readonly string[] }[];
   specialDates: readonly {

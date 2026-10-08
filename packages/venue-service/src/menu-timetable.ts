@@ -704,6 +704,8 @@ export async function readOpeningHoursModel(
   const graph = await loadSectionGraph(tx);
   const menuNames = new Map(menus.map((menu) => [menu.id, menu.name]));
   return {
+    timeZone: clock.timeZone,
+    clockReadable: moment !== null,
     dayCutover: clock.dayCutover,
     menus: menus.map((menu) => ({
       ...menu,

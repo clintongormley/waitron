@@ -9,6 +9,8 @@ import "./opening-hours-screen.js";
 class OpeningLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly api = new OpeningHoursApi((async () => ({
+    timeZone: "Europe/Madrid",
+    clockReadable: true,
     dayCutover: "06:00",
     specialDates: [],
     menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],

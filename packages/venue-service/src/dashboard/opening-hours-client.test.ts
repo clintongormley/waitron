@@ -4,6 +4,8 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 
 const model: OpeningHoursModel = {
+  timeZone: "Europe/Madrid",
+  clockReadable: true,
   dayCutover: "06:00",
   menus: [],
   departments: [],

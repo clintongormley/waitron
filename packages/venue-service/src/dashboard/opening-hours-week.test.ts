@@ -19,6 +19,8 @@ afterEach(() => {
 });
 export function fixture(): OpeningHoursModel {
   return {
+    timeZone: "Europe/Madrid",
+    clockReadable: true,
     dayCutover: "06:00",
     specialDates: [],
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
@@ -49,11 +51,12 @@ export function fixture(): OpeningHoursModel {
 async function mount(
   write?: (url: string, method: string, body: unknown) => Promise<unknown>,
   readOnly = false,
+  model = fixture(),
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.readOnly = readOnly;
   screen.api = new OpeningHoursApi((async (url, method, body) =>
-    method === "GET" ? fixture() : write?.(url, method, body)) as DashboardRequest);
+    method === "GET" ? model : write?.(url, method, body)) as DashboardRequest);
   applyTokens(screen);
   document.body.append(screen);
   await expect.poll(() => screen.shadowRoot?.querySelector("wt-tabs")).not.toBeNull();
@@ -712,4 +715,54 @@ it("a departed nested Cancel cannot close the next child editor", async () => {
   emit(old, "period-close", {});
   await week.updateComplete;
   expect(week.shadowRoot!.querySelector("period-editor")).toBe(next);
+});
+
+it("preserves all six other weekdays when staging a Sunday range", async () => {
+  const model = fixture();
+  model.departments[0]!.week = [
+    { weekday: 0, slots: [] },
+    { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+    { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
+    { weekday: 3, slots: [] },
+    { weekday: 4, slots: [] },
+    { weekday: 5, slots: [{ periodId: "p1", startsAt: "20:00", endsAt: "03:00" }] },
+    { weekday: 6, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "12:00" }] },
+  ];
+  const writes: unknown[] = [];
+  const week = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    false,
+    model,
+  );
+  emit(grid(week), "grid-range-select", { columnKey: "0", startsAt: "13:00", endsAt: "17:00" });
+  await week.updateComplete;
+  const dialog =
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["range-dialog"]>("range-dialog")!;
+  await dialog.updateComplete;
+  emit(dialog.shadowRoot!.querySelector("[name=periodId]")!, "wt-change", { value: "p1" });
+  await dialog.updateComplete;
+  dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
+  await week.updateComplete;
+  expect(writes).toEqual([]);
+  week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/departments/d1/menu-week",
+      "PUT",
+      {
+        days: [
+          { weekday: 0, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "17:00" }] },
+          { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+          { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
+          { weekday: 3, slots: [] },
+          { weekday: 4, slots: [] },
+          { weekday: 5, slots: [{ periodId: "p1", startsAt: "20:00", endsAt: "03:00" }] },
+          { weekday: 6, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "12:00" }] },
+        ],
+      },
+    ],
+  ]);
 });

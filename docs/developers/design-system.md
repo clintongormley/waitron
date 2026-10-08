@@ -1556,7 +1556,9 @@ Save available for retry. A venue viewer gets the grid without day menus or Save
 uses one column and stages Closed all day or Follow the normal week before Save. These choices
 compare the override's presence as well as its ranges, so choosing Closed on an inherited empty
 weekday still enables Save. Changing the date or returning to the normal week asks before
-discarding a staged draft. The Day consumer is still being built in A366 slice 1.
+discarding a staged draft. A special-date range explains endpoints the venue clock repeats on
+their calendar morning; its ending changeover belongs to the next morning. A skipped-time refusal
+names the clock gap at the date header and keeps Save available for retry. The Day consumer is still being built in A366 slice 1.
 
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
