@@ -29,11 +29,7 @@ import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
-import {
-  ROOT_KEY,
-  ownPresentation,
-  type StructureAddAction,
-} from "../widgets/menu-structure-table.js";
+import { ownPresentation, type StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
@@ -778,6 +774,8 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       const reached = reachable(this.structure?.nodes ?? []);
       this.#onMenu = reached.products;
+      // An empty menu's table draws no toolbar, so nothing could turn the mode off.
+      if (this.structure?.nodes.length === 0) this.structureReordering = false;
     }
     if (changed.has("structure") || changed.has("addingProducts")) {
       const target = this.addingProducts;
@@ -1456,7 +1454,7 @@ export class MenusScreen extends LitElement {
   }
 
   #returnFocusTo(path: string[], shut = false): void {
-    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") || ROOT_KEY };
+    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") };
     this.#windowShut = shut;
   }
 

@@ -795,10 +795,25 @@ async function toggleRow(el: MenusScreen, key: string): Promise<void> {
   await settleStructure(el);
 }
 
-/** Opens a row's ⋮ and chooses `action` in it, focusing the item first as a person's click
- * leaves it. */
+/** The tree's toolbar Add ⋮, which holds the adds for the menu's own top level. */
+function toolbarAdds(el: MenusScreen): HTMLElementTagNameMap["wt-row-actions"] | null {
+  return structure(el).shadowRoot!.querySelector('[data-test="toolbar-adds"]');
+}
+
+/** Opens a row's ⋮ — for `""`, the toolbar's Add ⋮ — and chooses `action` in it, focusing the
+ * item first as a person's click leaves it. */
 async function rowAction(el: MenusScreen, key: string, action: string): Promise<void> {
   await settleStructure(el);
+  if (key === "") {
+    toolbarAdds(el)!.show();
+    const item = structure(el).shadowRoot!.querySelector<HTMLElement>(
+      `[data-test="${CSS.escape(`${action}-top`)}"]`,
+    )!;
+    item.focus();
+    item.click();
+    await settleStructure(el);
+    return;
+  }
   inStructure<HTMLElementTagNameMap["wt-row-actions"]>(
     el,
     `[data-test="${CSS.escape(`actions-${key}`)}"]`,
@@ -809,29 +824,40 @@ async function rowAction(el: MenusScreen, key: string, action: string): Promise<
   await settleStructure(el);
 }
 
-/** The keys of the rows drawn at the menu's own top level, in order. */
-function topLevelKeys(el: MenusScreen): string[] {
-  return allInStructure(el, 'tbody tr[aria-level="2"]').map((row) => row.dataset.rowKey!);
+/** Chooses `action` among the adds an empty menu's tree draws in its empty box. */
+async function emptyAdd(el: MenusScreen, action: string): Promise<void> {
+  await settleStructure(el);
+  const item = structure(el).shadowRoot!.querySelector<HTMLElement>(
+    `[data-test="${CSS.escape(`${action}-empty`)}"]`,
+  )!;
+  item.focus();
+  item.click();
+  await settleStructure(el);
 }
 
-/** The keys of the rows drawn directly under `key`'s row, in order. */
+/** The keys of the rows drawn at the menu's own top level, in order. */
+function topLevelKeys(el: MenusScreen): string[] {
+  return allInStructure(el, 'tbody tr[aria-level="1"]').map((row) => row.dataset.rowKey!);
+}
+
+/** The keys of the rows drawn directly under `key`'s row (`""`: the top level), in order. */
 function childKeys(el: MenusScreen, key: string): string[] {
-  const depth = key === "root" ? 0 : key.split("/").length;
+  const depth = key === "" ? 0 : key.split("/").length;
   return allInStructure(el, "tbody tr[data-row-key]")
     .map((row) => row.dataset.rowKey!)
     .filter(
       (shown) =>
-        shown !== "root" &&
-        shown.split("/").length === depth + 1 &&
-        (depth === 0 || shown.startsWith(`${key}/`)),
+        shown.split("/").length === depth + 1 && (depth === 0 || shown.startsWith(`${key}/`)),
     );
 }
 
-/** The menu's name, then the names down to the row marked current, or "" when no row is. */
+/** The menu's name, then the names down to the row marked current; the menu's name alone when
+ * the tree is at the top level, which no row stands for; "" when a section is current but no row
+ * is marked. */
 function currentPlace(el: MenusScreen): string {
   const key = inStructure(el, '[aria-current="true"]')?.closest("tr")?.dataset.rowKey;
-  if (key === undefined) return "";
-  const segments = key === "root" ? [] : key.split("/");
+  if (key === undefined) return structure(el).current.length === 0 ? structure(el).menuName : "";
+  const segments = key.split("/");
   return [
     structure(el).menuName,
     ...segments.map((_, index) =>
@@ -840,9 +866,11 @@ function currentPlace(el: MenusScreen): string {
   ].join(" › ");
 }
 
-/** The key of the row marked current. */
+/** The key of the row marked current; `""` at the menu's top level, which no row stands for. */
 function currentKey(el: MenusScreen): string {
-  return inStructure(el, '[aria-current="true"]')!.closest("tr")!.dataset.rowKey!;
+  const marked = inStructure(el, '[aria-current="true"]');
+  if (marked === null && structure(el).current.length === 0) return "";
+  return marked!.closest("tr")!.dataset.rowKey!;
 }
 
 /** Lunch's structure holding `nodes` at its top level. */
@@ -1972,7 +2000,7 @@ it("shows the root's members, and expanding Drinks shows its members inline", as
 it("edits the menu's own top level first, with no sharing to report and nothing to duplicate", async () => {
   const el = await mountLunch();
   expect(currentPlace(el)).toBe("Lunch Menu");
-  expect(childKeys(el, "root")).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  expect(childKeys(el, "")).toEqual(["m-burger", "m-drinks", "m-fav"]);
   expect(q(el, '[data-test="shared"]')).toBeNull();
   expect(q(el, '[data-test="duplicate-here"]')).toBeNull();
 });
@@ -1999,17 +2027,85 @@ it("edits a section in place, marking the path followed in the tree", async () =
   expect(currentPlace(el)).toBe("Lunch Menu");
 });
 
-it("keeps the current list's Add actions in its own row's ⋮, not beside the Structure tab", async () => {
+it("keeps the current list's Add actions in its own row's ⋮ and the top level's in the toolbar's Add ⋮, not beside the Structure tab", async () => {
   const el = await mountLunch(api());
   await editDrinks(el);
   const tabs = q(el, 'wt-tabs[data-test="menu-tabs"]')!;
-  for (const key of ["root", "m-drinks"])
-    for (const action of ["new-section", "include-menu", "open-add-products"])
-      expect(
-        inStructure(el, `[data-test="actions-${key}"] [data-test="${action}-${key}"]`),
-        `${action}-${key}`,
-      ).not.toBeNull();
+  for (const action of ["new-section", "include-menu", "open-add-products"]) {
+    expect(
+      inStructure(el, `[data-test="actions-m-drinks"] [data-test="${action}-m-drinks"]`),
+      `${action}-m-drinks`,
+    ).not.toBeNull();
+    expect(
+      toolbarAdds(el)!.querySelector(`[data-test="${action}-top"]`),
+      `${action}-top`,
+    ).not.toBeNull();
+  }
   expect(tabs.querySelector('[slot="actions"]')).toBeNull();
+});
+
+it("creates a section at the menu's top level from the toolbar's Add ⋮, and gives focus back to it", async () => {
+  const client = api();
+  const el = await mountLunch(client);
+  await rowAction(el, "", "new-section");
+  expect(modal(el, "new-section").heading).toBe(
+    t("menus.new_section_heading").replace("{list}", "Lunch Menu"),
+  );
+  type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
+  await el.updateComplete;
+  inModal(el, "new-section", '[data-test="new-section-save"]').click();
+  await vi.waitFor(() =>
+    expect(client.createSectionIn).toHaveBeenCalledExactlyOnceWith(
+      "root-lunch",
+      expect.objectContaining({ internalName: "Ciders" }),
+    ),
+  );
+  await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
+  await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+  await afterDialogCloses(el);
+  await settleStructure(el);
+  expect(structure(el).shadowRoot!.activeElement).toBe(toolbarAdds(el));
+});
+
+it("draws Reorder's Done after the toolbar's Add ⋮", async () => {
+  const el = await mountLunch();
+  await pressReorder(el);
+  const done = q(el, '[data-test="reorder-done"]')!;
+  const adds = toolbarAdds(el)!;
+  expect(done.getBoundingClientRect().width).toBeGreaterThan(0);
+  expect(done.getBoundingClientRect().left).toBeGreaterThan(adds.getBoundingClientRect().right);
+});
+
+it("turns Reorder off and puts focus on the empty box's first add when removing the last member empties the menu", async () => {
+  let removed = false;
+  const client = api({
+    getMenuStructure: vi.fn(async () =>
+      lunchWith(removed ? [] : [productNode("m-burger", "p-burger")]),
+    ),
+    removeSectionMember: vi.fn(async () => {
+      removed = true;
+    }),
+  });
+  const el = await mountLunch(client);
+  await vi.waitFor(() => expect(rowOf(el, "m-burger")).not.toBeNull());
+  await pressReorder(el);
+  expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("true");
+  await rowAction(el, "m-burger", "remove");
+  await vi.waitFor(() =>
+    expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("root-lunch", "m-burger"),
+  );
+  await vi.waitFor(() =>
+    expect(
+      structure(el).shadowRoot!.querySelector('[data-test="new-section-empty"]'),
+    ).not.toBeNull(),
+  );
+  await afterDialogCloses(el);
+  await settleStructure(el);
+  expect(structure(el).shadowRoot!.activeElement?.getAttribute("data-test")).toBe(
+    "new-section-empty",
+  );
+  expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
+  expect(q(el, '[data-test="reorder-done"]')).toBeNull();
 });
 
 it("keeps the new-section form open and explains a refused section", async () => {
@@ -2262,7 +2358,7 @@ it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the 
   const handle = () =>
     list.shadowRoot.querySelector<HTMLButtonElement>('[data-test="drag-m-burger"]')!;
   const order = () =>
-    [...list.shadowRoot.querySelectorAll('tbody tr[aria-level="2"]')].map((row) =>
+    [...list.shadowRoot.querySelectorAll('tbody tr[aria-level="1"]')].map((row) =>
       row.getAttribute("data-row-key"),
     );
   handle().focus();
@@ -2911,7 +3007,7 @@ const DINNER_PATH = "/manage/menus/menu/menu-dinner/view/structure";
 
 it("closes an open window without a message when the person goes to another menu", async () => {
   const el = await mountLunch();
-  await rowAction(el, "root", "new-section");
+  await rowAction(el, "", "new-section");
   expect(modal(el, "new-section").heading).toBe(
     t("menus.new_section_heading").replace("{list}", "Lunch Menu"),
   );
@@ -2919,7 +3015,7 @@ it("closes an open window without a message when the person goes to another menu
   expect(modal(el, "new-section").open).toBe(false);
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 
-  await rowAction(el, "root", "open-add-products");
+  await emptyAdd(el, "open-add-products");
   await visit(el, LUNCH_PATH, "Lunch Menu");
   await editDrinks(el);
   expect(modal(el, "add-products").open).toBe(false);
@@ -2999,7 +3095,7 @@ it("closes a new-section form whose section is refused while the person is on th
   const creating = deferred<SectionDetails>();
   const client = api({ createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
-  await rowAction(el, "root", "new-section");
+  await rowAction(el, "", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Specials");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -3178,7 +3274,7 @@ it("closes a new-section form quietly when its section is created and added whil
   const creating = deferred<SectionDetails>();
   const client = api({ createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
-  await rowAction(el, "root", "new-section");
+  await rowAction(el, "", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Specials");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -3252,7 +3348,7 @@ it("reports no lost list when a product add is saved while its menu's structure 
   const adding = deferred<{ added: number }>();
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
-  await rowAction(el, "root", "open-add-products");
+  await rowAction(el, "", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -3403,7 +3499,7 @@ describe("the Structure tree", () => {
   const places = [
     { key: "m-fav/m-fav-drinks", open: ["m-fav"], list: "s-drinks", name: "Drinks" },
     { key: "m-fav", open: [], list: "s-fav", name: "Favourites" },
-    { key: "root", open: [], list: "root-lunch", name: "Lunch Menu" },
+    { key: "", open: [], list: "root-lunch", name: "Lunch Menu" },
   ];
 
   it.each(places)(
@@ -3718,7 +3814,7 @@ describe("the Structure tree", () => {
       const { client, el } = await mountWithWines({
         addSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.member_cycle" }),
       });
-      await rowAction(el, "root", "include-menu");
+      await rowAction(el, "", "include-menu");
       await chooseOption(inModal(el, "include", '[name="included-menu"]'), "wine-root");
       await vi.waitFor(async () =>
         expect(await bottom(el, "include")).toBe(codeMessage("menu_section.member_cycle")),
@@ -3729,8 +3825,10 @@ describe("the Structure tree", () => {
     });
   });
 
-  /** The ⋮ that has focus in the tree's table, as its row's key. */
+  /** The ⋮ that has focus in the tree's table, as its row's key; `""` for the toolbar's Add ⋮. */
   function focusedRowMenu(el: MenusScreen): string | undefined {
+    const adds = toolbarAdds(el);
+    if (adds !== null && structure(el).shadowRoot!.activeElement === adds) return "";
     const focused = structureRows(el).shadowRoot.activeElement;
     return focused?.localName === "wt-row-actions"
       ? focused.closest("tr")?.dataset.rowKey
@@ -3806,12 +3904,12 @@ describe("the Structure tree", () => {
     },
     {
       name: "Include a menu, cancelled",
-      open: (el) => rowAction(el, "root", "include-menu"),
+      open: (el) => rowAction(el, "", "include-menu"),
       close: async (el) => {
         await click(el, "include-cancel");
         await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
       },
-      focused: "root",
+      focused: "",
     },
     {
       name: "Edit, cancelled",
@@ -3861,7 +3959,7 @@ describe("the Structure tree", () => {
         await vi.waitFor(() => expect(includeModal(el).open).toBe(false));
         await vi.waitFor(() => expect(topLevelKeys(el)).not.toContain("included-wine"));
       },
-      focused: "root",
+      focused: "",
     },
     {
       name: "Delete, confirmed",
@@ -3975,11 +4073,16 @@ describe("the Structure tree", () => {
 
   it("returns no focus to a menu the person has since left", async () => {
     const el = await mountLunch();
-    await rowAction(el, "root", "include-menu");
+    await rowAction(el, "", "include-menu");
     await visit(el, DINNER_PATH, "Dinner Menu");
     await afterDialogCloses(el);
     await settleStructure(el);
-    expect(focusedRowMenu(el)).not.toBe("root");
+    expect(focusedRowMenu(el)).not.toBe("");
+    // Dinner is empty, so its adds are the empty box's.
+    expect(
+      structure(el).shadowRoot!.querySelector('[data-test="new-section-empty"]'),
+    ).not.toBeNull();
+    expect(structure(el).shadowRoot!.activeElement).toBeNull();
   });
 
   it.each(["an add", "a removal"] as const)(
@@ -4033,7 +4136,6 @@ describe("the Structure tree", () => {
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     const menus = allInStructure(el, 'wt-row-actions[data-test^="actions-"]');
     expect(menus.map((menu) => menu.closest("tr")!.dataset.rowKey)).toEqual([
-      "root",
       "m-burger",
       "m-drinks",
       "m-drinks/m-lager",
@@ -4052,6 +4154,14 @@ describe("the Structure tree", () => {
       const hit = menu.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
       expect(hit !== null && button.contains(hit), `${key} is covered`).toBe(true);
     }
+    const adds = toolbarAdds(el)!;
+    const button = adds.shadowRoot!.querySelector("button")!;
+    window.scrollTo(0, button.getBoundingClientRect().top + window.scrollY - 100);
+    const at = button.getBoundingClientRect();
+    expect(at.left).toBeGreaterThanOrEqual(0);
+    expect(at.right).toBeLessThanOrEqual(window.innerWidth);
+    const hit = adds.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+    expect(hit !== null && button.contains(hit), "the toolbar's Add ⋮ is covered").toBe(true);
   });
 
   it.each(["en-GB", "es-ES"])(
@@ -7556,7 +7666,7 @@ it("creates a section with its customer name, image and colour in one request", 
   });
   Object.assign(client, { createSectionIn });
   const el = await mountLunch(client);
-  await rowAction(el, "root", "new-section");
+  await rowAction(el, "", "new-section");
   const form = el.shadowRoot!.querySelector("dashboard-section-details-form");
   expect(form).not.toBeNull();
   form!.dispatchEvent(
@@ -7600,7 +7710,7 @@ it("offers only menus that can be included, and includes one as a folder", async
     }),
   });
   const el = await mountLunch(client);
-  await rowAction(el, "root", "include-menu");
+  await emptyAdd(el, "include-menu");
   const picker = el.shadowRoot!.querySelector<
     HTMLElement & {
       required: boolean;
@@ -7669,7 +7779,7 @@ describe("the include-a-menu field", () => {
   it("includes the chosen menu without a second action", async () => {
     const client = includeClient();
     const el = await mountLunch(client);
-    await rowAction(el, "root", "include-menu");
+    await emptyAdd(el, "include-menu");
     const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
     await chooseOption(picker, "wine-root");
     await vi.waitFor(() =>
@@ -7685,7 +7795,7 @@ describe("the include-a-menu field", () => {
     const adding = deferred<SectionMember>();
     const client = includeClient({ addSectionMember: vi.fn(() => adding.promise) });
     const el = await mountLunch(client);
-    await rowAction(el, "root", "include-menu");
+    await emptyAdd(el, "include-menu");
     const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
     expect(picker).not.toBeNull();
     expect(picker.label).toBe(t("menus.include_menu"));
@@ -7711,7 +7821,7 @@ describe("the include-a-menu field", () => {
 
   it("closes an open list on Escape and leaves the dialog open", async () => {
     const el = await mountLunch(includeClient());
-    await rowAction(el, "root", "include-menu");
+    await emptyAdd(el, "include-menu");
     const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
     const list = picker.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
