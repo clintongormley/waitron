@@ -1572,8 +1572,8 @@ section and include dialogs" (`widgets/section-details-form.ts`, `widgets/includ
 — because only `menus-screen.ts` mounts them and gating them forces edits to
 `menus-screen.test.ts`. The batch list above puts `section-*` and `include-folder-form` in batch 2,
 but `git diff --name-only origin/main...feat/save-follows-changes-catalogue` (2026-10-08, 2a tip
-`e8becbbab`) touches neither file nor any file below except this plan, so 2b takes them. 2b does
-not edit 2a's files: `add-to-menus.ts`, `section-add-products.ts` and `menu-publications.ts`
+`dc7f9229b`, with 2a.5 and 2a.6 committed) touches neither file nor any file below except this
+plan, so 2b takes them. 2b does not edit 2a's files: `add-to-menus.ts`, `section-add-products.ts` and `menu-publications.ts`
 (2a.5, 2a.6) are 2a's, though `menus-screen.ts` mounts all three. 2a's rule for 2a.5 and 2a.6 is
 to run `menus-screen.test.ts` unedited, and to move a widget to 2b if the gate breaks it there; if
 that happens, 2b takes it in a task added after 2a lands. Both branches edit this plan,
@@ -1614,13 +1614,14 @@ an edit on the stored section (~2218); an include's Edit on its stored folder or
 | --- | --- | --- |
 | `menus-screen.ts` | Add a shortcut (~2507–2541), Include a menu (~2644–2674) | No Save button: choosing in the combobox writes at once (`#addShortcut` ~1615, `#includeMenu` ~1507). |
 | `menus-screen.ts` | Delete section (`delete-section-save`, ~2676–2726) | A `danger` confirmation of a delete. |
-| `menus-screen.ts` | The home display slider and radios (~2387–2398, ~2443–2456) | Each change saves at once (`#saveDisplay` ~1689). |
+| `menus-screen.ts` | The home display slider and radios (~2387–2398, ~2443–2456) | Each change saves at once (`#saveDisplay` ~1689). The device radios above them (~2367–2384) only switch which device's display is shown. |
 | `menus-screen.ts` | Add menu, Reorder and Done, the retry buttons | Open a form, switch a mode, read again. |
 | `menus-screen.ts` | The Add products window (~2735–2786) | Hosts 2a's picker. Its Cancel and `beforeClose` already ask for the coordinator itself (`leaveCoordinatorFor(this)`, ~1532–1537, ~2741, ~2776), so 2a's change to the picker needs nothing here. |
-| `widgets/menu-prices-table.ts` | Each price override field (~870–886) and Undo (~1273–1285) | No Save button: a price saves on Enter or on leaving the field (`#commit` ~946); Undo writes the old price back at once. |
+| `widgets/menu-prices-table.ts` | Each price override field (~870–886) and Undo (~1273–1285); Show clashes (~1178) | No Save button: a price saves on Enter or on leaving the field (`#commit` ~946); Undo writes the old price back at once; Show clashes only filters the table. |
 | `widgets/menu-structure-table.ts` | Row menus' Add, Edit, Delete, Remove, the colour swatch, drag to reorder (~718–810) | Each opens one of the forms above or writes at once. |
 | `widgets/menu-preview.ts` | Publish (`publish` ~732–741) and its confirmation (`publish-confirm` ~862–867) | Publishes the menu's staged changes, an operation; Publish is drawn only while there is something to publish (`#renderPublish` ~727–729). Show all changes, the view combobox (~698) and Retry change only what is shown. |
 | `widgets/menu-document-tree.ts`, `widgets/menu-tree-presentation.ts`, `widgets/device-home-preview.ts` | — | Draw only: no form controls besides the preview's navigation tiles. |
+| `widgets/menu-price-inheritance.ts`, `widgets/section-writes.ts`, `widgets/off-menus.ts`, `packages/catalogue/src/customer-menu-presentation.ts` (Batch 7 held `customer-menu*` for this work) | — | Helpers with no controls (`git grep -n 'wt-button\|register(\|leaveCoordinatorFor'` finds none). |
 | `navigation.ts`, `i18n/strings.ts` | — | The URL map and `leftToBrowser` (~1–34); strings need nothing new. |
 
 So the code change is two files; the rest of 2b is the menus screen's tests.
@@ -1667,7 +1668,11 @@ The menus screen mounts this one form twice: the menu form (create and rename,
 
 - `#submit` (~177) returns while `saveActionState(this.#scope).unchanged`, after the
   `busy || pickerOpen` return (~179) and BEFORE `attempted = true` (~180). Test first: an untouched
-  press emits no `wt-submit`. Then the throw-probe over the 2b.1a suites.
+  press emits no `wt-submit`. Then the throw-probe over the 2b.1a suites. Some untouched presses
+  show under the probe only as `Unhandled error` lines in tests that stay green: the a11y presses
+  (`section-details-form.a11y.test.ts` ~38, `menus-screen.a11y.test.ts` ~315) are changed checks
+  all the same; `menus-screen.test.ts` ~2071 is not — the live change has already closed the
+  form, so that press sent nothing before either; leave it.
 - Predicted changed checks (from reading; the throw-probe is the list that counts):
   `section-details-form.test.ts` ~8–23 (an empty create pressed: type a customer name, then press,
   and the internal name's error shows), ~222–237 (a translation refusal pressed untouched), ~238–264
@@ -1678,8 +1683,9 @@ The menus screen mounts this one form twice: the menu form (create and rename,
   type a customer name first in both; "the name forms" (`it.each` over the menu form and the new
   section form), each test twice: ~7849–7872 (`""` into an empty create is no change: type a
   customer name, then empty the internal name), ~7894–7915 (the second press at ~7911 follows
-  emptying the name back to unchanged), ~7932–7945 (same as ~7849); `menus-screen.a11y.test.ts`
-  ~309–318 and ~368–390 (blank name refused: type a customer name first). Presses after a typed
+  emptying the name back to unchanged), ~7917–7930 (its press at ~7920 is an empty create, which
+  the test needs to have shown errors before the reopen: same fix as ~7849), ~7932–7945 (same as
+  ~7849); `menus-screen.a11y.test.ts` ~309–318 and ~368–390 (blank name refused: type a customer name first). Presses after a typed
   name (~964, ~1074, ~1858, ~1874, ~1888–1894, ~1932, ~2022, ~2071–2151, ~2999, ~3178, ~3758,
   ~3772, ~8387) and `menu-details.unsaved.test.ts` (~94–107, fills the name first) should not change.
 - Suites: as 2b.1a.
@@ -1704,6 +1710,8 @@ The menus screen mounts this one form twice: the menu form (create and rename,
   `commitSaved` with the form open makes it quiet. Reconnect case in
   `include-folder-form.unsaved.test.ts`, as 2b.1a. Axe both states, both themes: add a "changed"
   state to `include-folder-form.a11y.test.ts`.
+- Measured 2026-10-08 (see "Plan review" below): the throw-probe over these suites fails exactly the
+  tests listed here.
 - Predicted changed checks: `include-folder-form.test.ts` ~129–137 (keeps a name in a language the
   form does not show, pressed untouched: edit the colour and check `fr` is still sent), ~204–218
   (`it.each`, three rows: refusal at mount, Save asserted enabled at ~216 — edit first);
@@ -1729,3 +1737,14 @@ The menus screen mounts this one form twice: the menu form (create and rename,
   Publish act at once, pointing at this section. Nothing joins "These open already savable".
 - `docs/backlog.md` A331: batch 2b's status in the headline and a 2b bullet (the forms, the not-a-save
   table in one line, what the look found). If 2a has not landed, batch 2 stays OPEN for 2a.
+
+**Plan review (fresh context, 2026-10-08, at `a50333417`).** A temporary probe wired both forms as
+2b.1a and 2b.2 describe (`draftScopeFor`, the `isConnected` skip, the leave paths on `#leave`, Save
+bound to `saveActionState`) with `throw new Error("untouched save")` at both early returns, then ran
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/section-details-form
+src/widgets/include-folder-form src/screens/menus-screen src/screens/menu-details.unsaved`: 595
+tests, 31 failed, 28 `Unhandled error` lines, every one at a site listed in 2b.1a, 2b.1b or 2b.2
+except `menus-screen.test.ts` ~2071 (explained in 2b.1b) and ~7920 (added to 2b.1b). No failure in
+either form's `*.unsaved.test.ts` or `menu-details.unsaved.test.ts`. The probe was reverted. Because
+it bound `disabled` and the early return together, it does not say which task each failure falls
+in; the split above is from reading.
