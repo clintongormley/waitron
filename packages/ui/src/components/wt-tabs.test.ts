@@ -1,4 +1,5 @@
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanup, host, mountInShadowRoot } from "../test-helpers.js";
 import { mountThemed } from "../a11y-helpers.js";
 import type { WtTabs } from "./wt-tabs.js";
@@ -682,4 +683,38 @@ test("brings the selected tab back into view when the tabs alone are reordered",
   await el.updateComplete;
   expect(tablist(el).scrollLeft).toBeLessThan(scrolled);
   expectSelectedInView(el);
+});
+
+test("a marked tab shows a star after its label and is named with what the star means", async () => {
+  const el = await setup();
+  el.items = [items[0]!, { ...items[1]!, marked: "unpublished changes" }, items[2]!];
+  await el.updateComplete;
+  const marked = buttons(el)[1]!;
+  const star = marked.querySelector<HTMLElement>(".mark")!;
+  expect(star.textContent).toBe("*");
+  expect(star.getAttribute("aria-hidden")).toBe("true");
+  expect(marked.textContent!.replace(/\s+/g, " ").trim().startsWith("Menus*")).toBe(true);
+  await expect
+    .element(page.getByRole("tab", { name: "Menus, unpublished changes", exact: true }))
+    .toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Status", exact: true })).toBeInTheDocument();
+  expect(buttons(el)[0]!.querySelector(".mark")).toBeNull();
+});
+
+test("a marked tab is drawn in the primary text colour, selected or not", async () => {
+  const el = await setup();
+  host.style.setProperty("--wt-color-primary-text", "rgb(10, 20, 30)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(90, 90, 90)");
+  host.style.setProperty("--wt-color-text", "rgb(0, 0, 0)");
+  el.items = [
+    { ...items[0]!, marked: "unpublished changes" },
+    { ...items[1]!, marked: "unpublished changes" },
+    items[2]!,
+  ];
+  await el.updateComplete;
+  const [selected, unselected, plain] = buttons(el);
+  expect(selected!.getAttribute("aria-selected")).toBe("true");
+  expect(getComputedStyle(selected!).color).toBe("rgb(10, 20, 30)");
+  expect(getComputedStyle(unselected!).color).toBe("rgb(10, 20, 30)");
+  expect(getComputedStyle(plain!).color).toBe("rgb(90, 90, 90)");
 });

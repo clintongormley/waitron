@@ -37,6 +37,22 @@ describe.each(["light", "dark"] as const)("tabs accessibility (%s)", (theme) => 
     await expectNoA11yViolations(host);
   });
 
+  test("a marked tab, selected and not, stays accessible", async () => {
+    const el = (await mountThemed(
+      '<wt-tabs label="Lunch Menu"><p slot="structure">Structure</p><p slot="preview">Preview</p></wt-tabs>',
+      theme,
+    )) as WtTabs;
+    el.items = [
+      { key: "structure", label: "Structure" },
+      { key: "preview", label: "Preview", marked: "unpublished changes" },
+    ];
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    el.value = "preview";
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("both selected states have named, associated tabs and panels", async () => {
     const el = (await mountThemed(
       '<wt-tabs label="Venue operations"><p slot="status">Ready for service</p><p slot="menus">Manage menus</p></wt-tabs>',
