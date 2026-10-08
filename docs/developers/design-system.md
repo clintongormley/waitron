@@ -1660,6 +1660,10 @@ connection and enrolment, including with its saved address after denial, so it r
 without an edit. Recovery Retry also performs an operation. The
 [Batch 7 audit](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
 lists the call paths and the reserved forms still awaiting their owning batches.
+The 2026-10-08 [Batch 7b follow-up](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7b--revisit-the-landed-reservations-lane-e-a331-7b)
+revisited the hardware, till, menus and invoice foundation after landing and found no additional
+staged Save editor. Service-period forms remain reserved until the A366 slices land and batch
+4b follows them.
 
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.

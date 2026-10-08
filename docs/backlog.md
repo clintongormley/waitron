@@ -1757,19 +1757,19 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   Save perform operations; the latter clears the token and restarts enrolment even with the same
   saved address. Existing behavior remains unchanged. The
   [audit and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
-  list each classification. **Reserved forms still need their owning batch and a follow-up audit:**
-  printer/agent/calibration, device/profile, reader and canvas forms (gated by batch 3b) still await
-  a rerun of Batch 7's two inventories; till dialogs left for after
-  `feat/save-follows-changes-till` lands; device-home, menus and Preview widgets left for after
-  `fix/home-column-ranges` and its following Preview work land (the menus screen's section and
-  menu details form and an include's Edit dialog are done in batch 2b; Add products, the
-  publication schedule and Add to menus in batch 2a); hours/date/slot, service
-  settings, operations and timetable forms left for after
-  `feat/service-periods-slice-1` lands (batch 4b; the local holiday and watcher forms are done in
-  batch 4c); invoice configuration/setup and agent paths left
-  for after parked invoice part 1 [#1399](https://github.com/clintongormley/waitron/pull/1399) lands.
-  Next action: rerun Batch 7's inventories over those paths after landing, then apply the shared
-  gate test-first to any true Save editor its owning batch leaves uncovered.
+  list each classification. **Batch 7b follow-up (A331-7b, 2026-10-08)** reran both
+  inventories on the landed hardware, till, menu/home/Preview and invoice-foundation paths.
+  No additional staged Save editor was found; existing Save gates, immediate price/display
+  writes and the agent's unchanged-address enrolment retry remain as built. Canvas Create
+  opens an editor before saving; Duplicate confirms its prefilled copy. The
+  [dated follow-up and source receipts](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7b--revisit-the-landed-reservations-lane-e-a331-7b)
+  distinguish source inspection from the unchanged focused tests. The browser run also logged
+  the ResizeObserver message; A407 owns its cause and screen-effect investigation.
+  **Still reserved:** hours/date/slot, service settings, venue operations and timetable forms
+  wait for lane D's A366 slices and batch 4b. Local holiday and watcher forms landed in #1418,
+  preparation stations in #1426. Next action: after the relevant A366 slices land, finish batch
+  4b and rerun the inventories on the rewritten forms. A396's disabled-zone profile ruling,
+  A397's reconnect work and A231q's future invoice screens remain separate tasks.
 
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected

@@ -1832,3 +1832,69 @@ Execution receipt, 2026-10-08: landed in #1426 as `46e8688f3bff5c3dfac00f4d205b9
 Focused browser checks ran 738 tests; the current-head CI venue-service coverage job ran 2,829.
 The Claude run-it validation-message finding and the dirty-before-reconnect case each failed added
 behavioral tests before their fixes. Changed test checks and review limits are recorded in the PR.
+
+
+## Batch 7b — revisit the landed reservations (Lane E, A331-7b)
+
+**2026-10-08, audit on `086d75f84e83e56fdfc168c5902d7dbc4987fdb5`.** The original
+Batch 7 above is a historical receipt. Its hardware (#1415), till (#1414, #1418),
+menu/home/Preview (#1411, #1417, #1422, #1424) and invoice foundation (#1399)
+reservations have landed. This follow-up found no additional staged Save editor to
+change in those paths. Only documentation changes; all existing tests and product
+code stay byte-for-byte unchanged.
+
+Rerun the four inventory commands under Batch 7. Intersect the labelled list with
+the button list for the first inventory; retain every button file for the second.
+Read both scoped and unscoped files in the reserved groups: a scope alone does not
+establish that the button or handler uses the Save gate. On this tree, the whole-tree
+lists contained 33 labelled button files without a scope-helper mention and 103
+button files without one. These counts describe a text scan, not independent forms.
+The local command outputs and checks are retained under
+`~/waitron-campaign-e/receipts/a331-7b/`.
+
+| Previously reserved area | Classification on this tree and source receipt |
+| --- | --- |
+| Printer and agent settings, calibration and pairing | Existing Save gates: `apps/dashboard/src/screens/printers-screen.ts:2191` (agent), `:2440` (connection), `:2491` (name), `:1696` (calibration), `:1616` (Pair). Calibration after Add and the supplied printer name remain savable at open, as batch 3b decided. |
+| Devices, profiles and readers | Existing Save gates: `apps/dashboard/src/screens/devices-screen.ts:585` combines the device and reader scopes; `device-profiles-screen.ts:571` combines the profile and reader scopes; `payments-screen.ts:777` gates Rename and `:917` gates bill attestation. Pair and provider-supplied reader Add retain batch 3b's savable-at-open rules. The disabled-zone profile ruling remains A396's separate task. |
+| Canvas editor, name chooser and duplicate | `apps/dashboard/src/screens/canvas-editor-screen.ts:815` gates the editor's Save. Create's `#confirmCreate` at `:503` opens a default canvas draft with a null baseline, without a request. Duplicate confirms a prefilled copy name (`:1042`); it remains savable at open. `canvas-grid-preview.ts` changes the parent draft; it owns no separate Save. |
+| Menu and section details, include Edit, Add products, Add to menus, publication schedule | Existing helpers and handler returns in `apps/dashboard/src/widgets/section-details-form.ts:192`, `include-folder-form.ts:208`, `section-add-products.ts:227`, `add-to-menus.ts:245` and `menu-publications.ts:510`. `menus-screen.ts:1999`, `:2608` and `:2634` consume the child submissions. |
+| Prices, Structure, Preview and device-home preview | Prices commit on Enter or leaving a field (`apps/dashboard/src/widgets/menu-prices-table.ts:884`, `:942`, `:946`); Undo sends the previous price (`:985`). Structure buttons emit operations or open an editor (`menu-structure-table.ts:744`). Preview publishes, retries a read or changes the local hidden-change list (`menu-preview.ts:541`, `:586`); device-home preview navigates (`device-home-preview.ts:315`). Home display choices write immediately through `menus-screen.ts:2395`, `:2411`, `:2421`. None owns an additional staged primary Save. |
+| Till Save editors | Party name, invoice recipient, modifier Edit, station Make at and schedule cover/time-off requests already use the shared gate. Profile Switch uses batch 4c's stated comparison exception (`apps/till/src/widgets/profile-dialog.ts:84`). Modifier Add remains savable at open (`modifier-picker.ts:485`). Batch 5's operation classifications still apply. |
+| Other till controls from the broader inventory | Equipment choice emits `equipment-change` (`apps/till/src/widgets/equipment-dialog.ts:162`) and reaches `setDeviceEquipment` (`till-app.ts:4535`) immediately; taking a held item is a confirmation of that operation. Reader choice emits `reader-chosen` (`reader-picker.ts:76`); reprint language confirms a print (`reprint-language-dialog.ts:77`). Basket refresh, seating, order/payment/serve controls and navigation remain operations, parent-draft changes or choosers, with no additional staged Save editor. |
+| Invoice configuration/setup and server/agent paths | The configuration-transfer and setup API files are server boundaries, not editors. The setup screens retain Batch 6's provisioning/restore classifications. `apps/dashboard/src/screens/email-screen.ts:104` and `:118` read the practice inbox; SMTP setup screens remain part 2 (A231q). The string-page scan still finds only recovery Retry and agent setup/reset actions. Agent `/setup` calls Configure (`apps/print-agent/src/setup-page.ts:208`, `:225`), whose implementation clears the token and resets runtime even for the saved address (`packages/print-agent/src/agent.ts:592`–`:605`). Keep that retry available. |
+
+**Still reserved.** Skip hours/date/slot, service settings, venue operations and menu
+timetable forms in `packages/venue-service`; lane D's A366 slices rewrite them and
+batch 4b follows those landings. The local holiday and watcher editors already
+landed in #1418, and preparation stations in #1426. This audit does not claim to
+cover lane D's unlanded tree, future invoice screens or reconnect defects being
+worked by lane C's A397.
+
+**Checks and limits.** Run unchanged focused suites, not a package-wide gate.
+The exact commands and outputs are retained in the local receipts. All commands
+below exited 0, with these printed results:
+
+| Command (after `pnpm --filter <package> exec vitest run`) | Package | Printed result |
+| --- | --- | --- |
+| `src/screens/printers-screen.save-state.test.ts src/screens/devices-screen.save-state.test.ts src/screens/device-profiles-screen.save-state.test.ts src/screens/payments-screen.save-state.test.ts src/screens/canvas-editor-screen.save-state.test.ts src/screens/menu-details.unsaved.test.ts src/widgets/section-details-form.unsaved.test.ts src/widgets/include-folder-form.test.ts src/widgets/menu-selections.unsaved.test.ts src/widgets/menu-publications.test.ts src/widgets/menu-prices-table.test.ts` | `@waitron/dashboard` | 11 files, 527 tests passed |
+| `src/widgets/section-details-form.save-state.test.ts src/widgets/include-folder-form.save-state.test.ts src/widgets/menu-publications.save-state.test.ts src/widgets/section-add-products.save-state.test.ts src/widgets/menu-publications.unsaved.test.ts src/screens/menus-screen.test.ts` | `@waitron/dashboard` | 6 files, 470 tests passed |
+| `src/widgets/party-name-dialog.test.ts src/widgets/invoice-recipient-dialog.test.ts src/widgets/modifier-picker.test.ts src/widgets/station-choice-dialog.test.ts src/widgets/profile-dialog.test.ts src/widgets/equipment-dialog.test.ts src/widgets/reprint-language-dialog.test.ts src/widgets/reader-picker.test.ts src/widgets/basket-refresh-dialog.test.ts src/widgets/seat-dialog.test.ts src/screens/till-schedule-screen.test.ts` | `@waitron/till` | 11 files, 205 tests passed |
+| `src/widgets/party-name-dialog.save-state.test.ts src/widgets/invoice-recipient-dialog.save-state.test.ts src/widgets/modifier-picker.save-state.test.ts src/widgets/station-choice-dialog.save-state.test.ts src/widgets/profile-dialog.save-state.test.ts src/screens/till-schedule-screen.save-state.test.ts` | `@waitron/till` | 6 files, 39 tests passed |
+| `src/setup-page.test.ts` | `@waitron/print-agent-app` | 1 file, 33 tests passed |
+| `src/agent.test.ts -t 'setup reset drops|reconfigures a denied agent|refuses a queued configure'` | `@waitron/print-agent` | 1 file, 4 tests passed, 114 skipped by name selection |
+| `src/write-path.e2e.test.ts src/inmutabilidad.test.ts` | `@waitron/fiscal-verifactu` | 2 files, 20 tests passed, both files unedited |
+
+The first dashboard command also named two nonexistent filters,
+`src/screens/menu-layout.unsaved.test.ts` and `src/widgets/menu-price-outcomes.test.ts`;
+the second named `src/widgets/menu-prices-table.input.test.ts`, also absent. Vitest
+ran only the existing files listed above. No execution is claimed for absent filters.
+
+The dashboard
+hardware Save-state suites, menu detail/selection/publication and price suites
+exercise the existing gates and immediate commits; till editor and chooser suites
+exercise the Save/action distinction; setup-page and selected agent cases exercise
+same-address reset/rejoin. No new Save gate was needed, so there is no new red/green
+cycle, changed-test-check inventory or visual change to verify. Browser console
+output includes the ResizeObserver notification-loop message; its cause and screen
+effect remain unverified and belong to A407. Do not infer package coverage or absence
+of other defects from these focused runs.
