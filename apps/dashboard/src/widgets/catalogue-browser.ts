@@ -587,6 +587,8 @@ export class CatalogueBrowser extends LitElement {
           : "folders.disable_products_heading",
       count,
     );
+    const blocked =
+      this.summaryLoading || this.summaryFailed || (this.operation === "move" && !this.destination);
     return html`<wt-modal
       size="compact"
       .open=${true}
@@ -728,9 +730,9 @@ export class CatalogueBrowser extends LitElement {
         >
         <wt-button
           data-test="confirm"
-          variant=${this.operation === "delete" ? "danger" : "primary"}
+          variant=${blocked ? "secondary" : this.operation === "delete" ? "danger" : "primary"}
           .loading=${this.operationBusy}
-          .disabled=${this.operationBusy || this.summaryLoading || this.summaryFailed || (this.operation === "move" && !this.destination)}
+          .disabled=${this.operationBusy || blocked}
           @click=${(event: Event) => {
             if (!(event.currentTarget as HTMLElement).isConnected) return;
             void this.#confirm(this.operation, true);

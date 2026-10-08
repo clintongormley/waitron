@@ -1710,6 +1710,83 @@ it("requires a move destination, excludes selected folders and descendants, and 
   await vi.waitFor(() => expect(dialog(el)).toBeNull());
   expect(count(el)).toBe("0 selected");
 });
+it.each(["light", "dark"])(
+  "draws Move quiet like Cancel while it waits for a destination, then blue (%s theme)",
+  async (theme) => {
+    const el = await mountBrowser();
+    el.parentElement!.setAttribute("data-theme", theme);
+    await selectKeys(el, ["bread"]);
+    await press(el, "move");
+    const confirm =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+    const fill = (host: Element) =>
+      getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+    const cancelFill = fill(el.shadowRoot!.querySelector("wt-button[slot=cancel]")!);
+    expect(confirm.getAttribute("disabled")).not.toBeNull();
+    expect(confirm.variant).toBe("secondary");
+    expect(fill(confirm)).toBe(cancelFill);
+    await destination(el, "f");
+    await confirm.updateComplete;
+    expect(confirm.getAttribute("disabled")).toBeNull();
+    expect(confirm.variant).toBe("primary");
+    expect(fill(confirm)).not.toBe(cancelFill);
+  },
+);
+it.each([
+  ["Move", "move", "primary"],
+  ["Delete", "delete", "danger"],
+] as const)(
+  "keeps %s coloured while the request it sent is in progress",
+  async (_name, operation, variant) => {
+    const el = await mountBrowser();
+    let finish!: () => void;
+    vi.mocked(
+      operation === "move" ? el.api.moveCatalogueItems : el.api.deleteCatalogueItems,
+    ).mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve)));
+    await selectKeys(el, ["folder:d"]);
+    await press(el, operation);
+    if (operation === "move") await destination(el, "f");
+    else
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"),
+      );
+    await press(el, "confirm");
+    const confirm =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+    await vi.waitFor(() => expect(confirm.loading).toBe(true));
+    await vi.waitFor(() =>
+      expect(
+        operation === "move" ? el.api.moveCatalogueItems : el.api.deleteCatalogueItems,
+      ).toHaveBeenCalled(),
+    );
+    expect(confirm.variant).toBe(variant);
+    finish();
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  },
+);
+it("draws Delete quiet while its summary loads, then red", async () => {
+  const el = await mountBrowser();
+  let resolve!: (
+    value: {
+      id: string;
+      folders: number;
+      products: number;
+      activeProducts: number;
+      routes: number;
+      ownRoutes: number;
+    }[],
+  ) => void;
+  vi.mocked(el.api.summariseFolders).mockReturnValueOnce(new Promise((r) => (resolve = r)));
+  await selectKeys(el, ["bread", "folder:d"]);
+  await press(el, "delete");
+  const confirm =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  expect(confirm.getAttribute("disabled")).not.toBeNull();
+  expect(confirm.variant).toBe("secondary");
+  resolve([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }]);
+  await vi.waitFor(() => expect(confirm.getAttribute("disabled")).toBeNull());
+  expect(confirm.variant).toBe("danger");
+});
 it("shows a move refused for a duplicate name in the move dialog, keeping the choice", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.moveCatalogueItems).mockRejectedValueOnce({
@@ -1941,7 +2018,7 @@ it("still asks what happens to the contents when a category holding only routing
   );
 });
 it.each(["network", "missing", "partial"])(
-  "keeps deletion disabled on %s summary",
+  "keeps deletion disabled and quiet on %s summary",
   async (state) => {
     const el = await mountBrowser();
     if (state === "network")
@@ -1955,9 +2032,10 @@ it.each(["network", "missing", "partial"])(
     await selectKeys(el, ["folder:d", "folder:f"]);
     await press(el, "delete");
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
-    expect(
-      el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
-    ).not.toBeNull();
+    const confirm =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+    expect(confirm.getAttribute("disabled")).not.toBeNull();
+    expect(confirm.variant).toBe("secondary");
     expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
   },
 );
