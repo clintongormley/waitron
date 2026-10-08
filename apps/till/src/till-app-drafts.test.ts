@@ -79,7 +79,7 @@ function catalogue(version: string, prices: Record<string, string> = {}): ZoneOf
     offer("offer-flan", "Flan", "desserts"),
   ].map((each) => ({ ...each, unitPrice: prices[each.name] ?? each.unitPrice }));
   return {
-    service: { open: true, periodName: null },
+    service: { open: true, periodName: null, keepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId: "z1",
@@ -3494,7 +3494,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const state = (versionId: string) => ({
-        service: { open: true, periodName: null },
+        service: { open: true, periodName: null, keepOpen: null },
         menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
         unavailable: { products: [], optionLabels: [] },
       });
@@ -3553,7 +3553,7 @@ describe("till-app: other people's drafts and taking one over", () => {
 
 describe("till-app: a menu published while a table's draft is open (D9)", () => {
   const state = (versionId: string, soldOut: string[] = []) => ({
-    service: { open: true, periodName: null },
+    service: { open: true, periodName: null, keepOpen: null },
     menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
@@ -4236,7 +4236,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
 
 describe("till-app: a draft line that cannot be sold now", () => {
   const state = (soldOut: string[]) => ({
-    service: { open: true, periodName: null },
+    service: { open: true, periodName: null, keepOpen: null },
     menus: [{ menuId: "lunch", versionId: "v1", orderable: true, sendable: true }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
@@ -4570,7 +4570,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       defaultMenuId: null,
     });
     const at = (versionId: string) => ({
-      service: { open: true, periodName: null },
+      service: { open: true, periodName: null, keepOpen: null },
       menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
       unavailable: { products: [], optionLabels: [] },
     });

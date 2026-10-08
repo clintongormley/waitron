@@ -98,6 +98,9 @@ import {
  * - `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
  *   `PUT /api/stations/:stationId/today`: a decision about the venue's day; reads require a session,
  *   writes require `venue_service.manage` or a permitted PIN override;
+ * - `GET /api/service-zones/:zoneId/keep-open` and
+ *   `PUT /api/service-zones/:zoneId/period-extension`: the venue's day, session reads and
+ *   `venue_service.manage` or a permitted PIN for writes;
  * - the watcher "done" marks: each is the watcher's own record of what it has seen, not preparing
  *   or handing over. `/api/device/watcher/done` is made by the watcher's own display, which is
  *   allowed only `prepare-orders`; `/api/watchers/:id/done` by a person signed in on a till that

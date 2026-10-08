@@ -168,7 +168,17 @@ describe("Always fixture periods", () => {
           listZoneOffers(tx, v.cfg, zoneId, { at: madrid(MONDAY, time) }),
         );
         expect(offers.defaultMenuId).toBe(v.menus.Desayunos);
-        expect(offers.service).toEqual({ open: true, periodName: "Always" });
+        expect(offers.service).toEqual({
+          open: true,
+          periodName: "Always",
+          keepOpen: {
+            periodId: expect.any(String),
+            periodName: "Always",
+            endsAt: "06:00",
+            running: true,
+            extendedUntil: null,
+          },
+        });
         expect(
           offers.menus.map((menu) => ({
             id: menu.id,
@@ -739,7 +749,17 @@ describe("the menu a zone starts on", () => {
       listZoneOffers(tx, v.cfg, v.sala, { at: madrid(MONDAY, "10:00") }),
     );
     expect(offers.defaultMenuId).toBe(menus.Desayunos);
-    expect(offers.service).toEqual({ open: true, periodName: "Mañanas" });
+    expect(offers.service).toEqual({
+      open: true,
+      periodName: "Mañanas",
+      keepOpen: {
+        periodId: periods.mananas,
+        periodName: "Mañanas",
+        endsAt: "12:00",
+        running: true,
+        extendedUntil: null,
+      },
+    });
     expect(offers.menus.filter((menu) => menu.orderable).map((menu) => menu.id)).toEqual([
       menus.Desayunos,
     ]);
@@ -1793,6 +1813,7 @@ describe("statements", () => {
     expect(lots.filter((text) => runningPeriodReads.test(text))).toEqual([]);
     const priced = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { withDefault: false }));
     expect(priced.defaultMenuId).toBeNull();
+    expect(priced.service).toEqual({ open: true, periodName: null, keepOpen: null });
     expect(priced.menus.map((menu) => menu.id).sort()).toEqual(
       [
         v.menus.Desayunos,
@@ -2334,7 +2355,7 @@ describe("department service periods", () => {
       .update(locations)
       .set({ timeZone: "not/a-zone" })
       .where(eq(locations.id, v.locationId));
-    expect(await read(v, FRIDAY, "14:15")).toMatchObject({ open: true, keepOpen: null });
+    expect(await read(v, FRIDAY, "14:15")).toMatchObject({ open: true });
   });
 
   it("keeps all period menus once while marking the running customer and staff menus orderable", async () => {
@@ -2343,7 +2364,17 @@ describe("department service periods", () => {
     const result = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
     );
-    expect(result.service).toEqual({ open: true, periodName: "Lunch" });
+    expect(result.service).toEqual({
+      open: true,
+      periodName: "Lunch",
+      keepOpen: {
+        periodId: v.lunch,
+        periodName: "Lunch",
+        endsAt: "14:00",
+        running: true,
+        extendedUntil: null,
+      },
+    });
     expect(result.defaultMenuId).toBe(v.menus.Almuerzo);
     expect(
       result.menus
@@ -2365,7 +2396,17 @@ describe("department service periods", () => {
     const afternoon = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "14:00") }),
     );
-    expect(afternoon.service).toEqual({ open: true, periodName: "Afternoon" });
+    expect(afternoon.service).toEqual({
+      open: true,
+      periodName: "Afternoon",
+      keepOpen: {
+        periodId: v.afternoon,
+        periodName: "Afternoon",
+        endsAt: "19:00",
+        running: true,
+        extendedUntil: null,
+      },
+    });
     expect(afternoon.menus.find((menu) => menu.id === v.menus.Café)).toMatchObject({
       audience: "customer",
       orderable: true,
@@ -2440,7 +2481,7 @@ describe("department service periods", () => {
     );
     expect(result).toEqual({
       defaultMenuId: null,
-      service: { open: false, periodName: null },
+      service: { open: false, periodName: null, keepOpen: null },
       menus: [],
       offers: [],
     });
@@ -2456,7 +2497,17 @@ describe("department service periods", () => {
     const result = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "20:00") }),
     );
-    expect(result.service).toEqual({ open: false, periodName: null });
+    expect(result.service).toEqual({
+      open: false,
+      periodName: null,
+      keepOpen: {
+        periodId: v.afternoon,
+        periodName: "Afternoon",
+        endsAt: "19:00",
+        running: false,
+        extendedUntil: null,
+      },
+    });
     expect(result.defaultMenuId).toBeNull();
     expect(result.menus.map((menu) => menu.id).sort()).toEqual(
       [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena].sort(),
@@ -2473,7 +2524,7 @@ describe("department service periods", () => {
     const result = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "20:00") }),
     );
-    expect(result.service).toEqual({ open: true, periodName: null });
+    expect(result.service).toEqual({ open: true, periodName: null, keepOpen: null });
     expect(result.menus).toHaveLength(4);
     expect(result.menus.every((menu) => menu.orderable)).toBe(true);
     expect(result.defaultMenuId).toBeNull();

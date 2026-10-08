@@ -68,6 +68,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | ------------------------------------------------------- | ---------------------- | ---------------------------------------------------- |
  * | GET  /api/default-service-zone/offers                   | profile start; list    | "starts at the profile's starting zone and lists..." |
  * | GET  /api/service-zones/:zoneId/offers                  | path zone              | refuses GET /api/service-zones/:zoneId/offers        |
+ * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses GET for a zone outside the profile department |
+ * | PUT  /api/service-zones/:zoneId/period-extension        | path zone              | till-api.keep-open.test.ts: refuses PUT for a zone outside the profile department |
  * | GET  /api/menu-state?zoneId                             | query zone; or start   | refuses GET /api/menu-state?zoneId                   |
  * | POST /api/dead-ends/sale                                | body zone; body order  | refuses POST /api/dead-ends/sale (zone), (order)     |
  * | POST /api/sales                                         | body zone; body order  | refuses POST /api/sales (zone), (order)              |

@@ -58,7 +58,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products }),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      service: { open: true, periodName: null },
+      service: { open: true, periodName: null, keepOpen: null },
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-counter",

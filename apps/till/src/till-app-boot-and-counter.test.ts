@@ -109,7 +109,7 @@ function zoneOffers(
   defaultMenuId: string | null = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null,
 ): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    service: { open: true, periodName: null },
+    service: { open: true, periodName: null, keepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId,
