@@ -13,7 +13,7 @@ import { freePorts } from "./testing/free-ports.js";
 
 const drain = vi.hoisted(() => ({ calls: [] as FiscalDutyDeps[] }));
 
-// The filing path's only clock input is the drain's deps, so a fake drain stands in for filing.
+// Boot hands filing the authority-clock observer only through the drain's deps, so a fake drain stands in for filing.
 vi.mock("@waitron/module", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/module")>();
   return {

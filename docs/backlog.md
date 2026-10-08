@@ -2915,14 +2915,15 @@ independent real-database cash-sale check pass in `apps/server/src/time-health.t
 its real authority-clock monitor a sample. The authenticated alerts API returns the measured
 drift alert, then no clock alert after a correct sample. Removing the clock-alert registration
 in a disposable checkout makes the drift assertion fail; the restored registration passes.
-The test exposes the monitor's sample input; it does not check boot's filing-observer connection
+That test exposes the monitor's sample input; it does not check boot's filing-observer connection
 or exercise the filing transport. **A406 DONE:** `apps/server/src/boot.clock-wiring.test.ts`
 starts the real server with the fiscal slot's `drain` replaced by a fake that hands the deps'
 `observeAuthorityTime` a sample 121 s off, and waits for that drift alert on the authenticated
 alerts API. Deleting `observeAuthorityTime: authorityClock.observe,` from `boot.ts` made it fail
 (`expected [] to deeply equal [ { key: 'fiscal.clock_drift', …(6) } ]`) while
-`boot.clock-alert.test.ts` still passed in the same run; the restored line passes. It does not
-exercise the filing transport.
+`boot.clock-alert.test.ts` still passed in the same run; the restored line passes. It replaces the
+Veri\*Factu slot's own drain, so it exercises neither that drain's handover of the sample input to
+`aeatClientResolver` (`packages/fiscal-verifactu/src/slot.ts`) nor the filing transport.
 **A385 DONE:** the till's legacy unit fallback includes Spanish text. A missing enabled
 abbreviation falls back to the unit's enabled name; with no enabled text the label is
 empty, never an id. Chromium helper and rendered-tile cases cover Spanish, a missing requested
