@@ -33,7 +33,7 @@ const LUNCH_PATH = "/manage/menus/menu/menu-lunch/view/structure";
 const PREVIEW_PATH = "/manage/menus/menu/menu-lunch/view/preview";
 const PRICES_PATH = "/manage/menus/menu/menu-lunch/view/prices";
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
-const CHANGED_LINE = `Unpublished changes · Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`;
+const LIVE_WORDS = `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`;
 
 const burger = {
   id: "p-burger",
@@ -160,10 +160,6 @@ function menusLink(el: MenusScreen): HTMLAnchorElement {
   return q<HTMLAnchorElement>(el, '[data-test="menu-breadcrumb"] a')!;
 }
 
-function statusLink(el: MenusScreen): HTMLAnchorElement | null {
-  return q<HTMLAnchorElement>(el, '[data-test="menu-status"] [data-test="status-changes"]');
-}
-
 /** Records whether each click reaching the window was prevented, then stops the test page itself
  * from navigating. */
 function watchClicks(): boolean[] {
@@ -186,7 +182,7 @@ function modifiedClick(target: Element, modifier: (typeof MODIFIERS)[number]): v
 }
 
 describe("the menu editor's heading", () => {
-  it("leads with a path landmark holding one link, Menus, then the menu's name on the same line", async () => {
+  it("puts a path landmark holding one link, Menus ›, above the menu's name, left-aligned, at normal text size in the link colour", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     onTestFinished(() => page.viewport(width, height));
@@ -201,21 +197,37 @@ describe("the menu editor's heading", () => {
     const link = links[0]!;
     expect(text(link)).toBe(t("menus.title"));
     expect(text(link)).toBe("Menus");
+    expect(text(nav.querySelector(".sep"))).toBe("›");
+    expect(nav.querySelector(".sep")!.getAttribute("aria-hidden")).toBe("true");
     expect(link.getAttribute("href")).toBe(LIST_PATH);
     expect(link.dataset.test).toBe("back");
     const style = getComputedStyle(link);
     expect(style.textDecorationLine).toContain("underline");
     expect(style.color).toBe(resolved(el, "--wt-color-primary-text"));
+    expect(style.fontSize).toBe(getComputedStyle(el).fontSize);
+    expect(getComputedStyle(nav.querySelector(".sep")!).color).toBe(
+      resolved(el, "--wt-color-primary-text"),
+    );
 
     const headings = el.shadowRoot!.querySelectorAll("h1");
     expect(headings).toHaveLength(1);
     const h1 = headings[0]!;
     expect(text(h1)).toBe("Lunch Menu");
     expect(nav.contains(h1)).toBe(false);
-    const a = link.getBoundingClientRect();
+    const a = nav.getBoundingClientRect();
     const b = h1.getBoundingClientRect();
-    expect(a.top < b.bottom && b.top < a.bottom, "the link and the name share a line").toBe(true);
-    expect(a.right).toBeLessThanOrEqual(b.left);
+    expect(a.bottom, "the path sits above the name").toBeLessThanOrEqual(b.top + 1);
+    expect(Math.abs(link.getBoundingClientRect().left - b.left)).toBeLessThanOrEqual(1);
+  });
+
+  it("draws the menu's name at the size of the Menus list's heading", async () => {
+    const list = await mount(api(), LIST_PATH);
+    await vi.waitFor(() => expect(q(list, '[data-test="menus"]')).not.toBeNull());
+    const listSize = getComputedStyle(q(list, "h1")!).fontSize;
+    cleanupWidgets();
+    const el = await mount();
+    expect(text(q(el, "h1"))).toBe("Lunch Menu");
+    expect(getComputedStyle(q(el, "h1")!).fontSize).toBe(listSize);
   });
 
   it("names the path and its link in Spanish", async () => {
@@ -266,88 +278,110 @@ describe("the menu editor's heading", () => {
     expect(text(q(el, "h1"))).toBe("Lunch Menu");
   });
 
-  it("makes Unpublished changes a link to the Preview tab, worded as before", async () => {
+  /** The Preview tab's button in the editor's tab row. */
+  function previewTab(el: MenusScreen): HTMLButtonElement {
+    return q(el, "wt-tabs")!.shadowRoot!.querySelector<HTMLButtonElement>(
+      '[role="tab"][data-key="preview"]',
+    )!;
+  }
+
+  it("marks the Preview tab with a star while the menu has unpublished changes, and draws no link for them", async () => {
     const el = await mount();
-    await vi.waitFor(() => expect(statusLink(el)).not.toBeNull());
-    const link = statusLink(el)!;
-    expect(link.tagName).toBe("A");
-    expect(link.getAttribute("href")).toBe(PREVIEW_PATH);
-    expect(text(link)).toBe("Unpublished changes");
-    expect(text(q(el, '[data-test="menu-status"]'))).toBe(CHANGED_LINE);
-    const style = getComputedStyle(link);
-    expect(style.textDecorationLine).toContain("underline");
-    expect(style.color).toBe(resolved(el, "--wt-color-primary-text"));
+    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
+    expect(text(previewTab(el))).toBe("Preview*");
+    expect(previewTab(el).getAttribute("aria-label")).toBe("Preview, unpublished changes");
+    expect(deepAll(el.shadowRoot!, '[data-test="status-changes"]')).toEqual([]);
+    expect(text(q(el, '[data-test="menu-status"]'))).not.toContain("Unpublished changes");
+    expect(q(el, '[data-test="menu-status"] a')).toBeNull();
   });
 
-  it("keeps the state line's height when its label becomes a link, while giving the link a tap target's height", async () => {
-    const plain = await mount(api(async () => ({ ...CHANGED, state: "current" })));
-    await vi.waitFor(() => expect(q(plain, '[data-test="menu-status"] .time')).not.toBeNull());
-    const plainHeight = q(plain, '[data-test="menu-status"]')!.getBoundingClientRect().height;
-    cleanupWidgets();
+  it("names the starred Preview tab in Spanish", async () => {
+    setLocale("es-ES");
     const el = await mount();
-    await vi.waitFor(() => expect(statusLink(el)).not.toBeNull());
-    expect(q(el, '[data-test="menu-status"]')!.getBoundingClientRect().height).toBe(plainHeight);
-    const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
-    expect(statusLink(el)!.getBoundingClientRect().height).toBeGreaterThanOrEqual(tapMin);
+    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
+    expect(text(previewTab(el))).toBe("Vista previa*");
+    expect(previewTab(el).getAttribute("aria-label")).toBe("Vista previa, cambios sin publicar");
   });
 
-  it("opens the Preview tab on a plain click on Unpublished changes", async () => {
-    const seen = watchClicks();
-    const el = await mount();
-    await vi.waitFor(() => expect(statusLink(el)).not.toBeNull());
-    statusLink(el)!.click();
-    await el.updateComplete;
-    expect(seen).toEqual([true]);
-    expect(location.pathname).toBe(PREVIEW_PATH);
-    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("preview");
+  it.each([
+    ["Structure", LUNCH_PATH],
+    ["Preview", PREVIEW_PATH],
+  ])("draws the starred Preview tab in the primary colour on the %s tab", async (_tab, path) => {
+    const el = await mount(api(), path);
+    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
+    expect(getComputedStyle(previewTab(el)).color).toBe(resolved(el, "--wt-color-primary-text"));
   });
 
-  it.each(MODIFIERS)(
-    "leaves a click on Unpublished changes with %s held to the browser",
-    async (modifier) => {
-      const seen = watchClicks();
-      const el = await mount();
-      await vi.waitFor(() => expect(statusLink(el)).not.toBeNull());
-      modifiedClick(statusLink(el)!, modifier);
-      await el.updateComplete;
-      expect(seen).toEqual([false]);
-      expect(location.pathname).toBe(LUNCH_PATH);
-      expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("structure");
-    },
-  );
+  it("sits the live version in brackets beside the name, on the heading's line, in normal text", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    onTestFinished(() => page.viewport(width, height));
+    await page.viewport(1280, 900);
+    const el = await mount();
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS));
+    const words = q(el, '[data-test="menu-status"]')!;
+    const h1 = q(el, "h1")!;
+    expect(h1.contains(words)).toBe(false);
+    expect(text(h1)).toBe("Lunch Menu");
+    const a = h1.getBoundingClientRect();
+    const b = words.getBoundingClientRect();
+    expect(a.top < b.bottom && b.top < a.bottom, "the name and its version share a line").toBe(
+      true,
+    );
+    expect(b.left).toBeGreaterThanOrEqual(a.right);
+    const style = getComputedStyle(words);
+    expect(style.fontSize).toBe(getComputedStyle(el).fontSize);
+    expect(style.fontWeight).toBe("400");
+    expect(style.color).toBe(resolved(el, "--wt-color-text-muted"));
+  });
+
+  it("words the live version in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(
+        `(Publicada: versión 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
+      ),
+    );
+  });
 
   const never = () => new Promise<MenuStatus>(() => undefined);
   it.each([
     [
       "published and current",
       async (): Promise<MenuStatus> => ({ ...CHANGED, state: "current" }),
-      `Published · Version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
+      `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
     ],
     [
       "never published",
       async (): Promise<MenuStatus> => ({ state: "unpublished", clashes: 0 }),
-      "Unpublished",
+      "(Unpublished)",
     ],
-    ["still being checked", never, "Checking…"],
+    ["still being checked", never, "(Checking…)"],
     [
       "not checkable",
       async (): Promise<MenuStatus> => Promise.reject(new Error("offline")),
-      "Could not be checked",
+      "(Could not be checked)",
     ],
-  ])("draws no link while the menu is %s", async (_state, status, words) => {
+  ])("leaves the Preview tab unstarred while the menu is %s", async (_state, status, words) => {
     const el = await mount(api(status));
     await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(words));
     expect(q(el, '[data-test="menu-status"] a')).toBeNull();
+    expect(previewTab(el).querySelector(".mark")).toBeNull();
+    expect(previewTab(el).hasAttribute("aria-label")).toBe(false);
+    expect(text(previewTab(el))).toBe("Preview");
   });
 
-  it("draws no link on the Preview tab, which it would only open again", async () => {
+  it("keeps the star on the Preview tab while it is the tab shown", async () => {
     const el = await mount(api(), PREVIEW_PATH);
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(CHANGED_LINE));
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS));
     expect(q(el, '[data-test="menu-status"] a')).toBeNull();
+    expect(previewTab(el).getAttribute("aria-selected")).toBe("true");
+    expect(text(previewTab(el))).toBe("Preview*");
   });
 
   const clashWords = (el: MenusScreen) =>
-    q(el, '[data-test="menu-status"] [data-test="status-clashes"]');
+    q(el, '[data-test="menu-clashes"] [data-test="status-clashes"]');
   it.each([
     ["Prices", PRICES_PATH, "en", 1, "Publishing waits on 1 clash"],
     ["Prices", PRICES_PATH, "en", 3, "Publishing waits on 3 clashes"],
@@ -367,7 +401,8 @@ describe("the menu editor's heading", () => {
       );
       await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
       expect(text(clashWords(el))).toBe(words);
-      expect(text(q(el, '[data-test="menu-status"]')).endsWith(` · ${words}`)).toBe(true);
+      expect(text(q(el, '[data-test="menu-clashes"]'))).toBe(words);
+      expect(text(q(el, '[data-test="menu-status"]'))).not.toContain(words);
       expect(getComputedStyle(clashWords(el)!).color).toBe(resolved(el, "--wt-color-danger"));
     },
   );
@@ -434,8 +469,9 @@ describe("the menu editor's heading", () => {
     ["Preview", PREVIEW_PATH],
   ])("says nothing about clashes on the %s tab while none is left", async (_tab, path) => {
     const el = await mount(api(), path);
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(CHANGED_LINE));
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS));
     expect(clashWords(el)).toBeNull();
+    expect(q(el, '[data-test="menu-clashes"]')).toBeNull();
   });
 
   it("reads the clashes again on the Prices tab when a price override changes", async () => {
@@ -461,7 +497,7 @@ describe("the menu editor's heading", () => {
         ),
     });
     const el = await mount(client, PRICES_PATH);
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(CHANGED_LINE));
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS));
     clashes = 2;
     live.invalidate([{ type: "menu_item_variant_overrides" }]);
     await vi.waitFor(() => expect(text(clashWords(el))).toBe("Publishing waits on 2 clashes"));
@@ -478,7 +514,7 @@ describe("the menu editor's heading", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(vi.mocked(client.getMenuStatus).mock.calls.length).toBeGreaterThan(reads);
     await vi.waitFor(() => expect(clashWords(el)).toBeNull());
-    expect(text(q(el, '[data-test="menu-status"]'))).toBe(CHANGED_LINE);
+    expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS);
   });
 
   /** Mounts a menu named `name` at phone width, putting the viewport back afterwards. */
@@ -558,7 +594,8 @@ it.each(["light", "dark"] as const)(
       theme,
     );
     const heading = () => text(q(el, '[data-test="menu-status"]'));
-    await vi.waitFor(() => expect(heading()).toContain("Publishing waits on 2 clashes"));
+    const clashLine = () => text(q(el, '[data-test="menu-clashes"]'));
+    await vi.waitFor(() => expect(clashLine()).toBe("Publishing waits on 2 clashes"));
     failed = true;
     live.invalidate([{ type: "products" }]);
     const panel = () => q(el, "dashboard-menu-preview")!.shadowRoot!;
@@ -566,7 +603,7 @@ it.each(["light", "dark"] as const)(
       expect(panel().querySelector('[data-test="preview-error"]')).not.toBeNull(),
     );
     expect(q(el, '[data-test="status-clashes"]')).toBeNull();
-    expect(heading()).toBe(CHANGED_LINE);
+    expect(heading()).toBe(LIVE_WORDS);
     expect(text(panel().querySelector('[data-test="preview-error"]'))).toBe(
       "The changes could not be worked out.",
     );
@@ -574,7 +611,7 @@ it.each(["light", "dark"] as const)(
     failed = false;
     clashes = 3;
     live.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(heading()).toContain("Publishing waits on 3 clashes"));
+    await vi.waitFor(() => expect(clashLine()).toBe("Publishing waits on 3 clashes"));
     expect(panel().querySelector('[data-test="preview-error"]')).toBeNull();
     await expectNoA11yViolations(host);
   },
