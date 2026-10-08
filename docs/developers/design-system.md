@@ -1619,7 +1619,8 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   across screens.
 
 These forms follow the rule so far; the others are being brought under it batch by batch
-([backlog](../backlog.md) A331, [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),
+([backlog](../backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07) A331,
+[plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),
 and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;

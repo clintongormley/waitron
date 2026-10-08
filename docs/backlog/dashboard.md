@@ -576,6 +576,279 @@ text and takes the dark values from the `@media (prefers-color-scheme: dark)` bl
 **Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
 there is no copy to keep in step.
 
+## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
+
+**A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
+venue-service forms and the till's profile dialog) in #1418; batch 5 (the till) in #1414; batch 6 audited with no
+stored-setting editors; batch 7 unreserved forms audited; batch 2a landed as #1422; batch 2b
+(the menus screen) landed as #1424; batch 4b OPEN.** The owner:
+"open a form with the Save button transparent (and disabled?). but as soon as you make a change,
+make the Save button active/blue",
+then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
+disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
+pressable, and undoing the change turns it quiet and disabled again. "Changed" is what the form's
+unsaved-changes tracking (W69) already says, not a comparison written per screen. The rule, and
+how a screen adopts it: [design-system.md](../developers/design-system.md) → Forms. The plan, one pull
+request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
+
+- **Batch 1 — the shared mechanism, the product editor and the variant form.** `draftScopeFor` and
+  `saveActionState` in `@waitron/ui`. Enable on a disabled product still saves at once: pressing
+  it is the change. No batch-1 form opens already savable. Looked at on 2026-10-08 in 35
+  screenshots of the two forms mounted with test data (English and Spanish, light and dark,
+  1280px and 390px wide, unchanged and after one edit, plus a changed form refused by its own
+  checks and a disabled product), kept outside the repository in `~/waitron-campaign-b/a331-shots/`:
+  no defect found. In the same mount, the first screen frame after `closeSaved` (what the
+  Products screen calls once a save succeeds) already has the product editor closed, so its Save
+  is not seen turning quiet as the dialog goes.
+- **Batch 2a — LANDED as #1422 (A331-2a, 2026-10-08).** The catalogue and menus forms
+  that lane D's menus Preview work does not touch: the "VAT class for new products" default on
+  Venue settings, the recipe editor and the ingredient form, the unit form (new and existing), the
+  options list and its option window, the extras list, Add to menus after a product is created, a
+  section's Add products, and a menu's Schedule and Change time on its Preview tab (list:
+  [design-system.md](../developers/design-system.md) → Forms). None of them opens already savable,
+  except the option window when it opens showing a refusal (A410, below).
+  Rulings put to the owner, with the answers:
+  - the Units screen's Change unit (in the "unit in use" dialog), the Products browser's Move and
+    Delete dialog and the image picker are not saves, so they are not gated. Change unit already
+    stays disabled until products and a new unit are chosen; Move already stays disabled until a
+    destination is chosen, and kept its blue look while it was disabled (owner, 2026-10-08: "Fix
+    it" — A409 draws it quiet while it waits, see design-system.md → Forms); Delete is pressed with its
+    default choice of what happens to the contents; the image picker acts the moment an image is
+    chosen or removed. Gating Change unit would change only how it looks. **Left open by A409
+    (#1433), for the owner — decided:** other buttons that are not saves still kept their colour
+    while disabled and waiting — the Products browser's toolbar Delete, the options/extras Delete
+    confirmation, Add and Edit on the options screen until languages load, Print on an equipment
+    label and on a reprint, and two on the till. Owner, 2026-10-08: "b", draw them all quiet the
+    same way. A416 did the dashboard ones, and also the profile window's Edit and the backup key's
+    Change the key. **Landed as #1440.** The two till buttons are A417 (lane A). **Left open by
+    A416, for the owner — decided:** buttons disabled because their row's own state rules them out
+    still kept their colour — Disable on an already-disabled printer and on an inactive service
+    status, Publish on a menu's Preview while it has clashes, and the product editor's modifier
+    Remove while a window opened from it is still open. Owner, 2026-10-08: "a", draw them grey too;
+    A427 does those four, and Remove keeps its red while the editor's own save is being sent.
+    **Landed as #1446.** Delete on a canvas's last tab is left as it is, because canvases are
+    being deleted (A182, owner 2026-10-08). **Left open by A427, not queued:** the product editor's
+    image picker can still be opened while the editor's own save is being sent (found by #1446's
+    Codex review, which held the save request open and clicked the image chooser);
+  - when the server refuses an options list's save because of one option, opening that option's
+    window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
+    window with Save active, and pressing it untouched gives the option back to the list, which
+    clears that option's refusal; the window opened any other way still opens quiet. **Landed as
+    #1434.** Left as built, for the owner: Save turns active only for a refusal the window holds
+    when it OPENS — one handed to it while it is already open leaves Save as it was (believed
+    unreachable, from reading only: the list's own Save sits behind the open window) — and it stays active
+    for the whole time that window is open, even once the refused field is edited back;
+  - on the autumn clock-change day, the Change time form can no longer move a scheduled menu
+    version to the other copy of the same repeated local time (the other 02:30) in one step. The
+    form opens on the stored date and time, so an untouched press now does nothing, where it used
+    to bring up the server's "which 02:30" choice, and typing another time and then the stored one
+    back is no change. After a real edit to a repeated time the choice still appears, so the other
+    02:30 is reached only by two moves through another time. Owner, 2026-10-08: keep it as built.
+
+  Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form
+  unchanged and after one edit; the catalogue default also after a save; the extras list, the
+  options list with its option window, and the catalogue default also at 390px, dark, Spanish);
+  screenshots in `~/waitron-campaign-b/a331-2a-shots/`. The recipe editor, the ingredient form, Add
+  to menus (including after one place refused the product) and Schedule and Change time were
+  looked at mounted with test data instead: the recipe screen that holds the first two is reached
+  from nowhere in the dashboard, Add to menus only opens after creating a product, and no demo menu
+  had unpublished changes to schedule. Every form opened quiet and disabled and turned blue on the
+  first edit, and the unit form, the option window, the options and extras lists and Add products
+  went quiet again when the edit was undone: no defect found. The look changed the demo venue's
+  "VAT class for new products" and set it back to Reduced, and switched the demo owner's language
+  to English and back to Spanish; it saved nothing else. Left open: an edit typed BEFORE one of
+  these forms is taken out of the page and put back stays on screen but no longer counts as
+  unsaved: measured 2026-10-08 on the unit form, the same before and after this batch's fix; the
+  other forms were not tried, and the recipe editor clears its choice on removal by design. It
+  matters only if a screen ever moves an open form. DONE for the unit form in A397 part 2 (#1439): its
+  edit-first case in `catalogue-forms.unsaved.test.ts` failed before the fix and passes after.
+  Still untried: the "VAT class for new products" default, the ingredient form, the options list
+  and its option window, the extras list, Add to menus, Add products, Schedule and Change time.
+- **Batch 2b — LANDED in #1424 (A331-2b, 2026-10-08).** The menus screen: the menu details
+  form (new and rename) and the section form (new and edit), which are one form mounted twice, and
+  an include's Edit dialog. Each opens quiet, turns blue on the first edit, goes quiet again when
+  the opened values are typed back or a save is committed with it still open, and sends nothing
+  when an untouched Save is pressed. Not a save, so not gated: Add a shortcut, Include a menu, the
+  home display's slider and radios and the menu price fields write at once; Delete section and
+  Publish confirm an operation; the rest open a form or only show (list:
+  [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b)).
+  The Add products window and the publication schedule do save; they are batch 2a's.
+  Test checks that pressed or asserted on an untouched form now edit first or expect Save
+  disabled; each is listed in its commit message. Looked at on 2026-10-08 in 33 screenshots of the forms mounted with
+  test data (each unchanged, after one edit, and changed but blocked — an emptied required name
+  for the details form, busy for the include — at 1280px light English and 390px dark Spanish,
+  plus an Edit section refused, fixed and saved), kept outside the repository in
+  `~/waitron-campaign-c/a331-2b-shots/`: no defect found. Left open: both forms keep their fields
+  when taken out of the page and put back, and take what they then hold as the new starting point.
+  Run on the branch on 2026-10-08 (a throwaway case: edit, remove, re-add): the edit was still in
+  the field, Save was quiet, and Cancel closed the form without asking; main was not run. Related
+  to, but not the same as, the watcher form's point in batch 4c, where the edit was replaced when
+  the form was put back (fixed in #1429). It matters only if the menus screen ever moves an open
+  form. DONE for both forms in A397 part 2 (#1439): each one's edit-first case
+  (`section-details-form.unsaved.test.ts`, `include-folder-form.unsaved.test.ts`) failed before the
+  fix (not counted as unsaved) and passes after.
+- **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
+  floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
+  flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
+  the backup turn-on form and settings editor, the bucket copy form, your profile's details and
+  credential dialogs, the edit-person and new-person dialogs, the purchase form and the shift
+  dialog (list: [design-system.md](../developers/design-system.md) → Forms). The backup settings
+  editor opens already savable when the stored schedule is one the form cannot show, or no
+  retention is stored. Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form unchanged and
+  after one edit; the floor, edit-person and backup forms also at 390px, in dark and in Spanish),
+  plus the backup settings editor mounted with test data, because the demo venue has backups off;
+  screenshots in `~/waitron-campaign-b/a331-3a-shots/`. Every form opened quiet and disabled (the
+  backup editor over an interval schedule opened blue, as intended) and turned blue on the first
+  edit; where a required field was still empty (the time-off dates, a cover request with no shift
+  to offer, a shift's end time, the turn-on form's "I have saved this key" box) it stayed blue and
+  disabled until filled. The action's size and horizontal position were the same before and after
+  the edit in every pair measured; Add table was compared by eye. Left open:
+  - a password manager filling the profile's current-password field: the owner tried Chrome's
+    password manager on 2026-10-08 and reported that it works well; other password managers are
+    untried;
+  - other purchases-screen, staff-screen and roster-screen tests still send made-up create and
+    update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`,
+    `update-shift`) instead of pressing the form's button; they pass, but never prove the button
+    works.
+- **Batch 3b — LANDED in #1415.** Printers, devices, device profiles, payments,
+  canvases: the print agent's Edit dialog, a printer page's name and connection editors, the
+  calibration wizard, the Bluetooth printer Pair dialog, the Edit device dialog, the device profile
+  editor, the card reader's Rename dialog, the bill attestation and the canvas editor (list:
+  [design-system.md](../developers/design-system.md) → Forms). Opening already savable: the printers'
+  name dialog, the calibration wizard when an add opened it (the campaign runner's ruling of
+  2026-10-08, for the owner to confirm: a freshly added printer's wizard opens with a blue Save),
+  the device pairing dialog, each row of "Add a card reader", the canvas Duplicate dialog, and a new
+  canvas's editor. Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px,
+  light, each form unchanged and after one edit; a printer's name editor, the calibration wizard and
+  Edit device also at 390px, dark, Spanish); screenshots in `~/waitron-campaign-b/a331-3b-shots/`.
+  Every form reached opened quiet and disabled and turned blue on the first edit; the connection
+  editor, Edit device and the profile editor went quiet again when the stored value was typed back;
+  the savable ones (the name dialog as Add and as Enable, the wizard after a fresh add and after a
+  re-add, Duplicate, a new canvas) opened blue. The demo venue has no card provider connected
+  (connecting one takes an API key), and no device asking to pair was made on the shared venue, so
+  "Add a card reader" (four readers), Rename reader and the pairing dialog were looked at mounted
+  with test data instead; "Add a card reader" now shows a blue Add on every row, as the printers'
+  discovered rows do. Not looked at, left to their tests: the Bluetooth Pair dialog (the laptop's
+  print agent has no `bluetoothctl`) and the bill attestation (the demo venue showed no payment to
+  attest). Seen and not changed, because this batch does not touch them: the canvas Create and
+  Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow to show "A331 look
+  canvas (copy)" whole; the printer name dialog is titled "Add a printer" when its button says
+  Enable. The owner confirmed #1415's Bluetooth Pair dialog and bill attestation rulings: both
+  are gated like a save and open with every required field empty. **A396 — DONE (#1428, 2026-10-08).**
+  The owner reversed the disabled-zone ruling on 2026-10-08.
+  A device profile with no active allowed zone shows its field errors and bottom correction
+  message on open. Save stays quiet while unchanged, and a name or reader edit cannot save until
+  an active zone is chosen. Focused Chromium checks: 226 pass; fiscal golden and inmutabilidad: 20 unchanged pass.
+  EN/ES, light/dark, 390/1280 views inspected; Claude review found no bugs. Current-head
+  dashboard CI passed 9,544 tests with coverage above its required thresholds; root guards,
+  types, licence and CodeQL passed. The merge's own CI is recorded in the lane ledger for
+  follow-up. The look left a switched-off printer
+  named "A331 look Epson" (the owner's Epson at 192.168.10.81) in the shared demo venue.
+- **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
+  booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
+  and SumUp Connect/Pair/Try again remain provider operations;
+  [classification and call paths](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
+- **Batch 4b — OPEN.** The venue-service screens other branches are changing: hours, the menu
+  timetable and venue operations (after `feat/service-periods-slice-1`). Preparation stations were
+  held for `fix/drag-edge-scroll`, which landed as #1416; they are covered by batch 4d below.
+- **Batch 4d — LANDED in #1426 (A331-4d, 2026-10-08).** Preparation stations' New/Rename, station printer
+  choices, watcher Rename/follows/zones/pass/printer choices, and Settings rest/fallback/minutes
+  use the shared Save state. An untouched fallback stays open without a confirmation or write;
+  changing it keeps the two-press confirmation. Routing and station service operations remain
+  immediate actions. After an invalid New station attempt, field messages and the bottom summary
+  remain until corrected and return if a field breaks again. Retained Add/Rename drafts keep their
+  saved baseline through reconnect. The delegated watcher form was already covered by batch 4c.
+  [Batch 4d's scope and checks](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4d--prep-stations-lane-e-a331-4d).
+  The review left detached `readOnly` changes and a retained table's scroll/sort unverified;
+  no defect was reproduced for either. Before changing screen caching, exercise those transitions.
+  The validation-message finding was reproduced and fixed before landing.
+- **Batch 4c — LANDED in #1418 (A331-4c, 2026-10-08).** The local holiday Add and Edit and the watcher form
+  (New and Edit) in `packages/venue-service`, and the till's profile dialog, whose Switch now waits
+  until another profile is chosen — this closes the profile-dialog point left open by batch 5. A
+  Switch with the current profile still chosen never reached the server before either: the app
+  closed the dialog. Holiday Remove and Forget stay red confirmations and the holiday area saves on
+  choice; [the Batch 4c table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4c--the-venue-service-forms-nobody-else-is-changing-and-the-tills-profile-dialog-lane-c-a331-4c)
+  gives the call path for each. Looked at on 2026-10-08 in 13 screenshots of the forms mounted with
+  test data in Chromium (the holiday Add and Edit, the watcher form's Edit and the profile dialog,
+  each unchanged and after one edit at 1280px, light, English, plus the holiday Remove confirmation;
+  the watcher Edit and the profile dialog also at 390px, dark, Spanish; the watcher form's New was
+  not captured), kept outside the repository in
+  `~/waitron-campaign-c/a331-4c-shots/`: no defect found. Left open from #1418's review, read but
+  not run: if the watcher form is taken out of the page and put back, an edit typed BEFORE it left
+  may be replaced by the stored watcher without a question (its `disconnectedCallback` forgets the
+  draft's identity, so the next `willUpdate` starts it again); the till dialogs keep such an edit.
+  The reviewer believes main behaved the same before #1418, which nobody ran either. It matters only
+  if the prep stations screen ever moves the open form. DONE in #1429 (2026-10-08): the edit-first case failed on main (the edit was
+  replaced) and passes with the fix; the form now keeps the record it opened and the value it last
+  saved across removal.
+- **Batch 5 — LANDED in #1414 (A331-5).** The till's five forms that save an edit: the party name dialog,
+  the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
+  when it edits a line, and the station dialog's Make at. Adding a dish never waits for a change
+  (the extras picker passes `savableAtOpen` when it adds), and the station dialog's Move keeps its
+  own rule. Every other till dialog that tracks unsaved changes takes an action and is unchanged;
+  the decision for each is in
+  [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5);
+  the till's other forms wait for Batch 7's follow-up audit below.
+  Looked at on 2026-10-08 in 24 screenshots of the forms mounted with test data in Chromium (each
+  unchanged and after one edit at 1280px, light, English; the party name and the extras picker
+  also at 390px, dark, Spanish; the invoice dialog pressed while incomplete), kept outside the
+  repository in `~/waitron-campaign-c/a331-5-shots/`: no defect found. The extras picker's add
+  mode and the station dialog's Move were byte-identical to screenshots of the code before the
+  batch. Left open: the station dialog widens or narrows with the chosen station's name, so its
+  buttons shift a little as a station is picked (it did so before this batch). Also left open from
+  #1414's review: (1) the till's profile dialog — done in batch 4c; (2) the four batch 5 dialogs had to stop registering their draft while out of the page, or a
+  reattached dialog stopped asking before discarding; design-system.md → Forms named seven
+  dashboard forms that still registered that way, untested for the same fault. DONE for six of
+  them in #1429 (2026-10-08): the staff edit and new person,
+  variant, purchase and shift forms and the bookings form. Each one failed both cases on main (an
+  edit made after the form is put back, and one made before it was taken out) and passes with the
+  fix; the purchase and shift forms and the bookings form also replaced an edit made before
+  removal with the stored values. DONE for the seventh in A397 part 2 (#1439): the product editor failed
+  both cases before its fix (`product-editor.unsaved.test.ts`) and passes after. The same branch
+  closed the unit form's edit-first point under batch 2a. Also seen in the purchase and shift forms' tests, not changed and not
+  tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
+  neither asks nor closes until focus is back on a field inside the dialog (the tests put it there
+  with `focus()`; a click was not tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`,
+  A397.2): after a put-back, focus is on the page body and the dialog is no longer modal; the
+  measurements attribute this to how `wt-dialog` handles being put back.
+- **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.
+  Admin, venue and certificate Next buttons contribute to the provisioning draft; Connect adopts
+  with credentials; Import stages configuration; reset, file/bucket/Cloud restore and provisioning
+  confirmation/retry are operations. The other setup controls navigate, check status/readiness or
+  open links. Existing actions keep their validation and refusal behavior. Per-screen call paths
+  and the execution checklist: [Batch 6 audit](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-6--setup-stored-setting-editors-lane-e-a331-6).
+  A future setup editor for stored settings must use the shared helper.
+- **Batch 7 — AUDITED (A331-7, 2026-10-08).** No unreserved no-scope Save editor was found.
+  Content-language/category-colour choices and course/category inline names save immediately;
+  Add/Edit controls open forms or stage their parent's draft. Server recovery Retry and print-agent
+  Save perform operations; the latter clears the token and restarts enrolment even with the same
+  saved address. Existing behavior remains unchanged. The
+  [audit and call paths](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
+  list each classification. **Batch 7b follow-up (A331-7b, 2026-10-08)** reran both
+  inventories on the landed hardware, till, menu/home/Preview and invoice-foundation paths.
+  No additional staged Save editor was found; existing Save gates, immediate price/display
+  writes and the agent's unchanged-address enrolment retry remain as built. Canvas Create
+  opens an editor before saving; Duplicate confirms its prefilled copy. The
+  [dated follow-up and source receipts](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7b--revisit-the-landed-reservations-lane-e-a331-7b)
+  distinguish source inspection from the unchanged focused tests. The browser run also logged
+  the ResizeObserver message. A407 (#1432) fixes the measured currency-field notifications;
+  the historical catalogue-only warning was not reproduced.
+  **Still reserved:** hours/date/slot, service settings, venue operations and timetable forms
+  wait for lane D's A366 slices and batch 4b. Local holiday and watcher forms landed in #1418,
+  preparation stations in #1426. Next action: after the relevant A366 slices land, finish batch
+  4b and rerun the inventories on the rewritten forms. A396's disabled-zone profile ruling is
+  done in #1428; A231q's future invoice screens remain a separate task.
+
+## Service-status colour-field labels are clipped (found during W69, 2026-10-06)
+
+**Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
+The native status colour fields show an ellipsis instead of the full label in the inspected
+EN/ES service-status captures at 390 and 1280 px, both themes. The minimal-shell receipts are
+`~/waitron-campaign-e/receipts/w69-status-rows-20261006/look/`; runtime reproduction on main is
+unverified. W69 changes no field sizing. Next action: reproduce in Venue settings → Tables and
+adjust the colour-field width using the shared field contract without changing status colour data.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'
