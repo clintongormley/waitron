@@ -10,7 +10,6 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
-  leaveCoordinatorFor,
   navigationGuardFor,
   type DraftScope,
   type LeaveCoordinator,
@@ -287,17 +286,18 @@ export class VenueOperationsScreen extends LitElement {
     else this.tradingNameError = message;
   }
   #registerName(kind: NameCell, draft: NameDraft): void {
-    this.#leave ??= leaveCoordinatorFor(this);
     let registering = true;
-    draft.scope = this.#leave?.register({
+    const { coordinator, scope } = draftScopeFor<string>(this, {
       id: draft.id,
       current: () => (registering ? draft.baseline : this.#nameValue(kind).trim()),
       snapshot: (value) => value,
       equal: (a, b) => a === b,
       restore: (value) => this.#setNameValue(kind, value),
     });
+    this.#leave = coordinator;
+    draft.scope = scope;
     registering = false;
-    draft.scope?.changed();
+    scope.changed();
   }
   #currentName(kind: NameCell, draft?: NameDraft): boolean {
     return this.isConnected && draft !== undefined && this.#nameDrafts.get(kind) === draft;
@@ -309,9 +309,9 @@ export class VenueOperationsScreen extends LitElement {
     proceed: () => void,
   ): void {
     if (!this.#currentName(kind, draft) || this.busy) return;
-    if (!draft!.scope) proceed();
+    if (!this.#leave || !draft!.scope) proceed();
     else
-      void this.#leave!.request({
+      void this.#leave.request({
         scopes: [draft!.id],
         reason,
         proceed: () => {
@@ -381,6 +381,7 @@ export class VenueOperationsScreen extends LitElement {
     write: (value: string) => Promise<unknown>,
   ): Promise<void> {
     if (!this.#currentName(kind, draft) || this.busy) return;
+    if (saveActionState(draft!.scope).unchanged) return;
     const submitted = this.#nameValue(kind).trim();
     if (!submitted) {
       this.#clearNameError(kind, t("venue.field_required"));
@@ -1067,21 +1068,19 @@ export class VenueOperationsScreen extends LitElement {
                         this.#changeName("zone", zoneDraft, event.detail.value);
                       }}
                     ></wt-input>
-                    <button
-                      type="button"
+                    <wt-button
                       data-test="save-zone-name"
-                      ?disabled=${this.busy}
+                      variant=${saveActionState(zoneDraft?.scope).variant}
+                      ?disabled=${this.busy || saveActionState(zoneDraft?.scope).unchanged}
                       @click=${() => void this.#saveName("zone", zoneDraft, (value) => this.api.updateZone(row.zone.id, { name: value }))}
+                      >${t("venue.save")}</wt-button
                     >
-                      ${t("venue.save")}
-                    </button>
-                    <button
-                      type="button"
+                    <wt-button
                       data-test="cancel-zone-name"
+                      variant="secondary"
                       @click=${() => this.#leaveName("zone", zoneDraft, "cancel", () => this.#closeName("zone", zoneDraft!))}
+                      >${t("venue.cancel")}</wt-button
                     >
-                      ${t("venue.cancel")}
-                    </button>
                     <div part="name-clash-action">
                       ${this.inlineNameClashes.zone ? this.#enableNameClash(this.inlineNameClashes.zone, "zone", zoneDraft) : nothing}
                     </div>
@@ -1159,21 +1158,19 @@ export class VenueOperationsScreen extends LitElement {
                 this.#changeName("department", departmentDraft, event.detail.value);
               }}
             ></wt-input>
-            <button
-              type="button"
+            <wt-button
               data-test="save-department-name"
-              ?disabled=${this.busy}
+              variant=${saveActionState(departmentDraft?.scope).variant}
+              ?disabled=${this.busy || saveActionState(departmentDraft?.scope).unchanged}
               @click=${() => void this.#saveName("department", departmentDraft, (value) => this.api.updateDepartment(row.department.id, { name: value, tradingName: row.department.tradingName, defaultServiceMode: row.department.defaultServiceMode }))}
+              >${t("venue.save")}</wt-button
             >
-              ${t("venue.save")}
-            </button>
-            <button
-              type="button"
+            <wt-button
               data-test="cancel-department-name"
+              variant="secondary"
               @click=${() => this.#leaveName("department", departmentDraft, "cancel", () => this.#closeName("department", departmentDraft!))}
+              >${t("venue.cancel")}</wt-button
             >
-              ${t("venue.cancel")}
-            </button>
             <div part="name-clash-action">
               ${this.inlineNameClashes.department ? this.#enableNameClash(this.inlineNameClashes.department, "department", departmentDraft) : nothing}
             </div>
@@ -1218,21 +1215,19 @@ export class VenueOperationsScreen extends LitElement {
                 this.#changeName("trading", tradingDraft, event.detail.value);
               }}
             ></wt-input>
-            <button
-              type="button"
+            <wt-button
               data-test="save-trading-name"
-              ?disabled=${this.busy}
+              variant=${saveActionState(tradingDraft?.scope).variant}
+              ?disabled=${this.busy || saveActionState(tradingDraft?.scope).unchanged}
               @click=${() => void this.#saveName("trading", tradingDraft, (value) => this.api.updateDepartment(row.department.id, { name: row.department.name, tradingName: value, defaultServiceMode: row.department.defaultServiceMode }))}
+              >${t("venue.save")}</wt-button
             >
-              ${t("venue.save")}
-            </button>
-            <button
-              type="button"
+            <wt-button
               data-test="cancel-trading-name"
+              variant="secondary"
               @click=${() => this.#leaveName("trading", tradingDraft, "cancel", () => this.#closeName("trading", tradingDraft!))}
-            >
-              ${t("venue.cancel")}
-            </button>`;
+              >${t("venue.cancel")}</wt-button
+            >`;
         },
       },
       {

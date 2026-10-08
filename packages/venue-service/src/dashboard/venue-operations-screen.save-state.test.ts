@@ -86,6 +86,7 @@ async function mount(options: { write?: Promise<void>; leave?: boolean } = {}) {
     createDepartment: record,
     updateDepartment: record,
     createZone: record,
+    updateZone: record,
     configureZone: record,
     loadDepartmentTransfers: async () => ({
       departmentId: "d1",
@@ -311,5 +312,114 @@ describe("the Disable confirmation", () => {
     saveButton(screen).click();
     await expect.poll(() => writes).toEqual([["deactivate", "d1"]]);
     await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  });
+});
+
+const nameCells = [
+  {
+    label: "department name",
+    action: "department-name",
+    name: "departmentName",
+    initial: "Restaurant and bar",
+    edited: "Terrace",
+  },
+  {
+    label: "zone name",
+    action: "zone-name",
+    name: "zoneName",
+    initial: "Dining room",
+    edited: "Terrace",
+  },
+  {
+    label: "trading name",
+    action: "trading-name",
+    name: "tradingName",
+    initial: "Casa Delgado",
+    edited: "Casa Terrace",
+  },
+] as const;
+type NameCell = (typeof nameCells)[number];
+
+async function settleCell(screen: VenueOperationsScreen) {
+  await screen.updateComplete;
+  const table = screen.shadowRoot!.querySelector<LitElement>("[data-test=policy-tree]")!;
+  await table.updateComplete;
+}
+async function openCell(screen: VenueOperationsScreen, item: NameCell) {
+  find(screen.shadowRoot!, `[data-test="edit-${item.action}"]`)!.click();
+  await settleCell(screen);
+  expect(find(screen.shadowRoot!, `[name="${item.name}"]`), item.name).toBeDefined();
+}
+async function editCell(screen: VenueOperationsScreen, item: NameCell, value: string) {
+  const host = find(screen.shadowRoot!, `[name="${item.name}"]`)!;
+  host.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await settleCell(screen);
+}
+const cellButton = (screen: VenueOperationsScreen, test: string) =>
+  find(screen.shadowRoot!, `[data-test="${test}"]`) as
+    HTMLElementTagNameMap["wt-button"] | undefined;
+async function cellSaveState(screen: VenueOperationsScreen, item: NameCell) {
+  await settleCell(screen);
+  const save = cellButton(screen, `save-${item.action}`)!;
+  expect(save.localName).toBe("wt-button");
+  await save.updateComplete;
+  return {
+    variant: save.variant,
+    disabled: save.disabled,
+    innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+
+describe.each(nameCells)("the inline $label editor", (item) => {
+  it("opens with Save quiet and disabled, and Cancel secondary", async () => {
+    const { screen } = await mount();
+    await openCell(screen, item);
+    expect(await cellSaveState(screen, item)).toEqual(quiet);
+    const cancel = cellButton(screen, `cancel-${item.action}`)!;
+    expect(cancel.localName).toBe("wt-button");
+    expect(cancel.variant).toBe("secondary");
+  });
+
+  it("one edit makes Save primary and enabled; the opened value typed back with spaces makes it quiet", async () => {
+    const { screen } = await mount();
+    await openCell(screen, item);
+    await editCell(screen, item, item.edited);
+    expect(await cellSaveState(screen, item)).toEqual(ready);
+    await editCell(screen, item, ` ${item.initial} `);
+    expect(await cellSaveState(screen, item)).toEqual(quiet);
+  });
+
+  it("a press that reaches Save's handler on the untouched name sends nothing and marks nothing", async () => {
+    const { screen, writes } = await mount();
+    await openCell(screen, item);
+    cellButton(screen, `save-${item.action}`)!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await settleCell(screen);
+    expect(writes).toEqual([]);
+    const input = find(screen.shadowRoot!, `[name="${item.name}"]`) as
+      (HTMLElement & { error: string }) | undefined;
+    expect(input).toBeDefined();
+    expect(input!.error).toBe("");
+  });
+
+  it("with no application above the screen, an edit turns Save blue and Cancel and Escape close it", async () => {
+    const { screen, writes } = await mount({ leave: false });
+    await openCell(screen, item);
+    expect(await cellSaveState(screen, item)).toEqual(quiet);
+    await editCell(screen, item, item.edited);
+    expect(await cellSaveState(screen, item)).toEqual(ready);
+    cellButton(screen, `cancel-${item.action}`)!.click();
+    await settleCell(screen);
+    expect(find(screen.shadowRoot!, `[name="${item.name}"]`)).toBeUndefined();
+    await openCell(screen, item);
+    await editCell(screen, item, item.edited);
+    find(screen.shadowRoot!, `[name="${item.name}"]`)!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+    );
+    await settleCell(screen);
+    expect(find(screen.shadowRoot!, `[name="${item.name}"]`)).toBeUndefined();
+    expect(writes).toEqual([]);
   });
 });
