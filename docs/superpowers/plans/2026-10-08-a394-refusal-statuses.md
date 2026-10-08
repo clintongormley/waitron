@@ -1401,8 +1401,14 @@ holds — never "active" or "not suspended", which would be a new rule.
    names, so a missing roster version or shift still answers its own 404: `createRosterVersion`
    checks the location first; `addShift` after the version's status; `updateShift` after
    `shiftForWrite`, and only when `personId` is in the patch; `requestSwap` after the `fromShift`
-   checks and before the `toShift` block. Add a precedence case: an unknown version with an unknown
-   person still throws `roster.not_found`.
+   checks and before the `toShift` block. `addShift` checks `personId` before `locationId` (the
+   route's screening order), the two reads awaited in turn on `tx`, never in `Promise.all`. Two
+   precedence cases: an unknown version with an unknown person still throws `roster.not_found`, and
+   an unknown shift with an unknown person still throws `shift.not_found`. For `updateShift`, "no row
+   written" means the shift's `person_id` is unchanged. Two swap answers move, and the PR says so:
+   an unknown `toPersonId` beside a real `toShiftId` (today `swap.not_permitted`, 403) and beside an
+   unknown `toShiftId` (today `shift.not_found`) both become `management.request_invalid`; no test
+   pins either (plan review, 2026-10-08).
 3. **Routes, test first.** One case per route that reaches each check, asserting status 400 AND
    `{ code: "management.request_invalid", params.field }`: `POST /management-api/roster`,
    `POST /management-api/roster/:versionId/shifts` (person, location),
