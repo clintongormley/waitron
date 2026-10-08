@@ -1,7 +1,13 @@
 import { LitElement, css, html } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  draftScopeFor,
+  saveActionState,
+} from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { getCountryPack } from "@waitron/country-packs";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -92,10 +98,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
   }
 
   override willUpdate(): void {
-    if (!this.active || this.#scope) return;
+    if (!this.isConnected || !this.active || this.#scope) return;
     this.#baseline ??= this.#value();
-    this.#leave = leaveCoordinatorFor(this);
-    this.#scope = this.#leave?.register<RecipientDraft>({
+    const { coordinator, scope } = draftScopeFor<RecipientDraft>(this, {
       id: this,
       current: () => this.#value(),
       snapshot: (value) => ({ ...value }),
@@ -111,7 +116,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
         }),
       restore: (value) => Object.assign(this, value),
     });
-    if (this.#baseline) this.#scope?.commit(this.#baseline);
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#baseline);
   }
 
   override disconnectedCallback(): void {
@@ -144,6 +151,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
 
   async #save(): Promise<void> {
     if (!this.isConnected || !this.active) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     const errors = this.#errors();
     if (Object.values(errors).some(Boolean)) {
@@ -212,6 +220,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
   override render() {
     const errors = this.#errors();
     const invalid = Object.values(errors).some(Boolean);
+    const saveAction = saveActionState(this.#scope);
     const fieldRefused =
       this.refusal !== "" && ["taxId", "legalName", "address"].includes(this.refusalField);
     const bottomMessages: string[] = [];
@@ -220,7 +229,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       .heading=${t("invoice.full")}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
@@ -320,8 +329,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
           >
           <wt-button
             data-invoice-save
-            variant="primary"
-            ?disabled=${this.attempted && invalid}
+            variant=${saveAction.variant}
+            ?disabled=${saveAction.unchanged || (this.attempted && invalid)}
             @click=${() => void this.#save()}
             >${t("invoice.save_choice")}</wt-button
           >

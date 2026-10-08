@@ -70,6 +70,7 @@ describe("till-invoice-recipient-dialog", () => {
     el.refusal = "The server could not be reached";
     el.refusalField = "";
     await el.updateComplete;
+    await fill(el, "legalName", "Ana García");
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
     await el.updateComplete;
 
