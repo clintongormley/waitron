@@ -338,6 +338,8 @@ const nameCells = [
     name: "departmentName",
     initial: "Restaurant and bar",
     edited: "Terrace",
+    refusal: { code: "department.name_taken", params: { name: "Terrace" } },
+    onField: true,
   },
   {
     label: "zone name",
@@ -345,6 +347,8 @@ const nameCells = [
     name: "zoneName",
     initial: "Dining room",
     edited: "Terrace",
+    refusal: { code: "zone.name_taken", params: { name: "Terrace" } },
+    onField: true,
   },
   {
     label: "trading name",
@@ -352,6 +356,8 @@ const nameCells = [
     name: "tradingName",
     initial: "Casa Delgado",
     edited: "Casa Terrace",
+    refusal: { code: "department.not_found", params: { departmentId: "d1" } },
+    onField: false,
   },
 ] as const;
 type NameCell = (typeof nameCells)[number];
@@ -421,12 +427,7 @@ describe.each(nameCells)("the inline $label editor", (item) => {
   });
 
   it("a refused save leaves Save enabled and primary", async () => {
-    const { screen, writes } = await mount({
-      refuse: {
-        code: item.name === "zoneName" ? "zone.name_taken" : "department.name_taken",
-        params: {},
-      },
-    });
+    const { screen, writes } = await mount({ refuse: item.refusal });
     await openCell(screen, item);
     await editCell(screen, item, item.edited);
     cellButton(screen, `save-${item.action}`)!.click();
@@ -435,7 +436,15 @@ describe.each(nameCells)("the inline $label editor", (item) => {
     const input = find(screen.shadowRoot!, `[name="${item.name}"]`) as
       (HTMLElement & { error: string }) | undefined;
     expect(input).toBeDefined();
-    await expect.poll(() => input!.error).not.toBe("");
+    const alert = () =>
+      screen.shadowRoot!.querySelector('[data-test="page-alert"]')!.textContent!.trim();
+    if (item.onField) {
+      await expect.poll(() => input!.error).not.toBe("");
+      expect(alert()).toBe("");
+    } else {
+      await expect.poll(alert).toBe("The change could not be saved.");
+      expect(input!.error).toBe("");
+    }
     expect(await cellSaveState(screen, item)).toEqual(ready);
   });
 
