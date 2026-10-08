@@ -728,10 +728,19 @@ stay in the editor; an in-use deletion stays in its confirmation as one sentence
 messages cannot clear either refusal. New tests cover native Save, Cancel and phone row-menu
 access, discard and reconnect, background snapshots, late responses and controls from departed
 openings. Deletion confirmations use an identity for each opening, including reopening the same
-period. No existing test assertions change in this substep. The screen is not registered yet;
-registration/navigation, the Departments link and retirement of the old UI with its retained
-checks remain in Task 12. Week and Day content remain Tasks 13 and 14. Leave Task 12 unchecked
-until its remaining work and verification finish.
+period. No existing test assertions change in this substep.
+
+**Checkpoint 2026-10-08 — registration and navigation.** Opening hours replaces Menu timetable's
+registered contribution, with operations order 15; Station hours moves to 16. The dashboard path
+keeps the Opening hours view and department. The Departments row action opens Opening hours for
+its department through the navigation guard. Existing registration and history assertions now check
+these approved destinations, retaining request/live-data wiring and viewer permission checks.
+A new forward-navigation check asserts no history write on Keep and one write after Discard.
+Focused checks and three safeguard-deletion controls pass after restoration. The registered
+manager and viewer Periods views have been inspected in both languages, themes and phone/desktop
+widths. Old Menu timetable sources and their tests remain pending retirement; preserve the Week
+and special-date assertions while moving them to their new consumers. Week and Day content remain
+Tasks 13 and 14. Leave Task 12 unchecked until its remaining work and verification finish.
 
 ---
 

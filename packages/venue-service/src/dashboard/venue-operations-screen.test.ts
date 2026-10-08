@@ -3494,8 +3494,11 @@ it("keeps the Operations draft when Opening hours navigation is refused, then fo
     '[data-test="hours-tree-department-d2"]',
   )!;
   hours.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  const pushed = vi.spyOn(history, "pushState");
+  onTestFinished(() => pushed.mockRestore());
   hours.click();
   await expect.poll(() => asks).toBe(1);
+  expect(pushed).not.toHaveBeenCalled();
   expect(location.pathname).toBe("/manage/venue-operations");
   expect(new URL(guard.href).pathname).toBe("/manage/venue-operations");
   discard = true;
@@ -3503,6 +3506,9 @@ it("keeps the Operations draft when Opening hours navigation is refused, then fo
   await expect.poll(() => asks).toBe(2);
   await expect.poll(() => location.pathname).toBe("/manage/opening-hours/department/d2");
   expect(new URL(guard.href).pathname).toBe("/manage/opening-hours/department/d2");
+  expect(
+    pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname),
+  ).toEqual(["/manage/opening-hours/department/d2"]);
 });
 
 it("Opening hours uses a distinct history position and Keep preserves the Operations entry", async () => {

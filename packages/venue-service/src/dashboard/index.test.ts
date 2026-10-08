@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
-import { LiveData, createRequest } from "@waitron/dashboard-kit";
+import { LiveData, createRequest, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { VENUE_SERVICE_DASHBOARD } from "./index.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
@@ -9,9 +9,14 @@ import type { HoursScreen } from "./hours-screen.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 
 const containers: HTMLElement[] = [];
+const originalUrl = location.href;
+const originalLocale = currentLocale();
+beforeEach(() => setLocale("en"));
 afterEach(() => {
   for (const container of containers.splice(0)) container.remove();
   vi.useRealTimers();
+  history.replaceState(null, "", originalUrl);
+  setLocale(originalLocale);
 });
 
 describe("VENUE_SERVICE_DASHBOARD", () => {
@@ -276,6 +281,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
         text: async () => JSON.stringify(model),
       } as Response),
     );
+    history.replaceState(null, "", "/manage/opening-hours/view/periods/department/d1");
     const liveData = new LiveData();
     const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.at(-1)!;
     expect(timetable.screen).toEqual({
@@ -300,6 +306,22 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     expect(screen.api.liveData).toBe(liveData);
     expect(screen.readOnly).toBe(true);
     await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "[name=departmentId]",
+        )!.value,
+      ).toBe("d1"),
+    );
+    const periods =
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
+    await periods.updateComplete;
+    expect(periods.shadowRoot!.textContent).toContain("No periods yet.");
+    expect(screen.shadowRoot!.querySelector("[data-test=new-period]")).toBeNull();
+    render(handle.render(false), container);
+    await screen.updateComplete;
+    expect(screen.readOnly).toBe(false);
+    expect(screen.shadowRoot!.querySelector("[data-test=new-period]")).not.toBeNull();
     const [[path, init]] = fetchImpl.mock.calls as unknown as [[string, RequestInit]];
     expect(path).toBe("/management-api/venue-service/opening-hours");
     expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");

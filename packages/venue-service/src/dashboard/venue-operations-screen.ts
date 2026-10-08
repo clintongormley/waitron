@@ -43,7 +43,7 @@ function openPage(path: string): void {
 }
 
 function openHoursPage(departmentId: string): void {
-  openPage(`/manage/hours/department/${encodeURIComponent(departmentId)}`);
+  openPage(`/manage/opening-hours/department/${encodeURIComponent(departmentId)}`);
 }
 
 const openingHoursPath = (departmentId: string) =>
