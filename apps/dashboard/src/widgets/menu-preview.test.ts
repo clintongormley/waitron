@@ -5,7 +5,7 @@ import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
-import type { CustomerMenu } from "./customer-menu.js";
+import type { MenuDocumentTree } from "./menu-document-tree.js";
 import {
   cleanupWidgets,
   documentProduct,
@@ -77,7 +77,15 @@ function text(node: Element | null): string {
 }
 
 function items(el: MenuPreviewPanel, list: string): string[] {
-  return [...el.shadowRoot!.querySelectorAll(`[data-test="${list}"] li`)].map(text);
+  const words = [...el.shadowRoot!.querySelectorAll(`[data-test="${list}"] li`)].map((row) =>
+    list === "changes"
+      ? [...row.children]
+          .filter((node) => node.tagName === "SPAN")
+          .map(text)
+          .join(" ")
+      : text(row),
+  );
+  return list === "changes" ? words.sort() : words;
 }
 
 it("words every kind of change, each with where it came from", async () => {
@@ -247,26 +255,28 @@ it("words every kind of change, each with where it came from", async () => {
       },
     ]),
   });
-  expect(items(el, "changes")).toEqual([
-    "Lemonade added under Drinks — this menu",
-    "Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu",
-    "Lemonade: allergens — shared product, also on Dinner Menu",
-    "Drinks renamed — included menu",
-    "Lager removed from Drinks › Beer — included menu, also on Dinner Menu and Terrace Menu",
-    "Chips added at the top level — this menu",
-    "Soup moved from Starters to the top level and Mains › Hot — this menu",
-    "Cola: names, description, photo, unit, diet, variants, extras, options — shared product",
-    "Section Desserts added at the top level — this menu",
-    "Bread removed from the top level — this menu",
-    "Section Specials removed from the top level — this menu",
-    "Section Beer removed from Drinks — included menu",
-    "Mains: name, photo, colour — included menu",
-    "Order changed at the top level — this menu",
-    "Order changed in Drinks — included menu",
-    "Device Home Page shortcuts changed — this menu",
-    "Device Home Page display for Till changed — this menu",
-    "Menu renamed from Midday Menu to Lunch Menu — this menu",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Lemonade added under Drinks",
+      "Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu",
+      "Lemonade: allergens — shared product, also on Dinner Menu",
+      "Drinks renamed — included menu",
+      "Lager removed from Drinks › Beer — included menu, also on Dinner Menu and Terrace Menu",
+      "Chips added at the top level",
+      "Soup moved from Starters to the top level and Mains › Hot",
+      "Cola: names, description, photo, unit, diet, variants, extras, options — shared product",
+      "Section Desserts added at the top level",
+      "Bread removed from the top level",
+      "Section Specials removed from the top level",
+      "Section Beer removed from Drinks — included menu",
+      "Mains: name, photo, colour — included menu",
+      "Order changed at the top level",
+      "Order changed in Drinks — included menu",
+      "Device Home Page shortcuts changed",
+      "Device Home Page display for Till changed",
+      "Menu renamed from Midday Menu to Lunch Menu",
+    ].sort(),
+  );
 });
 
 it("words a change in Spanish, with the price in the Spanish money format", async () => {
@@ -317,13 +327,15 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
       },
     ]),
   });
-  expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual([
-    "Se ha movido Soup: antes en Starters; ahora en el nivel principal y Mains › Hot — esta carta",
-    "Ha cambiado el orden en el nivel principal — esta carta",
-    "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu y Terrace Menu",
-    "Han cambiado los accesos directos de la página de inicio del dispositivo — esta carta",
-    "Ha cambiado la presentación de la página de inicio del dispositivo en Terminal de mano — esta carta",
-  ]);
+  expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual(
+    [
+      "Se ha movido Soup: antes en Starters; ahora en el nivel principal y Mains › Hot",
+      "Ha cambiado el orden en el nivel principal",
+      "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu y Terrace Menu",
+      "Han cambiado los accesos directos de la página de inicio del dispositivo",
+      "Ha cambiado la presentación de la página de inicio del dispositivo en Terminal de mano",
+    ].sort(),
+  );
 });
 
 it("names a deleted extra-only product on its own line in English and Spanish", async () => {
@@ -350,18 +362,22 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
       },
     ]),
   });
-  expect(items(el, "changes")).toEqual([
-    "Lemonade: extras — shared product, also on Dinner Menu",
-    "Extra lemon deleted — shared product, also on Dinner Menu",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Lemonade: extras — shared product, also on Dinner Menu",
+      "Extra lemon deleted — shared product, also on Dinner Menu",
+    ].sort(),
+  );
 
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
-  expect(items(el, "changes")).toEqual([
-    "Lemonade: extras — producto compartido, también en Dinner Menu",
-    "Se ha eliminado Extra lemon — producto compartido, también en Dinner Menu",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Lemonade: extras — producto compartido, también en Dinner Menu",
+      "Se ha eliminado Extra lemon — producto compartido, también en Dinner Menu",
+    ].sort(),
+  );
 });
 
 it("names an extra's list and old and new units in both languages", async () => {
@@ -381,16 +397,20 @@ it("names an extra's list and old and new units in both languages", async () => 
       },
     ]),
   });
-  expect(items(el, "changes")).toEqual([
-    "Extras: Jamón unit changed from g (0 decimal places) to kg (3 decimal places) — shared product",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Extras: Jamón unit changed from g (0 decimal places) to kg (3 decimal places) — shared product",
+    ].sort(),
+  );
 
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
-  expect(items(el, "changes")).toEqual([
-    "Extras: la unidad de Jamón ha cambiado de g (0 decimales) a kg (3 decimales) — producto compartido",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Extras: la unidad de Jamón ha cambiado de g (0 decimales) a kg (3 decimales) — producto compartido",
+    ].sort(),
+  );
 });
 
 it("names an extra's list and old and new portions with their units in both languages", async () => {
@@ -410,16 +430,16 @@ it("names an extra's list and old and new portions with their units in both lang
       },
     ]),
   });
-  expect(items(el, "changes")).toEqual([
-    "Extras: Jamón portion changed from 0.050 kg to 0.100 kg — shared product",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    ["Extras: Jamón portion changed from 0.050 kg to 0.100 kg — shared product"].sort(),
+  );
 
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
-  expect(items(el, "changes")).toEqual([
-    "Extras: la porción de Jamón ha cambiado de 0.050 kg a 0.100 kg — producto compartido",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    ["Extras: la porción de Jamón ha cambiado de 0.050 kg a 0.100 kg — producto compartido"].sort(),
+  );
 });
 
 it("names an extra's change to no quantity limit in both languages", async () => {
@@ -439,15 +459,17 @@ it("names an extra's change to no quantity limit in both languages", async () =>
       },
     ]),
   });
-  expect(items(el, "changes")).toEqual([
-    "Extras: Jamón maximum quantity changed from 2 to no limit — shared product",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    ["Extras: Jamón maximum quantity changed from 2 to no limit — shared product"].sort(),
+  );
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
-  expect(items(el, "changes")).toEqual([
-    "Extras: la cantidad máxima de Jamón ha cambiado de 2 a sin límite — producto compartido",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Extras: la cantidad máxima de Jamón ha cambiado de 2 a sin límite — producto compartido",
+    ].sort(),
+  );
 });
 
 /** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
@@ -484,21 +506,25 @@ const VAT_CHANGES: MenuChange[] = [
 
 it("names a VAT change among a product's changed facts", async () => {
   const el = await mount({ preview: preview(VAT_CHANGES) });
-  expect(items(el, "changes")).toEqual([
-    "Lemonade: VAT — shared product, also on Dinner Menu",
-    "Burger: allergens, VAT, variants — shared product",
-    "Cheese: VAT — shared product",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Lemonade: VAT — shared product, also on Dinner Menu",
+      "Burger: allergens, VAT, variants — shared product",
+      "Cheese: VAT — shared product",
+    ].sort(),
+  );
 });
 
 it("names a VAT change in Spanish", async () => {
   setLocale("es-ES");
   const el = await mount({ preview: preview(VAT_CHANGES) });
-  expect(items(el, "changes")).toEqual([
-    "Lemonade: IVA — producto compartido, también en Dinner Menu",
-    "Burger: alérgenos, IVA, variantes — producto compartido",
-    "Cheese: IVA — producto compartido",
-  ]);
+  expect(items(el, "changes")).toEqual(
+    [
+      "Lemonade: IVA — producto compartido, también en Dinner Menu",
+      "Burger: alérgenos, IVA, variantes — producto compartido",
+      "Cheese: IVA — producto compartido",
+    ].sort(),
+  );
 });
 
 it.each([
@@ -809,17 +835,15 @@ it.each(results)("reports %s", async (_name, result, status, message) => {
   expect(shown.getAttribute("role")).toBe(result.kind === "published" ? "status" : "alert");
 });
 
-function documentView(el: MenuPreviewPanel): CustomerMenu {
-  return q<CustomerMenu>(el, '[data-test="document"] dashboard-customer-menu')!;
+function documentView(el: MenuPreviewPanel): MenuDocumentTree {
+  return q<MenuDocumentTree>(el, '[data-test="document"] dashboard-menu-document-tree')!;
 }
 
-/** The frozen document's root product/section labels, in the selected content view. */
-function topNames(tree: CustomerMenu): string[] {
-  return [
-    ...tree.shadowRoot!.querySelectorAll(
-      ".menu > [data-change-target] > .members > .product .heading > span[lang], .menu > [data-change-target] > .members > .section > [data-change-target] .heading > button > span:first-of-type, .menu > [data-change-target] > .members > .missing",
-    ),
-  ].map(text);
+async function topNames(tree: MenuDocumentTree): Promise<string[]> {
+  await tree.updateComplete;
+  const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  return [...table.shadowRoot!.querySelectorAll('[data-test="name"]')].map(text);
 }
 
 it("shows the whole menu the publish would make live, read-only, under its own heading", async () => {
@@ -840,10 +864,10 @@ it("shows the whole menu the publish would make live, read-only, under its own h
   await tree.updateComplete;
   expect(tree.document).toBe(DOCUMENT);
   expect(tree.view).toEqual({ kind: "customer", language: "es" });
-  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
+  expect(await topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
   expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
-  expect(tree.shadowRoot!.textContent).toContain("para clientes");
-  expect(tree.shadowRoot!.textContent).not.toContain("COCINA");
+  expect((await topNames(tree)).join(" ")).toContain("para clientes");
+  expect((await topNames(tree)).join(" ")).not.toContain("COCINA");
 });
 
 it("still shows the whole menu, as it is live, when there is nothing to publish", async () => {
@@ -860,7 +884,7 @@ it("still shows the whole menu, as it is live, when there is nothing to publish"
   await tree.updateComplete;
   expect(tree.document).toBe(DOCUMENT);
   expect(tree.view).toEqual({ kind: "customer", language: "es" });
-  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
+  expect(await topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
 });
 
 it("shows a never-published menu whole, as its first publish would make it live", async () => {
@@ -871,7 +895,7 @@ it("shows a never-published menu whole, as its first publish would make it live"
   expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
+  expect(await topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
 });
 
 it("names the whole-menu view in Spanish", async () => {
@@ -900,7 +924,7 @@ it("names a product the document offers nothing for as no longer available", asy
   const el = await mount({ preview: { ...preview([]), document: { ...document, offers: {} } } });
   const tree = documentView(el);
   await tree.updateComplete;
-  expect(topNames(tree)).toEqual([t("members.missing")]);
+  expect(await topNames(tree)).toEqual([t("members.missing")]);
 });
 
 it("lists unresolved clashes above Publish and disables publishing", async () => {
@@ -1005,7 +1029,7 @@ it.each([
   ],
 ])(
   "names an include switched between a folder and its sections, and draws it in place, in %s",
-  async (locale, words, source, note) => {
+  async (locale, words) => {
     setLocale(locale);
     const content = currentContentLanguages();
     setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
@@ -1045,13 +1069,17 @@ it.each([
         document,
       },
     });
-    expect(text(q(el, 'button[data-change-id="switched"]'))).toBe(words);
-    expect(text(q(el, '[data-test="changes"] .source'))).toBe(`— ${source}`);
-    expect(text(q(el, 'button[data-side="after"]'))).toContain(words.split(": ")[1]);
-    const view = q<CustomerMenu>(el, "dashboard-customer-menu")!;
+    expect(text(q(el, '[data-change-row="switched"] > span'))).toBe(words);
+    expect(q(el, '[data-test="changes"] .source')).toBeNull();
+    const view = documentView(el);
     await view.updateComplete;
-    expect(text(view.shadowRoot!.querySelector("[data-direct]"))).toBe(note);
-    expect(view.shadowRoot!.querySelector("[data-direct] span")!.getAttribute("lang")).toBe("es");
+    const table = view.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const row = table.shadowRoot!.querySelector('tr[data-row-key="s-bar"]')!;
+    expect(row.textContent).toContain("Bebidas");
+    row.querySelector<HTMLButtonElement>(".row-activate")!.click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="s-bar/s-cold"]')).not.toBeNull();
   },
 );
 

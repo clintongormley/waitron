@@ -4246,7 +4246,7 @@ describe("the clash message and the Clashes filter", () => {
 
   it.each([
     ["en-GB", "Show clashes"],
-    ["es-ES", "Ver discrepancias"],
+    ["es-ES", "Ver conflictos"],
   ])(
     "offers %s Show clashes beside the red line once another filter is chosen, and a click puts the filter back on Clashes",
     async (locale, label) => {
@@ -4412,11 +4412,11 @@ describe("the clash message and the Clashes filter", () => {
   it("says the clash message in Spanish", async () => {
     const one = await mount({ rows: [burger, clashRow(lager)] });
     expect(text(message(one))).toBe(
-      "1 precio tiene una discrepancia. Resuélvela antes de poder publicar esta carta.",
+      "1 precio tiene un conflicto. Resuélvelo antes de poder publicar esta carta.",
     );
     const two = await mount({ rows: [burger, followedClashRow()] });
     expect(text(message(two))).toBe(
-      "2 precios tienen discrepancias. Resuélvelas antes de poder publicar esta carta.",
+      "2 precios tienen conflictos. Resuélvelos antes de poder publicar esta carta.",
     );
   });
 });

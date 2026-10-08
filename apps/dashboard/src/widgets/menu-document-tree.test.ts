@@ -491,3 +491,38 @@ it("clears the mark for an outside control even when that control stops its clic
     button.remove();
   }
 });
+
+it("tags translated names with their actual language and clears inherited language for staff names", async () => {
+  const el = await mount();
+  el.lang = "en";
+  await toggle(el, "drinks");
+  await toggle(el, "drinks/beer");
+  expect(row(el, "root")!.querySelector('[data-test="root-name"]')!.getAttribute("lang")).toBe("");
+  expect(row(el, "drinks/beer/mi")!.querySelector('[data-test="name"]')!.getAttribute("lang")).toBe(
+    "",
+  );
+  el.view = { kind: "customer", language: "en" };
+  await settle(el);
+  expect(row(el, "drinks/beer/mi")!.querySelector('[data-test="name"]')!.getAttribute("lang")).toBe(
+    "en",
+  );
+  expect(row(el, "drinks")!.querySelector('[data-test="name"]')!.getAttribute("lang")).toBe("es");
+  expect(row(el, "juice")!.querySelector('[data-test="name"]')!.getAttribute("lang")).toBe("");
+});
+
+it("uses the phone name column for a short product name without reserving absent row actions", async () => {
+  await page.viewport(390, 844);
+  const doc = fixture();
+  doc.offers.mi!.customerName = { es: "Patatas bravas" };
+  const el = await mount(doc);
+  el.style.width = "310px";
+  el.view = { kind: "customer", language: "es" };
+  await toggle(el, "drinks");
+  await toggle(el, "drinks/beer");
+  await expect.poll(() => table(el).hasAttribute("narrow")).toBe(true);
+  const name = row(el, "drinks/beer/mi")!.querySelector<HTMLElement>('[data-test="name"]')!;
+  expect(name.getBoundingClientRect().width).toBeGreaterThan(44);
+  expect(
+    table(el).shadowRoot!.querySelector<HTMLElement>(".scroll")!.scrollWidth,
+  ).toBeLessThanOrEqual(310);
+});

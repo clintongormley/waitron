@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -6,10 +7,7 @@ import type { MenuView } from "@waitron/catalogue/src/customer-menu-presentation
 import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
 import { menuTargetKey } from "@waitron/catalogue/src/menu-navigation.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { ALLERGEN_CODES, allergenName } from "../i18n/domain.js";
-import { en } from "../i18n/strings.js";
-import { CustomerMenu } from "./customer-menu.js";
-import "./device-home-preview.js";
+import { MenuDocumentTree } from "./menu-document-tree.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -36,6 +34,52 @@ export type PublishResult =
   | { kind: "published"; number: number; warnings?: MenuPreview["warnings"] }
   | { kind: "stale" }
   | { kind: "failed"; reason: string };
+
+const CHANGE_GROUP_ORDER = [
+  "menu",
+  "sections_added",
+  "sections_removed",
+  "sections_changed",
+  "products_added",
+  "products_removed",
+  "products_moved",
+  "prices",
+  "details",
+  "order",
+  "home",
+] as const;
+type ChangeGroup = (typeof CHANGE_GROUP_ORDER)[number];
+const CHANGE_GROUPS: Record<MenuChange["kind"], ChangeGroup> = {
+  menu_renamed: "menu",
+  section_added: "sections_added",
+  section_removed: "sections_removed",
+  section_changed: "sections_changed",
+  product_added: "products_added",
+  product_removed: "products_removed",
+  product_deleted: "products_removed",
+  product_moved: "products_moved",
+  price_changed: "prices",
+  product_changed: "details",
+  extra_unit_changed: "details",
+  extra_portion_changed: "details",
+  extra_max_quantity_changed: "details",
+  order_changed: "order",
+  home_shortcuts_changed: "home",
+  home_display_changed: "home",
+};
+const GROUP_LABELS: Record<ChangeGroup, StringKey> = {
+  menu: "menu_preview.group_menu",
+  sections_added: "menu_preview.group_sections_added",
+  sections_removed: "menu_preview.group_sections_removed",
+  sections_changed: "menu_preview.group_sections_changed",
+  products_added: "menu_preview.group_products_added",
+  products_removed: "menu_preview.group_products_removed",
+  products_moved: "menu_preview.group_products_moved",
+  prices: "menu_preview.group_prices",
+  details: "menu_preview.group_details",
+  order: "menu_preview.group_order",
+  home: "menu_preview.group_home",
+};
 
 const PRODUCT_FIELDS: Record<ProductChangeField, StringKey> = {
   names: "menu_preview.field_names",
@@ -136,7 +180,7 @@ export class MenuPreviewPanel extends LitElement {
       }
       @container (min-width: 800px) {
         .panes {
-          grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+          grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
           align-items: start;
         }
       }
@@ -145,9 +189,13 @@ export class MenuPreviewPanel extends LitElement {
         gap: var(--wt-space-2);
         min-width: 0;
       }
-      h2 {
+      h2,
+      h3 {
         margin: 0;
         font-size: var(--wt-font-size-lg);
+      }
+      h3 {
+        font-size: var(--wt-font-size-md);
       }
       p {
         margin: 0;
@@ -188,32 +236,8 @@ export class MenuPreviewPanel extends LitElement {
       .warnings li::marker {
         color: var(--wt-color-warning);
       }
-      button {
-        font: inherit;
-        color: var(--wt-color-text);
-        background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        min-block-size: var(--wt-tap-min);
-        cursor: pointer;
-        text-align: start;
-        overflow-wrap: anywhere;
-      }
-      button:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      button[aria-pressed="true"] {
-        border-color: var(--wt-color-primary);
-      }
       a {
         color: var(--wt-color-primary-text);
-      }
-      [data-test="return-change"] {
-        position: sticky;
-        inset-block-start: 0;
-        z-index: 1;
       }
       .actions {
         display: grid;
@@ -238,13 +262,10 @@ export class MenuPreviewPanel extends LitElement {
   @state() private confirmingHash: string | null = null;
   #publishedWarnings: MenuPreview["warnings"] = [];
   @state() private selectedView: string | null = null;
-  @state() private side: "before" | "after" = "after";
-  @state() private selectedChangeId: string | null = null;
-  @state() private selectedTarget: MenuTarget | null = null;
+  @state() private hiddenChangeIds = new Set<string>();
+  #menuId: string | null = null;
   #navigation = 0;
   @state() private navigationUnavailable = false;
-  @state() private selectionCleared = false;
-  #restoreSelection = false;
 
   #view(): MenuView {
     const config = currentContentLanguages();
@@ -258,174 +279,72 @@ export class MenuPreviewPanel extends LitElement {
     };
   }
 
-  #label = (key: string, values: Readonly<Record<string, string>> = {}): string => {
-    if (key === "amount") return formatMoney(values.amount!, currentLocale());
-    if (ALLERGEN_CODES.includes(key)) return allergenName(key);
-    const known: Record<string, StringKey> = {
-      missing_offer: "members.missing",
-      override: "menu_prices.override_column",
-      contains: "allergen.contains",
-      may_contain: "allergen.may_contain",
-      vegan: "editor.diet.vegan",
-      vegetarian: "editor.diet.vegetarian",
-      halal: "editor.diet.halal",
-      kosher: "editor.diet.kosher",
-      no_meat: "editor.diet.no_meat",
-      no_fish: "editor.diet.no_fish",
-      yes: "diet.yes",
-      no: "diet.no",
-      meat: "diet.contains_meat",
-      fish: "diet.contains_fish",
-      direct: "menu_preview.field_direct",
-      shown_directly: "menu_preview.shown_directly",
-    };
-    const candidate = known[key] ?? `customer_menu.${key}`;
-    return candidate in en ? fill(candidate as StringKey, { ...values }) : key;
-  };
-
-  #targets(change: MenuChange): MenuChange["targets"] {
-    if (change.kind !== "section_added" && change.kind !== "section_removed") return change.targets;
-    const targets = { before: [...change.targets.before], after: [...change.targets.after] };
-    const otherSide = change.kind === "section_added" ? "before" : "after";
-    for (const sibling of this.preview?.changes ?? []) {
-      if (
-        (sibling.kind === "section_added" || sibling.kind === "section_removed") &&
-        sibling.sectionId === change.sectionId
-      ) {
-        for (const target of sibling.targets[otherSide]) {
-          if (
-            !targets[otherSide].some(
-              (existing) => menuTargetKey(existing) === menuTargetKey(target),
-            )
-          )
-            targets[otherSide].push(target);
-        }
-      }
-    }
-    return targets;
-  }
-
-  #targetWords(target: MenuTarget, side: "before" | "after"): string {
-    if (target.kind === "title") return t("customer_menu.title");
-    if (target.kind === "home")
-      return `${t(target.device === "handheld" ? "home.device_handheld" : "home.device_till")} · ${t(target.field === "shortcuts" ? "home.block_shortcuts" : target.field === "columns" ? "home.columns" : target.field === "tiles" ? "home.tiles" : "home.order")}`;
-    const document = side === "before" ? this.preview?.live?.document : this.preview?.document;
-    let members = document?.root.members ?? [];
-    const names: string[] = [];
+  #target(change: MenuChange): MenuTarget | null {
+    const document = this.preview?.document;
+    if (document === undefined || change.kind === "product_deleted") return null;
+    let target: MenuTarget | undefined;
+    if (change.kind === "menu_renamed") target = { kind: "title", menuId: document.menuId };
+    else if (change.kind === "section_removed")
+      target = { kind: "list", sectionIds: change.parentSectionIds };
+    else if (change.kind === "product_removed") {
+      const old = change.targets.before.find((target) => target.kind === "product");
+      if (old?.kind === "product") target = { kind: "list", sectionIds: old.sectionIds };
+    } else if (change.kind === "product_moved") {
+      const oldKeys = new Set(change.targets.before.map(menuTargetKey));
+      target =
+        change.targets.after.find((target) => !oldKeys.has(menuTargetKey(target))) ??
+        change.targets.after[0];
+    } else target = change.targets.after[0];
+    if (target === undefined) return null;
+    if (target.kind === "title" || target.kind === "home") return target;
+    let members = document.root.members;
     for (const id of target.sectionIds) {
       const section = members.find(
         (member) => member.kind === "section" && member.sectionId === id,
       );
-      if (section?.kind !== "section") break;
-      names.push(section.internalName);
+      if (section?.kind !== "section") return null;
       members = section.members;
     }
-    const path =
-      target.sectionIds.length === 0
-        ? t("menu_preview.top_level")
-        : names.length === target.sectionIds.length
-          ? names.join(" / ")
-          : this.#label("unavailable_target");
-    if (target.kind === "list") return `${this.#label("members")} · ${path}`;
-    const field = target.field;
-    const name =
-      field.kind === "name"
-        ? `${t(field.audience === "staff" ? "sections.internal_name" : field.audience === "kitchen" ? "editor.kitchen_name" : "editor.customer_name")}${field.language ? ` · ${field.language}` : ""}`
-        : field.kind === "description"
-          ? `${this.#label("description")} · ${field.language}`
-          : this.#label(field.kind);
-    return [
-      name,
-      path,
-      ...(target.kind === "product"
-        ? (() => {
-            const offer = document?.offers[target.menuItemId];
-            const list = offer?.offeredModifiers.find((list) => list.id === target.listId);
-            return [
-              offer?.variants.find((variant) => variant.id === target.variantId)?.name,
-              list?.name,
-              list?.kind === "extras"
-                ? list.items.find((item) => item.productId === target.extraProductId)?.name
-                : list?.kind === "options"
-                  ? list.labels.find((label) => label.id === target.optionLabelId)?.name
-                  : undefined,
-            ].filter(Boolean);
-          })()
-        : []),
-    ].join(" · ");
-  }
-
-  #removed(): boolean {
-    const change = this.preview?.changes.find((change) => change.id === this.selectedChangeId);
-    return (
-      change !== undefined &&
-      this.selectedTarget !== null &&
-      !this.#targets(change).after.some(
-        (target) => menuTargetKey(target) === menuTargetKey(this.selectedTarget!),
-      )
-    );
-  }
-
-  async #navigate(change: MenuChange, side: "before" | "after", target: MenuTarget): Promise<void> {
-    const preview = this.preview;
     if (
-      preview === null ||
-      this.failed ||
-      !preview.changes.includes(change) ||
-      (side === "before" && preview.live === null)
+      target.kind === "product" &&
+      !members.some(
+        (member) =>
+          member.kind === "product" &&
+          member.menuItemId === target.menuItemId &&
+          member.productId === target.productId,
+      )
     )
-      return;
-    const turn = ++this.#navigation;
-    this.selectedChangeId = change.id;
-    this.navigationUnavailable = false;
-    this.selectionCleared = false;
-    this.side = side;
-    this.selectedTarget = target;
-    if (target.kind === "product" || target.kind === "section") {
-      const field = target.field;
-      if (
-        (field.kind === "name" && field.audience !== "customer") ||
-        ["override", "vat", "color"].includes(field.kind)
-      )
-        this.selectedView = "internal";
-      else if (
-        (field.kind === "name" || field.kind === "description") &&
-        field.language !== undefined
-      )
-        this.selectedView = currentContentLanguages().languages.includes(field.language)
-          ? field.language
-          : "internal";
-    }
-    await this.updateComplete;
-    if (turn !== this.#navigation || this.preview !== preview) return;
-    if (target.kind === "home") {
-      const destination = this.shadowRoot!.querySelector<HTMLElement>('[data-test="home-target"]');
-      destination?.focus({ preventScroll: true });
-      destination?.scrollIntoView({ block: "nearest", behavior: "instant" });
-    } else {
-      const renderer = this.shadowRoot!.querySelector<CustomerMenu>("dashboard-customer-menu");
-      const resolved = await renderer?.reveal(target);
-      if (turn !== this.#navigation || this.preview !== preview) return;
-      if (!resolved) {
-        this.navigationUnavailable = true;
-        await this.updateComplete;
-        if (turn !== this.#navigation || this.preview !== preview) return;
-        const message = this.shadowRoot!.querySelector<HTMLElement>(
-          '[data-test="navigation-unavailable"]',
-        );
-        message?.focus({ preventScroll: true });
-        message?.scrollIntoView({ block: "nearest", behavior: "instant" });
-      }
-    }
+      return null;
+    return target;
   }
 
-  async #returnChange(): Promise<void> {
+  async #navigate(event: MouseEvent, change: MenuChange, target: MenuTarget): Promise<void> {
+    if (leftToBrowser(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const preview = this.preview;
+    if (preview === null || this.failed || !preview.changes.includes(change)) return;
+    const turn = ++this.#navigation;
+    this.navigationUnavailable = false;
+    const tree = this.shadowRoot!.querySelector<MenuDocumentTree>("dashboard-menu-document-tree");
+    const resolved = await tree?.reveal(target);
+    if (turn !== this.#navigation || this.preview !== preview) return;
+    this.navigationUnavailable = !resolved;
+  }
+
+  async #hide(event: MouseEvent, change: MenuChange, preview: MenuPreview): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.preview !== preview || this.failed) return;
+    const focused = this.shadowRoot!.activeElement === event.currentTarget;
+    this.hiddenChangeIds = new Set(this.hiddenChangeIds).add(change.id);
     await this.updateComplete;
-    const row = [
-      ...this.shadowRoot!.querySelectorAll<HTMLButtonElement>("button[data-change-id]"),
-    ].find((node) => node.dataset.changeId === this.selectedChangeId);
-    row?.focus({ preventScroll: true });
-    row?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    if (focused && this.preview === preview) {
+      const next =
+        this.shadowRoot!.querySelector<HTMLElement>("a[data-hide-change]") ??
+        this.shadowRoot!.querySelector<HTMLElement>('[data-test="show-all-changes"]');
+      next?.focus({ preventScroll: true });
+    }
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -434,47 +353,16 @@ export class MenuPreviewPanel extends LitElement {
       this.confirmingHash = null;
       this.navigationUnavailable = false;
       this.#navigation++;
-      const old = changed.get("preview") as MenuPreview | null | undefined;
-      const sameMenu = old?.document.menuId === this.preview?.document.menuId;
-      if (!sameMenu) this.selectedView = null;
-      const selection = sameMenu
-        ? this.preview?.changes.find((row) => row.id === this.selectedChangeId)
-        : undefined;
-      const targets = selection === undefined ? [] : this.#targets(selection)[this.side];
-      const target = targets.find(
-        (target) =>
-          this.selectedTarget !== null &&
-          menuTargetKey(target) === menuTargetKey(this.selectedTarget),
-      );
-      this.selectionCleared = sameMenu && this.selectedChangeId !== null && target === undefined;
-      if (target !== undefined) {
-        this.selectedTarget = target;
-        this.#restoreSelection = true;
+      const menuId = this.preview?.document.menuId ?? null;
+      if (this.#menuId !== menuId) {
+        this.selectedView = null;
+        this.hiddenChangeIds = new Set();
       } else {
-        this.side = "after";
-        this.selectedChangeId = null;
-        this.selectedTarget = null;
-        this.#restoreSelection = false;
+        const ids = new Set(this.preview?.changes.map((change) => change.id));
+        this.hiddenChangeIds = new Set([...this.hiddenChangeIds].filter((id) => ids.has(id)));
       }
+      this.#menuId = menuId;
     }
-  }
-
-  protected override updated(): void {
-    if (!this.#restoreSelection) return;
-    this.#restoreSelection = false;
-    const target = this.selectedTarget;
-    if (target !== null && target.kind !== "home") void this.#restoreTarget(target);
-  }
-
-  async #restoreTarget(target: MenuTarget): Promise<void> {
-    const turn = this.#navigation;
-    const renderer = this.shadowRoot!.querySelector<CustomerMenu>("dashboard-customer-menu");
-    const resolved = await renderer?.reveal(target, false);
-    if (turn !== this.#navigation || resolved) return;
-    this.selectionCleared = true;
-    this.selectedChangeId = null;
-    this.selectedTarget = null;
-    this.side = "after";
   }
 
   #warningWords(warnings = this.preview?.warnings ?? []): string[] {
@@ -711,34 +599,62 @@ export class MenuPreviewPanel extends LitElement {
     else if (preview.changes.length === 0)
       body = html`<p class="note" data-test="no-changes">${t("menu_preview.no_changes")}</p>`;
     else
-      body = html`<ul data-test="changes">
-        ${preview.changes.map(
-          (change) =>
-            html`<li>
-              <button
-                type="button"
-                data-change-id=${change.id}
-                aria-pressed=${String(this.selectedChangeId === change.id)}
-                @click=${() => {
-                  const side = change.targets.after.length > 0 ? "after" : "before";
-                  const oldKeys = new Set(change.targets.before.map(menuTargetKey));
-                  const target =
-                    change.kind === "product_moved"
-                      ? (change.targets.after.find(
-                          (target) => !oldKeys.has(menuTargetKey(target)),
-                        ) ?? change.targets.after[0])
-                      : change.targets[side][0];
-                  if (target !== undefined) void this.#navigate(change, side, target);
-                }}
-              >
-                ${this.#words(change)}
-              </button>
-              <span class="source">— ${this.#source(change)}</span>
-              ${this.#targets(change).before.length + this.#targets(change).after.length <= 1 ? nothing : html`<p class="note" data-test="target-count">${fill("customer_menu.target_count", { count: String(this.#targets(change).before.length + this.#targets(change).after.length) })}</p>`}
-              ${(["after", "before"] as const).map((side) => this.#targets(change)[side].map((target) => html`<button type="button" data-target-key=${menuTargetKey(target)} data-side=${side} @click=${() => void this.#navigate(change, side, target)}>${t(side === "after" ? "customer_menu.proposed" : "customer_menu.before")} · ${this.#targetWords(target, side)}</button>`))}
-            </li>`,
-        )}
-      </ul>`;
+      body = keyed(
+        preview,
+        html`<div>
+            <wt-button
+              variant="secondary"
+              data-test="show-all-changes"
+              .disabled=${this.hiddenChangeIds.size === 0}
+              @click=${(event: Event) => {
+                event.stopPropagation();
+                this.hiddenChangeIds = new Set();
+              }}
+              >${t("menu_preview.show_all_changes")}</wt-button
+            >
+            ${this.hiddenChangeIds.size === 0 ? nothing : html`<span data-test="hidden-count">${fill(this.hiddenChangeIds.size === 1 ? "menu_preview.hidden_count_one" : "menu_preview.hidden_count", { count: String(this.hiddenChangeIds.size) })}</span>`}
+            <p class="help">${t("menu_preview.hidden_hint")}</p>
+          </div>
+          <div data-test="changes">
+            ${CHANGE_GROUP_ORDER.map((group) => {
+              const rows = preview.changes.filter(
+                (change) =>
+                  !this.hiddenChangeIds.has(change.id) && CHANGE_GROUPS[change.kind] === group,
+              );
+              if (rows.length === 0) return nothing;
+              return html`<section data-group=${group}>
+                <h3>${t(GROUP_LABELS[group])}</h3>
+                <ul>
+                  ${rows.map((change) => {
+                    const target = this.#target(change);
+                    return html`<li data-change-row=${change.id}>
+                      <span>${this.#words(change)}</span>
+                      ${change.source === "this_menu" ? nothing : html`<span class="source">— ${this.#source(change)}</span>`}
+                      ${
+                        target === null
+                          ? nothing
+                          : html`<a
+                              data-own-click
+                              data-change-id=${change.id}
+                              href=${`/manage/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/${target.kind === "home" ? "home" : "preview"}`}
+                              @click=${target.kind === "home" ? nothing : (event: MouseEvent) => void this.#navigate(event, change, target)}
+                              >(${t("menu_preview.view_change")})</a
+                            >`
+                      }
+                      <a
+                        data-own-click
+                        data-hide-change=${change.id}
+                        href=${`/manage/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/preview`}
+                        @click=${(event: MouseEvent) => void this.#hide(event, change, preview)}
+                        >${t("menu_preview.hide_change")}</a
+                      >
+                    </li>`;
+                  })}
+                </ul>
+              </section>`;
+            })}
+          </div>`,
+      );
     return html`<section>
       <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
       ${body}
@@ -767,7 +683,6 @@ export class MenuPreviewPanel extends LitElement {
         ? "menu_preview.document_heading"
         : "menu_preview.document_heading_live",
     );
-    const before = this.side === "before" ? preview.live : null;
     const view = this.#view();
     const config = currentContentLanguages();
     return html`<section data-test="document">
@@ -791,65 +706,13 @@ export class MenuPreviewPanel extends LitElement {
         }}
       ></wt-combobox>
       <p class="note">${t("customer_menu.frozen_content")}</p>
-      ${
-        before === null
-          ? nothing
-          : html`<p data-test="before" role="status">
-              ${t(this.#removed() ? "customer_menu.removed" : "customer_menu.before")} ·
-              ${fill("menu_preview.live_version", { number: String(preview.status.state === "unpublished" ? "" : preview.status.version), time: preview.status.state === "unpublished" ? "" : formatIsoMinute(preview.status.publishedAt) })}
-              <button
-                type="button"
-                data-test="return-proposed"
-                @click=${() => {
-                  this.side = "after";
-                  this.selectedTarget = null;
-                  this.navigationUnavailable = false;
-                  this.#navigation++;
-                }}
-              >
-                ${t("customer_menu.return_proposed")}
-              </button>
-            </p>`
-      }
-      ${this.selectedChangeId === null ? nothing : html`<button type="button" data-test="return-change" @click=${() => void this.#returnChange()}>${t("customer_menu.return_change")}</button>`}
-      ${this.navigationUnavailable ? html`<p role="status" tabindex="-1" data-test="navigation-unavailable">${t("customer_menu.unavailable_target")}</p>` : nothing}
-      ${this.selectionCleared ? html`<p role="status" data-test="selection-cleared">${t("customer_menu.selection_cleared")}</p>` : nothing}
-      ${
-        this.selectedTarget?.kind !== "home"
-          ? nothing
-          : html`<section>
-              <h3
-                data-test="home-target"
-                data-change-target=${menuTargetKey(this.selectedTarget)}
-                tabindex="-1"
-              >
-                ${t("customer_menu.changed")} ·
-                ${t(this.selectedTarget.device === "handheld" ? "home.device_handheld" : "home.device_till")}
-                ·
-                ${t(this.selectedTarget.field === "shortcuts" ? "home.block_shortcuts" : this.selectedTarget.field === "columns" ? "home.columns" : this.selectedTarget.field === "tiles" ? "home.tiles" : "home.order")}:
-                ${this.selectedTarget.field === "columns" ? (before?.document ?? preview.document).home[this.selectedTarget.device].columns : this.selectedTarget.field === "tiles" ? t((before?.document ?? preview.document).home[this.selectedTarget.device].tiles === "colours" ? "home.tiles_colours" : "home.tiles_thumbnails") : this.selectedTarget.field === "order" ? t((before?.document ?? preview.document).home[this.selectedTarget.device].order === "home_first" ? "home.order_home_first" : "home.order_menu_first") : String((before?.document ?? preview.document).home.shortcuts.length)}
-              </h3>
-              <dashboard-device-home-preview
-                .document=${before?.document ?? preview.document}
-                .device=${this.selectedTarget.device}
-              ></dashboard-device-home-preview>
-              <a
-                data-test="home-settings"
-                href=${`/manage/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/home`}
-                >${t("menus.tab_home")}</a
-              >
-            </section>`
-      }
-      <dashboard-customer-menu
-        .document=${before?.document ?? preview.document}
+      ${this.navigationUnavailable ? html`<p role="status" data-test="navigation-unavailable">${t("customer_menu.unavailable_target")}</p>` : nothing}
+      <dashboard-menu-document-tree
+        .document=${preview.document}
         .inspectionKey=${preview}
-        .showUnavailable=${false}
         .view=${view}
         .languages=${config}
-        .label=${this.#label}
-        .mediaUrl=${(filename: string) => `/media/${encodeURIComponent(filename)}`}
-        .highlighted=${this.selectedTarget === null ? [] : [this.selectedTarget]}
-      ></dashboard-customer-menu>
+      ></dashboard-menu-document-tree>
     </section>`;
   }
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { decimal } from "@waitron/shared";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, documentProduct, menuDocument, mountWidget } from "./test-helpers.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
 import type { MenuPreview } from "../api/client.js";
@@ -149,6 +149,33 @@ it.each(["ctrlKey", "metaKey", "shiftKey", "altKey"])(
     expect(heard).not.toHaveBeenCalled();
     expect(link.getAttribute("href")).toBe(
       "/manage/menus/menu/menu-lunch/view/prices/filter/clashes",
+    );
+  },
+);
+
+it.each([1, 2])(
+  "uses conflicto throughout the Spanish clash vocabulary and Preview sentence (%i)",
+  async (count) => {
+    setLocale("es-ES");
+    expect(t("menu_prices.clash")).toBe("Conflicto");
+    expect(t("menu_prices.clashes_only")).toBe("Con conflictos");
+    expect(t("menu_prices.show_clashes")).toBe("Ver conflictos");
+    expect(t("menus.publish_waits_clash")).toBe("No se puede publicar hasta resolver 1 conflicto");
+    expect(t("menus.publish_waits_clashes").replace("{count}", "2")).toBe(
+      "No se puede publicar hasta resolver 2 conflictos",
+    );
+    const p = preview();
+    p.clashes = Array.from({ length: count }, () => ({
+      productId: "lager",
+      variantId: null,
+      field: "price",
+      candidates: [],
+    })) as MenuPreview["clashes"];
+    const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview: p });
+    expect(text(el.shadowRoot!.querySelector('[data-test="clash-count"]'))).toBe(
+      count === 1
+        ? "1 precio tiene un conflicto. Resuélvelo antes de poder publicar esta carta."
+        : "2 precios tienen conflictos. Resuélvelos antes de poder publicar esta carta.",
     );
   },
 );

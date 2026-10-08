@@ -10,7 +10,7 @@ import {
   mountWidget,
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
-import type { CustomerMenu } from "../widgets/customer-menu.js";
+import type { MenuDocumentTree } from "../widgets/menu-document-tree.js";
 import type {
   DashboardApi,
   MenuHome,
@@ -408,13 +408,17 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await vi.waitFor(() => {
       if (!panel.shadowRoot!.querySelector('[data-test="changes"]')) throw new Error("preview");
     });
-    const menu = panel.shadowRoot!.querySelector<CustomerMenu>(
-      '[data-test="document"] dashboard-customer-menu',
+    const menu = panel.shadowRoot!.querySelector<MenuDocumentTree>(
+      '[data-test="document"] dashboard-menu-document-tree',
     )!;
     await menu.updateComplete;
-    const section = menu.shadowRoot!.querySelector<HTMLButtonElement>('[aria-expanded="false"]')!;
+    const table = menu.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const section = table.shadowRoot!.querySelector<HTMLButtonElement>(
+      '.row-activate[aria-expanded="false"]',
+    )!;
     section.click();
-    await menu.updateComplete;
+    await table.updateComplete;
     expect(section.getAttribute("aria-expanded")).toBe("true");
     await expectNoA11yViolations(host);
   });

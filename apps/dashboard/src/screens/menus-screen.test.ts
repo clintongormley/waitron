@@ -38,7 +38,7 @@ import type {
 } from "../api/client.js";
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
 import type { DashboardApp } from "../dashboard-app.js";
-import type { CustomerMenu } from "../widgets/customer-menu.js";
+import type { MenuDocumentTree } from "../widgets/menu-document-tree.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -5701,89 +5701,93 @@ describe("publishing", () => {
     return snapshot;
   }
 
-  async function content(el: MenusScreen): Promise<CustomerMenu> {
-    const renderer = panel(el).shadowRoot!.querySelector<CustomerMenu>("dashboard-customer-menu")!;
+  async function content(el: MenusScreen): Promise<MenuDocumentTree> {
+    const renderer = panel(el).shadowRoot!.querySelector<MenuDocumentTree>(
+      "dashboard-menu-document-tree",
+    )!;
     await renderer.updateComplete;
+    await renderer.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
     return renderer;
+  }
+  function treeRows(renderer: MenuDocumentTree) {
+    return renderer.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
   }
 
   async function followChange(el: MenusScreen, id: string): Promise<void> {
-    panel(el)
-      .shadowRoot!.querySelector<HTMLButtonElement>(`button[data-change-id="${id}"]`)!
-      .click();
+    const link = panel(el).shadowRoot!.querySelector<HTMLAnchorElement>(
+      `a[data-change-id="${id}"]`,
+    )!;
+    expect(link).not.toBeNull();
+    if (id === "home-columns") {
+      expect(link.getAttribute("href")).toBe("/manage/menus/menu/menu-lunch/view/home");
+      return;
+    }
+    link.focus();
+    link.click();
     await panel(el).updateComplete;
-    await vi.waitFor(async () => {
-      const renderer = await content(el);
-      if (id === "home-columns") expect(inPanel(el, "home-target")).not.toBeNull();
-      else expect(renderer.shadowRoot!.querySelector("[data-detail]")).not.toBeNull();
-    });
+    await vi.waitFor(async () =>
+      expect(treeRows(await content(el)).querySelector('[aria-current="true"]')).not.toBeNull(),
+    );
+    expect(panel(el).shadowRoot!.activeElement).toBe(link);
   }
 
-  it("inspects preview languages, variants, Before and Home without another read or write", async () => {
+  it("inspects frozen tree names and removal places without another read or write", async () => {
     const snapshot = navigablePreview();
     const original = JSON.stringify(snapshot);
     const client = api({ getMenuPreview: vi.fn().mockResolvedValue(snapshot) });
     const el = await mountPreview(client);
     await followChange(el, "lemon-description");
     const renderer = await content(el);
-    expect(renderer.view).toEqual({ kind: "customer", language: "en" });
-    expect(renderer.shadowRoot!.textContent).toContain("Proposed fresh lemon");
+    expect(renderer.view).toEqual({ kind: "customer", language: "es" });
+    expect(treeRows(renderer).textContent).toContain("Lemonade para clientes");
     const reads = client.getMenuPreview.mock.calls.length;
-    renderer.shadowRoot!.querySelector<HTMLButtonElement>('[data-variant="v-large"]')!.click();
-    await renderer.updateComplete;
-    expect(
-      renderer.shadowRoot!.querySelector('[data-variant="v-large"]')!.getAttribute("aria-pressed"),
-    ).toBe("true");
     setLocale("es-ES");
     await panel(el).updateComplete;
     await renderer.updateComplete;
-    expect(renderer.view).toEqual({ kind: "customer", language: "en" });
-    expect(renderer.shadowRoot!.textContent).toContain("Proposed fresh lemon");
+    expect(renderer.view).toEqual({ kind: "customer", language: "es" });
     const selector = panel(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       'wt-combobox[name="menu-preview-view"]',
     )!;
     await chooseOption(selector, "internal");
     await renderer.updateComplete;
+    await renderer.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
     expect(renderer.view).toEqual({ kind: "internal" });
-    expect(renderer.shadowRoot!.textContent).toContain("Lemonade");
+    expect(treeRows(renderer).textContent).toContain("Lemonade");
     await chooseOption(selector, "es");
     await renderer.updateComplete;
     expect(renderer.view).toEqual({ kind: "customer", language: "es" });
-    expect(renderer.shadowRoot!.textContent).toContain("Limón propuesto");
     await followChange(el, "removed-burger");
-    expect((await content(el)).shadowRoot!.textContent).toContain("Burger para clientes");
+    expect(
+      treeRows(renderer).querySelector('[aria-current="true"]')!.closest("tr")!.dataset.rowKey,
+    ).toBe("root");
+    expect(renderer.document).toBe(snapshot.document);
     await followChange(el, "home-columns");
-    expect(inPanel(el, "home-target")!.textContent).toContain("Columnas");
     expect(client.getMenuPreview.mock.calls.length).toBe(reads);
     expect(writeCalls(client)).toEqual([]);
     expect(JSON.stringify(snapshot)).toBe(original);
   });
 
-  it("publishes the proposed preview hash while inspecting the removed live dish", async () => {
+  it("publishes the proposed preview hash after viewing a removed dish's parent", async () => {
     const snapshot = navigablePreview();
     const client = api({ getMenuPreview: vi.fn().mockResolvedValue(snapshot) });
     const el = await mountPreview(client);
     await followChange(el, "removed-burger");
-    expect((await content(el)).document).toBe(snapshot.live!.document);
+    expect((await content(el)).document).toBe(snapshot.document);
     await publish(el);
     expect(client.publishMenu.mock.calls).toEqual([["menu-lunch", LUNCH_HASH]]);
     expect(writeCalls(client)).toEqual(["publishMenu"]);
   });
 
-  it("replaces the whole preview envelope without stealing focus or retaining local variant picks", async () => {
+  it("replaces the whole preview envelope without stealing focus or retaining tree expansion", async () => {
     const live = new LiveData();
     const initial = navigablePreview();
     const refreshed = navigablePreview();
     refreshed.hash = "f".repeat(64);
-    refreshed.document.offers["mi-lemonade"]!.description = { en: "New frozen description" };
-    refreshed.live!.versionId = "new-live-version";
-    refreshed.live!.document.offers["mi-burger"]!.name = "New frozen before name";
+    refreshed.document.offers["mi-lemonade"]!.customerName = { es: "New frozen name" };
     const client = api({ liveData: live, getMenuPreview: vi.fn().mockResolvedValue(initial) });
     const el = await mountPreview(client);
     await followChange(el, "lemon-description");
     const renderer = await content(el);
-    renderer.shadowRoot!.querySelector<HTMLButtonElement>('[data-variant="v-large"]')!.click();
-    await renderer.updateComplete;
     const back = q<HTMLElement>(el, '[data-test="back"]')!;
     back.focus();
     expect(el.shadowRoot!.activeElement).toBe(back);
@@ -5791,23 +5795,17 @@ describe("publishing", () => {
     live.invalidate([{ type: "products" }]);
     await vi.waitFor(() => expect(panel(el).preview).toBe(refreshed));
     await vi.waitFor(() =>
-      expect(renderer.shadowRoot!.textContent).toContain("New frozen description"),
+      expect(
+        treeRows(renderer).querySelector('tr[data-row-key="s-drinks/mi-lemonade"]'),
+      ).toBeNull(),
     );
     expect(inPanel(el, "publish-confirmation")).toBeNull();
     expect(el.shadowRoot!.activeElement).toBe(back);
-    expect(
-      renderer.shadowRoot!.querySelector('[data-variant="v-small"]')!.getAttribute("aria-pressed"),
-    ).toBe("true");
-    expect(
-      renderer.shadowRoot!.querySelector('[data-variant="v-large"]')!.getAttribute("aria-pressed"),
-    ).toBe("false");
-    expect(
-      panel(el)
-        .shadowRoot!.querySelector('[data-change-id="lemon-description"]')!
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(treeRows(renderer).querySelector('[aria-current="true"]')).toBeNull();
+    await followChange(el, "lemon-description");
+    expect(treeRows(renderer).textContent).toContain("New frozen name");
     await followChange(el, "removed-burger");
-    expect((await content(el)).document).toBe(refreshed.live!.document);
+    expect((await content(el)).document).toBe(refreshed.document);
     expect(writeCalls(client)).toEqual([]);
   });
 
@@ -5891,8 +5889,8 @@ describe("publishing", () => {
       expect(panel(el).preview).toBe(dinner);
       expect(renderer.document!.menuId).toBe("menu-dinner");
       expect(renderer.view).toEqual({ kind: "customer", language: "es" });
-      expect(renderer.shadowRoot!.textContent).toContain("Frozen dinner title");
-      expect(renderer.shadowRoot!.textContent).not.toContain("Proposed fresh lemon");
+      expect(treeRows(renderer).textContent).toContain("Frozen dinner title");
+      expect(treeRows(renderer).textContent).not.toContain("Lemonade para clientes");
       expect(inPanel(el, "preview-error")).toBeNull();
       expect(inPanel(el, "return-change")).toBeNull();
       expect(writeCalls(client)).toEqual([]);
@@ -5989,38 +5987,32 @@ describe("publishing", () => {
         element: inPanel(el, "document-pane")!,
         path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-detail.png`,
       });
-      const returnButton = inPanel(el, "return-change")!;
       const menuPane = inPanel(el, "document-pane")!;
-      menuPane.scrollTop = menuPane.scrollHeight;
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      expect(returnButton.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      const renderer = await content(el);
+      const selected = treeRows(renderer).querySelector<HTMLElement>('[aria-current="true"]')!;
+      expect(selected.getBoundingClientRect().top).toBeGreaterThanOrEqual(
         menuPane.getBoundingClientRect().top,
       );
-      expect(returnButton.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      expect(selected.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         menuPane.getBoundingClientRect().bottom,
       );
-      returnButton.click();
-      await panel(el).updateComplete;
       expect(panel(el).shadowRoot!.activeElement?.getAttribute("data-change-id")).toBe(
         "lemon-description",
       );
-      panel(el)
-        .shadowRoot!.querySelector<HTMLButtonElement>('button[data-change-id="removed-empty"]')!
-        .click();
-      await vi.waitFor(() => expect(inPanel(el, "before")).not.toBeNull());
+      await followChange(el, "removed-empty");
+      expect(
+        treeRows(renderer).querySelector('[aria-current="true"]')!.closest("tr")!.dataset.rowKey,
+      ).toBe("root");
+      expect(renderer.document).toBe(snapshot.document);
       checkWidth();
       await expectNoA11yViolations(el.parentElement!);
       await page.screenshot({
-        element: inPanel(el, "document-pane")!,
+        element: menuPane,
         path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-removed.png`,
       });
       await followChange(el, "home-columns");
       checkWidth();
       await expectNoA11yViolations(el.parentElement!);
-      await page.screenshot({
-        element: inPanel(el, "document-pane")!,
-        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-home.png`,
-      });
       expect(client.getMenuPreview).toHaveBeenCalledTimes(1);
       expect(writeCalls(client)).toEqual([]);
     },
@@ -6127,9 +6119,7 @@ describe("publishing", () => {
     await vi.waitFor(() =>
       expect(text(q(onPreview, '[data-test="menu-status"]'))).toBe("Could not be checked"),
     );
-    await vi.waitFor(() =>
-      expect(text(inPanel(onPreview, "live"))).toBe("The live version could not be checked."),
-    );
+    await vi.waitFor(() => expect(inPanel(onPreview, "live")).toBeNull());
   });
 
   it("keeps the state it read on another tab when the preview cannot be read", async () => {
@@ -6140,7 +6130,7 @@ describe("publishing", () => {
     await chooseTab(el, "preview");
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown);
-    expect(text(inPanel(el, "live"))).toBe(`Version 2, published ${formatIsoMinute(PUBLISHED_AT)}`);
+    expect(inPanel(el, "live")).toBeNull();
   });
 
   it("says a menu's state could not be checked, still listing the menus", async () => {
@@ -6305,12 +6295,12 @@ describe("publishing", () => {
       expect(
         [...panel(el).shadowRoot!.querySelectorAll('[data-test="changes"] li')].map(text),
       ).toEqual([
-        "Chips added under Drinks — this menu",
-        "Lemonade: allergens — shared product, also on Dinner Menu",
+        "Chips added under Drinks Hide",
+        "Lemonade: allergens — shared product, also on Dinner Menu Hide",
       ]),
     );
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
-    expect(text(inPanel(el, "live"))).toBe(`Version 2, published ${formatIsoMinute(PUBLISHED_AT)}`);
+    expect(inPanel(el, "live")).toBeNull();
     expect(text(inPanel(el, "warnings"))).toBe(
       "1 shortcut on Lunch Menu's Device Home Page points at something no longer in this menu. It stays as an empty space until you remove it.",
     );
@@ -6357,7 +6347,7 @@ describe("publishing", () => {
         `Unpublished changes · Live: version 3 · ${formatIsoMinute(PUBLISHED_AT)}`,
       ),
     );
-    expect(text(inPanel(el, "live"))).toBe(`Version 3, published ${formatIsoMinute(PUBLISHED_AT)}`);
+    expect(inPanel(el, "live")).toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(client.getMenuStatus.mock.calls.length).toBe(statusReads);
     const held = deferred<MenuStatus>();
@@ -6442,9 +6432,7 @@ describe("publishing", () => {
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
       `Published · Version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")}`,
     );
-    expect(text(inPanel(el, "live"))).toBe(
-      `Version 3, published ${formatIsoMinute("2026-09-26T11:00:00.000Z")}`,
-    );
+    expect(inPanel(el, "live")).toBeNull();
     cleanupWidgets();
 
     // Answered with the version already live, as when that content was published already: its
@@ -6499,7 +6487,7 @@ describe("publishing", () => {
     );
     await vi.waitFor(() =>
       expect(text(inPanel(el, "changes"))).toBe(
-        "Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu",
+        "Prices Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu Hide",
       ),
     );
     expect(client.getMenuPreview.mock.calls.length).toBe(reads + 1);
@@ -6794,21 +6782,17 @@ describe("publishing", () => {
     ]);
   });
 
-  /** The names the Preview tab's whole-menu view shows, with every section opened. */
   async function wholeMenu(el: MenusScreen): Promise<string[]> {
-    const tree = inPanel(el, "document")!.querySelector<CustomerMenu>("dashboard-customer-menu")!;
+    const tree = inPanel(el, "document")!.querySelector<MenuDocumentTree>(
+      "dashboard-menu-document-tree",
+    )!;
     await tree.updateComplete;
-    for (;;) {
-      const closed = tree.shadowRoot!.querySelector<HTMLElement>('[aria-expanded="false"]');
-      if (closed === null) break;
-      closed.click();
-      await tree.updateComplete;
-    }
-    return [
-      ...tree.shadowRoot!.querySelectorAll(
-        ".product .heading > span[lang], .section > [data-change-target] .heading > button > span:first-of-type",
-      ),
-    ].map(text);
+    const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const all = table.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!;
+    if (all.textContent?.trim() === t("folders.expand_all")) all.click();
+    await table.updateComplete;
+    return [...table.shadowRoot!.querySelectorAll('[data-test="name"]')].map(text);
   }
 
   it("shows the whole menu as the publish would make it live, read-only, from the preview rather than the working structure", async () => {
@@ -6816,7 +6800,9 @@ describe("publishing", () => {
     expect(text(inPanel(el, "document")!.querySelector("h2"))).toBe(
       "The menu as it will be published",
     );
-    const tree = inPanel(el, "document")!.querySelector<CustomerMenu>("dashboard-customer-menu")!;
+    const tree = inPanel(el, "document")!.querySelector<MenuDocumentTree>(
+      "dashboard-menu-document-tree",
+    )!;
     expect(tree.document).toEqual(lunchDocument());
     expect(tree.view).toEqual({ kind: "customer", language: "es" });
     expect(await wholeMenu(el)).toEqual([
@@ -6825,8 +6811,8 @@ describe("publishing", () => {
       "Lemonade para clientes",
       "Chips para clientes",
     ]);
-    expect(tree.shadowRoot!.textContent).not.toContain("Lager");
-    expect(tree.shadowRoot!.textContent).not.toContain("Favourites");
+    expect((await wholeMenu(el)).join(" ")).not.toContain("Lager");
+    expect((await wholeMenu(el)).join(" ")).not.toContain("Favourites");
     expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
   });
 

@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { page } from "vitest/browser";
-import { cleanupWidgets, menuDocument, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  menuDocument,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
   CatalogueSummary,
@@ -343,12 +348,12 @@ describe("the menu editor's heading", () => {
   it.each([
     ["Prices", PRICES_PATH, "en", 1, "Publishing waits on 1 clash"],
     ["Prices", PRICES_PATH, "en", 3, "Publishing waits on 3 clashes"],
-    ["Prices", PRICES_PATH, "es-ES", 1, "No se puede publicar hasta resolver 1 discrepancia"],
-    ["Prices", PRICES_PATH, "es-ES", 3, "No se puede publicar hasta resolver 3 discrepancias"],
+    ["Prices", PRICES_PATH, "es-ES", 1, "No se puede publicar hasta resolver 1 conflicto"],
+    ["Prices", PRICES_PATH, "es-ES", 3, "No se puede publicar hasta resolver 3 conflictos"],
     ["Preview", PREVIEW_PATH, "en", 1, "Publishing waits on 1 clash"],
     ["Preview", PREVIEW_PATH, "en", 3, "Publishing waits on 3 clashes"],
-    ["Preview", PREVIEW_PATH, "es-ES", 1, "No se puede publicar hasta resolver 1 discrepancia"],
-    ["Preview", PREVIEW_PATH, "es-ES", 3, "No se puede publicar hasta resolver 3 discrepancias"],
+    ["Preview", PREVIEW_PATH, "es-ES", 1, "No se puede publicar hasta resolver 1 conflicto"],
+    ["Preview", PREVIEW_PATH, "es-ES", 3, "No se puede publicar hasta resolver 3 conflictos"],
   ])(
     "says on the %s tab at %s, in %s, that publishing waits on %i clash(es), in red",
     async (_tab, path, locale, clashes, words) => {
@@ -513,3 +518,61 @@ describe("the menu editor's heading", () => {
     expect(heading.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
   });
 });
+
+it.each(["light", "dark"] as const)(
+  "drops an unverified Preview clash count after a failed live read and restores a fresh count (%s)",
+  async (theme) => {
+    const live = new LiveData();
+    let clashes = 2;
+    let failed = false;
+    const client = api(async () => {
+      if (failed) throw { code: "server.internal" };
+      return { ...CHANGED, clashes };
+    });
+    Object.assign(client, {
+      liveData: live,
+      getMenuRead: async (id: string, parts: readonly ("structure" | "preview")[]) => {
+        if (failed) throw { code: "server.internal" };
+        return Object.fromEntries(
+          await Promise.all(
+            parts.map(async (part) => [
+              part,
+              {
+                status: 200,
+                body: await (part === "preview"
+                  ? client.getMenuPreview(id)
+                  : client.getMenuStructure(id)),
+              },
+            ]),
+          ),
+        );
+      },
+    });
+    history.replaceState(null, "", PREVIEW_PATH);
+    const { el, host } = await mountWidget<MenusScreen>(
+      "dashboard-menus-screen",
+      { api: client },
+      theme,
+    );
+    const heading = () => text(q(el, '[data-test="menu-status"]'));
+    await vi.waitFor(() => expect(heading()).toContain("Publishing waits on 2 clashes"));
+    failed = true;
+    live.invalidate([{ type: "products" }]);
+    const panel = () => q(el, "dashboard-menu-preview")!.shadowRoot!;
+    await vi.waitFor(() =>
+      expect(panel().querySelector('[data-test="preview-error"]')).not.toBeNull(),
+    );
+    expect(q(el, '[data-test="status-clashes"]')).toBeNull();
+    expect(heading()).toBe(CHANGED_LINE);
+    expect(text(panel().querySelector('[data-test="preview-error"]'))).toBe(
+      "The changes could not be worked out.",
+    );
+    await expectNoA11yViolations(host);
+    failed = false;
+    clashes = 3;
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(heading()).toContain("Publishing waits on 3 clashes"));
+    expect(panel().querySelector('[data-test="preview-error"]')).toBeNull();
+    await expectNoA11yViolations(host);
+  },
+);

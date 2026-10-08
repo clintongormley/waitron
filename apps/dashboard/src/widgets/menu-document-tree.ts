@@ -41,9 +41,9 @@ export class MenuDocumentTree extends LitElement {
       }
       wt-data-table[narrow]::part(name-stack) {
         min-width: 0;
-        max-inline-size: max(
-          var(--wt-tap-min),
-          calc(100cqw - var(--wt-tap-min) * 6 - var(--wt-space-3) * 2)
+        max-inline-size: min(
+          calc(var(--wt-tap-min) * 2),
+          max(var(--wt-tap-min), calc(100cqw - var(--wt-tap-min) * 5 - var(--wt-space-3) * 2))
         );
         overflow-wrap: anywhere;
       }
@@ -172,7 +172,7 @@ export class MenuDocumentTree extends LitElement {
         >${folderFrame()}<span
           part=${row.key === this.highlightedKey ? "name-stack folder-stack target" : "name-stack folder-stack"}
           aria-current=${row.key === this.highlightedKey ? "true" : nothing}
-          ><span data-test="root-name">${this.#snapshot!.menuName}</span
+          ><span data-test="root-name" lang="">${this.#snapshot!.menuName}</span
           >${this.#snapshot!.root.members.length === 0 ? html`<span part="note">${t("menus.structure_empty")}</span>` : nothing}</span
         ></span
       >`;
@@ -182,7 +182,7 @@ export class MenuDocumentTree extends LitElement {
       part=${`${member.kind === "section" ? "name-stack folder-stack" : "name-stack"}${row.key === this.highlightedKey ? " target" : ""}`}
       aria-current=${row.key === this.highlightedKey ? "true" : nothing}
     >
-      <span data-test="name">${text.text}</span>
+      <span data-test="name" lang=${text.language ?? ""}>${text.text}</span>
       ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage)}</span>` : nothing}
       ${text.missingRequested && text.origin === "staff" ? html`<span part="note">${t("customer_menu.staff_fallback")}</span>` : nothing}
     </span>`;

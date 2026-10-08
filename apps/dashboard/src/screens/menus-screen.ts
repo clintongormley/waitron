@@ -2562,7 +2562,10 @@ export class MenusScreen extends LitElement {
                 >`,
             )
           : statusLine(this.status);
-    const clashes = this.statusError ? 0 : (this.status?.clashes ?? 0);
+    const clashes =
+      this.statusError || (this.view === "preview" && this.previewError)
+        ? 0
+        : (this.status?.clashes ?? 0);
     const waits =
       clashes === 1
         ? t("menus.publish_waits_clash")
