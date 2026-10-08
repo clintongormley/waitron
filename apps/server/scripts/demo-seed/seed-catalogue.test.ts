@@ -53,7 +53,12 @@ describe("seedCatalogues", () => {
     for (const structure of [read.restaurant, read.lunch]) {
       const drinks = structure.nodes.find((node) => node.internalName === "Drinks");
       expect(drinks?.includedMenuId).toBe(read.drinksId);
-      expect(drinks?.children?.map((node) => node.internalName)).toEqual(["Drinks"]);
+      expect(drinks?.children?.map((node) => node.internalName)).toEqual([
+        "Cocktails",
+        "Wine and beer",
+        "Soft drinks",
+        "Coffee",
+      ]);
     }
   });
 
@@ -196,12 +201,16 @@ describe("seedCatalogues", () => {
         name: row.name,
         is_default: row.is_default === 1,
       }));
-      const { rows: drinksRoute } = await tx.execute<{ station_name: string | null }>(sql`
-        select ks.name as station_name
+      const { rows: drinksRoute } = await tx.execute<{
+        category: string;
+        station_name: string | null;
+      }>(sql`
+        select c.name as category, ks.name as station_name
         from categories c
         join routing_cells sc on sc.category_id = c.id and sc.zone_id is null and sc.location_id = ${locationId}
         left join kitchen_stations ks on ks.id = sc.station_id
-        where c.name = 'Drinks'`);
+        where c.name in ('Cocktails', 'Wine and beer', 'Soft drinks', 'Coffee')
+        order by c.name`);
       const { rows: charcuterieRoute } = await tx.execute<{ station_name: string | null }>(sql`
         select ks.name as station_name
         from categories c
@@ -326,7 +335,12 @@ describe("seedCatalogues", () => {
     expect(upstairsBar?.is_default).toBe(false);
     expect(deli?.is_default).toBe(false);
 
-    expect(res.drinksRoute[0]?.station_name).toBe("Downstairs bar");
+    expect(res.drinksRoute).toEqual([
+      { category: "Cocktails", station_name: "Downstairs bar" },
+      { category: "Coffee", station_name: "Downstairs bar" },
+      { category: "Soft drinks", station_name: "Downstairs bar" },
+      { category: "Wine and beer", station_name: "Downstairs bar" },
+    ]);
     expect(res.charcuterieRoute[0]?.station_name).toBe("Deli counter");
 
     // One product's three names in full, then a floor across the whole seed — so flattening the names
@@ -345,7 +359,7 @@ describe("seedCatalogues", () => {
         },
         kitchen_name: "COFFEE · DOWNSTAIRS BAR",
         dietary_declarations: ["vegetarian", "halal"],
-        primary_category: "Drinks",
+        primary_category: "Coffee",
         variant_prices: ["140", "210"],
         // The menu overrides nothing, so each variant sells at its own price there.
         menu_overrides: 0,

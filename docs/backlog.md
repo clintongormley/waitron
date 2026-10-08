@@ -2375,6 +2375,14 @@ its quantity strings directly (`apps/dashboard/src/widgets/top-sellers-table.ts`
 `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These are
 readings, not browser reproductions; reproduce them before changing their displays.
 
+**A321 DONE: the demo's included Drinks menu opens onto four sections.**
+Casa Delgado and Menú del Día include Cocktails, Wine and beer, Soft drinks and Coffee inside
+one Drinks folder. Each category routes to the downstairs bar by default; the upstairs bar
+zone keeps its bar routing. The seven drink products and Coffee's two variants retain their
+names, prices, VAT classes and images. The new section labels have English, Spanish, Catalan
+and Galician text. The Catalan and Galician labels are drafts awaiting a speaker's check,
+like W109-3's text below. The unchanged practice-sales golden comparison passes.
+
 **The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the
 text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
 in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
