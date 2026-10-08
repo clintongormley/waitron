@@ -567,6 +567,19 @@ is no `process.title` anywhere in `vitest@4.1.11`'s `dist/`. Measured 2026-09-19
 `packages/identity`, one version each: 3.2.7 showed `node (vitest)` and `node (vitest 1)`, 4.1.11
 showed no `(vitest` at any sample and a worker running `…/vitest/dist/workers/forks.js`.
 
+**A browser-mode run's test Chromium goes with its vitest process, so `pnpm reap` clears it without a
+rule of its own.** Measured 2026-10-08 on `packages/ui`, vitest 4.1.11, Playwright's
+`chromium_headless_shell-1243` on macOS, each time with the processes the run started recorded by id
+beforehand. (1) `kill -9` on the vitest process: all 15 `chrome-headless-shell` processes (the browser
+was vitest's direct child, the renderers, GPU and network processes the browser's) were gone 5 s
+later. (2) `kill -9` on the `pnpm --filter @waitron/ui test` above it: vitest was left with ppid 1
+and still held its 15 browser processes; `pnpm reap` reported `killed 1 orphaned vitest worker(s)`,
+and 5 s later none of the 16 (vitest and its browser) was running. (3) `kill -9` on the browser's main process: every
+renderer and the vitest process had exited 5 s later. No run left a test browser with ppid 1, so
+the sweep has no browser rule (A426). A failing case would have shown a `…/ms-playwright/…/chrome-headless-shell`
+row with ppid 1 after the kill. Never kill a browser by name to clean up: `ms-playwright` also holds
+the Playwright MCP's `mcp-chrome-*` profiles, an interactive browser.
+
 ## The stream loop test skips locally without its two binaries, and a skip reads as a pass
 
 `apps/server/src/stream-loop.e2e.test.ts` runs slice 2 end to end with the real pinned Litestream

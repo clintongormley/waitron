@@ -7752,6 +7752,16 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
   (`rg -n provisioning.invalid_identifier packages apps`) found no product throw site. Retire it
   with the broader dead-code sweep, checking stored-code consumers first.
 
+- **`pnpm reap` and an interrupted browser test run's Chromium (A426, owner 2026-10-08) — MEASURED,
+  no code change.** Queued to make the sweep kill an orphaned Playwright test browser. Reproducing it
+  first, three interrupts of a `packages/ui` browser run (vitest killed, its `pnpm` killed, the
+  browser's main process killed) left no test browser with ppid 1: the browser exits with its vitest
+  process, and the existing sweep already kills an orphaned vitest. Receipt:
+  [testing-guide.md](developers/testing-guide.md), "An interrupted run also ORPHANS its vitest
+  workers". **Open point (owner):** whether to add a browser rule anyway, for a shape not observed;
+  it would have to tell a test browser from the Playwright MCP's `mcp-chrome-*` browser, which lives
+  under the same `ms-playwright` cache folder.
+
 - **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
   `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
   stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
