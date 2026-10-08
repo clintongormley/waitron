@@ -112,6 +112,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                   service: {
                     open: state === "last-orders",
                     periodName: state === "last-orders" ? "Breakfast" : null,
+                    keepOpen: null,
                   },
                   departmentName: "Restaurant",
                   products: [coffee],

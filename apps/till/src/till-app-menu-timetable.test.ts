@@ -291,7 +291,7 @@ afterEach(() => {
 
 describe("period service at the counter", () => {
   it("end-offset poll closes selection with unchanged service and versions, then marks grace expiry", async () => {
-    const running = { ...BARRA, service: { open: true, periodName: "Breakfast" } };
+    const running = { ...BARRA, service: { open: true, periodName: "Breakfast", keepOpen: null } };
     const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => running) });
     await signIn(el);
     add(el, DESAYUNOS);
@@ -871,7 +871,7 @@ describe("an open table's order", () => {
   it("end-offset table poll hides selection and retains sendable grace before expiry", async () => {
     const breakfast = {
       ...COMEDOR,
-      service: { open: true, periodName: "Breakfast" },
+      service: { open: true, periodName: "Breakfast", keepOpen: null },
       menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
     const lunch = {
