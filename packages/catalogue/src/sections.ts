@@ -317,6 +317,113 @@ export async function moveMember(
   return moved;
 }
 
+/** A member named by the list holding it. */
+export interface MemberAt {
+  listId: string;
+  memberId: string;
+}
+
+/** Each named member as its list holds it, refusing an empty or repeated naming. */
+function heldMembers(
+  graph: SectionGraph,
+  members: readonly MemberAt[],
+): { listId: string; member: SectionMember }[] {
+  if (!Array.isArray(members) || members.length === 0)
+    throw new AppError("menu_section.invalid", { field: "members" });
+  const named = new Set<string>();
+  return members.map(({ listId, memberId }) => {
+    if (named.has(memberId)) throw new AppError("menu_section.invalid", { field: "members" });
+    named.add(memberId);
+    requireWritableList(graph, listId);
+    return { listId, member: heldMember(graph.children(listId), listId, memberId) };
+  });
+}
+
+const refKey = (ref: MemberRef): string =>
+  ref.kind === "product" ? `product:${ref.productId}` : `section:${ref.sectionId}`;
+
+async function writeStructureChange(
+  tx: Transaction,
+  graph: SectionGraph,
+  lists: Iterable<string>,
+): Promise<void> {
+  const menus = new Set<string>();
+  for (const list of lists) for (const menu of menusContaining(graph, list)) menus.add(menu);
+  await onStructureChanged(tx, [...menus].sort(), graph);
+}
+
+/**
+ * Moves members of this menu's lists into one of its lists, keeping each member row (and so an
+ * include's folder setting), placed in the order given at `position` of the destination counted
+ * without them (past the end means last). Every source list is renumbered without them.
+ */
+export async function moveMembersInto(
+  tx: Transaction,
+  toListId: string,
+  members: readonly MemberAt[],
+  position?: number,
+): Promise<SectionMember[]> {
+  const graph = await loadSectionGraph(tx);
+  requireWritableList(graph, toListId);
+  requirePosition(position);
+  const moving = heldMembers(graph, members);
+  const menu = graph.ownerMenu(toListId);
+  if (moving.some(({ listId }) => graph.ownerMenu(listId) !== menu))
+    throw new AppError("menu_section.invalid", { field: "listId" });
+  const movedIds = new Set(moving.map(({ member }) => member.id));
+  const staying = graph.children(toListId).filter((member) => !movedIds.has(member.id));
+  // Checked against the final list, so no update below passes through a duplicate either.
+  const held = new Set(staying.map((member) => refKey(member.ref)));
+  for (const { member } of moving) {
+    if (member.ref.kind === "section" && wouldCreateCycle(graph, toListId, member.ref.sectionId))
+      throw new AppError("menu_section.member_cycle", {
+        sectionId: toListId,
+        childSectionId: member.ref.sectionId,
+      });
+    const key = refKey(member.ref);
+    if (held.has(key)) throw new AppError("menu_section.member_duplicate", { sectionId: toListId });
+    held.add(key);
+  }
+  const ordered = [...staying];
+  ordered.splice(
+    Math.min(position ?? staying.length, staying.length),
+    0,
+    ...moving.map(({ member }) => member),
+  );
+  const arriving = moving.filter(({ listId }) => listId !== toListId);
+  for (const batch of batches(arriving.map(({ member }) => member.id)))
+    await tx
+      .update(sectionMembers)
+      .set({ sectionId: toListId })
+      .where(inArray(sectionMembers.id, batch));
+  await renumber(tx, ordered);
+  const sources = new Set(arriving.map(({ listId }) => listId));
+  for (const listId of sources)
+    await renumber(
+      tx,
+      graph.children(listId).filter((member) => !movedIds.has(member.id)),
+    );
+  await writeStructureChange(tx, graph, [toListId, ...sources]);
+  return ordered.map((member, at) => ({ ...member, position: at }));
+}
+
+/** Removes members from their lists; an owned section is deleted, never removed. */
+export async function removeMembers(tx: Transaction, members: readonly MemberAt[]): Promise<void> {
+  const graph = await loadSectionGraph(tx);
+  const removing = heldMembers(graph, members);
+  for (const { member } of removing) refuseOwnedMember(graph, member);
+  const removedIds = new Set(removing.map(({ member }) => member.id));
+  for (const batch of batches([...removedIds]))
+    await tx.delete(sectionMembers).where(inArray(sectionMembers.id, batch));
+  const lists = new Set(removing.map(({ listId }) => listId));
+  for (const listId of lists)
+    await renumber(
+      tx,
+      graph.children(listId).filter((member) => !removedIds.has(member.id)),
+    );
+  await writeStructureChange(tx, graph, lists);
+}
+
 /**
  * Swaps what a member holds, keeping its place, so a menu never passes through a state holding
  * neither the old ref nor the new one. The hook is told once, after the swap.
