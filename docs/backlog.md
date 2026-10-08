@@ -2424,12 +2424,15 @@ Screenshots: `~/waitron-campaign/w109-4-shots/`.
 The till no longer polls for an authority comparison. Measured drift remains an administrator
 alert, `fiscal.clock_drift`, for people with `fiscal.view`. The existing drift-alert test and the
 independent real-database cash-sale check pass in `apps/server/src/time-health.test.ts`.
-**Open verification gap found by A364's review:** removing
-`authorityClockAlertSource(authorityClock.read)` from boot still left `boot.test.ts`,
-`alert-sources.test.ts`, `alerts-api.test.ts` and `alerts.test.ts` passing (178 tests in the
-installed review candidate). The isolated alert-source tests do not check its boot wiring.
-Add a boot-level check that feeds an authority sample and reads the resulting alert; this
-review recorded the gap without changing the filing observer or widening A364.
+**A386 DONE:** `apps/server/src/boot.clock-alert.test.ts` starts the real server and feeds
+its real authority-clock monitor a sample. The authenticated alerts API returns the measured
+drift alert, then no clock alert after a correct sample. Removing the clock-alert registration
+in a disposable checkout makes the drift assertion fail; the restored registration passes.
+The test exposes the monitor's sample input; it does not check boot's filing-observer connection
+or exercise the filing transport. **Open follow-up from A386's review:** removing
+`observeAuthorityTime: authorityClock.observe` from boot in the disposable review checkout
+left this new test passing. Add a separate boot-level check for that sample-input connection;
+no claim is made here about other suites' coverage of it.
 **A385 DONE:** the till's legacy unit fallback includes Spanish text. A missing enabled
 abbreviation falls back to the unit's enabled name; with no enabled text the label is
 empty, never an id. Chromium helper and rendered-tile cases cover Spanish, a missing requested
