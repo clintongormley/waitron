@@ -1038,6 +1038,11 @@ case and its identity response before choosing a fix. Transfer-focused runs did 
 rejection from `#switchProfile` and reported 5,897 passing tests. That run does not establish its
 cause; retain the investigation above. Local receipt: Lane E's `receipts/a366-3a/a11-till.log`.
 
+2026-10-09: A366-3A's A13 affected-file run (`pnpm --filter @waitron/till exec vitest run`,
+with the seven files named in `~/waitron-campaign-e/receipts/a366-3a/a13-final-family.log`)
+reported 1,406 passing tests and logged the same rejection from `#switchProfile`. The cause
+remains unverified.
+
 ## A card payment stuck `attempting` holds its device's profile switch
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:

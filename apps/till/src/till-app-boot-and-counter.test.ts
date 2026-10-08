@@ -317,24 +317,22 @@ describe("till-app session activity", () => {
   });
 
   it("keeps an enrolled station screen on its station board", async () => {
-    const getDeviceStation = vi
-      .fn()
-      .mockResolvedValue({
-        station: {
-          id: "st-1",
-          name: "Pass",
-          today: {
-            open: true,
-            isDefault: true,
-            byHand: null,
-            sendsTo: null,
-            why: "default" as const,
-          },
-          queue: [],
-          notices: [],
-          printersDown: [],
+    const getDeviceStation = vi.fn().mockResolvedValue({
+      station: {
+        id: "st-1",
+        name: "Pass",
+        today: {
+          open: true,
+          isDefault: true,
+          byHand: null,
+          sendsTo: null,
+          why: "default" as const,
         },
-      });
+        queue: [],
+        notices: [],
+        printersDown: [],
+      },
+    });
     const getDeviceWatcher = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
     const { el } = await mountApp({
       getTill: vi
@@ -386,24 +384,22 @@ describe("till-app session activity", () => {
         watcher: { id: "pass", name: "Pass", runsPass: true, active: true },
         orders: [],
       }),
-      getDeviceStation: vi
-        .fn()
-        .mockResolvedValue({
-          station: {
-            id: "st-1",
-            name: "Pass",
-            today: {
-              open: true,
-              isDefault: true,
-              byHand: null,
-              sendsTo: null,
-              why: "default" as const,
-            },
-            queue: [],
-            notices: [],
-            printersDown: [],
+      getDeviceStation: vi.fn().mockResolvedValue({
+        station: {
+          id: "st-1",
+          name: "Pass",
+          today: {
+            open: true,
+            isDefault: true,
+            byHand: null,
+            sendsTo: null,
+            why: "default" as const,
           },
-        }),
+          queue: [],
+          notices: [],
+          printersDown: [],
+        },
+      }),
     });
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-card-grid")!, "enrolled");

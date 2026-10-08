@@ -331,3 +331,206 @@ it("an authorizer read failure returns a localized refusal without hiding the cl
     "The venue's clock cannot be read",
   );
 });
+
+const managers = [{ personId: "manager", displayName: "Ana" }];
+async function pinStep(el: TillStationToday) {
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+    .not.toBeNull();
+  const pin = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
+  await pin.updateComplete;
+  expect(pin.authorizers).toEqual(managers);
+  return pin;
+}
+it.each(["open", "closed"] as const)(
+  "device %s requires a manager before its first write",
+  async (state) => {
+    const { el, calls } = await mount(
+      { deviceMode: true, station: { ...station, open: state === "closed" } },
+      (_path, init) =>
+        init.method === "PUT"
+          ? new Response(null, { status: 204 })
+          : json({ destinations, authorizers: managers }),
+    );
+    let changed = 0;
+    el.addEventListener("station-today-changed", () => changed++);
+    act(el);
+    if (state === "closed") confirm(await dialog(el));
+    const pin = await pinStep(el);
+    expect(calls).toEqual([
+      { path: "/api/device/stations/grill/today", method: "GET", body: null },
+    ]);
+    pin.dispatchEvent(
+      new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+    );
+    await expect.poll(() => changed).toBe(1);
+    expect(calls.at(-1)).toEqual({
+      path: "/api/device/stations/grill/today",
+      method: "PUT",
+      body: {
+        state,
+        ...(state === "closed" ? { sendsToStationId: "pass" } : {}),
+        authorizer: { personId: "manager", pin: "1234" },
+      },
+    });
+  },
+);
+it.each(["pin.invalid", "pin.throttled"])(
+  "device retains its PIN and destination after %s",
+  async (code) => {
+    let writes = 0;
+    const { el, calls } = await mount({ deviceMode: true }, (_path, init) =>
+      init.method === "PUT"
+        ? ++writes === 1
+          ? refused(code)
+          : new Response(null, { status: 204 })
+        : json({ destinations, authorizers: managers }),
+    );
+    act(el);
+    const close = await dialog(el);
+    close
+      .shadowRoot!.querySelector("wt-combobox")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
+    await close.updateComplete;
+    confirm(close);
+    const pin = await pinStep(el);
+    pin.dispatchEvent(
+      new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+    );
+    await expect.poll(() => pin.error).toBe(code);
+    expect(el.shadowRoot!.querySelector("till-station-today-dialog")).toBe(close);
+    expect(close.shadowRoot!.querySelector("wt-combobox")!.value).toBe("bar");
+    pin.dispatchEvent(
+      new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "5678" } }),
+    );
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+      .toBeNull();
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([
+      {
+        state: "closed",
+        sendsToStationId: "bar",
+        authorizer: { personId: "manager", pin: "1234" },
+      },
+      {
+        state: "closed",
+        sendsToStationId: "bar",
+        authorizer: { personId: "manager", pin: "5678" },
+      },
+    ]);
+  },
+);
+it("device forbidden-station read shows its sentence and permits retry", async () => {
+  const { el, calls } = await mount({ deviceMode: true }, () =>
+    refused("device.forbidden_station"),
+  );
+  act(el);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector('[role="alert"]')?.textContent)
+    .toContain("This device cannot use that station");
+  expect(calls[0]!.path).toBe("/api/device/stations/grill/today");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-action]")!.disabled,
+  ).toBe(false);
+});
+it("cancelling a device opening PIN writes nothing and the next press asks again", async () => {
+  const { el, calls } = await mount(
+    { deviceMode: true, station: { ...station, open: false } },
+    () => json({ destinations, authorizers: managers }),
+  );
+  act(el);
+  (await pinStep(el)).dispatchEvent(new CustomEvent("override-cancel"));
+  await el.updateComplete;
+  expect(calls.filter((c) => c.method === "PUT")).toEqual([]);
+  act(el);
+  await pinStep(el);
+  expect(calls.map((c) => c.path)).toEqual([
+    "/api/device/stations/grill/today",
+    "/api/device/stations/grill/today",
+  ]);
+});
+
+it("device refreshes refused destinations through its own route and asks for a fresh PIN", async () => {
+  let reads = 0;
+  const { el, calls } = await mount({ deviceMode: true }, (_path, init) =>
+    init.method === "PUT"
+      ? refused("station.destination_invalid")
+      : json({
+          destinations: ++reads === 1 ? destinations : [destinations[0]],
+          authorizers: managers,
+        }),
+  );
+  act(el);
+  const close = await dialog(el);
+  close
+    .shadowRoot!.querySelector("wt-combobox")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
+  await close.updateComplete;
+  confirm(close);
+  (await pinStep(el)).dispatchEvent(
+    new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+  );
+  await expect.poll(() => reads).toBe(2);
+  await close.updateComplete;
+  expect(close.shadowRoot!.querySelector("wt-combobox")!.value).toBe("pass");
+  expect(close.refusal).toBe("station.destination_invalid");
+  confirm(close);
+  await pinStep(el);
+  expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  expect(calls.map((c) => c.path)).toEqual([
+    "/api/device/stations/grill/today",
+    "/api/device/stations/grill/today",
+    "/api/device/stations/grill/today",
+  ]);
+});
+it.each(["disconnect", "station switch"])(
+  "device opening ignores a late manager read after %s",
+  async (mode) => {
+    let resolve!: (reply: Response) => void;
+    const pending = new Promise<Response>((r) => {
+      resolve = r;
+    });
+    const { el, calls } = await mount(
+      { deviceMode: true, station: { ...station, open: false } },
+      () => pending,
+    );
+    act(el);
+    if (mode === "disconnect") el.remove();
+    else {
+      el.station = { ...station, id: "bar" };
+      await el.updateComplete;
+    }
+    resolve(json({ destinations, authorizers: managers }));
+    await pending;
+    await el.updateComplete;
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(calls.filter((c) => c.method === "PUT")).toEqual([]);
+  },
+);
+
+it("device permission refusal refreshes its managers without a session request", async () => {
+  let reads = 0;
+  const newManager = [{ personId: "other", displayName: "Luis" }];
+  const { el, calls } = await mount(
+    { deviceMode: true, station: { ...station, open: false } },
+    (path, init) =>
+      path === "/api/service-day/authorizers"
+        ? json(newManager)
+        : init.method === "PUT"
+          ? refused("authorization.not_permitted")
+          : json({ destinations, authorizers: ++reads === 1 ? managers : newManager }),
+  );
+  act(el);
+  (await pinStep(el)).dispatchEvent(
+    new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+  );
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("till-supervisor-override-dialog")?.authorizers)
+    .toEqual(newManager);
+  expect(calls.map((c) => c.path)).toEqual([
+    "/api/device/stations/grill/today",
+    "/api/device/stations/grill/today",
+    "/api/device/stations/grill/today",
+  ]);
+});

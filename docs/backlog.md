@@ -1277,8 +1277,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   manager PIN retry and unsaved-choice protection. The operator Station screen now shows the
   selected station's control above its queue, names the closed station's destination and marks
   closed picker entries. Closing or reopening refreshes its status and queue; polling also reads
-  station status. Wiring the kitchen display and building the visible keep-open control remain
-  to do.
+  station status. The kitchen display now uses the same status and destination dialog, asking
+  for a manager PIN before each close/open write through the device routes. It keeps the
+  destination after a refused PIN and reloads its status after saving or on its polling tick.
+  Building the visible keep-open control remains to do.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows
@@ -1286,8 +1288,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   zones spec; it folds in S11. [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
   Slice 3 Part A remains in progress on `feat/service-periods-slice-3-station-controls`:
-  its station-day and period-extension server controls are implemented; the till and kitchen
-  display controls, full branch review and current-head CI remain.
+  its station-day and period-extension server controls and station UI are implemented; the
+  visible keep-open control, full branch review and current-head CI remain.
 
 - **Changing the business-day start after saving service hours** — open review follow-up from
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed

@@ -527,24 +527,22 @@ describe("till-station-screen", () => {
   it("suppresses the queue-surface header when embedded", async () => {
     // deviceMode renders the queue surface; embedded drops its own header (the card host supplies chrome).
     const api = stubApi({
-      getDeviceStation: vi
-        .fn()
-        .mockResolvedValue({
-          station: {
-            id: "st-dev",
-            name: "Grill",
-            today: {
-              open: true,
-              isDefault: false,
-              byHand: null,
-              sendsTo: null,
-              why: "open" as const,
-            },
-            printersDown: [],
-            queue: [],
-            notices: [],
+      getDeviceStation: vi.fn().mockResolvedValue({
+        station: {
+          id: "st-dev",
+          name: "Grill",
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
           },
-        }),
+          printersDown: [],
+          queue: [],
+          notices: [],
+        },
+      }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -2909,6 +2907,146 @@ describe("operator station-today controls", () => {
       await pickBar();
       expect(line()).toBe("Open");
       closeFromElsewhere();
+      await vi.advanceTimersByTimeAsync(15_000);
+      vi.useRealTimers();
+      await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("kitchen display station-today controls", () => {
+  beforeEach(() => setLocale("en"));
+  afterEach(() => setLocale("en"));
+  async function kitchen(closed = false, initial = false) {
+    let today = {
+      open: !closed,
+      isDefault: false,
+      byHand: closed ? ("closed" as const) : null,
+      sendsTo: closed ? { id: "pass", name: "Pass" } : null,
+      why: closed ? ("closed_by_hand" as const) : ("open" as const),
+    };
+    const answer = () => ({
+      station: {
+        id: "grill",
+        name: "Grill",
+        today,
+        queue: cocinaQueue,
+        notices: [],
+        printersDown: [],
+      },
+    });
+    const calls: { path: string; body: unknown }[] = [];
+    let fail = false;
+    const api = new StationTodayApi("", async (path, init) => {
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      calls.push({ path: String(path), body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (String(path) === "/api/device/station")
+        return fail
+          ? json({ error: { code: "server.internal", params: {} } }, 500)
+          : json(answer());
+      if (String(path) === "/api/device/stations/grill/today") {
+        if (init?.method === "PUT") {
+          today = {
+            open: false,
+            isDefault: false,
+            byHand: "closed",
+            sendsTo: { id: "pass", name: "Pass" },
+            why: "closed_by_hand",
+          };
+          return new Response(null, { status: 204 });
+        }
+        return json({
+          destinations: [{ id: "pass", name: "Pass", isDefault: true }],
+          authorizers: [{ personId: "manager", displayName: "Ana" }],
+        });
+      }
+      throw new Error(`Unexpected device request: ${String(path)}`);
+    });
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+      ...(initial ? { initialDeviceStation: answer() } : {}),
+    });
+    await flush(el);
+    const control = () => el.shadowRoot!.querySelector<TillStationToday>("till-station-today");
+    const line = () => control()?.shadowRoot?.querySelector("[data-status]")?.textContent?.trim();
+    return {
+      el,
+      host,
+      calls,
+      control,
+      line,
+      fail: () => {
+        fail = true;
+      },
+      closeElsewhere: () => {
+        today = {
+          open: false,
+          isDefault: false,
+          byHand: "closed",
+          sendsTo: { id: "pass", name: "Pass" },
+          why: "closed_by_hand",
+        };
+      },
+    };
+  }
+  it.each([false, true])(
+    "renders device status above its queue (cold boot answer: %s)",
+    async (initial) => {
+      const { el, control, line, calls } = await kitchen(true, initial);
+      expect(line()).toBe("Closed for today. New dishes go to Pass.");
+      expect(control()!.deviceMode).toBe(true);
+      expect(
+        control()!.compareDocumentPosition(queueWidget(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(calls.map((c) => c.path)).toEqual(initial ? [] : ["/api/device/station"]);
+    },
+  );
+  it.each([false, true])(
+    "a successful close refreshes device state (refresh refused: %s)",
+    async (failed) => {
+      const { el, host, control, line, calls, fail } = await kitchen();
+      expect(line()).toBe("Open");
+      const escaped = vi.fn();
+      host.addEventListener("station-today-changed", escaped);
+      control()!.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
+      await expect
+        .poll(() => control()!.shadowRoot!.querySelector("till-station-today-dialog"))
+        .not.toBeNull();
+      const dialog = control()!.shadowRoot!.querySelector("till-station-today-dialog")!;
+      await dialog.updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+      await expect
+        .poll(() => control()!.shadowRoot!.querySelector("till-supervisor-override-dialog"))
+        .not.toBeNull();
+      if (failed) fail();
+      control()!
+        .shadowRoot!.querySelector("till-supervisor-override-dialog")!
+        .dispatchEvent(
+          new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+        );
+      if (failed)
+        await expect.poll(() => el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+      else await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");
+      expect(calls.at(-1)!.path).toBe("/api/device/station");
+      expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+      expect(control()!.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
+      expect(control()!.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      expect(escaped).not.toHaveBeenCalled();
+    },
+  );
+  it("polling follows a close at another till", async () => {
+    vi.useFakeTimers();
+    try {
+      const { line, closeElsewhere } = await kitchen();
+      expect(line()).toBe("Open");
+      closeElsewhere();
       await vi.advanceTimersByTimeAsync(15_000);
       vi.useRealTimers();
       await expect.poll(line).toBe("Closed for today. New dishes go to Pass.");

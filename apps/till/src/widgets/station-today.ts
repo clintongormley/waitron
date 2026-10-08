@@ -45,6 +45,7 @@ export class TillStationToday extends LitElement {
   @state() private authorizers: StaffMember[] | null = null;
   @state() private pinError: string | null = null;
   #intent?: StationTodayWrite;
+  #deviceAuthorizers: StaffMember[] = [];
   #generation = 0;
   override disconnectedCallback(): void {
     this.#reset();
@@ -63,6 +64,7 @@ export class TillStationToday extends LitElement {
     this.destinations = null;
     this.authorizers = null;
     this.#intent = undefined;
+    this.#deviceAuthorizers = [];
     this.refusal = null;
     this.pinError = null;
   }
@@ -90,7 +92,7 @@ export class TillStationToday extends LitElement {
       this.authorizers
     )
       return;
-    if (!station.open) {
+    if (!station.open && !this.deviceMode) {
       await this.#write({ state: "open" });
       return;
     }
@@ -99,16 +101,35 @@ export class TillStationToday extends LitElement {
     this.busy = true;
     this.refusal = null;
     try {
-      const answer = await this.api.stationToday(id);
-      if (this.#current(generation, id)) this.destinations = answer.destinations;
+      const answer = await this.#readToday(id);
+      if (this.#current(generation, id)) {
+        if (answer.authorizers) this.#deviceAuthorizers = answer.authorizers;
+        if (station.open) this.destinations = answer.destinations;
+        else this.#askDeviceManager({ state: "open" });
+      }
     } catch (error) {
       if (this.#current(generation, id)) this.refusal = this.#code(error);
     } finally {
       if (this.#current(generation, id)) this.busy = false;
     }
   }
+  async #readToday(
+    id: string,
+  ): Promise<{ destinations: StationDestination[]; authorizers?: StaffMember[] }> {
+    if (!this.deviceMode) return this.api!.stationToday(id);
+    const answer = await this.api!.deviceStationToday(id);
+    return answer;
+  }
+  #askDeviceManager(intent: StationTodayWrite): void {
+    this.#intent = intent;
+    this.authorizers = this.#deviceAuthorizers;
+  }
   async #write(intent: StationTodayWrite, override?: OverrideConfirmDetail): Promise<void> {
     if (!this.isConnected || !this.api || !this.station || this.busy) return;
+    if (this.deviceMode && !override) {
+      this.#askDeviceManager(intent);
+      return;
+    }
     const generation = ++this.#generation;
     const id = this.station.id;
     this.#intent = intent;
@@ -116,7 +137,14 @@ export class TillStationToday extends LitElement {
     this.refusal = null;
     this.pinError = null;
     try {
-      await this.api.setStationToday(id, override ? { ...intent, override } : intent);
+      if (this.deviceMode) {
+        const { state, sendsToStationId } = intent;
+        await this.api.deviceSetStationToday(id, {
+          state,
+          ...(sendsToStationId === undefined ? {} : { sendsToStationId }),
+          authorizer: override!,
+        });
+      } else await this.api.setStationToday(id, override ? { ...intent, override } : intent);
       if (!this.#current(generation, id)) return;
       this.shadowRoot!.querySelector("till-station-today-dialog")?.commit();
       this.#reset();
@@ -134,8 +162,13 @@ export class TillStationToday extends LitElement {
         this.pinError = code;
       } else if (code === "authorization.not_permitted") {
         try {
-          const people = await this.api.serviceDayAuthorizers();
-          if (this.#current(generation, id)) this.authorizers = people;
+          const people = this.deviceMode
+            ? (await this.api.deviceStationToday(id)).authorizers
+            : await this.api.serviceDayAuthorizers();
+          if (this.#current(generation, id)) {
+            this.authorizers = people;
+            if (this.deviceMode) this.#deviceAuthorizers = people;
+          }
         } catch (readError) {
           if (this.#current(generation, id)) this.refusal = this.#code(readError);
         }
@@ -144,8 +177,11 @@ export class TillStationToday extends LitElement {
         this.refusal = code;
         if (code === "station.destination_invalid" && this.destinations !== null) {
           try {
-            const answer = await this.api.stationToday(id);
-            if (this.#current(generation, id)) this.destinations = answer.destinations;
+            const answer = await this.#readToday(id);
+            if (this.#current(generation, id)) {
+              this.destinations = answer.destinations;
+              if (answer.authorizers) this.#deviceAuthorizers = answer.authorizers;
+            }
           } catch {
             /* Keep the write refusal when the refresh also fails. */
           }

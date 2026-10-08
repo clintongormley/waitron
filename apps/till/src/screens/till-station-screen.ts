@@ -146,6 +146,7 @@ export class TillStationScreen extends LitElement {
   @property({ type: Boolean }) embedded = false;
 
   @state() private stations: Station[] = [];
+  @state() private deviceStation?: DeviceStation["station"];
   @state() private activeStationId?: string;
   @state() private groups: StationQueueGroup[] = [];
   @state() private printersDown: StationPrinterDown[] = [];
@@ -312,6 +313,7 @@ export class TillStationScreen extends LitElement {
 
   #adoptDeviceStation({ station }: DeviceStation): void {
     this.activeStationId = station.id;
+    this.deviceStation = station;
     this.groups = station.queue;
     this.printersDown = station.printersDown ?? [];
     this.#adoptNotices(station.notices);
@@ -521,7 +523,24 @@ export class TillStationScreen extends LitElement {
   }
 
   #renderDevice(): TemplateResult {
-    return this.#renderQueueSurface({ showBack: false, body: this.#queue(true) });
+    const bound = this.deviceStation;
+    const today = bound?.today;
+    return this.#renderQueueSurface({
+      showBack: false,
+      body: html`
+        <till-station-today
+          .api=${this.api}
+          .deviceMode=${true}
+          .station=${bound && today ? { id: bound.id, name: bound.name, active: today.why !== "switched_off", isDefault: today.isDefault, open: today.open, byHand: today.byHand, sendsTo: today.sendsTo?.id ?? null, why: today.why } : undefined}
+          .stations=${today?.sendsTo ? [today.sendsTo] : []}
+          @station-today-changed=${(event: Event) => {
+            event.stopPropagation();
+            void this.#reload();
+          }}
+        ></till-station-today>
+        ${this.#queue(true)}
+      `,
+    });
   }
 
   #renderQueueSurface(opts: { showBack: boolean; body: TemplateResult }): TemplateResult {

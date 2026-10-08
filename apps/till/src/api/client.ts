@@ -1454,6 +1454,14 @@ export interface EquipmentChange {
 export interface DeviceStation {
   station: {
     id: string;
+    name: string;
+    today: {
+      open: boolean;
+      isDefault: boolean;
+      byHand: Station["byHand"];
+      sendsTo: { id: string; name: string } | null;
+      why: Station["why"];
+    };
     queue: StationQueueGroup[];
     notices: KitchenNotice[];
     printersDown: StationPrinterDown[];
@@ -2484,6 +2492,23 @@ export class TillApi {
 
   setStationToday(stationId: string, body: StationTodayWrite): Promise<void> {
     return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "PUT", body);
+  }
+
+  deviceStationToday(
+    stationId: string,
+  ): Promise<{ destinations: StationDestination[]; authorizers: StaffMember[] }> {
+    return this.#request(`/api/device/stations/${encodeURIComponent(stationId)}/today`, "GET");
+  }
+
+  deviceSetStationToday(
+    stationId: string,
+    body: Omit<StationTodayWrite, "override"> & { authorizer: { personId: string; pin: string } },
+  ): Promise<void> {
+    return this.#request(
+      `/api/device/stations/${encodeURIComponent(stationId)}/today`,
+      "PUT",
+      body,
+    );
   }
 
   serviceDayAuthorizers(): Promise<StaffMember[]> {

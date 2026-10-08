@@ -270,23 +270,21 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
 
 function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
-    getDeviceStation: vi
-      .fn()
-      .mockResolvedValue({
-        station: {
-          id: "st-dev",
-          name: "Grill",
-          today: {
-            open: true,
-            isDefault: false,
-            byHand: null,
-            sendsTo: null,
-            why: "open" as const,
-          },
-          queue: groups,
-          notices: [],
+    getDeviceStation: vi.fn().mockResolvedValue({
+      station: {
+        id: "st-dev",
+        name: "Grill",
+        today: {
+          open: true,
+          isDefault: false,
+          byHand: null,
+          sendsTo: null,
+          why: "open" as const,
         },
-      }),
+        queue: groups,
+        notices: [],
+      },
+    }),
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -306,23 +304,21 @@ describe.each(["light", "dark"] as const)(
     });
     it("has no violations with the bound station's notices above its queue", async () => {
       const api = deviceStubApi({
-        getDeviceStation: vi
-          .fn()
-          .mockResolvedValue({
-            station: {
-              id: "st-dev",
-              name: "Grill",
-              today: {
-                open: true,
-                isDefault: false,
-                byHand: null,
-                sendsTo: null,
-                why: "open" as const,
-              },
-              queue: groups,
-              notices,
+        getDeviceStation: vi.fn().mockResolvedValue({
+          station: {
+            id: "st-dev",
+            name: "Grill",
+            today: {
+              open: true,
+              isDefault: false,
+              byHand: null,
+              sendsTo: null,
+              why: "open" as const,
             },
-          }),
+            queue: groups,
+            notices,
+          },
+        }),
       });
       const { el, host } = await mountWidget<TillStationScreen>(
         "till-station-screen",
