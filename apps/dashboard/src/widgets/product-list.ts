@@ -344,6 +344,7 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
   @property({ attribute: false }) categories: CategorySummary[] = [];
+  @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) unroutedFolderIds: string[] = [];
   /** Each category's baseline route; a category with none is drawn blank while routing loads. */
   @property({ attribute: false }) folderMadeAt: ReadonlyMap<string, FolderMadeAt> = new Map();
@@ -1013,7 +1014,8 @@ export class ProductList extends LitElement {
           ].join(" "),
         cell: ({ product, variant }, { ancestorOnly }) => {
           const color =
-            product.color ?? categoryColor(product.primaryCategoryId, this.#categoryById);
+            product.color ??
+            categoryColor(product.primaryCategoryId, this.#categoryById, this.defaultColor);
           return variant
             ? html`<span part="variant-cell"
                 >${productMedia({

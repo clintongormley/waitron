@@ -4805,6 +4805,25 @@ describe("product media link", () => {
     );
     expect(root.querySelector("[popover]:popover-open")).toBeNull();
   });
+  it("fills an uncategorised product with no colour of its own with the venue default, and a coloured category's product with the category's", async () => {
+    const { el, root } = await mountTree({
+      products: [
+        product({ id: "plain", name: "Plain", primaryCategoryId: null }),
+        product({ id: "cola", name: "Cola", primaryCategoryId: "d" }),
+      ],
+      categories: [{ ...drinks, color: "#256bb1" }],
+      defaultColor: "#777777",
+    });
+    await openRow(el, "folder:d");
+    const fill = (id: string) =>
+      getComputedStyle(
+        root.querySelector<HTMLElement>(
+          `[data-test="color-${id}"] [data-test="thumb-placeholder"]`,
+        )!,
+      ).backgroundColor;
+    expect(fill("plain")).toBe("rgb(119, 119, 119)");
+    expect(fill("cola")).toBe("rgb(37, 107, 177)");
+  });
   it("fills a product without a photo with its own colour and hides the swatch at phone width", async () => {
     const { el, root } = await mountTree({
       products: [product({ id: "plain", name: "Plain", color: "#b12525" })],

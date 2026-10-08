@@ -2108,6 +2108,22 @@ it("describes Use category colour by the draft category's colour, and follows a 
   await describes("#7a25b1");
 });
 
+it("describes Use category colour by the venue default when the product has no category", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, primaryCategoryId: null },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    categories: colouredCategories,
+    defaultColor: "#b12525",
+  });
+  await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleDescription("#b12525");
+  expect(getComputedStyle(useCategory(el).querySelector(".chip")!).backgroundColor).toBe(
+    "rgb(177, 37, 37)",
+  );
+});
+
 it("saves a chosen swatch as the product's own colour", async () => {
   const el = await mountColoured();
   expect(useCategory(el).getAttribute("aria-checked")).toBe("true");

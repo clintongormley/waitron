@@ -25,6 +25,7 @@ import {
 import { BATCH_SIZE } from "./batches.js";
 import * as vatRates from "./vat-rates.js";
 import { createCategory, updateCategory } from "./categories.js";
+import { saveCatalogueDefaultColor } from "./settings.js";
 import {
   createCatalogue,
   createProduct,
@@ -323,6 +324,12 @@ describe("each offer's colour", () => {
     expect(await offerFor(f.lunch, f.soup)).toHaveProperty("color", "#256bb1");
   });
 
+  it("freezes the venue default on an offered product with nothing coloured above it", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => saveCatalogueDefaultColor(tx, "#777777"));
+    expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", "#777777");
+  });
+
   it("keeps a section's colour on the section only", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
@@ -387,7 +394,7 @@ describe("readDishFacts", () => {
     await fx.db.update(products).set({ color: "#b12525" }).where(eq(products.id, variantId));
     const unknown = crypto.randomUUID();
     const effectiveColors = async (tx: Transaction, ids: string[]) =>
-      new Map([...(await readDishFacts(tx, ids))].map(([id, facts]) => [id, facts.color]));
+      new Map([...(await readDishFacts(tx, ids, null))].map(([id, facts]) => [id, facts.color]));
     expect(await app((tx) => effectiveColors(tx, [productId, variantId, unknown]))).toEqual(
       new Map([
         [productId, "#256bb1"],
@@ -395,6 +402,21 @@ describe("readDishFacts", () => {
       ]),
     );
     expect(await app((tx) => effectiveColors(tx, []))).toEqual(new Map());
+  });
+
+  it("gives a product with nothing coloured above it the venue default, and a variant its parent's", async () => {
+    const colors = () =>
+      app(async (tx) => {
+        const facts = await readDishFacts(tx, [productId, variantId], "#777777");
+        return [facts.get(productId)!.color, facts.get(variantId)!.color];
+      });
+    expect(await colors()).toEqual(["#777777", "#777777"]);
+    const plain = await app((tx) => createCategory(tx, { name: "Plain", color: null }));
+    await app((tx) => updateProduct(tx, productId, { categoryId: plain.id }));
+    expect(await colors()).toEqual(["#777777", "#777777"]);
+    const drinks = await app((tx) => createCategory(tx, { name: "Drinks", color: "#256bb1" }));
+    await app((tx) => updateProduct(tx, productId, { categoryId: drinks.id }));
+    expect(await colors()).toEqual(["#256bb1", "#256bb1"]);
   });
 
   it("reads the category tree once and the products once per batch, with no separate colour read", async () => {
@@ -406,7 +428,7 @@ describe("readDishFacts", () => {
     await app(async (tx) => {
       const reads = vi.spyOn(tx, "select");
       try {
-        await readDishFacts(tx, ids);
+        await readDishFacts(tx, ids, null);
         expect(reads).toHaveBeenCalledTimes(3);
       } finally {
         reads.mockRestore();

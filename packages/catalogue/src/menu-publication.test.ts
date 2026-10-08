@@ -41,6 +41,7 @@ import {
   updateProduct,
 } from "./operations.js";
 import { updateCategory } from "./categories.js";
+import { saveCatalogueDefaultColor } from "./settings.js";
 import { moveCatalogueItems } from "./catalogue-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
@@ -701,6 +702,21 @@ describe("a category's colour", () => {
     expect((await liveColors(f.dinner)).get(f.lemonade)).toBeNull();
     await publish(f.dinner);
     expect((await liveColors(f.dinner)).get(f.lemonade)).toBe("#256bb1");
+  });
+
+  it("setting the venue default colour is a shared change, and clearing it undoes it", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app((tx) => saveCatalogueDefaultColor(tx, "#777777"));
+    expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
+    expect((await liveColors(f.lunch)).get(f.lemonade)).toBeNull();
+    expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toContainEqual({
+      ...colorChange(f.lemonade, "Lemonade"),
+      alsoOn: ["Dinner Menu"],
+    });
+    await app((tx) => saveCatalogueDefaultColor(tx, null));
+    expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
   });
 
   it("moving an uncoloured category under a coloured one changes the next document", async () => {

@@ -16,22 +16,45 @@ const drinks = tree([
 
 describe("effectiveColor", () => {
   it("takes the product's own colour over its category's", () =>
-    expect(effectiveColor("#b12525", "juice", drinks)).toBe("#b12525"));
+    expect(effectiveColor("#b12525", "juice", drinks, null)).toBe("#b12525"));
   it("takes the main category's colour when the product has none", () =>
-    expect(effectiveColor(null, "juice", drinks)).toBe("#25b125"));
+    expect(effectiveColor(null, "juice", drinks, null)).toBe("#25b125"));
   it("takes the nearest coloured category above an uncoloured one, two levels up", () =>
-    expect(effectiveColor(null, "cold", drinks)).toBe("#256bb1"));
+    expect(effectiveColor(null, "cold", drinks, null)).toBe("#256bb1"));
   it("is null for an uncategorised product and when nothing above is coloured", () => {
-    expect(effectiveColor(null, null, drinks)).toBeNull();
-    expect(categoryColor("a", tree([["a", { parentId: null, color: null }]]))).toBeNull();
+    expect(effectiveColor(null, null, drinks, null)).toBeNull();
+    expect(categoryColor("a", tree([["a", { parentId: null, color: null }]]), null)).toBeNull();
   });
   it("ends at null for a category the tree lacks and for a loop in the data", () => {
-    expect(categoryColor("gone", drinks)).toBeNull();
+    expect(categoryColor("gone", drinks, null)).toBeNull();
     const loop = tree([
       ["a", { parentId: "b", color: null }],
       ["b", { parentId: "a", color: null }],
     ]);
-    expect(categoryColor("a", loop)).toBeNull();
+    expect(categoryColor("a", loop, null)).toBeNull();
+  });
+});
+
+describe("the venue default at the end of the walk", () => {
+  const fallback = "#777777";
+  it("is an uncategorised product's colour", () =>
+    expect(effectiveColor(null, null, drinks, fallback)).toBe(fallback));
+  it("is the colour of a category with nothing coloured above it", () =>
+    expect(categoryColor("a", tree([["a", { parentId: null, color: null }]]), fallback)).toBe(
+      fallback,
+    ));
+  it("is the colour of a category the tree lacks", () =>
+    expect(categoryColor("gone", drinks, fallback)).toBe(fallback));
+  it("ends a loop in the data", () => {
+    const loop = tree([
+      ["a", { parentId: "b", color: null }],
+      ["b", { parentId: "a", color: null }],
+    ]);
+    expect(categoryColor("a", loop, fallback)).toBe(fallback);
+  });
+  it("loses to the product's own colour and to a coloured category above", () => {
+    expect(effectiveColor("#b12525", null, drinks, fallback)).toBe("#b12525");
+    expect(effectiveColor(null, "cold", drinks, fallback)).toBe("#256bb1");
   });
 });
 
