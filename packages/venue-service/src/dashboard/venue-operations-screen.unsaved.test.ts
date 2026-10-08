@@ -464,6 +464,23 @@ it("a reconnected venue form protects its retained draft against the original ba
   await field(screen, "trading-name", "Casa Delgado");
   expect(unload()).toBe(false);
 });
+// The redraw that disposing the scope asks for runs only after this tick, while the screen is out.
+it("a venue form left out of the page for a tick still asks before discarding once it is back", async () => {
+  const { screen, writes } = await mount();
+  await open(screen, "edit-department-d1");
+  await field(screen, "trading-name", "Retained draft");
+  screen.remove();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  app.shadowRoot!.append(screen);
+  await screen.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(unload()).toBe(true);
+  screen.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-editor"]')!.click();
+  expect((await question()).open).toBe(true);
+  await choose("keep");
+  expect(screen.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  expect(writes).toEqual([]);
+});
 
 const nameCells = [
   {

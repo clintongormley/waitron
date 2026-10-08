@@ -104,6 +104,8 @@ describe.each(["light", "dark"] as const)("transfer settings (%s)", (theme) => {
         locale === "en" ? "Transfers: Restaurant" : "Traslados: Restaurant",
       );
       await expectNoA11yViolations(host);
+      modal.querySelector<HTMLInputElement>('[name="transfer-destination-d2"]')!.click();
+      await screen.updateComplete;
       modal.querySelector<HTMLElement>('[data-test="save-editor"]')!.click();
       const actions = modal.querySelector("wt-form-actions")!;
       await expect

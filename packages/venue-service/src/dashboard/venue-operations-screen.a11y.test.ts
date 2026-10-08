@@ -111,6 +111,14 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-department"]')!.click();
     await el.updateComplete;
+    const tradingName = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      'wt-input[name="trading-name"]',
+    )!;
+    tradingName.value = "Casa";
+    tradingName.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Casa" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-editor"]')!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;

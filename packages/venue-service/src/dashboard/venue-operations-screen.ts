@@ -8,12 +8,13 @@ import { live } from "lit/directives/live.js";
 import { codeOf, tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
-  leaveCoordinatorFor,
   navigationGuardFor,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  saveActionState,
   submitOnEnter,
   UrlStateController,
   type DataTableColumn,
@@ -285,17 +286,18 @@ export class VenueOperationsScreen extends LitElement {
     else this.tradingNameError = message;
   }
   #registerName(kind: NameCell, draft: NameDraft): void {
-    this.#leave ??= leaveCoordinatorFor(this);
     let registering = true;
-    draft.scope = this.#leave?.register({
+    const { coordinator, scope } = draftScopeFor<string>(this, {
       id: draft.id,
       current: () => (registering ? draft.baseline : this.#nameValue(kind).trim()),
       snapshot: (value) => value,
       equal: (a, b) => a === b,
       restore: (value) => this.#setNameValue(kind, value),
     });
+    this.#leave = coordinator;
+    draft.scope = scope;
     registering = false;
-    draft.scope?.changed();
+    scope.changed();
   }
   #currentName(kind: NameCell, draft?: NameDraft): boolean {
     return this.isConnected && draft !== undefined && this.#nameDrafts.get(kind) === draft;
@@ -307,9 +309,9 @@ export class VenueOperationsScreen extends LitElement {
     proceed: () => void,
   ): void {
     if (!this.#currentName(kind, draft) || this.busy) return;
-    if (!draft!.scope) proceed();
+    if (!this.#leave || !draft!.scope) proceed();
     else
-      void this.#leave!.request({
+      void this.#leave.request({
         scopes: [draft!.id],
         reason,
         proceed: () => {
@@ -379,6 +381,7 @@ export class VenueOperationsScreen extends LitElement {
     write: (value: string) => Promise<unknown>,
   ): Promise<void> {
     if (!this.#currentName(kind, draft) || this.busy) return;
+    if (saveActionState(draft!.scope).unchanged) return;
     const submitted = this.#nameValue(kind).trim();
     if (!submitted) {
       this.#clearNameError(kind, t("venue.field_required"));
@@ -529,16 +532,16 @@ export class VenueOperationsScreen extends LitElement {
     );
   }
   protected override updated(): void {
-    if (this.#editorIdentity !== this.editor) {
+    // Disposing a scope redraws the screen, and a scope taken while detached reaches no application.
+    if (this.isConnected && this.#editorIdentity !== this.editor) {
       this.#editorScope?.dispose();
       this.#editorScope = undefined;
       this.#editorIdentity = this.editor;
       if (this.editor && this.editor.kind !== "disable") {
         const modal = this.renderRoot.querySelector("wt-modal")!;
-        this.#leave ??= leaveCoordinatorFor(this);
         const baseline = (this.#editorBaseline ??= this.#editorValues(modal));
         let registering = true;
-        this.#editorScope = this.#leave?.register({
+        const { coordinator, scope } = draftScopeFor<EditorValues>(this, {
           id: this.editor,
           current: () => (registering ? baseline : this.#editorValues(modal)),
           snapshot: (value) => ({ ...value }),
@@ -551,15 +554,17 @@ export class VenueOperationsScreen extends LitElement {
             }
           },
         });
+        this.#leave = coordinator;
+        this.#editorScope = scope;
         registering = false;
-        this.#editorScope?.changed();
+        scope.changed();
       }
     }
   }
   readonly #beforeEditorClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy || !this.isConnected) return false;
     const editor = this.editor;
-    if (!this.#editorScope) return true;
+    if (!this.#leave || !this.#editorScope) return true;
     const outcome = await this.#leave!.request({
       scopes: [this.#editorScope.id],
       reason,
@@ -1063,21 +1068,19 @@ export class VenueOperationsScreen extends LitElement {
                         this.#changeName("zone", zoneDraft, event.detail.value);
                       }}
                     ></wt-input>
-                    <button
-                      type="button"
+                    <wt-button
                       data-test="save-zone-name"
-                      ?disabled=${this.busy}
+                      variant=${saveActionState(zoneDraft?.scope).variant}
+                      ?disabled=${this.busy || saveActionState(zoneDraft?.scope).unchanged}
                       @click=${() => void this.#saveName("zone", zoneDraft, (value) => this.api.updateZone(row.zone.id, { name: value }))}
+                      >${t("venue.save")}</wt-button
                     >
-                      ${t("venue.save")}
-                    </button>
-                    <button
-                      type="button"
+                    <wt-button
                       data-test="cancel-zone-name"
+                      variant="secondary"
                       @click=${() => this.#leaveName("zone", zoneDraft, "cancel", () => this.#closeName("zone", zoneDraft!))}
+                      >${t("venue.cancel")}</wt-button
                     >
-                      ${t("venue.cancel")}
-                    </button>
                     <div part="name-clash-action">
                       ${this.inlineNameClashes.zone ? this.#enableNameClash(this.inlineNameClashes.zone, "zone", zoneDraft) : nothing}
                     </div>
@@ -1155,21 +1158,19 @@ export class VenueOperationsScreen extends LitElement {
                 this.#changeName("department", departmentDraft, event.detail.value);
               }}
             ></wt-input>
-            <button
-              type="button"
+            <wt-button
               data-test="save-department-name"
-              ?disabled=${this.busy}
+              variant=${saveActionState(departmentDraft?.scope).variant}
+              ?disabled=${this.busy || saveActionState(departmentDraft?.scope).unchanged}
               @click=${() => void this.#saveName("department", departmentDraft, (value) => this.api.updateDepartment(row.department.id, { name: value, tradingName: row.department.tradingName, defaultServiceMode: row.department.defaultServiceMode }))}
+              >${t("venue.save")}</wt-button
             >
-              ${t("venue.save")}
-            </button>
-            <button
-              type="button"
+            <wt-button
               data-test="cancel-department-name"
+              variant="secondary"
               @click=${() => this.#leaveName("department", departmentDraft, "cancel", () => this.#closeName("department", departmentDraft!))}
+              >${t("venue.cancel")}</wt-button
             >
-              ${t("venue.cancel")}
-            </button>
             <div part="name-clash-action">
               ${this.inlineNameClashes.department ? this.#enableNameClash(this.inlineNameClashes.department, "department", departmentDraft) : nothing}
             </div>
@@ -1214,21 +1215,19 @@ export class VenueOperationsScreen extends LitElement {
                 this.#changeName("trading", tradingDraft, event.detail.value);
               }}
             ></wt-input>
-            <button
-              type="button"
+            <wt-button
               data-test="save-trading-name"
-              ?disabled=${this.busy}
+              variant=${saveActionState(tradingDraft?.scope).variant}
+              ?disabled=${this.busy || saveActionState(tradingDraft?.scope).unchanged}
               @click=${() => void this.#saveName("trading", tradingDraft, (value) => this.api.updateDepartment(row.department.id, { name: row.department.name, tradingName: value, defaultServiceMode: row.department.defaultServiceMode }))}
+              >${t("venue.save")}</wt-button
             >
-              ${t("venue.save")}
-            </button>
-            <button
-              type="button"
+            <wt-button
               data-test="cancel-trading-name"
+              variant="secondary"
               @click=${() => this.#leaveName("trading", tradingDraft, "cancel", () => this.#closeName("trading", tradingDraft!))}
-            >
-              ${t("venue.cancel")}
-            </button>`;
+              >${t("venue.cancel")}</wt-button
+            >`;
         },
       },
       {
@@ -1916,6 +1915,7 @@ export class VenueOperationsScreen extends LitElement {
     </div>`;
   }
   #submit(content: EditorContent): void {
+    if (this.#editorSaveState()?.unchanged) return;
     this.attempted = true;
     this.refusedFields = {};
     this.editorError = undefined;
@@ -1927,6 +1927,12 @@ export class VenueOperationsScreen extends LitElement {
     }
     this.#focusInvalid();
   }
+  /** Undefined for the Disable confirmation, which has no draft. */
+  #editorSaveState() {
+    return this.editor && this.editor.kind !== "disable"
+      ? saveActionState(this.#editorScope)
+      : undefined;
+  }
   #modal() {
     if (!this.editor) return nothing;
     const editor = this.editor;
@@ -1936,6 +1942,8 @@ export class VenueOperationsScreen extends LitElement {
     const recheck = (event: Event) => {
       if (!this.isConnected || this.editor !== editor) return;
       this.#editorScope?.changed();
+      // The fields are read from the page, not reactive properties, so nothing else redraws Save.
+      this.requestUpdate();
       const controlName = (event.target as HTMLInputElement).name;
       const name =
         editor.kind === "transfers" && controlName?.startsWith("transfer-destination-")
@@ -1950,6 +1958,7 @@ export class VenueOperationsScreen extends LitElement {
       if (this.attempted) this.fieldErrors = content.check();
     };
     const confirming = editor.kind === "disable";
+    const save = this.#editorSaveState();
     return keyed(
       editor,
       html`<wt-modal
@@ -1989,8 +1998,8 @@ export class VenueOperationsScreen extends LitElement {
             >${t("venue.cancel")}</wt-button
           ><wt-button
             data-test="save-editor"
-            variant=${confirming ? "danger" : "primary"}
-            ?disabled=${this.busy || invalid}
+            variant=${save?.variant ?? "danger"}
+            ?disabled=${this.busy || invalid || !!save?.unchanged}
             @click=${() => {
               if (this.editor === editor && this.isConnected) this.#submit(content);
             }}
