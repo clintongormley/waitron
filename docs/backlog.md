@@ -3772,7 +3772,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
 
 **Open — screens:**
 
-- **A396 — adding and calibrating a printer (owner, 2026-10-08; open):**
+- **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority, campaign
+  lane B):**
   1. **The Add-a-printer scan shows an empty box while it searches.** Say something like "No
      printers found yet" while scanning, and something clearer if the scan ends with nothing found.
   2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
@@ -3797,9 +3798,11 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      e.g. "Portable printer", with the explanation as its hint. It sits under calibration step 3's
      heading "Does this printer have a cash drawer?", which is not what it is about — give it its
      own heading or a wider one for the step. The same label shows on the printer details
-     (A397), and changes there too.
+     (A405), and changes there too.
 
-- **A397 — printer details and the print queue (owner, 2026-10-08; open):**
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority, campaign
+  lane B after A404).** A modal means the printer page is no longer a sub-page, which overlaps
+  lane B's A398 (the printer page takes the sub-page heading pattern).
   1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
      Edit opens the name field off to the right, away from the title it changes; whether the
      printer is active shows three times (a "Status" heading, "Status: Active" and an Active
@@ -5270,7 +5273,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   signals read beside the profile reload); folding the signal data into the profile response would
   remove it.
 
-- **A395 — sign-in and passkey fixes (owner, 2026-10-08; open):**
+- **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority, campaign lane A):**
   1. **Choosing a passkey on the password step asks to discard unsaved changes.** On the dashboard
      sign-in: enter an email, press Next, then press "Log in with passkey" on the password step — the
      "discard unsaved changes" dialog appears. Moving between sign-in methods loses nothing the
