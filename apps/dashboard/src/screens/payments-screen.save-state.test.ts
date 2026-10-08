@@ -282,7 +282,16 @@ describe("the Rename reader dialog's Save", () => {
   });
 
   it("the same dialog's Unpair is not a save: it opens pressable and unpairs at once", async () => {
-    const { el, api } = await mount();
+    const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue([{ ...readers[0]!, active: false }]),
+    });
+    const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+      api,
+      panels: [],
+    });
+    await vi.waitFor(() => expect(q(el, "wt-combobox[name=reader-status-filter]")).not.toBeNull());
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await vi.waitFor(() => expect(q(el, "[data-test=unpair-r-1]")).not.toBeNull());
     await openReader(el, "unpair");
     const unpair = await state(el, "confirm-unpair");
     expect(unpair.disabled).toBe(false);

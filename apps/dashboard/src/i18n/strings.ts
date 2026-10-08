@@ -1888,6 +1888,8 @@ export const en = {
   "payments.readers_empty": "No card readers yet.",
   "payments.reader_disabled": "Disabled",
   "payments.disable": "Disable",
+  "payments.disable_confirm": "Disable this card reader?",
+  "payments.also_unpair": "Also unpair from {provider}",
   "payments.enable": "Enable",
   "payments.filter_active": "Active",
   "payments.filter_disabled": "Disabled",
@@ -1898,7 +1900,7 @@ export const en = {
   "payments.edit_reader": "Edit card reader",
   "payments.unpair": "Unpair from {provider}",
   "payments.unpair_warning":
-    "This reader returns to standalone use. Adding it back will need a pairing code.",
+    "Unpairing cannot be undone here. This reader returns to standalone use. Adding it back will need a pairing code.",
   "payments.discovery_heading": "Add a card reader",
   "payments.discovery_intro": "Already connected to your {provider} account:",
   "payments.discovery_failed":
@@ -4344,6 +4346,8 @@ export const es: Record<StringKey, string> = {
   "payments.readers_empty": "Todavía no hay lectores de tarjetas.",
   "payments.reader_disabled": "Deshabilitado",
   "payments.disable": "Deshabilitar",
+  "payments.disable_confirm": "¿Deshabilitar este lector de tarjetas?",
+  "payments.also_unpair": "Desvincular también de {provider}",
   "payments.enable": "Habilitar",
   "payments.filter_active": "Activos",
   "payments.filter_disabled": "Deshabilitados",
@@ -4354,7 +4358,7 @@ export const es: Record<StringKey, string> = {
   "payments.edit_reader": "Editar lector de tarjetas",
   "payments.unpair": "Desvincular de {provider}",
   "payments.unpair_warning":
-    "Este lector volverá a funcionar de forma independiente. Para añadirlo de nuevo necesitarás un código de vinculación.",
+    "La desvinculación no se puede deshacer aquí. Este lector volverá a funcionar de forma independiente. Para añadirlo de nuevo necesitarás un código de vinculación.",
   "payments.discovery_heading": "Añadir un lector de tarjetas",
   "payments.discovery_intro": "Ya conectados a tu cuenta de {provider}:",
   "payments.discovery_failed":

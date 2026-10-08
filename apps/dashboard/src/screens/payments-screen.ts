@@ -255,6 +255,14 @@ export class PaymentsScreen extends LitElement {
         grid-template-columns: auto 1fr;
         gap: var(--wt-space-2) var(--wt-space-4);
       }
+      .unpair-choice {
+        display: flex;
+        align-items: baseline;
+        gap: var(--wt-space-2);
+      }
+      .unpair-choice input {
+        accent-color: var(--wt-color-primary);
+      }
       dd {
         margin: 0;
         overflow-wrap: anywhere;
@@ -365,7 +373,11 @@ export class PaymentsScreen extends LitElement {
   /** Discovered readers whose Add has been pressed; their names are checked from then on. */
   @state() private attemptedNames = new Set<string>();
   @state() private readerFilter = "active";
-  @state() private editor: { reader: ReaderRow; mode: "edit" | "details" | "unpair" } | null = null;
+  @state() private editor: {
+    reader: ReaderRow;
+    mode: "edit" | "details" | "disable" | "unpair";
+  } | null = null;
+  @state() private alsoUnpair = false;
   @state() private editName = "";
   @state() private editAttempted = false;
   @state() private dialogError: string | null = null;
@@ -781,7 +793,11 @@ export class PaymentsScreen extends LitElement {
     }
   }
 
-  #openEditor(reader: ReaderRow, mode: "edit" | "details" | "unpair", event: Event): void {
+  #openEditor(
+    reader: ReaderRow,
+    mode: "edit" | "details" | "disable" | "unpair",
+    event: Event,
+  ): void {
     const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
     this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
     this.#editScope?.dispose();
@@ -789,6 +805,7 @@ export class PaymentsScreen extends LitElement {
     this.#readerOperation = undefined;
     this.busy = false;
     this.editor = { reader, mode };
+    this.alsoUnpair = false;
     this.editName = reader.name;
     if (mode === "edit") {
       const { coordinator, scope } = draftScopeFor(this, {
@@ -842,9 +859,17 @@ export class PaymentsScreen extends LitElement {
     this.busy = true;
     try {
       if (mode === "edit") await this.api.renameReader(reader.id, name);
+      else if (
+        mode === "disable" &&
+        !(
+          this.alsoUnpair &&
+          this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
+        )
+      )
+        await this.api.disableReader(reader.id);
       else await this.api.unpairReader(reader.id);
       if (!this.isConnected || this.editor !== editor) {
-        if (this.isConnected && mode === "unpair") await this.#load();
+        if (this.isConnected && mode !== "edit") await this.#load();
         return;
       }
       scope?.commit(name);
@@ -1646,13 +1671,15 @@ export class PaymentsScreen extends LitElement {
                     align="start"
                     data-test=${`${reader.active ? "disable" : "enable"}-${reader.id}`}
                     ?disabled=${this.busy}
-                    @click=${() => void this.#mutate(() => (reader.active ? this.api.disableReader(reader.id) : this.api.enableReader(reader.id)))}
+                    @click=${(event: Event) => (reader.active ? this.#openEditor(reader, "disable", event) : void this.#mutate(() => this.api.enableReader(reader.id)))}
                   >
                     ${t(reader.active ? "payments.disable" : "payments.enable")}</wt-button
                   >`
                 : nothing
             }
             ${
+              !reader.active &&
+              reader.canEnable &&
               this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
                 ? html` <wt-button
                     variant="secondary"
@@ -1780,7 +1807,9 @@ export class PaymentsScreen extends LitElement {
         ? t("payments.edit_reader")
         : mode === "unpair"
           ? unpair
-          : t("payments.details");
+          : mode === "disable"
+            ? t("payments.disable")
+            : t("payments.details");
     const status = this.statuses.get(reader.id);
     const details =
       status && status !== "error" && status !== "connection.timed_out"
@@ -1797,7 +1826,7 @@ export class PaymentsScreen extends LitElement {
     const save =
       mode === "edit"
         ? saveActionState(this.#editScope)
-        : { variant: "secondary" as const, unchanged: false };
+        : { variant: "danger" as const, unchanged: false };
     const bottom = [
       ...(this.dialogError ? [codeMessage(this.dialogError)] : []),
       ...(invalid ? [t("form.fix_fields")] : []),
@@ -1835,24 +1864,44 @@ export class PaymentsScreen extends LitElement {
                 this.#editScope?.changed();
               }}
             ></wt-input>`
-          : mode === "unpair"
-            ? html`<p>${t("payments.unpair_warning")}</p>`
-            : html`<p>${this.#statusText(reader)}</p>
-                <p data-test="reader-holder">
-                  ${t("payments.reader_holder")}:
-                  ${holderText(this.holders.get(reader.id)?.holder ?? null)}
-                </p>
+          : mode === "disable"
+            ? html`<p>${t("payments.disable_confirm")}</p>
                 ${
-                  details.length
-                    ? html`<dl class="reader-details">
-                        ${details.map(
-                          ([label, value]) =>
-                            html`<dt>${label}</dt>
-                              <dd>${value}</dd>`,
-                        )}
-                      </dl>`
-                    : html`<p>${t("payments.details_empty")}</p>`
+                  this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
+                    ? html`<label class="unpair-choice">
+                          <input
+                            type="checkbox"
+                            name="also-unpair"
+                            .checked=${this.alsoUnpair}
+                            ?disabled=${this.busy}
+                            @change=${(event: Event) => {
+                              if (!this.isConnected || this.editor !== editor || this.busy) return;
+                              this.alsoUnpair = (event.target as HTMLInputElement).checked;
+                            }}
+                          />
+                          ${t("payments.also_unpair").replace("{provider}", this.#providerName(reader.provider))}
+                        </label>
+                        <p>${t("payments.unpair_warning")}</p>`
+                    : nothing
                 }`
+            : mode === "unpair"
+              ? html`<p>${t("payments.unpair_warning")}</p>`
+              : html`<p>${this.#statusText(reader)}</p>
+                  <p data-test="reader-holder">
+                    ${t("payments.reader_holder")}:
+                    ${holderText(this.holders.get(reader.id)?.holder ?? null)}
+                  </p>
+                  ${
+                    details.length
+                      ? html`<dl class="reader-details">
+                          ${details.map(
+                            ([label, value]) =>
+                              html`<dt>${label}</dt>
+                                <dd>${value}</dd>`,
+                          )}
+                        </dl>`
+                      : html`<p>${t("payments.details_empty")}</p>`
+                  }`
       }
       <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
@@ -1867,11 +1916,11 @@ export class PaymentsScreen extends LitElement {
           mode === "details"
             ? nothing
             : html`<wt-button
-                data-test=${mode === "edit" ? "save-reader" : "confirm-unpair"}
+                data-test=${mode === "edit" ? "save-reader" : mode === "disable" ? "confirm-disable" : "confirm-unpair"}
                 variant=${save.variant}
                 ?disabled=${this.busy || invalid || save.unchanged}
                 @click=${() => void this.#saveEditor()}
-                >${mode === "edit" ? t("action.save") : unpair}</wt-button
+                >${mode === "edit" ? t("action.save") : mode === "disable" ? t("payments.disable") : unpair}</wt-button
               >`
         }
       </wt-form-actions>

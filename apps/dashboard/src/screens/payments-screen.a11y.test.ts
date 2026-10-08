@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { registerCatalogue } from "@waitron/dashboard-kit";
 import type {
@@ -161,19 +162,30 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it.each(["discovery", "edit", "details", "unpair"])(
+  it.each(["discovery", "edit", "details", "disable", "unpair"])(
     "renders the %s dialog accessibly",
     async (mode) => {
       const { el, host } = await mountWidget<PaymentsScreen>(
         "dashboard-payments-screen",
         {
-          api: stubApi(),
+          api: stubApi(
+            mode === "unpair"
+              ? { listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }
+              : {},
+          ),
           request: vi.fn() as unknown as PaymentsScreen["request"],
           panels: PANELS,
         },
         theme,
       );
       await flush(el);
+      if (mode === "unpair") {
+        await chooseOption(
+          el.shadowRoot!.querySelector("wt-combobox[name=reader-status-filter]")!,
+          "disabled",
+        );
+        await flush(el);
+      }
       const root =
         mode === "discovery"
           ? el.shadowRoot!

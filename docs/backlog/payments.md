@@ -26,35 +26,6 @@ their full text.
   changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
   taken through a Stripe webhook.
 
-## A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable
-
-- **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
-  2026-10-08; in progress; campaign lane D).** `apps/dashboard/src/screens/payments-screen.ts`.
-  1. **Providers and Readers become two tabs**, laid out like Print agents and Printers. The screen
-     opens on Readers when the venue has at least one reader, and on Providers when it has none
-     (added to Waitron, including disabled or offline readers). Implemented locally on
-     `feat/card-payments-controls`; not landed. The first successful reader list chooses the
-     default; tab links and later choices survive live refreshes. Providers remain available
-     while that read is pending or failed. Both panels stay mounted when switching tabs.
-  2. **"Default for devices" becomes "In use by", listing device names.** Implemented locally
-     on `feat/card-payments-controls`; not landed. The reader list includes each active device's
-     explicit choice, otherwise its profile default, and the screen shortens a long list to
-     "Bar till, Terrace till +3" with the full list in its title. The current holder stays separate.
-     Disconnect and Disable below remain open; this item lands together in one PR.
-  3. **Disconnect checks first and confirms beside its button.** Implemented locally on
-     `feat/card-payments-controls`; not landed. An active reader for that provider refuses
-     before confirmation, including an offline reader, with a floating message beside Disconnect.
-     A second tap checks the latest reader snapshot again. A server `payment.provider_in_use`
-     refusal uses the same message. Otherwise the button asks "Disconnect this provider?" in
-     the danger colour. The bucket copy's Turn off asks "Turn off this copy?" the same way.
-     Disable below remains open; all four parts land together.
-  4. **One Disable instead of Disable plus "Unpair from SumUp".** Unpairing already switches the
-     reader off and can never be undone here (the unpair route sets `active: false`, and an
-     unpaired reader loses Enable, `canEnable`). Disable opens a confirm with an "Also unpair from
-     {provider}" tick box and its can't-be-undone warning, shown only where the provider can unpair
-     (`canUnpair`). A reader already disabled but still paired keeps an "Unpair from {provider}"
-     item, or it could never be unpaired.
-
 ## The card refund path records only after the provider call, with a fresh key each time
 
 - **The card refund path records only after the provider call, with a fresh key each time.**

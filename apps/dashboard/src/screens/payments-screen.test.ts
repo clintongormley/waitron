@@ -350,10 +350,13 @@ describe("payments-screen", () => {
     });
   });
 
-  it("disables a reader locally from its row menu and reloads", async () => {
+  it("confirms a local disable from its row menu and reloads", async () => {
     const { el, api } = await mount();
     vi.mocked(api.listReaders).mockClear();
     qCell(el, "[data-test=disable-r-1]")!.click();
+    await flush(el);
+    expect(api.disableReader).not.toHaveBeenCalled();
+    q(el, "[data-test=confirm-disable]")!.click();
     await flush(el);
     expect(api.disableReader).toHaveBeenCalledWith("r-1");
     expect(api.unpairReader).not.toHaveBeenCalled();
@@ -422,6 +425,8 @@ describe("payments-screen", () => {
       }),
     );
     qCell(el, "[data-test=disable-other]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-disable]")!.click();
     await flush(el);
     expect(qCell(el, "[data-test=reader-battery-r-1]")!.textContent).toBe("90%");
     if (outcome === "success") resolveOld({ online: false, batteryPercent: 10 });
@@ -1002,7 +1007,11 @@ describe("reader discovery and status", () => {
   });
 
   it("confirms unpair separately and hides it for providers without support", async () => {
-    const { el, api } = await mount();
+    const { el, api } = await mount(
+      stubApi({ listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }),
+    );
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(el);
     qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
     expect(api.unpairReader).not.toHaveBeenCalled();
@@ -1013,8 +1022,11 @@ describe("reader discovery and status", () => {
     const other = await mount(
       stubApi({
         listPaymentProviders: vi.fn().mockResolvedValue([{ ...PROVIDERS[0], canUnpair: false }]),
+        listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]),
       }),
     );
+    await chooseOption(q(other.el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(other.el);
     expect(qCell(other.el, "[data-test=unpair-r-1]")).toBeNull();
   });
 });
@@ -1068,12 +1080,15 @@ describe("reader dialog request lifetime", () => {
   it("shows an unpair failure only in the confirmation's bottom message, with no alert of its own, and permits retry", async () => {
     const { el, api } = await mount(
       stubApi({
+        listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]),
         unpairReader: vi
           .fn()
           .mockRejectedValueOnce({ code: "server.internal" })
           .mockResolvedValue(undefined),
       }),
     );
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(el);
     qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
     q(el, "[data-test=confirm-unpair]")!.click();
@@ -1222,7 +1237,9 @@ describe("payments-screen remaining edges", () => {
     const { el, api } = await mount(
       stubApi({ disableReader: vi.fn().mockReturnValueOnce(pending) }),
     );
-    const disable = qCell(el, "[data-test=disable-r-1]")!;
+    qCell(el, "[data-test=disable-r-1]")!.click();
+    await flush(el);
+    const disable = q(el, "[data-test=confirm-disable]")!;
 
     disable.click();
     disable.click();

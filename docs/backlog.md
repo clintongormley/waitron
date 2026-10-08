@@ -2815,10 +2815,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **Product decision to take before production:** The orphan drift gate holds a customer's money
   pending a human, unbounded — nothing re-sweeps a closed period.
 
-- **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
-  2026-10-08; in progress; campaign lane D).** `apps/dashboard/src/screens/payments-screen.ts`.
-  [Detail](backlog/payments.md#a421--the-card-payments-screen-tabs-who-uses-a-reader-disconnect-disable)
-
 - **The card refund path records only after the provider call, with a fresh key each time.** **Next
   action:** give the reconciler's reversal, and any post-invoice refund route when one is built, the
   same durable-attempt rule. Left open by the service, ordering and billing plan.
