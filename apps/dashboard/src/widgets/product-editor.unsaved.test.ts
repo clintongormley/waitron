@@ -4,7 +4,12 @@ import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { t, setLocale } from "../i18n/t.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import { ProductEditor } from "./product-editor.js";
 import type { DashboardApi } from "../api/client.js";
 import "../screens/catalogue-screen.js";
@@ -634,4 +639,57 @@ it("a nested Variant opens with its Save quiet and disabled, and one edit enable
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), "Half cup");
   expect(app.leave.coordinator.isDirty([child])).toBe(true);
   expect(await childSave()).toEqual({ variant: "primary", disabled: false, innerDisabled: false });
+});
+it("a Product put back after a detached update still asks before Escape discards an edit", async () => {
+  const { app, editor } = await mount();
+  await reattachAfterDetachedUpdate(editor);
+  await edit(editor, "name", "Edited coffee");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(editor.open).toBe(true);
+  expect(app.cancelled).toBe(0);
+});
+it("a Product keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, editor } = await mount();
+  await edit(editor, "name", "Edited coffee");
+  await reattachAfterDetachedUpdate(editor);
+  expect(editor.currentValue.name).toBe("Edited coffee");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveState(editor)).toEqual({
+    variant: "primary",
+    disabled: false,
+    innerDisabled: false,
+  });
+  await cancel(editor);
+  expect((await question(app)).open).toBe(true);
+  expect(editor.open).toBe(true);
+  expect(app.cancelled).toBe(0);
+});
+it("a Product reopened on another product after a put-back save opens quiet with that product", async () => {
+  const { app, editor } = await mount();
+  await edit(editor, "name", "Edited coffee");
+  await reattachAfterDetachedUpdate(editor);
+  editor.closeSaved({ ...product, name: "Edited coffee" });
+  expect(editor.open).toBe(false);
+  await closeReportsDelivered();
+  editor.value = { ...product, name: "Tea", unitPrice: "3.00" };
+  editor.open = true;
+  await editor.updateComplete;
+  expect(editor.currentValue.name).toBe("Tea");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await saveState(editor)).toEqual(quietSave);
+  await edit(editor, "name", "Green tea");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await edit(editor, "name", "Tea");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("a Product saved while open and then taken out and put back stays quiet", async () => {
+  const { app, editor } = await mount();
+  await edit(editor, "name", "Saved coffee");
+  editor.commitSaved({ ...product, name: "Saved coffee" });
+  await reattachAfterDetachedUpdate(editor);
+  expect(editor.currentValue.name).toBe("Saved coffee");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await saveState(editor)).toEqual(quietSave);
 });
