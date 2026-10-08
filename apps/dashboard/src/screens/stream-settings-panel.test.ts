@@ -193,6 +193,7 @@ describe("stream-settings-panel: the bucket form", () => {
   it("explains every missing field beside it and once above Save, focuses the first, and sends nothing", async () => {
     const api = stubApi();
     const { el } = await mount(api);
+    type(el, "bucket-prefix", "venue");
     await press(el, "save");
     expect(api.saveStreamSettings).not.toHaveBeenCalled();
     expect(
@@ -447,6 +448,7 @@ describe("stream-settings-panel: the bucket form", () => {
 
   it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
     const { el } = await mount(stubApi());
+    type(el, "bucket-prefix", "venue");
     await press(el, "save");
     type(el, "bucket-region", "eu-west-1");
     await flush(el);

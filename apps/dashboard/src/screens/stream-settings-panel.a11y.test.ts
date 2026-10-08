@@ -78,6 +78,12 @@ async function flush(el: StreamSettingsPanel): Promise<void> {
   }
 }
 
+function type(el: StreamSettingsPanel, name: string, value: string): void {
+  el.shadowRoot!.querySelector(`wt-input[name=${name}]`)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
 function fillRequired(el: StreamSettingsPanel): void {
   for (const [name, value] of [
     ["bucket-region", "eu-west-1"],
@@ -85,9 +91,7 @@ function fillRequired(el: StreamSettingsPanel): void {
     ["bucket-access-key-id", "AKIA"],
     ["bucket-secret-access-key", "secret"],
   ]) {
-    el.shadowRoot!.querySelector(`wt-input[name=${name}]`)!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-    );
+    type(el, name!, value!);
   }
 }
 
@@ -119,6 +123,7 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
 
   it("the form after an invalid save, with the bottom message and field errors", async () => {
     const { el, host } = await mount(OFF);
+    type(el, "bucket-prefix", "venue");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     expect(fieldError(el, "bucket-name")).toBe(t("stream.form.bucket_required"));
@@ -183,6 +188,20 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-input[name=bucket-name]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=cancel]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("changing the bucket, with Save quiet and then ready", async () => {
+    const { el, host } = await mount(PAUSED);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
+    await flush(el);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    type(el, "bucket-secret-access-key", "secret");
+    await flush(el);
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
     await expectNoA11yViolations(host);
   });
 
