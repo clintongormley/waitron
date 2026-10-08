@@ -1626,6 +1626,57 @@ it("keeps a modifier's Remove red while the editor's own save is being sent", as
   expect(remove.variant).toBe("danger");
 });
 
+it.each([
+  [
+    "a list's window",
+    async (el: ProductEditor) => {
+      el.childOpen = true;
+    },
+  ],
+  [
+    "the image picker",
+    async (el: ProductEditor) => {
+      photoControl(el).dispatchEvent(
+        new CustomEvent("image-picker-state", {
+          detail: { open: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    },
+  ],
+  [
+    "the variant window",
+    async (el: ProductEditor) => {
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+    },
+  ],
+])(
+  "keeps a modifier's Remove red while the editor's own save is being sent, even with %s open",
+  async (_window, openWindow) => {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: twoAttached,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      extraLists,
+      optionLists,
+      api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
+    });
+    await openWindow(el);
+    await el.updateComplete;
+    const remove = attachedRow(el, "extras:sauces").querySelector<
+      HTMLElementTagNameMap["wt-button"]
+    >('[data-test="remove-modifier-extras:sauces"]')!;
+    expect(remove.variant).toBe("secondary");
+    el.busy = true;
+    await el.updateComplete;
+    expect(remove.disabled).toBe(true);
+    expect(remove.variant).toBe("danger");
+  },
+);
+
 it("still reorders attached rows from the drag handle's keyboard, asking for no editor", async () => {
   const { el, edits } = await mountTwoAttached();
   attachedRow(el, "options:cooked")

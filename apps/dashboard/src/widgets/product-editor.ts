@@ -1762,7 +1762,7 @@ export class ProductEditor extends LitElement {
             }}
             >${t("action.edit")}</wt-button
           ><wt-button
-            variant=${this.windowOpen ? "secondary" : "danger"}
+            variant=${this.busy || !this.windowOpen ? "danger" : "secondary"}
             data-test=${`remove-modifier-${key}`}
             .disabled=${this.suspended}
             @click=${(event: Event) => {

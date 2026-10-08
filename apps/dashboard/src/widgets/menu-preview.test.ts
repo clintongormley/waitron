@@ -1192,33 +1192,43 @@ const CLASH: MenuPreview["clashes"][number] = {
 };
 
 it.each(["light", "dark"] as const)(
-  "draws Publish quiet like a disabled secondary button while the menu has clashes, and blue without them (%s theme)",
+  "draws Publish quiet like Show all changes while the menu has clashes, and blue without them (%s theme)",
   async (theme) => {
-    const clashing = { ...preview([]), clashes: [CLASH] };
-    const { el, host } = await mountWidget<MenuPreviewPanel>(
+    const renamed: MenuChange = {
+      id: "change-renamed",
+      targets: { before: [], after: [] },
+      kind: "menu_renamed",
+      from: "Lunch",
+      to: "Lunch Menu",
+      source: "this_menu",
+    };
+    const { el } = await mountWidget<MenuPreviewPanel>(
       "dashboard-menu-preview",
-      { menuName: "Lunch Menu", status: changedStatus, preview: clashing },
+      {
+        menuName: "Lunch Menu",
+        status: changedStatus,
+        preview: { ...preview([renamed]), clashes: [CLASH] },
+      },
       theme,
     );
-    const quiet = document.createElement("wt-button");
-    quiet.variant = "secondary";
-    quiet.disabled = true;
-    quiet.textContent = "Quiet";
-    host.append(quiet);
-    await quiet.updateComplete;
     const fill = (button: Element) =>
       getComputedStyle(button.shadowRoot!.querySelector("button")!).backgroundColor;
-    const publish = () => q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
-    await publish().updateComplete;
-    expect(publish().disabled).toBe(true);
-    expect(publish().variant).toBe("secondary");
-    expect(fill(publish())).toBe(fill(quiet));
-    el.preview = preview([]);
+    const button = (test: string) =>
+      q<HTMLElementTagNameMap["wt-button"]>(el, `[data-test="${test}"]`)!;
+    const settled = () =>
+      Promise.all([button("publish").updateComplete, button("show-all-changes").updateComplete]);
+    await settled();
+    expect(button("show-all-changes").variant).toBe("secondary");
+    expect(button("show-all-changes").disabled).toBe(true);
+    expect(button("publish").disabled).toBe(true);
+    expect(button("publish").variant).toBe("secondary");
+    expect(fill(button("publish"))).toBe(fill(button("show-all-changes")));
+    el.preview = preview([renamed]);
     await el.updateComplete;
-    await publish().updateComplete;
-    expect(publish().disabled).toBe(false);
-    expect(publish().variant).toBe("primary");
-    expect(fill(publish())).not.toBe(fill(quiet));
+    await settled();
+    expect(button("publish").disabled).toBe(false);
+    expect(button("publish").variant).toBe("primary");
+    expect(fill(button("publish"))).not.toBe(fill(button("show-all-changes")));
   },
 );
 
