@@ -6,9 +6,8 @@ import { AppError } from "@waitron/shared";
 
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
-import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
-  calendarDateOfTime,
+  clockTimeSkipped,
   parseServiceDay,
   rangeInForce,
   rangeSpan,
@@ -160,15 +159,7 @@ function skippedSlot(
   if (clock.zone === null) return null;
   for (const [position, slot] of slots.entries())
     for (const end of ["startsAt", "endsAt"] as const)
-      if (
-        localTimeOccurrences(
-          end === "endsAt" && slot[end] === clock.cutover
-            ? addDays(date, 1)
-            : calendarDateOfTime(date, slot[end], clock.cutover),
-          slot[end],
-          clock.zone,
-        ).length === 0
-      )
+      if (clockTimeSkipped(date, slot[end], clock.cutover, clock.zone, end === "endsAt"))
         return { position, end };
   return null;
 }
@@ -399,7 +390,7 @@ export async function departmentDay(
   };
 }
 
-function keepOpenSubject(
+export function keepOpenSubject(
   ranges: readonly ServiceRange[],
   day: Awaited<ReturnType<typeof departmentDay>>,
   moment: ServiceMoment | null,

@@ -2,6 +2,7 @@ import "./errors.js";
 
 export * from "./schema/index.js";
 export * from "./operations.js";
+export * from "./keep-open.js";
 export type { MenuUse } from "./errors.js";
 export {
   MENU_TIMETABLE_CALENDAR_PARTICIPANT,

@@ -1,3 +1,4 @@
+import { readKeepOpen, keepPeriodOpen } from "./keep-open.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
   listDepartmentTransferDestinations,
@@ -92,6 +93,8 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listServiceZones,
   resolveZoneContext,
   resolveDepartmentService,
+  readKeepOpen,
+  keepPeriodOpen,
   resolveSalePolicy,
   recordSaleReceiptHeader,
   readSaleReceiptHeader,

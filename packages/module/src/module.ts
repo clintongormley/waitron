@@ -315,6 +315,16 @@ export type ExtraMakerOutcome =
       readonly why: "no_rule" | "no_preparation" | "no_replacement" | "same_station";
     };
 
+export interface KeepOpenSubject {
+  id: string;
+  name: string;
+  endsAt: string;
+  running: boolean;
+  extendedUntil: string | null;
+  choices: readonly string[];
+  next: { name: string; startsAt: string } | null;
+}
+
 export interface StationTodayState {
   readonly open: boolean;
   readonly isDefault: boolean;
@@ -462,6 +472,19 @@ export interface VenueServiceContribution {
     sendableMenuIds: readonly string[];
     endedMenuIds: readonly string[];
   }>;
+  readKeepOpen(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at: Date,
+  ): Promise<{ period: KeepOpenSubject | null }>;
+  keepPeriodOpen(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    input: { periodId: string; until: string | null },
+    at: Date,
+  ): Promise<void>;
   resolveSalePolicy(
     tx: Transaction,
     cfg: { locationId: LocationId },

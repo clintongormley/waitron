@@ -1,6 +1,7 @@
 import { venueMomentAt } from "@waitron/reporting";
 import { isUuid } from "@waitron/shared";
 import { addDays, weekdayOf } from "./hours-rules.js";
+import { localTimeOccurrences } from "./hours-occurrences.js";
 import { invalidTimetable } from "./menu-timetable-rules.js";
 
 export interface ServiceRange {
@@ -123,4 +124,18 @@ export function withExtension(
   }
   if (extension !== null) result.push({ ...extension });
   return result.sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
+}
+
+export function clockTimeSkipped(
+  businessDay: string,
+  time: string,
+  cutover: string,
+  timeZone: string,
+  asEnd: boolean,
+): boolean {
+  const date =
+    asEnd && time === cutover
+      ? addDays(businessDay, 1)
+      : calendarDateOfTime(businessDay, time, cutover);
+  return localTimeOccurrences(date, time, timeZone).length === 0;
 }

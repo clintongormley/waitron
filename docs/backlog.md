@@ -1269,7 +1269,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   with a manager PIN, under its profile's preparation permission and the shared PIN limit.
   The dashboard keeps today's status without close/open buttons; its today-write route is removed.
   Stored period extensions now change the running and ended menus for today; the resolver reports
-  the running or last-ended period and its effective end. Extension request paths and till/kitchen
+  the running or last-ended period and its effective end. The extension read and writer offer
+  future quarter-hours, retain the scheduled start on repeated extension and refuse invalid ends;
+  the shared service contract exposes both. Server extension request paths and till/kitchen
   visible controls remain to build.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,

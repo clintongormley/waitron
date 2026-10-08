@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calendarDateOfTime,
+  clockTimeSkipped,
   minuteOfServiceDay,
   parseServiceDay,
   rangeInForce,
@@ -174,4 +175,9 @@ describe("period extensions over the service day", () => {
       withExtension(day, { periodId: P, startsAt: "20:00", endsAt: "21:00" }, "06:00"),
     ).toEqual([...day, { periodId: P, startsAt: "20:00", endsAt: "21:00" }]);
   });
+});
+
+it("dates an end at the changeover on the next calendar day when checking skipped times", () => {
+  expect(clockTimeSkipped("2027-03-27", "02:30", "02:30", "Europe/Madrid", true)).toBe(true);
+  expect(clockTimeSkipped("2027-03-27", "02:30", "02:30", "Europe/Madrid", false)).toBe(false);
 });
