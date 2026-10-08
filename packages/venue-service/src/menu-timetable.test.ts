@@ -1355,23 +1355,23 @@ describe("a period no longer placed anywhere but a past special date", () => {
 });
 
 describe("a zone moved to another department", () => {
-  it("loses its all-day and period menus in the same transaction", async () => {
+  it("uses the new department's current period and preserves the other zone's menus", async () => {
     const v = await timed();
-    const left = await scoped(async (tx) => {
+    await scoped(async (tx) => {
       await setZoneAllDayMenu(tx, v.cfg, v.barra, v.menus.Desayunos);
       await setZonePeriodMenu(tx, v.cfg, v.barra, v.periods.mananas, v.menus.Café);
       await setZonePeriodMenu(tx, v.cfg, v.terraza, v.periods.mananas, v.menus.Café);
       await configureZone(tx, v.cfg, { zoneId: v.barra, departmentId: v.deli });
-      return {
-        allDay: (await tx.execute(sql`select 1 from zone_all_day_menus where zone_id = ${v.barra}`))
-          .rows,
-        period: (await tx.execute(sql`select 1 from zone_period_menus where zone_id = ${v.barra}`))
-          .rows,
-        kept: (await tx.execute(sql`select 1 from zone_period_menus where zone_id = ${v.terraza}`))
-          .rows,
-      };
     });
-    expect(left).toEqual({ allDay: [], period: [], kept: [{ 1: 1 }] });
+    const at = madrid(MONDAY, "13:00");
+    const moved = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { at }));
+    expect(moved.defaultMenuId).toBe(v.menus["Deli para llevar"]);
+    expect(moved.menus.map((menu) => menu.id)).toEqual([v.menus["Deli para llevar"]]);
+    const other = await scoped((tx) => listZoneOffers(tx, v.cfg, v.terraza, { at }));
+    expect(other.defaultMenuId).toBe(v.menus.Almuerzo);
+    expect(other.menus.filter((menu) => menu.orderable).map((menu) => menu.id)).toEqual([
+      v.menus.Almuerzo,
+    ]);
   });
 
   it("keeps them when configured again within its own department, and lets an inactive zone's be cleared", async () => {
@@ -1762,6 +1762,28 @@ describe("statements", () => {
       prepared.mockRestore();
       return texts;
     });
+
+  it("moves a zone to its new department without accessing retired zone menu tables", async () => {
+    const v = await timed();
+    const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    const statements = await statementsOf((tx) =>
+      configureZone(tx, v.cfg, { zoneId: v.barra, departmentId: v.deli }),
+    );
+    expect(statements.filter((text) => /"zone_(all_day|period)_menus"/.test(text))).toEqual([]);
+    const moved = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "13:00") }),
+    );
+    expect(moved.menus.map((menu) => ({ id: menu.id, orderable: menu.orderable }))).toEqual([
+      { id: v.menus["Deli para llevar"], orderable: true },
+    ]);
+    expect(moved.defaultMenuId).toBe(v.menus["Deli para llevar"]);
+    const after = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(after.departments).toEqual(before.departments);
+    const unchanged = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.sala, { at: madrid(MONDAY, "13:00") }),
+    );
+    expect(unchanged.defaultMenuId).toBe(v.menus.Almuerzo);
+  });
 
   /** Twenty one-hour slots over Sunday and Monday, alternating the five Restaurant periods. */
   const twentySlots = (p: Timed["periods"]) => {

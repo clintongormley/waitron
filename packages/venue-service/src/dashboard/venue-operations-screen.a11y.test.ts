@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { page } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -6,7 +7,10 @@ import type { VenueServiceApi } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setLocale("en");
+});
 describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (theme) => {
   test("announces readiness problems as a correctly structured list", async () => {
     setLocale("en");
@@ -183,3 +187,65 @@ describe.each(["light", "dark"] as const)("venue editors' fields accessibility (
     },
   );
 });
+
+for (const locale of ["en", "es"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280])
+      test(`missing opening periods are accessible (${locale}/${theme}/${width})`, async () => {
+        const previous = { width: window.innerWidth, height: window.innerHeight };
+        try {
+          await page.viewport(width, 900);
+          setLocale(locale);
+          await mountThemed("<div></div>", theme);
+          const el = document.createElement(
+            "dashboard-venue-operations-screen",
+          ) as VenueOperationsScreen;
+          el.api = {
+            load: vi.fn().mockResolvedValue({
+              readiness: [
+                { code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" },
+              ],
+              departments: [
+                {
+                  id: "d1",
+                  name: "Restaurant",
+                  tradingName: "Casa",
+                  defaultServiceMode: "table_tab",
+                  active: true,
+                },
+              ],
+              zones: [],
+              salePolicies: { departments: [], zones: [] },
+              floorZones: [],
+              settings: { editSentLines: true },
+            }),
+          } as unknown as VenueServiceApi;
+          host.append(el);
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector('[data-test="readiness"]')).not.toBeNull(),
+          );
+          await el.updateComplete;
+          const warning = findDeep(el.shadowRoot!, '[data-test="department-readiness"]')!;
+          expect(warning.textContent).toContain(
+            locale === "en" ? "has no opening periods" : "no tiene períodos de apertura",
+          );
+          const name = findDeep(el.shadowRoot!, '[data-test="edit-department-name"]')!;
+          expect(warning.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+            name.getBoundingClientRect().bottom,
+          );
+          expect(warning.getBoundingClientRect().right).toBeLessThanOrEqual(
+            warning.closest("td")!.getBoundingClientRect().right,
+          );
+          const link = warning.querySelector<HTMLAnchorElement>("a")!;
+          expect(link.getAttribute("href")).toBe("/manage/opening-hours?department=d1");
+          expect(link.textContent).toContain(
+            locale === "en" ? "Set up Opening hours" : "Configura los horarios de apertura",
+          );
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `__screenshots__/look/a366-readiness-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          await page.viewport(previous.width, previous.height);
+        }
+      });
