@@ -6811,8 +6811,8 @@ approved.
 
 ### B9. CI and test infra
 
-- **Image smoke's package-index refresh can consume its whole job limit — IN PROGRESS (A422,
-  2026-10-08), branch `fix/apt-bounded-waits` (observed while checking A407's merge).** In main
+- **Image smoke's package-index refresh can consume its whole job limit — DONE (A422, #1442,
+  2026-10-08) (observed while checking A407's merge).** In main
   run 37771042263, job 113290522107 entered the AppArmor/BlueZ setup step at 11:35:49 UTC. Its last output at
   11:36:22 was from `apt-get update`, including an ignored `noble InRelease` from
   `azure.archive.ubuntu.com`; it printed nothing else before cancellation at 11:50:57.
@@ -6824,6 +6824,16 @@ approved.
   retried; guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts` fail on
   one with no outer timeout. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
   bounded".
+  **Open points (no action queued):** (1) the Dockerfile's `bounded()` does not retry an
+  `apt-get update` that cannot connect, because apt prints "Failed to fetch" and still exits 0
+  (measured in the A422 probes; apt's own `Acquire::Retries=3` still applies);
+  `APT::Update::Error-Mode=any` would make it fail and be retried, at the cost of failing on any one
+  broken index. (2) `deploy/waitron.sh` (its `apt_get update` / `install` calls for Docker, curl and
+  qrencode) and `bench/sqlite-failover/src/probes/linux-binaries.ts` (`CA_DOCKERFILE`) run apt with
+  no outer limit; the rule and its guards cover only the workflows and `deploy/Dockerfile`.
+  (3) Comments in `.github/workflows/ci.yml` (the Chromium install, "restore `--with-deps`") and
+  `mutation.yml` suggest restoring `playwright install --with-deps`, which runs apt with no outer
+  limit and which neither guard reads.
 - **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
   watcher/owner 2026-10-08, "active monitoring") — DONE (#1427).** PR #1399's image smoke sat
   46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
