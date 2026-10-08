@@ -4,13 +4,11 @@ import {
   CALENDAR_COLOURS,
   HOURS_RANGE_MAX_DAYS,
   type CalendarColour,
-  type CalendarTone,
   type DateCell,
   type DateHoursCell,
   type HourPeriod,
   type HoursSubject,
   type LocalDate,
-  type ResolvedHours,
   type SpecialDateInput,
   type WeekCell,
 } from "./hours-types.js";
@@ -261,17 +259,4 @@ export function parseDuplicateDates(value: unknown): LocalDate[] {
     seen.add(date);
     return date;
   });
-}
-
-/**
- * Closed only when the venue has active departments and every one of them is Closed that date;
- * stations play no part, and a department with no hours set is not Closed.
- */
-export function calendarTone(
-  colour: CalendarColour | null,
-  activeDepartments: readonly ResolvedHours["cell"]["mode"][],
-): CalendarTone {
-  if (activeDepartments.length > 0 && activeDepartments.every((mode) => mode === "closed"))
-    return "closed";
-  return colour ?? "standard";
 }

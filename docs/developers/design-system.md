@@ -181,7 +181,8 @@ with eight fills. A special date picks one of six palette colours, `--wt-color-p
 plan (`docs/superpowers/plans/2026-10-05-hours.md`, choice 6). The values below were picked for
 these contrast checks, not copied from the `hours-v3.html` mockup.
 Two more are reserved, so no special date can look like them: `--wt-color-day-standard` for a
-standard day and `--wt-color-day-closed` for a day every active department is Closed. Text on
+standard day and `--wt-color-day-closed` for a business day with no service ranges in any active
+department, or a whole-venue closure. Text on
 each fill uses its own `--wt-color-on-palette-…` or `--wt-color-on-day-…` colour. A coloured date
 always carries its name in words too, and a Closed one the word Closed, so colour is never the
 only signal.

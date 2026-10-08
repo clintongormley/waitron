@@ -5,7 +5,6 @@ import { AppError } from "@waitron/shared";
 import { isReadableClock, skippedEndpoint, venueLocalMoment } from "./hours-clock.js";
 import {
   addDays,
-  calendarTone,
   cellIntervals,
   effective,
   invalidHours,
@@ -48,6 +47,7 @@ import {
   specialDates,
 } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
+import { readOpeningHoursModel } from "./menu-timetable.js";
 import "./errors.js";
 
 export { cellIntervals } from "./hours-rules.js";
@@ -1146,16 +1146,15 @@ async function readRange(
   return { subjects, weeks, specials, cellsByDate };
 }
 
-/**
- * Each date of the range with its special date and calendar colour. The colour is Closed only
- * when every active department is Closed that date, by its week, the date's cell or a whole-venue
- * closure.
- */
-function calendarDays(
+async function calendarDays(
+  tx: Transaction,
+  cfg: VenueScope,
   dates: readonly LocalDate[],
   range: Awaited<ReturnType<typeof readRange>>,
   holidays: readonly HolidayFact[],
-): CalendarDay[] {
+  at: Date,
+): Promise<CalendarDay[]> {
+  const opening = await readOpeningHoursModel(tx, cfg, at);
   const specialOn = new Map(range.specials.map((special) => [special.date, special]));
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of holidays) {
@@ -1163,21 +1162,25 @@ function calendarDays(
     if (facts === undefined) factsOn.set(fact.date, [fact]);
     else facts.push(fact);
   }
-  const active = range.subjects.filter((s) => s.kind === "department" && s.active);
+  const active = opening.departments.filter((department) => department.active);
   return dates.map((date) => {
     const special = specialOn.get(date) ?? null;
-    const cells = special === null ? [] : range.cellsByDate.get(special.id)!;
-    const modes = active.map((department) => {
-      if (special?.closeWholeVenue) return "closed";
-      const own = cells.find((entry) => entry.subject.id === department.id);
-      if (own !== undefined) return own.cell.mode;
-      return range.weeks.get(keyOf(department))?.[weekdayOf(date)]?.mode ?? "not_set";
-    });
+    const open =
+      !special?.closeWholeVenue &&
+      active.some((department) => {
+        const own =
+          special === null
+            ? undefined
+            : department.dates.find((day) => day.specialDateId === special.id);
+        const slots =
+          own?.slots ?? department.week.find((day) => day.weekday === weekdayOf(date))!.slots;
+        return slots.length > 0;
+      });
     return {
       date,
       specialDate: special,
       holidays: factsOn.get(date) ?? [],
-      tone: calendarTone(special?.colour ?? null, modes as ResolvedHours["cell"]["mode"][]),
+      tone: open ? (special?.colour ?? "standard") : "closed",
     };
   });
 }
@@ -1212,7 +1215,14 @@ export async function readCalendarDays(
 ): Promise<CalendarDay[]> {
   const dates = rangeDates(from, to);
   const range = await readRange(tx, cfg, dates);
-  return calendarDays(dates, range, await readHolidays(tx, cfg, dates, holidays));
+  return calendarDays(
+    tx,
+    cfg,
+    dates,
+    range,
+    await readHolidays(tx, cfg, dates, holidays),
+    new Date(),
+  );
 }
 
 /** Everything the Hours page shows for one range of dates, with the venue's date at `at`. */
@@ -1242,7 +1252,14 @@ export async function readHoursModel(
         cell: range.weeks.get(keyOf({ kind, id }))?.[weekday] ?? { mode: "not_set", periods: [] },
       })),
     })),
-    days: calendarDays(dates, range, await readHolidays(tx, cfg, dates, holidays)),
+    days: await calendarDays(
+      tx,
+      cfg,
+      dates,
+      range,
+      await readHolidays(tx, cfg, dates, holidays),
+      at,
+    ),
     specialDates: range.specials.filter((special) => special.date >= listFrom),
     specialCells: range.specials.map((special) => ({
       specialDateId: special.id,
