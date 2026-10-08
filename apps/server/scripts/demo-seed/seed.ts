@@ -75,6 +75,7 @@ export async function seedDemoRestaurant(
     await seedStaff(tx, { dataSet });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
     await seedMedia(tx, { productsByImage });
+    // Publish after modifiers and media so each version freezes their seeded values.
     for (const menuId of Object.values(menuIds)) {
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
