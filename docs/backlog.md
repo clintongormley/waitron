@@ -1463,7 +1463,8 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batches 2–7 OPEN.** The owner: "open a form with the Save button
+BUILT: batch 1 in #1391; batch 3a built on `feat/save-follows-changes-venue` (pull request
+pending); batches 2, 3b and 4–7 OPEN.** The owner: "open a form with the Save button
 transparent (and disabled?). but as soon as you make a change, make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
@@ -1481,8 +1482,31 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   no defect found. In the same mount, the first screen frame after `closeSaved` (what the
   Products screen calls once a save succeeds) already has the product editor closed, so its Save
   is not seen turning quiet as the dialog goes.
-- **Batch 2 — OPEN.** The dashboard's catalogue and menus forms.
-- **Batch 3 — OPEN.** The rest of the dashboard's screens that track unsaved changes.
+- **Batch 2 — OPEN.** The dashboard's catalogue and menus forms. Done after batch 3 because #1392
+  (lane A) changed two of its files. The venue settings page's "VAT class for new products" Save
+  (`dashboard-catalogue-settings-panel`) is one of them: on 2026-10-08 it still opened blue and
+  pressable with nothing changed.
+- **Batch 3a — BUILT, pull request pending.** The venue settings, service and people forms: the
+  floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
+  flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
+  the backup turn-on form and settings editor, the bucket copy form, your profile's details and
+  credential dialogs, the edit-person and new-person dialogs, the purchase form and the shift
+  dialog (list: [design-system.md](developers/design-system.md) → Forms). The backup settings
+  editor opens already savable when the stored schedule is one the form cannot show. Looked at on
+  2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form unchanged and
+  after one edit; the floor, edit-person and backup forms also at 390px, in dark and in Spanish),
+  plus the backup settings editor mounted with test data, because the demo venue has backups off;
+  screenshots in `~/waitron-campaign-b/a331-3a-shots/`. Every form opened quiet and disabled (the
+  backup editor over an interval schedule opened blue, as intended) and turned blue on the first
+  edit; where a required field was still empty (the time-off dates, a cover request with no shift
+  to offer, a shift's end time, the turn-on form's "I have saved this key" box) it stayed blue and
+  disabled until filled. The action's size and horizontal position were the same before and after
+  the edit in every pair measured; Add table was compared by eye. Left open:
+  - a password manager that fills the profile's current-password field without the field's change
+    event was not tried, so whether Save stays quiet until the person types is unknown;
+  - other purchases-screen tests still send made-up create and update events from an untouched
+    form instead of pressing the form's button; they pass, but never prove the button works.
+- **Batch 3b — OPEN.** Printers, devices, device profiles, payments, canvases.
 - **Batch 4 — OPEN.** Module screens: venue service, Stripe, SumUp, adjustments, bookings, media.
 - **Batch 5 — OPEN.** The till; many of its dialogs act (pay, refund, find) rather than save, and
   the batch says which ones save.

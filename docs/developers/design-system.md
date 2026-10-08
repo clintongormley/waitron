@@ -1538,10 +1538,21 @@ written per screen:
   the form's primary action and is not gated: pressing it is the change. The setup wizard's step
   navigation is not a save, and neither is a sign-in.
 
-Only the product editor and the variant form follow this rule so far; the other forms are being
-brought under it batch by batch ([backlog](../backlog.md) A331,
-[plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)), and nothing guards it across
-screens.
+These forms follow the rule so far; the others are being brought under it batch by batch
+([backlog](../backlog.md) A331, [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),
+and nothing guards it across screens:
+
+- batch 1: the product editor and the variant form;
+- batch 3a: the floor plan's table rows and Add table; the service-status rows and Create; the
+  kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
+  receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
+  profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
+  form; the shift dialog.
+
+The backup settings editor is the one form here that can open already savable: when the stored
+schedule is not a wall-clock one, or no retention is stored, the form cannot show what is running,
+so it opens with its own defaults and Save ready (`#policyReplaced` in
+`apps/dashboard/src/screens/backup-screen.ts`).
 
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.
