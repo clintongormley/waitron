@@ -1853,13 +1853,14 @@ or, on a variant still blank in every language, the parent's where the parent ha
 language (`defaultLanguageHint`, `apps/dashboard/src/widgets/form-fields.ts`). That hint is the owner's
 decision (A220); no reader fills a missing language with it, and nothing outside the product editor
 shows a product description today (the reader check in A220, `docs/backlog.md`).
-A price field that holds its own value can say so with `wt-price-input`'s `overriding` state (see its row in the component table), which a menu's Price overrides tab uses.
 
 - **Text and price fields** (`wt-input`, `wt-price-input`, `wt-textarea`): the fallback value is the
   field's `placeholder`. All three primitives paint it `--wt-color-text-muted`, because Chromium's
   default grey measured 3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the
   4.5:1 text needs. axe does not check placeholder contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
-  (`packages/ui-core/src/components/wt-input.a11y.test.ts`).
+  (`packages/ui-core/src/components/wt-input.a11y.test.ts`). A price field that holds its own value
+  can say so with `wt-price-input`'s `overriding` state (see its row in the component table), which a
+  menu's Price overrides tab uses.
 - **A single-choice `wt-combobox`** (the product editor's VAT and course): its
   first option has an empty value and reads as the fallback value itself, with no "Same as" before
   it (owner, 2026-10-02: "we just want to show the value"), e.g. "Reduced (10%)"; where the parent
