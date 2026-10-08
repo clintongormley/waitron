@@ -60,6 +60,7 @@ import {
   deactivateDepartment,
   listDepartments,
   listZoneOffers,
+  listVenueReadiness,
   recordOrderServiceContext,
   recordWorkingLineContexts,
 } from "./operations.js";
@@ -2213,6 +2214,7 @@ describe("department service periods", () => {
 
   it("keeps all period menus once while marking the running customer and staff menus orderable", async () => {
     const v = await serviceVenue();
+    await timed();
     const result = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
     );
@@ -2275,6 +2277,55 @@ describe("department service periods", () => {
     expect(unserved.menus.every((menu) => !menu.orderable && !menu.isDefault)).toBe(true);
   });
 
+  it("refuses an asserted menu version outside the period membership while retaining closed-period versions", async () => {
+    const v = await serviceVenue();
+    const running = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
+    );
+    const lunch = running.menus.find((menu) => menu.id === v.menus.Almuerzo)!;
+    const asserted = [{ menuId: lunch.id, versionId: lunch.versionId }];
+    const closed = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, {
+        at: madrid(FRIDAY, "20:00"),
+        asserted,
+        withDefault: false,
+      }),
+    );
+    expect(closed.menus.find((menu) => menu.id === lunch.id)).toMatchObject({
+      versionId: lunch.versionId,
+      orderable: true,
+    });
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.lunch, {
+        menuId: v.menus.Café,
+        staffMenuIds: [v.menus.Bebidas],
+      }),
+    );
+    await expect(
+      scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { asserted, withDefault: false })),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+    });
+  });
+
+  it("offers no department-list menus without periods and refuses a different venue's zone", async () => {
+    const v = await venue({ timetable: false });
+    const result = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
+    );
+    expect(result).toEqual({
+      defaultMenuId: null,
+      service: { open: false, periodName: null },
+      menus: [],
+      offers: [],
+    });
+    const other = await serviceVenue();
+    await expect(scoped((tx) => listZoneOffers(tx, v.cfg, other.barra))).rejects.toMatchObject({
+      code: "service_zone.not_found",
+      params: { zoneId: other.barra },
+    });
+  });
+
   it("keeps period menus for a stored basket when closed, with none orderable and no default", async () => {
     const v = await serviceVenue();
     const result = await scoped((tx) =>
@@ -2301,6 +2352,44 @@ describe("department service periods", () => {
     expect(result.menus).toHaveLength(4);
     expect(result.menus.every((menu) => menu.orderable)).toBe(true);
     expect(result.defaultMenuId).toBeNull();
+  });
+
+  it("reports active departments with no normal-week range even if they have period menus", async () => {
+    const v = await serviceVenue();
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => []),
+        AT,
+      ),
+    );
+    const issues = await scoped((tx) => listVenueReadiness(tx, v.cfg));
+    expect(issues.filter((issue) => issue.code === "department.no_periods")).toEqual([
+      { code: "department.no_periods", departmentId: v.deli, departmentName: "Deli" },
+      { code: "department.no_periods", departmentId: v.restaurant, departmentName: "Restaurant" },
+    ]);
+    expect(issues.some((issue) => (issue.code as string) === "zone.menu_missing")).toBe(false);
+    await scoped((tx) => deactivateDepartment(tx, v.cfg, v.deli));
+    const after = await scoped((tx) => listVenueReadiness(tx, v.cfg));
+    expect(after.filter((issue) => issue.code === "department.no_periods")).toEqual([
+      { code: "department.no_periods", departmentId: v.restaurant, departmentName: "Restaurant" },
+    ]);
+  });
+
+  it("readiness judges distinct published period menus and ignores the retired department list", async () => {
+    const v = await serviceVenue();
+    const issues = await scoped((tx) => listVenueReadiness(tx, v.cfg));
+    expect(issues.filter((issue) => issue.code === "department.no_periods")).toEqual([
+      { code: "department.no_periods", departmentId: v.deli, departmentName: "Deli" },
+    ]);
+    const bar = issues.filter((issue) => "zoneId" in issue && issue.zoneId === v.barra);
+    expect(bar).toHaveLength(4);
+    expect(bar.every((issue) => issue.code === "zone.menu_empty")).toBe(true);
+    expect(
+      bar.flatMap((issue) => (issue.code === "zone.menu_empty" ? [issue.menuId] : [])).sort(),
+    ).toEqual([v.menus.Almuerzo, v.menus.Café, v.menus.Cena, v.menus.Bebidas].sort());
   });
 
   it("reads opening hours with period colours, ordered staff menus, all seven days and explicit closed dates", async () => {

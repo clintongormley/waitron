@@ -1,5 +1,5 @@
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
-import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
   diningTables,
@@ -38,17 +38,14 @@ import {
   zoneServicePolicies,
 } from "./schema/service.js";
 import {
-  departmentAllDayMenus,
-  departmentMenus,
   zoneAllDayMenus,
   zonePeriodMenus,
+  menuPeriods,
+  menuPeriodStaffMenus,
+  menuDayTimetables,
+  menuSlots,
 } from "./schema/menus.js";
-import {
-  placeOpenPeriod,
-  resolveDepartmentService,
-  resolveZoneMenus,
-  servedDefault,
-} from "./menu-timetable.js";
+import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
@@ -84,16 +81,6 @@ export async function listDepartments(tx: Transaction, cfg: VenueScope): Promise
 export function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
-
-/** A zone's own all-day menu, else its department's; joined beside `zone_service_policies`. */
-const allDayMenuId = sql<
-  string | null
->`coalesce(${zoneAllDayMenus.menuId}, ${departmentAllDayMenus.menuId})`;
-const zoneAllDayJoin = eq(zoneAllDayMenus.zoneId, zoneServicePolicies.zoneId);
-const departmentAllDayJoin = eq(
-  departmentAllDayMenus.departmentId,
-  zoneServicePolicies.departmentId,
-);
 
 /** The default list is restricted to zones that can start a new order. */
 export async function listServiceZones(
@@ -278,9 +265,10 @@ export async function deactivateDepartment(
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
 
   const activeDepartments = await tx
-    .select({ id: departments.id })
+    .select({ id: departments.id, name: departments.name })
     .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+    .orderBy(asc(departments.name), asc(departments.id));
   if (activeDepartments.length === 1 && activeDepartments[0]!.id === departmentId) {
     throw new AppError("department.last_active", { departmentId });
   }
@@ -337,7 +325,7 @@ export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
   | { code: "zone.department_missing"; zoneId: string; zoneName: string }
-  | { code: "zone.menu_missing"; zoneId: string; zoneName: string }
+  | { code: "department.no_periods"; departmentId: string; departmentName: string }
   | { code: "zone.menu_unpublished"; zoneId: string; zoneName: string }
   | {
       code: "zone.menu_empty";
@@ -366,10 +354,33 @@ export async function listVenueReadiness(
   const issues: VenueReadinessIssue[] =
     defaultStation === undefined ? [{ code: "venue.default_station_missing" }] : [];
   const activeDepartments = await tx
-    .select({ id: departments.id })
+    .select({ id: departments.id, name: departments.name })
     .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+    .orderBy(asc(departments.name), asc(departments.id));
   if (activeDepartments.length === 0) return [...issues, { code: "venue.department_missing" }];
+  const placed = await tx
+    .selectDistinct({ departmentId: menuDayTimetables.departmentId })
+    .from(menuDayTimetables)
+    .innerJoin(menuSlots, eq(menuSlots.timetableId, menuDayTimetables.id))
+    .where(
+      and(
+        inArray(
+          menuDayTimetables.departmentId,
+          activeDepartments.map((department) => department.id),
+        ),
+        isNotNull(menuDayTimetables.weekday),
+      ),
+    );
+  const placedDepartments = new Set(placed.map((row) => row.departmentId));
+  for (const department of activeDepartments) {
+    if (!placedDepartments.has(department.id))
+      issues.push({
+        code: "department.no_periods",
+        departmentId: department.id,
+        departmentName: department.name,
+      });
+  }
 
   const zones = await tx
     .select({
@@ -377,13 +388,10 @@ export async function listVenueReadiness(
       name: floorZones.name,
       departmentId: zoneServicePolicies.departmentId,
       departmentActive: departments.active,
-      defaultMenuId: allDayMenuId,
     })
     .from(floorZones)
     .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
     .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .leftJoin(zoneAllDayMenus, zoneAllDayJoin)
-    .leftJoin(departmentAllDayMenus, departmentAllDayJoin)
     .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
 
@@ -392,15 +400,11 @@ export async function listVenueReadiness(
       if (zone.departmentId === null || zone.departmentActive !== true) {
         return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
       }
-      if (zone.defaultMenuId === null) {
-        return [{ code: "zone.menu_missing", zoneId: zone.id, zoneName: zone.name }];
-      }
       return [];
     }),
   );
   const ready = zones.filter(
-    (zone) =>
-      zone.departmentId !== null && zone.departmentActive === true && zone.defaultMenuId !== null,
+    (zone) => zone.departmentId !== null && zone.departmentActive === true,
   );
   if (ready.length === 0) return issues;
   const liveByZone = await liveDocumentsByZone(tx, cfg);
@@ -730,22 +734,12 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     .where(eq(zoneSalePolicies.zoneId, zoneId));
 }
 
-/** The active menus each of the venue's zones may sell from, in its department's order. */
 async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<string, string[]>> {
   const byZone = new Map<string, string[]>();
-  for (const row of await tx
-    .select({ zoneId: zoneServicePolicies.zoneId, menuId: departmentMenus.menuId })
-    .from(departmentMenus)
-    .innerJoin(
-      zoneServicePolicies,
-      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
-    )
-    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
-    .where(and(eq(zoneServicePolicies.locationId, cfg.locationId), eq(catalogues.active, true)))
-    .orderBy(departmentMenus.displayOrder, departmentMenus.menuId)) {
+  for (const row of await zonePeriodMembership(tx, { locationId: cfg.locationId })) {
     const menus = byZone.get(row.zoneId);
     if (menus === undefined) byZone.set(row.zoneId, [row.menuId]);
-    else menus.push(row.menuId);
+    else if (!menus.includes(row.menuId)) menus.push(row.menuId);
   }
   return byZone;
 }
@@ -771,19 +765,49 @@ export async function liveDocumentsByZone(
   );
 }
 
-/** The active menus a zone may sell from: its department's, in the department's order. */
+async function zonePeriodMembership(tx: Transaction, scope: { zoneId: string } | VenueScope) {
+  const where = and(
+    "zoneId" in scope
+      ? eq(zoneServicePolicies.zoneId, scope.zoneId)
+      : eq(zoneServicePolicies.locationId, scope.locationId),
+    eq(catalogues.active, true),
+  );
+  const customer = await tx
+    .select({
+      zoneId: zoneServicePolicies.zoneId,
+      menuId: menuPeriods.menuId,
+      periodId: menuPeriods.id,
+    })
+    .from(menuPeriods)
+    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.departmentId, menuPeriods.departmentId))
+    .innerJoin(catalogues, eq(catalogues.id, menuPeriods.menuId))
+    .where(where)
+    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
+  const staff = await tx
+    .select({
+      zoneId: zoneServicePolicies.zoneId,
+      menuId: menuPeriodStaffMenus.menuId,
+      periodId: menuPeriods.id,
+    })
+    .from(menuPeriodStaffMenus)
+    .innerJoin(menuPeriods, eq(menuPeriods.id, menuPeriodStaffMenus.periodId))
+    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.departmentId, menuPeriods.departmentId))
+    .innerJoin(catalogues, eq(catalogues.id, menuPeriodStaffMenus.menuId))
+    .where(where)
+    .orderBy(
+      asc(menuPeriods.name),
+      asc(menuPeriods.id),
+      asc(menuPeriodStaffMenus.displayOrder),
+      asc(menuPeriodStaffMenus.menuId),
+    );
+  return [
+    ...customer.map((row) => ({ ...row, audience: "customer" as const })),
+    ...staff.map((row) => ({ ...row, audience: "staff" as const })),
+  ];
+}
+
 async function zoneMenuIds(tx: Transaction, zoneId: string): Promise<string[]> {
-  const rows = await tx
-    .select({ id: departmentMenus.menuId })
-    .from(departmentMenus)
-    .innerJoin(
-      zoneServicePolicies,
-      eq(zoneServicePolicies.departmentId, departmentMenus.departmentId),
-    )
-    .innerJoin(catalogues, eq(catalogues.id, departmentMenus.menuId))
-    .where(and(eq(zoneServicePolicies.zoneId, zoneId), eq(catalogues.active, true)))
-    .orderBy(departmentMenus.displayOrder, departmentMenus.menuId);
-  return rows.map((row) => row.id);
+  return [...new Set((await zonePeriodMembership(tx, { zoneId })).map((row) => row.menuId))];
 }
 
 /**
@@ -795,25 +819,24 @@ async function zoneLiveDocuments(
   tx: Transaction,
   zoneId: string,
   asserted: readonly { menuId: string; versionId: string }[] = [],
+  menuIds?: readonly string[],
 ): Promise<{ menuId: string; versionId: string; document: MenuDocument }[]> {
-  const menuIds = await zoneMenuIds(tx, zoneId);
-  const live = await assertLiveVersions(tx, menuIds, asserted);
-  return menuIds.flatMap((menuId) => {
+  const ids = menuIds ?? (await zoneMenuIds(tx, zoneId));
+  const live = await assertLiveVersions(tx, ids, asserted);
+  return ids.flatMap((menuId) => {
     const version = live.get(menuId);
     return version === undefined ? [] : [{ menuId, ...version }];
   });
 }
 
-/**
- * What the zone sells: each published menu's live version, with the current availability put back
- * (an unavailable offer is served marked, in its place), and that version's structure and Device
- * Home Page. An inactive menu, or one with no live version, is left out. The default is the menu
- * timetable's at `at` (now when absent), and one that is inactive or unpublished gives way to the
- * zone's first menu that is served; with `withDefault: false` the timetable is not read and no
- * menu is the default. Refused `menu.version_changed` unless every `asserted` version is the live
- * version of one of the zone's active menus. With `menuItemIds`, only the offers it names are
- * served; the menus are all listed.
- */
+export interface ServiceZoneOffers extends ZoneOffers {
+  readonly service: { readonly open: boolean; readonly periodName: string | null };
+  readonly menus: readonly (ServedMenu & {
+    readonly audience: "customer" | "staff";
+    readonly orderable: boolean;
+  })[];
+}
+
 export async function listZoneOffers(
   tx: Transaction,
   cfg: VenueScope,
@@ -824,31 +847,47 @@ export async function listZoneOffers(
     at?: Date;
     withDefault?: false;
   } = {},
-): Promise<ZoneOffers> {
-  await resolveZoneContext(tx, cfg, zoneId);
-  const published = await zoneLiveDocuments(tx, zoneId, options.asserted);
+): Promise<ServiceZoneOffers> {
+  const context = await resolveZoneContext(tx, cfg, zoneId);
+  const membership = await zonePeriodMembership(tx, { zoneId });
+  const published = await zoneLiveDocuments(tx, zoneId, options.asserted, [
+    ...new Set(membership.map((row) => row.menuId)),
+  ]);
   const served = await applyLiveFields(
     tx,
     published.map((menu) => menu.document),
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
   );
-  const defaultMenuId =
+  const service =
     options.withDefault === false
       ? null
-      : servedDefault(
-          (await resolveZoneMenus(tx, cfg, zoneId, options.at ?? new Date())).defaultMenuId,
-          published.map((menu) => menu.menuId),
-        );
-  // Catalogue's `ServedMenu` is the type the till reads each menu as.
-  const menus: ServedMenu[] = published.map(({ menuId, versionId, document }) => ({
+      : await resolveDepartmentService(tx, cfg, context.departmentId, options.at ?? new Date());
+  const defaultMenuId = service?.open
+    ? servedDefault(
+        service.customerMenuId,
+        published
+          .map((menu) => menu.menuId)
+          .filter((menuId) => service.orderableMenuIds.includes(menuId)),
+      )
+    : null;
+  const menus: ServiceZoneOffers["menus"] = published.map(({ menuId, versionId, document }) => ({
     id: menuId,
     name: document.menuName,
     isDefault: menuId === defaultMenuId,
+    audience: (membership.find(
+      (row) => row.menuId === menuId && row.periodId === service?.periodId,
+    ) ?? membership.find((row) => row.menuId === menuId))!.audience,
+    orderable: service === null || service.orderableMenuIds.includes(menuId),
     versionId,
     structure: document.root,
     home: document.home,
   }));
-  return { defaultMenuId, menus, offers: published.flatMap((menu) => served.get(menu.menuId)!) };
+  return {
+    defaultMenuId,
+    service: { open: service?.open ?? true, periodName: service?.periodName ?? null },
+    menus,
+    offers: published.flatMap((menu) => served.get(menu.menuId)!),
+  };
 }
 
 export async function menuState(
