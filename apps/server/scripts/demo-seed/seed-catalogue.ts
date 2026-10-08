@@ -129,7 +129,10 @@ export async function seedCatalogues(
       });
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
-      const category = await createCategory(tx, { name: cat.categoryName ?? cat.name.en });
+      const category = await createCategory(tx, {
+        name: cat.categoryName ?? cat.name.en,
+        color: cat.color,
+      });
       await setRoutingCell(
         tx,
         { locationId: brandLocationId(locationId) },

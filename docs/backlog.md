@@ -2375,6 +2375,12 @@ its quantity strings directly (`apps/dashboard/src/widgets/top-sellers-table.ts`
 `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These are
 readings, not browser reproductions; reproduce them before changing their displays.
 
+**A326 DONE: every top-level demo category has its own stored colour.**
+The demo data supplies distinct lowercase `#rrggbb` colours through `createCategory`, including
+all four drink categories. Every country pack's selected or fallback demo data set is checked.
+Products use their category's colour through the existing inheritance path; the seed does not
+set product colours or change prices, VAT, names or practice sales.
+
 **A321 DONE: the demo's included Drinks menu opens onto four sections.**
 Casa Delgado and Menú del Día include Cocktails, Wine and beer, Soft drinks and Coffee inside
 one Drinks folder. Each category routes to the downstairs bar by default; the upstairs bar
