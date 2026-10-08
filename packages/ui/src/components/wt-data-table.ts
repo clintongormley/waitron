@@ -1,3 +1,4 @@
+import { DragEdgeScroll } from "../drag-edge-scroll.js";
 import { createLabelComparator } from "@waitron/shared";
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
@@ -878,6 +879,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @state() private chooserOpen = false;
   @query(".columns-trigger") private chooserTrigger!: HTMLButtonElement;
   @query(".columns-panel") private chooserPanel!: HTMLElement;
+  readonly #edgeScroll = new DragEdgeScroll();
+  #columnPoint = { x: 0, y: 0 };
   #columnDrag: { key: string; pointerId: number; startY: number; active: boolean } | null = null;
   private readonly seededBranches = new Set<string>();
   #restored = false;
@@ -1222,6 +1225,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     document.addEventListener("pointermove", this.#moveColumnDrag);
     document.addEventListener("pointerup", this.#dropColumnDrag);
     document.addEventListener("pointercancel", this.#cancelColumnDrag);
+    document.addEventListener("keydown", this.#columnDragKey, true);
   }
 
   readonly #moveColumnDrag = (event: PointerEvent): void => {
@@ -1232,26 +1236,36 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (!drag.active) {
       drag.active = true;
       holdPageCursor();
+      const origin = this.chooserPanel.querySelector(`[data-reorder="${CSS.escape(drag.key)}"]`)!;
+      this.#edgeScroll.start(origin, { x: event.clientX, y: event.clientY }, () =>
+        this.#trackColumnDrop(),
+      );
     }
+    this.#columnPoint = { x: event.clientX, y: event.clientY };
+    this.#edgeScroll.update(this.#columnPoint);
+    this.#trackColumnDrop();
+  };
+
+  #trackColumnDrop(): void {
     const target = [...this.chooserPanel.querySelectorAll<HTMLElement>("[data-column-row]")].find(
       (row) => {
         const box = row.getBoundingClientRect();
         return (
           row.querySelector("[data-reorder]") &&
-          event.clientX >= box.left &&
-          event.clientX < box.right &&
-          event.clientY >= box.top &&
-          event.clientY < box.bottom
+          this.#columnPoint.x >= box.left &&
+          this.#columnPoint.x < box.right &&
+          this.#columnPoint.y >= box.top &&
+          this.#columnPoint.y < box.bottom
         );
       },
     );
     this.columnDragPreview = {
-      key: drag.key,
-      x: event.clientX,
-      y: event.clientY,
+      key: this.#columnDrag!.key,
+      x: this.#columnPoint.x,
+      y: this.#columnPoint.y,
       target: target?.dataset.columnRow ?? null,
     };
-  };
+  }
 
   readonly #dropColumnDrag = (event: PointerEvent): void => {
     const drag = this.#columnDrag;
@@ -1284,13 +1298,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (event.pointerId === this.#columnDrag?.pointerId) this.#endColumnDrag();
   };
 
+  readonly #columnDragKey = (event: KeyboardEvent): void => {
+    if (this.#columnDrag) this.#chooserKeydown(event);
+  };
+
   #endColumnDrag(): void {
+    this.#edgeScroll.stop();
     if (this.#columnDrag?.active) releasePageCursor();
     this.#columnDrag = null;
     this.columnDragPreview = null;
     document.removeEventListener("pointermove", this.#moveColumnDrag);
     document.removeEventListener("pointerup", this.#dropColumnDrag);
     document.removeEventListener("pointercancel", this.#cancelColumnDrag);
+    document.removeEventListener("keydown", this.#columnDragKey, true);
   }
 
   #restoreColumnDefaults(): void {

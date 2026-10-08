@@ -1,3 +1,4 @@
+import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { QueryController, codeOf } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -13,7 +14,11 @@ import {
   UrlStateController,
   type DataTableColumn,
 } from "@waitron/ui";
-import { holdPageCursor, releasePageCursor } from "@waitron/ui/src/reorder-table.js";
+import {
+  holdPageCursor,
+  releasePageCursor,
+  pointerElementsAt,
+} from "@waitron/ui/src/reorder-table.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
@@ -1083,41 +1088,74 @@ export class PrepStationsScreen extends LitElement {
     if (table) await table.updateComplete;
     table?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
   }
+  readonly #stationScroll = new DragEdgeScroll();
+  #stationPoint = { x: 0, y: 0 };
+
   #startStationDrag(event: PointerEvent, id: string) {
     if (this.busy || this.#stationDrag || event.button !== 0) return;
     event.preventDefault();
     this.#stationDrag = { id, pointerId: event.pointerId, changed: false };
+    this.#stationPoint = { x: event.clientX, y: event.clientY };
+    this.#stationScroll.start(event.currentTarget as Element, this.#stationPoint, () => {
+      const root = this.#healthTable()?.shadowRoot;
+      const row = pointerElementsAt(this.#stationPoint.x, this.#stationPoint.y).find(
+        (element) => element.matches("tbody tr") && root?.contains(element),
+      );
+      this.#trackStationDrag(row ? [row] : []);
+    });
     holdPageCursor();
     document.addEventListener("pointermove", this.#moveStationDrag);
     document.addEventListener("pointerup", this.#dropStationDrag);
     document.addEventListener("pointercancel", this.#dropStationDrag);
+    document.addEventListener("keydown", this.#stationDragKey, true);
   }
   readonly #moveStationDrag = (event: PointerEvent) => {
     const drag = this.#stationDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
+    this.#stationPoint = { x: event.clientX, y: event.clientY };
+    this.#stationScroll.update(this.#stationPoint);
+    this.#trackStationDrag();
+  };
+  #trackStationDrag(
+    rows: Iterable<Element> = this.#healthTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? [],
+  ): void {
+    const drag = this.#stationDrag;
+    if (!drag) return;
     const order = this.#activeStationOrder();
-    for (const row of this.#healthTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? []) {
+    for (const row of rows) {
       const bounds = row.getBoundingClientRect();
-      if (event.clientY < bounds.top || event.clientY >= bounds.bottom) continue;
+      if (this.#stationPoint.y < bounds.top || this.#stationPoint.y >= bounds.bottom) continue;
       const id = row.querySelector<HTMLElement>("[data-station-id]")?.dataset.stationId;
       if (id && order.includes(id) && this.#moveStation(drag.id, order.indexOf(id)))
         drag.changed = true;
       break;
     }
-  };
+  }
+
   readonly #dropStationDrag = (event: PointerEvent) => {
     const drag = this.#stationDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     this.#endStationDrag();
     if (drag.changed) void this.#saveStationOrder(drag.id);
   };
+  readonly #stationDragKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.#stationDrag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const drag = this.#stationDrag;
+    this.#endStationDrag();
+    if (drag.changed) void this.#saveStationOrder(drag.id);
+  };
+
   #endStationDrag() {
+    this.#stationScroll.stop();
     if (!this.#stationDrag) return;
     this.#stationDrag = undefined;
     releasePageCursor();
     document.removeEventListener("pointermove", this.#moveStationDrag);
     document.removeEventListener("pointerup", this.#dropStationDrag);
     document.removeEventListener("pointercancel", this.#dropStationDrag);
+    document.removeEventListener("keydown", this.#stationDragKey, true);
   }
   #stationMenu(station: PrepStation) {
     return html`${

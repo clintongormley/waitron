@@ -942,8 +942,16 @@ opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is bein
 the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
 member. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
 `menu-structure-table.a11y.test.ts` beside it, and the "the Structure tree" cases in
-`apps/dashboard/src/screens/menus-screen.test.ts`. No case drags with a touch pointer, and a drag
-does not scroll the page near its edge, as in Products.
+`apps/dashboard/src/screens/menus-screen.test.ts`.
+
+Hold a dragged row near the visible top or bottom edge to reach rows outside the current view.
+`DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box across
+shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
+scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
+Escape ends the scrolling loop. Products, shared reorder tables, preparation
+stations and the Customise column list use this helper. Shared reorder tables and preparation
+stations keep the moves already made when a drag is cancelled, as they do on pointer cancellation;
+Products apply their move only on release. Menu Structure still needs the helper wiring (A334b).
 
 ### Remembered, searchable, filterable tables
 

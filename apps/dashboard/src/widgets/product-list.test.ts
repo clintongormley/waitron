@@ -4999,3 +4999,100 @@ it("keeps columns while live folder warnings and add permission update", async (
   expect(add.disabled).toBe(true);
   expect(table.columns).toBe(columns);
 });
+
+async function edgeProduct(up = false, fits = false) {
+  const categories = Array.from({ length: fits ? 1 : 35 }, (_, i) => ({
+    id: `edge-${i}`,
+    name: `Category ${String(i).padStart(2, "0")}`,
+    parentId: null,
+    color: null,
+  }));
+  const sourceFolder = up ? "edge-30" : "edge-0";
+  const { el, root } = await mountTree({
+    categories,
+    products: [product({ id: "edge-source", name: "Source", primaryCategoryId: sourceFolder })],
+    reordering: true,
+  });
+  await openRow(el, `folder:${sourceFolder}`);
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:40px;width:800px;height:350px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const from = root.querySelector<HTMLElement>('tr[data-row-key="edge-source"] .drag-grip')!;
+  if (up) box.scrollTop = from.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
+  const start = from.getBoundingClientRect();
+  const bounds = box.getBoundingClientRect();
+  const y = up ? bounds.top + 8 : bounds.bottom - 8;
+  const send = (type: string, at = y) =>
+    from.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerType: "touch",
+        pointerId: 89,
+        clientX: start.left + 8,
+        clientY: at,
+      }),
+    );
+  const drops: { keys: string[]; folderId: string }[] = [];
+  el.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+  const initial = box.scrollTop;
+  send("pointerdown", start.top + 8);
+  send("pointermove");
+  return { el, root, box, bounds, send, drops, initial };
+}
+
+it.each([false, true])(
+  "edge scroll re-reads the category below a stationary product drag (up: %s)",
+  async (up) => {
+    const { root, box, send, drops, initial } = await edgeProduct(up);
+    try {
+      for (let frame = 0; frame < 40; frame++) await new Promise(requestAnimationFrame);
+      expect(up ? initial - box.scrollTop : box.scrollTop).toBeGreaterThan(350);
+      await expect
+        .poll(
+          () =>
+            Number(
+              root.querySelector('[part~="drop-target"]')?.closest("tr")?.dataset.rowKey?.slice(12),
+            ),
+          { timeout: 2000 },
+        )
+        [up ? "toBeLessThan" : "toBeGreaterThan"](up ? 27 : 3);
+      const target = root.querySelector('[part~="drop-target"]')?.closest("tr")?.dataset.rowKey;
+      send("pointerup");
+      expect(drops).toEqual([{ keys: ["edge-source"], folderId: target!.slice(7) }]);
+    } finally {
+      send("pointercancel");
+      document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 89 }));
+      await new Promise(requestAnimationFrame);
+    }
+  },
+  10_000,
+);
+
+it.each(["leave", "cancel", "Escape", "disconnect", "fits"])(
+  "edge scroll product drag stops on %s",
+  async (end) => {
+    const { el, box, bounds, send, drops } = await edgeProduct(false, end === "fits");
+    try {
+      if (end === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
+      else await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(100);
+      if (end === "leave") send("pointermove", bounds.top + bounds.height / 2);
+      else if (end === "cancel") send("pointercancel");
+      else if (end === "Escape")
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      else if (end === "disconnect") el.remove();
+      await el.updateComplete;
+      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+      const ended = box.scrollTop;
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      expect(box.scrollTop).toBe(ended);
+      expect(drops).toEqual([]);
+    } finally {
+      send("pointercancel");
+      document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 89 }));
+      await new Promise(requestAnimationFrame);
+    }
+  },
+);

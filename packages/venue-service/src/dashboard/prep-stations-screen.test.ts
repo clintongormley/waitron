@@ -6615,3 +6615,166 @@ describe("Routing grid", () => {
     }
   });
 });
+
+it("edge scroll carries a held station past the visible summary and persists on release", async () => {
+  const next = {
+    ...view,
+    stations: Array.from({ length: 35 }, (_, i) => ({
+      ...view.stations[0]!,
+      id: `edge-${i}`,
+      name: `Station ${i}`,
+      displayOrder: i,
+      isDefault: i === 0,
+    })),
+  };
+  const order = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountToday(next, { reorderStations: order });
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const handle = healthSummary(el)!.querySelector<HTMLElement>('[data-test="drag-edge-0"]')!;
+  box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
+  const start = handle.getBoundingClientRect();
+  const bounds = box.getBoundingClientRect();
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 91,
+      clientX: start.left + 10,
+      clientY: start.top + 10,
+      bubbles: true,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      pointerId: 91,
+      clientX: start.left + 10,
+      clientY: bounds.bottom - 8,
+    }),
+  );
+  const initial = box.scrollTop;
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(initial + 150);
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
+    await settle(el);
+    expect(order).toHaveBeenCalledTimes(1);
+    expect((order.mock.calls[0]![0] as string[]).indexOf("edge-0")).toBeGreaterThan(3);
+  } finally {
+    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 91 }));
+  }
+});
+
+it("edge scroll Escape stops a held station without another reorder on release", async () => {
+  const next = {
+    ...view,
+    stations: Array.from({ length: 35 }, (_, i) => ({
+      ...view.stations[0]!,
+      id: `escape-${i}`,
+      name: `Station ${i}`,
+      displayOrder: i,
+      isDefault: i === 0,
+    })),
+  };
+  const { el } = await mountToday(next);
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const handle = healthSummary(el)!.querySelector<HTMLElement>('[data-test="drag-escape-0"]')!;
+  box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
+  const start = handle.getBoundingClientRect();
+  const bounds = box.getBoundingClientRect();
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 92,
+      clientX: start.left + 10,
+      clientY: start.top + 10,
+      bubbles: true,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      pointerId: 92,
+      clientX: start.left + 10,
+      clientY: bounds.bottom - 8,
+    }),
+  );
+  const initial = box.scrollTop;
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(initial + 100);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await settle(el);
+    await new Promise(requestAnimationFrame);
+    const ended = box.scrollTop;
+    for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+    expect(box.scrollTop).toBe(ended);
+    expect(document.body.style.cursor).not.toBe("grabbing");
+  } finally {
+    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 92 }));
+  }
+});
+
+it.each(["up", "leave", "cancel", "disconnect", "fits"])(
+  "edge scroll station drag handles %s",
+  async (action) => {
+    const next = {
+      ...view,
+      stations: Array.from({ length: action === "fits" ? 1 : 35 }, (_, i) => ({
+        ...view.stations[0]!,
+        id: `lifecycle-${i}`,
+        name: `Station ${i}`,
+        displayOrder: i,
+        isDefault: i === 0,
+      })),
+    };
+    const order = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountToday(next, { reorderStations: order });
+    const box = document.createElement("div");
+    box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:400px;overflow:auto";
+    el.parentElement!.append(box);
+    box.append(el);
+    const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
+    const handle = healthSummary(el)!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
+    if (action === "up")
+      box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
+    const start = handle.getBoundingClientRect();
+    const bounds = box.getBoundingClientRect();
+    const initial = box.scrollTop;
+    handle.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerId: 93,
+        clientX: start.left + 10,
+        clientY: start.top + 10,
+        bubbles: true,
+      }),
+    );
+    const send = (type: string, y = action === "up" ? bounds.top + 8 : bounds.bottom - 8) =>
+      document.dispatchEvent(
+        new PointerEvent(type, { pointerId: 93, clientX: start.left + 10, clientY: y }),
+      );
+    send("pointermove");
+    try {
+      if (action === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
+      else
+        await expect
+          .poll(() => (action === "up" ? initial - box.scrollTop : box.scrollTop - initial), {
+            timeout: 3000,
+          })
+          .toBeGreaterThan(250);
+      if (action === "up") {
+        send("pointerup");
+        await settle(el);
+        expect((order.mock.calls[0]![0] as string[]).indexOf(key)).toBeLessThan(28);
+      } else if (action === "leave") send("pointermove", bounds.top + bounds.height / 2);
+      else if (action === "cancel") send("pointercancel");
+      else if (action === "disconnect") el.remove();
+      await settle(el);
+      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+      const ended = box.scrollTop;
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      expect(box.scrollTop).toBe(ended);
+    } finally {
+      send("pointercancel");
+    }
+  },
+);

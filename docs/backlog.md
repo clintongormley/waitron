@@ -1520,6 +1520,23 @@ quantities. Cause and real-venue reproduction remain unverified. Inspect the rea
 attributing them to W69 or changing quantity/money handling. Service-status labels, sidebar
 and warning hover contrast investigations remain separate below.
 
+**Held reorder drags scroll at the list edge (A334, 2026-10-08) — BUILT.**
+Products, shared reorder tables, preparation stations and the column chooser use
+one `DragEdgeScroll` helper. A held pointer scrolls the nearest visible scrolling box and refreshes
+the drop target; leaving the edge or ending the gesture stops its frame loop. Columns reorder
+vertically in Customise; the helper also covers horizontal scrolling. Floor and grid placement
+editors remain outside this change.
+One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
+bottom; a later instrumented eight-case matrix reached the bottom in every case. The earlier
+cause is unverified. If it recurs, capture the current scroll/limit, pointer position, drag state
+and visible box before attributing it to the scroll helper.
+
+**A334b: wire the menu structure tree, after lane D's Preview bundle lands — OPEN.**
+Call the shared helper from Menu Structure's pointer drag and refresh its drop target on each
+scroll. Add the up/down, release, Escape, leave-band and fitting-list Chromium cases there.
+The tree owns its drag lifecycle, so this needs a change to `menu-structure-table.ts`; that file
+is reserved by the watcher for Lane D's Preview bundle.
+
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 5 (the till) in #1414; batch 6 audited with no
 stored-setting editors; batch 7 unreserved forms audited; batches 2 and 4b OPEN.** The owner:
@@ -2699,6 +2716,8 @@ real touch screen; a drag does not scroll the page near its edge (nor does Produ
 390 px the Type column scrolls partly under the pinned Actions column, which is the table's own
 sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
 against the other states.
+(2026-10-08, A334: Products now scrolls at a held drag's edge, with native touch checked at
+390 px in both themes and languages. Menu Structure still needs A334b after the Preview bundle.)
 
 **A menu no longer switches a product or size off on its own — DONE (W90, #1216, 2026-10-05;
 owner 2026-10-04).**
