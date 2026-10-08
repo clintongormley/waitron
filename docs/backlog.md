@@ -3951,6 +3951,60 @@ The original walkthrough is retained under _Detail → Setup wizard_.
     of ours covering the page — not told apart. If it recurs, attach over USB before restarting
     Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
 
+- **A419 — Valencian offered as a content language in Spain's pack (owner, 2026-10-08; open; no
+  lane yet).** The Content languages screen's "Add language" list shows Basque and Galician under
+  "Official languages" in a Catalan venue; the owner asks for Valencian there too. This reverses
+  the 2026-10-06 decision _"'Valenciano' is Catalan (`ca`) for now"_ (entry "Content languages per
+  region", A2), so the first step is the owner's choice of what Valencian IS in the data: its own
+  language code (BCP 47's variant tag gives `ca-ES-valencia`; not checked against what the
+  language list and the screens accept) or a second name for Catalan. That choice decides whether
+  the Valencian Community's required language and default (`VALENCIAN_COMMUNITY`, `ca-ES` for
+  both today, beside `officialLocales` in `packages/country-es/src/spain.ts`) move to it, and what a
+  venue already holding Catalan text sees. The receipt and whole-app translations into Valencian
+  stay with the parked C125 entry (A8).
+
+- **A420 — the Content languages screen becomes a table, with translations filled in a dialog
+  (owner, 2026-10-08; open; no lane yet).** `apps/dashboard/src/screens/content-languages-screen.ts`.
+  1. **One table, one row per content language**: the language, how complete its translations are,
+     and a row menu (`key: "actions"`, `pinned: "end"`, CLAUDE.md §3). The menu holds **Make
+     default** (was "Set as default"), **Delete** (was "Remove") and **Edit translations**. The
+     separate "Missing translations" section below the list goes; whether its Kind and Why filters
+     move into the dialog is part of the design. This retires C111's left-open point about
+     "Hacer predeterminado" and "Quitar" stacking on a narrow phone (A7).
+  2. **Edit translations opens a dialog where the missing names are typed in place**, rather than
+     following a link to each product's, menu's or list's own screen (`gapHref` today). The gap
+     report covers products, variants, option lists and their labels, extras lists, menus,
+     sections, included menus and units (`TranslationGapKind`,
+     `packages/catalogue/src/content-translation-report-types.ts`); each is saved today by its own
+     screen with its own checks. Not yet looked into: whether one write path can take all of them,
+     or the dialog needs one per kind. Spec first — this is the large half of the entry. The
+     dialog holds staged input, so it takes a draft scope and a `*.unsaved.test.ts` (CLAUDE.md §3).
+
+- **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
+  2026-10-08; open; no lane yet).** `apps/dashboard/src/screens/payments-screen.ts`.
+  1. **Providers and Readers become two tabs**, laid out like Print agents and Printers. The screen
+     opens on Readers when the venue has at least one reader, and on Providers when it has none
+     (read as "added to Waitron", online or not — confirm with the owner if that matters).
+  2. **"Default for devices" becomes "In use by", listing device names.** The column today counts
+     only devices that picked the reader themselves (`device_card_readers`,
+     `apps/server/src/payments-api.ts`); a device left on "Use default" that gets the reader from
+     its profile (`device_profile_card_readers`) is not counted, and the header reads as if it were.
+     List every device that would take a card on this reader, both ways; a long list is shortened
+     ("Bar till, Terrace till +3").
+  3. **Disconnect asks the way other screens do, and checks first.** It shows "Tap again to
+     disconnect" (`payments.disconnect_confirm`), unlike the other screens' confirm steps (the
+     Devices screen's button, for one, turns into "Disable this device?"). The refusal "Disable
+     this provider's card readers before disconnecting it" (`payment.provider_in_use`) comes only
+     after confirming, at the top of the page, moving the page down. Check for active readers when
+     Disconnect is pressed, skip the confirm when it would be refused, and show the refusal as a
+     floating message beside the button, so nothing moves.
+  4. **One Disable instead of Disable plus "Unpair from SumUp".** Unpairing already switches the
+     reader off and can never be undone here (the unpair route sets `active: false`, and an
+     unpaired reader loses Enable, `canEnable`). Disable opens a confirm with an "Also unpair from
+     {provider}" tick box and its can't-be-undone warning, shown only where the provider can unpair
+     (`canUnpair`). A reader already disabled but still paired keeps an "Unpair from {provider}"
+     item, or it could never be unpaired.
+
 - **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
   `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
   not `wt-data-table`, so `pinned` does not reach them; `product-editor.ts` also contains both a
