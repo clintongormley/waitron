@@ -182,7 +182,7 @@ from the approved spec**; the rest fill gaps it leaves.
    only whether a Pass board draws Fire (when fire control is `expo`), Ready and Away. Why not a
    server-checked action: those routes are already checked — fire against `take-orders`, ready
    against `prepare-orders`, away against `hand-over-orders`
-   (`apps/server/src/till-api.profile-actions.test.ts:62-64`, and the group rows below them) — and
+   (`apps/server/src/till-api.profile-actions.test.ts:61-63` for courses, `:77-79` for groups) — and
    the same routes serve other screens: the order screen fires a group (`apps/till/src/till-app.ts:5754`),
    the station screen fires a course and a group (`till-station-screen.ts:433`, `:447`), and the
    station queue offers a group's Fire (`widgets/station-queue.ts:656`). A server check on those
@@ -295,8 +295,8 @@ from the approved spec**; the rest fill gaps it leaves.
 ## Where the code differs from what the spec assumes
 
 - §9.4 "Firing, Ready and Away are a profile action": the three are already gated by profile
-  actions — `take-orders`, `prepare-orders`, `hand-over-orders` (`till-api.profile-actions.test.ts:62-64`)
-  — on routes the order screen, the station screen and the station queue also call
+  actions — `take-orders`, `prepare-orders`, `hand-over-orders` (`till-api.profile-actions.test.ts:61-63`,
+  `:77-79`) — on routes the order screen, the station screen and the station queue also call
   (`till-app.ts:5754`, `till-station-screen.ts:433`, `:447`, `widgets/station-queue.ts:656`). A new
   server-checked action on those routes would change those screens too, so the plan makes "Run the
   pass" a screen setting (decision 3).
@@ -337,9 +337,12 @@ from the approved spec**; the rest fill gaps it leaves.
   child and an `ON DELETE no action` child each made it fail with `FOREIGN KEY constraint failed`.
   At `1f95b0c44`, `grep 'REFERENCES \`devices\`' packages/*/drizzle/*.sql` finds `restrict` children
   including `sessions`, `sales`, `payments`, `registros_facturacion`, `working_orders`,
-  `time_entries`, `incidents`, `bill_payments` and `device_card_readers`, `no action` children
-  including `drawer_opens`, `device_made_here_stations` and `device_zone_defaults`, and `cascade`
-  children `device_approved_profiles`, `printer_holders` and `card_reader_holders`. So on any box
+  `time_entries`, `incidents`, `bill_payments` and `device_card_readers`; the `no action` children
+  `drawer_opens`, `device_made_here_stations` and `watcher_item_marks` (`done_by_device_id`); and
+  the `cascade` children `device_approved_profiles`, `printer_holders` and `card_reader_holders`.
+  (The grep also prints `device_zone_defaults`, which
+  `packages/venue-service/drizzle/0025_retire_device_zone_defaults.sql` drops; the other tables'
+  later `DROP TABLE`s are rebuilds that rename `__new_*` back.) So on any box
   that has had a sign-in or a sale the migration fails and the box does not start until it is
   reset. Task A10's commit message lists every child with its `ON DELETE` and says this; the pull
   request's first line says the reset is required (see "Venue reset" above).
@@ -348,7 +351,7 @@ from the approved spec**; the rest fill gaps it leaves.
   every file that throws one imports its registry. A code decision 11 retires leaves every registry
   and every translation list in the change that stops throwing it (`grep -rn '"<code>"' apps packages`;
   among them `apps/dashboard/src/i18n/codes.ts`, `apps/till/src/i18n/codes.ts`,
-  `devices-screen.ts:108-125`, `profile-dialog.ts:19`).
+  `devices-screen.ts:108-128`, `profile-dialog.ts:19`).
 - venue-service functions take `cfg: VenueScope`. Multi-table writes take one `tx: Transaction`;
   queries on one transaction are awaited in turn.
 - New UI reads `--wt-*` tokens only; a screen does not draw its own `<select>`, `<textarea>` or text
@@ -361,6 +364,11 @@ from the approved spec**; the rest fill gaps it leaves.
   #1422's reconnect case (take the form off the page, put it back, it still asks before
   discarding). The Pair dialog keeps `{ savableAtOpen: true }` (`devices-screen.ts:1961`). Do it
   test-first inside the task; list it under the pull request's changed checks.
+- A task that removes or renames a field, function, route client method or exported type also
+  removes it from every caller and every test stub that names it in the same commit; the package's
+  typecheck lists them, and `grep -rln "<name>" apps packages` confirms. The till's and dashboard's
+  suites stub the API client, so a server route can change before the screen that calls it
+  without a red suite; the screen's own task then moves it.
 - Strings in English and Spanish. Coverage stays at 98/98/98/95 in every package touched.
 - Comments only for an invariant or a non-obvious why; no history.
 - LOOK at every changed screen in EN and ES, both themes, 1280 and 390 wide.
@@ -374,11 +382,12 @@ Tests pinning these may change, under the rule at the top:
 - A profile's flat station and watcher lists (`device_profile_stations`, `device_profile_watchers`;
   `readProfileKitchenLists`, `setProfileKitchenLists`, `assertProfileBinding`) and the
   `stationIds`/`watcherIds` fields of `readProfileServiceAccess`.
-- A device keeping a watcher in use, and a profile's watcher list being cleared when a watcher is
-  deleted (`apps/server/src/watchers.test.ts:45-62`, `:392-414`).
+- A device or a Done mark keeping a watcher in use, and a profile's watcher list being cleared
+  when a watcher is deleted (`apps/server/src/watchers.test.ts`: `bindDevice :46-62` and its callers
+  `:245`, `:417`, `:466`, `:476`, `:495`, `:531`; `:392-412`; `:443`).
 - Done marks kept per watcher (`watcher_item_marks`, `markWatcherItems`;
-  `packages/db/src/schema/watchers.test.ts:20`, `:150-191`), and a person marking Done for a watcher
-  at a till.
+  `packages/db/src/schema/watchers.test.ts:20`, its mark cases `:150-193` and their helper
+  `seedTicketAndDevice :78-148`), and a person marking Done for a watcher at a till.
 - The till Pass screen's watcher choice and the `till-watcher` address part
   (`apps/till/src/navigation.ts:11`); a pass board's levers depending on the watcher's `runs_pass`.
 - The till Pass screen's levers shown to every profile with `show-expo`; they now need
@@ -471,7 +480,10 @@ capabilities.
 - Create: `packages/venue-service/src/schema/monitors.ts`; generated
   `packages/venue-service/drizzle/00NN_*.sql`, snapshot, journal entry
 - Modify: `schema/index.ts`, `classification.ts` and its test, `configuration-transfer.ts`
-  (the profile tables, decision 15), `migrations.test.ts` (`TABLES`), `scripts/schema-constraints.test.ts`
+  (the profile tables, decision 15), `migrations.test.ts` (`TABLES`), `scripts/schema-constraints.test.ts`,
+  `apps/server/src/testing/clear-provision-fixture.ts` (the six tables join its list beside
+  `device_profile_stations` `:23`, before `kitchen_stations` and `floor_zones`, whose keys from
+  `device_monitor_stations` and `device_monitor_zones` have no delete rule)
 
 **Interfaces — produces** (built from `@waitron/db`'s column vocabulary, as `schema/service.ts:1-24`
 imports it):
@@ -624,9 +636,13 @@ refuses either shape.
 **Files:**
 - Modify: `apps/server/src/device.ts` (`resolveDeviceBinding :337` → `resolveDeviceMonitor`;
   `updateDeviceSettings :84`, `insertDevice :59`, `switchActiveProfile :288`), `join-requests.ts`
-  (`acceptDeviceJoinRequest :487`, `returningDevicesOf :257`), `join-api.ts` (`:330-366`),
-  `device-api.ts` (`PATCH /management-api/devices/:id :568`), `errors.ts`
-  (`device.station_required` goes), `testing/enrol.ts`
+  (`acceptDeviceJoinRequest :487`, `returningDevicesOf :257`, which gains `monitor`), `join-api.ts`
+  (`:330-366`; its status map `:58-68` and the comments naming `resolveDeviceBinding` `:49-52`,
+  `:95-98`), `device-api.ts` (`PATCH /management-api/devices/:id :568`; status map `:128-144`),
+  `errors.ts` (`device.station_required` goes), `testing/enrol.ts`; the dashboard's copies of
+  `device.station_required`, renamed to `device_monitor.required` in the same change
+  (`apps/dashboard/src/screens/devices-screen.ts:110`, `:895`, `apps/dashboard/src/i18n/codes.ts:560`,
+  and `devices-screen.test.ts:1457`, `:2157`, `:2205`, `:3939`)
 - Test: `device.test.ts`, `join-requests.test.ts`, `join-api.test.ts`, `join-api.db.test.ts`,
   `join-e2e.test.ts`, `device-api.test.ts` (the PATCH cases)
 
@@ -639,17 +655,22 @@ export async function resolveDeviceMonitor(
   input: { profileId: string; monitor?: DeviceMonitor | null; kept?: DeviceMonitor | null },
 ): Promise<{ monitor: DeviceMonitor | null; stationId: string | null; formFactor: FormFactor }>;
 // stationId: the one station of a prep monitor with exactly one explicit station, else null —
-// what devices.station_id keeps holding until A8, for the old display route.
+// what devices.station_id keeps holding until A8 stops writing it, for the readers A7 and A8 move
+// (/api/device/station until A7; device-session's DeviceBinding and the switch until A8).
 ```
 
 The join-accept and PATCH bodies take `monitor?: DeviceMonitor | null` (absent on PATCH keeps it)
 in place of `stationId`/`watcherId`. `acceptDeviceJoinRequest`'s input gains `monitor` and keeps
 `stationId` and `watcherId` until A8, used only by `enrolDeviceForTest`: a `stationId` is read as
-a one-station prep monitor; a `watcherId` is written to `watcher_id` with today's checks and no
-monitor, so the watcher suites keep passing until A8 moves them. Every accept, edit and re-enable
-writes the device row with `station_id` from `resolveDeviceMonitor` and then calls
-`setDeviceMonitor` in the same transaction; a profile switch calls `assertDeviceMonitor` with the
-device's current monitor before it switches. `enrolDeviceForTest(db, cfg, { …, stationId?, monitor?, watcherId? })`
+a one-station prep monitor; a `watcherId` is written to `watcher_id` with today's checks
+(`resolveDeviceBinding`'s watcher half and `assertProfileBinding`) and no monitor. That watcher
+path skips `setDeviceMonitor`, which would refuse a kitchen display with no monitor
+(`device_monitor.required`), and a profile switch of a device that holds a `watcher_id` and no
+monitor skips `assertDeviceMonitor` and runs today's `assertProfileBinding` instead, so the watcher
+suites keep passing until A8 moves them to `monitor` and deletes the path. Every other accept,
+edit and re-enable writes the device row with `station_id` from `resolveDeviceMonitor` and then
+calls `setDeviceMonitor` in the same transaction; every other profile switch calls
+`assertDeviceMonitor` with the device's current monitor before it switches. `enrolDeviceForTest(db, cfg, { …, stationId?, monitor?, watcherId? })`
 adds what it is given to the profile (decision 14: `addProfileMonitor`, and today's
 `listOnProfile` for the old lists) before accepting.
 
@@ -672,8 +693,7 @@ adds what it is given to the profile (decision 14: `addProfileMonitor`, and toda
 **Files:**
 - Modify: `apps/server/src/management-api.ts` (profile POST and PUT `:1435-1536`,
   `saveKitchenLists :525`, `ProfileBody :558-578`; new `GET /management-api/device-profile-monitors`),
-  `device-api.ts` (the list `GET /management-api/devices :470`, `/api/device/me :261`,
-  `/api/dev/devices`)
+  `device-api.ts` (the list `GET /management-api/devices :470`, `/api/device/me :261`)
 - Test: `management-api.device-profiles.test.ts`, `device-api.test.ts`,
   `management-api.test.ts`
 
@@ -684,7 +704,10 @@ monitors, as an absent `stationIds` does today, `management-api.ts:1473`, `:1508
 drops the tables it reads; the dashboard moves off it in A15, and its tests mock the client, so they
 stay green in between. `GET /management-api/devices` rows and
 `/api/device/me` gain `monitor: DeviceMonitor | null`; their `stationId`, `watcherId` and `binding`
-fields stay until A8 for the till and dashboard code that still reads them, and go then.
+fields stay until A8, which stops writing the columns behind them. The till reads `/api/device/me`'s
+until A11, the dashboard reads the list's until A16 and the Prep stations screen until A17
+(`routing-client.ts:70-77`); those suites stay green in between because they mock the API client
+rather than call the server.
 
 - [ ] **Step 1: Failing tests:** `GET /management-api/device-profile-monitors` answers every live
   profile; a profile PUT naming `monitors` replaces them and one without leaves them; a PUT that
@@ -748,18 +771,26 @@ tests mock the client, so they stay green.
   `watcher-done-body.ts`)
 - Modify: `device-api.ts` (`/api/device/watcher :363`, `/done :374` → `/api/device/pass`,
   `/api/device/pass/done`; the list and `/api/device/me` lose `stationId`, `watcherId` and
-  `binding`), `till-api.ts` (delete `/api/watchers`, `/:id/queue`, `/:id/done`, `:1896-1932`, and
+  `binding`; the PATCH stops reading the columns `:594-595`; `/api/dev/devices :681-692` stops
+  selecting `devices.stationId`; the `watcher.*` statuses in the map `:128-144` go),
+  `device-session.ts` (`DeviceBinding :91-101` loses `stationId` and `watcherId`, and
+  `deviceBindingColumns :109-110` and the row mapping `:158-159` stop reading them), `till-api.ts` (delete `/api/watchers`, `/:id/queue`, `/:id/done`, `:1896-1932`, and
   their imports `:74-76`), `working-order.ts` (`:3868-3874` copies `pass_item_marks`), `device.ts`
-  and `join-requests.ts` (stop writing `station_id` and `watcher_id`; drop the `stationId`/`watcherId`
-  inputs), `testing/enrol.ts` (its `watcherId` option goes), `watchers.ts` (`WATCHER_REFERENCES
+  (stop writing `station_id` and `watcher_id`; `switchActiveProfile`'s reads `:298-299`,
+  `:318-325` go) and `join-requests.ts` (stop writing them; drop the `stationId`/`watcherId`
+  inputs; `returningDevicesOf` stops selecting them `:267-268`), `join-api.ts` (the `watcher.*`
+  statuses `:65`, `:67` go), `testing/enrol.ts` (its `watcherId` option goes), `watchers.ts` (`WATCHER_REFERENCES
   :165-168` loses `devices` and `watcherItemMarks`; `WATCHER_SETTINGS :171-176` loses
-  `deviceProfileWatchers`), `till-api.profile-actions.test.ts` (the "watcher done marks" paragraph
+  `deviceProfileWatchers`, and its import `:17` goes, since A10 removes that export), `till-api.profile-actions.test.ts` (the "watcher done marks" paragraph
   at `:97-100` describes `/api/device/pass/done` instead)
 - Test: `pass-monitor.test.ts`, `till-api.watchers.test.ts` (→ `device-api.pass.test.ts`),
-  `working-order.test.ts` (the split case), `in-use-references.test.ts`, `watchers.test.ts`
-  (`bindDevice :45-62` and the profile-list case `:392-414` describe what no longer exists: a
-  device no longer keeps a watcher in use, and no profile lists one; changed checks), every suite
-  that enrolled with `watcherId` (`grep -rln "watcherId" apps/server/src --include='*.test.ts'`)
+  `working-order.test.ts` (the split case), `in-use-references.test.ts`, `device-session.test.ts`,
+  `watchers.test.ts` (with `WATCHER_REFERENCES` empty, nothing keeps a watcher in use, so removing
+  one deletes it unless the request asks to disable it: the helper `bindDevice :46-62`, the cases
+  that call it at `:245`, `:417`, `:466`, `:476`, `:495` and `:531`, the profile-list case
+  `:392-412` and the Done-mark case `:443` change — each that relied on "in use" passes `disable`
+  or checks deletion instead; changed checks), every suite that enrolled with `watcherId`
+  (`grep -rln "watcherId" apps/server/src --include='*.test.ts'`)
 
 **Interfaces:**
 
@@ -778,7 +809,9 @@ read for this device. `markPassItems` keeps `markWatcherItems`' location check (
   Bar dish or a counter sale; marking Done on device A leaves the dish on device B; undoing removes
   only A's mark; a dish split onto another bill keeps A's mark; `/api/device/pass` on a prep device
   answers `device.unauthorized`; the removed routes answer 404; an accepted device's `station_id`
-  and `watcher_id` are null.
+  and `watcher_id` are null; afterwards
+  `grep -rn "devices\.stationId\|devices\.watcherId\|device\.stationId\|device\.watcherId" apps/server/src --include='*.ts' | grep -v test`
+  prints nothing, so A10 can drop the columns.
 - [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/pass-monitor.test.ts src/device-api.pass.test.ts src/working-order.test.ts`.
 - [ ] **Step 3: Implement.** Delete `watcher-board.ts`; nothing else should import it
   (`grep -rn "watcher-board" apps/server/src`). Move the `watcherId` fixtures to `monitor`.
@@ -792,10 +825,10 @@ read for this device. `markPassItems` keeps `markWatcherItems`' location check (
 **Files:**
 - Modify: `apps/server/scripts/dev-setup.ts` (`:255-325`, and the printed device list `:462-463`,
   "Pantalla Pase (watcher display)"), `demo-seed/seed.ts` (`:18`, `:74`), `demo-seed/data-set.ts`
-  (`watcherName :134`), `demo-seed/data-sets/casa-delgado-es.ts` (`:44`),
-  `apps/server/src/testing/clear-provision-fixture.ts` (its table list, `:23`)
+  (`watcherName :134`), `demo-seed/data-sets/casa-delgado-es.ts` (`:44`)
 - Delete: `demo-seed/seed-watchers.ts`, `seed-watchers.test.ts`
-- Test: `demo-seed/seed.test.ts`, `apps/server/scripts/dev-setup.test.ts`,
+- Test: `demo-seed/seed.test.ts`, `demo-seed/data-set.test.ts` (`watcherName :166`),
+  `apps/server/scripts/dev-setup.test.ts`,
   `apps/server/src/configuration-transfer.test.ts` (a profile's monitors round-trip; decision 15)
 
 - [ ] **Step 1: Failing tests:** decision 13's two displays and their monitors; no watcher seeded;
@@ -813,8 +846,9 @@ read for this device. `markPassItems` keeps `markWatcherItems`' location check (
 **Files:**
 - Modify: `packages/db/src/schema/devices.ts` (drop `stationId`, `watcherId` and their
   `v8 ignore` pairs), delete `schema/watcher-item-marks.ts` and its exports, `classification.ts`,
-  `schema/watchers.test.ts` (the import `:20` and the mark cases `:150-191`, which describe the
-  dropped table; changed checks); `packages/venue-service/src/schema/service.ts` (drop
+  `schema/watchers.test.ts` (the import `:20`, the mark cases `:150-193` and their helper
+  `seedTicketAndDevice :78-148`, which writes `devices.stationId` at `:142`; they describe the
+  dropped table and column; changed checks); `packages/venue-service/src/schema/service.ts` (drop
   `deviceProfileStations`, `deviceProfileWatchers`, `:219-261`), `classification.ts`,
   `configuration-transfer.ts` (`:616-617`, `:557-558@79bffeca9`), `migrations.test.ts`,
   `profile-access.ts` (delete the kitchen-list half, `readProfileKitchenLists` to `writeLists`,
@@ -822,7 +856,15 @@ read for this device. `markPassItems` keeps `markWatcherItems`' location check (
   matching cases of its test, `service.ts`, `errors.ts` (`station_in_use`, `watcher_in_use`,
   `watcher.not_allowed`); `packages/module/src/module.ts` (the three old members and the two
   fields); `apps/server/src/management-api.ts` (`GET /management-api/device-profile-kitchen-lists
-  :1435` goes with the tables it reads); `apps/server/src/testing/enrol.ts` (`listOnProfile`'s old half);
+  :1435` goes with the tables it reads); `apps/server/src/testing/enrol.ts` (`listOnProfile`'s old half),
+  `testing/clear-provision-fixture.ts` (`device_profile_stations`, `device_profile_watchers`,
+  `watcher_item_marks` leave its list); `apps/dashboard/src/api/live-queries.ts`
+  (`device_profile_stations` and `device_profile_watchers` leave `listProfileKitchenLists`
+  `:275-281`, so no list names a dropped table before A15 replaces the entry); every remaining
+  fixture that sets `stationId` or `watcherId` on a `devices` insert — the typechecks of db,
+  venue-service and server name them; at `1f95b0c44` among them `receipt-print.test.ts:1437`,
+  `management-api.test.ts:379`, `packages/db/src/schema/devices.test.ts`, `devices.fk.test.ts`,
+  `device-profiles.trigger.test.ts`, `packages/venue-service/src/profile-access.test.ts`;
   `scripts/schema-constraints.test.ts` (decision 16), `scripts/migration-upgrade.test.ts`
   (`RESETS`)
 - Create: core — a `--custom` migration dropping `device_profile_form_factor_locked`; a generated
@@ -859,7 +901,8 @@ that is this slice's required venue reset.
 
 **Files:**
 - Modify: `apps/till/src/api/client.ts` (`DeviceIdentity :1360-1370` gains `monitor`, loses
-  `stationId` and `watcherId`), `till-app.ts` (boot `:2293-2302`: a `kds` device with a prep
+  `stationId` and `watcherId`; `DevDevice :1451-1457` loses `stationId`, as `/api/dev/devices` did
+  in A8), `till-app.ts` (boot `:2293-2302`: a `kds` device with a prep
   monitor reads the prep board, with a pass monitor the pass board, with none shows the sentence
   below), `i18n/strings.ts`
 - Test: `till-app-boot-and-counter.test.ts`, `till-app.test.ts`, `api/client.test.ts`
@@ -880,7 +923,10 @@ responsable que elija uno en Dispositivos." and no queue.
 - Modify: `apps/till/src/api/client.ts` (`DeviceStation :1438` → `DevicePrep`;
   `getDeviceStation :2558` → `getDevicePrep`), `screens/till-station-screen.ts` (device mode:
   `#loadDevice :284`, `#adoptDeviceStation :311`, `#renderDevice :518`; advance and acknowledge
-  keep their device verbs), `widgets/card-grid.ts` (`kds-board :388`)
+  keep their device verbs), `till-app.ts` (the `DeviceStation` import `:175`,
+  `initialDeviceStation :1597`, `getDeviceStation` at boot `:2297`), `widgets/card-grid.ts`
+  (the `DeviceStation` import `:24`, `kds-board :388`); the till test suites whose API stubs name
+  `getDeviceStation` (`grep -rln getDeviceStation apps/till/src`)
 - Test: `till-station-screen.test.ts`, `.a11y.test.ts`, `api/client.test.ts`
 
 **Behaviour:** decision 7 — one section per station, each headed by its name, with its own queue,
@@ -902,8 +948,9 @@ notices and printers-down line, in the order the server sends; one station rende
   `:1034`), `navigation.ts` (`"till-watcher" :11`), `till-app.ts` (`:2102`, `:2141`, `:2426`,
   `:8216`, `:8227`; pass `.runsPass=${this.capabilities.includes("run-the-pass")}` to every
   `till-expo-screen` a till draws), `widgets/card-grid.ts` (`expo` case), `api/client.ts`
-  (`WatcherSummary`, `listWatchers`, `getWatcherQueue`, `markWatcherDone`, `:2692-2707`),
-  `i18n/strings.ts`
+  (`listWatchers`, `getWatcherQueue`, `markWatcherDone`, `:2692-2707`; `WatcherSummary :1558`
+  stays, because `WatcherBoard :1573-1574` and `till-expo-screen.ts:23`, `:26` still use it until
+  A14), `i18n/strings.ts`
 - Test: `till-expo-screen.test.ts`, `.a11y.test.ts`, `till-app.test.ts`,
   `widgets/card-grid.test.ts`
 
@@ -923,12 +970,15 @@ unchanged (Review focus 6).
 ### Task A14: The kitchen display's pass board
 
 **Files:**
-- Modify: `apps/till/src/api/client.ts` (`WatcherBoard`, `getDeviceWatcher`,
-  `markDeviceWatcherDone`, `:2562-2567` → `PassBoard`, `getDevicePass`, `markDevicePassDone`),
+- Modify: `apps/till/src/api/client.ts` (`WatcherSummary :1558`, `WatcherBoard :1573`,
+  `getDeviceWatcher`, `markDeviceWatcherDone`, `:2562-2567` → `PassBoard`, `getDevicePass`,
+  `markDevicePassDone`; the screen's imports `till-expo-screen.ts:23-26`),
   `screens/till-expo-screen.ts` (device mode: `connectedCallback :484-496`, `#reload`'s device
   read, `#isWatcher :774` → whether the board is a device's pass monitor, `#done` and `#undo`
-  `:609-648`), `till-app.ts` (`:2296`, `:8441`, `:8543-8549`), `widgets/card-grid.ts`
-  (`kds-board`), `widgets/profile-dialog.ts` (`:19`, decision 11's codes), `i18n/codes.ts`
+  `:609-648`), `till-app.ts` (the `WatcherBoard` import `:176`, `initialDeviceWatcher :1598`,
+  `:2296`, `:8441`, `:8543-8549`), `widgets/card-grid.ts` (the `WatcherBoard` import `:25`,
+  `kds-board`), the till test suites whose API stubs name `getDeviceWatcher` or
+  `markDeviceWatcherDone`, `widgets/profile-dialog.ts` (`:19`, decision 11's codes), `i18n/codes.ts`
 - Test: `till-expo-screen.test.ts`, `.a11y.test.ts`, `widgets/card-grid.test.ts`,
   `widgets/profile-dialog.test.ts`, `i18n/codes.test.ts`
 
@@ -947,7 +997,7 @@ the device's name.
 ### Task A15: Dashboard — the profile editor's monitors
 
 **Files:**
-- Modify: `apps/dashboard/src/screens/device-profiles-screen.ts` (`KITCHEN_LISTS :162-185`,
+- Modify: `apps/dashboard/src/screens/device-profiles-screen.ts` (`KITCHEN_LISTS :162-186`,
   `FIELDS :237-256`, `FIELD_TARGET :260-277`, `FIELD_BY_PARAM :281-298`, `#shownFields :699-712`,
   `#registerDraft :541-575`, `#onKitchenToggle :1167`, `#kitchenListsToSend :1186-1197`,
   `#duplicate :1398`, `#kitchenChoices :1733`, `#renderKitchenLists :1756`),
@@ -959,8 +1009,10 @@ the device's name.
   `listProfileMonitors` over `device_profiles`, the three profile monitor tables,
   `kitchen_stations`, `floor_zones`), `i18n/strings.ts`, `i18n/codes.ts` (decision 11)
 - Test: `device-profiles-screen.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts`,
-  `.save-state.test.ts`, `devices-screen.test.ts` and `device-pair.unsaved.test.ts` (their mocks of
-  `listProfileKitchenLists`); `scripts/live-subscriptions.test.ts` must pass
+  `.save-state.test.ts`; and every devices-screen suite that mocks `listProfileKitchenLists`:
+  `devices-screen.test.ts` (`:275`, `:1630`, `:3976`, `:4690`), `device-pair.unsaved.test.ts:135`,
+  `device-edit.unsaved.test.ts:101`, `devices-screen.a11y.test.ts:222`, `:656`,
+  `devices-screen.save-state.test.ts:190`; `scripts/live-subscriptions.test.ts` must pass
 
 **Behaviour:** for a kitchen display profile, the editor shows "Prep station monitor" and "Pass
 monitor" switches; under each one switched on, "Every station" or one switch per station; under
@@ -984,7 +1036,7 @@ reconnect case.
 
 **Files:**
 - Modify: `apps/dashboard/src/screens/devices-screen.ts` (the "Shows" binding: `PairField :61`,
-  `FIELD_BY_CODE :108-116` and `FIELD_BY_PARAM :118-125`, `binding`/`bindingIds` `:174-205`,
+  `FIELD_BY_CODE :108-116` and `FIELD_BY_PARAM :118-128`, `binding`/`bindingIds` `:174-205`,
   `#activeBinding :1055-1068`, `#bindingName :1011`, the edit draft `#registerEditDraft :551-579`,
   `#renderPairDialog :1924`), `apps/dashboard/src/api/client.ts` (`DeviceRow :628`,
   `ReturningDetails :776-782`, `acceptDeviceJoinRequest`'s body `:2852-2858`, `updateDevice`'s
