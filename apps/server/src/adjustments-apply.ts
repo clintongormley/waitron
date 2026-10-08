@@ -460,7 +460,7 @@ export async function planAdjustment(
       // Part of a weighed line, carved off, can round to totals whose sum is not the line's: 0.005 kg
       // at €1.00/kg is €0.01, while 0.002 kg and 0.003 kg are €0.00 each.
       // Refused even when exactly representable: the owner's decision of 2026-09-30,
-      // docs/backlog/till.md, Task 11's "Settled (owner, 2026-09-30)" point.
+      // docs/backlog/till.md, Decisions and deliberate limits, "Part of a weighed line stays refused".
       if (partial && weighed) {
         throw new AppError("adjustment.weighed_partial", {
           workingOrderId: orderId,
