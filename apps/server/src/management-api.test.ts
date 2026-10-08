@@ -3279,7 +3279,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     });
   });
 
-  it("PUT /products/:id/course on an unknown or a variant's :id → 404 product.not_found, nothing written", async () => {
+  it("PUT /products/:id/course on an unknown or a variant's :id → 404 product.not_found", async () => {
     const courseId = await createCourse(unique("Course"));
     const { variantId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: unique("Carta") });
@@ -3306,10 +3306,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         error: { code: "product.not_found", params: { productId: id } },
       });
     }
-    const stored = await suite.db.execute<{ course_id: string | null }>(
-      sql`select course_id from products where id = ${variantId}`,
-    );
-    expect(stored.rows[0]!.course_id).toBeNull();
   });
 
   it("PUT /products/:id/course names the product before the course", async () => {

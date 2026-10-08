@@ -348,7 +348,7 @@ const runFolder = createErrorBoundary(
   { ...STATUS, "category.parent_cycle": 409 },
   "catalogue.failed",
 );
-// A product create names its catalogue in the body: an id in the body that names nothing is a 400
+// A product create names its catalogue in the body, so an unknown one is a 400
 // (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong").
 const runCreateProduct = createErrorBoundary(
   { ...STATUS, "catalogue.not_found": 400 },

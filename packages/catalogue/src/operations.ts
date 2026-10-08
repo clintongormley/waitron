@@ -780,10 +780,6 @@ async function readOfferVariants(
   return grouped;
 }
 
-/**
- * Check an untrusted catalogue id before a write that stores it, so an absent catalogue produces
- * `catalogue.not_found` instead of an opaque foreign-key failure.
- */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
     .select({ id: catalogues.id })
