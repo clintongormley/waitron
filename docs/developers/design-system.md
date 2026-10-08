@@ -1583,7 +1583,13 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   action stays enabled;
 - a second action that saves by itself (the product editor's Enable on an inactive product) is not
   the form's primary action and is not gated: pressing it is the change. The setup wizard's step
-  navigation is not a save, and neither is a sign-in.
+  navigation is not a save, and neither is a sign-in;
+- the Products browser's Move and Delete dialog draws its confirm `secondary` while it waits for a
+  destination or for the folder summary, or after the summary failed, and its own variant once it
+  can act; while it is working (`loading`) it keeps its own variant (owner, 2026-10-08, A409).
+  Change unit and the image picker are `secondary` throughout. This is not yet a rule across
+  screens: elsewhere an action that waits for a choice or a load can keep its colour while
+  disabled (the same browser's toolbar Delete is one), and nothing guards it.
 
 These forms follow the rule so far; the others are being brought under it batch by batch
 ([backlog](../backlog.md) A331, [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),

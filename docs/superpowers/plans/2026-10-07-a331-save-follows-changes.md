@@ -1319,6 +1319,8 @@ nothing. The catalogue default VAT class is always a stored `VatClass`
 A ruling the owner may overrule, named in the PR: units' Change unit and the catalogue's Move keep
 today's look (Move `primary` while disabled at open, Change unit `secondary`). Gating either would
 change only its look, through `draftScopeFor` plus `saveActionState`.
+_2026-10-08 (owner, A409): Move now draws `secondary` while it waits for a destination; see
+design-system.md → Forms._
 
 ### Task 2a.1 — catalogue defaults and the recipe editor (`screens/catalogue-settings-panel.ts`, `widgets/recipe-editor.ts`)
 

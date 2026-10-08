@@ -1605,9 +1605,10 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   - the Units screen's Change unit (in the "unit in use" dialog), the Products browser's Move and
     Delete dialog and the image picker are not saves, so they are not gated. Change unit already
     stays disabled until products and a new unit are chosen; Move already stays disabled until a
-    destination is chosen, and keeps its blue look while it is disabled; Delete is pressed with its
+    destination is chosen, and kept its blue look while it was disabled (owner, 2026-10-08: "Fix
+    it" — A409 draws it quiet while it waits, see design-system.md → Forms); Delete is pressed with its
     default choice of what happens to the contents; the image picker acts the moment an image is
-    chosen or removed. Gating Change unit or Move would change only how they look;
+    chosen or removed. Gating Change unit would change only how it looks;
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal with the window's Save quiet until something in the window
     changes (the list hands the refusal to the window, `option-list-form.ts`). A refusal still
