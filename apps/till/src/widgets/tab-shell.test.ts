@@ -1100,6 +1100,91 @@ describe("till-tab-shell above phone width", () => {
     );
   });
 
+  const popoverOpen = (el: TillTabShell) =>
+    menuOf(el)!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
+
+  it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1280, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+          ...full,
+          canSwitchProfile: false,
+        });
+        await settle(el);
+        const menu = menuOf(el)!;
+        const held = inMore(el);
+        // Profile would come third in the leaving order, so with three or more items already in
+        // More its arrival shifts the count's slice by one.
+        expect(held).toContain("schedule");
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        await page.viewport(ROOMY_WIDTH, 844);
+        await settle(el);
+        el.canSwitchProfile = true;
+        await settle(el);
+        expect(menuOf(el)).toBe(menu);
+        expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
+        expect(popoverOpen(el)).toBe(true);
+        expect(inMore(el)).toEqual(
+          leaveOrder.map(([k]) => k).filter((k) => k === "profile" || held.includes(k)),
+        );
+        await userEvent.keyboard("{Escape}");
+        await settle(el);
+        expect(menuOf(el)).toBeNull();
+        expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
+        expectOneRow(el);
+      }),
+    );
+  });
+
+  it("keeps an open More, and everything in it, when the screen widens out of phone width", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(390, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const menu = menuOf(el)!;
+        const everything = leaveOrder.map(([k]) => k);
+        expect(inMore(el)).toEqual(everything);
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        await page.viewport(1280, 844);
+        await settle(el);
+        expect(menuOf(el)).toBe(menu);
+        expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
+        expect(popoverOpen(el)).toBe(true);
+        expect(inMore(el)).toEqual(everything);
+        expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
+        expectOneRow(el);
+        await userEvent.keyboard("{Escape}");
+        await settle(el);
+        const { el: fresh } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(fresh);
+        expect(inMore(fresh).length).toBeLessThan(everything.length);
+        expect(inMore(el)).toEqual(inMore(fresh));
+        expectOneRow(el);
+      }),
+    );
+  });
+
+  it("keeps an open More, gaining what is left, when the screen narrows into phone width", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1024, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const menu = menuOf(el)!;
+        expect(inMore(el).length).toBeLessThan(leaveOrder.length);
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        await page.viewport(390, 844);
+        await settle(el);
+        expect(menuOf(el)).toBe(menu);
+        expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true");
+        expect(popoverOpen(el)).toBe(true);
+        expect(inMore(el)).toEqual(leaveOrder.map(([k]) => k));
+      }),
+    );
+  });
+
   it("keeps fitting after it is taken off the page and put back", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);

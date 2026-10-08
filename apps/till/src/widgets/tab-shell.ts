@@ -255,8 +255,23 @@ export class TillTabShell extends LitElement {
   #observer?: ResizeObserver;
   #observedChooser?: Element;
   #watchedPopup?: Element;
+  #shown: ReadonlySet<BarItem> = new Set();
   readonly #onPopupToggle = () => {
-    if (this.#stepBackOwed && !this.#menuOpen()) void this.#fit();
+    if (this.#menuOpen()) return;
+    // An open More can hold more than `steps` selects; count up to what it held, so the fit steps
+    // back from what is on screen instead of leaving the bar showing items `steps` no longer moves.
+    if (!this.phone) {
+      const present = this.#present();
+      const covering = Math.max(
+        0,
+        ...present.map((item, i) => (this.#shown.has(item) ? i + 2 : 0)),
+      );
+      if (covering > this.steps) {
+        this.steps = covering;
+        this.#stepBackOwed = true;
+      }
+    }
+    if (this.#stepBackOwed) void this.#fit();
   };
 
   #present(): BarItem[] {
@@ -274,9 +289,12 @@ export class TillTabShell extends LitElement {
     return LEAVE_ORDER.filter((item) => has[item]);
   }
 
+  /** While More is open nothing leaves it: what it showed stays, whatever `steps` now selects. */
   #moved(): ReadonlySet<BarItem> {
     const present = this.#present();
-    return new Set(this.phone ? present : present.slice(0, Math.max(0, this.steps - 1)));
+    const fitted = this.phone ? present : present.slice(0, Math.max(0, this.steps - 1));
+    if (!this.#menuOpen()) return new Set(fitted);
+    return new Set(present.filter((item) => fitted.includes(item) || this.#shown.has(item)));
   }
 
   override updated(changed: PropertyValues): void {
@@ -510,6 +528,7 @@ export class TillTabShell extends LitElement {
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
     const moved = this.#moved();
+    this.#shown = moved;
     // Mirrors `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body rendered.
     const activeKey = this.tabs.some((tab) => tab.key === this.activeTabKey)
       ? this.activeTabKey
@@ -523,7 +542,7 @@ export class TillTabShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.phone || this.steps > 0 ? nothing : html`<span class="brand">${BRAND}</span>`}
+                  ${this.steps > 0 || moved.size > 0 ? nothing : html`<span class="brand">${BRAND}</span>`}
                   <nav class="tabs" role="tablist">
                     ${this.tabs.map(
                       (tab) => html`
