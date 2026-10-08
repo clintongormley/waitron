@@ -163,7 +163,8 @@ Much more polished than the login screen (proper top bar, product grid, basket c
       the tender each triggers should read plainly. Resolved by B30: the button reads Cash beside Card.
 - [ ] **Top bar mixes navigation, actions and identity** — Allergens / Floor / Kitchen / Pass / My
       schedule / Marta Ruiz / Log out sit in one undifferentiated row; consider grouping
-      (navigate vs act vs who-am-I).
+      (navigate vs act vs who-am-I). (2026-10-08, A378: at phone width the actions and the name
+      moved into a More menu; wider screens unchanged.)
 - [ ] **Per-kg deli items** (e.g. White tuna belly €54.00/kg) — confirm the add-to-basket weight-entry
       flow is intuitive when tapped (not yet exercised).
 - [ ] **Menu tab labels** — "Casa Delgado" (the venue name?) vs "Menú del Día"; confirm the à-la-carte
