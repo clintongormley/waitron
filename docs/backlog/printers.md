@@ -66,3 +66,19 @@ their full text.
   CHECK propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
   `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
   reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
+
+## Waitron carries two QR encoders; consolidate on `qrcode-generator`
+
+**Waitron carries two QR encoders; consolidate on `qrcode-generator` — Small.** `apps/server` imports
+`qrcode` (in `qr-matrix.ts`, `print-job-preview.ts`, `discovery-api.ts`) while `apps/till` uses
+`qrcode-generator` (`qr.ts`). The server's three call sites use only `.create()` (the module matrix)
+and `.toString({ type: "svg" })` — no PNG — so `qrcode`'s `pngjs` is never exercised and its `yargs`
+(pulled only because `qrcode` ships a CLI bin) is dead weight. `qrcode-generator` is isomorphic,
+**zero-dependency**, and covers both the matrix (`getModuleCount()`/`isDark()`) and the SVG case.
+Switch the three server sites over and drop `qrcode`; hoist the receipt's hand-ported
+money/date/label formatters into `packages/shared` too (the paper receipt already drifts from the
+screen by an NBSP normalisation). **The gate before landing:** `print-job-preview.ts` reconstructs a
+QR from stored raw `latin1` bytes through `qrcode`'s byte-mode segment API; `qrcode-generator` has a
+`'Byte'` mode, but this path must produce a byte-identical, still-scannable QR — these are fiscal
+receipt QRs AEAT's own app must verify — so it needs a render→decode check and a real scan, not
+just a green typecheck.

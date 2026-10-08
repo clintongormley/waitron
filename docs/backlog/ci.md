@@ -209,8 +209,86 @@ their full text.
   default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's first test can
   use that session; they pass today because only the first does.
 
+## `--no-verify`: the docs say "Claude never", the hook says "agents never"
+
+**`--no-verify`: the docs say "Claude never", the hook says "agents never" — OWNER'S CALL (found
+2026-10-03 by #1139's review).** `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude
+never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agents never". Codex
+sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
+decides whether the rule covers every agent, then the two docs follow.
+
+## The shard layout was measured against an engine that is gone
+
+**The shard layout was measured against an engine that is gone — OPEN (found 2026-09-23, task F1's
+review wave).** The shard counts and their sizing arguments were all measured against PGlite and
+none has been re-measured — `mutation.yml`'s ten-shard matrix for `packages/db` most of all, whose
+comment says so explicitly. Read the next weekly run's shard durations before treating any of them
+as current. No local command produces the numbers, so re-cutting the matrix has to wait for a real
+weekly run.
+
+## The PGlite throughput bench no longer matches the shape it says it matches
+
+**The PGlite throughput bench no longer matches the shape it says it matches — OPEN (found
+2026-09-21, task P6).** `bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE
+match" of the write path, and its `create table` statements are three landed storage decisions
+behind: `numeric` money and quantity columns where the real columns are now whole-number counts
+(#475 and task P6), and a `tenant_id` column the real schema no longer has. Either bring the three
+decisions across and re-baseline, or change the sentence to say what it is.
+
+## The gate never runs on a pull request, so thinning a `packages/db` test merges green
+
+**Left behind by gating `packages/db`'s mutation score (#472, 2026-09-20).** **The gate never runs
+on a pull request, so thinning a `packages/db` test merges green.** `.github/workflows/mutation.yml`
+fires on a weekly schedule and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it,
+so a change that removes an assertion the score depended on reddens the following Monday. The ten db
+shards took about 50 minutes of wall clock, which is why nobody has put them on the merge path.
+Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
+per-pull-request signal.
+
+## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
+
+**Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).**
+**`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests.** It is test-only plumbing
+the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
+`src/tokens/token-test-helpers.ts`, which `packages/ui/stryker.config.json` already excludes from
+`mutate`. Adding a fourth exclusion is the consistent move and also shrinks the denominator the
+`break: 90` is measured against. Owner's call.
+
+## A pull request that changes only front-end code gets no SPA bundle built anywhere in CI
+
+**Left behind by the vite 8 upgrade (#450, 2026-09-19).**
+
+- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI.**
+  `bundle-smoke` builds esbuild bundles only. The only thing that runs `vite build` is
+  `deploy/Dockerfile`, which the `image` job runs — on a pull request only when an image input has
+  changed (`.github/workflows/ci.yml`, the `image` job's `if`), and on every main push; it never
+  OPENS one, so a bundle that builds and renders nothing passes there too. This is the work item
+  `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
+
 ## Decisions and deliberate limits
 
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
+
+**The development stack:**
+
+- **A stale dev database is only reported AFTER the boot dies, never before it** (#343). A pre-flight
+  check was offered and deliberately not built (owner chose the message and the documentation
+  instead, 2026-09-13): compare each set's applied rows against its journal entry count
+  (`packages/migrations/migrations.manifest.json` gives the set-to-table mapping) and warn before
+  launching. Worth doing only if the after-the-fact line turns out not to be enough.
+- **The hint cannot fire for an ahead-of-image database** (`provisioning.database_ahead`), by
+  design: its operator text never suggests wiping — the remedy there is restore or reinstall (owner
+  decision 2026-09-10).
+
+**House rules and their guards:**
+
+- **`CLAUDE.md` stays contained through regular housekeeping — it is not gated** (owner, 2026-09-14
+  and 2026-10-07). #1337 (2026-10-07) moved the receipts into the `docs/developers/` topic files and
+  took it from about 102 KB to about 71 KB. Add rules freely; prune when touching an entry, and sweep
+  when the file has grown well past about 71 KB, per `CLAUDE.md` §7. The campaign watcher checks it on
+  its 3-hourly evaluation. A housekeeping check, never a blocker.
+- **The pointers guard is deliberately narrower than "every pointer"** (#337): it does not check a
+  root-level filename such as `eslint.config.js`, nor a bare directory. `CLAUDE.md` §7 says so;
+  widen the guard if that gap ever costs something.

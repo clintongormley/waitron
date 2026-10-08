@@ -30,3 +30,12 @@ their full text.
   `management-api.accounts-and-receipt-config.test.ts`, "(Task 4)" in
   `management-api.device-profiles.test.ts`, and "KDS-1", "KDS-2", "FP-2" and "KDS-3" in
   `management-api.test.ts`.
+
+## A supplier credit note cannot be entered through the dashboard
+
+**A supplier credit note cannot be entered through the dashboard — OPEN, unqueued.** A negative
+gross total on the purchase-invoice routes is a supplier credit note and is accepted and stored by
+design (owner ruling 2026-09-21; task N1). The dashboard form's `inRange(this.total, 0, Infinity)`
+(`apps/dashboard/src/widgets/purchase-form.ts`) refuses one, so the form refuses the very document
+the ruling calls legitimate. Nobody has decided whether the form should be relaxed or the credit
+note should become its own document type.

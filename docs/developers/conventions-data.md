@@ -1209,7 +1209,7 @@ timing — 2026-09-22: two reads and two `create table`s issued with `Promise.al
 
 **No test or guard enforces this rule anywhere.** The `fireLines` single-call test and the
 preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
-The missing guard is a Track C item in `docs/backlog.md`.
+The missing guard is an item in `docs/backlog.md`, under "Modules, data and code health".
 
 ## A read taken while ANOTHER caller's write transaction is open sees committed rows only
 
@@ -1244,7 +1244,7 @@ nothing could route it back. Measured on the branch that built this: 54 of `pack
 files failed that way on 2026-09-23 — a reading of that day's tree, not a standing count — and the
 case is now pinned as `keeps to the writer for a transaction opened as an ordinary statement`.
 
-**Three exposures left open deliberately**, all recorded in `docs/backlog.md`. A transaction opened
+**Three exposures left open deliberately**, all recorded in `docs/backlog/architecture.md`. A transaction opened
 by running `begin` is not one the store is told about, so a read concurrent with it still lands on
 the writer and sees its rows. A write issued from outside a running body while one is open is
 refused by the reader and re-run on the writer, where it joins that transaction if it is still open

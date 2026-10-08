@@ -15,3 +15,13 @@ their full text.
   id per reversal) is still deferred: #570's review showed two identical `reverseViaStripe` calls
   get different idempotency keys, so a retried reversal sends a second real refund; the comment
   at `reverse.ts` says so.
+
+## The Stripe webhook endpoint still has to be repointed by hand, at Stripe
+
+**Names left behind by the tenant-column removal (#378, 2026-09-16):**
+
+- **The Stripe webhook endpoint still has to be repointed by hand, at Stripe.** #378 shortened the
+  address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`; the endpoint registered in the
+  Stripe dashboard is outside this repository and will keep sending to the old one until somebody
+  changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
+  taken through a Stripe webhook.

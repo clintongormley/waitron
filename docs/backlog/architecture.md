@@ -215,3 +215,193 @@ their full text.
 every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `media`,
   `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the
   `DrizzleQueryError` entry under _Afterwards_).
+
+## Comments and test titles still cite sections of specs that were deleted
+
+**Comments and test titles still cite sections of specs that were deleted — OPEN (2026-09-26).**
+The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
+before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
+was fixed only for the last 28 documents. Find the rest with
+`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench`. Some hits point
+into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
+so check which document each one names before cutting it. Two were left on purpose:
+`packages/db/drizzle/0004_variant_one_level.sql` ("spec §1.2, §15.7"), because a shipped migration
+is not edited without a venue reset (`CLAUDE.md` §3), and
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
+deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
+each to the pull request that built the work, or drop the tag. A test title is not a comment, so
+changing one does not pass `scripts/comments-only.mjs` as a comments-only change.
+
+## Three shapes the read connection does not cover
+
+**Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3, PR #493).** A
+transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
+Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
+A write issued from outside a running body while one is open is re-run on the writer, where it joins
+that transaction if it is still open and commits or rolls back with it, which is what one connection
+did; in the moment after the queue's `commit` and before the body has ended, none is open and the
+write commits by itself. Nothing refuses it. And `readOnly: true` refuses a write to the database
+FILE, not every write: measured 2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a
+connection, so a temporary table written from outside a running body would land on the reader and
+stay there — and the same holds for an `ATTACH` of a file that exists (one of a missing file is
+refused, errcode 14 — measured by #568) and for any connection-scoped pragma, because all three
+change a CONNECTION rather than the file, so nothing refuses them and nothing routes them back. A
+temporary table and an `ATTACH` have no site in this tree (searched 2026-09-23). The two
+connection-scoped pragmas that run on a request path, both `pragma defer_foreign_keys = on`, are
+each issued INSIDE a running transaction body, which is exactly where the routing sends a statement
+to the writer: `apps/server/src/configuration-transfer.ts`'s import issues it inside the
+provisioning transaction's body, and `writeAndRemoveDecoyAction`
+(`packages/identity/src/account-action.ts`) inside `issueRecovery`'s `withTransaction` body
+(`apps/server/src/management-api.ts`); the others are test setup issued outside any body, where the
+reader would serve them if a body happened to be running, and none of those suites runs one.
+**Next action:** none needed while that holds; a temporary table, an attachment or a connection
+pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and a guard for
+that does not exist. Also left by #493's review: the case pinning the adapter half of the window fix
+lives in `packages/store/src/index.test.ts`, not beside the file it reverts
+(`packages/store/src/node-sqlite-adapter.ts`).
+
+## Every read route now takes the venue's exclusive write lock and issues a DELETE
+
+**Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
+2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
+inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
+Plain GETs are among its callers — box status, the unauthenticated content-languages route, and two
+management reads. The single writer is the engine's and is not removable. The unconditional DELETE
+on a read-only body is: `node:sqlite` exposes a change counter. But it interacts with a documented
+behaviour — the drain deliberately collects the rows an orphaned writer left — so this is a design
+decision, not a cleanup. **Next action:** decide whether a read-only body should take the lock at
+all.
+
+## Three copies of one SQL identifier validator and two cause-chain walkers
+
+**Three copies of one SQL identifier validator and two cause-chain walkers — OPEN (found
+2026-09-23, task F1's review wave).** W8 replaced the probes in
+`packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
+`packages/db/src/mirror-config.ts`, `packages/migrations/src/schema-version.ts`,
+`packages/migrations/src/journal-hashes.ts` and `packages/catalogue/src/categories.ts` with
+`@waitron/db`'s `tableExists`. `apps/server/src/restore-stream.ts` still has a one-table probe;
+`apps/server/scripts/dev-setup.ts` checks two table names in one query. The identifier validator is in
+`packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
+`packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
+in `packages/shared/src/engine-failure.ts` and again in `packages/db/src/constraint-target.ts`, and
+that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
+local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Next action:** export
+one validator from `@waitron/shared`; `packages/store` depends on nothing today, and
+`@waitron/shared` depends on nothing either, so that edge closes no loop.
+
+## `resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch table
+
+**`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch
+table — OPEN (found 2026-09-23, task F1's review wave).** `packages/provisioning/src/environment.ts`
+and `apps/server/src/config.ts`. They agree today, checked line for line. The stated reason — a
+package cannot import an app — is true and skips the third option: `@waitron/db` already owns the
+`DeploymentEnvironment` type and both sides depend on it. Nothing in the tree runs both over one
+input. This decides whether a box files against the real AEAT or the test one (`CLAUDE.md` §5), so
+two copies held together by hand is the wrong shape for it.
+
+## Files that still spell the store's file names themselves
+
+**Files that still spell the store's file names themselves (left by #757, which exported them
+from `@waitron/store`).** Outside test files and `bench/`: `apps/server/src/cloud-snapshot-archive.ts`
+(a staging file outside the venue folder), `packages/stream/src/litestream.ts` and
+`packages/stream/src/restore.ts` (`@waitron/stream` does not depend on the store),
+`deploy/waitron.sh` (a `node -e` snippet run in the app image, whose `/app/node_modules` holds only
+sharp), the fixture scripts `apps/server/scripts/cloud-backup-fixture.ts` and
+`apps/server/scripts/cloud-recovery-client-fixture.ts`, and the store's own
+`packages/store/src/connections.ts`, which builds the `-wal` path itself; `WAL_SUFFIX` lives in
+`index.ts`, which imports `connections.ts`, so using it there means moving the names into a module
+of their own. #757's checks do not cover `migrations.lock`, Litestream's `.venue.db-litestream/`
+folder, or the restore's `venue.db.incoming` file and `.venue.db-replaced-*` folder.
+
+## An append-only trigger can be dropped, or quietly replaced, from the application's own database handle
+
+**An append-only trigger can be dropped, or quietly replaced, from the application's own database
+handle — OPEN (found 2026-09-22, task F1).** SQLite has no roles, so only the trigger protects an
+append-only table — every connection is the owner-equivalent, and a `DROP TRIGGER` on the
+application's own handle succeeds (recorded in `packages/db/src/immutability.test.ts`'s header).
+Data mutations are still refused while the triggers are in place, so this is defence in depth rather
+than a live hole.
+
+**The defence to build:** at boot, and then on a repeating check while the box runs, read
+`sqlite_master` and refuse to trade if any append-only trigger that should be there is missing, or
+its stored text is not the text `installAppendOnlyTriggers` writes
+(`packages/store/src/append-only.ts`). The set to compare against is already known — the tables a
+module declared with `appendOnly()`, carried set by set as `MigrationSet.appendOnlyTables`.
+**Re-installing the triggers is not that check** (measured 2026-09-22 on `node:sqlite`): the
+installer writes `create trigger if not exists`, so a trigger that was simply DROPPED is put back by
+the next migrating path, but one dropped and re-created under the SAME NAME with a permissive body is
+not. For whoever writes the comparison: SQLite stores a trigger with `IF NOT EXISTS` removed and
+`CREATE TRIGGER` upper-cased, so the stored text is not byte-identical to the string the installer
+sent.
+
+## `apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree
+
+**Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).**
+
+- **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree.** #460
+  declared `@waitron/print-agent-app` as a test-only dependency of `apps/server` (for
+  `apps/server/src/print-agent-e2e.test.ts`) and exported `./tcp-probe.js`. Moving `tcp-probe.ts`
+  alone into `packages/print-agent` was consciously not taken: it belongs to a cohort of six
+  device-discovery modules in the app (`ipp-probe.ts`, `bluetooth.ts`, `usb.ts`,
+  `linux-devices.ts`, `network.ts`, `sweep.ts`), and moving one would leave its siblings importing
+  back across the boundary. Moving the WHOLE cohort would settle it, and that is a print agent
+  layering decision. Until then no guard stops a second app-to-app edge:
+  `scripts/workspace-cycles.test.ts` looks only for loops, and `eslint.config.js`'s
+  `no-restricted-paths` zones name `packages/*` as targets, never `apps/*`.
+
+## Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's location
+
+**Correctness:**
+
+1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
+   location.** The TENANT half is retired — there is no tenant column (`CLAUDE.md` §3) — but the
+   location half is open and is NOT covered by item 2, which names a different set of verbs. All
+   four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
+   reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
+   `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
+   filters by `cfg.locationId`; without a stored context, the handover check uses the unscoped
+   `prepay` default;
+   `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's
+   till and node and, for an order whose invoice was issued, to give the credit note its node and
+   series (its till is the requesting device's); `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
+   it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`, which the filing sites in
+   `till-sale.ts` and `working-order.ts` call.
+
+## These index and key names still read `tenant`, and the columns they name are gone
+
+**Names left behind by the tenant-column removal (#378, 2026-09-16):**
+
+- **These index and key names still read `tenant`, and the columns they name are gone:**
+  `canvases_tenant_name_key`, `print_agents_tenant_node_key`,
+  `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
+  `table_service_statuses_tenant_label_key`, `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
+  `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
+  `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`. (The `tenants*`,
+  `tenant_themes*`, `tenant_receipts*` and `tenant_credentials*` names are correct and stay.) This is
+  its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in production
+  error translation — `persons_tenant_email_uq` (`packages/identity/src/staff.ts` and
+  `account-action.ts`), `persons_tenant_live_display_name_uq` and `persons_tenant_pending_email_uq`
+  (`staff.ts`) — so renaming them changes behaviour and wants its own failing tests first.
+
+## `server.credential_unusable` names an unusable credential, although `server.*` is reserved for facts about the process itself
+
+**Names left behind by the tenant-column removal (#378, 2026-09-16):**
+
+- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
+  facts about the process itself.** It is thrown for AEAT's certificate
+  (`packages/fiscal-verifactu/src/aeat-transport.ts`), for Stripe's secret key and webhook secret
+  (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and for the email and
+  machine-key credentials (`credentialField`, `apps/server/src/credentials.ts`); both
+  `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. **Next
+  action:** choose a prefix (`credentials.missing` is the nearest sibling) and rename it in one
+  change, checking the prefix matchers `docs/developers/conventions-data.md` lists.
+
+## `DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1
+
+**Names left behind by the tenant-column removal (#378, 2026-09-16):**
+
+- **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** The field
+  reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off
+  `> 0`) and `fiscal-none`. A rename would want to keep that "did this pass attempt work?" meaning
+  rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
+  a pass that exercised the certificate and skipped.

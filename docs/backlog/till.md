@@ -117,3 +117,89 @@ their full text.
   `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
   `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
   commit message; `docs/developers/testing-guide.md` has no paragraph holding it.
+
+## The bookings seat picker keeps a table it no longer offers
+
+**The bookings seat picker keeps a table it no longer offers — OPEN (found 2026-09-23, writing
+bookings' coverage tests, PR #503).** `packages/bookings/src/dashboard/bookings-screen.ts` stores the
+picker's choice when a Seat click arms it. A throwaway browser test armed the picker on `t-1`, then
+let a live refresh empty the table list: the dropdown showed no options and the value `""`, and
+confirming still called `seatBooking("bk-1", { tableId: "t-1" })`. The same test found no way to
+reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that branch, and the
+`?? ""` in `#onSeatClick` (after its own early return for an empty table list), are two of the
+three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
+does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
+may make one or both of those branches reachable, or show they can go.
+
+## Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render its screen
+
+**Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render
+its screen — OPEN (found 2026-09-25, review of PR #641).**
+
+- `#onLoggedIn` awaits `#refreshHeldOrders()` and then `#refreshStationQueue()` outside any `try`,
+  and the `logged-in` listener in `render` calls it with `void`, so a failed held-list read at login
+  is an unhandled promise rejection that also skips the queue, roster and floor loads.
+- `#onRetrieveOrder` and `#onDiscardOrder` await `#refreshHeldOrders()`, and `#onAdvanceTicketItem`
+  and `#onMarkCollected` await `#refreshStationQueue()`, in `apps/till/src/till-app.ts`, each after
+  its `try`/`catch` and outside it. A failed refresh there is an unhandled promise rejection and the
+  operator sees nothing: the test "a plain list refresh that fails starts no retry, leaves a
+  countdown alone, and takes over a retry in flight" in `till-app.test.ts` suppresses the rejection
+  the discard handler leaves uncaught. All four refresh on both paths, after a success and after a
+  failure. Retrieve differs in that it writes nothing, so an "X succeeded, but…" message does not
+  fit it.
+- The two older cases in `apps/till/src/till-app.a11y.test.ts` titled "…on the composed counter
+  screen…" (about lines 128 and 142) do not render the screen their titles name. Their `getTill`
+  returns no `canvas`, and the till enters its shell only when it has one (`#inShell`,
+  `apps/till/src/till-app.ts`), so in both themes they scan the lock screen (found with a temporary
+  assertion on menus Task 9's branch; not re-run on `main`).
+
+**Next action:** decide whether discard, advance and mark-collected go through `#refreshAfterWrite`
+with their own "X succeeded, but…" strings, and what login and retrieve show when their refresh
+fails. Give both a11y cases' `getTill` a canvas and assert `till-counter-screen` exists before each
+scan.
+
+## Two more till lookups read inherited object properties
+
+**Two more till lookups read inherited object properties — OPEN (found by W24's review,
+2026-10-03, by reading, not run).** Both look a string key up in a plain object, so a key such as
+`constructor` finds an inherited property — the defect `deviceKindLabel` had.
+
+- `allergenName` (`apps/till/src/i18n/allergen-names.ts:30`) finds `Object` for `constructor`, so
+  it returns `undefined` instead of the code itself.
+- The station dialog's refusal (`apps/till/src/widgets/station-choice-dialog.ts:74`) finds
+  `Object` in `moveRefusals` for a `constructor` code, so it passes that to `t` and shows an empty
+  alert instead of the code's own message (by reading).
+
+**Next action:** look both keys up on own properties only (`Object.hasOwn`, as
+`apps/till/src/i18n/codes.ts` does), with a test each.
+
+## Cash handed back for a voided cash sale is recorded nowhere
+
+**Cash handed back for a voided cash sale is recorded nowhere — OPEN (found 2026-09-24 by #605).**
+A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
+a drawer shortfall at cash-up. No till screen or server route calls `recordVoid` yet, so nothing
+can do this today. **Owner decision 2026-09-25:** keep it here and decide it when the till's void
+screen is designed.
+
+## A re-sent "place" on an already-placed order answers 409 rather than replaying the original result — leave it, or build the replay?
+
+**Product decisions to take before production:**
+
+- **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
+  result — leave it, or build the replay?** In `invoice_first` the place path files a deferred
+  invoice through `recordSale`, so replaying would mean reading back the immutable
+  `registros_facturacion` row and rebuilding the invoice number, date and QR. That is fiscal core,
+  and not work to do unattended. Leaving it is a real option — the 409 is a defensible state
+  conflict and the till keeps the basket and shows `place.error`. The gain if built is that a re-tap
+  after a lost response returns the invoice already issued instead of an error. Two claims an earlier
+  campaign note made are FALSE and must not be reused: that placing files nothing fiscally, and that
+  the current answer is an opaque 500. The place-path comment in
+  `apps/till/src/till-app.ts` calling an idempotent `placeOrder` "a recorded backlog follow-up"
+  refers to this entry.
+
+## Decisions and deliberate limits
+
+**What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
+change (owner decision 2026-09-23; PR #536).** The ticket belongs to the TILL, not to the operator
+who started it, so a late result shown on that device after a change of operator is right; the
+payment belongs to the table, so no payment is lost.

@@ -98,3 +98,18 @@ their full text.
   Test titles #617 could not touch: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`;
   "since Task 7" and "this tenant's devices" in `device-api.test.ts`; "(R1 behaviour preserved)"
   in `membership-mint.test.ts`.
+
+## The tunnel's stand-in relay pairs with sockets that have already gone
+
+**The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
+writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
+nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
+box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
+box and its bytes go nowhere (both reviewers of that branch ran this). When a waiting client closes,
+it stays in `waiters` until its wait window (`waitForBoxMs`) runs out, so a box registering inside
+that window is sent `go` and paired with the dead client. Three tests in `relay.test.ts` pass anyway
+because they check only the next `ack`: the two reset cases say so, and the older "drops an idle box
+that sends garbage after registering, and keeps serving" claims more than it checks. **Next
+action:** only if `@waitron/tunnel` outlives its planned retirement (see _Waitron retains_ below) —
+drop the entry on close, test-first (a live client after the reset is paired with a live box), and
+narrow or extend that older test.

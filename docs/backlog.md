@@ -223,6 +223,23 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
 - **Two 2026-07-26 specs still call the FNMT seal certificate's export unverified**, which
   `docs/compliance/getting-to-production.md` §4 closed that day (found by #577).
 
+- **The three alta builders repeat their record assembly** — `recordSale`/`recordCorrection`/
+  `recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
+  `toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
+  needs a huella-invariance re-run across all three.
+  Fiscal: each behind its own review, owner sign-off at land.
+
+- `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH`
+  when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT.
+  Fiscal: each behind its own review, owner sign-off at land.
+
+- **Product decision to take before production:** The €0 comped sale settles at the settlement
+  instant, not backdated to `issued_at` — is a comp ever finalised long after the invoice printed?
+
+- **Product decision to take before production:** The duplicate purchase-invoice key
+  `(supplier_tax_id, supplier_invoice_number)` is unique forever — per-year versus forever is the
+  asesor's.
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -245,13 +262,52 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   unchanged.
   [Detail](backlog/catalogue.md#mergeallergenmaps-srcderivationts-can-list-a-source-twice-and-order-sources-differently-from-run-to-run)
 
+- **The media library still reads every matching image for search and name sorting, inside the venue
+  write lock** — OPEN (found 2026-09-23, task F1's review wave). The route (`GET /management-api/images`)
+  uses `withTransaction`, the venue's exclusive write lock, so these remaining scans can delay a
+  sale. **Next action:** decide how far to push search ranking into SQL; measure a way to bound name
+  sorting without changing its results.
+  [Detail](backlog/catalogue.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
+
+- **A negative catalogue price can still be stored by a direct call** — OPEN (left by #487).
+  `createProduct` and `updateProduct` (`packages/catalogue/src/operations.ts`) still accept and
+  store a negative when called directly — a seed, a script or a future caller — and
+  `products.unit_price` carries no `>= 0` check.
+  [Detail](backlog/catalogue.md#a-negative-catalogue-price-can-still-be-stored-by-a-direct-call)
+
+- **Two price rules disagree about a value that is not negative** — OPEN (found 2026-09-21, task
+  N4). **Next action:** decide whether one rule should govern every catalogue price, and if so which
+  — and check each dashboard form against it before changing the server, since a server stricter
+  than its own form is the failure #485 met.
+  [Detail](backlog/catalogue.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
+
 ### Service periods, opening hours and departments
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them._
 
+- **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
+  way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
+  disabled, and its routing exceptions and watcher zones stay gone (a profile's starting zone is
+  kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
+  it is disabled).
+
 ### The kitchen and preparation
 
 _Formerly Track A's kitchen part, and kitchen entries elsewhere._
+
+- **The dashboard's read-only Prep stations screen still shows only its Stations tab, so a view-only
+  manager does not see the watcher list there** — left open by W110b (#1278) and A285 (#1308): `GET /management-api/watchers`
+  now needs only `venue.view`, like the stations and courses lists (writes still need
+  `venue.configure`).
+
+- **`#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) turns the
+  server's `switched_off` reason into `prep.test_disabled` for both of its callers, and the review
+  found no test for the caller that explains an extra falling back to another station** — a test
+  gap, reported by W110's review (#1255) and not re-checked. W110c's review read #1269 as having
+  added a test for it; not re-checked, so this entry may be stale.
+
+- KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
+  `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
 
 ### The till, devices and table service
 
@@ -306,6 +362,51 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   name; only the dashboard form refuses one.
   [Detail](backlog/till.md#seating-a-booking-at-a-table-in-a-zone-that-is-not-a-table-tab-zone-has-no-bookings-test)
 
+- **The bookings seat picker keeps a table it no longer offers** — OPEN (found 2026-09-23, writing
+  bookings' coverage tests, PR #503). A throwaway browser test armed the picker on `t-1`, then let a
+  live refresh empty the table list: the dropdown showed no options and the value `""`, and
+  confirming still called `seatBooking("bk-1", { tableId: "t-1" })`. **Next action:** decide what
+  the picker does when its tables change under it (re-pick the first, or close) and fix it
+  test-first. [Detail](backlog/till.md#the-bookings-seat-picker-keeps-a-table-it-no-longer-offers)
+
+- **Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render
+  its screen** — OPEN (found 2026-09-25, review of PR #641). **Next action:** decide whether
+  discard, advance and mark-collected go through `#refreshAfterWrite` with their own "X succeeded,
+  but…" strings, and what login and retrieve show when their refresh fails. Give both a11y cases'
+  `getTill` a canvas and assert `till-counter-screen` exists before each scan.
+  [Detail](backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen)
+
+- **Two more till lookups read inherited object properties** — OPEN (found by W24's review,
+  2026-10-03, by reading, not run). Both look a string key up in a plain object, so a key such as
+  `constructor` finds an inherited property — the defect `deviceKindLabel` had. **Next action:**
+  look both keys up on own properties only (`Object.hasOwn`, as `apps/till/src/i18n/codes.ts` does),
+  with a test each. [Detail](backlog/till.md#two-more-till-lookups-read-inherited-object-properties)
+
+- **The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
+  reading, not run).** `session-activity.ts`'s `#shouldRunIdleTimer` keeps the `this.#active &&` check
+  that `#shouldHoldWakeLock` lost, and its callers look the same. **Next action:** remove the check
+  with a receipt, as W24 did for `#shouldHoldWakeLock`, or keep it by decision.
+
+- **Cash handed back for a voided cash sale is recorded nowhere** — OPEN (found 2026-09-24 by #605).
+  A void writes no payment or refund row, so if staff give a customer cash back, the void's day
+  shows a drawer shortfall at cash-up. **Owner decision 2026-09-25:** keep it here and decide it
+  when the till's void screen is designed.
+  [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
+
+- The dev `?dev` chooser shows `label · kind` rather than `name · profile`; the Spanish
+  form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
+
+- Recorded, not blocking: a handheld's Order tab is tappable with no active table; the
+  boot-into-floor prefetch is unreached by any shipped canvas; the station screen's device-mode enrol
+  sub-view is unreachable; the default counter canvas has no prep-queue rail.
+
+- **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
+  result — leave it, or build the replay?** — a product decision to take before production. Leaving
+  it is a real option — the 409 is a defensible state conflict and the till keeps the basket and
+  shows `place.error`. The gain if built is that a re-tap after a lost response returns the invoice
+  already issued instead of an error.
+  [Detail](backlog/till.md#a-re-sent-place-on-an-already-placed-order-answers-409-rather-than-replaying-the-original-result--leave-it-or-build-the-replay)
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -343,6 +444,16 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
   re-claim the jobs not yet sent while the first agent still sends every job it pulled; the lease
   comment in `runtime.ts` now says so. [Detail](backlog/printers.md#an-aged-batch-can-print-twice)
 
+- **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small. Switch the three
+  server sites over and drop `qrcode`; hoist the receipt's hand-ported money/date/label formatters
+  into `packages/shared` too (the paper receipt already drifts from the screen by an NBSP
+  normalisation).
+  [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
+
+- Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
+  migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
+  presence light.
+
 ### Payments and card readers
 
 _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backlog/payments.md).
@@ -359,6 +470,19 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
   deferred: #570's review showed two identical `reverseViaStripe` calls get different idempotency
   keys, so a retried reversal sends a second real refund; the comment at `reverse.ts` says so.
   [Detail](backlog/payments.md#the-two-providertestts-cases-named-throws-paymentnot_found-assert-only-rejectstothrow-not-the-code)
+
+- **The Stripe webhook endpoint still has to be repointed by hand, at Stripe** — left behind by the
+  tenant-column removal (#378, 2026-09-16). **Next action:** change it in the Stripe dashboard
+  before any card payment is taken through a Stripe webhook.
+  [Detail](backlog/payments.md#the-stripe-webhook-endpoint-still-has-to-be-repointed-by-hand-at-stripe)
+
+- Bound the HTTP body read as well as the header wait in `sumup-client.ts` (move `clearTimeout` after
+  `res.text()`); lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
+
+- Pre-existing `forward` retry backoff.
+
+- **Product decision to take before production:** The orphan drift gate holds a customer's money
+  pending a human, unbounded — nothing re-sweeps a closed period.
 
 ### Users, sign-in and the dashboard shell
 
@@ -379,6 +503,33 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554, is
   reached by no test.
   [Detail](backlog/dashboard.md#setemail-in-packagesidentitysrcstaffts-unlike-updatepersondetails-never-checks-the-new-email-against-other-peoples-pending-emails)
+
+- **Dashboard leftovers from the coverage branch** — OPEN (found 2026-09-23, PR #538). `wt-dialog`
+  re-sends the native dialog's `close` event as `wt-close`
+  (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
+  closes — the same mechanism the catalogue screen's nested forms guard against (#741).
+  `staff-screen.ts` and `purchases-screen.ts` have no guard; their tests wait out the late close
+  rather than guard it (`staff-screen.test.ts`, `purchases-screen.test.ts`).
+  [Detail](backlog/dashboard.md#dashboard-leftovers-from-the-coverage-branch)
+
+- **A person row written from outside `packages/identity` still folds its key ASCII-only** — OPEN
+  (found 2026-09-23, task F1's review wave). **What is left open:** every remaining writer outside
+  `packages/identity` is a fixture or a seed, each still folding ASCII-only, and the column is still
+  nullable, so nothing at the compiler stops a new writer forgetting it. **Next action:** decide
+  whether the column becomes mandatory — which breaks every fixture at the compiler rather than
+  silently — or whether a guard over the write sites is enough.
+  [Detail](backlog/dashboard.md#a-person-row-written-from-outside-packagesidentity-still-folds-its-key-ascii-only)
+
+- **Two owner questions from W110c, in its PR: whether a bulk Enable is wanted, and whether an
+  all-disabled selection's Disable should be greyed out like the toolbar's other buttons rather than
+  hidden** — left open by W110c (#1271), part of W110 (#1255), "One word for 'switched off, kept for
+  the record' across the dashboard".
+
+- The dashboard's `es-ES` module default still needs the flip the till got in #170; check the
+  dashboard money formatter for the same "doesn't follow the UI locale" bug.
+
+- **Product decision to take before production:** A human account always keeps an email (no
+  remove-email action; `setEmail` rejects clearing) — the rule now, rather than a missing UI path.
 
 ### Interface languages
 
@@ -416,6 +567,12 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 - **The recipe screen's `#loadRecipe` guard compares product ids**, so choosing A, then B, then A
   again lets the first A answer apply and turn Save back on while the second A load is still
   running. Found by #607 (`apps/dashboard/src/screens`), read only, not run.
+
+- **A supplier credit note cannot be entered through the dashboard** — OPEN, unqueued. A negative
+  gross total on the purchase-invoice routes is a supplier credit note and is accepted and stored by
+  design (owner ruling 2026-09-21; task N1). Nobody has decided whether the form should be relaxed
+  or the credit note should become its own document type.
+  [Detail](backlog/back-office.md#a-supplier-credit-note-cannot-be-entered-through-the-dashboard)
 
 ### The box: backups, upgrades and recovery
 
@@ -553,6 +710,13 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
   lines 128–133) may treat a lock written by a different store as a previous boot's, so a live
   process's lock could be taken over (a belief, not verified).
   [Detail](backlog/replication-cloud.md#the-boot-time-fetch-is-given-only-the-url--and-boot-never-reads-the-superseded-that-reconcilemembershiponboot-returns)
+
+- **The tunnel's stand-in relay pairs with sockets that have already gone** — OPEN (found
+  2026-09-23, writing tunnel's coverage tests, PR #506). `packages/tunnel/src/testing/relay.ts` is
+  test-only: nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay.
+  When a parked box closes, it stays in `idle` until a client takes it, so the next client is paired
+  with the dead box and its bytes go nowhere (both reviewers of that branch ran this).
+  [Detail](backlog/replication-cloud.md#the-tunnels-stand-in-relay-pairs-with-sockets-that-have-already-gone)
 
 ### CI, tests and developer tooling
 
@@ -714,6 +878,41 @@ _Formerly B9, and Track C's development-stack and house-rules items._ Detail: [b
   first test can use that session; they pass today because only the first does.
   [Detail](backlog/ci.md#one-test-title-in-packageslayoutssrccanvas-storedbtestts-line-144-still-quotes-postgresqls-error-number-23001)
 
+- **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL (found
+  2026-10-03 by #1139's review). **Next action:** the owner decides whether the rule covers every
+  agent, then the two docs follow.
+  [Detail](backlog/ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never)
+
+- **The shard layout was measured against an engine that is gone** — OPEN (found 2026-09-23, task
+  F1's review wave). Read the next weekly run's shard durations before treating any of them as
+  current. No local command produces the numbers, so re-cutting the matrix has to wait for a real
+  weekly run. [Detail](backlog/ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone)
+
+- **The PGlite throughput bench no longer matches the shape it says it matches** — OPEN (found
+  2026-09-21, task P6). Either bring the three decisions across and re-baseline, or change the
+  sentence to say what it is.
+  [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches)
+
+- **The gate never runs on a pull request, so thinning a `packages/db` test merges green** — left
+  behind by gating `packages/db`'s mutation score (#472, 2026-09-20). Either accept the weekly lag
+  and say so where a reader meets the gate, or find a cheaper per-pull-request signal.
+  [Detail](backlog/ci.md#the-gate-never-runs-on-a-pull-request-so-thinning-a-packagesdb-test-merges-green)
+
+- **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
+  the `packages/ui` mutation score (#466, 2026-09-20). Adding a fourth exclusion is the consistent
+  move and also shrinks the denominator the `break: 90` is measured against. Owner's call.
+  [Detail](backlog/ci.md#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
+
+- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI** — left
+  behind by the vite 8 upgrade (#450, 2026-09-19). `bundle-smoke` builds esbuild bundles only. This
+  is the work item `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
+  [Detail](backlog/ci.md#a-pull-request-that-changes-only-front-end-code-gets-no-spa-bundle-built-anywhere-in-ci)
+
+- **The hint's cover stops at the migration run, and provisioning runs after it** (#343). A module's
+  provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
+  succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
+  curated line. Nobody has hit this.
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -729,6 +928,96 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   when a lane has room).** #1179 (Vitest 5) waits on Stryker (owner). The rest: **sharp 0.35.5
   (#1299 root, #1423 `apps/server`) and the compose group (#1178)**; **the npm minor-and-patch group
   (#1267, 13 updates)**; **stripe 22.6.2 → 23.0.0 (#1181, a major)**. [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
+
+- **Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed** — OPEN (found 2026-10-03
+  by #1139's review). **Next action:** read each claim against the installed 0.45.3, then update the
+  number or the claim.
+  [Detail](backlog/dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-0453-is-installed)
+
+- **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7** —
+  left behind by the TypeScript 7 upgrade (#460, 2026-09-20). When a release supports it, the root
+  entry goes back to a plain `^7` range and the alias disappears.
+  [Detail](backlog/dependencies.md#collapse-the-two-typescript-entries-back-into-one-once-typescript-eslint-supports-version-7)
+
+- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it** — left
+  behind by the Stryker upgrade (#447, 2026-09-19). Stryker 10.0.0's release notes mention neither
+  issue, and nothing here was run under Vitest 5, so the question is untouched rather than resolved.
+  [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
+
+- **Whether a declared floor follows the installed version is undecided — one decision for every
+  manifest** — left behind by the dependency refresh (#432, 2026-09-19). The answer goes in
+  `versioning-strategy` in `.github/dependabot.yml`.
+  [Detail](backlog/dependencies.md#whether-a-declared-floor-follows-the-installed-version-is-undecided--one-decision-for-every-manifest)
+
+- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it** at
+  0.25.12; since A107 a root `pnpm.overrides` entry moves `@esbuild-kit/core-utils`' copy onto the
+  same 0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit`
+  packages are deprecated.
+  Left behind by the esbuild upgrade (#439, 2026-09-19).
+
+- **`apps/dashboard` type-checks against two `@types/node` majors at once** — left behind by the
+  Node types upgrade (#441, 2026-09-19). The fix is a pnpm resolution override, which is a policy
+  decision, so it was left for the owner.
+  [Detail](backlog/dependencies.md#appsdashboard-type-checks-against-two-typesnode-majors-at-once)
+
+- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One line
+  either way; it needs an owner call on whether Node 24 is still supported.
+  Left behind by the Node types upgrade (#441, 2026-09-19).
+
+- **Only the request side of that adapter was compared between the two versions** — left behind by
+  the Hono Node adapter upgrade (#444, 2026-09-19). `apps/server` and `apps/print-agent` moved from
+  `@hono/node-server` 1.19.15 to 2.1.1. The suites pass, so nothing is known to be broken.
+  Re-running the comparison needs a scratch install of 1.19.15.
+  [Detail](backlog/dependencies.md#only-the-request-side-of-that-adapter-was-compared-between-the-two-versions)
+
+- **`apps/server/src/tls.ts`'s type guarantee is still untested.** It derives its options type from
+  the installed package (`Parameters<typeof serve>[0]`) so that an incompatible reshape fails
+  `tsc`; this upgrade did not exercise that, because the type was otherwise identical across the two
+  versions.
+  Left behind by the Hono Node adapter upgrade (#444, 2026-09-19).
+
+- **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo** — left
+  behind by the vite 8 upgrade (#450, 2026-09-19). What is missing is anywhere that states a browser
+  floor, so the next bump moves it again silently.
+  [Detail](backlog/dependencies.md#the-default-browser-floor-rose-and-no-browser-floor-is-stated-anywhere-in-the-repo)
+
+- **The browser-mode packages that declare no vite follow the others' by deduplication, not by a
+  declaration** — left behind by the vite 8 upgrade (#450, 2026-09-19). If a future change puts a
+  second vite in the tree, they could land on a different one silently.
+  [Detail](backlog/dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
+
+- **A dependency-optimizer receipt taken on vite 6 was not re-measured** — left behind by the vite 8
+  upgrade (#450, 2026-09-19). Nobody re-checked that vite 8 still emits that warning, or that the
+  `include` lists are still the fix.
+  [Detail](backlog/dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
+
+- **The till's QR pin compares the code against itself, not an authority** — left behind by the till
+  QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20). Giving the till the same reader needs a
+  matrix accessor as well (`qrSvg` returns a string, never the library's `qr` object) and a
+  module-boundary decision about where the helper lives.
+  [Detail](backlog/dependencies.md#the-tills-qr-pin-compares-the-code-against-itself-not-an-authority)
+
+- **There is no snapshot file anywhere in the repository**, so the till's byte pin is a SHA-256 of
+  the output. A file snapshot would fail with a readable diff; whether this repo wants snapshot
+  files at all is an owner decision.
+  Left behind by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).
+
+- **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot alert
+  #20, 2026-10-01). Every version up to 1.4.0, the one in the lockfile, accepts some RSA signatures
+  it should reject when checking them. It is a direct dependency of `packages/server-kit`,
+  `apps/server` and `apps/print-agent`. **Next action:** bump it when a fixed version is published,
+  and run the certificate suites in those three packages.
+  [Detail](backlog/dependencies.md#node-forge-has-a-high-severity-security-alert-with-no-fixed-version)
+
+- **Whether the vulnerability the upgrade fixes is reachable in this product is open** — left behind
+  by the passkey library upgrade (#453, 2026-09-19). `@simplewebauthn/server` and
+  `@simplewebauthn/browser` moved to 14. The cheap evidence leans towards reachable rather than
+  away.
+  [Detail](backlog/dependencies.md#whether-the-vulnerability-the-upgrade-fixes-is-reachable-in-this-product-is-open)
+
+- **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would improve
+  the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
+  Left behind by the passkey library upgrade (#453, 2026-09-19).
 
 ### Modules, data and code health
 
@@ -827,6 +1116,138 @@ _Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/ar
   `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) has only
   the PostgreSQL raw-read table, not the SQLite one #579's commit message now carries.
   [Detail](backlog/architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
+
+- **`product.not_found` has no dashboard wording, so the recipe screen shows the generic message for
+  it** — left open by A394-2 (#1444); still so after A394-3 (#1447).
+
+- **`GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an unknown
+  location** — left open by A394-3 (#1447).
+
+- **A malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22, while
+  the course route answers 404** — left open by A394-3 (#1447).
+
+- **The two location routes' body menu id keeps 404 until A394-11** — left open by A394-3 (#1447).
+
+- **Workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's
+  PATH location answers `location.not_found`** — left open by A394-3 (#1447). If workforce moves to
+  the new code, declare it in `packages/db/src/errors.ts`.
+
+- **A394-4 to A394-22 — refusal statuses by one rule** — OPEN, low priority, not queued — owner
+  2026-10-08: take them from here when a lane has room. (A394-1 to A394-3 landed as #1441, #1444 and
+  #1447.) Read, not run: of 49 boundaries, 96 status rows break the rule
+  (`docs/developers/conventions-data.md`); 17 defects answer 500 or success for a missing id (A394-1
+  to -6 first); 16 owner questions; A394-8 settles A374's. The follow-ups and the rows:
+  `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+
+- **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26). A
+  pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)") was fixed only
+  for the last 28 documents. **Next action:** fold into the comment-pruning sweeps: re-point each to
+  the pull request that built the work, or drop the tag.
+  [Detail](backlog/architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
+
+- **Three shapes the read connection does not cover** — OPEN (stated 2026-09-23, task N3, PR #493).
+  A transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told
+  about — Drizzle's own migrator opens one that way — so a read concurrent with it still lands on
+  the writer. **Next action:** none needed while that holds; a temporary table, an attachment or a
+  connection pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and
+  a guard for that does not exist.
+  [Detail](backlog/architecture.md#three-shapes-the-read-connection-does-not-cover)
+
+- **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN (found
+  2026-09-23, task F1's review wave). `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
+  inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
+  **Next action:** decide whether a read-only body should take the lock at all.
+  [Detail](backlog/architecture.md#every-read-route-now-takes-the-venues-exclusive-write-lock-and-issues-a-delete)
+
+- **Three copies of one SQL identifier validator and two cause-chain walkers** — OPEN (found
+  2026-09-23, task F1's review wave). The identifier validator is in
+  `packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
+  `packages/store/src/append-only.ts` — the first two are in the SAME package. **Next action:**
+  export one validator from `@waitron/shared`; `packages/store` depends on nothing today, and
+  `@waitron/shared` depends on nothing either, so that edge closes no loop.
+  [Detail](backlog/architecture.md#three-copies-of-one-sql-identifier-validator-and-two-cause-chain-walkers)
+
+- **`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one
+  four-branch table** — OPEN (found 2026-09-23, task F1's review wave).
+  `packages/provisioning/src/environment.ts` and `apps/server/src/config.ts`. This decides whether a
+  box files against the real AEAT or the test one (`CLAUDE.md` §5), so two copies held together by
+  hand is the wrong shape for it.
+  [Detail](backlog/architecture.md#resolveenvironment-and-deploymentenvironment-are-two-hand-maintained-copies-of-one-four-branch-table)
+
+- **Raw engine imports in `apps/server/src/recovery-lock.ts` and
+  `apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155), which closed
+  "`packages/migrations` opened its own raw `node:sqlite` connection": a 2026-10-03 search of
+  non-test files under `apps/` and `packages/` also found raw engine imports in
+  `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`. **Next
+  action:** review each remaining raw connection separately before deciding whether a shared store
+  API fits.
+
+- **Files that still spell the store's file names themselves** — left by #757, which exported them
+  from `@waitron/store`. #757's checks do not cover `migrations.lock`, Litestream's
+  `.venue.db-litestream/` folder, or the restore's `venue.db.incoming` file and
+  `.venue.db-replaced-*` folder.
+  [Detail](backlog/architecture.md#files-that-still-spell-the-stores-file-names-themselves)
+
+- **Two leftovers of the restrict/trigger refusal split (#731).** `isRefusal` with
+  `RESTRICT_VIOLATION` or `TRIGGER_ABORT` still reads the number alone and both stay exported (the
+  `CLAUDE.md` §3 rule, unguarded, is what stands against a new caller); and the four near-identical
+  word-matching checks in `packages/db/src/constraint-target.ts` could share one private helper.
+
+- **An append-only trigger can be dropped, or quietly replaced, from the application's own database
+  handle** — OPEN (found 2026-09-22, task F1). Data mutations are still refused while the triggers
+  are in place, so this is defence in depth rather than a live hole. **The defence to build:** at
+  boot, and then on a repeating check while the box runs, read `sqlite_master` and refuse to trade
+  if any append-only trigger that should be there is missing, or its stored text is not the text
+  `installAppendOnlyTriggers` writes (`packages/store/src/append-only.ts`).
+  [Detail](backlog/architecture.md#an-append-only-trigger-can-be-dropped-or-quietly-replaced-from-the-applications-own-database-handle)
+
+- **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree** — left
+  behind by the TypeScript 7 upgrade (#460, 2026-09-20). Moving the WHOLE cohort would settle it,
+  and that is a print agent layering decision.
+  [Detail](backlog/architecture.md#appsserver--appsprint-agent-is-the-first-app-to-app-workspace-edge-in-the-tree)
+
+- **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
+  location.** The TENANT half is retired — there is no tenant column (`CLAUDE.md` §3) — but the
+  location half is open and is NOT covered by item 2, which names a different set of verbs.
+  [Detail](backlog/architecture.md#four-order-paths-read-working_orders-by-id-alone-with-nothing-narrowing-them-to-the-callers-location)
+
+- **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
+  `updateHeldOrder`/`abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
+  together with the four paths in item 1, which are the same problem in the same file.
+
+- **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
+  are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
+  test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
+  transaction while another is still running.
+
+- **These index and key names still read `tenant`, and the columns they name are gone** — left
+  behind by the tenant-column removal (#378, 2026-09-16). This is its own slice, not a tidy-up:
+  THREE of the four `persons_*` names are matched BY NAME in production error translation —
+  `persons_tenant_email_uq` (`packages/identity/src/staff.ts` and `account-action.ts`),
+  `persons_tenant_live_display_name_uq` and `persons_tenant_pending_email_uq` (`staff.ts`) — so
+  renaming them changes behaviour and wants its own failing tests first.
+  [Detail](backlog/architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
+
+- **Decide whether to implement `sale.number_reused`.** It was added in `10b16fd57` for a
+  translation of the invoice-number unique-index violation that was never written. Decide whether
+  that translation is still wanted before deleting the code (A77 kept it pending this).
+  Listed with the names left behind by the tenant-column removal (#378, 2026-09-16).
+
+- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
+  facts about the process itself** — left behind by the tenant-column removal (#378, 2026-09-16).
+  **Next action:** choose a prefix (`credentials.missing` is the nearest sibling) and rename it in
+  one change, checking the prefix matchers `docs/developers/conventions-data.md` lists.
+  [Detail](backlog/architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
+
+- **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
+  by the tenant-column removal (#378, 2026-09-16). A rename would want to keep that "did this pass
+  attempt work?" meaning rather than flatten it to a boolean, since the flag deliberately
+  distinguishes a no-work pass from a pass that exercised the certificate and skipped.
+  [Detail](backlog/architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
+
+- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
+  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
+  constant (the theme colour is literal in three places).
 
 ### Data protection and legal compliance
 
@@ -7173,714 +7594,6 @@ format. **Before building, ask the labour
 advisor** whether the digital-registro decree is in force and which fields it requires
 ([asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)). The time record cannot be
 edited once written, so its chain and correction paths take the owner's sign-off at land.
-
----
-
-## Track C — smaller items
-
-Each fits one sitting, and none needs a spec. Correctness first, then by area. A _Small_ item that
-turns out to need a design moves to its track.
-
-**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 LANDED as #1441 (a workforce request whose body names an unknown person or location answers 400, not 500); A394-2 LANDED as #1444 (a recipe or ingredient route naming an unknown product or ingredient answers 404, and an unknown or repeated ingredient in a recipe 400, not 200, 204 or 500; left open: `product.not_found` has no dashboard wording, so the recipe screen shows the generic message for it); A394-3 LANDED as #1447 (five catalogue and course requests naming an unknown menu, location or product answer 404 for a path id and 400 for a body menu, not 200, 204 or 500; new code `location.not_found` with dashboard wording; left open: `GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an unknown location; a malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22, while the course route answers 404; the two location routes' body menu id keeps 404 until A394-11; `product.not_found` still has no dashboard wording; workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's PATH location answers `location.not_found` — if workforce moves to the new code, declare it in `packages/db/src/errors.ts`); A394-4 to A394-22 OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room.** Read, not
-run: of 49 boundaries, 96 status rows break the rule (`docs/developers/conventions-data.md`); 17 defects
-answer 500 or success for a missing id (A394-1 to -6 first); 16 owner questions; A394-8 settles A374's.
-The follow-ups and the rows: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
-
-**Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed — OPEN (found 2026-10-03 by #1139's
-review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
-`docs/developers/conventions-data.md`, and checked their line numbers against 0.45.3. Still naming
-0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:310` and
-`packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
-`packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:280` and
-this file (the 0.45.2 unnamed-`unique()` note in Track C), none of them re-checked against 0.45.3.
-**Next action:** read each claim against the installed 0.45.3, then update the number or the claim.
-
-**`--no-verify`: the docs say "Claude never", the hook says "agents never" — OWNER'S CALL (found
-2026-10-03 by #1139's review).** `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude
-never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agents never". Codex
-sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
-decides whether the rule covers every agent, then the two docs follow.
-
-**Comments and test titles still cite sections of specs that were deleted — OPEN (2026-09-26).**
-The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
-before it). A pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)")
-was fixed only for the last 28 documents. Find the rest with
-`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench`. Some hits point
-into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
-so check which document each one names before cutting it. Two were left on purpose:
-`packages/db/drizzle/0004_variant_one_level.sql` ("spec §1.2, §15.7"), because a shipped migration
-is not edited without a venue reset (`CLAUDE.md` §3), and
-`packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could not be traced to a
-deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
-each to the pull request that built the work, or drop the tag. A test title is not a comment, so
-changing one does not pass `scripts/comments-only.mjs` as a comments-only change.
-
-**The bookings seat picker keeps a table it no longer offers — OPEN (found 2026-09-23, writing
-bookings' coverage tests, PR #503).** `packages/bookings/src/dashboard/bookings-screen.ts` stores the
-picker's choice when a Seat click arms it. A throwaway browser test armed the picker on `t-1`, then
-let a live refresh empty the table list: the dropdown showed no options and the value `""`, and
-confirming still called `seatBooking("bk-1", { tableId: "t-1" })`. The same test found no way to
-reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that branch, and the
-`?? ""` in `#onSeatClick` (after its own early return for an empty table list), are two of the
-three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
-does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
-may make one or both of those branches reachable, or show they can go.
-
-**Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render
-its screen — OPEN (found 2026-09-25, review of PR #641).**
-
-- `#onLoggedIn` awaits `#refreshHeldOrders()` and then `#refreshStationQueue()` outside any `try`,
-  and the `logged-in` listener in `render` calls it with `void`, so a failed held-list read at login
-  is an unhandled promise rejection that also skips the queue, roster and floor loads.
-- `#onRetrieveOrder` and `#onDiscardOrder` await `#refreshHeldOrders()`, and `#onAdvanceTicketItem`
-  and `#onMarkCollected` await `#refreshStationQueue()`, in `apps/till/src/till-app.ts`, each after
-  its `try`/`catch` and outside it. A failed refresh there is an unhandled promise rejection and the
-  operator sees nothing: the test "a plain list refresh that fails starts no retry, leaves a
-  countdown alone, and takes over a retry in flight" in `till-app.test.ts` suppresses the rejection
-  the discard handler leaves uncaught. All four refresh on both paths, after a success and after a
-  failure. Retrieve differs in that it writes nothing, so an "X succeeded, but…" message does not
-  fit it.
-- The two older cases in `apps/till/src/till-app.a11y.test.ts` titled "…on the composed counter
-  screen…" (about lines 128 and 142) do not render the screen their titles name. Their `getTill`
-  returns no `canvas`, and the till enters its shell only when it has one (`#inShell`,
-  `apps/till/src/till-app.ts`), so in both themes they scan the lock screen (found with a temporary
-  assertion on menus Task 9's branch; not re-run on `main`).
-
-**Next action:** decide whether discard, advance and mark-collected go through `#refreshAfterWrite`
-with their own "X succeeded, but…" strings, and what login and retrieve show when their refresh
-fails. Give both a11y cases' `getTill` a canvas and assert `till-counter-screen` exists before each
-scan.
-
-**Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
-reading unless marked run:
-
-- `wt-dialog` re-sends the native dialog's `close` event as `wt-close`
-  (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
-  closes — the same mechanism the catalogue screen's nested forms guard against (#741). So a dialog
-  reopened within that task is shut again: `wt-dialog`'s own close handler (`onClose`) sets its
-  `open` to false, which closes the native dialog, and then the screen's handler clears its state.
-  `staff-screen.ts` and `purchases-screen.ts` have no guard; their tests wait out the late close
-  rather than guard it (`staff-screen.test.ts`, `purchases-screen.test.ts`). `profile-screen.ts`'s
-  flag (`#closingModal`) protects the screen's mode but, we believe (by reading, not tested), not
-  the dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting
-  a fresh dialog for each open (`keyed`). Seen once under coverage load in a test (run); we believe
-  a person cannot reopen it that fast; not tested.
-- `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
-  all would pass; the server always sends one.
-- Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
-  "no selected card" guards, several `?? []` and `?? null` fallbacks in the printers, payments,
-  kitchen, backup, devices, profile, extra-list and option-list files, and a
-  handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
-  receipt each, or leave them as defensive code by decision.
-
-**What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
-change (owner decision 2026-09-23; PR #536).** The ticket belongs to the TILL, not to the operator
-who started it, so a late result shown on that device after a change of operator is right; the
-payment belongs to the table, so no payment is lost.
-
-**Till code that no test can reach, and small till defects — DONE (W24, #1127).**
-
-**Two more till lookups read inherited object properties — OPEN (found by W24's review,
-2026-10-03, by reading, not run).** Both look a string key up in a plain object, so a key such as
-`constructor` finds an inherited property — the defect `deviceKindLabel` had.
-
-- `allergenName` (`apps/till/src/i18n/allergen-names.ts:30`) finds `Object` for `constructor`, so
-  it returns `undefined` instead of the code itself.
-- The station dialog's refusal (`apps/till/src/widgets/station-choice-dialog.ts:74`) finds
-  `Object` in `moveRefusals` for a `constructor` code, so it passes that to `t` and shows an empty
-  alert instead of the code's own message (by reading).
-
-**Next action:** look both keys up on own properties only (`Object.hasOwn`, as
-`apps/till/src/i18n/codes.ts` does), with a test each.
-
-**The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
-reading, not run).** `session-activity.ts`'s `#shouldRunIdleTimer` keeps the `this.#active &&` check
-that `#shouldHoldWakeLock` lost, and its callers look the same. **Next action:** remove the check
-with a receipt, as W24 did for `#shouldHoldWakeLock`, or keep it by decision.
-
-**The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
-writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
-nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
-box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
-box and its bytes go nowhere (both reviewers of that branch ran this). When a waiting client closes,
-it stays in `waiters` until its wait window (`waitForBoxMs`) runs out, so a box registering inside
-that window is sent `go` and paired with the dead client. Three tests in `relay.test.ts` pass anyway
-because they check only the next `ack`: the two reset cases say so, and the older "drops an idle box
-that sends garbage after registering, and keeps serving" claims more than it checks. **Next
-action:** only if `@waitron/tunnel` outlives its planned retirement (see _Waitron retains_ below) —
-drop the entry on close, test-first (a live client after the reset is paired with a live box), and
-narrow or extend that older test.
-
-**Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3, PR #493).** A
-transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
-Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
-A write issued from outside a running body while one is open is re-run on the writer, where it joins
-that transaction if it is still open and commits or rolls back with it, which is what one connection
-did; in the moment after the queue's `commit` and before the body has ended, none is open and the
-write commits by itself. Nothing refuses it. And `readOnly: true` refuses a write to the database
-FILE, not every write: measured 2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a
-connection, so a temporary table written from outside a running body would land on the reader and
-stay there — and the same holds for an `ATTACH` of a file that exists (one of a missing file is
-refused, errcode 14 — measured by #568) and for any connection-scoped pragma, because all three
-change a CONNECTION rather than the file, so nothing refuses them and nothing routes them back. A
-temporary table and an `ATTACH` have no site in this tree (searched 2026-09-23). The two
-connection-scoped pragmas that run on a request path, both `pragma defer_foreign_keys = on`, are
-each issued INSIDE a running transaction body, which is exactly where the routing sends a statement
-to the writer: `apps/server/src/configuration-transfer.ts`'s import issues it inside the
-provisioning transaction's body, and `writeAndRemoveDecoyAction`
-(`packages/identity/src/account-action.ts`) inside `issueRecovery`'s `withTransaction` body
-(`apps/server/src/management-api.ts`); the others are test setup issued outside any body, where the
-reader would serve them if a body happened to be running, and none of those suites runs one.
-**Next action:** none needed while that holds; a temporary table, an attachment or a connection
-pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and a guard for
-that does not exist. Also left by #493's review: the case pinning the adapter half of the window fix
-lives in `packages/store/src/index.test.ts`, not beside the file it reverts
-(`packages/store/src/node-sqlite-adapter.ts`).
-
-**The media library still reads every matching image for search and name sorting, inside the venue
-write lock — OPEN (found 2026-09-23, task F1's review wave).** The unsearched date sort counts,
-orders and pages in SQL, reading only the page's metadata. Search still scores and pages in
-JavaScript, and name sorting still uses `Intl.Collator` for accented names.
-`listImageTranslationGaps` still reads all rows of its selected columns. The route
-(`GET /management-api/images`) uses `withTransaction`, the venue's exclusive write lock, so these
-remaining scans can delay a sale. **Next action:** decide how far to push search ranking into SQL;
-measure a way to bound name sorting without changing its results.
-
-**Cash handed back for a voided cash sale is recorded nowhere — OPEN (found 2026-09-24 by #605).**
-A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
-a drawer shortfall at cash-up. No till screen or server route calls `recordVoid` yet, so nothing
-can do this today. **Owner decision 2026-09-25:** keep it here and decide it when the till's void
-screen is designed.
-
-**Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
-2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
-inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
-Plain GETs are among its callers — box status, the unauthenticated content-languages route, and two
-management reads. The single writer is the engine's and is not removable. The unconditional DELETE
-on a read-only body is: `node:sqlite` exposes a change counter. But it interacts with a documented
-behaviour — the drain deliberately collects the rows an orphaned writer left — so this is a design
-decision, not a cleanup. **Next action:** decide whether a read-only body should take the lock at
-all.
-
-**Three copies of one SQL identifier validator and two cause-chain walkers — OPEN (found
-2026-09-23, task F1's review wave).** W8 replaced the probes in
-`packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
-`packages/db/src/mirror-config.ts`, `packages/migrations/src/schema-version.ts`,
-`packages/migrations/src/journal-hashes.ts` and `packages/catalogue/src/categories.ts` with
-`@waitron/db`'s `tableExists`. `apps/server/src/restore-stream.ts` still has a one-table probe;
-`apps/server/scripts/dev-setup.ts` checks two table names in one query. The identifier validator is in
-`packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
-`packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
-in `packages/shared/src/engine-failure.ts` and again in `packages/db/src/constraint-target.ts`, and
-that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
-local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Next action:** export
-one validator from `@waitron/shared`; `packages/store` depends on nothing today, and
-`@waitron/shared` depends on nothing either, so that edge closes no loop.
-
-**`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch
-table — OPEN (found 2026-09-23, task F1's review wave).** `packages/provisioning/src/environment.ts`
-and `apps/server/src/config.ts`. They agree today, checked line for line. The stated reason — a
-package cannot import an app — is true and skips the third option: `@waitron/db` already owns the
-`DeploymentEnvironment` type and both sides depend on it. Nothing in the tree runs both over one
-input. This decides whether a box files against the real AEAT or the test one (`CLAUDE.md` §5), so
-two copies held together by hand is the wrong shape for it.
-
-**`packages/migrations` opened its own raw `node:sqlite` connection — DONE (W45, #1155); left
-open:** a 2026-10-03 search of non-test files under `apps/` and `packages/` also found raw engine
-imports in `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`.
-**Next action:** review each remaining raw connection separately before deciding whether a shared
-store API fits.
-
-**Files that still spell the store's file names themselves (left by #757, which exported them
-from `@waitron/store`).** Outside test files and `bench/`: `apps/server/src/cloud-snapshot-archive.ts`
-(a staging file outside the venue folder), `packages/stream/src/litestream.ts` and
-`packages/stream/src/restore.ts` (`@waitron/stream` does not depend on the store),
-`deploy/waitron.sh` (a `node -e` snippet run in the app image, whose `/app/node_modules` holds only
-sharp), the fixture scripts `apps/server/scripts/cloud-backup-fixture.ts` and
-`apps/server/scripts/cloud-recovery-client-fixture.ts`, and the store's own
-`packages/store/src/connections.ts`, which builds the `-wal` path itself; `WAL_SUFFIX` lives in
-`index.ts`, which imports `connections.ts`, so using it there means moving the names into a module
-of their own. #757's checks do not cover `migrations.lock`, Litestream's `.venue.db-litestream/`
-folder, or the restore's `venue.db.incoming` file and `.venue.db-replaced-*` folder.
-
-**Two leftovers of the restrict/trigger refusal split (#731).** `isRefusal` with
-`RESTRICT_VIOLATION` or `TRIGGER_ABORT` still reads the number alone and both stay exported (the
-`CLAUDE.md` §3 rule, unguarded, is what stands against a new caller); and the four near-identical
-word-matching checks in `packages/db/src/constraint-target.ts` could share one private helper.
-
-**A person row written from outside `packages/identity` still folds its key ASCII-only — OPEN
-(found 2026-09-23, task F1's review wave).** SQLite's `lower()` folds ASCII and nothing else, so the
-three unique indexes on `persons` stopped refusing two staff whose names differ only in the case of
-an accented letter — José García beside JOSÉ GARCÍA, on a Spanish product. The repair stores a
-folded key in its own column (`packages/identity/src/fold.ts`: trim, NFC, lower, NFC) and each
-index reads `case when <folded> is null then lower(<raw>) else <folded> end`. **The `case` is why
-this entry exists:** a bare index on the folded column alone would put every row that did not carry
-one OUTSIDE the uniqueness check, which is worse than the defect. The two real paths that create a
-person are routed — `packages/provisioning/src/venue-apply.ts`'s admin insert and
-`apps/server/src/mirror-session.ts` both call the exported `foldForUniqueness`. **What is left
-open:** every remaining writer outside `packages/identity` is a fixture or a seed, each still
-folding ASCII-only, and the column is still nullable, so nothing at the compiler stops a new writer
-forgetting it. **Next action:** decide whether the column becomes mandatory — which breaks every
-fixture at the compiler rather than silently — or whether a guard over the write sites is enough.
-
-**The shard layout was measured against an engine that is gone — OPEN (found 2026-09-23, task F1's
-review wave).** The shard counts and their sizing arguments were all measured against PGlite and
-none has been re-measured — `mutation.yml`'s ten-shard matrix for `packages/db` most of all, whose
-comment says so explicitly. Read the next weekly run's shard durations before treating any of them
-as current. No local command produces the numbers, so re-cutting the matrix has to wait for a real
-weekly run.
-
-**An append-only trigger can be dropped, or quietly replaced, from the application's own database
-handle — OPEN (found 2026-09-22, task F1).** SQLite has no roles, so only the trigger protects an
-append-only table — every connection is the owner-equivalent, and a `DROP TRIGGER` on the
-application's own handle succeeds (recorded in `packages/db/src/immutability.test.ts`'s header).
-Data mutations are still refused while the triggers are in place, so this is defence in depth rather
-than a live hole.
-
-**The defence to build:** at boot, and then on a repeating check while the box runs, read
-`sqlite_master` and refuse to trade if any append-only trigger that should be there is missing, or
-its stored text is not the text `installAppendOnlyTriggers` writes
-(`packages/store/src/append-only.ts`). The set to compare against is already known — the tables a
-module declared with `appendOnly()`, carried set by set as `MigrationSet.appendOnlyTables`.
-**Re-installing the triggers is not that check** (measured 2026-09-22 on `node:sqlite`): the
-installer writes `create trigger if not exists`, so a trigger that was simply DROPPED is put back by
-the next migrating path, but one dropped and re-created under the SAME NAME with a permissive body is
-not. For whoever writes the comparison: SQLite stores a trigger with `IF NOT EXISTS` removed and
-`CREATE TRIGGER` upper-cased, so the stored text is not byte-identical to the string the installer
-sent.
-
-**Waitron carries two QR encoders; consolidate on `qrcode-generator` — Small.** `apps/server` imports
-`qrcode` (in `qr-matrix.ts`, `print-job-preview.ts`, `discovery-api.ts`) while `apps/till` uses
-`qrcode-generator` (`qr.ts`). The server's three call sites use only `.create()` (the module matrix)
-and `.toString({ type: "svg" })` — no PNG — so `qrcode`'s `pngjs` is never exercised and its `yargs`
-(pulled only because `qrcode` ships a CLI bin) is dead weight. `qrcode-generator` is isomorphic,
-**zero-dependency**, and covers both the matrix (`getModuleCount()`/`isDark()`) and the SVG case.
-Switch the three server sites over and drop `qrcode`; hoist the receipt's hand-ported
-money/date/label formatters into `packages/shared` too (the paper receipt already drifts from the
-screen by an NBSP normalisation). **The gate before landing:** `print-job-preview.ts` reconstructs a
-QR from stored raw `latin1` bytes through `qrcode`'s byte-mode segment API; `qrcode-generator` has a
-`'Byte'` mode, but this path must produce a byte-identical, still-scannable QR — these are fiscal
-receipt QRs AEAT's own app must verify — so it needs a render→decode check and a real scan, not
-just a green typecheck.
-
-**A supplier credit note cannot be entered through the dashboard — OPEN, unqueued.** A negative
-gross total on the purchase-invoice routes is a supplier credit note and is accepted and stored by
-design (owner ruling 2026-09-21; task N1). The dashboard form's `inRange(this.total, 0, Infinity)`
-(`apps/dashboard/src/widgets/purchase-form.ts`) refuses one, so the form refuses the very document
-the ruling calls legitimate. Nobody has decided whether the form should be relaxed or the credit
-note should become its own document type.
-
-**A negative catalogue price can still be stored by a direct call — OPEN (left by #487).** A
-negative catalogue price is never valid (owner ruling 2026-09-21); the product-create and menu-item writes in
-`apps/server/src/catalogue-api.ts` refuse one at the request boundary. `createProduct` and
-`updateProduct` (`packages/catalogue/src/operations.ts`) still accept and store a negative when
-called directly — a seed, a script or a future caller — and `products.unit_price` carries no
-`>= 0` check. Decide whether the screen belongs in the ops or as a `products.unit_price >= 0` check
-beside the sibling price checks the other catalogue tables carry; the column is an integer count of
-cents, so a check constraint is now the only thing that would refuse it at the database.
-
-**Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
-`isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) allows at most two decimal places
-and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the
-screened catalogue writes use allows any number of decimals and twelve whole digits, and ROUNDS the
-excess. So `POST /management-api/products` with `unitPrice: "1.999"` stores `2.00` without saying
-so, while the product-editor route refuses the same value with `product.invalid`; an eleven-digit
-price splits the same way, and `-0.00` is accepted by one and refused by the other. Widening the
-four routes to `isProductPrice` would start refusing values that save today. **Next action:** decide
-whether one rule should govern every catalogue price, and if so which — and check each dashboard
-form against it before changing the server, since a server stricter than its own form is the
-failure #485 met.
-
-**The PGlite throughput bench no longer matches the shape it says it matches — OPEN (found
-2026-09-21, task P6).** `bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE
-match" of the write path, and its `create table` statements are three landed storage decisions
-behind: `numeric` money and quantity columns where the real columns are now whole-number counts
-(#475 and task P6), and a `tenant_id` column the real schema no longer has. Either bring the three
-decisions across and re-baseline, or change the sentence to say what it is.
-
-**Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).**
-
-- **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
-  Packages run `tsc` at 7; the repository root resolves the name `typescript` to
-  `npm:@typescript/typescript6` so typescript-eslint keeps the version 6 API it still reads.
-  typescript-eslint tracks the work in its issue 10940, and the message it prints today names
-  version **7.1** as the target. When a release supports it, the root entry goes back to a plain
-  `^7` range and the alias disappears. `scripts/comments-only.mjs`,
-  `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
-  `scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts` parse with
-  the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them,
-  before that move. The arrangement is in [ci-and-gates.md](developers/ci-and-gates.md) → _Two
-  TypeScript compilers are installed, and that is deliberate_.
-- **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree.** #460
-  declared `@waitron/print-agent-app` as a test-only dependency of `apps/server` (for
-  `apps/server/src/print-agent-e2e.test.ts`) and exported `./tcp-probe.js`. Moving `tcp-probe.ts`
-  alone into `packages/print-agent` was consciously not taken: it belongs to a cohort of six
-  device-discovery modules in the app (`ipp-probe.ts`, `bluetooth.ts`, `usb.ts`,
-  `linux-devices.ts`, `network.ts`, `sweep.ts`), and moving one would leave its siblings importing
-  back across the boundary. Moving the WHOLE cohort would settle it, and that is a print agent
-  layering decision. Until then no guard stops a second app-to-app edge:
-  `scripts/workspace-cycles.test.ts` looks only for loops, and `eslint.config.js`'s
-  `no-restricted-paths` zones name `packages/*` as targets, never `apps/*`.
-
-**Left behind by gating `packages/db`'s mutation score (#472, 2026-09-20).** **The gate never runs
-on a pull request, so thinning a `packages/db` test merges green.** `.github/workflows/mutation.yml`
-fires on a weekly schedule and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it,
-so a change that removes an assertion the score depended on reddens the following Monday. The ten db
-shards took about 50 minutes of wall clock, which is why nobody has put them on the merge path.
-Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
-per-pull-request signal.
-
-**Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).**
-**`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests.** It is test-only plumbing
-the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
-`src/tokens/token-test-helpers.ts`, which `packages/ui/stryker.config.json` already excludes from
-`mutate`. Adding a fourth exclusion is the consistent move and also shrinks the denominator the
-`break: 90` is measured against. Owner's call.
-
-**Left behind by the Stryker upgrade (#447, 2026-09-19).**
-
-- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** Vitest 5 was
-  abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
-  `packages/shared` 8.14% (stryker-js#6210). Stryker 10.0.0's release notes mention neither issue,
-  and nothing here was run under Vitest 5, so the question is untouched rather than resolved. A
-  retry must also check whether #766's stored Dependabot ignore of `@vitest/browser-playwright` 5.x
-  holds that package back, and clear it if so (`docs/developers/workflow-guide.md` → Dependabot pull
-  requests).
-
-**Left behind by the dependency refresh (#432, 2026-09-19).**
-
-- **Whether a declared floor follows the installed version is undecided — one decision for every
-  manifest.** #432 raised five low floors (`hono`, `pg`, `playwright`, `@types/pg`,
-  `@aws-sdk/client-s3`) so that every package declared one identical range; no commit or doc
-  explains why those floors were low, so this was a judgement, not a rule being followed. The vite 8
-  and passkey upgrades below left the same shape (`^8.0.0` against 8.3.0 installed; `^14.0.0` below
-  14.0.2 in two manifests). Dependabot's npm updates set no `versioning-strategy`; its first npm PR,
-  #765, raised the floor of each caret range it changed to the new version and kept each manifest's own form (an
-  exact pin stayed exact), so it did not restore #432's one-range shape where that had lapsed:
-  `@aws-sdk/client-s3` is exact in `apps/server` and a caret range in `packages/stream` and
-  `bench/sqlite-failover`. The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
-
-**Left behind by the esbuild upgrade (#439, 2026-09-19).**
-
-- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it** at
-  0.25.12; since A107 a root `pnpm.overrides` entry moves `@esbuild-kit/core-utils`' copy onto the
-  same 0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit`
-  packages are deprecated.
-- **A bundler bump is checked by comparing the built bundles, by hand.** The test suites run against
-  TypeScript source and cannot see a bundler change, and CI's `bundle-smoke` job would catch a
-  bundle that no longer boots, not one whose contents quietly changed shape. The method: build,
-  stash the outputs, bump, rebuild, `cmp` each pair, and account for every difference class. It does
-  not survive a bundler REPLACEMENT; what replaced it for vite 8 is below.
-
-**Left behind by the Node types upgrade (#441, 2026-09-19).**
-
-- **`apps/dashboard` type-checks against two `@types/node` majors at once.** `@types/qrcode`
-  (declared in `apps/dashboard` and `apps/server`) references the Node types with its own range
-  `"*"`, and the lockfile leaves it on 24.x while everything else is on 26. Nothing complains
-  because `skipLibCheck` is on (`tsconfig.base.json`); with `--skipLibCheck false` that program
-  reports a duplicate `NonSharedBuffer` identifier. The fix is a pnpm resolution override, which is
-  a policy decision, so it was left for the owner. (`@types/ssh2` also holds 18.x, but it asks for
-  `"^18.11.18"` and no 26 release satisfies it.)
-- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One line
-  either way; it needs an owner call on whether Node 24 is still supported.
-
-**Left behind by the Hono Node adapter upgrade (#444, 2026-09-19).** `apps/server` and
-`apps/print-agent` moved from `@hono/node-server` 1.19.15 to 2.1.1. Two things it leaves open:
-
-- **Only the request side of that adapter was compared between the two versions.** Version 2 also
-  changed response code — `Response` fast paths, null-body handling, a close handler for
-  `Blob`/`ReadableStream` responses, and `Response.json()`/`Response.redirect()` — and nothing
-  compared a response BODY or its headers across the two. The suites pass, so nothing is known to
-  be broken. Re-running the comparison needs a scratch install of 1.19.15.
-- **`apps/server/src/tls.ts`'s type guarantee is still untested.** It derives its options type from
-  the installed package (`Parameters<typeof serve>[0]`) so that an incompatible reshape fails
-  `tsc`; this upgrade did not exercise that, because the type was otherwise identical across the two
-  versions.
-
-**Left behind by the vite 8 upgrade (#450, 2026-09-19).** `apps/dashboard`, `apps/setup`,
-`apps/till` and `packages/ui` moved to vite 8, which swaps the bundler and the transformer (Rolldown
-and Oxc for Rollup and esbuild). What replaced the byte comparison: build both, then run the
-SHIPPED bundles and compare what they produce.
-
-- **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI.**
-  `bundle-smoke` builds esbuild bundles only. The only thing that runs `vite build` is
-  `deploy/Dockerfile`, which the `image` job runs — on a pull request only when an image input has
-  changed (`.github/workflows/ci.yml`, the `image` job's `if`), and on every main push; it never
-  OPENS one, so a bundle that builds and renders nothing passes there too. This is the work item
-  `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
-- **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.** Nothing
-  sets a `build.target` and there is no `browserslist`, so the SPAs take vite's default: on 8.3.0
-  `["chrome111","edge111","firefox114","safari16.4","ios16.4"]`, where 6.4.3 gave
-  `["es2020","edge88","firefox78","chrome87","safari14"]`. A `browserslist` field would not fix this
-  (measured against vite 8.3.0: it leaves the resolved target at the default, while
-  `build: { target: … }` sets it). Nothing is known to break, and the devices are bought new — but
-  the hardware track's own stated floors do NOT establish that, and one of them cuts the other way:
-  Screen Wake Lock's iOS Safari 16.4
-  (`docs/superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md`) sits exactly ON
-  the new floor, and Web NFC's Chrome for Android 89
-  (`docs/superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md`) is twenty-two majors
-  BELOW the new chrome111. What is missing is anywhere that states a browser floor, so the next
-  bump moves it again silently.
-- **The browser-mode packages that declare no vite follow the others' by deduplication, not by a
-  declaration.** `packages/adjustments`, `bookings`, `media`, `payments-stripe`, `payments-sumup`
-  and `venue-service` resolve vite because vitest declares it as a required peer spanning three
-  majors and pnpm deduped onto the one the declaring manifests choose. If a future change puts a
-  second vite in the tree, they could land on a different one silently.
-- **A dependency-optimizer receipt taken on vite 6 was not re-measured.** The `vitest.config.ts` of
-  `apps/dashboard`, `apps/setup`, `apps/till` and `packages/ui` each carry an
-  `optimizeDeps.include` list; only `apps/setup`'s comment still quotes Vite's warning — "Vite
-  unexpectedly reloaded a test" — as the flake it fixes. Vite 8's migration guide says Rolldown "is
-  now used for dependency optimization instead of esbuild". Nobody re-checked that vite 8 still emits
-  that warning, or that the `include` lists are still the fix.
-
-**Left behind by the AEAT XML parser upgrade (fast-xml-parser 4 -> 5, 2026-09-20).** Version 5 no
-longer decodes numeric character references: `&#38;` and the references for the other four
-XML-reserved characters arrive as their own source text, and a reference to a character XML 1.0
-forbids is removed entirely. Named forms (`&amp;` and the rest) still decode, and `escape.ts` writes
-nothing but named forms. The upgrade shipped WITHOUT compensating for it, on this argument: every
-parsed AEAT value that is matched against one of ours is a value WE minted and AEAT echoed —
-`RefExterna` (a UUID), `NumSerieFactura` (emitted only from `NUMSERIE_PATTERN`'s charset) and
-`Huella` (hex) — and none of those characters is ever entity-encoded. **The limit of that receipt:
-nothing validates a value on the way back IN** — `NUMSERIE_PATTERN` runs only on the outgoing
-record — so it is an assumption about AEAT's serialiser, not an invariant this code enforces. If it
-is ever in doubt, validating the parsed values on arrival is the cheap fix. `htmlEntities: true` was
-tried and reverted: it decodes 35 named entities XML does not define and turns `&nbsp;` and `&#160;`
-into U+00A0 where 4.5.7 gave U+0020. Exact XML semantics would need version 5's `entityDecoder`
-hook, which is bespoke code on a fiscal path and a decision rather than a bump.
-
-**Left behind by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).**
-
-- **The till's QR pin compares the code against itself, not an authority.** `qrSvg`'s one product
-  call site is the on-screen ticket (`apps/till/src/screens/till-ticket-view.ts`); the PRINTED QR's
-  test reads the error-correction level back out of the format-information bits (`formatInfoLevel`
-  in `apps/server/src/qr-matrix.test.ts`) with negative controls, which asserts what art. 21.1
-  mandates. Giving the till the same reader needs a matrix accessor as well (`qrSvg` returns a
-  string, never the library's `qr` object) and a module-boundary decision about where the helper
-  lives.
-- **There is no snapshot file anywhere in the repository**, so the till's byte pin is a SHA-256 of
-  the output. A file snapshot would fail with a readable diff; whether this repo wants snapshot
-  files at all is an owner decision.
-
-**`node-forge` has a high-severity security alert with no fixed version — OPEN (Dependabot alert #20,
-2026-10-01).** Every version up to 1.4.0, the one in the lockfile, accepts some RSA signatures
-it should reject when checking them. It is a direct dependency of `packages/server-kit`,
-`apps/server` and `apps/print-agent`. From reading the code on 2026-10-02 (nothing run), product
-code only creates and signs certificates and certificate requests with it
-(`packages/server-kit/src/certificate.ts`, `apps/server/src/self-signed-cert.ts`,
-`apps/server/src/cloud-remote.ts`); it checks signatures with it only in tests. **Next action:**
-bump it when a fixed version is published, and run the certificate suites in those three packages.
-
-**Left behind by the passkey library upgrade (#453, 2026-09-19).** `@simplewebauthn/server` and
-`@simplewebauthn/browser` moved to 14.
-
-- **Whether the vulnerability the upgrade fixes is reachable in this product is open.** 14.0.2's
-  release note describes it as "Revamped certificate revocation logic to only cryptographically
-  verify and process CRLs from certificates that chained back to an RP-chosen trust anchor"
-  (GHSA-2g3p-m8c9-hhwh; the release note is the only source). We ask for `attestation: "none"` and
-  never call `MetadataService`, but the attestation FORMAT is chosen by the RESPONSE: the verifier
-  dispatches on the `fmt` inside the client-supplied attestation object, and the `apple` and
-  `android-key` formats carry the library's own built-in trust anchors, which is what makes
-  `validateCertificatePath` — the only caller of `isCertRevoked` — do work. The cheap evidence leans
-  towards reachable rather than away.
-- **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would improve
-  the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
-
-**Correctness:**
-
-1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
-   location.** The TENANT half is retired — there is no tenant column (`CLAUDE.md` §3) — but the
-   location half is open and is NOT covered by item 2, which names a different set of verbs. All
-   four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
-   reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
-   `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
-   filters by `cfg.locationId`; without a stored context, the handover check uses the unscoped
-   `prepay` default;
-   `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's
-   till and node and, for an order whose invoice was issued, to give the credit note its node and
-   series (its till is the requesting device's); `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
-   it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`, which the filing sites in
-   `till-sale.ts` and `working-order.ts` call.
-2. **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
-   `updateHeldOrder`/`abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
-   together with the four paths in item 1, which are the same problem in the same file.
-3. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
-   are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
-   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
-   transaction while another is still running.
-
-**Names left behind by the tenant-column removal (#378, 2026-09-16):**
-
-- **These index and key names still read `tenant`, and the columns they name are gone:**
-  `canvases_tenant_name_key`, `print_agents_tenant_node_key`,
-  `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
-  `table_service_statuses_tenant_label_key`, `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
-  `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
-  `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`. (The `tenants*`,
-  `tenant_themes*`, `tenant_receipts*` and `tenant_credentials*` names are correct and stay.) This is
-  its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in production
-  error translation — `persons_tenant_email_uq` (`packages/identity/src/staff.ts` and
-  `account-action.ts`), `persons_tenant_live_display_name_uq` and `persons_tenant_pending_email_uq`
-  (`staff.ts`) — so renaming them changes behaviour and wants its own failing tests first.
-- **Decide whether to implement `sale.number_reused`.** It was added in `10b16fd57` for a
-  translation of the invoice-number unique-index violation that was never written. Decide whether
-  that translation is still wanted before deleting the code (A77 kept it pending this).
-- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
-  facts about the process itself.** It is thrown for AEAT's certificate
-  (`packages/fiscal-verifactu/src/aeat-transport.ts`), for Stripe's secret key and webhook secret
-  (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and for the email and
-  machine-key credentials (`credentialField`, `apps/server/src/credentials.ts`); both
-  `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. **Next
-  action:** choose a prefix (`credentials.missing` is the nearest sibling) and rename it in one
-  change, checking the prefix matchers `docs/developers/conventions-data.md` lists.
-- **The Stripe webhook endpoint still has to be repointed by hand, at Stripe.** #378 shortened the
-  address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`; the endpoint registered in the
-  Stripe dashboard is outside this repository and will keep sending to the old one until somebody
-  changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
-  taken through a Stripe webhook.
-- **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** The field
-  reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off
-  `> 0`) and `fiscal-none`. A rename would want to keep that "did this pass attempt work?" meaning
-  rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
-  a pass that exercised the certificate and skipped.
-
-**The development stack:**
-
-- **A stale dev database is only reported AFTER the boot dies, never before it** (#343). A pre-flight
-  check was offered and deliberately not built (owner chose the message and the documentation
-  instead, 2026-09-13): compare each set's applied rows against its journal entry count
-  (`packages/migrations/migrations.manifest.json` gives the set-to-table mapping) and warn before
-  launching. Worth doing only if the after-the-fact line turns out not to be enough.
-- **The hint's cover stops at the migration run, and provisioning runs after it** (#343). A module's
-  provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
-  succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
-  curated line. Nobody has hit this.
-- **The hint cannot fire for an ahead-of-image database** (`provisioning.database_ahead`), by
-  design: its operator text never suggests wiping — the remedy there is restore or reinstall (owner
-  decision 2026-09-10).
-
-**Dashboard, till and setup:**
-
-- **One word for "switched off, kept for the record" across the dashboard — done by W110
-  (#1255); what each point leaves open is said under it.** The owner's rule (2026-10-05): a record
-  switched off but kept says **Disable / Deshabilitar**, comes back with **Enable / Habilitar**, and
-  reads **Active** or **Disabled** (Deshabilitado or Deshabilitada, agreeing with the noun);
-  **Delete / Eliminar** only for a real delete. The rule is in `docs/developers/design-system.md`,
-  "Switching off versus deleting". (a) is done by W110a (#1268). (c) is done by W110c (#1271); two
-  owner questions from W110c, in its PR: whether a bulk Enable is wanted, and whether an
-  all-disabled selection's Disable should be greyed out like the toolbar's other buttons rather than
-  hidden. W110c's review read #1269 as having added a test for (e); not re-checked, so (e) below may
-  be stale. (b) is done by W110b (#1278). Two of its loose ends are closed by A285 (#1308):
-  `GET /management-api/watchers` now needs only `venue.view`, like the stations and courses lists
-  (writes still need `venue.configure`), and `products`, `order_draft_lines`, `working_order_lines`
-  and `ticket_items` each have an index on `course_id` (core migration
-  `packages/db/drizzle/0111_course_id_indexes.sql`), which the course in-use read uses. The
-  dashboard's read-only Prep stations screen still shows only its Stations tab, so a view-only
-  manager does not see the watcher list there. Left open by the owner's choice: a Delete label can
-  be stale, because the watcher list does not re-read on a watcher's Done marks nor the course list
-  on draft lines, order lines or kitchen items, in which case a confirmed Delete switches the row
-  off instead. Found along the way:
-  `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) wrote untracked
-  `look/` screenshots into `apps/dashboard/src/screens/` — fixed by A281 (#1344). (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
-  and floor tables do too (W110e, #1290). A department is enabled through `active` on
-  `PATCH /management-api/venue-service/departments/:departmentId`, from its policy-tree row and
-  the departments tab; floor tables through `active` on `PATCH /management-api/tables/:id`, which
-  refuses `table.zone_inactive` while the table's zone, or that zone's department, is disabled;
-  the floor screen reads `GET /management-api/tables?includeDisabled=true`, keeping disabled
-  tables off the plan, and offers no Enable on a table whose zone is disabled. W110e also put a
-  space between a disabled zone's name and its "Disabled" word in the policy tree. Found along
-  the way, each left as it is: enabling a zone or a department leaves what disabling switched off
-  as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
-  exceptions and watcher zones stay gone (a profile's starting zone is kept since W97, 2026-10-06:
-  `readProfileZones` falls back to the profile's first usable zone while it is disabled). A282 is DONE:
-  moving, creating or placing an active table in a zone requires that zone and its department
-  to be active;
-  enabling a zone requires an active department, and moving an active zone to a disabled
-  department is refused. Disabled tables can move into disabled zones; disabled zones can move
-  to a disabled department.
-  `POST /management-api/zones` and the old dashboard creation method are retired; the demo seed
-  and creation fixtures use `createServiceZone`, which writes the zone and its department policy
-  in one transaction. You create zones through Departments and zones. The Enable refusal tells
-  you to enable or assign a department, in English or Spanish. The policy-tree row withholds
-  Enable until that assignment is active. The table-with-no-department gap is closed by the
-  same checks, with direct unassigned-row fixtures covering create, move and placement.
-  A283 is DONE: creating or renaming a department onto another department's name answers
-  409 `department.name_taken`; a disabled department or zone keeps its name and the refusal
-  names the existing row (`department.name_disabled` / `zone.name_disabled`). Departments and
-  zones puts the message beside the name and offers Enable there. Enabling from Add closes
-  the editor after success; enabling from an inline rename keeps the draft and explains that
-  the enabled item's name is still taken. Enabling a zone still requires an active department;
-  if that blocks Enable, the name explains how to fix the assignment and the unusable offer
-  goes away. A reply to an earlier name does not mark text you edited while Enable was waiting.
-  An active zone with no department had its "Not configured" note run onto its name with no space before
-  it (the owner's screenshot read "Private roomNot configured") — DONE by A301: the note now has
-  its own gap and the muted colour. (e) a test gap,
-  reported by W110's review and not re-checked: `#fallbackReason`
-  (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) turns the server's
-  `switched_off` reason into `prep.test_disabled` for both of its callers, and the review found
-  no test for the caller that explains an extra falling back to another station.
-- The dev `?dev` chooser shows `label · kind` rather than `name · profile`; the Spanish
-  form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
-- An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
-  `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
-  constant (the theme colour is literal in three places).
-- Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
-  migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
-  presence light.
-- KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
-  `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
-- Recorded, not blocking: a handheld's Order tab is tappable with no active table; the
-  boot-into-floor prefetch is unreached by any shipped canvas; the station screen's device-mode enrol
-  sub-view is unreachable; the default counter canvas has no prep-queue rail.
-- The dashboard's `es-ES` module default still needs the flip the till got in #170; check the
-  dashboard money formatter for the same "doesn't follow the UI locale" bug.
-
-**House rules and their guards:**
-
-- **`CLAUDE.md` stays contained through regular housekeeping — it is not gated** (owner, 2026-09-14
-  and 2026-10-07). #1337 (2026-10-07) moved the receipts into the `docs/developers/` topic files and
-  took it from about 102 KB to about 71 KB. Add rules freely; prune when touching an entry, and sweep
-  when the file has grown well past about 71 KB, per `CLAUDE.md` §7. The campaign watcher checks it on
-  its 3-hourly evaluation. A housekeeping check, never a blocker.
-- **The pointers guard is deliberately narrower than "every pointer"** (#337): it does not check a
-  root-level filename such as `eslint.config.js`, nor a bare directory. `CLAUDE.md` §7 says so;
-  widen the guard if that gap ever costs something.
-
-**Payments:**
-
-- Bound the HTTP body read as well as the header wait in `sumup-client.ts` (move `clearTimeout` after
-  `res.text()`); lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
-- Pre-existing `forward` retry backoff.
-
-**Fiscal (each behind its own review, owner sign-off at land):**
-
-- **The three alta builders repeat their record assembly** — `recordSale`/`recordCorrection`/
-  `recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
-  `toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
-  needs a huella-invariance re-run across all three.
-- `mirror-bundle.ts`'s `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH`
-  when either package is next touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT.
-
-**Product decisions to take before production:**
-
-- The orphan drift gate holds a customer's money pending a human, unbounded — nothing re-sweeps a
-  closed period.
-- The €0 comped sale settles at the settlement instant, not backdated to `issued_at` — is a comp
-  ever finalised long after the invoice printed?
-- A human account always keeps an email (no remove-email action; `setEmail` rejects clearing) — the
-  rule now, rather than a missing UI path.
-- The duplicate purchase-invoice key `(supplier_tax_id, supplier_invoice_number)` is unique
-  forever — per-year versus forever is the asesor's.
-- **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
-  result — leave it, or build the replay?** In `invoice_first` the place path files a deferred
-  invoice through `recordSale`, so replaying would mean reading back the immutable
-  `registros_facturacion` row and rebuilding the invoice number, date and QR. That is fiscal core,
-  and not work to do unattended. Leaving it is a real option — the 409 is a defensible state
-  conflict and the till keeps the basket and shows `place.error`. The gain if built is that a re-tap
-  after a lost response returns the invoice already issued instead of an error. Two claims an earlier
-  campaign note made are FALSE and must not be reused: that placing files nothing fiscally, and that
-  the current answer is an opaque 500. The place-path comment in
-  `apps/till/src/till-app.ts` calling an idempotent `placeOrder` "a recorded backlog follow-up"
-  refers to this entry.
 
 ---
 

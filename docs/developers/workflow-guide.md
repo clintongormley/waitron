@@ -98,9 +98,9 @@ What still needs a person:
 - **A major bump is a migration, not an update.** #766 moved `@vitest/browser-playwright` alone to
   5.0.1 while every `vitest` stayed on 4, and failed CI; an earlier Vitest 5 move was abandoned on
   2026-09-19 because Stryker killed almost no mutants under it, and a retry has to re-measure
-  mutation: [backlog.md](../backlog.md) → Track C, *Left behind by the Stryker upgrade (#447,
-  2026-09-19)*. The `vitest` group moves `vitest` and `@vitest/*` together, but #766 was closed with
-  `@dependabot ignore this major version`, which Dependabot answered _"OK, I won't notify you about
+  mutation: [backlog/dependencies.md](../backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it),
+  left behind by the Stryker upgrade (#447, 2026-09-19). The `vitest` group moves `vitest` and
+  `@vitest/*` together, but #766 was closed with `@dependabot ignore this major version`, which Dependabot answered _"OK, I won't notify you about
   version 5.x.x again, unless you re-open this PR"_. GitHub's docs describe such ignores as stored
   per dependency
   (`content/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands.md`

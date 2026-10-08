@@ -1115,7 +1115,7 @@ will meet:
   `scripts/apply-migrations-callers.test.ts`, `scripts/pinned-actions-column.test.ts`,
   `scripts/native-form-fields.test.ts` and `scripts/screenshot-paths.test.ts` to version 7's API or keeping the alias for them,
   collapse both back to one plain range
-  (`docs/backlog.md` → Track C).
+  (`docs/backlog.md` → Dependency upgrades).
 
 The root DOES therefore have a working TypeScript compiler API, at version 6, importable from the
 root Vitest project. The root scripts that import it, `scripts/comments-only.mjs`,
