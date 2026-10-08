@@ -531,6 +531,8 @@ describe("the Receipts page's one Save", () => {
   it("when only the receipt texts are refused, says so at the bottom and claims no success", async () => {
     const api = stubApi({ putReceipt: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mount(api);
+    edit(el, "headerSubtitle", "Calle Mayor 1");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(api.putLocationSettings).toHaveBeenCalledTimes(1);
@@ -548,6 +550,8 @@ describe("the Receipts page's one Save", () => {
       putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     const { el } = await mount(api);
+    edit(el, "headerSubtitle", "Calle Mayor 1");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
@@ -566,6 +570,9 @@ describe("the Receipts page's one Save", () => {
         }),
       });
       const { el } = await mount(api);
+      if (field === "headerSubtitle") edit(el, "headerSubtitle", "Calle Mayor 1");
+      else typeFooter(el, "Gracias por su visita");
+      await el.updateComplete;
       q(el, "[data-test=save]")!.click();
       await flush(el);
       const expected = t("receipts.trim_too_long").replace("{max}", "200");
@@ -604,6 +611,8 @@ describe("the Receipts page's one Save", () => {
       }),
     });
     const { el } = await mount(api);
+    edit(el, "headerSubtitle", "Calle Mayor 1");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.error).toBe(

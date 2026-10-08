@@ -123,6 +123,13 @@ function pick(el: ReceiptsScreen, language: string): void {
   void chooseOption(select(el)!, language);
 }
 
+/** An edit outside the language, so Save can be pressed while the language stays as loaded. */
+async function editHeader(el: ReceiptsScreen, value: string): Promise<void> {
+  q(el, "wt-input[name=headerSubtitle]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
 async function save(el: ReceiptsScreen): Promise<void> {
   q(el, "[data-test=save]")!.click();
   await flush(el);
@@ -186,8 +193,10 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
       [{}, undefined, "gl-ES"],
       [{}],
     ]);
+    await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+    expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({ headerSubtitle: "Calle Mayor 1" });
   });
 
   it("keeps the picked language when the paper width or the text changes", async () => {
@@ -225,8 +234,12 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     expect(q(el, "[role=status]")!.textContent).toBe(t("receipts.saved"));
     expect(select(el)!.value).toBe("gl-ES");
     expect(await shown(el)).toBe("Galician");
+    const action = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!;
+    expect([action.variant, action.disabled]).toEqual(["secondary", true]);
+    await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).toHaveBeenCalledTimes(1);
+    expect(api.putReceipt).toHaveBeenLastCalledWith({ headerSubtitle: "Calle Mayor 1" });
   });
 
   it("waits for the language to be saved before sending the rest", async () => {
@@ -251,6 +264,7 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
   it("sends nothing about the language when it was not changed", async () => {
     const api = stubApi(madrid());
     const el = await mount(api);
+    await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
     expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta en establecimiento");
@@ -343,8 +357,10 @@ describe("the Receipts page's receipt language, where the venue may choose it", 
     const field = select(el)!;
     expect(await shown(el)).toBe("English");
     expect(field.value).toBe("en-GB");
+    await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+    expect(api.putLocationSettings).toHaveBeenCalledExactlyOnceWith("Venta en establecimiento");
   });
 
   it("shows a stored value that is not a language as it is, without failing", async () => {
@@ -485,6 +501,7 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     expect(q(el, "[data-test=receipt-language-value]")!.textContent!.trim()).toBe("Catalan");
     expect(q(el, "[data-test=receipt-language-reason]")!.textContent!.trim()).toBe(REASON.en);
     expect(q(el, "[data-test=use-fixed-language]")).toBeNull();
+    await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(api.putReceiptLanguage).not.toHaveBeenCalled();
     expect(api.putLocationSettings).toHaveBeenCalledTimes(1);
@@ -532,6 +549,7 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     expect(languageError(el)).toBe("");
     expect(await bottomOf(el)).toBe(codeMessage("receipt.language_orders_open"));
     expect(q(el, "[data-test=use-fixed-language]")).not.toBeNull();
+    await editHeader(el, "Calle Mayor 1");
     await save(el);
     expect(await bottomOf(el)).toBe("");
     expect(api.putReceiptLanguage).toHaveBeenCalledTimes(1);

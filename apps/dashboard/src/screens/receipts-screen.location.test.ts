@@ -160,6 +160,8 @@ describe("receipts page: the location's invoice description", () => {
       api: client,
     });
     await flush(el);
+    edit(el, "Venta de comidas");
+    await el.updateComplete;
     q(el, "[data-test=save]").click();
     await flush(el);
     expect(await bottomOf(el)).toBe(t("location_settings.save_error"));
@@ -180,6 +182,8 @@ describe("receipts page: the location's invoice description", () => {
           api: client,
         });
         await flush(el);
+        edit(el, "Venta de comidas");
+        await el.updateComplete;
         q(el, "[data-test=save]").click();
         await flush(el);
         const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
@@ -259,6 +263,8 @@ describe("receipts page: the location's invoice description", () => {
       api: api({ putLocationSettings }),
     });
     await flush(el);
+    edit(el, "Venta de comidas");
+    await el.updateComplete;
     q(el, "[data-test=save]").click();
     await el.updateComplete;
     q(el, "[data-test=save]").click();
@@ -344,6 +350,8 @@ describe("receipts page: the location's invoice description", () => {
       api: client,
     });
     await flush(el);
+    edit(el, "Venta de comidas");
+    await el.updateComplete;
     q(el, "[data-test=save]").click();
     await flush(el);
     edit(el, " ");
@@ -362,6 +370,8 @@ describe("receipts page: the location's invoice description", () => {
       api: client,
     });
     await flush(el);
+    edit(el, "Venta de comidas");
+    await el.updateComplete;
     q(el, "[data-test=save]").click();
     await flush(el);
     expect(errorOf(el)).toBe("");
@@ -376,6 +386,8 @@ describe("receipts page: the location's invoice description", () => {
       api: client,
     });
     await flush(el);
+    edit(el, "Venta de comidas");
+    await el.updateComplete;
     q(el, "[data-test=save]").click();
     await flush(el);
     expect(saveDisabled(el)).toBe(false);

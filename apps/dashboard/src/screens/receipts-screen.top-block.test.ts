@@ -312,15 +312,19 @@ describe("saving the top block", () => {
 });
 
 describe("the top block's keyboard and focus", () => {
-  it.each(["phone", "email"])("saves on Enter in the %s field", async (field) => {
+  it.each([
+    ["phone", "+34 912 345 678"],
+    ["email", "hola@deli.es"],
+  ])("saves on Enter in the %s field", async (field, value) => {
     const api = stubApi();
     const { el } = await mount(api);
     const input = q<WtInput>(el, `wt-input[name=${field}]`)!;
     await input.updateComplete;
-    input.shadowRoot!.querySelector("input")!.focus();
+    await userEvent.fill(input.shadowRoot!.querySelector("input")!, value);
+    await el.updateComplete;
     await userEvent.keyboard("{Enter}");
     await flush(el);
-    expect(api.putReceipt).toHaveBeenCalledTimes(1);
+    expect(api.putReceipt).toHaveBeenCalledExactlyOnceWith({ [field]: value });
   });
 
   it("stops outlining the address once focus leaves the switch", async () => {
@@ -423,6 +427,8 @@ describe("the top block while a save is in flight", () => {
     const api = stubApi({ logo: LOGO });
     const finish = delayedSave(api);
     const { el } = await mount(api);
+    edit(el, "headerSubtitle", "Calle Mayor 1");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(inner(el, "remove-image").disabled).toBe(true);
@@ -434,7 +440,7 @@ describe("the top block while a save is in flight", () => {
     expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
     finish();
     await flush(el);
-    expect(lastPut(api)).toEqual({ logo: LOGO });
+    expect(lastPut(api)).toEqual({ headerSubtitle: "Calle Mayor 1", logo: LOGO });
     expect(q(el, "p[role=status]")!.textContent!.trim()).toBe(t("receipts.saved"));
     expect(logoControl(el).image).toBe(LOGO);
     expect(inner(el, "remove-image").disabled).toBe(false);
@@ -447,6 +453,8 @@ describe("the top block while a save is in flight", () => {
     logoControl(el).shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
     await flush(el);
     expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+    edit(el, "headerSubtitle", "Calle Mayor 1");
+    await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
@@ -537,6 +545,7 @@ describe("a refused save of the top block", () => {
       },
     );
     const { el } = await mount(api);
+    edit(el, "headerSubtitle", "Calle Mayor 1");
     await save(el);
     expect(q(el, "[data-test=print-address-error]")!.textContent!.trim()).toBe(
       codeMessage("receipt.invalid"),

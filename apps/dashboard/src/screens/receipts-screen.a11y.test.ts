@@ -56,6 +56,21 @@ async function flush(el: ReceiptsScreen): Promise<void> {
   await el.updateComplete;
 }
 
+/** An edit, so Save can be pressed. */
+async function editHeader(el: ReceiptsScreen, value: string): Promise<void> {
+  el.shadowRoot!.querySelector("wt-input[name=headerSubtitle]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+
+async function saveState(el: ReceiptsScreen) {
+  const save =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+  await save.updateComplete;
+  return [save.variant, save.disabled];
+}
+
 // axe does not score a placeholder's contrast, so the footer's placeholder hint is measured here.
 // The parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
 function contrastRatio(a: string, b: string): number {
@@ -90,6 +105,25 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with Save quiet, then with Save ready after an edit", async () => {
+    const { el, host } = await mountWidget<ReceiptsScreen>(
+      "dashboard-receipts-screen",
+      {
+        api: stubApi(
+          {},
+          { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
+        ),
+      },
+      theme,
+    );
+    await flush(el);
+    expect(await saveState(el)).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    await editHeader(el, "Calle Mayor 2");
+    expect(await saveState(el)).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with a refused save shown in the form's bottom message", async () => {
     const { el, host } = await mountWidget<ReceiptsScreen>(
       "dashboard-receipts-screen",
@@ -97,8 +131,12 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
+    await editHeader(el, "Calle Mayor 1");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+    ).not.toBe("");
     await expectNoA11yViolations(host);
   });
 
@@ -121,8 +159,21 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-mark=headerSubtitle]")).not.toBeNull(),
     );
+    el.shadowRoot!.querySelector("wt-textarea[name=footerMessage]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Gracias por su visita" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-textarea[name=footerMessage]",
+      )!.error,
+    ).not.toBe("");
     el.shadowRoot!.querySelector("wt-input[name=headerSubtitle]")!
       .shadowRoot!.querySelector("input")!
       .focus();
@@ -177,6 +228,7 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       theme,
     );
     await flush(el);
+    await editHeader(el, "Calle Mayor 1");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     const marked = el.shadowRoot!.querySelector<HTMLElement & { error?: string }>(at)!;
