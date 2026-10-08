@@ -2069,9 +2069,10 @@ handler and its `*.unsaved.test.ts`.
 | --- | --- | --- |
 | `hours-screen.ts` (Station hours) | weekday and Configure editors, special date Add/Edit, Duplicate | follows the rule (slice 1); reconnect cases in `hours-screen.unsaved.test.ts` |
 | `opening-hours-week.ts`, `opening-hours-day.ts`, `period-editor.ts`, `range-dialog.ts` (Opening hours, new in #1460) | the normal week, a day, a period, a date range | follow the rule: `saveActionState` bound and an early return in each save; each has a `*.unsaved.test.ts` that takes the form out of the page and puts it back |
-| `opening-hours-screen.ts` | nothing: Edit and Add period open the period editor, Delete is a confirmation | not a form |
+| `opening-hours-screen.ts` | the write behind the period editor's Save, and Delete (a confirmation); Edit and Add period open the period editor | the Save is the period editor's, which follows the rule |
 | `menu-timetable-screen.ts` | — | deleted by #1460 |
 | `service-grid.ts`, `hours-cell-editor.ts`, `hours-calendar.ts` | nothing of their own: parts of the forms above | — |
+| `service-settings-panel.ts` | each setting as soon as it changes; no Save | not a form |
 | `venue-operations-screen.ts` (Departments and zones) | the editor window (Add department, Edit department, Add zone, Configure zone, Transfers) and three inline name editors (department name, zone name, trading name) | **does NOT follow the rule**: Save is drawn blue and enabled on an untouched form, and the inline Saves are enabled on open |
 
 Not saves on Departments and zones, so not gated: the Disable confirmation (`danger`, confirms an
@@ -2081,14 +2082,31 @@ Receipt printing), every Enable action, and the name clash's "Enable <name>".
 **Decisions this batch makes (defaults; the owner may override):**
 
 1. The editor window's Save takes `saveActionState` for the four editing kinds and Transfers. The
-   Disable confirmation keeps `danger` and stays enabled.
+   Disable confirmation keeps `danger` and stays enabled. It has no draft (`updated()` registers
+   none for `kind === "disable"`), so the binding and the early return apply only while the window
+   has a draft — `saveActionState(undefined)` says "unchanged", and a blanket early return would
+   make Disable do nothing. `hours-screen.ts` does the same with its `tracked` flag.
 2. Add department opens with its service style already chosen ("prepay"); that is the opened
    value, so it opens unchanged. No form on this screen opens already savable.
 3. The scopes come from `draftScopeFor`, not `this.#leave?.register`, so a screen with no
    `LeaveController` above it still follows its draft — with `register` alone its scope would be
-   `undefined` and Save would stay disabled for ever. The leave paths (`#beforeEditorClose`,
-   `#leaveName`) then gate on the coordinator (`this.#leave`), not on whether a scope exists,
-   because a scope now always exists.
+   `undefined` and Save would stay disabled for ever. Store the coordinator `draftScopeFor` hands
+   back in `#leave`. The leave paths then gate on the coordinator, not on whether a scope exists,
+   because a scope now always exists: `#leaveName` proceeds at once when there is no coordinator,
+   and `#beforeEditorClose` returns `true` when there is no coordinator OR no draft (Disable) —
+   otherwise `this.#leave!.request` is reached with no coordinator and throws. A side effect, in
+   line with the rule: a screen with no coordinator now also keeps its window open when newer
+   input was typed while a save was being sent (`#save`'s `!scope?.isDirty()`), as it already did
+   with one.
+3a. The editor scope is registered in `updated()` only while `this.isConnected`
+   (`connectedCallback` already asks for an update, and re-registers the inline name drafts
+   itself, so those need no new check). Disposing a scope now redraws the screen, and
+   `disconnectedCallback` disposes the editor's scope and clears `#editorIdentity`, so without the
+   check the redraw runs while the screen is detached, registers a scope with no application
+   behind it, and once the screen is put back it never registers with the application: Cancel,
+   Escape and closing the tab would discard an edit without asking (the trap design-system.md →
+   Forms names). The existing reconnect case puts the screen back in the same task, before that
+   redraw runs, so it cannot catch this; a new case waits a tick while detached.
 4. The editor window's fields are not reactive properties (their values are read from the DOM), so
    the window's change handler asks for an update after `scope.changed()`, or Save would not turn
    blue until something else redrew the screen.
@@ -2102,7 +2120,7 @@ Receipt printing), every Enable action, and the name clash's "Enable <name>".
 to save an unchanged form) now edits first or expects Save disabled; each change is listed in the
 commit message and the pull request.
 
-### Task 4b.1 — the editor window (`venue-operations-screen.ts`)
+### Task 4b.1a — the editor window (`venue-operations-screen.ts`)
 
 Test first, in a new `venue-operations-screen.save-state.test.ts` (the shape of
 `watcher-form.save-state.test.ts`), for each of Add department, Edit department, Add zone,
@@ -2110,12 +2128,30 @@ Configure zone and Transfers: Save is `secondary` and disabled on open; one edit
 `primary` and enabled; typing the opened value back makes it quiet and disabled again; an untouched
 Save `.click()` on the host sends nothing (the early return); a committed save with the window
 still open (newer input kept) draws it as the newer input says. Also: the screen mounted WITHOUT a
-`LeaveController` still turns Save blue on an edit (decision 3); the Disable confirmation is
-`danger` and enabled. Then: `draftScopeFor` for the editor scope, coordinator-gated
-`#beforeEditorClose`, `requestUpdate` after `changed()` in the window's change handler, Save bound
-through `saveActionState`, and `#submit` returns early while unchanged. Run the screen's three
-existing suites (`venue-operations-screen.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`) and fix
-the checks the rule changes, listing each.
+`LeaveController` still turns Save blue on an edit and Cancel/Escape still close it (decision 3);
+the Disable confirmation is `danger`, enabled, and still disables (decision 1); and, in
+`venue-operations-screen.unsaved.test.ts`, a reconnect case that edits, removes the screen, waits a
+tick while it is detached, puts it back, and expects `unload()` to be protected and Cancel to ask
+(decision 3a) — delete the `isConnected` check and see that case fail, then restore it. Then:
+`draftScopeFor` for the editor scope, the coordinator-gated `#beforeEditorClose`, the
+`isConnected` check in `updated()`, `requestUpdate` after `changed()` in the
+window's change handler, Save bound through `saveActionState` while the window has a draft, and
+`#submit` returns early while a draft is unchanged. Run `venue-operations-screen.unsaved.test.ts`,
+`venue-operations-screen.a11y.test.ts` and `department-transfers.a11y.test.ts` and fix the checks
+the rule changes there, listing each (the reviewer found untouched-Save presses at
+`venue-operations-screen.a11y.test.ts:114` and `department-transfers.a11y.test.ts:107`). Commit;
+`venue-operations-screen.test.ts` may still be red on the checks 4b.1b lists — say so in the commit.
+
+### Task 4b.1b — the main suite's changed checks (`venue-operations-screen.test.ts`)
+
+That suite mounts with no `LeaveController`, so every editor draft starts counting there. The plan
+reviewer found these presses of an untouched edit-form Save (Disable presses left out), lines on
+`main` 8d52162e3: 332, 2122, 2141, 2683, 2723, 2735, 2778, 2798, 2810, 2972, 3136, 3355, 3371,
+3905, 3934; and `saveDisabled(el)` expected `false` while unchanged at 2716 (after typing back to
+""), 2768 and 2793 (on reopen). For each: make the edit the test means before pressing, or expect
+Save disabled where the test is about the untouched form — never loosen what it asserts after.
+List every changed check (`file:line`, before, after) for the commit message and the PR. The
+whole suite passes.
 
 ### Task 4b.2 — the inline name editors (`venue-operations-screen.ts`)
 
@@ -2131,7 +2167,8 @@ pass unedited.
 
 LOOK at Departments and zones in the dev stack: the editor window unchanged and after one edit
 (Add department, Edit department, Configure zone), and an inline name editor unchanged and after
-one edit, in English light 1280px and Spanish dark 390px. Add the screen, and the Opening hours
+one edit, in English light 1280px and Spanish dark 390px — at 390px also with a long name, since the
+name cell's buttons change from native to `wt-button`. Add the screen, and the Opening hours
 forms the audit found already following the rule, to design-system.md → Forms' list. Backlog: batch
 4b's bullet in the A331 entry, and the one re-check after A366-7 (decision 6) as its own short
 entry.
