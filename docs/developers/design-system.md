@@ -483,11 +483,13 @@ but never lets the textarea itself fall below `--wt-tap-min`, growing the box in
 `--wt-tap-min` in a compact field. Among the field primitives, `wt-number-stepper`'s two buttons are
 the one exception, by the owner's decision (A263, 2026-10-03): each is `--wt-stepper-button-width` (24px) wide, because the
 number between them keeps them apart and 24 by 24 CSS px is WCAG 2.2's level AA minimum (criterion
-2.5.8; the 44px figure is the level AAA criterion 2.5.5). Outside the field primitives,
+2.5.8; the 44px figure is the level AAA criterion 2.5.5).
+
 The dashboard sidebar's page rows and group headers use `--wt-space-6` (32px) minimum
 height with a fine pointer (A325, owner 2026-10-07). With a coarse pointer they retain
 `--wt-tap-min` (44px). This exception applies to sidebar navigation only.
-`wt-relative-time`'s words are an inline button below `--wt-tap-min`, under criterion 2.5.8's
+
+Outside the field primitives, `wt-relative-time`'s words are an inline button below `--wt-tap-min`, under criterion 2.5.8's
 exception for a target in a sentence (quoted in its row of the component table); that is the
 implementer's choice and awaits the owner's view (`docs/backlog.md`, W106's open point (f)). `wt-switch`'s `:host` and `.control` and
 `wt-price-input`'s unit button take `min-width` and
@@ -2086,7 +2088,9 @@ of what the header shows, and outside a search the header's `aria-expanded` and 
 `hidden` follow the set alone. A collapsed group holding the current page hides that page's row;
 arriving at another page in it opens it again. Opening a headed group, by clicking its header
 or arriving at one of its pages, closes every other headed group (A325, owner 2026-10-07).
-Typing a search term leaves those stored choices unchanged.
+Opening Overview, the page without a group header, closes every headed group. A same-page
+address change or Back step leaves a manually opened group alone. Typing a search term leaves
+those stored choices unchanged.
 
 A group draws no header when this session cannot open any of its pages. Search also hides a group
 when it removes all of its pages. A group may mix module pages with core pages: a core item listed in

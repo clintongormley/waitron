@@ -729,8 +729,7 @@ export class DashboardApp extends LitElement {
   @state() private collapsedGroups = new Set<NavGroupId>(
     NAV_GROUPS.filter((group) => group.headerKey).map((group) => group.id),
   );
-  // Collapsing a group shrinks the sidebar, and the browser clamps scrollTop, snapping the list
-  // upward. Correcting scrollTop by how far the clicked header moved keeps it where it was clicked.
+  // Keep the clicked header in place when another group's panel closes above it.
   #toggleGroup(id: NavGroupId, trigger: HTMLElement): void {
     const before = trigger.getBoundingClientRect().top;
     const next =
@@ -1742,7 +1741,6 @@ export class DashboardApp extends LitElement {
     if (this.screen === "login" || this.sessionRole === undefined) return;
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
-    this.#openGroupOf(this.screen);
     this.drawerOpen = false;
     diag.record("info", "nav", { screen: this.screen });
   };

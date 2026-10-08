@@ -1,4 +1,4 @@
-import { leaveCoordinatorFor } from "@waitron/ui";
+import { leaveCoordinatorFor, navigationGuardFor } from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
@@ -15,6 +15,7 @@ import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 declare module "vitest/browser" {
   interface BrowserCommands {
     emulateColorScheme: (colorScheme: "light" | "dark" | null) => Promise<void>;
+    emulateTouch: (enabled: boolean) => Promise<void>;
   }
 }
 
@@ -2111,6 +2112,31 @@ describe("dashboard-app", () => {
     }
   });
 
+  it("keeps touch nav rows at 44px and their chevrons visible without hover", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await commands.emulateTouch(true);
+      await page.viewport(390, 844);
+      expect(matchMedia("(pointer: coarse)").matches).toBe(true);
+      expect(matchMedia("(hover: none)").matches).toBe(true);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+      await flush(el);
+      for (const header of el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")) {
+        expect(header.matches(":hover")).toBe(false);
+        expect(header.matches(":focus-visible")).toBe(false);
+        expect(header.getBoundingClientRect().height).toBe(44);
+        expect(getComputedStyle(header.querySelector(".chevron")!).opacity).toBe("1");
+      }
+      expect(navItem(el, "overview")!.getBoundingClientRect().height).toBe(44);
+    } finally {
+      await commands.emulateTouch(false);
+      await page.viewport(width, height);
+    }
+  });
+
   it.each(["en-GB", "es-ES"])(
     "fits nav group labels on one line and paints the sidebar edge (%s)",
     async (locale) => {
@@ -2154,6 +2180,9 @@ describe("dashboard-app", () => {
         el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
         await flush(el);
         expect(sidebar.getBoundingClientRect().width).toBeLessThan(390 * 0.85 + 1);
+        await page.viewport(320, 844);
+        expect(window.innerWidth).toBe(320);
+        expect(sidebar.getBoundingClientRect().width).toBeCloseTo(320 * 0.85, 0);
       } finally {
         await page.viewport(width, height);
       }
@@ -2279,6 +2308,36 @@ describe("dashboard-app", () => {
     expect(panel.hidden).toBe(false);
     expect(navItem(el, "catalogue")!.checkVisibility()).toBe(true);
   });
+
+  it.each(["Back", "query write"])(
+    "keeps a manually opened nav group on a same-page %s",
+    async (operation) => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+      await flush(el);
+      if (operation === "Back") history.pushState(null, "", "/manage/catalogue?review=1");
+      const team = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-team]")!;
+      team.click();
+      await flush(el);
+      expect(team.getAttribute("aria-expanded")).toBe("true");
+      if (operation === "Back") {
+        const back = new Promise<void>((resolve) =>
+          window.addEventListener("popstate", () => resolve(), { once: true }),
+        );
+        history.back();
+        await back;
+      } else {
+        await navigationGuardFor(window)!.write("/manage/catalogue?review=2");
+      }
+      await flush(el);
+      expect(location.pathname).toBe("/manage/catalogue");
+      expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+      expect(team.getAttribute("aria-expanded")).toBe("true");
+      expect(
+        el.shadowRoot!.querySelector("[data-test=nav-group-menu]")!.getAttribute("aria-expanded"),
+      ).toBe("false");
+    },
+  );
 
   it("opens a collapsed group when the Back button arrives at a page in it", async () => {
     history.replaceState(null, "", "/manage/staff");

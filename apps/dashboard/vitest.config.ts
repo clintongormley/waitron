@@ -1,6 +1,7 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
+import type { CDPSession, Page } from "playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
@@ -33,6 +34,21 @@ const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = asy
   await page.emulateMedia({ reducedMotion });
 };
 
+const touchSessions = new WeakMap<Page, CDPSession>();
+const emulateTouch: BrowserCommand<[enabled: boolean]> = async (context, enabled) => {
+  const { page } = context as unknown as { page: Page };
+  let session = touchSessions.get(page);
+  if (!session) {
+    session = await page.context().newCDPSession(page);
+    touchSessions.set(page, session);
+  }
+  await session.send("Emulation.setTouchEmulationEnabled", { enabled });
+  if (!enabled) {
+    touchSessions.delete(page);
+    await session.detach();
+  }
+};
+
 // The browser context is pinned to UTC so screen tests' wall-clock assertions read the same on every
 // machine. That pin cannot test local-time rendering, so date-utils runs in a Node project below.
 const browserProject = {
@@ -51,6 +67,7 @@ const browserProject = {
       commands: {
         emulateColorScheme,
         emulateReducedMotion,
+        emulateTouch,
         ...parkPointerCommands,
       },
     },
