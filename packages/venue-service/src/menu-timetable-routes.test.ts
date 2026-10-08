@@ -376,7 +376,7 @@ describe("the opening-hours routes", () => {
         days: week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "09:00" }]),
       }),
       400,
-      { code: "menu_timetable.invalid", params: { field: "days.1.slots.0.endsAt" } },
+      { code: "menu_timetable.invalid", params: { field: "days.1.slots", reason: "empty" } },
     );
     await answers(
       await r.send("PUT", `/special-dates/${unknown}/menu-timetables/${r.restaurant}`, r.manager, {
