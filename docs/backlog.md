@@ -1208,9 +1208,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   product is created in; with two, the second becomes unreachable from the dashboard. **Next
   action:** decide whether more than one catalogue is a case Waitron supports.
 
-- **There is no permanent delete** for a product that was never sold and was created by mistake.
-  **Next action:** decide whether that is worth a second, differently-worded action.
-
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's parser refuses a blank; `option_lists.name`, `option_labels.name` and
   `extra_lists.name` share the pattern (`packages/catalogue/drizzle/0000_baseline.sql`). **Next
@@ -4567,6 +4564,13 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 ### Modules, data and code health
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
+
+- **A435 — delete hardware and venue setup, archive products for good (owner, 2026-10-08; spec
+  written; plans not written).** A permanent deleted state rather than row removal: printers, card
+  readers and devices keep Disable beside a new Delete; kitchen stations, courses, tables, zones and
+  departments get Delete only; products get a permanent Archive, refused while a live or scheduled
+  menu includes them. History is left as it is. Six steps, products first, then printers.
+  [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md)
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
