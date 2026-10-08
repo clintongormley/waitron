@@ -712,6 +712,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   layout. Left open by W93 (#1287).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
+- **On the Home page tab, a shortcut's ⋮ still opens while a save is out** (its Remove is disabled,
+  as the Structure tree's was). The plan wanted the ⋮ itself disabled, but `wt-row-actions` lost its
+  `disabled` option in A359 (#1360). Owner to choose: bring the option back, or keep this. Left open
+  by A336 (#1458).
+
 - **On the Home page tab, a missing shortcut and one devices do not show look alike**: both are
   dashed and muted and differ only in their words ("Missing: <name>" against "Not shown on
   devices"), because the dashboard has no warning icon. Left open by A336.
