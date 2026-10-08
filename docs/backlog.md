@@ -1263,7 +1263,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   are implemented. Routing follows today's destination, with the active default taking work if
   that path ends without an open station. The module contract exposes destination choices and
   today's close/open writes. Identity accepts the module permission and authorises a manager PIN
-  without a session under the wrong-PIN limit; controls and their request paths remain to build.
+  without a session under the wrong-PIN limit. The till now reads destinations and authorizers,
+  closes or opens a station with a manager permission or PIN, and reports today's state. The
+  kitchen display request path, extension request paths and visible controls remain to build.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows

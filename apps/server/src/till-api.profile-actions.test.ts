@@ -94,6 +94,9 @@ import {
  * checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
  * routes (choosing equipment is not printing, paying or opening the drawer); and table placement,
  * which needs `venue.configure`. Left ungated by decision, each with its reason:
+ * - `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
+ *   `PUT /api/stations/:stationId/today`: a decision about the venue's day; reads require a session,
+ *   writes require `venue_service.manage` or a permitted PIN override;
  * - the watcher "done" marks: each is the watcher's own record of what it has seen, not preparing
  *   or handing over. `/api/device/watcher/done` is made by the watcher's own display, which is
  *   allowed only `prepare-orders`; `/api/watchers/:id/done` by a person signed in on a till that

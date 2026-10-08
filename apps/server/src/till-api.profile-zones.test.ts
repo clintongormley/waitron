@@ -148,7 +148,9 @@ import { offerProducts } from "./testing/zone-offers.js";
  * `/payment-slip`, `/reprint` and the four bill-payment routes — where it reads just before, outside
  * any transaction.
  *
- * Not zone-gated: the session, staff, till, locale and product reads; the kitchen's station,
+ * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
+ * `PUT /api/stations/:stationId/today` name no zone; the session, staff, till, locale and product
+ * reads; the kitchen's station,
  * notice, ticket-item, expo, watcher and `/api/orders/:id/stations/:sid/advance` routes, whose scope
  * is the device's station or watcher ("a kitchen display" below); and the drawer, the authorizer and reason lists,
  * `/api/statuses` and `GET/PUT /api/device/equipment`, which name no zone.
