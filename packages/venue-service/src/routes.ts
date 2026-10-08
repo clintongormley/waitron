@@ -84,6 +84,7 @@ import {
   setDepartmentTransferSettings,
 } from "./department-transfers.js";
 import "./errors.js";
+import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -122,6 +123,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "hours.invalid": 400,
   "special_date.not_found": 404,
   "special_date.date_taken": 409,
+  "zone_closed_time.invalid": 400,
   "special_date.keeps_week": 409,
   "station.always_open": 409,
   "holiday.invalid": 400,
@@ -995,6 +997,28 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await gated(sessionId, (tx) =>
           replaceMenuWeek(tx, ctx.cfg, departmentId, body.days as readonly MenuWeekDay[], at),
         );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/zones/:zoneId/closed-week", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["days"]);
+        await gated(sessionId, (tx) => replaceZoneClosedWeek(tx, ctx.cfg, zoneId, body.days));
+        return c.body(null, 204);
+      }),
+    );
+    app.put("/management-api/venue-service/special-dates/:id/zone-closed-times/:zoneId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["ranges"]);
+        await gated(sessionId, (tx) => saveZoneClosedDate(tx, ctx.cfg, id, zoneId, body.ranges));
         return c.body(null, 204);
       }),
     );

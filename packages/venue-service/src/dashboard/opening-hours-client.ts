@@ -5,6 +5,7 @@ import type {
   MenuWeekDay,
   OpeningHoursModel,
 } from "../menu-timetable-types.js";
+import type { ClosedRange } from "../service-day.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { ModelWatches } from "./model-watch.js";
 
@@ -50,6 +51,23 @@ export class OpeningHoursApi {
   }
   saveWeek(departmentId: string, days: readonly MenuWeekDay[]): Promise<void> {
     return this.request(`${BASE}/departments/${at(departmentId)}/menu-week`, "PUT", { days });
+  }
+  saveZoneWeek(
+    zoneId: string,
+    days: readonly { weekday: number; ranges: readonly ClosedRange[] }[],
+  ): Promise<void> {
+    return this.request(`${BASE}/zones/${at(zoneId)}/closed-week`, "PUT", { days });
+  }
+  saveZoneDate(
+    specialDateId: string,
+    zoneId: string,
+    ranges: readonly ClosedRange[],
+  ): Promise<void> {
+    return this.request(
+      `${BASE}/special-dates/${at(specialDateId)}/zone-closed-times/${at(zoneId)}`,
+      "PUT",
+      { ranges },
+    );
   }
   saveDateMenus(
     specialDateId: string,

@@ -64,6 +64,9 @@ export const QUERY_DEPENDENCIES = {
     "departments",
     "catalogues",
     "locations",
+    "zone_closed_times",
+    "zone_service_policies",
+    "floor_zones",
   ],
   operations: [
     "departments",

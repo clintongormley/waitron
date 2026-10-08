@@ -751,3 +751,50 @@ it("refuses dated writes on a day keeping the week and no longer offers per-depa
   });
   await answers(await r.send("DELETE", path, r.manager), 404);
 });
+
+describe("zone closed-time routes", () => {
+  it("writes a week and a named day and reads their zone ranges", async () => {
+    const r = await routed();
+    const ranges = [{ startsAt: "23:00", endsAt: "06:00" }];
+    const days = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      ranges: weekday === 1 ? ranges : [],
+    }));
+    await answers(await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, { days }), 204);
+    await answers(
+      await r.send("PUT", `/special-dates/${r.christmas}/zone-closed-times/${r.barra}`, r.manager, {
+        ranges: [{ startsAt: "06:00", endsAt: "06:00" }],
+      }),
+      204,
+    );
+    const response = await r.send("GET", "/opening-hours", r.supervisor);
+    expect(response.status).toBe(200);
+    const saved = (await response.json()) as OpeningHoursModel;
+    expect(restaurantOf(saved, r).zones).toEqual([
+      {
+        id: r.barra,
+        name: "Barra",
+        week: days,
+        dates: [{ specialDateId: r.christmas, ranges: [{ startsAt: "06:00", endsAt: "06:00" }] }],
+      },
+    ]);
+    await answers(await r.send("PUT", `/zones/${r.barra}/closed-week`, r.staff, { days }), 403);
+    await answers(
+      await r.send("PUT", `/special-dates/${r.christmas}/zone-closed-times/${r.barra}`, r.staff, {
+        ranges: [],
+      }),
+      403,
+    );
+    await answers(
+      await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, {
+        days: [
+          ...days.slice(0, 6),
+          { weekday: 6, ranges: [{ startsAt: "12:10", endsAt: "14:00" }] },
+        ],
+      }),
+      400,
+      { code: "zone_closed_time.invalid", params: { field: "days.6.ranges", reason: "step" } },
+    );
+    expect(restaurantOf(await r.model(), r).zones[0]!.week).toEqual(days);
+  });
+});

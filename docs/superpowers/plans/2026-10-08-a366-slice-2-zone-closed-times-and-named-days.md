@@ -631,15 +631,15 @@ Routes (manager, `venue.configure` as the other writers): `PUT
 `zone_closed_times`, `zone_service_policies` and `floor_zones`. The calendar participant copies a
 date's zone rows.
 
-- [ ] **Step 1: Failing tests:** a week saved and read back (fails today: no such route); a
+- [x] **Step 1: Failing tests:** a week saved and read back (fails today: no such route); a
   06:00–06:00 range is the whole day; overlap, order, step and empty refusals name the field and
   reason; another venue's zone is refused `service_zone.not_found`; a dated save on a day keeping
   the week is refused; a copy of a day carries its zone rows; the live query's list.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/service-day.test.ts src/menu-timetable-routes.test.ts src/dashboard/live-queries.test.ts`.
-- [ ] **Step 3: Implement.** Register `zone_closed_time.invalid` (400).
-- [ ] **Step 4: Run; see them pass;** the venue-service node project and the server package;
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/service-day.test.ts src/menu-timetable-routes.test.ts src/dashboard/live-queries.test.ts`.
+- [x] **Step 3: Implement.** Register `zone_closed_time.invalid` (400).
+- [x] **Step 4: Run; see them pass;** the venue-service node project and the server package;
   typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): zone closed times for the week and for a named day (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): zone closed times for the week and for a named day (A366)`.
 
 ---
 

@@ -34,6 +34,8 @@ import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { periodExtensions } from "./schema/period-extensions.js";
+import { readZoneClosedTimes } from "./zone-closed-times.js";
+import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import "./errors.js";
 
 const wire = (time: string) => time.slice(0, 5);
@@ -802,6 +804,18 @@ async function assertPlaced(
  */
 export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
   async copy(tx, _cfg, sourceId, targetId) {
+    const closures = await tx
+      .select({
+        zoneId: zoneClosedTimes.zoneId,
+        startsAt: zoneClosedTimes.startsAt,
+        endsAt: zoneClosedTimes.endsAt,
+      })
+      .from(zoneClosedTimes)
+      .where(eq(zoneClosedTimes.specialDateId, sourceId));
+    if (closures.length > 0)
+      await tx
+        .insert(zoneClosedTimes)
+        .values(closures.map((row) => ({ ...row, specialDateId: targetId })));
     for (const { departmentId, slots } of await dateTimetables(tx, sourceId))
       await writeDay(tx, undefined, { departmentId, specialDateId: targetId }, slots);
   },
@@ -874,6 +888,7 @@ export async function readOpeningHoursModel(
       .get(id)!
       .slice()
       .sort((a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start);
+  const zones = await readZoneClosedTimes(tx, cfg, clock.dayCutover);
   const dateRows = await tx
     .select({
       id: specialDates.id,
@@ -924,6 +939,9 @@ export async function readOpeningHoursModel(
       const days = timetables.filter((row) => row.departmentId === department.id);
       return {
         ...department,
+        zones: zones
+          .filter((zone) => zone.departmentId === department.id)
+          .map(({ id, name, week, dates }) => ({ id, name, week, dates })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
           .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({

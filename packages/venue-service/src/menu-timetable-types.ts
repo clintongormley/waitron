@@ -1,5 +1,5 @@
 // Browser-safe: types only, no database or server imports.
-import type { ServiceRange } from "./service-day.js";
+import type { ClosedRange, ServiceRange } from "./service-day.js";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
 
 export interface MenuPeriodInput {
@@ -59,6 +59,12 @@ export interface OpeningHoursModel {
     id: string;
     name: string;
     active: boolean;
+    zones: readonly {
+      id: string;
+      name: string;
+      week: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
+      dates: readonly { specialDateId: string; ranges: readonly ClosedRange[] }[];
+    }[];
     periods: readonly {
       id: string;
       name: string;
