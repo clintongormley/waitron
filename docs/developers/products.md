@@ -305,8 +305,9 @@ That colour is worked out in order. It is the product's own colour (`products.co
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
 nearest category above it that does (`category_details.color`). Otherwise it is the venue's
 default colour (`catalogue_settings.default_color`); with no default it has none, and each
-screen draws its usual neutral look. The rule lives in one place, `effectiveColor` and
-`categoryColor` in `packages/catalogue/src/color-inheritance.ts`, which the server and the
+screen draws its usual neutral look. The rule lives in one place, `effectiveColor`, `categoryColor` and
+`categoryColorSource` (which also says which category the colour came from) in
+`packages/catalogue/src/color-inheritance.ts`, which the server and the
 dashboard both call. So colouring a category colours every product under it, at any depth, that
 has no colour of its own and no coloured category nearer to it, and the default colours every
 product with no colour of its own and no coloured category above it, a product in no category
