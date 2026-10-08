@@ -217,14 +217,20 @@ export class PurchaseForm extends LitElement {
   #opening = {};
   #submitted?: PurchaseDraft;
   #scope?: DraftScope<PurchaseDraft>;
+  #baseline?: PurchaseDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#disposeDraft();
-    this.#identity = undefined;
+    this.#opening = {};
     super.disconnectedCallback();
   }
 
@@ -256,6 +262,7 @@ export class PurchaseForm extends LitElement {
     return () => {
       if (!this.isConnected || !this.open || opening !== this.#opening) return false;
       if (submitted) {
+        this.#baseline = snapshot(submitted);
         scope?.commit(submitted);
         if (scope?.isDirty()) return false;
       }
@@ -275,6 +282,7 @@ export class PurchaseForm extends LitElement {
       this.#identity = identity;
       this.#opening = {};
       this.#submitted = undefined;
+      this.#baseline = undefined;
       const inv = this.invoice;
       this.supplierTaxId = inv?.supplierTaxId ?? "";
       this.supplierName = inv?.supplierName ?? "";
@@ -291,7 +299,8 @@ export class PurchaseForm extends LitElement {
       this.attempted = false;
     }
     if (!this.open) this.#disposeDraft();
-    else if (!this.#scope) {
+    else if (this.isConnected && !this.#scope) {
+      this.#baseline ??= snapshot(this.#value());
       const { coordinator, scope } = draftScopeFor<PurchaseDraft>(this, {
         id: this,
         current: () => this.#value(),
@@ -312,6 +321,7 @@ export class PurchaseForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
 

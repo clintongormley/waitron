@@ -4,7 +4,12 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import type { PurchaseInvoice } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./purchase-form.js";
 
 const invoice: PurchaseInvoice = {
@@ -288,4 +293,79 @@ it("disconnection aborts an outstanding purchase discard and releases unload pro
   await expect.poll(() => q.open).toBe(false);
   expect(unload()).toBe(false);
   expect(app.closes).toBe(0);
+});
+
+function fieldValue(form: HTMLElement, name: string) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[data-test=${name}]`)!
+    .value;
+}
+async function saveButton(form: HTMLElementTagNameMap["dashboard-purchase-form"]) {
+  await form.updateComplete;
+  const save =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  await save.updateComplete;
+  return { variant: save.variant, disabled: save.disabled };
+}
+it("a purchase put back after a detached update still asks before Escape discards an edit", async () => {
+  const { app, form } = await mount();
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "supplier-name", "Changed supplier");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("a purchase keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, form } = await mount();
+  await edit(form, "supplier-name", "Changed supplier");
+  await reattachAfterDetachedUpdate(form);
+  expect(fieldValue(form, "supplier-name")).toBe("Changed supplier");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
+  form
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=supplier-name]")!
+    .shadowRoot!.querySelector("input")!
+    .focus();
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("a purchase put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  await edit(form, "supplier-name", "Submitted supplier");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  const completeWrite = form.writeCompletion();
+  await edit(form, "supplier-name", "Newer supplier");
+  expect(completeWrite()).toBe(false);
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "supplier-name", "Submitted supplier");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("a purchase reopened on another invoice after a put-back save opens quiet with that invoice", async () => {
+  const { app, form } = await mount();
+  await edit(form, "supplier-name", "Changed supplier");
+  await reattachAfterDetachedUpdate(form);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  expect(form.writeCompletion()()).toBe(true);
+  expect(form.open).toBe(false);
+  await closeReportsDelivered();
+  form.invoice = { ...invoice, id: "pi-2", supplierName: "Other supplier" };
+  form.open = true;
+  await form.updateComplete;
+  expect(fieldValue(form, "supplier-name")).toBe("Other supplier");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect((await saveButton(form)).disabled).toBe(true);
+});
+it("a purchase write that started before the form was taken out and put back neither saves nor closes it", async () => {
+  const { app, form } = await mount();
+  await edit(form, "supplier-name", "Changed supplier");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  const completeWrite = form.writeCompletion();
+  await reattachAfterDetachedUpdate(form);
+  expect(completeWrite()).toBe(false);
+  expect(form.open).toBe(true);
+  expect(fieldValue(form, "supplier-name")).toBe("Changed supplier");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
 });
