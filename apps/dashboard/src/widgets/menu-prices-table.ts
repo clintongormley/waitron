@@ -204,8 +204,8 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(price-note) {
         font-size: var(--wt-font-size-sm);
       }
-      /* Wide enough that a range placeholder shows whole rather than clipped into one price, until
-         phone width narrows it (below). Its positioned box holds the field's hidden hint, which otherwise
+      /* Wide enough that a range placeholder shows whole rather than clipped into one price; phone
+         width sizes it below. Its positioned box holds the field's hidden hint, which otherwise
          escapes the table's scroller and widens the page. Its end margin clears the outcome message
          floating at the bottom, whose height is measured into --outcome-height because a long
          sentence wraps it. */
@@ -245,15 +245,16 @@ export class MenuPricesTable extends LitElement {
       /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
          the note under it, is capped at the room the price column and the pinned row-menu column
          leave beside the cell's padding and the tree's toggle. The row-menu column is as wide as
-         its heading in the current language, so its width is measured into --actions-width. The
-         price field gives up width first, down to the base field's, so at 390px a one-word name
-         such as "Lemonade" keeps its line. A size's name is indented one tree step further. */
+         its heading in the current language, so its width is measured into --actions-width. While
+         no field shows a range, the price field gives up width first, down to the base field's. A
+         size's name is indented one tree step further. */
       @container (max-width: 30rem) {
         wt-data-table {
           --name-and-field-room: calc(
             100cqi - var(--actions-width, var(--wt-tap-min)) - 4 *
               var(--wt-space-3) - var(--tree-arrow-width) - var(--wt-space-4)
           );
+          --name-floor: var(--wt-tap-min);
           --narrow-price-field-width: clamp(
             var(--wt-price-field-width),
             var(--name-and-field-room) - var(--wt-tap-min) - var(--wt-space-6),
@@ -261,16 +262,30 @@ export class MenuPricesTable extends LitElement {
           );
           --name-room: calc(var(--name-and-field-room) - var(--narrow-price-field-width));
         }
+        /* While a field shows a range, the names give up width first, down to --wt-space-6 or to
+           the width the column's heading, measured into --name-heading-width, holds them at anyway.
+           The pinned cell may cover part of the price cell's end padding. */
+        wt-data-table.ranges {
+          --name-floor: max(
+            var(--wt-space-6),
+            var(--name-heading-width, 0px) - var(--tree-arrow-width)
+          );
+          --narrow-price-field-width: clamp(
+            var(--wt-price-field-width),
+            var(--name-and-field-room) + var(--wt-space-2) - var(--name-floor),
+            var(--wt-price-range-field-width)
+          );
+        }
         wt-data-table::part(override-field) {
           --wt-price-field-width: var(--narrow-price-field-width);
         }
         wt-data-table::part(name-box) {
           display: block;
-          max-inline-size: max(var(--wt-tap-min), var(--name-room));
+          max-inline-size: max(var(--name-floor), var(--name-room));
         }
         wt-data-table::part(variant-name) {
           padding-inline-start: var(--wt-space-3);
-          max-inline-size: max(var(--wt-tap-min), var(--name-room) - var(--wt-space-2));
+          max-inline-size: calc(max(var(--name-floor), var(--name-room)) - var(--wt-space-2));
         }
       }
       @media (max-width: 48rem) {
@@ -469,11 +484,16 @@ export class MenuPricesTable extends LitElement {
   }
 
   #fitActions(): void {
-    const cell = this.#table()?.shadowRoot?.querySelector('thead th[data-pinned="end"]');
-    const width = cell ? `${cell.getBoundingClientRect().width}px` : "";
-    if (this.style.getPropertyValue("--actions-width") === width) return;
-    if (width === "") this.style.removeProperty("--actions-width");
-    else this.style.setProperty("--actions-width", width);
+    const head = this.#table()?.shadowRoot?.querySelector("thead");
+    this.#measureInto("--actions-width", head?.querySelector('th[data-pinned="end"]'));
+    this.#measureInto("--name-heading-width", head?.querySelector('[part="tree-heading"]'));
+  }
+
+  #measureInto(property: string, node: Element | null | undefined): void {
+    const width = node ? `${node.getBoundingClientRect().width}px` : "";
+    if (this.style.getPropertyValue(property) === width) return;
+    if (width === "") this.style.removeProperty(property);
+    else this.style.setProperty(property, width);
   }
 
   #fitOutcome(): void {
@@ -749,6 +769,18 @@ export class MenuPricesTable extends LitElement {
     if (leftToBrowser(event)) return;
     event.preventDefault();
     this.#emit("wt-edit-product", { productId });
+  }
+
+  /** Whether the row inherits a range and either has no stored price or has had it cleared, so
+   * typing into an unpriced field does not narrow it under the cursor. */
+  #showsRange(line: Line): boolean {
+    const inherited = this.#inherited(line);
+    return (
+      (this.#stored(line) === null || this.drafts.get(keyOf(line)) === "") &&
+      this.#clash(line) === null &&
+      inherited.state !== "clash" &&
+      !oneAmount(inherited)
+    );
   }
 
   #overrideCell(line: Line) {
@@ -1097,6 +1129,7 @@ export class MenuPricesTable extends LitElement {
 
   override render() {
     return html`${this.#clashMessage()}<wt-data-table
+        class=${this.#lines.some((line) => this.#showsRange(line)) ? "ranges" : ""}
         @wt-filter-change=${() => this.#readFilter()}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}

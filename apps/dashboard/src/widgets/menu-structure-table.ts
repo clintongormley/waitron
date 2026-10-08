@@ -906,7 +906,9 @@ export class MenuStructureTable extends LitElement {
           if (row.kind !== "member" || row.node.ref.kind !== "product") return nothing;
           const product = this.#productById.get(row.node.ref.productId);
           if (product === undefined) return nothing;
-          return html`<span part="available" data-test="available"
+          return html`<span
+            part=${row.readOnly ? "available read-only" : "available"}
+            data-test="available"
             >${t(product.available ? "menus.available_yes" : "menus.available_no")}</span
           >`;
         },

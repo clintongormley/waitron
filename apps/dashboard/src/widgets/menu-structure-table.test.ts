@@ -2138,6 +2138,10 @@ describe("a product row's Available and Edit product", () => {
     await toggle(el, "included-wine");
     expect(availableOf(el, "included-wine/wine-lager")).toBe(t("menus.available_yes"));
     expect(inTable(el, '[data-test="actions-included-wine/wine-lager"]')).toBeNull();
+    const parts = (key: string) =>
+      row(el, key)!.querySelector('[data-test="available"]')!.getAttribute("part")!.split(" ");
+    expect(parts("included-wine/wine-lager")).toEqual(["available", "read-only"]);
+    expect(parts("m-burger")).toEqual(["available"]);
   });
 
   it("shows no Available for a product the list does not hold", async () => {

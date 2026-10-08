@@ -2522,10 +2522,12 @@ function linesOf(node: Element): number {
   return range.getClientRects().length;
 }
 
-/** At 390 px, once the row menu's column has been measured into --actions-width. */
+/** At a phone's width, 390 px unless given, once the row menu's column has been measured into
+ * --actions-width. */
 async function atPhoneWidth(
   locale: string,
   props: Partial<MenuPricesTable> = {},
+  viewport = 390,
 ): Promise<MenuPricesTable> {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -2534,17 +2536,18 @@ async function atPhoneWidth(
     setLocale("es-ES");
     await page.viewport(width, height);
   });
-  await page.viewport(390, 844);
-  await vi.waitFor(() => expect(window.innerWidth).toBe(390));
+  await page.viewport(viewport, 844);
+  await vi.waitFor(() => expect(window.innerWidth).toBe(viewport));
   const el = await mount(props);
   await vi.waitFor(() => expect(el.style.getPropertyValue("--actions-width")).not.toBe(""));
+  await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
   await frame();
   await frame();
   return el;
 }
 
 it.each(["en-GB", "es-ES"])(
-  "keeps ordinary one-word names whole beside the row menu at phone width, with each field wholly left of it (%s)",
+  "keeps ordinary one-word names whole beside the row menu at phone width while no field shows a range, with each field wholly left of it (%s)",
   async (locale) => {
     const el = await atPhoneWidth(locale);
     toggleOf(el, "mi-lemonade")!.click();
@@ -2605,6 +2608,113 @@ it.each(["en-GB", "es-ES"])(
     expect(override(el, "mi-ranged").getBoundingClientRect().right).toBeLessThanOrEqual(
       pinnedCell(el, "mi-ranged").getBoundingClientRect().left + 0.5,
     );
+  },
+);
+
+/** A product row with two sizes priced `low` and `high`, so its empty field shows the range. */
+function rangedRow(low: string, high: string): MenuPriceRow {
+  return {
+    ...lemonade,
+    menuItemId: "mi-ranged",
+    override: null,
+    combined: combinedFixture(
+      "p-lemonade",
+      low,
+      [
+        { variantId: "v-small", price: low },
+        { variantId: "v-large", price: high },
+      ],
+      null,
+      low,
+      { "v-small": low, "v-large": high },
+    ),
+    variants: [
+      { variantId: "v-small", price: low, active: true, available: true },
+      { variantId: "v-large", price: high, active: true, available: true },
+    ],
+  };
+}
+
+/** The width a field's text needs, its placeholder's when it is empty, against the input's
+ * content box. */
+function textFit(field: HTMLElementTagNameMap["wt-price-input"]) {
+  const input = field.shadowRoot!.querySelector("input")!;
+  const style = getComputedStyle(input);
+  const context = document.createElement("canvas").getContext("2d")!;
+  context.font = getComputedStyle(input, input.value === "" ? "::placeholder" : null).font;
+  const shown = input.value === "" ? input.placeholder : input.value;
+  return {
+    shown,
+    needed: context.measureText(shown).width,
+    room: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+  };
+}
+
+it.each([
+  ["en-GB", 320, "12.50", "15.00"],
+  ["es-ES", 320, "12.50", "15.00"],
+  ["en-GB", 390, "1000.00", "9999.99"],
+  ["es-ES", 390, "1000.00", "9999.99"],
+])(
+  "shows a range placeholder whole in the field, left of the row menu, at phone width (%s, %i px, %s – %s)",
+  async (locale, viewport, low, high) => {
+    const el = await atPhoneWidth(locale, { rows: [rangedRow(low, high)] }, viewport);
+    toggleOf(el, "mi-ranged")!.click();
+    await table(el).updateComplete;
+    await frame();
+    await frame();
+    // As typed into the field, with a point whatever the language.
+    expect(textFit(override(el, "mi-ranged")).shown).toBe(`${low} – ${high}`);
+    for (const key of ["mi-ranged", "mi-ranged:v-small", "mi-ranged:v-large"]) {
+      const field = override(el, key);
+      const fit = textFit(field);
+      expect(fit.needed, `${key} ${JSON.stringify(fit)}`).toBeLessThanOrEqual(fit.room);
+      const menu = pinnedCell(el, key).getBoundingClientRect();
+      expect(field.getBoundingClientRect().right, key).toBeLessThanOrEqual(menu.left + 0.5);
+      expect(menu.right, key).toBeLessThanOrEqual(window.innerWidth);
+    }
+  },
+);
+
+async function typeAndDraw(el: MenuPricesTable, key: string, value: string) {
+  await typeIn(el, key, value);
+  await table(el).updateComplete;
+  await frame();
+}
+
+it("widens a field whose stored price is cleared, so the range it then shows is whole at 320 px", async () => {
+  const el = await atPhoneWidth(
+    "es-ES",
+    { rows: [{ ...rangedRow("12.50", "15.00"), override: "13.00" }] },
+    320,
+  );
+  const stored = override(el, "mi-ranged").getBoundingClientRect().width;
+  await typeAndDraw(el, "mi-ranged", "");
+  const fit = textFit(override(el, "mi-ranged"));
+  expect(fit.shown).toBe("12.50 – 15.00");
+  expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+  expect(override(el, "mi-ranged").getBoundingClientRect().width).toBeGreaterThan(stored);
+});
+
+it("keeps a field that shows a range as wide while a price is typed into it at 320 px", async () => {
+  const el = await atPhoneWidth("es-ES", { rows: [rangedRow("12.50", "15.00")] }, 320);
+  const width = () => override(el, "mi-ranged").getBoundingClientRect().width;
+  const empty = width();
+  await typeAndDraw(el, "mi-ranged", "1");
+  expect(width()).toBe(empty);
+});
+
+it.each(["en-GB", "es-ES"])(
+  "shows a single stored price whole in the field at 320 px (%s)",
+  async (locale) => {
+    const el = await atPhoneWidth(locale, { rows: [{ ...burger, override: "9999.99" }] }, 320);
+    const field = override(el, "mi-burger");
+    const fit = textFit(field);
+    expect(fit.shown).toBe(locale === "es-ES" ? "9999,99" : "9999.99");
+    expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    const menu = pinnedCell(el, "mi-burger").getBoundingClientRect();
+    expect(field.getBoundingClientRect().right).toBeLessThanOrEqual(menu.left + 0.5);
+    expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
   },
 );
 

@@ -37,6 +37,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
+import type { DashboardApp } from "../dashboard-app.js";
 import type { CustomerMenu } from "../widgets/customer-menu.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
 import { registerIcons } from "@waitron/ui";
@@ -4344,6 +4345,127 @@ async function mountPrices(client: Api = api()) {
   await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));
   return el;
 }
+
+it.each([
+  ["en-GB", "12.50", "15.00"],
+  ["es-ES", "12.50", "15.00"],
+  ["en-GB", "1000.00", "9999.99"],
+  ["es-ES", "1000.00", "9999.99"],
+])(
+  "shows Lemonade's range placeholder whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s)",
+  async (locale, low, high) => {
+    await import("../dashboard-app.js");
+    registerIcons(DASHBOARD_ICONS);
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const before = currentLocale();
+    onTestFinished(async () => {
+      setLocale(before);
+      await page.viewport(width, height);
+    });
+    await page.viewport(390, 844);
+    history.replaceState(null, "", PRICES_PATH);
+    const rows = lunchPrices();
+    rows[1] = {
+      ...rows[1]!,
+      override: null,
+      combined: combinedFixture(
+        "p-lemonade",
+        low,
+        [
+          { variantId: "v-small", price: low },
+          { variantId: "v-large", price: high },
+        ],
+        null,
+        low,
+        { "v-small": low, "v-large": high },
+      ),
+      variants: [
+        { variantId: "v-small", price: low, active: true, available: true },
+        { variantId: "v-large", price: high, active: true, available: true },
+      ],
+    };
+    const client = api({
+      getMenuPrices: vi.fn().mockResolvedValue(rows),
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        role: "manager",
+        locale,
+        venueLocale: locale,
+        sessionDefault: locale,
+        venueName: "Venue",
+        permissions: ["product.manage"],
+        modules: [],
+      }),
+      getLocales: async () => ({
+        locales: [
+          { code: "en-GB", label: "English" },
+          { code: "es-ES", label: "Español" },
+        ],
+        venueDefault: locale,
+        loginDefault: locale,
+        venueName: "Venue",
+        onboardingIntent: "prepare",
+      }),
+      listAlerts: async () => ({ visible: false, alerts: [] }),
+      getGoogleConfig: async () => ({ configured: false }),
+      passkeySignals: async () => ({
+        rpId: "localhost",
+        userId: "cDE",
+        credentialIds: [],
+        name: "ada@example.com",
+        displayName: "Ada",
+      }),
+    });
+    const { el: app } = await mountWidget<DashboardApp>("dashboard-app", { api: client }, "light");
+    const screen = () =>
+      app.shadowRoot!.querySelector<MenusScreen>("dashboard-menus-screen") ?? undefined;
+    await vi.waitFor(() => expect(screen() && prices(screen()!)?.rows.length).toBe(3));
+    const widget = prices(screen()!);
+    await vi.waitFor(() => expect(widget.style.getPropertyValue("--actions-width")).not.toBe(""));
+    const grid = widget.shadowRoot!.querySelector("wt-data-table")!;
+    await vi.waitFor(() => expect(grid.hasAttribute("narrow")).toBe(true));
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(window.innerWidth).toBe(390);
+    expect(currentLocale()).toBe(locale);
+    const rowOf = (key: string) =>
+      grid.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"]`)!;
+    rowOf("mi-lemonade").querySelector<HTMLElement>("button.tree-toggle")!.click();
+    await vi.waitFor(() => expect(rowOf("mi-lemonade:v-large")).not.toBeNull());
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const input = (key: string) =>
+      rowOf(key).querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
+    // As typed into the field, with a point whatever the language.
+    expect(input("mi-lemonade").placeholder).toBe(`${low} – ${high}`);
+    for (const key of [
+      "mi-burger",
+      "mi-lemonade",
+      "mi-lemonade:v-small",
+      "mi-lemonade:v-large",
+      "mi-lager",
+    ]) {
+      const field = input(key);
+      const shown = field.value === "" ? field.placeholder : field.value;
+      const style = getComputedStyle(field);
+      const context = document.createElement("canvas").getContext("2d")!;
+      context.font = getComputedStyle(field, field.value === "" ? "::placeholder" : null).font;
+      const fit = {
+        key,
+        shown,
+        needed: context.measureText(shown).width,
+        room: field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+      };
+      expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+      const menu = rowOf(key).querySelector('td[data-pinned="end"]')!.getBoundingClientRect();
+      expect(
+        rowOf(key).querySelector("wt-price-input")!.getBoundingClientRect().right,
+        key,
+      ).toBeLessThanOrEqual(menu.left + 0.5);
+      expect(menu.right, key).toBeLessThanOrEqual(window.innerWidth);
+    }
+  },
+);
 
 async function chooseTab(el: MenusScreen, key: string): Promise<void> {
   const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;

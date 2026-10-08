@@ -1150,21 +1150,26 @@ unused `units` property is gone (it closes W75's leftover).
   (Yes/No; not searchable, no filter, available first). Each row has a ⋮ in a pinned `actions`
   column holding Edit product, a link to the product's or size's page. The Structure tab's product
   rows show the same Available word, muted like Type, and their ⋮ offers Edit product before Remove
-  at every width. At phone width the price field gives up width before a name does, so one-word
-  names stay whole beside the ⋮.
+  at every width. At phone width the price field gives up width before a name does while no field
+  shows a range; while one does, the names give up width first. Measured in the dashboard's test
+  browser, in English and Spanish, with every field left of the ⋮: "12.50 – 15.00" shows whole in
+  the table alone at 320px, and "1000.00 – 9999.99" in the table alone at 390px and inside the
+  dashboard at a 390px window. In the table alone with a range shown, "Lemonade" then breaks
+  mid-word at 320px and at 390px (observed, not asserted).
+  - Open: at a 320px window only "12.50 – 15.00" was measured. The field's width there is set for
+    the whole table, not by its text, so by that case's room (106.33px English, 90.33px Spanish)
+    "1000.00 – 9999.99" (123.96px) would clip in both languages, and a three-digit range such as
+    "100.00 – 150.00" may clip in Spanish; neither was measured.
   - Open, for the owner: `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since
     A347 (#1392), so the dashboard's Inactive branches (`#active` and `activeOffer` in
     `menu-prices-table.ts`, the `active` conditions in `menu-price-inheritance.ts`) cannot be
     reached. Retiring them deletes the tests whose subject is an Inactive row, so it waits for the
     owner.
-  - Open: in the real dashboard at a 390px window the table gets roughly 310px (worked out from the
-    stylesheets, not measured in the running app). At that width, measured in a 310px box, the field
-    clears the ⋮ but one-word names still break mid-word in both languages, even with the field at
-    its 96px floor. In a 342px box "Lemonade" breaks in Spanish, and even with the full 390px a
-    longer word such as "Hamburguesa" (about 90px, against 76px kept for a name) breaks. Options: less page padding on
-    phones, a shorter Actions heading, or a field narrower than 96px.
-  - Open: at a 390px window, a range placeholder with three-digit prices ("100.00 – 150.00") clips
-    in Spanish, and the longest ("1000.00 – 9999.99") clips in both languages.
+  - Open: in the real dashboard at a 390px window the table is 358px wide (read once in the
+    dashboard's test browser; no test pins it). Whether one-word names keep their line there while no field shows a
+    range has not been measured; with the full 390px a longer word such as "Hamburguesa" (about
+    90px, against 76px kept for a name) breaks. Options for more room: less page padding on phones,
+    or a shorter Actions heading.
   - Open, believed to predate A348: on the Structure tab at 390px the tree's own box scrolls
     sideways under the pinned ⋮, by design (`pinned: "end"`); in Spanish the Tipo column already
     sat under Acciones before A348 (measured at the commit before it), and Disponible now sits
