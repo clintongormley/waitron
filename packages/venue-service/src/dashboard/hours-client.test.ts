@@ -46,7 +46,7 @@ describe("HoursApi writes", () => {
           : saved,
     );
     const api = new HoursApi(request as DashboardRequest);
-    const subject = { kind: "department" as const, id: "dept" };
+    const subject = { kind: "station" as const, id: "station" };
     const days: WeekDay[] = [];
     const input: SpecialDateInput = {
       date: "2030-10-15",

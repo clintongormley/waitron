@@ -31,7 +31,7 @@ afterEach(async () => {
 const week = (cell: (weekday: number) => WeekCell): WeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: cell(weekday) }));
 const subject = (
-  kind: "department" | "station",
+  kind: "station",
   id: string,
   name: string,
   extra: Partial<HoursModelSubject> = {},
@@ -64,7 +64,6 @@ const TONES: Record<LocalDate, CalendarDay["tone"]> = {
   "2026-10-12": "red",
   "2026-10-13": "closed",
   "2026-11-20": "green",
-  // Every department Closed by its week, with no special date.
   "2026-10-20": "closed",
   "2026-10-27": "closed",
 };
@@ -95,15 +94,15 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
     civilDate: "2026-10-07",
     clockReadable: true,
     subjects: [
-      subject("department", "restaurant", "Restaurant", { isDefault: true }),
-      subject("department", "deli", "Deli"),
-      subject("department", "terrace", "Terrace", { active: false }),
+      subject("station", "restaurant", "Restaurant"),
+      subject("station", "deli", "Deli"),
+      subject("station", "terrace", "Terrace", { active: false }),
       subject("station", "kitchen", "Kitchen", { isDefault: true }),
       subject("station", "bar", "Bar"),
     ],
     week: [
       {
-        subject: { kind: "department", id: "restaurant" },
+        subject: { kind: "station", id: "restaurant" },
         days: week((d) =>
           d === 1
             ? { mode: "closed", periods: [] }
@@ -111,7 +110,7 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
         ),
       },
       {
-        subject: { kind: "department", id: "deli" },
+        subject: { kind: "station", id: "deli" },
         days: week(() => ({ mode: "not_set", periods: [] })),
       },
       {
@@ -132,14 +131,14 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
         special.id === "fiesta"
           ? [
               {
-                subject: { kind: "department", id: "restaurant" },
+                subject: { kind: "station", id: "restaurant" },
                 cell: {
                   mode: "periods",
                   periods: [{ id: "f1", opensAt: "12:00", closesAt: "23:00" }],
                 },
               },
               {
-                subject: { kind: "department", id: "deli" },
+                subject: { kind: "station", id: "deli" },
                 cell: { mode: "closed", periods: [] },
               },
             ]
@@ -303,7 +302,6 @@ describe("Hours calendar: the month", () => {
     expect(getComputedStyle(dayButton(el, "2026-10-13")).color).toBe(
       token(el, "--wt-color-on-day-closed"),
     );
-    // An ordinary date every department is Closed on.
     expect(text(dayButton(el, "2026-10-20"))).toBe("20 Closed");
     expect(dayButton(el, "2026-10-20").getAttribute("aria-label")).toBe(
       "Tuesday, 20 October 2026, Closed",
@@ -630,7 +628,7 @@ describe("Hours calendar: a date's panel", () => {
     );
     expect(rows(el)).toEqual([
       ["Restaurant", "Standard hours: 12:00–16:00"],
-      ["Deli", "Standard hours: No hours set"],
+      ["Deli", "Standard hours: No hours restriction"],
       ["Kitchen", "Always open"],
       ["Bar", "Standard hours: 17:00–23:00"],
     ]);
@@ -938,7 +936,7 @@ describe("Hours calendar: public holidays", () => {
     },
   );
 
-  it("keeps the fixed Closed colour on a holiday whose Hours close every department, and the holiday itself says nothing of closing", async () => {
+  it("keeps the server's Closed tone on a holiday", async () => {
     const { api } = server({
       edit: (model) => {
         model.days

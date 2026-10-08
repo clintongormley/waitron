@@ -23,8 +23,8 @@ const model: HoursModel = {
   dayCutover: "06:00",
   civilDate: "2026-10-07",
   clockReadable: true,
-  subjects: [{ kind: "department", id: "d1", name: "Restaurant", active: true, isDefault: true }],
-  week: [{ subject: { kind: "department", id: "d1" }, days }],
+  subjects: [{ kind: "station", id: "d1", name: "Restaurant", active: true, isDefault: false }],
+  week: [{ subject: { kind: "station", id: "d1" }, days }],
   days: [],
   specialDates: [],
   specialCells: [],
@@ -80,7 +80,7 @@ async function mount(
 async function open(screen: HoursScreen) {
   screen
     .shadowRoot!.querySelector<HTMLButtonElement>(
-      'td[data-subject="department:d1"][data-weekday="0"] button',
+      'td[data-subject="station:d1"][data-weekday="0"] button',
     )!
     .click();
   await screen.updateComplete;
@@ -127,7 +127,7 @@ async function choose(decision: "keep" | "discard") {
 const expected = [
   "/management-api/venue-service/hours/week",
   {
-    subject: { kind: "department", id: "d1" },
+    subject: { kind: "station", id: "d1" },
     days: days.map((day) =>
       day.weekday === 0
         ? {
@@ -331,7 +331,7 @@ it("opening another weekday asks before replacing an edited Hours draft", async 
   const { modal } = await open(screen);
   await change(screen, "10:00");
   const trigger = screen.shadowRoot!.querySelector<HTMLButtonElement>(
-    'td[data-subject="department:d1"][data-weekday="0"] button',
+    'td[data-subject="station:d1"][data-weekday="0"] button',
   )!;
   trigger.click();
   await choose("keep");
@@ -350,7 +350,7 @@ const unconfigured: HoursModel = {
   ...model,
   week: [
     {
-      subject: { kind: "department", id: "d1" },
+      subject: { kind: "station", id: "d1" },
       days: days.map(({ weekday }) => ({
         weekday,
         cell: { mode: "not_set", periods: [] },
@@ -389,7 +389,7 @@ function action(modal: HTMLElement, kind: "save" | "cancel") {
 const configuredBody = [
   "/management-api/venue-service/hours/week",
   {
-    subject: { kind: "department", id: "d1" },
+    subject: { kind: "station", id: "d1" },
     days: [
       { weekday: 0, cell: { mode: "closed", periods: [] } },
       { weekday: 1, cell: { mode: "all_day", periods: [] } },
@@ -547,7 +547,7 @@ it("Configure hours asks before a second Configure opening replaces its draft", 
   const { screen, modal, writes } = await configure();
   await mode(screen, "monday", "all_day");
   const trigger = screen.shadowRoot!.querySelector<HTMLButtonElement>(
-    'td[data-subject="department:d1"][data-weekday="0"] button',
+    'td[data-subject="station:d1"][data-weekday="0"] button',
   )!;
   trigger.click();
   await choose("keep");
@@ -613,7 +613,7 @@ const specialModel: HoursModel = {
   specialCells: [
     {
       specialDateId: "fiesta",
-      cells: [{ subject: { kind: "department", id: "d1" }, cell: { mode: "closed", periods: [] } }],
+      cells: [{ subject: { kind: "station", id: "d1" }, cell: { mode: "closed", periods: [] } }],
     },
   ],
 };
@@ -704,7 +704,7 @@ const editedDateBody = [
     name: "Changed fiesta",
     colour: "red",
     closeWholeVenue: false,
-    cells: [{ subject: { kind: "department", id: "d1" }, cell: { mode: "closed", periods: [] } }],
+    cells: [{ subject: { kind: "station", id: "d1" }, cell: { mode: "closed", periods: [] } }],
   },
 ];
 it("special-date Edit commits the exact accepted body before a failed refresh", async () => {
@@ -765,8 +765,7 @@ it.each(["date", "name", "colour", "closeWholeVenue", "cell"])(
             composed: true,
           }),
         );
-      } else if (field === "cell")
-        await mode(screen, "department.d1", changed ? "all_day" : "closed");
+      } else if (field === "cell") await mode(screen, "station.d1", changed ? "all_day" : "closed");
       else
         await dateField(
           screen,

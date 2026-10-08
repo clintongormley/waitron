@@ -56,7 +56,7 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
     civilDate: "2026-10-07",
     clockReadable: true,
     subjects: [
-      { kind: "department", id: "restaurant", name: "Restaurant", active: true, isDefault: true },
+      { kind: "station", id: "restaurant", name: "Restaurant", active: true, isDefault: false },
       { kind: "station", id: "kitchen", name: "Kitchen", active: true, isDefault: true },
       { kind: "station", id: "bar", name: "Bar", active: true, isDefault: false },
     ],
@@ -80,7 +80,7 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
       specialDateId: special.id,
       cells: [
         {
-          subject: { kind: "department", id: "restaurant" },
+          subject: { kind: "station", id: "restaurant" },
           cell: { mode: "closed", periods: [] },
         },
       ],

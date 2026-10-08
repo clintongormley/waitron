@@ -32,15 +32,15 @@ function model(clockReadable = true): HoursModel {
     civilDate: clockReadable ? "2026-10-07" : null,
     clockReadable,
     subjects: [
-      { kind: "department", id: "restaurant", name: "Restaurant", active: true, isDefault: true },
-      { kind: "department", id: "deli", name: "Deli", active: true, isDefault: false },
-      { kind: "department", id: "terrace", name: "Terrace", active: false, isDefault: false },
+      { kind: "station", id: "restaurant", name: "Restaurant", active: true, isDefault: false },
+      { kind: "station", id: "deli", name: "Deli", active: true, isDefault: false },
+      { kind: "station", id: "terrace", name: "Terrace", active: false, isDefault: false },
       { kind: "station", id: "kitchen", name: "Kitchen", active: true, isDefault: true },
       { kind: "station", id: "bar", name: "Bar", active: true, isDefault: false },
     ],
     week: [
       {
-        subject: { kind: "department", id: "restaurant" },
+        subject: { kind: "station", id: "restaurant" },
         days: week((d) =>
           d < 2
             ? { mode: "closed", periods: [] }
@@ -48,11 +48,11 @@ function model(clockReadable = true): HoursModel {
         ),
       },
       {
-        subject: { kind: "department", id: "deli" },
+        subject: { kind: "station", id: "deli" },
         days: week(() => ({ mode: "not_set", periods: [] })),
       },
       {
-        subject: { kind: "department", id: "terrace" },
+        subject: { kind: "station", id: "terrace" },
         days: week(() => ({ mode: "all_day", periods: [] })),
       },
       {
@@ -72,7 +72,7 @@ function model(clockReadable = true): HoursModel {
       {
         specialDateId: "fiesta",
         cells: [
-          { subject: { kind: "department", id: "deli" }, cell: { mode: "closed", periods: [] } },
+          { subject: { kind: "station", id: "deli" }, cell: { mode: "closed", periods: [] } },
         ],
       },
     ],
@@ -190,7 +190,7 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
       new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
     );
     await settle(el);
-    expect(deep(el, 'th[data-subject="department:terrace"]')).not.toBeNull();
+    expect(deep(el, 'th[data-subject="station:terrace"]')).not.toBeNull();
     return el;
   },
   "a read-only week whose clock cannot be read": (theme) =>
@@ -215,7 +215,7 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
   },
   "a day's editor after a failed press": async (theme) => {
     const el = await mount(theme);
-    await press(el, 'td[data-subject="department:restaurant"][data-weekday="2"] button');
+    await press(el, 'td[data-subject="station:restaurant"][data-weekday="2"] button');
     await set(el, "tuesday.periods.0.opensAt", "");
     await press(el, '[data-test="save-editor"]');
     expect(
@@ -225,12 +225,12 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
   },
   "the seven-day draft": async (theme) => {
     const el = await mount(theme);
-    await press(el, 'td[data-subject="department:deli"][data-weekday="1"] button');
+    await press(el, 'td[data-subject="station:deli"][data-weekday="1"] button');
     return el;
   },
   "the seven-day draft's confirmation": async (theme) => {
     const el = await mount(theme);
-    await press(el, 'td[data-subject="department:deli"][data-weekday="1"] button');
+    await press(el, 'td[data-subject="station:deli"][data-weekday="1"] button');
     await press(el, '[data-test="save-editor"]');
     expect(deep(el, '[data-test="confirm-text"]')).not.toBeNull();
     return el;
