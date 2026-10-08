@@ -261,6 +261,7 @@ export interface ZoneUnavailable {
 
 /** A zone's live menu versions, and what they hold that cannot be sold now. */
 export interface ZoneMenuState {
+  readonly service: { readonly open: boolean; readonly periodName: string | null };
   readonly menus: readonly { readonly menuId: string; readonly versionId: string }[];
   readonly unavailable: ZoneUnavailable;
 }
@@ -508,8 +509,6 @@ export interface VenueServiceContribution {
       withDefault?: false;
     },
   ): Promise<ZoneOffers>;
-  /** The zone's default menu at `at` among `servedMenuIds`, which the caller already read: the
-   *  timetable's, else the first served when that one is not served. Reads no publication. */
   resolveDefaultMenu(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -517,8 +516,12 @@ export interface VenueServiceContribution {
     at: Date,
     servedMenuIds: readonly string[],
   ): Promise<string | null>;
-  /** Does not check the zone: an unknown one holds nothing. */
-  menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState>;
+  menuState(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at?: Date,
+  ): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },

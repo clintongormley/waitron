@@ -32,7 +32,7 @@ import type {
   MenuTimetableModel,
   ZoneMenuChoice,
 } from "./menu-timetable-types.js";
-import { storedTime, type VenueScope } from "./operations.js";
+import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
 import {
   departmentAllDayMenus,
@@ -446,7 +446,6 @@ export function servedDefault(
     : (servedMenuIds[0] ?? null);
 }
 
-/** The zone's default at `at` among the menus a caller found served, reading no publication. */
 export async function resolveDefaultMenu(
   tx: Transaction,
   cfg: VenueScope,
@@ -454,7 +453,12 @@ export async function resolveDefaultMenu(
   at: Date,
   servedMenuIds: readonly string[],
 ): Promise<string | null> {
-  return servedDefault((await resolveZoneMenus(tx, cfg, zoneId, at)).defaultMenuId, servedMenuIds);
+  const zone = await resolveZoneContext(tx, cfg, zoneId);
+  const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
+  return servedDefault(
+    service.customerMenuId,
+    servedMenuIds.filter((id) => service.orderableMenuIds.includes(id)),
+  );
 }
 
 export async function saveMenuPeriod(

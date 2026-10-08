@@ -24,7 +24,6 @@ import {
   units,
   type MenuDocument,
   type MenuOffer,
-  type MenuState,
   type ServedMenu,
 } from "@waitron/catalogue";
 import type { ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
@@ -44,7 +43,12 @@ import {
   zoneAllDayMenus,
   zonePeriodMenus,
 } from "./schema/menus.js";
-import { placeOpenPeriod, resolveZoneMenus, servedDefault } from "./menu-timetable.js";
+import {
+  placeOpenPeriod,
+  resolveDepartmentService,
+  resolveZoneMenus,
+  servedDefault,
+} from "./menu-timetable.js";
 import { routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
@@ -847,19 +851,37 @@ export async function listZoneOffers(
   return { defaultMenuId, menus, offers: published.flatMap((menu) => served.get(menu.menuId)!) };
 }
 
-/**
- * Each of the zone's live menus with its version, and what those versions hold that cannot be sold
- * now (`readUnavailable`). Does not check the zone: an unknown one holds nothing.
- */
-export async function menuState(tx: Transaction, zoneId: string): Promise<ZoneMenuState> {
+export async function menuState(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  at: Date = new Date(),
+): Promise<ZoneMenuState> {
+  const [zone] = await tx
+    .select({ departmentId: zoneServicePolicies.departmentId })
+    .from(zoneServicePolicies)
+    .where(
+      and(
+        eq(zoneServicePolicies.zoneId, zoneId),
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+      ),
+    );
+  if (zone?.departmentId == null)
+    return {
+      service: { open: false, periodName: null },
+      menus: [],
+      unavailable: { products: [], optionLabels: [] },
+    };
+  const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
   const published = await zoneLiveDocuments(tx, zoneId);
-  const documents = published.map((menu) => menu.document);
-  // Catalogue's `MenuState` is the type the till reads this answer as.
-  const state: MenuState = {
+  return {
+    service: { open: service.open, periodName: service.periodName },
     menus: published.map(({ menuId, versionId }) => ({ menuId, versionId })),
-    unavailable: await readUnavailable(tx, documents),
+    unavailable: await readUnavailable(
+      tx,
+      published.map((menu) => menu.document),
+    ),
   };
-  return state;
 }
 
 /**
