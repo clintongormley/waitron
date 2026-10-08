@@ -4,52 +4,64 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Archiving a product or variant becomes permanent: nothing can switch it back on or edit
-it, archiving is refused while a live or scheduled menu includes it, and the dashboard shows
+**Goal:** Archiving a product or variant becomes permanent: nothing switches it back on or changes
+what it is, archiving is refused while a live or scheduled menu includes it, and the dashboard shows
 archived products read-only.
 
-**Architecture:** One new catalogue module, `packages/catalogue/src/archive.ts`, owns archiving: it
-finds the published menus that include a product, refuses with `product.on_live_menu`, and performs
-the archive (product, its variants, menus, extras lists). Every write path that can archive —
-`patchProduct`, `saveProductEditor`, `writeProductVariants`, `deleteCatalogueItems` — calls it, and
-every write path refuses a write to an archived row with `product.archived`. The dashboard swaps
-Disable/Enable for Archive/View and opens an archived product read-only.
+**Architecture:** One new catalogue module, `packages/catalogue/src/archive.ts`, owns archiving. It
+finds the published menus that include a product and refuses with `product.on_live_menu`; it
+performs the archive (the product, its variants, menu drafts, extras lists); and
+`assertProductWritable` refuses a write to an archived row with `product.archived`. Every path that
+archives — `patchProduct`, `saveProductEditor`, `writeProductVariants`, `deleteCatalogueItems` —
+goes through it, and every path that changes what a product is calls `assertProductWritable`. The
+dashboard swaps Disable/Enable for Archive/View and opens an archived product with its fields
+disabled.
 
-**Tech Stack:** TypeScript, drizzle on the venue's SQLite store (`node:sqlite`), Vitest (catalogue
-and server: database suites through `useCatalogueDb` / the server's own helpers; dashboard: browser
-mode in real headless Chromium), Lit.
+**Tech Stack:** TypeScript, drizzle on the venue's SQLite store (`node:sqlite`), Vitest (catalogue,
+recipes and server: database suites; dashboard: browser mode in real headless Chromium), Lit.
 
 **Spec:** `docs/superpowers/specs/2026-10-08-delete-and-archive-design.md`, section "Products".
+Reviewed once against the spec by a fresh-context reviewer on 2026-10-08; its ten findings are
+applied below.
 
 ## Global Constraints
 
 - Branch `feat/a435-product-archive`, created with
   `python3 ~/workspace/tools/worktree.py new waitron feat/a435-product-archive --headless`.
-- Every commit `git commit -s`; commit messages in plain English (no unexplained jargon).
-- Error codes name the domain concept: `product.archived`, `product.on_live_menu`. Each refusal test
-  asserts the code (and its params), never only that something threw.
+- Every commit `git commit -s`; commit messages in plain English.
+- Error codes: `product.archived { productId, field? }` and
+  `product.on_live_menu { products: {id,name}[], menus: {id,name}[] }`. Each refusal test asserts
+  the code and its params, never only that something threw.
 - Every user-facing string has English and Spanish text.
 - No backwards-compatibility or data-migration code (CLAUDE.md §3): products disabled today simply
   count as archived. No schema change and no migration in this step.
-- Coverage holds `98/98/98/95` in `@waitron/catalogue`, `@waitron/server` and `@waitron/dashboard`;
-  close a gap with a test that asserts behaviour, never an ignore comment.
+- **Writes this step refuses on an archived product or variant:** switching it on; the product
+  editor save; `PATCH`-style updates through `updateProduct`; variant writes; adding it to an extras
+  list; setting its course; setting its recipe. **Writes it leaves alone**, recorded in the spec by
+  Task 9: translation fixes, the main reporting category, and folder moves (which carry archived
+  products along with their folder).
+- A test that needs an archived product ON a published menu (data from before this change, or the
+  till's view of an archived item) writes `active = false` straight to the `products` row; it never
+  archives through a path that now refuses.
+- Coverage holds `98/98/98/95` in every package touched; close a gap with a test that asserts
+  behaviour, never an ignore comment.
 - Run focused tests while working; the pre-push hook and CI run the rest (CLAUDE.md §2). Browser
   suites: check `memory_pressure | grep free` first.
+- An implementer past about 150 tool calls with its task unfinished stops at a passing or cleanly red
+  point, commits, and hands over: done, left, files, each check's state.
 - Comments only for an invariant or a non-obvious why; cut stale ones in files you touch.
 
 ## Review Focus
 
 1. **An archive refused part-way leaves nothing written.** A `PATCH` that renames AND archives a
-   product on a live menu must leave the old name too — the refusal rolls back the whole request.
-   Test in Task 2.
-2. **A folder delete holding a product that is ALREADY archived but still on a live menu** (data
-   from before this change) is not refused and does not re-archive it. Test in Task 2.
-3. **A variant whose parent is archived while the variant row is still on** (data from before this
-   change) refuses every write with `product.archived`. Test in Task 2.
-4. **A deleted menu's live version does not block an archive** — deleted menus are never served.
-   Test in Task 1.
-5. **A queued edition whose time has come but has not been settled counts as live; a cancelled one
-   does not count.** Test in Task 1.
+   product on a live menu leaves the old name. Task 2.
+2. **A folder delete holding a product ALREADY archived but still on a live menu** is not refused
+   and does not re-archive it. Task 2.
+3. **A variant whose parent is archived while its own row is still on** refuses every write with
+   `product.archived`. Task 2.
+4. **A deleted menu's live version does not block an archive.** Task 1.
+5. **A queued edition whose time has come but is unsettled counts as live; a cancelled one does
+   not.** Task 1.
 
 ---
 
@@ -57,18 +69,15 @@ mode in real headless Chromium), Lit.
 
 **Files:**
 - Create: `packages/catalogue/src/archive.ts`
-- Modify: `packages/catalogue/src/errors.ts` (two new codes, beside `product.not_found`)
-- Test: `packages/catalogue/src/archive.db.test.ts` (new), `packages/catalogue/src/archive.test.ts`
-  (new, pure)
+- Modify: `packages/catalogue/src/errors.ts` (two codes, beside `product.not_found`)
+- Test: `packages/catalogue/src/archive.test.ts` (new, pure), `packages/catalogue/src/archive.db.test.ts` (new)
 
-**Interfaces:**
-- Produces:
-  - `documentProductIds(document: MenuDocument): Set<string>`
-  - `publishedMenusHolding(tx: Transaction, productIds: readonly string[], at?: Date): Promise<Map<string, HoldingMenu[]>>`
-    where `interface HoldingMenu { id: string; name: string }`
-  - `assertOffPublishedMenus(tx: Transaction, productIds: readonly string[]): Promise<void>`
-  - error `"product.on_live_menu": { products: { id: string; name: string }[]; menus: { id: string; name: string }[] }`
-  - error `"product.archived": { productId: string; field?: string }`
+**Interfaces — produces:**
+- `documentProductIds(document: MenuDocument): Set<string>`
+- `interface HoldingMenu { id: string; name: string }`
+- `publishedMenusHolding(tx, productIds: readonly string[], at?: Date): Promise<Map<string, HoldingMenu[]>>`
+- `assertOffPublishedMenus(tx, productIds: readonly string[]): Promise<void>`
+- the two error codes above.
 
 - [ ] **Step 1: Write the failing pure test** — `archive.test.ts`:
 
@@ -77,23 +86,16 @@ import { describe, expect, it } from "vitest";
 import { documentProductIds } from "./archive.js";
 import type { MenuDocument } from "./menu-document-types.js";
 
+const home: MenuDocument["home"] = {
+  shortcuts: [],
+  handheld: { columns: 3, tiles: "colours", order: "home_first" },
+  till: { columns: 6, tiles: "colours", order: "home_first" },
+};
 const doc = (partial: Partial<MenuDocument>): MenuDocument =>
-  ({
-    format: 3,
-    menuId: "m",
-    menuName: "M",
-    root: { members: [] },
-    offers: {},
-    home: {
-      shortcuts: [],
-      handheld: { columns: 3, tiles: "colours", order: "home_first" },
-      till: { columns: 6, tiles: "colours", order: "home_first" },
-    },
-    ...partial,
-  }) as MenuDocument;
+  ({ format: 3, menuId: "m", menuName: "M", root: { members: [] }, offers: {}, home, ...partial }) as MenuDocument;
 
 describe("documentProductIds", () => {
-  it("collects each dish, variant, extras item and home shortcut", () => {
+  it("collects each dish, variant, extras item and home shortcut, and no option label", () => {
     const ids = documentProductIds(
       doc({
         offers: {
@@ -106,10 +108,7 @@ describe("documentProductIds", () => {
             ],
           },
         } as unknown as MenuDocument["offers"],
-        home: {
-          ...doc({}).home,
-          shortcuts: [{ kind: "product", productId: "tile" }, { kind: "empty" }],
-        },
+        home: { ...home, shortcuts: [{ kind: "product", productId: "tile" }, { kind: "empty" }] },
       }),
     );
     expect([...ids].sort()).toEqual(["dish", "extra", "size", "tile"]);
@@ -117,28 +116,24 @@ describe("documentProductIds", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to see it fail**
+- [ ] **Step 2: Run it to see it fail** —
+  `pnpm --filter @waitron/catalogue exec vitest run src/archive.test.ts`. Expected: FAIL, no module.
 
-Run: `pnpm --filter @waitron/catalogue exec vitest run src/archive.test.ts`
-Expected: FAIL — `./archive.js` does not exist.
-
-- [ ] **Step 3: Write `archive.ts` (first part) and the two error codes**
-
-In `packages/catalogue/src/errors.ts`, beside `"product.not_found"`:
+- [ ] **Step 3: Write the codes and `archive.ts`.** In `errors.ts`, beside `"product.not_found"`:
 
 ```ts
     /** A write named an archived product or variant, or a variant of an archived product. Archiving
      * is permanent. `field` places the refusal where the body named the row. */
     "product.archived": { productId: string; field?: string };
-    /** Archiving was refused because a menu version that is live, or queued to go live, includes
-     * these products as a dish, a variant, an extras item or a home shortcut. */
+    /** Archiving was refused: a menu version that is live, or queued to go live, includes these
+     * products as a dish, a variant, an extras item or a home shortcut. */
     "product.on_live_menu": {
       products: { id: string; name: string }[];
       menus: { id: string; name: string }[];
     };
 ```
 
-Create `packages/catalogue/src/archive.ts`:
+Create `archive.ts`:
 
 ```ts
 import { and, eq, gt, inArray } from "drizzle-orm";
@@ -169,9 +164,8 @@ export function documentProductIds(document: MenuDocument): Set<string> {
 }
 
 /**
- * For each of `productIds` some served menu's live version, or a version queued to go live after
- * `at`, includes: those menus, by name. A deleted menu is never served, so its versions do not
- * count.
+ * For each of `productIds` that a served menu's live version, or a version queued to go live after
+ * `at`, includes: those menus. A deleted menu is never served, so its versions do not count.
  */
 export async function publishedMenusHolding(
   tx: Transaction,
@@ -179,7 +173,6 @@ export async function publishedMenusHolding(
   at: Date = now(),
 ): Promise<Map<string, HoldingMenu[]>> {
   const wanted = new Set(productIds);
-  const holding = new Map<string, Map<string, HoldingMenu>>();
   if (wanted.size === 0) return new Map();
   const documents: MenuDocument[] = [];
   for (const version of (await liveVersions(tx, undefined, "document", at)).values())
@@ -203,6 +196,7 @@ export async function publishedMenusHolding(
         .where(eq(catalogues.active, true))
     ).map((row) => [row.id, row.name]),
   );
+  const holding = new Map<string, Map<string, HoldingMenu>>();
   for (const document of documents) {
     const name = served.get(document.menuId);
     if (name === undefined) continue;
@@ -244,21 +238,19 @@ export async function assertOffPublishedMenus(
 }
 ```
 
-Check `catalogues` is exported by `@waitron/db` (`grep -n "catalogues" packages/db/src/index.ts`);
-if not, import it the way `menu-publication.ts`'s siblings do.
+- [ ] **Step 4: Run the pure test** — PASS.
 
-- [ ] **Step 4: Run the pure test** — same command. Expected: PASS.
-
-- [ ] **Step 5: Write the failing database tests** — `archive.db.test.ts`, using `menusFixture`
-  (`packages/catalogue/test/menus-fixture.ts`: Lunch holds Lemonade with variant Large and the
-  extras item Extra lemon; Dinner holds Burger):
+- [ ] **Step 5: Write the database tests** — `archive.db.test.ts`. `menusFixture`
+  (`packages/catalogue/test/menus-fixture.ts`): Lunch ("Lunch Menu") holds Lemonade, its variant
+  Large, and the extras item Extra lemon; Dinner holds Burger.
 
 ```ts
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
-import { menusFixture } from "../test/menus-fixture.js";
+import { menusFixture, product } from "../test/menus-fixture.js";
 import { assertOffPublishedMenus, publishedMenusHolding } from "./archive.js";
+import { addShortcut } from "./menu-home.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
 import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js";
 import { deactivateCatalogue } from "./operations.js";
@@ -277,43 +269,47 @@ async function queue(menuId: string, activatesAt: Date) {
   return app((tx) => queueMenuPublication(tx, menuId, hash, activatesAt, "person-1", { at: T0 }));
 }
 const holding = (ids: string[], at = T0) => app((tx) => publishedMenusHolding(tx, ids, at));
+const menuIds = async (id: string, at = T0) => (await holding([id], at)).get(id)?.map((m) => m.id);
 
 describe("publishedMenusHolding", () => {
   it("names the live menu for a dish, its variant and an extras item", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
-    const found = await holding([f.lemonade, f.large, f.extraLemon, f.burger]);
-    expect(found.get(f.lemonade)).toEqual([{ id: f.lunch, name: "Lunch Menu" }]);
-    expect(found.get(f.large)).toEqual([{ id: f.lunch, name: "Lunch Menu" }]);
-    expect(found.get(f.extraLemon)).toEqual([{ id: f.lunch, name: "Lunch Menu" }]);
-    expect(found.has(f.burger)).toBe(false); // Dinner was never published
+    for (const id of [f.lemonade, f.large, f.extraLemon]) expect(await menuIds(id)).toEqual([f.lunch]);
+    expect(await menuIds(f.burger)).toBeUndefined(); // Dinner was never published
   });
 
-  it("counts a version queued for later", async () => {
+  it("names the live menu for a home shortcut", async () => {
     const f = await menusFixture(fx.db);
-    await queue(f.dinner, later);
-    expect((await holding([f.burger])).get(f.burger)?.map((m) => m.id)).toEqual([f.dinner]);
+    await app((tx) => addShortcut(tx, f.lunch, product(f.lemonade)));
+    await publish(f.lunch);
+    expect(await menuIds(f.lemonade)).toEqual([f.lunch]);
+  });
+
+  it("counts a dish, a variant and an extras item on a version queued for later", async () => {
+    const f = await menusFixture(fx.db);
+    await queue(f.lunch, later);
+    for (const id of [f.lemonade, f.large, f.extraLemon]) expect(await menuIds(id)).toEqual([f.lunch]);
   });
 
   it("counts a queued version whose time has come before it is settled", async () => {
     const f = await menusFixture(fx.db);
     await queue(f.dinner, later);
-    const after = new Date(later.getTime() + 60_000);
-    expect((await holding([f.burger], after)).get(f.burger)?.map((m) => m.id)).toEqual([f.dinner]);
+    expect(await menuIds(f.burger, new Date(later.getTime() + 60_000))).toEqual([f.dinner]);
   });
 
   it("does not count a cancelled queued version", async () => {
     const f = await menusFixture(fx.db);
     const edition = await queue(f.dinner, later);
     await app((tx) => cancelMenuPublication(tx, f.dinner, edition.versionId, "person-1", T0));
-    expect((await holding([f.burger])).has(f.burger)).toBe(false);
+    expect(await menuIds(f.burger)).toBeUndefined();
   });
 
   it("does not count a deleted menu's live version", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.dinner);
     await app((tx) => deactivateCatalogue(tx, f.dinner));
-    expect((await holding([f.burger])).has(f.burger)).toBe(false);
+    expect(await menuIds(f.burger)).toBeUndefined();
   });
 });
 
@@ -321,7 +317,7 @@ describe("assertOffPublishedMenus", () => {
   it("refuses with the products and menus", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
-    await expect(app((tx) => assertOffPublishedMenus(tx, [f.lemonade]))).rejects.toMatchObject({
+    await expect(app((tx) => assertOffPublishedMenus(tx, [f.lemonade, f.burger]))).rejects.toMatchObject({
       code: "product.on_live_menu",
       params: {
         products: [{ id: f.lemonade, name: expect.any(String) }],
@@ -337,15 +333,13 @@ describe("assertOffPublishedMenus", () => {
 });
 ```
 
-Before running, confirm against the source: the fixture field names (`lemonade`, `large`,
-`extraLemon`, `burger`, `lunch`, `dinner`) and that `extraLemon` is the extras item's PRODUCT id
-(`test/menus-fixture.ts`); that `queueMenuPublication`'s result carries `versionId` (`QueuedEdition`); and the Lunch menu's
-name (`"Lunch Menu"` in the fixture). Fix the test to the source, never the source to the test.
+If `addShortcut`'s menu-reach rule needs Lemonade's section rather than Lunch's root, read
+`menu-home.test.ts` for the shape it uses and follow it.
 
-- [ ] **Step 6: Run them** — `pnpm --filter @waitron/catalogue exec vitest run src/archive.db.test.ts`.
-  Expected: PASS (the module exists already). Then prove each test by breaking the code it guards:
-  remove the `queued`/`gt` half, the `served` filter and the `variants` loop in turn, rerun, see the
-  matching test fail, restore.
+- [ ] **Step 6: Run, then prove each test by breaking its code** —
+  `pnpm --filter @waitron/catalogue exec vitest run src/archive.db.test.ts` (PASS). Remove in turn
+  the queued-versions read, the `served` filter, the variants loop and the extras loop; rerun; see
+  the matching test fail; restore.
 
 - [ ] **Step 7: Commit**
 
@@ -357,75 +351,78 @@ git commit -s -m "Catalogue: find the live and scheduled menus that include a pr
 
 ---
 
-### Task 2: Archive through one function; refuse writes to an archived product
+### Task 2: One archive path; refuse writes to an archived product
 
 **Files:**
-- Modify: `packages/catalogue/src/archive.ts` (add `archiveProducts`, move `markInactive` here)
-- Modify: `packages/catalogue/src/operations.ts` (`patchProduct`, `deactivateProduct`, remove
+- Modify: `packages/catalogue/src/archive.ts` (add `markInactive` — moved here —,
+  `removeFromExtraLists`, `archiveProducts`, `assertProductWritable`)
+- Modify: `packages/catalogue/src/operations.ts` (`patchProduct`, `deactivateProduct`; delete
   `markInactive`)
 - Modify: `packages/catalogue/src/product-editor.ts` (`saveProductEditor`)
 - Modify: `packages/catalogue/src/catalogue-items.ts` (`deleteCatalogueItems`)
+- Modify: `packages/catalogue/src/index.ts` (export `assertProductWritable`)
 - Test: `packages/catalogue/src/archive.db.test.ts`
 
 **Interfaces:**
 - Consumes: `assertOffPublishedMenus` (Task 1).
-- Produces: `archiveProducts(tx: Transaction, ids: readonly string[]): Promise<void>` — archives
-  each named product that is still on, together with its variants that are still on, and each named
-  variant still on; refuses `product.on_live_menu` first. `markInactive(tx, ids)` now lives in
-  `archive.ts` with the same signature.
+- Produces:
+  - `markInactive(tx, ids: readonly string[]): Promise<void>` (unchanged signature, new home)
+  - `removeFromExtraLists(tx, productIds: readonly string[]): Promise<void>`
+  - `archiveProducts(tx, ids: readonly string[]): Promise<void>`
+  - `assertProductWritable(tx, productId: string): Promise<void>` — exported from the package.
 
-- [ ] **Step 1: Write the failing tests** (append to `archive.db.test.ts`; import `updateProduct`,
-  `listProductVariants`, `readProductEditor`, `saveProductEditor`, `deleteCatalogueItems`,
-  `extraListItems` from `./schema/extras.js`, `products` from `@waitron/db`, `eq` from
-  `drizzle-orm`):
+- [ ] **Step 1: Write the failing tests** (append to `archive.db.test.ts`; add imports
+  `updateProduct` from `./operations.js`, `listProductVariants` from `./variants.js`,
+  `readProductEditor`, `saveProductEditor` from `./product-editor.js`, `deleteCatalogueItems` from
+  `./catalogue-items.js`, `extraListItems` from `./schema/extras.js`, `products` from
+  `@waitron/db`, `eq` from `drizzle-orm`):
 
 ```ts
 const archived = (productId: string) => ({ code: "product.archived", params: { productId } });
+const switchOff = (id: string) =>
+  app((tx) => tx.update(products).set({ active: false }).where(eq(products.id, id)));
+const row = async (id: string) =>
+  (await app((tx) =>
+    tx.select({ name: products.name, active: products.active }).from(products).where(eq(products.id, id)),
+  ))[0];
 
 describe("archiving", () => {
-  it("archives a product and all its variants, and takes it out of extras lists", async () => {
+  it("archives a product and every variant still on", async () => {
     const f = await menusFixture(fx.db);
     await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
     const variants = await app((tx) => listProductVariants(tx, f.lemonade));
-    expect(variants.every((v) => !v.active)).toBe(true);
+    expect(variants.map((v) => v.active)).toEqual(variants.map(() => false));
+  });
+
+  it("takes an archived product out of every extras list", async () => {
+    const f = await menusFixture(fx.db);
     await app((tx) => updateProduct(tx, f.extraLemon, { active: false }));
-    const left = await app((tx) =>
-      tx.select().from(extraListItems).where(eq(extraListItems.productId, f.extraLemon)),
-    );
-    expect(left).toEqual([]);
+    expect(
+      await app((tx) => tx.select().from(extraListItems).where(eq(extraListItems.productId, f.extraLemon))),
+    ).toEqual([]);
   });
 
   it("refuses archiving a product on a live menu and writes nothing", async () => {
     const f = await menusFixture(fx.db);
+    const before = await row(f.lemonade);
     await publish(f.lunch);
     await expect(
       app((tx) => updateProduct(tx, f.lemonade, { name: "Renamed", active: false })),
     ).rejects.toMatchObject({ code: "product.on_live_menu" });
-    const [row] = await app((tx) =>
-      tx.select({ name: products.name, active: products.active }).from(products)
-        .where(eq(products.id, f.lemonade)),
-    );
-    expect(row).toEqual({ name: expect.not.stringMatching(/^Renamed$/), active: true });
+    expect(await row(f.lemonade)).toEqual(before);
   });
 
   it("refuses switching an archived product back on, and any other edit", async () => {
     const f = await menusFixture(fx.db);
     await app((tx) => updateProduct(tx, f.burger, { active: false }));
-    await expect(app((tx) => updateProduct(tx, f.burger, { active: true }))).rejects.toMatchObject(
-      archived(f.burger),
-    );
-    await expect(app((tx) => updateProduct(tx, f.burger, { unitPrice: "9" }))).rejects.toMatchObject(
-      archived(f.burger),
-    );
+    await expect(app((tx) => updateProduct(tx, f.burger, { active: true }))).rejects.toMatchObject(archived(f.burger));
+    await expect(app((tx) => updateProduct(tx, f.burger, { unitPrice: "9" }))).rejects.toMatchObject(archived(f.burger));
   });
 
   it("refuses a write to a variant whose product is archived but whose own row is on", async () => {
     const f = await menusFixture(fx.db);
-    // Data from before this change: the parent off, the variant row left on.
-    await app((tx) => tx.update(products).set({ active: false }).where(eq(products.id, f.lemonade)));
-    await expect(app((tx) => updateProduct(tx, f.large, { unitPrice: "3" }))).rejects.toMatchObject(
-      archived(f.large),
-    );
+    await switchOff(f.lemonade);
+    await expect(app((tx) => updateProduct(tx, f.large, { unitPrice: "3" }))).rejects.toMatchObject(archived(f.large));
   });
 
   it("refuses every editor save of an archived product", async () => {
@@ -437,32 +434,37 @@ describe("archiving", () => {
     ).rejects.toMatchObject(archived(f.burger));
   });
 
-  it("an editor save that archives does only that", async () => {
+  it("an editor save that archives writes nothing else it carries", async () => {
     const f = await menusFixture(fx.db);
-    const value = await app((tx) => readProductEditor(tx, f.burger));
+    const value = await app((tx) => readProductEditor(tx, f.lemonade));
     await app((tx) =>
-      saveProductEditor(tx, f.burger, f.dinner, { ...value, active: false }, "en"),
+      saveProductEditor(
+        tx,
+        f.lemonade,
+        f.dinner,
+        { ...value, active: false, name: "Renamed", variants: value.variants.map((v) => ({ ...v, name: `${v.name} x` })) },
+        "en",
+      ),
     );
-    expect((await app((tx) => readProductEditor(tx, f.burger))).active).toBe(false);
+    const after = await app((tx) => readProductEditor(tx, f.lemonade));
+    expect(after.active).toBe(false);
+    expect(after.name).toBe(value.name);
+    expect(after.variants.map((v) => v.name)).toEqual(value.variants.map((v) => v.name));
   });
 
   it("a folder delete refuses when a product inside is on a live menu", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await expect(
-      app((tx) =>
-        deleteCatalogueItems(tx, { productIds: [f.lemonade], categoryIds: [] }, "move_up"),
-      ),
+      app((tx) => deleteCatalogueItems(tx, { productIds: [f.lemonade], categoryIds: [] }, "move_up")),
     ).rejects.toMatchObject({ code: "product.on_live_menu" });
   });
 
-  it("a folder delete passes over a product already archived while still on a live menu", async () => {
+  it("a folder delete passes over a product already off while still on a live menu", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
-    await app((tx) => tx.update(products).set({ active: false }).where(eq(products.id, f.lemonade)));
-    await app((tx) =>
-      deleteCatalogueItems(tx, { productIds: [f.lemonade], categoryIds: [] }, "move_up"),
-    );
+    await switchOff(f.lemonade);
+    await app((tx) => deleteCatalogueItems(tx, { productIds: [f.lemonade], categoryIds: [] }, "move_up"));
   });
 });
 ```
@@ -470,13 +472,12 @@ describe("archiving", () => {
 `saveProductEditor` reads its `catalogueId` argument only when creating, so any catalogue id
 serves for an update.
 
-- [ ] **Step 2: Run them to see them fail** —
-  `pnpm --filter @waitron/catalogue exec vitest run src/archive.db.test.ts`. Expected: the new cases
-  fail (no refusals yet; variants stay on; extras item stays).
+- [ ] **Step 2: Run to see the new cases fail** —
+  `pnpm --filter @waitron/catalogue exec vitest run src/archive.db.test.ts`.
 
-- [ ] **Step 3: Add `archiveProducts` and move `markInactive`** — in `archive.ts` (add imports:
-  `takeOffMenus`, `dropMenuPrices` from `./menu-removal.js`, `extraListItems` from
-  `./schema/extras.js`):
+- [ ] **Step 3: Add to `archive.ts`** (imports: `takeOffMenus`, `dropMenuPrices` from
+  `./menu-removal.js`; `extraListItems` from `./schema/extras.js`; `readUpdatedName` from
+  `./product-names.js`):
 
 ```ts
 /** Sets the products Inactive and nothing else: the caller takes them off menus. */
@@ -488,10 +489,27 @@ export async function markInactive(tx: Transaction, ids: readonly string[]): Pro
       .where(inArray(products.id, batch));
 }
 
+/** Deletes every extras-list item offering any of the products; a variant can be an item too. */
+export async function removeFromExtraLists(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<void> {
+  for (const batch of batches(productIds))
+    await tx.delete(extraListItems).where(inArray(extraListItems.productId, batch));
+}
+
+/** Refuses `product.archived` when the product, or its parent, is archived. A missing row is left
+ * to the caller's own not-found. */
+export async function assertProductWritable(tx: Transaction, productId: string): Promise<void> {
+  const row = await readUpdatedName(tx, productId);
+  if (row !== undefined && (!row.active || row.parentActive === false))
+    throw new AppError("product.archived", { productId });
+}
+
 /**
- * Archives each named product or variant that is still on, with every variant still on of each
- * named product: refused with `product.on_live_menu` first, then taken off menu drafts and extras
- * lists. A row already off is passed over, whatever menu still shows it.
+ * Archives each named product or variant still on, with every variant still on of each named
+ * product: refused with `product.on_live_menu` before anything is written, then taken off menu
+ * drafts and extras lists. A row already off is passed over, whatever menu still shows it.
  */
 export async function archiveProducts(tx: Transaction, ids: readonly string[]): Promise<void> {
   const named: { id: string; parentId: string | null; active: boolean }[] = [];
@@ -502,57 +520,48 @@ export async function archiveProducts(tx: Transaction, ids: readonly string[]): 
         .from(products)
         .where(inArray(products.id, batch))),
     );
-  const dishes = named.filter((row) => row.active && row.parentId === null).map((row) => row.id);
-  const variants = new Set(
-    named.filter((row) => row.active && row.parentId !== null).map((row) => row.id),
-  );
+  const dishes = named.filter((r) => r.active && r.parentId === null).map((r) => r.id);
+  const variants = new Set(named.filter((r) => r.active && r.parentId !== null).map((r) => r.id));
   for (const batch of batches(dishes))
-    for (const row of await tx
+    for (const variant of await tx
       .select({ id: products.id })
       .from(products)
       .where(and(inArray(products.parentId, batch), eq(products.active, true))))
-      variants.add(row.id);
-  await assertOffPublishedMenus(tx, [...dishes, ...variants]);
-  await markInactive(tx, [...dishes, ...variants]);
-  for (const batch of batches(dishes))
-    await tx.delete(extraListItems).where(inArray(extraListItems.productId, batch));
+      variants.add(variant.id);
+  const all = [...dishes, ...variants];
+  await assertOffPublishedMenus(tx, all);
+  await markInactive(tx, all);
+  await removeFromExtraLists(tx, all);
   await takeOffMenus(tx, dishes);
   await dropMenuPrices(tx, [...variants]);
 }
 ```
 
-In `operations.ts` delete `markInactive`, import `archiveProducts` from `./archive.js`, and make
-`deactivateProduct` call `archiveProducts(tx, [id])`. Update every other importer of
-`markInactive` (`grep -rn "markInactive" packages/catalogue/src`) to import it from `./archive.js`.
+`readUpdatedName` must not create an import cycle problem: `product-names.ts` does not import
+`archive.ts`. In `operations.ts` delete `markInactive`, import `archiveProducts` and
+`assertProductWritable` from `./archive.js`, and make `deactivateProduct` call
+`archiveProducts(tx, [id])`. Point every other importer of `markInactive`
+(`grep -rn "markInactive" packages/catalogue/src`) at `./archive.js`. Export
+`assertProductWritable` from `packages/catalogue/src/index.ts` beside the other product exports.
 
-- [ ] **Step 4: Change `patchProduct`** (`operations.ts`):
-
-Replace the opening two lines that read `row` with an unconditional read and the refusal:
+- [ ] **Step 4: Change `patchProduct`** (`operations.ts`). Replace its first two lines with:
 
 ```ts
   const namesChange = checkNames && (patch.name !== undefined || patch.active !== undefined);
   const row = await readUpdatedName(tx, id);
   if (row !== undefined && (!row.active || row.parentActive === false))
     throw new AppError("product.archived", { productId: id });
+  // Before the row is written: archiveProducts passes over a row already off.
   if (patch.active === false && row?.active === true) await archiveProducts(tx, [id]);
 ```
 
-Keep the `assertNotOfferedAsExtra` and `assertUpdatedNamesFree` lines that follow (they read
-`row`). Delete the tail:
+Keep the `assertNotOfferedAsExtra` / `assertUpdatedNamesFree` lines that follow. Delete the tail
+that ran `takeOffMenus` / `dropMenuPrices` on a change from Active, and drop those imports if
+unused.
 
-```ts
-  // Only a change from Active runs the removal: the editor resends `active` on every save.
-  if (patch.active === false && row?.active === true)
-    await (row.parentId === null ? takeOffMenus : dropMenuPrices)(tx, [id]);
-```
-
-and drop `takeOffMenus`/`dropMenuPrices` from `operations.ts`'s imports if nothing else uses them.
-Confirm `readUpdatedName`'s `UpdatedName` carries `parentActive` (`product-names.ts`); it does as of
-`main` 49a80d770.
-
-- [ ] **Step 5: Change `saveProductEditor`** (`product-editor.ts`): replace the stored-row select
-  with `readUpdatedName(tx, productId)` (it returns `id`, `name`, `active`, `parentId`,
-  `parentActive`, which covers `StoredName`), then right after it:
+- [ ] **Step 5: Change `saveProductEditor`** (`product-editor.ts`). Replace the stored-row select
+  with `const product = await readUpdatedName(tx, productId);` (it carries `id`, `name`, `active`,
+  `parentId` and `parentActive`, covering `StoredName`), then:
 
 ```ts
     if (!product) throw new AppError("product.not_found", { productId });
@@ -563,8 +572,8 @@ Confirm `readUpdatedName`'s `UpdatedName` carries `parentActive` (`product-names
 After `parseProductEditorInput` and the `parentId` check, add:
 
 ```ts
-  // An archiving save archives and changes nothing else: the dashboard sends the stored value back
-  // with `active: false`, and the variants and options it carries must not be rewritten onto an
+  // An archiving save archives and writes nothing else it carries: the dashboard sends the stored
+  // value back with `active: false`, and its variants and options must not be rewritten onto an
   // archived row.
   if (productId !== null && !value.active) {
     await archiveProducts(tx, [productId]);
@@ -572,29 +581,20 @@ After `parseProductEditorInput` and the `parentId` check, add:
   }
 ```
 
-- [ ] **Step 6: Change `deleteCatalogueItems`** (`catalogue-items.ts`): stop calling
-  `markInactive` and `takeOffMenus`; collect every product id the deletion reaches (the selection's
-  `productIds` and each subtree's products, exactly as `deactivated` collects them today) and call
-  `await archiveProducts(tx, deactivated)` once, BEFORE the folder loops write anything — so read the
-  subtrees' products first, archive, then vacate and remove folders. `archiveProducts` passes over
-  rows already off.
+- [ ] **Step 6: Change `deleteCatalogueItems`** (`catalogue-items.ts`): collect every product the
+  deletion reaches first — the selection's `productIds`, and for a `delete` of contents each
+  selected subtree's top-level products, read exactly as the loop reads them today — then call
+  `await archiveProducts(tx, reached)` once, before the folder loops vacate or remove anything. Drop
+  the `markInactive` calls and the final `takeOffMenus`.
 
-- [ ] **Step 7: Run the catalogue package's tests** —
-  `pnpm --filter @waitron/catalogue exec vitest run src/archive.db.test.ts` (PASS), then
-  `pnpm --filter @waitron/catalogue test` and fix what the change breaks in OTHER suites. Tests that
-  asserted a restore or a re-enable become refusal tests asserting `product.archived` — never
-  delete one. Known: `product-names.db.test.ts` ("refuses reactivating…" ×3 and the Inactive
-  duplicate cases), `menu-removal.test.ts` ("is not put back on any menu when made Active again"),
-  `active-available.test.ts`, `menu-structure.test.ts`, `product-editor.test.ts` ("…Active again
-  when sent active true", "adds, re-activates and restores variants…"), `operations.test.ts`.
-  A test that wrote an archived product for another purpose sets up its data without going through
-  the refused write.
+- [ ] **Step 7: Run** — `pnpm --filter @waitron/catalogue exec vitest run src/archive.db.test.ts`.
+  PASS. Do not fix other suites here; Task 4 does.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/catalogue
-git commit -s -m "Catalogue: archiving is permanent — one archive path, refused on a live menu, no writes after"
+git add packages/catalogue/src
+git commit -s -m "Catalogue: one archive path that refuses a live menu, and no writes to an archived product"
 ```
 
 ---
@@ -604,36 +604,46 @@ git commit -s -m "Catalogue: archiving is permanent — one archive path, refuse
 **Files:**
 - Modify: `packages/catalogue/src/variants.ts` (`writeProductVariants`)
 - Modify: `packages/catalogue/src/extras.ts` (`assertProductsExist`)
-- Test: `packages/catalogue/src/archive.db.test.ts`, the existing `variants.db.test.ts` and extras
-  suites
+- Test: `packages/catalogue/src/archive.db.test.ts`
 
-**Interfaces:**
-- Consumes: `assertOffPublishedMenus`, `product.archived` (Task 1).
+**Interfaces — consumes:** `assertOffPublishedMenus`, `removeFromExtraLists` (Tasks 1–2).
 
-- [ ] **Step 1: Write the failing tests** (append to `archive.db.test.ts`; import
-  `setProductVariants` from `./variants.js` and `createExtraList` from `./extras.js`):
+The rule for an archived variant named in a variants write: sent with `active: true` it is refused;
+sent with `active: false` it is accepted and NOTHING is written to it, so reading the editor value
+and saving it back unchanged keeps working and the body's row positions still match the editor's
+rows (`product-editor.ts` maps `variants.N` errors by position).
+
+- [ ] **Step 1: Write the failing tests** (append; import `setProductVariants` from
+  `./variants.js`, `createExtraList` from `./extras.js`):
 
 ```ts
 describe("variants and extras", () => {
-  it("refuses a variants write naming an archived variant", async () => {
+  it("refuses switching an archived variant back on", async () => {
     const f = await menusFixture(fx.db);
-    const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
     await app((tx) => updateProduct(tx, f.large, { active: false }));
+    const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
     await expect(
       app((tx) => setProductVariants(tx, f.lemonade, [{ ...large!, active: true }], "en")),
-    ).rejects.toMatchObject({
-      code: "product.archived",
-      params: { productId: f.large, field: "variants.0.id" },
-    });
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: f.large, field: "variants.0.active" } });
+  });
+
+  it("accepts an archived variant sent back unchanged, and writes nothing to it", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateProduct(tx, f.large, { active: false }));
+    const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
+    await app((tx) =>
+      setProductVariants(tx, f.lemonade, [{ ...large!, active: false, name: "Changed" }], "en"),
+    );
+    const [after] = await app((tx) => listProductVariants(tx, f.lemonade));
+    expect(after).toMatchObject({ id: f.large, name: large!.name, active: false });
   });
 
   it("refuses a variants write to an archived product", async () => {
     const f = await menusFixture(fx.db);
     await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
-    await expect(app((tx) => setProductVariants(tx, f.lemonade, [], "en"))).rejects.toMatchObject({
-      code: "product.archived",
-      params: { productId: f.lemonade },
-    });
+    await expect(app((tx) => setProductVariants(tx, f.lemonade, [], "en"))).rejects.toMatchObject(
+      archived(f.lemonade),
+    );
   });
 
   it("refuses archiving a variant a live menu offers, by switching it off or leaving it out", async () => {
@@ -641,9 +651,19 @@ describe("variants and extras", () => {
     await publish(f.lunch);
     const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
     for (const inputs of [[{ ...large!, active: false }], []])
-      await expect(
-        app((tx) => setProductVariants(tx, f.lemonade, inputs, "en")),
-      ).rejects.toMatchObject({ code: "product.on_live_menu" });
+      await expect(app((tx) => setProductVariants(tx, f.lemonade, inputs, "en"))).rejects.toMatchObject({
+        code: "product.on_live_menu",
+      });
+  });
+
+  it("takes a variant switched off by a variants write out of extras lists", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => createExtraList(tx, { name: "Sizes", items: [{ productId: f.large }] }, "en"));
+    const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
+    await app((tx) => setProductVariants(tx, f.lemonade, [{ ...large!, active: false }], "en"));
+    expect(
+      await app((tx) => tx.select().from(extraListItems).where(eq(extraListItems.productId, f.large))),
+    ).toEqual([]);
   });
 
   it("refuses adding an archived product to an extras list", async () => {
@@ -672,9 +692,12 @@ describe("variants and extras", () => {
 });
 ```
 
-- [ ] **Step 2: Run to see them fail** — same command as Task 2 Step 2.
+The list body follows `extras.test.ts`'s "offers a variant itself as an item"; Lunch is not
+published in this case, so the archive is not refused.
 
-- [ ] **Step 3: Change `writeProductVariants`** (`variants.ts`):
+- [ ] **Step 2: Run to see them fail.**
+
+- [ ] **Step 3: Change `writeProductVariants`** (`variants.ts`).
 
 After `const parent = await assertProductForWrite(tx, productId);`:
 
@@ -682,16 +705,16 @@ After `const parent = await assertProductForWrite(tx, productId);`:
   if (!parent.active) throw new AppError("product.archived", { productId });
 ```
 
-After the loop that refuses `product.variant_not_found`:
+After the loop refusing `product.variant_not_found`:
 
 ```ts
-  const archivedAt = normalized.findIndex(
-    (input) => input.id !== undefined && currentActive.get(input.id) === false,
+  const archivedOn = normalized.findIndex(
+    (input) => input.id !== undefined && currentActive.get(input.id) === false && input.active,
   );
-  if (archivedAt !== -1)
+  if (archivedOn !== -1)
     throw new AppError("product.archived", {
-      productId: normalized[archivedAt]!.id!,
-      field: `variants.${archivedAt}.id`,
+      productId: normalized[archivedOn]!.id!,
+      field: `variants.${archivedOn}.active`,
     });
   const left = current.filter((variant) => !seen.has(variant.id));
   const madeInactive = [
@@ -703,12 +726,25 @@ After the loop that refuses `product.variant_not_found`:
   if (madeInactive.length > 0) await assertOffPublishedMenus(tx, madeInactive);
 ```
 
-and delete the later `left` / `madeInactive` declarations (keep the loop over `left` and the
-`dropMenuPrices(tx, madeInactive)` call, which now use these). Leaving an archived variant OUT of
-the body stays allowed: the `left` loop keeps it off and orders it last.
+In the write loop, skip a row that was archived before this write:
 
-- [ ] **Step 4: Change `assertProductsExist`** (`extras.ts`): select `active` too and refuse an
-  archived product at its item:
+```ts
+    if (input.id !== undefined && currentActive.get(input.id) === false) continue;
+```
+
+Delete the later `left` / `madeInactive` declarations; keep the loop over `left` and, after it:
+
+```ts
+  if (madeInactive.length > 0) {
+    await dropMenuPrices(tx, madeInactive);
+    await removeFromExtraLists(tx, madeInactive);
+  }
+```
+
+The `assertContentTranslations` check in the normalising loop already skips inactive variants, so an
+archived variant's stale customer name never blocks a save.
+
+- [ ] **Step 4: Change `assertProductsExist`** (`extras.ts`):
 
 ```ts
   const rows = await tx
@@ -726,85 +762,145 @@ the body stays allowed: the `left` loop keeps it off and orders it last.
     });
 ```
 
-Update the function's comment to say it also refuses an archived product.
+and say in its comment that it refuses an archived product too.
 
-- [ ] **Step 5: Run** — `pnpm --filter @waitron/catalogue exec vitest run src/archive.db.test.ts`
-  (PASS), then `pnpm --filter @waitron/catalogue test`; turn the restore cases in
-  `variants.db.test.ts` (":290, :384, :649, :698" as of 49a80d770) and `product-editor.test.ts`
-  into refusal cases as in Task 2 Step 7. Then `pnpm --filter @waitron/catalogue test:coverage` and
-  read the per-file table for `archive.ts`, `variants.ts`, `extras.ts`.
+- [ ] **Step 5: Run** `src/archive.db.test.ts` — PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/catalogue
-git commit -s -m "Catalogue: no write brings an archived variant back, and extras lists refuse archived products"
+git add packages/catalogue/src
+git commit -s -m "Catalogue: no variants write brings an archived variant back, and extras lists refuse archived products"
 ```
 
 ---
 
-### Task 4: Server routes answer the two new refusals
+### Task 4: Bring the other catalogue, recipes and venue-service suites in line
 
-**Files:**
-- Modify: `apps/server/src/catalogue-api.ts` (status map near `"product.not_found": 404`)
-- Test: `apps/server/src/catalogue-api.test.ts`
+**Files:** tests only, plus `packages/recipes/src/recipes.ts` (`setProductRecipe`).
 
-- [ ] **Step 1: Write the failing route tests** in `catalogue-api.test.ts`, beside the existing
-  product editor cases, using that file's own helpers for a manager session and a product:
-  - `PUT /management-api/products/:id/editor` with `active: true` on an archived product answers
-    **409** with body `code: "product.archived"`.
-  - The same route archiving a product on a published menu answers **409** with
-    `code: "product.on_live_menu"` and `params.menus` naming the menu.
-  - `POST /management-api/folders/delete` with that product answers **409**
-    `product.on_live_menu`.
-  Turn the existing reactivation cases (":1303" name_taken on reactivation; ":2250" "is removed and
-  restored…", as of 49a80d770) into `product.archived` refusals.
+- [ ] **Step 1: Recipes refuse an archived product.** Add a failing case to the recipes suite
+  (`grep -ln "setProductRecipe" packages/recipes/src/*.test.ts`): `setProductRecipe` on an archived
+  product rejects with `product.archived`. Then at the top of `setProductRecipe` call
+  `await assertProductWritable(tx, productId);` (imported from `@waitron/catalogue`). Run the recipes
+  suite.
 
-- [ ] **Step 2: Run to see them fail** —
-  `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts`. Expected: 500 instead
-  of 409 for the new codes.
+- [ ] **Step 2: Run `pnpm --filter @waitron/catalogue test`** and fix every failure. A test that
+  asserted a restore or re-enable becomes a refusal test asserting `product.archived` — never delete
+  one. A test that needs an archived product on a published menu writes `active = false` straight to
+  the row (Global Constraints). Known, as of `main` 49a80d770:
+  - `product-names.db.test.ts:108, 111, 138, 145, 152, 218, 222`
+  - `menu-removal.test.ts:193, 537–538`
+  - `active-available.test.ts:114`; `menu-structure.test.ts:523`
+  - `product-editor.test.ts:267, 283, 1003`
+  - `variants.db.test.ts:290, 384, 649, 698`
+  - `operations.test.ts:674`
+  - `menu-publication.test.ts:1430, 1456, 1502–1503, 2214, 2432`; `menu-document.test.ts:249, 562`
+  - `configuration-transfer.test.ts:133, 411–440` (export and import of archived products: should
+    pass unchanged — confirm)
 
-- [ ] **Step 3: Add the statuses**
+- [ ] **Step 3: Run `pnpm --filter @waitron/venue-service exec vitest run src/category-dependencies.test.ts`**
+  and fix `:105` (it switches a product back on after a folder delete) the same way.
 
-```ts
-  "product.archived": 409,
-  "product.on_live_menu": 409,
+- [ ] **Step 4: Coverage** — `pnpm --filter @waitron/catalogue test:coverage`; read the per-file
+  rows for `archive.ts`, `variants.ts`, `extras.ts`, `operations.ts`, `product-editor.ts`,
+  `catalogue-items.ts`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages
+git commit -s -m "Catalogue and recipes: tests that restored archived products now expect the refusal"
 ```
 
-Then `grep -rn '"product.name_taken"' apps/server/src` and add both codes to every other status map
-that lists catalogue product codes (`setup-api.ts` lists one); a map whose routes cannot reach an
-archive needs nothing — say which in the commit message.
+---
 
-- [ ] **Step 4: Run** — same command, PASS; then `pnpm --filter @waitron/server exec vitest run
-  src/catalogue-api` and `pnpm exec vitest run scripts/errors-reachable.test.ts`.
+### Task 5: Server routes
+
+**Files:**
+- Modify: `apps/server/src/catalogue-api.ts` (status map; the editor route), `apps/server/src/kitchen.ts`
+  (`setProductCourse`), every other status map naming catalogue product codes
+- Test: `apps/server/src/catalogue-api.test.ts`, the course route's suite
+
+- [ ] **Step 1: Write the failing route tests** in `catalogue-api.test.ts`, with its own helpers:
+  - `PUT /management-api/products/:id/editor` with `active: true` on an archived product → **409**,
+    `code: "product.archived"`.
+  - The same route archiving a product on a published menu → **409**, `product.on_live_menu`,
+    `params.menus` naming the menu.
+  - The same route archiving a product whose stored course is then switched off answers **200** and
+    leaves the product archived: the archive does not run the routing step.
+  - `POST /management-api/folders/delete` with a product on a published menu → **409**
+    `product.on_live_menu`.
+  - The extras-list create route naming an archived product → **409** `product.archived`.
+  - `PUT /management-api/products/:id/course` on an archived product → **409** `product.archived`.
+
+- [ ] **Step 2: Run to see them fail** —
+  `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts`.
+
+- [ ] **Step 3: Implement.**
+  - Status map: `"product.archived": 409, "product.on_live_menu": 409`. Then
+    `grep -rn '"product.name_taken"' apps/server/src` and add both to each map whose routes can
+    reach an archive or an archived write (`setup-api.ts` has one); say in the commit which maps
+    you left and why.
+  - Editor route: run `applyRouting` only when the saved product is on —
+    `return product.active ? applyRouting(tx, product, routing) : product;`
+  - `setProductCourse` (`kitchen.ts`): call `assertProductWritable(tx, productId)` first. Check the
+    course route's status map answers 409 for `product.archived`.
+
+- [ ] **Step 4: Run** the two suites, then `pnpm exec vitest run scripts/errors-reachable.test.ts`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add apps/server
-git commit -s -m "Server: archiving refusals answer 409 with their own codes"
+git commit -s -m "Server: archiving refusals answer 409, and an archiving save skips the routing step"
 ```
 
 ---
 
-### Task 5: Dashboard words, product list, dialogs
+### Task 6: Server suites, and the till never sells an archived item
+
+**Files:** `apps/server/src/*.test.ts`
+
+- [ ] **Step 1: The spec's selling test.** In `working-order.test.ts` (beside the case at `:1987` as
+  of 49a80d770), add one case per kind — an archived DISH, an archived VARIANT and an archived
+  EXTRAS ITEM, each with `available` still true and each switched off by a direct row write while on
+  the published menu: adding it to an order is refused with `product.unavailable` (or
+  `product.variant_unavailable` for the variant), and an unsent line already holding it makes
+  payment refuse `product.unavailable`. Run it; it should PASS already (the readers require on AND
+  available). Prove it by deleting `products.active` from `productSellable`
+  (`working-order.ts`) — the dish case must fail — and restore.
+
+- [ ] **Step 2: Run the server suites that archive** —
+  `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts src/till-sale.test.ts src/working-order.test.ts`
+  and fix each failure: a set-up that archives a product on a published menu switches it off by a
+  direct row write instead; a reactivation becomes a `product.archived` refusal. Known:
+  `till-sale.test.ts:2105`, `working-order.test.ts:1987`,
+  `catalogue-api.test.ts:1303, 2178, 2250, 2293, 2316, 2370, 2483, 2577, 2613`.
+
+- [ ] **Step 3: Find the rest** —
+  `grep -rln "active: false\|active: true" apps/server/src --include='*.test.ts' | xargs grep -ln "product"`
+  and run each listed suite; fix the same way.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/server
+git commit -s -m "Server: tests set archived products up directly, and pin that the till never sells one"
+```
+
+---
+
+### Task 7: Dashboard words, product list and the catalogue screen's dialogs
 
 **Files:**
-- Modify: `apps/dashboard/src/i18n/strings.ts`, `apps/dashboard/src/i18n/codes.ts`
-- Modify: `apps/dashboard/src/screens/catalogue-screen.ts`
-- Modify: `apps/dashboard/src/widgets/product-list.ts`
-- Modify: `apps/dashboard/src/widgets/catalogue-browser.ts`
-- Modify: the extras-list form's product picker (`apps/dashboard/src/widgets/extra-list-form.ts`,
-  around the line that lists products for picking)
-- Test: `screens/catalogue-screen.test.ts`, `widgets/product-list.test.ts`,
-  `widgets/catalogue-browser.test.ts`, `widgets/extra-list-form.test.ts`
+- Modify: `apps/dashboard/src/i18n/strings.ts`, `apps/dashboard/src/i18n/codes.ts`,
+  `apps/dashboard/src/i18n/domain.ts`, `apps/dashboard/src/screens/units-screen.ts`
+- Create: `apps/dashboard/src/widgets/archive-refusal.ts`
+- Modify: `apps/dashboard/src/screens/catalogue-screen.ts`, `apps/dashboard/src/widgets/product-list.ts`
+- Test: `screens/catalogue-screen.test.ts`, `widgets/product-list.test.ts`, `widgets/archive-refusal.test.ts` (new)
 
-**Interfaces:**
-- Consumes: refusal bodies `product.archived { productId, field? }`,
-  `product.on_live_menu { products: {id,name}[], menus: {id,name}[] }`.
-
-- [ ] **Step 1: Strings.** Replace the Disable/Enable product keys with Archive keys. New English and
-  Spanish text:
+- [ ] **Step 1: Strings** (`strings.ts`):
 
 | Key | English | Spanish |
 |---|---|---|
@@ -812,25 +908,20 @@ git commit -s -m "Server: archiving refusals answer 409 with their own codes"
 | `product.view` | View | Ver |
 | `product.archive_named` | Archive {name} | Archivar {name} |
 | `product.archive_variant_named` | Archive {name} | Archivar {name} |
-| `product.archive_warning` | This archives the product for good: the till stops selling it, and it cannot be brought back. Its past sales are kept, and a new product can take its name. It also comes off any extras list that offers it. | Esto archiva el producto para siempre: la caja deja de venderlo y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre. También sale de las listas de extras que lo ofrecen. |
-| `product.archive_variant_warning` | This archives the variant for good: the till stops offering it, and it cannot be brought back. Its past sales are kept. | Esto archiva la variante para siempre: la caja deja de ofrecerla y no se puede recuperar. Sus ventas pasadas se conservan. |
+| `product.archive_warning` | This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name. | No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre. |
+| `product.archive_variant_warning` | This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept. | No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan. |
 | `product.archived_badge` | Archived | Archivado |
+| `product.variant_archived_badge` | Archived | Archivada |
 | `product.archived_notice` | This product is archived. You can look at it but not change it. | Este producto está archivado. Puedes consultarlo, pero no modificarlo. |
-| `folders.archive_products_heading` | Archive {count} products? | ¿Archivar {count} productos? |
-| `folders.archive_products_heading_one` | Archive 1 product? | ¿Archivar 1 producto? |
-| `folders.archive_products_body` | This archives the products for good: the till stops selling them, and they cannot be brought back. Their past sales are kept. | Esto archiva los productos para siempre: la caja deja de venderlos y no se pueden recuperar. Sus ventas pasadas se conservan. |
-| `folders.also_archives` | archives {products} | archiva {products} |
-| `folders.delete_off_menus` | Products archived by this deletion come off every menu they are on. | Los productos archivados por esta eliminación salen de todos los menús en los que están. |
 
-Keep `product.off_menus*` and `folders.off_menus*` (still true for menu drafts). Delete
-`product.disable`, `product.enable`, `product.disable_named`, `product.disable_variant_named`,
-`product.disable_warning`, `product.disable_variant_warning`, `product.disabled_badge`,
-`product.disabled_notice`, `folders.disable_products_heading(_one)`, `folders.disable_products_body`,
-`folders.also_disables` once nothing reads them (`grep -rn` each key under `apps/dashboard/src`;
-`variant-table.ts` and `product-editor.ts` are Task 6's and still read some — leave those keys for
-Task 6 to delete). Match the existing Spanish register in `strings.ts`.
+Keep `product.off_menus*`. Point `domain.ts:180–181` (status names) and `units-screen.ts:407` at
+`product.archived_badge` / `product.variant_archived_badge`. Delete `product.disabled_badge`,
+`product.variant_disabled_badge`, `product.disable_named`, `product.disable_variant_named`,
+`product.disable_warning`, `product.disable_variant_warning`, `product.enable` and
+`product.disabled_notice` once `grep -rn` finds no reader (the editor and variant table are Task 9's;
+leave a key they still read for Task 9 to delete).
 
-In `codes.ts`:
+`codes.ts` (no trailing colon — the names are appended by the helper):
 
 ```ts
   "product.archived": {
@@ -838,145 +929,183 @@ In `codes.ts`:
     es: "Este producto está archivado y ya no se puede modificar.",
   },
   "product.on_live_menu": {
-    en: "It is on a live or scheduled menu. Take it off the menu and publish, then archive it:",
-    es: "Está en un menú publicado o programado. Quítalo del menú y publica; después archívalo:",
+    en: "It is on a live or scheduled menu. Take it off the menu and publish, then archive it.",
+    es: "Está en un menú publicado o programado. Quítalo del menú y publica; después archívalo.",
   },
 ```
 
-- [ ] **Step 2: Write the failing browser tests.**
-  - `product-list.test.ts`: an archived row's actions hold only **View** (emits `edit-product`); an
-    active row's hold Edit and **Archive** (emits `delete-product`); the Status filter options read
-    "Active" and "Archived".
-  - `catalogue-screen.test.ts`: the archive dialog's heading and warning use the new keys; a
-    `product.on_live_menu` refusal shows the code's sentence followed by the menu names (and, with
-    more than one product, the product names); no Enable/restore path remains (delete the restore
-    cases or turn them into "an archived row offers View only").
-  - `catalogue-browser.test.ts`: the bulk action reads Archive, and a `product.on_live_menu` refusal
-    shows the menu and product names.
-  - `extra-list-form.test.ts`: the product picker leaves archived products out.
+- [ ] **Step 2: The refusal helper, test first.** `archive-refusal.test.ts`:
+  `refusalText("product.on_live_menu", params)` returns the code's sentence followed by
+  ` Menus: Dinner, Lunch Menu.` — and, when `params.products` holds more than one product,
+  ` Products: A, B.` before the menus; `refusalText("product.offered_as_extra", params)` keeps
+  today's behaviour (sentence plus list names); any other code returns `codeMessage(code)`. Add the
+  words "Menus" / "Menús" and "Products" / "Productos" as strings (`product.refusal_menus`,
+  `product.refusal_products`). Implement `refusalText(code: string, params: unknown): string` in
+  `archive-refusal.ts` by moving `extraListNames` and `refusalText` out of `catalogue-screen.ts`;
+  the screen keeps the error's `params` instead of the extracted list names.
 
-- [ ] **Step 3: Run to see them fail** —
-  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-list.test.ts src/screens/catalogue-screen.test.ts src/widgets/catalogue-browser.test.ts src/widgets/extra-list-form.test.ts`
-  (check `memory_pressure | grep free` first).
+- [ ] **Step 3: Write the failing screen and list tests.**
+  - `product-list.test.ts`: a row is archived when `rowActive` says so (a variant of an archived
+    product counts as archived); an archived row's actions hold only **View** (emits
+    `edit-product`); an active row's hold Edit and **Archive** (emits `delete-product`); the Status
+    filter offers "Active" and "Archived".
+  - `catalogue-screen.test.ts`: the archive dialog's heading and warning use the archive keys and
+    its confirm button reads Archive; a `product.on_live_menu` refusal in that dialog shows the
+    sentence and the menu names; the same refusal from an editor save that switched a variant off
+    (the screen's general save path) shows them too; no restore path remains — turn each restore
+    case into "an archived row offers View only".
 
-- [ ] **Step 4: Implement.**
-  - `product-list.ts`, actions column: an inactive row renders one `wt-button` "View"
-    (`data-test="view-${id}"`, event `edit-product`); an active row renders Edit and a danger
-    "Archive" (`data-test="delete-${id}"`, event `delete-product`). Remove `restore-product`. The
-    status cell and filter use `product.archived_badge` for an inactive row; update
-    `productStatusName` accordingly.
+- [ ] **Step 4: Run to see them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-list.test.ts src/screens/catalogue-screen.test.ts src/widgets/archive-refusal.test.ts`.
+
+- [ ] **Step 5: Implement.**
+  - `product-list.ts` actions column: decide with `rowActive(row)`, not the row's own flag. Archived:
+    one button View (`data-test="view-${id}"`, event `edit-product`). Active: Edit and a danger
+    Archive (`data-test="delete-${id}"`, event `delete-product`). Remove `restore-product`. The
+    status cell and filter labels use the archived badge keys.
   - `catalogue-screen.ts`: delete `#restoreProduct` and the `@restore-product` listener; the delete
-    dialog uses the archive keys and its confirm button reads `product.archive`. Generalise
-    `refusalText` so `product.on_live_menu` appends the menu names (and the product names when the
-    refusal names more than one product), read from `params` the way `extraListNames` reads
-    `extraLists`; set the dialog's `deleteErrorKey` text through it.
-  - `catalogue-browser.ts`: the bulk Disable label, heading, body and `also_disables` use the archive
-    keys; its refusal text goes through the same helper — move `refusalText` and its readers to a
-    small module both import (for example `apps/dashboard/src/widgets/archive-refusal.ts`).
-  - `extra-list-form.ts`: filter the picker's products to `active` ones.
+    dialog uses the archive keys; every place that showed a refusal through `refusalText` (the
+    dialog's error and the general error at the editor save path) passes the code and its params to
+    the new helper.
 
-- [ ] **Step 5: Run** — same command, PASS; then the whole catalogue screen family:
-  `pnpm --filter @waitron/dashboard exec vitest run src/screens/catalogue src/widgets/product src/widgets/catalogue src/widgets/extra-list`.
-
-- [ ] **Step 6: Look at it.** Start the dev stack (`wa-wt demo waitron-feat-a435-product-archive`),
-  archive a product not on a live menu, try one that is, open the Archived filter, at phone width
-  and in both themes. Note what you saw in the commit message.
+- [ ] **Step 6: Run** the same command, then
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/catalogue src/widgets/product-list src/screens/units`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add apps/dashboard
-git commit -s -m "Dashboard: Archive replaces Disable for products, with the live-menu refusal named"
+git commit -s -m "Dashboard: Archive replaces Disable for products, and the live-menu refusal names the menus"
 ```
 
 ---
 
-### Task 6: The product editor opens an archived product read-only; variants archive in the editor
+### Task 8: Dashboard folder actions and the extras-list picker
 
-**Files:**
-- Modify: `apps/dashboard/src/widgets/product-editor.ts`
-- Modify: `apps/dashboard/src/widgets/variant-table.ts`
-- Modify: `apps/dashboard/src/i18n/strings.ts`
-- Test: `widgets/product-editor.test.ts`, `widgets/product-editor.save-state.test.ts`,
-  `widgets/product-editor.a11y.test.ts`, `widgets/variant-table.test.ts`
+**Files:** `apps/dashboard/src/widgets/catalogue-browser.ts`, `apps/dashboard/src/widgets/extra-list-form.ts`,
+`apps/dashboard/src/i18n/strings.ts`; tests `widgets/catalogue-browser.test.ts`, `widgets/extra-list-form.test.ts`
 
 - [ ] **Step 1: Strings.**
 
 | Key | English | Spanish |
 |---|---|---|
-| `product.variant_archived_badge` | Archived | Archivada |
-| `product.variant_archive_pending_badge` | Archived when saved | Se archivará al guardar |
-| `product.keep_variant` | Keep | Conservar |
-| `editor.show_archived` | Show {count} archived | Mostrar {count} archivadas |
-| `editor.show_archived_one` | Show 1 archived | Mostrar 1 archivada |
-| `editor.hide_archived` | Hide archived | Ocultar archivadas |
+| `folders.archive_products_heading` | Archive {count} products? | ¿Archivar {count} productos? |
+| `folders.archive_products_heading_one` | Archive 1 product? | ¿Archivar 1 producto? |
+| `folders.archive_products_body` | This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept. | No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan. |
+| `folders.also_archives` | archives {products} | archiva {products} |
+| `folders.delete_off_menus` | Products archived by this deletion come off every menu they are on. | Los productos archivados por esta eliminación salen de todos los menús en los que están. |
 
-Delete `product.variant_disabled_badge`, `editor.show_disabled(_one)`, `editor.hide_disabled`, and
-whichever Task 5 leftovers (`product.disable`, `product.enable`, `product.disabled_notice`) nothing
-reads after this task.
+Delete `folders.disable_products_heading(_one)`, `folders.disable_products_body`,
+`folders.also_disables` once unread.
 
-- [ ] **Step 2: Write the failing browser tests.**
-  - `product-editor.test.ts`: opened on a value with `active: false`, every field and the variant
-    table are disabled, there is no Save and no Enable button, the Available switch is absent, the
-    notice reads `product.archived_notice`, and Cancel still closes the editor.
-  - `product-editor.test.ts`: a saved variant archived in the draft is still sent with
-    `active: false`; a variant that was ALREADY archived in the loaded value is left out of the
-    submitted `variants`.
-  - `variant-table.test.ts`: a variant archived in the loaded value shows `Archived` and only the
-    Open action; a variant switched off in this draft shows `Archived when saved` and a **Keep**
-    action (emits `wt-restore`); an active saved variant's danger action reads **Archive**; an unsaved
-    variant's still reads Remove.
+- [ ] **Step 2: Failing tests.** `catalogue-browser.test.ts`: the bulk action, heading and body read
+  Archive; a `product.on_live_menu` refusal shows the products and menus through `refusalText`.
+  `extra-list-form.test.ts`: the picker leaves archived products out.
 
-- [ ] **Step 3: Run to see them fail** —
-  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts src/widgets/variant-table.test.ts`.
+- [ ] **Step 3: Run to see them fail; implement** (the browser's labels and its refusal text through
+  `refusalText`; the picker filters to `active` products, `extra-list-form.ts` near the product list
+  it builds); **run to PASS**:
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/catalogue-browser.test.ts src/widgets/extra-list-form.test.ts`.
 
-- [ ] **Step 4: Implement.**
-  - `product-editor.ts`: add `private get archived() { return this.value?.id !== undefined && this.value?.active === false; }`
-    and make `suspended` return `this.busy || this.windowOpen || this.archived`. The Cancel button and
-    the modal's `dismissible` must stay usable, so they read `this.busy || this.windowOpen` instead
-    of `suspended`; check `reportCancel` and the close handler do not themselves refuse while
-    suspended. Render no Save and no Enable button when archived; delete the Enable button and the
-    `restore` parameter of `save` / `submissionValue`. Hide the Available switch when archived. The
-    inactive notice uses `product.archived_notice`.
-  - `submissionValue`: drop from `value.variants` every variant whose id is archived in `this.value`
-    (`this.value.variants.filter((v) => !v.active)`), so the server never receives one (Task 3
-    refuses it).
-  - Pass the archived ids to the table: `.archivedIds=${new Set(this.value?.variants.filter((v) => !v.active).map((v) => v.id))}`.
-    The show/hide toggle uses the `editor.*_archived` keys.
-  - `variant-table.ts`: add `@property({ attribute: false }) archivedIds: ReadonlySet<string> = new Set();`.
-    A row whose id is in it: badge `product.variant_archived_badge`, Available switch disabled, only
-    the Open action. A saved row switched off in the draft: badge
-    `product.variant_archive_pending_badge`, action `restore` labelled `product.keep_variant`. An
-    active saved row's danger action reads `product.archive`.
+- [ ] **Step 4: Look at it** on the dev stack (`wa-wt demo waitron-feat-a435-product-archive`):
+  archive one product not on a live menu and one that is, from the list and from a folder; open the
+  Archived filter; phone width; both themes. Say what you saw in the commit message.
 
-- [ ] **Step 5: Run** — same command, then
-  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor src/widgets/variant-table src/screens/catalogue`
-  (the save-state and a11y suites included; the a11y suite covers the read-only state in both
-  themes — add that state if it is not there).
-
-- [ ] **Step 6: Look at it** on the dev stack: open an archived product from the Archived filter,
-  archive a variant inside a product and Keep it again, at phone width and in both themes.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add apps/dashboard
-git commit -s -m "Dashboard: an archived product opens read-only, and variants archive on save with a Keep undo"
+git commit -s -m "Dashboard: folder actions archive, and the extras picker leaves archived products out"
 ```
 
 ---
 
-### Task 7: Documentation
+### Task 9: The editor opens an archived product with its fields disabled; variants archive on save
 
-**Files:**
-- Modify: `docs/backlog.md` (A435 entry)
-- Modify: `docs/superpowers/specs/2026-10-08-delete-and-archive-design.md` only if building showed a
-  sentence of it to be wrong — say what and why in the commit.
+**Files:** `apps/dashboard/src/widgets/product-editor.ts`, `apps/dashboard/src/widgets/variant-table.ts`,
+`apps/dashboard/src/i18n/strings.ts`, `docs/superpowers/specs/2026-10-08-delete-and-archive-design.md`;
+tests `widgets/product-editor.test.ts`, `widgets/product-editor.save-state.test.ts`,
+`widgets/product-editor.a11y.test.ts`, `widgets/variant-table.test.ts`
 
-- [ ] **Step 1:** Update A435's entry: step 1 (products) built on this branch; steps 2–6 open,
-  printers next. Any point this branch left open becomes its own short entry in the catalogue area.
-- [ ] **Step 2:** Grep the docs for claims the change retired: `grep -rn -i "enable it again\|restore.*product\|re-?activat" docs/developers docs/backlog.md docs/backlog/catalogue.md apps/dashboard/README* packages/catalogue/README* 2>/dev/null`
-  and fix each that describes the old behaviour.
+Disabled, not `readonly`: the design system's read-only field state exists only on `wt-input`
+(`docs/developers/design-system.md`, Forms → "The field box"), and this editor also holds switches,
+choosers and `wt-price-input`, which has no read-only setting. Nothing in an archived editor can
+change, so its draft scope never reports a change.
+
+- [ ] **Step 1: Strings.**
+
+| Key | English | Spanish |
+|---|---|---|
+| `product.variant_archive_pending_badge` | Archived when saved | Se archivará al guardar |
+| `product.keep_variant` | Keep | Conservar |
+
+Delete `editor.show_disabled`, `editor.show_disabled_one`, `editor.hide_disabled`, and the Task 7
+leftovers (`product.disable`, `product.enable`, `product.disabled_notice`,
+`product.variant_disabled_badge`) once unread.
+
+- [ ] **Step 2: Failing tests.**
+  - `product-editor.test.ts`, opened on a saved value with `active: false`: every field and the
+    variant table are disabled; there is no Save and no Enable button; the Available switch is
+    absent; the notice reads `product.archived_notice`; Cancel, the close button AND Escape all close
+    it.
+  - `product-editor.test.ts`: a saved variant archived in this draft is submitted with
+    `active: false`; a variant archived before is submitted unchanged at its own position (the
+    server accepts it and writes nothing to it, Task 3).
+  - `variant-table.test.ts`: a variant whose id is in `archivedIds` is not drawn at all; a saved
+    variant switched off in this draft shows "Archived when saved" and a Keep action (emits
+    `wt-restore`); an active saved variant's danger action reads Archive; an unsaved one's reads
+    Remove; there is no show/hide toggle.
+  - `product-editor.a11y.test.ts`: the archived state, both themes.
+
+- [ ] **Step 3: Run to see them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts src/widgets/variant-table.test.ts src/widgets/product-editor.a11y.test.ts`.
+
+- [ ] **Step 4: Implement.**
+  - `product-editor.ts`: `private get archived() { return this.value?.id !== undefined && this.value.active === false; }`;
+    `suspended` returns `this.busy || this.windowOpen || this.archived`. Everything that must stay
+    usable when archived reads `this.busy || this.windowOpen` instead: the Cancel button, the modal's
+    `dismissible`, and `#beforeClose` (which today refuses to close while suspended). No Save and no
+    Enable button when archived; delete the Enable button and the `restore` parameter of `save` and
+    `submissionValue`. Hide the Available switch when archived. The inactive notice uses
+    `product.archived_notice`.
+  - Remove the show/hide-inactive toggle and `showInactive`. Pass
+    `.archivedIds=${new Set((this.value?.variants ?? []).filter((v) => !v.active).map((v) => v.id))}`
+    to the table.
+  - `variant-table.ts`: `@property({ attribute: false }) archivedIds: ReadonlySet<string> = new Set();`.
+    Skip rows whose id is in it (keeping every other row's index as its position in the whole list,
+    which every row action reports). A saved row switched off in the draft: badge
+    `product.variant_archive_pending_badge`, action `restore` labelled `product.keep_variant`. An
+    active saved row's danger action reads `product.archive`. Remove `showInactive` and its event.
+
+- [ ] **Step 5: Run** the same command, then
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor src/widgets/variant-table src/screens/catalogue`.
+
+- [ ] **Step 6: Look at it** on the dev stack: open an archived product from the Archived filter
+  (close it with Escape), archive a variant in the editor and Keep it, then archive one and save;
+  phone width; both themes.
+
+- [ ] **Step 7: Correct the spec** where this step settled it differently, in its Products section:
+  the editor footer gains no Archive (archiving is from the product list, a folder and the variant
+  table); the editor's own "show disabled variants" toggle goes and archived variants are not shown
+  in the editor; the writes this step leaves alone (translation fixes, the main reporting category,
+  folder moves); the archive dialog's warning names extras lists rather than counting them.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/dashboard docs/superpowers/specs
+git commit -s -m "Dashboard: an archived product opens disabled and read-only, and variants archive on save with Keep"
+```
+
+---
+
+### Task 10: Documentation
+
+- [ ] **Step 1:** Update A435 in `docs/backlog.md`: step 1 built on this branch; steps 2–6 open,
+  printers next. Each point this branch left open becomes its own short catalogue entry.
+- [ ] **Step 2:** Find claims the change retired —
+  `grep -rn -i "enable it again\|restore.*product\|re-\?activat" docs/developers docs/backlog.md docs/backlog/catalogue.md`
+  — and fix each that describes the old behaviour.
 - [ ] **Step 3: Commit**
 
 ```bash
