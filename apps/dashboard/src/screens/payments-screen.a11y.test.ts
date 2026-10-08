@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { registerCatalogue } from "@waitron/dashboard-kit";
@@ -153,6 +153,34 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     },
   );
 
+  it("renders the rename dialog with Save quiet, then with a change, accessibly", async () => {
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      {
+        api: stubApi(),
+        request: vi.fn() as unknown as PaymentsScreen["request"],
+        panels: PANELS,
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-r-1]")!
+      .click();
+    await flush(el);
+    const save = el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-reader]")!;
+    expect(save.getAttribute("variant")).toBe("secondary");
+    expect(save.hasAttribute("disabled")).toBe(true);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-reader-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Garden" } }),
+    );
+    await flush(el);
+    expect(save.getAttribute("variant")).toBe("primary");
+    expect(save.hasAttribute("disabled")).toBe(false);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders a reader's equipment label accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
       "dashboard-payments-screen",
@@ -306,6 +334,11 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     );
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=bill-attest-note]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Provider confirmed" } }),
+    );
     await flush(el);
     await expectNoA11yViolations(host);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-bill-attest]")!.click();
