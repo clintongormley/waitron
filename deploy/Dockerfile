@@ -68,11 +68,18 @@ RUN set -eux; \
 FROM node:26-slim AS print-agent
 # python3-minimal goes in alone and first, so the packages it adds to the base image can be listed:
 # their Debian copyright files ship in /app/third-party/python3-minimal (deploy/third-party/README.md).
+# A trickling mirror never trips apt's own read timeout, so each apt-get runs under an outer limit and
+# is retried (docs/developers/ci-and-gates.md, "Every apt wait is bounded"). 300 s, not CI's 60-90 s,
+# because waitron.sh builds this same file on a venue's box over whatever link it has. The apt
+# setting is removed again so the image ships none.
 RUN set -eux; \
-  apt-get update; \
+  printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+    > /etc/apt/apt.conf.d/99bounded-waits; \
+  bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
+  bounded apt-get update; \
   dpkg-query -W -f '${Package}\n' | sort > /tmp/base-packages; \
   [ -s /tmp/base-packages ]; \
-  apt-get install -y --no-install-recommends python3-minimal; \
+  bounded apt-get install -y --no-install-recommends python3-minimal; \
   dpkg-query -W -f '${Package}\n' | sort | comm -13 /tmp/base-packages - > /tmp/python3-packages; \
   grep -qx python3-minimal /tmp/python3-packages; \
   while read -r pkg; do \
@@ -81,8 +88,8 @@ RUN set -eux; \
   done < /tmp/python3-packages; \
   dpkg-query -W -f '${Package} ${Version}\n' $(cat /tmp/python3-packages) \
     > /app/third-party/python3-minimal/PACKAGES.txt; \
-  apt-get install -y --no-install-recommends bluez; \
-  rm -rf /var/lib/apt/lists/* /tmp/base-packages /tmp/python3-packages
+  bounded apt-get install -y --no-install-recommends bluez; \
+  rm -rf /var/lib/apt/lists/* /tmp/base-packages /tmp/python3-packages /etc/apt/apt.conf.d/99bounded-waits
 # The state volume's mount path, pre-created and chowned so a fresh named volume comes up writable by
 # the non-root process (same rule as the app image's /var/lib/waitron paths).
 RUN install -d -o node -g node /var/lib/waitron-print-agent
@@ -132,11 +139,14 @@ FROM node:26-slim AS runtime
 
 ARG WAITRON_BUILD_ID
 
-# libcap2-bin is here for the setcap below.
+# libcap2-bin is here for the setcap below. apt-get is bounded as in the print-agent stage.
 RUN set -eux; \
-  apt-get update; \
-  apt-get install -y --no-install-recommends ca-certificates libcap2-bin; \
-  rm -rf /var/lib/apt/lists/*
+  printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+    > /etc/apt/apt.conf.d/99bounded-waits; \
+  bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
+  bounded apt-get update; \
+  bounded apt-get install -y --no-install-recommends ca-certificates libcap2-bin; \
+  rm -rf /var/lib/apt/lists/* /etc/apt/apt.conf.d/99bounded-waits
 
 # The on-prem profile is `network_mode: host`, whose namespace keeps the kernel's
 # ip_unprivileged_port_start=1024, so a non-root bind to 443 fails EACCES there — while Docker's own

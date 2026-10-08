@@ -50,6 +50,21 @@ jobs:
             echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"
           } > deploy/.env
 
+      # A mirror that trickles a byte every few seconds never trips apt's own read timeout, so each
+      # call has an outer limit and is retried. Receipt: docs/developers/ci-and-gates.md, "Every apt
+      # wait is bounded".
+      - name: Install BlueZ and the stand-in's Python libraries from apt
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if sudo timeout 60 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update &&
+              sudo timeout 90 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends bluez python3-dbus python3-gi; then
+              break
+            fi
+            [ "$attempt" -lt 3 ] || { echo "apt-get failed or stalled on all three attempts" >&2; exit 1; }
+          done
+
       # What waitron.sh does on a box with AppArmor, so the stack below runs the agent under the
       # shipped profile; compose would refuse to start it otherwise. The stand-in BlueZ is for the
       # Bluetooth check further down: the runner has no Bluetooth hardware or kernel module.
@@ -58,8 +73,6 @@ jobs:
           set -euo pipefail
           [ "$(cat /sys/module/apparmor/parameters/enabled)" = "Y" ]
           sudo apparmor_parser -r deploy/apparmor/waitron-print-agent
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends bluez python3-dbus python3-gi
           # The log path goes in as an argument: sudo drops RUNNER_TEMP from the root shell's environment.
           sudo sh -c 'python3 scripts/fake-bluez.py > "$1" 2>&1 &' sh "$RUNNER_TEMP/fake-bluez.log"
           for _ in $(seq 1 40); do grep -q "fake bluez ready" "$RUNNER_TEMP/fake-bluez.log" && break; sleep 0.25; done
