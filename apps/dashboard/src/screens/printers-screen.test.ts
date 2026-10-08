@@ -9714,7 +9714,7 @@ describe.each(["en", "es-ES"] as const)(
       expect(cut).toEqual(locale === "es-ES" ? ["390 px agents"] : []);
     });
 
-    it("scrolls the tabs beside the action, and only where they do not fit, at a 310 px screen", async () => {
+    it("scrolls the tabs beside the action at a 310 px screen", async () => {
       const { tablist } = await layoutAt("agents", 310, { viewport: 390 });
       expect(tablist.scrollWidth).toBeGreaterThan(tablist.clientWidth);
     });
@@ -9734,7 +9734,7 @@ describe.each(["en", "es-ES"] as const)(
       }
     });
 
-    it("brings a tab chosen from the keyboard into view, clear of the action, at a 310 px screen", async () => {
+    it("keeps a tab chosen from the keyboard clear of the action, showing at least its start, at a 310 px screen", async () => {
       const { el, host } = await layoutAt("printers", 310, { viewport: 390 });
       await selectTab(el, "queue");
       const tabs = q(el, "wt-tabs")!.shadowRoot!;

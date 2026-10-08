@@ -2916,7 +2916,8 @@ so a screen that nests one strip inside another's panel needs that check on the 
 The component updates its own selection, while your screen records it with `UrlStateController`.
 An unknown or omitted value shows the first tab. Arrow keys wrap between tabs; Home and End
 select the first and last tab. The tab strip scrolls on narrow screens and brings the selected tab
-into view when a page opens directly on it and whenever the strip changes width. Hidden panels remain
+into view when a page opens directly on it and whenever the strip changes width (a tab wider than
+the strip shows its start). Hidden panels remain
 mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
@@ -3035,10 +3036,11 @@ If a tab has an Add or Create action, put it in the `actions` slot for the selec
 places the action at the end of the tab row, outside the tab list's accessibility role, and keeps it
 there on the tabs' line at every width: never let the row wrap the action onto a line of its own
 (owner, 2026-10-08, A424). The tab strip takes the rest of the row and scrolls sideways beside the
-action, ending where the action begins. The action keeps its whole width up to the row less two
-touch targets; a group of actions wider than that scrolls within its own area. A selected tab wider
-than the strip shows its start: in Spanish at a 390 px window, Printers' "Agentes de impresión" tab
-is cut that way beside "Añadir un agente". Keep actions for other tabs out of sight until their tab
+action, ending where the actions area begins. The actions area keeps its whole width up to the row
+less two touch targets; actions wider than that scroll within it. A selected tab wider than the
+strip shows its start: in Spanish at a 390 px window (a 310 px screen), Printers' "Agentes de
+impresión" tab is cut that way beside "Añadir un agente" (pinned in
+`apps/dashboard/src/screens/printers-screen.test.ts`). Keep actions for other tabs out of sight until their tab
 is selected.
 A tab whose list is a tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
 Structure tab puts them in the ⋮ of the menu's own row and of each section the menu owns, and
