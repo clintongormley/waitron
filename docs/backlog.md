@@ -1510,8 +1510,9 @@ and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 6 audited with no
-stored-setting editors; batches 2, 3b, 4b, 5 and 7 OPEN.** The owner: "open a form with the Save button
-transparent (and disabled?). but as soon as you make a change, make the Save button active/blue",
+stored-setting editors; batch 7 unreserved forms audited; batches 2, 3b, 4b and 5 OPEN.** The owner:
+"open a form with the Save button transparent (and disabled?). but as soon as you make a change,
+make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
 pressable, and undoing the change turns it quiet and disabled again. "Changed" is what the form's
@@ -1569,8 +1570,22 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   open links. Existing actions keep their validation and refusal behavior. Per-screen call paths
   and the execution checklist: [Batch 6 audit](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-6--setup-stored-setting-editors-lane-e-a331-6).
   A future setup editor for stored settings must use the shared helper.
-- **Batch 7 — OPEN.** Forms with a Save that do not track unsaved changes, and the server's and
-  print agent's own pages: each brought under the rule, or listed with the reason it is not.
+- **Batch 7 — AUDITED (A331-7, 2026-10-08).** No unreserved no-scope Save editor was found.
+  Content-language/category-colour choices and course/category inline names save immediately;
+  Add/Edit controls open forms or stage their parent's draft. Server recovery Retry and print-agent
+  Save perform operations; the latter clears the token and restarts enrolment even with the same
+  saved address. Existing behavior remains unchanged. The
+  [audit and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
+  list each classification. **Reserved forms still need their owning batch and a follow-up audit:**
+  printer/agent/calibration, device/profile, reader and canvas forms left for after
+  `feat/save-follows-changes-hardware` lands; till dialogs left for after
+  `feat/save-follows-changes-till` lands; device-home, menus and Preview widgets left for after
+  `fix/home-column-ranges` and its following Preview work land; hours/date/holiday/slot, watcher,
+  service settings, operations, timetable and preparation-station forms left for after
+  `feat/service-periods-slice-1` lands (batch 4b); invoice configuration/setup and agent paths left
+  for after parked invoice part 1 [#1399](https://github.com/clintongormley/waitron/pull/1399) lands.
+  Next action: rerun Batch 7's inventories over those paths after landing, then apply the shared
+  gate test-first to any true Save editor its owning batch leaves uncovered.
 
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected

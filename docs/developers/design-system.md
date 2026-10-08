@@ -1580,6 +1580,14 @@ listed in [the Batch 6 audit](../superpowers/plans/2026-10-07-a331-save-follows-
 If you add a setup editor that saves already stored settings, use `draftScopeFor` and
 `saveActionState` with the early return, as described above.
 
+The remaining-form audit (A331 batch 7, 2026-10-08) found no unreserved no-scope Save editor.
+A selection that writes immediately, an inline Enter/blur commit, and a control that opens another
+editor have no staged primary Save to gate. The print agent's setup button labelled Save restarts
+connection and enrolment, including with its saved address after denial, so it remains available
+without an edit. Recovery Retry also performs an operation. The
+[Batch 7 audit](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
+lists the call paths and the reserved forms still awaiting their owning batches.
+
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.
 Switching it off hides the fields without clearing them, and switching it back on shows what they
