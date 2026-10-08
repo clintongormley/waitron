@@ -1807,7 +1807,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   opens an editor before saving; Duplicate confirms its prefilled copy. The
   [dated follow-up and source receipts](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7b--revisit-the-landed-reservations-lane-e-a331-7b)
   distinguish source inspection from the unchanged focused tests. The browser run also logged
-  the ResizeObserver message; A407 owns its cause and screen-effect investigation.
+  the ResizeObserver message. A407 (#1432) fixes the measured currency-field notifications;
+  the historical catalogue-only warning was not reproduced.
   **Still reserved:** hours/date/slot, service settings, venue operations and timetable forms
   wait for lane D's A366 slices and batch 4b. Local holiday and watcher forms landed in #1418,
   preparation stations in #1426. Next action: after the relevant A366 slices land, finish batch
@@ -3488,7 +3489,7 @@ On 2026-10-08 A349's six Preview, price-table and navigation suites also logged 
 `menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 
-**A407: currency measurements, IN PROGRESS (2026-10-08), branch `fix/resize-observer-loop`.** On main
+**A407: currency measurements, DONE (#1432, 2026-10-08; merge `d83b5223bb072ac5c82ad234b73dfd377a967128`).** On main
 `c7624e1b4396fe6123cdbe26487b3b06134e6bc0`, the four-suite catalogue/Preview/prices command
 ran 561 passing cases and logged the warning. Instrumenting native observers attributed the
 phone-price cases to `wt-price-input`: its currency callback increased a field from
@@ -3504,7 +3505,11 @@ the original code 18.2/14.3/14.2 ms in earlier disposable-checkout runs. These a
 experiments, not a measured delay on a real menu. Five disposable deletion controls failed;
 restoring the implementation passed 119 price-field cases. The updated eight-suite dashboard run
 passed 630 cases without the warning, and the unedited fiscal pair passed 20 cases. The revised Claude review ran 396 seconds and found no correctness bug in its tested arrangements;
-eight revised EN/ES/theme/width screenshots were inspected. Normal hook and current-head CI remain.
+eight revised EN/ES/theme/width screenshots were inspected. The normal push hook passed 5,406 root
+checks. CI, licence and CodeQL completed successfully on the final head
+`dd4e3702171268b76649341ee2f46028b3723bef`; the UI job passed 2,287 UI and 504 UI-core cases,
+and the dashboard job passed 9,588 cases. The merge has its own CI run (37771042263);
+its result was pending at landing.
 Review follow-up: the initial geometry includes currency-part inline padding/borders and ancestor scaling,
 where later `contentRect` does not; scaled ancestors or currency-part padding can cause an initial
 width adjustment. A source search found no `part(currency)`, `transform: scale` or `zoom:` consumer

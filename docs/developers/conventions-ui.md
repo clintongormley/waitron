@@ -904,4 +904,5 @@ The initial measurement assumes no inline sign padding/borders or ancestor scali
 adding those styles needs a consistent measurement box. A consumer overriding the amount to
 `width:auto`, or moving a field during notification, still produced warnings on both base and
 candidate in the review probes. This fix's warning-free receipts do not cover those arrangements.
-The final push gate and CI remain; this branch has not landed.
+A407 landed as #1432 on 2026-10-08, after the normal push gate and final-head CI, licence
+and CodeQL workflows completed successfully. The measurement limits above remain.
