@@ -203,6 +203,43 @@ describe("your profile", () => {
     expect(el.shadowRoot!.querySelector('[data-test="add-passkey"]')!.checkVisibility()).toBe(true);
   });
 
+  it.each([
+    { locale: "en-GB", width: 310 },
+    { locale: "en-GB", width: 390 },
+    { locale: "es-ES", width: 310 },
+    { locale: "es-ES", width: 390 },
+  ])(
+    "keeps the Security tab whole in its strip and level with Add passkey at $width px ($locale)",
+    async ({ locale, width }) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, host } = await mount();
+        host.style.width = `${width}px`;
+        const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+        tabs.shadowRoot!.querySelector<HTMLElement>('[role="tab"][data-key="security"]')!.click();
+        await flush(el);
+        await tabs.updateComplete;
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        const strip = tabs.shadowRoot!.querySelector("[role=tablist]")!.getBoundingClientRect();
+        const selected = tabs
+          .shadowRoot!.querySelector('[aria-selected="true"]')!
+          .getBoundingClientRect();
+        const action = tabs
+          .querySelector('[slot="actions"] [data-test="add-passkey"]')!
+          .getBoundingClientRect();
+        expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
+        expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
+        expect(
+          Math.abs(action.top + action.height / 2 - (selected.top + selected.height / 2)),
+        ).toBeLessThanOrEqual(1);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it("shows why the initial load failed, not just a bare Reload button", async () => {
     const { el } = await mount({
       getProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
