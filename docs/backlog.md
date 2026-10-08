@@ -1015,11 +1015,38 @@ unused `units` property is gone (it closes W75's leftover).
   spreading the toolbar over three lines at 390 px.
   - DONE (A367): the Printers screen's Add action reads "Add an agent" / "Añadir un agente".
     Chromium checks at 390 px in English and Spanish keep it inside the viewport and clear of
-    every tab, including after resizing from desktop; at 640 px or less its action sits under the tabs.
-    A367's final Claude review measured a remaining Spanish tab clipping case in its harness at
-    641 and 660 px; it also saw one at 800 px with an assumed 560 px content width. The real app at
-    those widths and whether this predates A367 are unverified. Next: reproduce with the full
-    dashboard and decide whether this layout should follow content width rather than viewport width.
+    every tab, including after resizing from desktop.
+    **A408 DONE** — the Spanish tabs were squeezed into a sideways scroll at some window widths
+    above 640 px (overflowing at 641, 660, 769 and 800 px; not at 720, 768, 1024 or 1280 px). Measured in the full
+    demo dashboard (Chromium, 2026-10-08): at a 641, 660 and 800 px window the Printers screen
+    itself is 561, 580 and 420 px wide (the side menu takes 300 px from a 769 px window), and the
+    Spanish tabs need about 445 px. Two causes. The only rule that moved the Add button under the
+    tabs went by the WINDOW's width (`@media (max-width: 640px)`, then at
+    `apps/dashboard/src/screens/printers-screen.ts:179`), so above a 640 px window the button stayed
+    beside the tabs even where they no longer fitted, squeezing them into a sideways scroll. And `wt-tabs` scrolled the selected
+    tab into view only when its tabs or its selection changed, so a page opened at 1280 px and then
+    narrowed left the Agents tab 38.6 px hidden at 641 px and wholly hidden at 800 px. Now the tab
+    row may always wrap, so the button drops under the tabs whenever tabs and button do not fit the
+    screen's own width (no breakpoint), and `wt-tabs` watches its strip's width and scrolls the
+    selected tab back into view on every change. Tests: `packages/ui/src/components/wt-tabs.test.ts`
+    ("keeps the selected tab in view when its strip narrows, with no ResizeObserver loop", the
+    taken-out-and-put-back, stops-watching and rebuilt-strip cases, and a widen-again control); and
+    "the tab action wraps by the screen's own width" in
+    `apps/dashboard/src/screens/printers-screen.test.ts`, English and Spanish, which keeps the
+    window at 1280 px and narrows only the screen — at 420 px the button is under the tabs and the
+    selected tab in view, at 561 px no tab is cut, at 900 px the button is beside the tabs and the
+    strip does not scroll, a sweep down from 900 px finds the strip never scrolling while the button
+    is beside it, and larger-text and Verdana variants neither squeeze nor overlap. After-look in
+    the demo (English and Spanish, light and dark, 390 px with the side menu closed and open, 641,
+    660, 800, 1024 and 1280 px, and 641/660/800 px resized from 1280 px; shots
+    `~/waitron-campaign-c/a408-shots/after-*`, outside the repository): in Spanish the button sits
+    under the tabs at 641, 660 and 800 px and beside them at 1024 and 1280 px with nothing
+    scrolling; the selected tab was in view in every case (never more than half a pixel past the strip's edge); at 800 px and at 390 px the Spanish strip still
+    scrolls the other tabs out of view, which is accepted. With the side menu open the Spanish
+    button returns beside the tabs from a 984 px window on the Agents tab (983 px on Printers),
+    English from 833/831 px. Whether this clipping predates A367 was not measured on the old
+    commit; read from its diff (`git show 98f34cb3b`), above 640 px A367 changed only the agent
+    button's text and named three `wt-tabs` parts.
     A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
     the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
     on screen in English and Spanish.

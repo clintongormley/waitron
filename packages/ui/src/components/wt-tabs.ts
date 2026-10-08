@@ -117,8 +117,27 @@ export class WtTabs extends LitElement {
     button.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
-  override updated(changed: PropertyValues<this>): void {
-    if (!changed.has("items") && !changed.has("value")) return;
+  // Only scrolls the strip, never resizes what it watches, so it needs no frame delay.
+  readonly #stripObserver = new ResizeObserver(([entry]) => {
+    const width = entry!.contentRect.width;
+    if (width === this.#observedWidth) return;
+    this.#observedWidth = width;
+    this.#showSelected();
+  });
+  #observedStrip: Element | null = null;
+  #observedWidth: number | null = null;
+
+  #observeStrip(): void {
+    if (!this.isConnected) return;
+    const bar = this.renderRoot.querySelector('[role="tablist"]');
+    if (bar === this.#observedStrip) return;
+    if (this.#observedStrip) this.#stripObserver.unobserve(this.#observedStrip);
+    if (bar) this.#stripObserver.observe(bar);
+    this.#observedStrip = bar;
+    this.#observedWidth = null;
+  }
+
+  #showSelected(): void {
     const bar = this.renderRoot.querySelector<HTMLElement>('[role="tablist"]');
     const selected = [...this.renderRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
       (button) => button.dataset.key === this.#selected,
@@ -130,6 +149,22 @@ export class WtTabs extends LitElement {
     const tabBounds = selected.getBoundingClientRect();
     if (tabBounds.right > barBounds.right) bar.scrollLeft += tabBounds.right - barBounds.right;
     else if (tabBounds.left < barBounds.left) bar.scrollLeft += tabBounds.left - barBounds.left;
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observeStrip();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#stripObserver.disconnect();
+    this.#observedStrip = null;
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    this.#observeStrip();
+    if (changed.has("items") || changed.has("value")) this.#showSelected();
   }
 
   override render() {

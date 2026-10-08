@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { cleanup, host, mountInShadowRoot } from "../test-helpers.js";
 import { mountThemed } from "../a11y-helpers.js";
 import type { WtTabs } from "./wt-tabs.js";
@@ -386,4 +386,175 @@ test("a click from a tab that has since been removed still reports that tab", as
   expect(listener).toHaveBeenCalledTimes(1);
   expect(listener.mock.calls[0]![0].detail).toEqual({ value: "menus" });
   expect(el.value).toBe("menus");
+});
+
+/** A resize is reported after layout and before the next paint, so read a few frames later. */
+async function frames(): Promise<void> {
+  for (let i = 0; i < 3; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+function tablist(el: WtTabs) {
+  return el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+}
+function expectSelectedInView(el: WtTabs) {
+  const selected = buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
+  const strip = tablist(el).getBoundingClientRect();
+  const box = selected.getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(strip.left - 1);
+  expect(box.right).toBeLessThanOrEqual(strip.right + 1);
+}
+async function selectLastWide() {
+  const el = await setup();
+  host.style.width = "900px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  expect(tablist(el).scrollLeft).toBe(0);
+  return el;
+}
+function recordErrors() {
+  const errors: string[] = [];
+  const record = (event: ErrorEvent) => errors.push(event.message);
+  addEventListener("error", record);
+  onTestFinished(() => removeEventListener("error", record));
+  return errors;
+}
+
+test("keeps the selected tab in view when its strip narrows, with no ResizeObserver loop", async () => {
+  const el = await selectLastWide();
+  const errors = recordErrors();
+  host.style.width = "220px";
+  await frames();
+  expect(tablist(el).scrollWidth).toBeGreaterThan(tablist(el).clientWidth);
+  expect(tablist(el).scrollLeft).toBeGreaterThan(0);
+  expectSelectedInView(el);
+  expect(errors).toEqual([]);
+});
+
+test("control: widening a narrowed strip again leaves the selected tab in view", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const errors = recordErrors();
+  host.style.width = "900px";
+  await frames();
+  expectSelectedInView(el);
+  expect(errors).toEqual([]);
+});
+
+test("still keeps the selected tab in view after being taken out of the page and put back", async () => {
+  const el = await selectLastWide();
+  el.remove();
+  host.append(el);
+  host.style.width = "220px";
+  await frames();
+  expect(tablist(el).scrollLeft).toBeGreaterThan(0);
+  expectSelectedInView(el);
+});
+
+test("stops watching its strip when taken out of the page", async () => {
+  const el = await selectLastWide();
+  const disconnect = vi.spyOn(ResizeObserver.prototype, "disconnect");
+  onTestFinished(() => disconnect.mockRestore());
+  el.remove();
+  expect(disconnect).toHaveBeenCalled();
+});
+
+test("watches a strip rebuilt after its tabs were emptied and given back", async () => {
+  const el = await selectLastWide();
+  const old = tablist(el);
+  const unobserve = vi.spyOn(ResizeObserver.prototype, "unobserve");
+  onTestFinished(() => unobserve.mockRestore());
+  el.items = [];
+  await el.updateComplete;
+  expect(unobserve).toHaveBeenCalledWith(old);
+  el.items = items;
+  await el.updateComplete;
+  await frames();
+  expect(tablist(el)).not.toBe(old);
+  host.style.width = "220px";
+  await frames();
+  expect(tablist(el).scrollLeft).toBeGreaterThan(0);
+  expectSelectedInView(el);
+});
+
+test("does not start watching a strip rebuilt while out of the page until it returns", async () => {
+  const el = await selectLastWide();
+  el.items = [];
+  await el.updateComplete;
+  el.remove();
+  const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+  onTestFinished(() => observe.mockRestore());
+  el.items = items;
+  await el.updateComplete;
+  expect(observe).not.toHaveBeenCalled();
+  host.append(el);
+  expect(observe).toHaveBeenCalledWith(tablist(el));
+  host.style.width = "220px";
+  await frames();
+  expectSelectedInView(el);
+});
+
+test("leaves a strip the reader scrolled where it is when only the label changes", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+  onTestFinished(() => observe.mockRestore());
+  tablist(el).scrollLeft = 0;
+  el.label = "Venue";
+  await el.updateComplete;
+  await frames();
+  expect(tablist(el).scrollLeft).toBe(0);
+  expect(observe).not.toHaveBeenCalled();
+});
+
+test("leaves a strip the reader scrolled where it is when only its height changes", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  expect(tablist(el).scrollLeft).toBeGreaterThan(0);
+  const before = tablist(el).getBoundingClientRect();
+  tablist(el).scrollLeft = 0;
+  const style = document.createElement("style");
+  style.textContent = `wt-tabs::part(tablist) { min-height: ${before.height + 20}px; }`;
+  document.head.append(style);
+  onTestFinished(() => style.remove());
+  await frames();
+  const after = tablist(el).getBoundingClientRect();
+  expect(after.width).toBe(before.width);
+  expect(after.height).toBeGreaterThan(before.height);
+  expect(tablist(el).scrollLeft).toBe(0);
+});
+
+test("shows the selected tab again when put back in the page at the same width", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  expect(tablist(el).scrollLeft).toBeGreaterThan(0);
+  el.remove();
+  host.append(el);
+  await frames();
+  expectSelectedInView(el);
+});
+
+test("brings the selected tab back into view when the tabs alone are reordered", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const scrolled = tablist(el).scrollLeft;
+  expect(scrolled).toBeGreaterThan(20);
+  el.items = [items[2]!, items[0]!, items[1]!];
+  await el.updateComplete;
+  expect(tablist(el).scrollLeft).toBeLessThan(scrolled);
+  expectSelectedInView(el);
 });

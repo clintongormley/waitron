@@ -2884,7 +2884,7 @@ so a screen that nests one strip inside another's panel needs that check on the 
 The component updates its own selection, while your screen records it with `UrlStateController`.
 An unknown or omitted value shows the first tab. Arrow keys wrap between tabs; Home and End
 select the first and last tab. The tab strip scrolls on narrow screens and brings the selected tab
-into view when a page opens directly on it. Hidden panels remain
+into view when a page opens directly on it and whenever the strip changes width. Hidden panels remain
 mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
@@ -3003,8 +3003,9 @@ If a tab has an Add or Create action, put it in the `actions` slot for the selec
 places the action beside the tabs and outside the tab list's accessibility role. At phone width,
 the tabs and a group of actions scroll separately, so the action area stays on screen when the tabs
 scroll. You can style the `tab-row`, `tablist` and `tab-actions` parts to put an action on its own
-line when the strip leaves too little room. Printers does this at 640 px or less, with the action under
-the tabs at the trailing edge. Keep actions for other tabs out of sight until their tab is selected.
+line when the strip leaves too little room. Go by the row's own width, not a breakpoint: Printers
+lets `tab-row` wrap, so its action drops under the tabs, at the trailing edge, exactly when tabs and
+action do not fit side by side. Keep actions for other tabs out of sight until their tab is selected.
 A tab whose list is a tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
 Structure tab puts them in the ⋮ of the menu's own row and of each section the menu owns, and
 nothing in the `actions` slot (the "the Structure tree" cases in

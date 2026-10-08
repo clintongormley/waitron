@@ -9525,3 +9525,148 @@ describe.each(["en", "es-ES"] as const)("printer agent action layout (%s)", (loc
     }
   });
 });
+
+describe.each(["en", "es-ES"] as const)(
+  "the tab action wraps by the screen's own width (%s)",
+  (locale) => {
+    const actionOf = { agents: "open-add-agent", printers: "open-add-printer" } as const;
+
+    // The viewport stays wide, so only the screen's own width can move the action.
+    async function layoutAt(
+      tab: keyof typeof actionOf,
+      hostWidth: number,
+      style: { scaled?: boolean; font?: "default" | "Verdana" } = {},
+    ) {
+      await page.viewport(1280, 900);
+      setLocale(locale);
+      const { el, host } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi(),
+      });
+      if (style.scaled) {
+        host.style.setProperty("--wt-font-size-sm", "var(--wt-font-size-lg)");
+        host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
+      }
+      if (style.font === "Verdana") {
+        const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+        expect(family).not.toBe("");
+        host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+      }
+      host.style.width = "900px";
+      await flush(el);
+      await selectTab(el, tab);
+      host.style.width = `${hostWidth}px`;
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+      const tabs = q(el, "wt-tabs")!.shadowRoot!;
+      const tablist = tabs.querySelector<HTMLElement>("[role=tablist]")!;
+      const action = q(el, `[data-test=${actionOf[tab]}]`)!.getBoundingClientRect();
+      const strip = tablist.getBoundingClientRect();
+      const tabBoxes = [...tabs.querySelectorAll<HTMLElement>("[role=tab]")].map((button) => ({
+        name: button.textContent!.trim(),
+        selected: button.getAttribute("aria-selected") === "true",
+        box: button.getBoundingClientRect(),
+      }));
+      return { el, host, tablist, action, strip, tabBoxes, hostBox: host.getBoundingClientRect() };
+    }
+
+    function inside(box: DOMRect, strip: DOMRect): boolean {
+      return box.left >= strip.left - 1 && box.right <= strip.right + 1;
+    }
+
+    function overlapsAnyTab(action: DOMRect, tabBoxes: { name: string; box: DOMRect }[]) {
+      return tabBoxes
+        .filter(
+          ({ box }) =>
+            action.left < box.right &&
+            action.right > box.left &&
+            action.top < box.bottom &&
+            action.bottom > box.top,
+        )
+        .map(({ name }) => name);
+    }
+
+    let before: string;
+    beforeEach(() => {
+      before = currentLocale();
+    });
+    afterEach(async () => {
+      setLocale(before);
+      await page.viewport(1280, 900);
+    });
+
+    it.each(["agents", "printers"] as const)(
+      "puts the %s tab's Add action under the tabs and keeps the selected tab in view on a 420 px screen",
+      async (tab) => {
+        const { action, strip, tabBoxes } = await layoutAt(tab, 420);
+        expect(action.width).toBeGreaterThan(0);
+        expect(action.top).toBeGreaterThanOrEqual(strip.bottom - 1);
+        const selected = tabBoxes.find((entry) => entry.selected)!;
+        expect(inside(selected.box, strip), selected.name).toBe(true);
+      },
+    );
+
+    // The English tabs and action fit one 561 px row; the Spanish ones do not.
+    it.each(["agents", "printers"] as const)(
+      "puts the %s tab's Add action where it fits and clips no tab on a 561 px screen",
+      async (tab) => {
+        const { action, strip, tablist, tabBoxes } = await layoutAt(tab, 561);
+        if (locale === "es-ES") expect(action.top).toBeGreaterThanOrEqual(strip.bottom - 1);
+        else expect(action.top).toBeLessThan(strip.bottom);
+        expect(tablist.scrollWidth).toBeLessThanOrEqual(tablist.clientWidth);
+        for (const { name, box } of tabBoxes) expect(inside(box, strip), name).toBe(true);
+      },
+    );
+
+    it.each(["agents", "printers"] as const)(
+      "keeps the %s tab's Add action beside the tabs, with no tab clipped, on a 900 px screen",
+      async (tab) => {
+        const { action, strip, tablist, tabBoxes } = await layoutAt(tab, 900);
+        expect(action.top).toBeLessThan(strip.bottom);
+        expect(action.bottom).toBeGreaterThan(strip.top);
+        expect(action.left).toBeGreaterThanOrEqual(strip.right - 1);
+        expect(tablist.scrollWidth).toBeLessThanOrEqual(tablist.clientWidth);
+        for (const { name, box } of tabBoxes) expect(inside(box, strip), name).toBe(true);
+      },
+    );
+
+    it("never squeezes the tabs beside the Add action as the screen narrows past the wrap", async () => {
+      const { el, host, tablist } = await layoutAt("agents", 900);
+      const action = q(el, "[data-test=open-add-agent]")!;
+      let wrapsAt: number | null = null;
+      for (let width = 900; width >= 420 && wrapsAt === null; width--) {
+        host.style.width = `${width}px`;
+        if (action.getBoundingClientRect().top < tablist.getBoundingClientRect().bottom) {
+          expect(tablist.scrollWidth, `${width} px`).toBeLessThanOrEqual(tablist.clientWidth);
+        } else {
+          wrapsAt = width;
+        }
+      }
+      expect(wrapsAt).not.toBeNull();
+      expect(wrapsAt!).toBeLessThan(900);
+    });
+
+    it.each(
+      [420, 561, 900].flatMap((hostWidth) =>
+        [false, true].flatMap((scaled) =>
+          (["default", "Verdana"] as const).map((font) => ({ hostWidth, scaled, font })),
+        ),
+      ),
+    )(
+      "neither squeezes the tabs beside the Add action nor overlaps them under it ($hostWidth px, larger text: $scaled, font: $font)",
+      async ({ hostWidth, scaled, font }) => {
+        const { action, strip, tablist, tabBoxes, hostBox } = await layoutAt("agents", hostWidth, {
+          scaled,
+          font,
+        });
+        expect(action.left).toBeGreaterThanOrEqual(hostBox.left - 1);
+        expect(action.right).toBeLessThanOrEqual(hostBox.right + 1);
+        expect(overlapsAnyTab(action, tabBoxes)).toEqual([]);
+        const besideTabs = action.top < strip.bottom;
+        if (besideTabs) expect(tablist.scrollWidth).toBeLessThanOrEqual(tablist.clientWidth);
+        else expect(action.top).toBeGreaterThanOrEqual(strip.bottom - 1);
+        const selected = tabBoxes.find((entry) => entry.selected)!;
+        expect(inside(selected.box, strip), selected.name).toBe(true);
+      },
+    );
+  },
+);
