@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type {
   IncludeFolder,
   IncludeFolderInput,
@@ -84,14 +85,74 @@ it("goes quiet again when a typed name is typed back", async () => {
   await expectQuiet(el);
 });
 
-it("an untouched press sends nothing", async () => {
+it.each([
+  [
+    "a palette colour",
+    (el: Form) => el.shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click(),
+  ],
+  [
+    "a custom colour",
+    (el: Form) => {
+      const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[name="include-color"]')!;
+      input.value = "#123456";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    },
+  ],
+  [
+    "the photo",
+    (el: Form) =>
+      emit(el.shadowRoot!.querySelector("dashboard-image-upload")!, "image-changed", {
+        image: null,
+      }),
+  ],
+])("one edit to %s makes Save ready", async (_label, edit) => {
+  const el = await mount();
+  edit(el);
+  await expectReady(el);
+});
+
+it("keeps a changed busy form primary and disables it, then allows retry", async () => {
+  const el = await mount();
+  type(el, "names-es", "Bar de copas");
+  await expectReady(el);
+  el.busy = true;
+  await el.updateComplete;
+  const button = save(el);
+  await button.updateComplete;
+  expect([button.getAttribute("variant"), button.disabled]).toEqual(["primary", true]);
+  el.busy = false;
+  await expectReady(el);
+});
+
+const nameInput = async (el: Form, name: string) => {
+  const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `wt-input[name="${name}"]`,
+  )!;
+  await field.updateComplete;
+  return field.shadowRoot!.querySelector("input")!;
+};
+
+it("on an untouched form neither a press nor Enter in a name field sends anything", async () => {
   const el = await mount();
   const submitted = vi.fn();
   el.addEventListener("wt-submit", submitted);
   save(el).click();
+  (await nameInput(el, "names-es")).focus();
+  await userEvent.keyboard("{Enter}");
   await el.updateComplete;
   expect(submitted).not.toHaveBeenCalled();
   await expectQuiet(el);
+});
+
+it("Enter in a name field sends a changed form", async () => {
+  const el = await mount();
+  const submitted = vi.fn();
+  el.addEventListener("wt-submit", submitted);
+  type(el, "names-es", "Bar de copas");
+  await expectReady(el);
+  (await nameInput(el, "names-es")).focus();
+  await userEvent.keyboard("{Enter}");
+  expect(submitted).toHaveBeenCalledOnce();
 });
 
 it("keeps Save ready after a refusal that follows a changed press", async () => {

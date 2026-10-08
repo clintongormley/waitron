@@ -324,6 +324,10 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
       .click();
     await el.updateComplete;
+    const name = q(el, '[data-test="menu-form"]').shadowRoot!.querySelector(
+      'wt-input[name="internalName"]',
+    )!;
+    expect((name as HTMLElementTagNameMap["wt-input"]).error).toBe(t("menus.name_required"));
     await expectNoA11yViolations(host);
   });
 

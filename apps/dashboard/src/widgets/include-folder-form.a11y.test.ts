@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { IncludeFolderForm } from "./include-folder-form.js";
 afterEach(cleanupWidgets);
@@ -31,6 +31,10 @@ describe.each(["light", "dark"] as const)("include folder (%s)", (theme) => {
           }),
         );
         await el.updateComplete;
+        const save =
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
+        await save.updateComplete;
+        expect([save.getAttribute("variant"), save.disabled]).toEqual(["primary", false]);
       }
       await expectNoA11yViolations(host);
     },

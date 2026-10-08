@@ -71,6 +71,11 @@ async function question(app: SectionLeaveApp) {
   await q.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return q;
 }
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
@@ -280,6 +285,10 @@ it("a Section taken out of the page and put back asks before discarding an edit 
   parent.appendChild(form);
   await form.updateComplete;
   await edit(form, "internalName", "Changed");
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=internalName]")!.value,
+  ).toBe("Changed");
+  expect(unload()).toBe(true);
   cancel(form);
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);

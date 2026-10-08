@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { SectionDetails, SectionInput } from "../api/client.js";
@@ -52,6 +53,10 @@ function change(el: Form, name: string, value: string) {
 }
 const field = (el: Form, name: string) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+async function innerInput(el: Form, name: string) {
+  await field(el, name).updateComplete;
+  return field(el, name).shadowRoot!.querySelector("input")!;
+}
 
 it("opens a stored section with every detail filled with Save quiet", async () => {
   await expectQuiet(await mount());
@@ -105,15 +110,44 @@ it("goes quiet again when the stored name is typed back, spaces around it includ
 it.each([
   ["a stored section", stored],
   ["a create with nothing typed", null],
-])("an untouched press on %s sends nothing and shows no error", async (_label, value) => {
-  const el = await mount(value);
+])(
+  "on %s neither an untouched press nor Enter sends anything or shows an error",
+  async (_label, value) => {
+    const el = await mount(value);
+    const submitted = vi.fn();
+    el.addEventListener("wt-submit", submitted);
+    save(el).click();
+    (await innerInput(el, "internalName")).focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(submitted).not.toHaveBeenCalled();
+    expect(field(el, "internalName").error).toBeFalsy();
+    await expectQuiet(el);
+  },
+);
+
+it("Enter in a text field sends a changed form", async () => {
+  const el = await mount();
   const submitted = vi.fn();
   el.addEventListener("wt-submit", submitted);
-  save(el).click();
+  change(el, "internalName", "Bar");
+  await expectReady(el);
+  (await innerInput(el, "internalName")).focus();
+  await userEvent.keyboard("{Enter}");
+  expect(submitted).toHaveBeenCalledOnce();
+});
+
+it("keeps a changed busy form primary and disables it, then allows retry", async () => {
+  const el = await mount();
+  change(el, "internalName", "Bar");
+  await expectReady(el);
+  el.busy = true;
   await el.updateComplete;
-  expect(submitted).not.toHaveBeenCalled();
-  expect(field(el, "internalName").error).toBeFalsy();
-  await expectQuiet(el);
+  const button = save(el);
+  await button.updateComplete;
+  expect([button.getAttribute("variant"), button.disabled]).toEqual(["primary", true]);
+  el.busy = false;
+  await expectReady(el);
 });
 
 it("keeps a changed form with an empty internal name primary and disabled after a press", async () => {
