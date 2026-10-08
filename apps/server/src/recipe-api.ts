@@ -42,6 +42,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_source": 400,
   "diet.invalid_origin": 400,
   "product.not_found": 404,
+  "ingredient.not_found": 404,
 };
 
 const run = createErrorBoundary(STATUS, "recipe.failed");
