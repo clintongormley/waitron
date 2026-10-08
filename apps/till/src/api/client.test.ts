@@ -2607,6 +2607,8 @@ describe("TillApi", () => {
   it("getDeviceStation GETs /api/device/station and returns the bound station + its queue", async () => {
     const station = {
       id: "st-1",
+      name: "Pass",
+      today: { open: true, isDefault: true, byHand: null, sendsTo: null, why: "default" as const },
       queue: [
         {
           orderId: "wo-1",

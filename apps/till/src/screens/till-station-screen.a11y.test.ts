@@ -272,7 +272,21 @@ function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     getDeviceStation: vi
       .fn()
-      .mockResolvedValue({ station: { id: "st-dev", queue: groups, notices: [] } }),
+      .mockResolvedValue({
+        station: {
+          id: "st-dev",
+          name: "Grill",
+          today: {
+            open: true,
+            isDefault: false,
+            byHand: null,
+            sendsTo: null,
+            why: "open" as const,
+          },
+          queue: groups,
+          notices: [],
+        },
+      }),
     deviceAdvance: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -294,7 +308,21 @@ describe.each(["light", "dark"] as const)(
       const api = deviceStubApi({
         getDeviceStation: vi
           .fn()
-          .mockResolvedValue({ station: { id: "st-dev", queue: groups, notices } }),
+          .mockResolvedValue({
+            station: {
+              id: "st-dev",
+              name: "Grill",
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              queue: groups,
+              notices,
+            },
+          }),
       });
       const { el, host } = await mountWidget<TillStationScreen>(
         "till-station-screen",
@@ -318,7 +346,20 @@ describe.each(["light", "dark"] as const)("printer warning a11y (%s theme)", (th
       const api = deviceMode
         ? deviceStubApi({
             getDeviceStation: vi.fn().mockResolvedValue({
-              station: { id: "st-dev", queue: groups, notices: [], printersDown },
+              station: {
+                id: "st-dev",
+                name: "Grill",
+                today: {
+                  open: true,
+                  isDefault: false,
+                  byHand: null,
+                  sendsTo: null,
+                  why: "open" as const,
+                },
+                queue: groups,
+                notices: [],
+                printersDown,
+              },
             }),
           })
         : stubApi({
