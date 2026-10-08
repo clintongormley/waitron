@@ -532,8 +532,11 @@ Rules the tests pin:
   repeating Navidad from 2026-12-25 expects `special_date.date_taken` `{ date: "2027-12-25" }` and
   fails today because only the exact date `2026-12-25` is compared (`hours.ts:639-649`).
 - [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/hours.test.ts src/hours-routes.test.ts`.
-- [ ] **Step 3: Implement.** Fixtures that send `colour` keep working; no existing assertion
-  changes, including `hours-screen.test.ts:1097-1104`.
+- [ ] **Step 3: Implement.** Fixtures that send `colour` keep working; the Station hours POST
+  assertion at `hours-screen.test.ts:1097-1104` stays unchanged. Under the owner’s 2026-10-05
+  test-change ruling, checks of the removed hand-picked colour now assert the kind-derived
+  colour, and exact named-day response shapes gain `kind`, `repeats` and `ownHours`. Inventory
+  every changed check in the PR and campaign FYI. Read models carry the same metadata.
 - [ ] **Step 4: Run; see them pass;** the venue-service node project and the touched browser
   files; typecheck.
 - [ ] **Step 5: Commit** — `feat(venue-service): named days with a kind and a yearly repeat (A366)`.

@@ -3178,3 +3178,246 @@ describe("named-day station occurrences", () => {
     });
   });
 });
+
+describe("named-day writes", () => {
+  it.each([
+    ["kind", null],
+    ["kind", ["holiday"]],
+    ["kind", "other"],
+    ["repeats", null],
+    ["repeats", 1],
+    ["repeats", "false"],
+    ["ownHours", null],
+    ["ownHours", 0],
+    ["ownHours", "true"],
+    ["closeWholeVenue", null],
+    ["closeWholeVenue", 1],
+  ])("refuses invalid %s (%j) before storing anything", async (field, value) => {
+    const f = await fixture();
+    await expect(saveDate(f, null, { ...specialInput(), [field]: value })).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field },
+    });
+    expect(
+      await db.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId)),
+    ).toEqual([]);
+  });
+
+  it("stores a kind, yearly repeat key and own-hours choice", async () => {
+    const f = await fixture();
+    const saved = await saveDate(f, null, {
+      ...specialInput({ date: "2026-12-25" }),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    const [row] = await db.select().from(specialDates).where(eq(specialDates.id, saved.id));
+    expect(row).toMatchObject({
+      date: "2026-12-25",
+      kind: "holiday",
+      repeatOn: "12-25",
+      ownHours: true,
+    });
+  });
+
+  it("defaults absent fields on create and retains stored values on update", async () => {
+    const f = await fixture();
+    const ordinary = await saveDate(f, null, specialInput());
+    const [created] = await db.select().from(specialDates).where(eq(specialDates.id, ordinary.id));
+    expect(created).toMatchObject({ kind: "working_day", repeatOn: null, ownHours: false });
+    await saveDate(f, ordinary.id, {
+      ...specialInput(),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    await saveDate(f, ordinary.id, specialInput({ date: "2026-10-10", name: "Renamed" }));
+    const [updated] = await db.select().from(specialDates).where(eq(specialDates.id, ordinary.id));
+    expect(updated).toMatchObject({
+      name: "Renamed",
+      kind: "holiday",
+      repeatOn: "10-10",
+      ownHours: true,
+    });
+    await saveDate(f, ordinary.id, {
+      ...specialInput({ date: "2026-10-10" }),
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
+    });
+    const [reset] = await db.select().from(specialDates).where(eq(specialDates.id, ordinary.id));
+    expect(reset).toMatchObject({ kind: "working_day", repeatOn: null, ownHours: false });
+  });
+
+  it("refuses own hours alongside whole-venue closure", async () => {
+    const f = await fixture();
+    await expect(
+      saveDate(f, null, { ...specialInput({ closeWholeVenue: true }), ownHours: true }),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "ownHours" } });
+  });
+
+  it("refuses repeating days with newly supplied station cells", async () => {
+    const f = await fixture();
+    await expect(
+      saveDate(f, null, {
+        ...specialInput({ cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }] }),
+        repeats: true,
+      }),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "repeats" } });
+  });
+
+  it("refuses making a day repeat while it retains a default station's dormant cell", async () => {
+    const f = await fixture();
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({ cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }] }),
+    );
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.kitchen.id));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, f.bar.id));
+    });
+    await expect(
+      saveDate(f, source.id, { ...specialInput(), repeats: true }),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "repeats" } });
+  });
+
+  it.each([
+    ["2026-12-25", true, "2027-12-25", false, "2027-12-25"],
+    ["2027-12-25", false, "2026-12-25", true, "2027-12-25"],
+    ["2026-12-25", true, "2028-12-25", true, "2028-12-25"],
+    ["2028-02-29", true, "2032-02-29", false, "2032-02-29"],
+  ])(
+    "refuses intersecting occurrences %s/%s and %s/%s",
+    async (firstDate, firstRepeats, date, repeats, clash) => {
+      const f = await fixture();
+      await saveDate(f, null, { ...specialInput({ date: firstDate }), repeats: firstRepeats });
+      await expect(saveDate(f, null, { ...specialInput({ date }), repeats })).rejects.toMatchObject(
+        { code: "special_date.date_taken", params: { date: clash } },
+      );
+      expect(
+        await db.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId)),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("allows a one-off before a repeat starts and a matching date in another venue", async () => {
+    const f = await fixture();
+    const other = await fixture();
+    await saveDate(f, null, { ...specialInput({ date: "2028-12-25" }), repeats: true });
+    const earlier = await saveDate(f, null, specialInput({ date: "2027-12-25" }));
+    const elsewhere = await saveDate(other, null, {
+      ...specialInput({ date: "2028-12-25" }),
+      repeats: true,
+    });
+    expect(earlier.date).toBe("2027-12-25");
+    expect(elsewhere.date).toBe("2028-12-25");
+  });
+
+  it("ignores the edited row itself but refuses moving its repeat onto another day", async () => {
+    const f = await fixture();
+    const source = await saveDate(f, null, {
+      ...specialInput({ date: "2026-12-25" }),
+      repeats: true,
+    });
+    const edited = await saveDate(
+      f,
+      source.id,
+      specialInput({ date: "2026-12-25", name: "New name" }),
+    );
+    expect(edited.id).toBe(source.id);
+    await saveDate(f, null, specialInput({ date: "2027-12-26" }));
+    await expect(
+      saveDate(f, source.id, specialInput({ date: "2026-12-26" })),
+    ).rejects.toMatchObject({ code: "special_date.date_taken", params: { date: "2027-12-26" } });
+    const [row] = await db.select().from(specialDates).where(eq(specialDates.id, source.id));
+    expect(row).toMatchObject({ date: "2026-12-25", repeatOn: "12-25", name: "New name" });
+  });
+
+  it("copies a repeat as a one-off, retaining kind and own hours", async () => {
+    const f = await fixture();
+    const source = await saveDate(f, null, {
+      ...specialInput({ date: "2026-12-25" }),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    const [copy] = await withTransaction(db, (tx) =>
+      duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-26"], AT),
+    );
+    const [row] = await db.select().from(specialDates).where(eq(specialDates.id, copy!.id));
+    expect(row).toMatchObject({
+      date: "2027-12-26",
+      kind: "holiday",
+      repeatOn: null,
+      ownHours: true,
+      closeWholeVenue: false,
+    });
+    const [original] = await db.select().from(specialDates).where(eq(specialDates.id, source.id));
+    expect(original).toMatchObject({ repeatOn: "12-25" });
+  });
+
+  it("refuses copying onto a recurring day and rolls back the whole batch", async () => {
+    const f = await fixture();
+    const source = await saveDate(f, null, specialInput({ date: "2026-12-24" }));
+    await saveDate(f, null, { ...specialInput({ date: "2026-12-25" }), repeats: true });
+    await expect(
+      withTransaction(db, (tx) =>
+        duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-24", "2027-12-25"], AT),
+      ),
+    ).rejects.toMatchObject({ code: "special_date.date_taken", params: { date: "2027-12-25" } });
+    expect(
+      (await db.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId)))
+        .map((row) => row.date)
+        .sort(),
+    ).toEqual(["2026-12-24", "2026-12-25"]);
+  });
+});
+
+describe("named-day response and colour", () => {
+  it("ignores the old colour and derives it from the kind, even when colour is absent", async () => {
+    const f = await fixture();
+    const saved = await saveDate(f, null, {
+      date: "2026-12-25",
+      name: "Christmas",
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+      closeWholeVenue: false,
+      cells: [],
+    });
+    expect(saved).toEqual({
+      id: expect.any(String),
+      date: "2026-12-25",
+      name: "Christmas",
+      colour: "red",
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+      closeWholeVenue: false,
+    });
+    const edited = await saveDate(f, saved.id, {
+      ...specialInput({ date: "2026-12-25", colour: "purple" }),
+      kind: "working_day",
+    });
+    expect(edited).toMatchObject({
+      colour: "blue",
+      kind: "working_day",
+      repeats: true,
+      ownHours: true,
+    });
+    expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saved.id))).toEqual({
+      ...edited,
+      cells: [],
+    });
+    expect(
+      await withTransaction(db, (tx) => renameSpecialDate(tx, f.cfg, saved.id, "Dinner")),
+    ).toEqual({ ...edited, name: "Dinner" });
+  });
+});

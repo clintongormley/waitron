@@ -888,12 +888,15 @@ export async function readOpeningHoursModel(
       .get(id)!
       .slice()
       .sort((a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start);
-  const dates = await tx
+  const dateRows = await tx
     .select({
       id: specialDates.id,
       date: specialDates.date,
       name: specialDates.name,
       colour: specialDates.colour,
+      kind: specialDates.kind,
+      repeatOn: specialDates.repeatOn,
+      ownHours: specialDates.ownHours,
       closeWholeVenue: specialDates.closeWholeVenue,
     })
     .from(specialDates)
@@ -915,6 +918,7 @@ export async function readOpeningHoursModel(
       ),
     )
     .orderBy(asc(specialDates.date));
+  const dates = dateRows.map(({ repeatOn, ...row }) => ({ ...row, repeats: repeatOn !== null }));
   const menus = await tx
     .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
     .from(catalogues)

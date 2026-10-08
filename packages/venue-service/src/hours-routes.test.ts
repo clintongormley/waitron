@@ -1073,3 +1073,41 @@ it("rolls back POST date and cells when an after-change participant refuses", as
   expect(await venueDates(fx)).toEqual([]);
   expect(await db.select().from(specialDateHours)).toEqual(before);
 });
+
+describe("named-day HTTP writes", () => {
+  it("returns recurring named-day metadata and refuses a later clashing occurrence", async () => {
+    const fx = await fixture();
+    const created = await send(fx, "POST", "/special-dates", fx.manager, {
+      ...input({ date: "2030-12-25", colour: "green" }),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({
+      date: "2030-12-25",
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+      colour: "red",
+    });
+    await refused(
+      await send(fx, "POST", "/special-dates", fx.manager, input({ date: "2031-12-25" })),
+      409,
+      { code: "special_date.date_taken", params: { date: "2031-12-25" } },
+    );
+    expect(await venueDates(fx)).toHaveLength(1);
+  });
+  it.each(["kind", "repeats", "ownHours"])(
+    "rejects an explicit null %s with a field refusal",
+    async (field) => {
+      const fx = await fixture();
+      await refused(
+        await send(fx, "POST", "/special-dates", fx.manager, { ...input(), [field]: null }),
+        400,
+        { code: "hours.invalid", params: { field } },
+      );
+      expect(await venueDates(fx)).toEqual([]);
+    },
+  );
+});

@@ -45,7 +45,7 @@ import {
   specialDates,
 } from "./schema/hours.js";
 import { namedDaysBetween, namedDaysOn } from "./named-days.js";
-import { nextOccurrence } from "./named-day-rules.js";
+import { nextOccurrence, occursOn, repeatKey } from "./named-day-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import "./errors.js";
 
@@ -400,6 +400,9 @@ export async function readSpecialDate(
     date: row.date,
     name: row.name,
     colour: row.colour,
+    kind: row.kind,
+    repeats: row.repeatOn !== null,
+    ownHours: row.ownHours,
     closeWholeVenue: row.closeWholeVenue,
     cells: await readDateCells(tx, id),
   };
@@ -608,11 +611,39 @@ export async function assertDemotedStationHours(
   invalidHours("date", { date, subjectId: stationId });
 }
 
-/**
- * Creates a special date (`id` null) or edits one in place, keeping its id. Its cells replace the
- * stored ones; an `inherit` cell stores nothing. A change of an existing date's date is handed to
- * each participant's `beforeMove` before anything is written.
- */
+async function assertNamedDayAvailable(
+  tx: Transaction,
+  cfg: VenueScope,
+  date: LocalDate,
+  repeats: boolean,
+  exceptId: string | null,
+): Promise<void> {
+  const rows = await tx
+    .select()
+    .from(specialDates)
+    .where(
+      and(
+        eq(specialDates.locationId, cfg.locationId),
+        exceptId === null ? undefined : ne(specialDates.id, exceptId),
+      ),
+    )
+    .orderBy(asc(specialDates.date));
+  for (const row of rows) {
+    const other = { date: row.date, repeats: row.repeatOn !== null };
+    const clash =
+      repeats && other.repeats && repeatKey(date) === repeatKey(row.date)
+        ? date > row.date
+          ? date
+          : row.date
+        : occursOn(other, date)
+          ? date
+          : occursOn({ date, repeats }, row.date)
+            ? row.date
+            : null;
+    if (clash !== null) throw new AppError("special_date.date_taken", { date: clash });
+  }
+}
+
 export async function saveSpecialDate(
   tx: Transaction,
   cfg: VenueScope,
@@ -621,8 +652,20 @@ export async function saveSpecialDate(
   at: Date,
   participants: readonly SpecialDateParticipant[] = [],
 ): Promise<SpecialDate> {
-  const parsed = parseSpecialDateInput(input);
+  const inputFields = parseSpecialDateInput(input);
   const current = id === null ? null : await requireSpecialDate(tx, cfg, id);
+  const parsed = {
+    ...inputFields,
+    kind: inputFields.kind === undefined ? (current?.kind ?? "working_day") : inputFields.kind,
+    repeats:
+      inputFields.repeats === undefined
+        ? current?.repeatOn !== undefined && current.repeatOn !== null
+        : inputFields.repeats,
+    ownHours:
+      inputFields.ownHours === undefined ? (current?.ownHours ?? false) : inputFields.ownHours,
+  };
+  if (parsed.ownHours && parsed.closeWholeVenue) invalidHours("ownHours");
+  if (parsed.repeats && parsed.cells.length > 0) invalidHours("repeats");
   await requireSubjects(
     tx,
     cfg,
@@ -632,22 +675,17 @@ export async function saveSpecialDate(
       writing: entry.cell.mode !== "inherit",
     })),
   );
-  const [taken] = await tx
-    .select({ id: specialDates.id })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        eq(specialDates.date, parsed.date),
-        id === null ? undefined : ne(specialDates.id, id),
-      ),
-    );
-  if (taken !== undefined) throw new AppError("special_date.date_taken", { date: parsed.date });
+  await assertNamedDayAvailable(tx, cfg, parsed.date, parsed.repeats, id);
 
   const existingCells =
     id === null
       ? []
       : await tx.select().from(specialDateHours).where(eq(specialDateHours.specialDateId, id));
+  if (parsed.repeats && existingCells.length > 0) {
+    const dormant = await defaultStationIds(tx, cfg);
+    if (existingCells.some((cell) => cell.stationId !== null && dormant.has(cell.stationId)))
+      invalidHours("repeats");
+  }
   const cellIdOf = (subject: HoursSubject) =>
     existingCells.find((cell) => keyOf(subjectOfRow(cell)) === keyOf(subject))?.id;
   await assertPeriodOwnership(
@@ -668,7 +706,10 @@ export async function saveSpecialDate(
   const values = {
     date: parsed.date,
     name: parsed.name,
-    colour: parsed.colour,
+    colour: parsed.kind === "holiday" ? ("red" as const) : ("blue" as const),
+    kind: parsed.kind,
+    repeatOn: parsed.repeats ? repeatKey(parsed.date) : null,
+    ownHours: parsed.ownHours,
     closeWholeVenue: parsed.closeWholeVenue,
   };
   let specialDateId: string;
@@ -719,7 +760,16 @@ export async function saveSpecialDate(
         : "date",
       at,
     );
-  return { id: specialDateId, ...values };
+  return {
+    id: specialDateId,
+    date: values.date,
+    name: values.name,
+    colour: values.colour,
+    kind: values.kind,
+    repeats: parsed.repeats,
+    ownHours: values.ownHours,
+    closeWholeVenue: values.closeWholeVenue,
+  };
 }
 
 /** Renames a special date and changes nothing else about it. */
@@ -740,6 +790,9 @@ export async function renameSpecialDate(
     date: row.date,
     name: row.name,
     colour: row.colour,
+    kind: row.kind,
+    repeats: row.repeatOn !== null,
+    ownHours: row.ownHours,
     closeWholeVenue: row.closeWholeVenue,
   };
 }
@@ -784,11 +837,6 @@ export interface SpecialDateParticipant {
   beforeDelete(tx: Transaction, cfg: VenueScope, id: string, at: Date): Promise<void>;
 }
 
-/**
- * Copies a special date's name, colour, closure and every cell to each target date under new ids,
- * then hands each copy to every participant. A refusal rolls back the batch in the caller's
- * transaction.
- */
 export async function duplicateSpecialDate(
   tx: Transaction,
   cfg: VenueScope,
@@ -799,18 +847,7 @@ export async function duplicateSpecialDate(
 ): Promise<SpecialDate[]> {
   const targets = parseDuplicateDates(dates);
   const source = await requireSpecialDate(tx, cfg, sourceId);
-  const taken = new Set(
-    (
-      await tx
-        .select({ date: specialDates.date })
-        .from(specialDates)
-        .where(
-          and(eq(specialDates.locationId, cfg.locationId), inArray(specialDates.date, targets)),
-        )
-    ).map((row) => row.date),
-  );
-  const occupied = targets.find((date) => taken.has(date));
-  if (occupied !== undefined) throw new AppError("special_date.date_taken", { date: occupied });
+  for (const date of targets) await assertNamedDayAvailable(tx, cfg, date, false, null);
 
   const cells = await readDateCells(tx, sourceId);
   // A default station's dormant cell is copied as it is: it is checked only for its subject.
@@ -848,13 +885,24 @@ export async function duplicateSpecialDate(
   const values = {
     name: source.name,
     colour: source.colour,
+    kind: source.kind,
+    repeats: false,
+    ownHours: source.ownHours,
     closeWholeVenue: source.closeWholeVenue,
   };
   const copies: SpecialDate[] = [];
   for (const date of targets) {
     const [row] = await tx
       .insert(specialDates)
-      .values({ ...values, ownHours: source.ownHours, date, locationId: cfg.locationId })
+      .values({
+        name: values.name,
+        colour: values.colour,
+        kind: values.kind,
+        ownHours: values.ownHours,
+        closeWholeVenue: values.closeWholeVenue,
+        date,
+        locationId: cfg.locationId,
+      })
       .returning({ id: specialDates.id });
     const targetId = row!.id;
     for (const { subject, cell } of cells)
@@ -948,12 +996,15 @@ async function readRange(
     week[cell.weekday] = cellOf(cell.mode, weekPeriods.get(cell.id) ?? []);
     weeks.set(key, week);
   }
-  const specials = await tx
+  const specialRows = await tx
     .select({
       id: specialDates.id,
       date: specialDates.date,
       name: specialDates.name,
       colour: specialDates.colour,
+      kind: specialDates.kind,
+      repeatOn: specialDates.repeatOn,
+      ownHours: specialDates.ownHours,
       closeWholeVenue: specialDates.closeWholeVenue,
     })
     .from(specialDates)
@@ -968,6 +1019,10 @@ async function readRange(
       ),
     )
     .orderBy(asc(specialDates.date));
+  const specials = specialRows.map(({ repeatOn, ...row }) => ({
+    ...row,
+    repeats: repeatOn !== null,
+  }));
   const dateCells =
     specials.length === 0
       ? []
@@ -1023,6 +1078,9 @@ function calendarDays(
             date,
             name: occurrence.name,
             colour: colourById.get(occurrence.id)!,
+            kind: occurrence.kind,
+            repeats: occurrence.repeats,
+            ownHours: occurrence.ownHours,
             closeWholeVenue: occurrence.closeWholeVenue,
           };
     const open =

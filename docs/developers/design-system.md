@@ -180,6 +180,10 @@ with eight fills. A special date picks one of six palette colours, `--wt-color-p
 (`packages/venue-service/src/hours-types.ts`), the six names the owner approved with the Hours
 plan (`docs/superpowers/plans/2026-10-05-hours.md`, choice 6). The values below were picked for
 these contrast checks, not copied from the `hours-v3.html` mockup.
+
+**2026-10-09, A366 slice 2:** the named-day writer derives the retained `colour` column from
+`kind` (`red` for `holiday`, `blue` for `working_day`) and ignores a request’s `colour`.
+The existing palette rendering stays until the Calendar replacement in that slice.
 Two more are reserved, so no special date can look like them: `--wt-color-day-standard` for a
 standard day and `--wt-color-day-closed` for a business day with no service ranges in any active
 department, or a whole-venue closure. Text on
