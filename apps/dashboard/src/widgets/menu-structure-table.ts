@@ -27,6 +27,7 @@ import {
 } from "./tree-drag.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
+import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import {
   FOLLOWING_FOLDER,
@@ -52,9 +53,6 @@ export function ownPresentation(node: MenuStructureNode): Presentation {
   return { names: node.names ?? {}, image: node.image ?? null, color: node.color ?? null };
 }
 
-/** A section's swatch slot, at a product photo's width; blank on the menu's and home's rows. */
-const folderFrame = (content: unknown = nothing) =>
-  html`<span part="folder-frame">${content}</span>`;
 const gripSpace = html`<span part="grip-space" aria-hidden="true"
   ><wt-icon name="grip"></wt-icon
 ></span>`;
@@ -120,35 +118,10 @@ export class MenuStructureTable extends LitElement {
     baseStyles,
     treeDragStyles,
     swatchPartStyles,
+    menuTreeStyles,
     css`
       :host {
         display: block;
-      }
-      /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
-         crossing used for their presentation. */
-      wt-data-table::part(folder-cell) {
-        display: flex;
-        align-items: center;
-      }
-      /* As wide as a product's photo, so a section's name starts where a product's does. */
-      wt-data-table::part(folder-frame) {
-        display: inline-flex;
-        flex: none;
-        justify-content: center;
-        width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        align-items: center;
-        margin-inline-end: var(--wt-space-3);
-      }
-      wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
-      }
-      /* Keep wrapped names on their first-line baseline beside the media slot. */
-      wt-data-table::part(product-cell) {
-        display: block;
-      }
-      wt-data-table[narrow]::part(tree-heading) {
-        margin-inline-start: var(--tree-arrow-width);
       }
       wt-data-table::part(drag-grip) {
         display: inline-flex;
@@ -181,45 +154,6 @@ export class MenuStructureTable extends LitElement {
         width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         visibility: hidden;
-      }
-      wt-data-table::part(thumb-frame),
-      wt-data-table::part(thumb-placeholder) {
-        box-sizing: border-box;
-        display: inline-block;
-        vertical-align: middle;
-        margin-inline-end: var(--wt-space-3);
-        width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        overflow: hidden;
-        background: var(--wt-color-surface);
-      }
-      wt-data-table[narrow]::part(swatch-button),
-      wt-data-table[narrow]::part(swatch-box),
-      wt-data-table[narrow]::part(folder-frame),
-      wt-data-table[narrow]::part(thumb-frame),
-      wt-data-table[narrow]::part(thumb-placeholder) {
-        display: none;
-      }
-      wt-data-table::part(thumbnail) {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
-      wt-data-table::part(name-stack) {
-        display: inline-flex;
-        flex-direction: column;
-      }
-      /* A flex row takes its first item's baseline unless an item aligns by baseline, so without
-         this the row lines up by the grip's or the swatch slot's baseline, not the name's. As tall as
-         the slot and centred in it, the stack still sits level with the slot. */
-      wt-data-table::part(folder-stack) {
-        align-self: baseline;
-        justify-content: center;
-        min-height: var(--wt-tap-min);
       }
       wt-data-table::part(current) {
         font-weight: var(--wt-font-weight-bold);
@@ -742,9 +676,7 @@ export class MenuStructureTable extends LitElement {
           : nothing
       }</span
     >`;
-    if (node.ref.kind === "section")
-      return html`<span part="folder-cell">${folderFrame(this.#swatch(row))}${stack}</span>`;
-    return html`<span part="product-cell">${this.#swatch(row)}${stack}</span>`;
+    return menuTreeCell(node.ref.kind, this.#swatch(row), stack);
   }
 
   #swatch(row: MemberRow) {

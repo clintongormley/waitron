@@ -4,7 +4,8 @@ import { applyTokens, currentContentLanguages, setContentLanguages } from "@wait
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, menuDocument, mountWidget } from "./widgets/test-helpers.js";
+import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
@@ -6625,3 +6626,129 @@ describe("printer breadcrumb during a pending save", () => {
     }
   }
 });
+
+it("lets Preview View and Hide links handle native activation inside the application shell", async () => {
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+  await flush(el);
+  const document = menuDocument([], {}, "Proposed lunch");
+  const preview = window.document.createElement("dashboard-menu-preview") as MenuPreviewPanel;
+  preview.menuName = "Lunch";
+  preview.preview = {
+    document,
+    live: null,
+    hash: "proposed",
+    warnings: [],
+    clashes: [],
+    changes: [
+      {
+        id: "rename",
+        kind: "menu_renamed",
+        from: "Lunch",
+        to: "Proposed lunch",
+        source: "this_menu",
+        targets: { before: [], after: [{ kind: "title", menuId: document.menuId }] },
+      },
+    ],
+    status: {
+      state: "changed",
+      version: 1,
+      publishedAt: "2026-10-01T10:00:00Z",
+      hash: "old",
+      clashes: 0,
+    },
+  };
+  el.shadowRoot!.querySelector(".body")!.append(preview);
+  await preview.updateComplete;
+  const view = preview.shadowRoot!.querySelector<HTMLAnchorElement>("[data-change-id]")!;
+  view.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => {
+    const tree = preview.shadowRoot!.querySelector("dashboard-menu-document-tree")!;
+    const row = tree
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector('[aria-current="true"]');
+    expect(row?.textContent).toContain("Proposed lunch");
+  });
+  expect(preview.shadowRoot!.activeElement).toBe(view);
+  const hide = preview.shadowRoot!.querySelector<HTMLAnchorElement>("[data-hide-change]")!;
+  hide.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(preview.shadowRoot!.querySelector('[data-change-row="rename"]')).toBeNull(),
+  );
+});
+
+it.each(["home", "clash"] as const)(
+  "handles Preview %s activation inside the real shell",
+  async (kind) => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    const document = menuDocument([], {}, "Proposed lunch");
+    const preview = window.document.createElement("dashboard-menu-preview") as MenuPreviewPanel;
+    preview.preview = {
+      document,
+      live: null,
+      hash: "proposed",
+      warnings: [],
+      changes: [
+        {
+          id: "home",
+          kind: "home_display_changed",
+          device: "handheld",
+          source: "this_menu",
+          targets: { before: [], after: [{ kind: "home", device: "handheld", field: "columns" }] },
+        },
+      ],
+      clashes: [
+        {
+          productId: "dish",
+          variantId: null,
+          field: "price",
+          candidates: [
+            {
+              place: { kind: "own_sections" },
+              value: "12.00" as never,
+              source: { kind: "product" },
+            },
+            {
+              place: { kind: "menu", menuId: "dinner", menuName: "Dinner" },
+              value: "14.00" as never,
+              source: { kind: "own" },
+            },
+          ],
+        },
+      ],
+      status: {
+        state: "changed",
+        version: 1,
+        publishedAt: "2026-10-01T10:00:00Z",
+        hash: "old",
+        clashes: 1,
+      },
+    };
+    el.shadowRoot!.querySelector(".body")!.append(preview);
+    await preview.updateComplete;
+    let nativeNavigation = false;
+    let clashEvent = false;
+    preview.addEventListener("wt-preview-clashes", () => {
+      clashEvent = true;
+    });
+    const blockNative = (event: MouseEvent) => {
+      if (!event.defaultPrevented) nativeNavigation = true;
+      event.preventDefault();
+    };
+    window.addEventListener("click", blockNative);
+    try {
+      const anchor = preview.shadowRoot!.querySelector<HTMLAnchorElement>(
+        kind === "home" ? '[data-change-id="home"]' : '[data-test="clash-prices"]',
+      )!;
+      anchor.click();
+      if (kind === "home") {
+        expect(nativeNavigation).toBe(false);
+        await expect.poll(() => location.pathname).toBe("/manage/menus/menu/menu-lunch/view/home");
+      } else expect(clashEvent).toBe(true);
+    } finally {
+      window.removeEventListener("click", blockNative);
+    }
+  },
+);

@@ -4246,7 +4246,7 @@ describe("the clash message and the Clashes filter", () => {
 
   it.each([
     ["en-GB", "Show clashes"],
-    ["es-ES", "Ver discrepancias"],
+    ["es-ES", "Ver conflictos"],
   ])(
     "offers %s Show clashes beside the red line once another filter is chosen, and a click puts the filter back on Clashes",
     async (locale, label) => {
@@ -4306,6 +4306,35 @@ describe("the clash message and the Clashes filter", () => {
     expect(table(el).shadowRoot.activeElement).toBe(
       table(el).shadowRoot.querySelector('input[name="search"]'),
     );
+  });
+
+  it("A349 applies a navigation request once and preserves a later choice through live row refreshes", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)], clashesFor: "lunch" });
+    await vi.waitFor(() => expect(priceFilter(el)).toBe("clash"));
+    await choose(el, "override", "");
+    await load(el, [burger, clashRow(lager)]);
+    expect(priceFilter(el)).toBe("");
+    expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+    el.clashesFor = "dinner";
+    await el.updateComplete;
+    await vi.waitFor(() => expect(priceFilter(el)).toBe("clash"));
+    await choose(el, "override", "");
+    el.clashesFor = "";
+    await el.updateComplete;
+    el.clashesFor = "dinner";
+    await el.updateComplete;
+    await vi.waitFor(() => expect(priceFilter(el)).toBe("clash"));
+  });
+
+  it("A349 consumes a navigation request when loaded prices no longer clash", async () => {
+    const el = await mount({ rows: [burger, lager], clashesFor: "lunch" });
+    await el.updateComplete;
+    expect(priceFilter(el)).toBe("");
+    await choose(el, "override", "not_overridden");
+    await choose(el, "override", "");
+    await load(el, [burger, clashRow(lager)]);
+    expect(priceFilter(el)).toBe("");
+    expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
   });
 
   it("offers Show clashes on a return to the tab whose remembered filter is All prices", async () => {
@@ -4383,11 +4412,11 @@ describe("the clash message and the Clashes filter", () => {
   it("says the clash message in Spanish", async () => {
     const one = await mount({ rows: [burger, clashRow(lager)] });
     expect(text(message(one))).toBe(
-      "1 precio tiene una discrepancia. Resuélvela antes de poder publicar esta carta.",
+      "1 precio tiene un conflicto. Resuélvelo antes de poder publicar esta carta.",
     );
     const two = await mount({ rows: [burger, followedClashRow()] });
     expect(text(message(two))).toBe(
-      "2 precios tienen discrepancias. Resuélvelas antes de poder publicar esta carta.",
+      "2 precios tienen conflictos. Resuélvelos antes de poder publicar esta carta.",
     );
   });
 });

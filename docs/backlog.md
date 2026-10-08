@@ -1132,11 +1132,12 @@ unused `units` property is gone (it closes W75's leftover).
   - Decided as built: a product with both a variant that follows its clashing price and a variant
     whose own price clashes is marked on its own price first, because a price typed there settles
     one of them; once typed, the mark moves to the variants.
-  - Open: Spanish says "discrepancia(s)" on the tab and the heading, but "conflictos" in the
-    menus list and in the publish refusal (`apps/dashboard/src/i18n/codes.ts`); both predate #1383.
-    Next: the owner picks one word.
-  - Open, from #1383's review: on the Preview tab a failed live refresh keeps the heading's old
-    clash count, as the rest of that line already does (`#menuReadFailed`, from A290, #1307).
+  - A383, owner 2026-10-08: the Preview bundle uses "conflicto(s)" across Spanish menu-price
+    labels, filters and clash sentences, including the editor heading. English wording stays fixed.
+    Exact Spanish widget and heading checks cover singular and plural wording.
+  - A384, from #1383's review: the Preview bundle drops the heading's stale clash count after
+    a failed live refresh, retaining known publication facts and the existing refresh error.
+    Both-theme browser checks load 2, fail the refresh, then recover with 3.
 - **A347, owner 2026-10-07 — DONE (#1392, a disabled product or size is on
   no menu):** disabling a product takes it off every menu list in the same transaction and clears
   its prices on every menu, so each menu's next publish leaves it out; a Device Home Page shortcut
@@ -2924,6 +2925,41 @@ would be the first).
   (read in `menus-screen.ts`, not run).
 
 **Inspect the proposed menu and follow every change — DONE (W95, #1302, 2026-10-06).**
+A390's disclosure follow-up landed separately as #1413 at
+`9164e05d49bec002219f6bfda74377287f9920a2`. Its own main CI run 37730952603 succeeded;
+the earlier A339 merge run remains recorded as failed.
+
+Follow-up Preview bundle (A349/A350/A351/A352/A383/A384), implemented 2026-10-08:
+the repeated Live section is removed; includers are named and linked beside Publish; clashes
+appear as a red sentence with their exact prices and sources. The Clashes link selects that
+Price overrides filter once after loading, overriding a remembered All prices choice. Later
+choices survive refreshes. Changes appear first on phones and to the left on desktop, with
+publication controls outside each pane's keyboard-reachable scroll region.
+
+The proposed menu now uses a frozen, read-only Structure-style tree sharing row presentation,
+indentation and swatch-slot geometry with Structure. Images occupy that slot, with colour
+fallbacks. Content view selects internal or translated names independently of interface language.
+Plain change bullets are grouped by every declared change kind. View opens the named occurrence,
+expands ancestors, scrolls and marks the row while focus stays on the link. Removals point to the
+surviving parent; catalogue deletions with no place have no View. Home links to its settings tab.
+Replacement previews reset tree expansion and highlight. Hide and Show all affect only the list;
+still-present IDs stay hidden across a refresh, new changes appear, and another menu resets them.
+Publish retains the complete preview hash. The card/detail/Before/Return renderer and its unused
+strings and tests are retired. Spanish menu-price copy uses conflicto(s). A failed Preview read
+drops only the heading's stale clash count, retaining publication facts and its refresh error;
+recovery supplies the new count. Real-database includer publication and repeated-preview ID checks
+pass. Whole-screen verification passed 508 cases. The final dense screen checks passed all eight
+EN/ES, light/dark, 390/1280 cases after the column-width changes. The Casa Delgado real-app look
+covered those same combinations with served photos in the shared 44px swatch slot on desktop;
+phone rows follow Structure's hidden-media layout. Demo edits were restored to the original
+preview hash and change count. The whole-branch run-it review reproduced Hide losing its state
+through an empty reload, missing removal targets when their parents were removed, and Home
+bypassing app navigation; new failing tests caught each before the fixes. Hide and content view
+now survive the empty reload, removals select the nearest surviving ancestor, and Home uses the
+shell's normal route. The clash link's own handler also runs inside the shell.
+
+Historical W95 receipt follows. Its card, detail, Before and Return navigation describe the
+2026-10-06 implementation; A350/A351 replace those surfaces with the tree and View links above.
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 [implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
 hierarchy, product inspection and linked before/after changes, with explicit translation
@@ -3117,6 +3153,13 @@ On 2026-10-05 A261-3 also observed this message while running
 src/widgets/catalogue-browser.test.ts`: both the transition candidate and the previous
 `c41ed54910fece4add9f1475bf18034992545e99` commit in a frozen-installed disposable checkout
 reported 164 passing tests and logged the message. Its cause on that path has not been established.
+On 2026-10-08 A349's six Preview, price-table and navigation suites also logged the message:
+397 tests passed on its candidate; the same command at the preceding checkpoint
+`43c54024eea8149e789163fdac46f3239300365c` in a frozen-installed disposable checkout passed
+390 tests and logged it too. The command selected `src/widgets/menu-preview.test.ts`,
+`menu-preview-top.test.ts`, `menu-preview-navigation.test.ts`, `menu-preview.a11y.test.ts`,
+`menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
+That comparison does not establish which observer causes it or its effect on the rendered screen.
 
 **Products: the Move dialog's destination categories — DONE (W82, #1210; a tree since W82a, #1229;
 paths joined with " › " in W82b, #1232, and W82c, #1262).** Two sibling categories with the same

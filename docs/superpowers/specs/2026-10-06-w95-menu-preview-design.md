@@ -1,5 +1,7 @@
 # W95: inspect the proposed menu and follow its changes
 
+> 2026-10-08, A349–A352/A383/A384: the Preview bundle replaces this historical card/detail/Before/Return UI with grouped View links and a frozen Structure-style tree, puts changes first, and adds Hide/Show all. See [the current Preview contract](../../developers/design-system.md).
+
 Date: 2026-10-06. Source checkout: `abbe54638da5f91d2d4c84c340790965cb12ae2e` (A291).
 Authority: Lane D `queue.md`, W95, including the Price override wording follow-up.
 The owner authorises unattended design and planning. The parent driver reviews these

@@ -9,7 +9,7 @@ export const dashboardPath: UrlPathConfig = {
     "prep-stations": { view: "view", test: "test" },
     hours: { view: "view", department: "department", station: "station" },
     "menu-timetable": { department: "department" },
-    menus: { menu: "menu", view: "view" },
+    menus: { menu: "menu", view: "view", "price-filter": "filter" },
     modifiers: { view: "view", list: "list" },
     orders: {
       status: "status",

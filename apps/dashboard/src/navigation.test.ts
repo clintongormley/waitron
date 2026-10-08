@@ -49,3 +49,14 @@ it("preserves the Hours tab and the subject a link names when the dashboard rewr
   url.write({ station: null, department: "deli" }, true);
   expect(location.pathname).toBe("/manage/hours/view/week/department/deli");
 });
+
+it("preserves the explicit menu price filter when the dashboard rewrites its destination", () => {
+  history.replaceState(null, "", "/manage/menus/menu/drinks/view/prices/filter/clashes");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  url.write({ dashboard: "menus" }, true);
+  expect(location.pathname).toBe("/manage/menus/menu/drinks/view/prices/filter/clashes");
+  expect(url.read("price-filter")).toBe("clashes");
+});

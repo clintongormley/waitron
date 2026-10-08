@@ -544,6 +544,7 @@ export class MenusScreen extends LitElement {
   /** Null until the open menu's prices are first read. */
   @state() private prices: MenuPriceRow[] | null = null;
   @state() private pricesError = false;
+  @state() private showPriceClashes = false;
   /** The prices table's row keys with a save queued or out. */
   @state() private savingPrices: ReadonlySet<string> = new Set();
   @state() private priceRefusals: Readonly<Record<string, string>> = {};
@@ -1109,6 +1110,7 @@ export class MenusScreen extends LitElement {
     }
     this.#select(this.#url.read("menu"));
     const view = this.#url.read("view");
+    this.showPriceClashes = view === "prices" && this.#url.read("price-filter") === "clashes";
     this.#showView(isTab(view) ? view : TABS[0]);
     this.#checkAddress();
   }
@@ -1122,6 +1124,7 @@ export class MenusScreen extends LitElement {
     this.#menuReadKey = "";
     this.#includedStatusesFor = null;
     this.menuId = menuId;
+    this.showPriceClashes = false;
     this.status = null;
     this.statusError = false;
     this.statusResetRequired = false;
@@ -1148,27 +1151,34 @@ export class MenusScreen extends LitElement {
   /** Replaces an address naming a menu that does not exist, or a tab the editor does not have. */
   #checkAddress(): void {
     if (this.#url.read("dashboard") !== "menus") return;
+    const priceFilter = this.#url.read("price-filter");
+    if (
+      priceFilter !== null &&
+      (this.menuId === null || this.view !== "prices" || priceFilter !== "clashes")
+    )
+      this.#url.write({ "price-filter": null }, true);
     if (this.menuId === null) {
       if (this.#url.read("view") !== null) this.#url.write({ view: null }, true);
       return;
     }
     if (!this.loading && !this.loadError && !this.menus.some(({ id }) => id === this.menuId)) {
       this.#select(null);
-      this.#url.write({ menu: null, view: null }, true);
+      this.#url.write({ menu: null, view: null, "price-filter": null }, true);
       return;
     }
     if (!isTab(this.#url.read("view"))) this.#url.write({ view: TABS[0] }, true);
   }
 
-  #open(menuId: string, view: Tab = TABS[0]): void {
+  #open(menuId: string, view: Tab = TABS[0], priceFilter: "clashes" | null = null): void {
     this.#select(menuId);
+    this.showPriceClashes = priceFilter === "clashes";
     this.#showView(view);
-    this.#url.write({ dashboard: "menus", menu: menuId, view });
+    this.#url.write({ dashboard: "menus", menu: menuId, view, "price-filter": priceFilter });
   }
 
   #backToList(): void {
     this.#select(null);
-    this.#url.write({ dashboard: "menus", menu: null, view: null });
+    this.#url.write({ dashboard: "menus", menu: null, view: null, "price-filter": null });
   }
 
   #menuName(): string {
@@ -2258,6 +2268,7 @@ export class MenusScreen extends LitElement {
 
   #renderPrices() {
     return html`<dashboard-menu-prices-table
+        .clashesFor=${this.showPriceClashes ? this.menuId! : ""}
         .rows=${this.prices ?? []}
         .loading=${this.prices === null && !this.pricesError}
         .failed=${this.pricesError}
@@ -2294,13 +2305,17 @@ export class MenusScreen extends LitElement {
   #renderPreview() {
     return html`<dashboard-menu-preview
       menuName=${this.#menuName()}
+      .includedBy=${this.structure?.includedBy ?? []}
       .status=${this.status}
-      .statusFailed=${this.statusError}
       .preview=${this.preview}
       .failed=${this.previewError}
       .failureReason=${this.previewResetRequired ? codeMessage("menu.reset_required") : ""}
       .publishing=${this.publishing.has(this.menuId!)}
       .result=${this.publishResult}
+      @wt-preview-clashes=${(event: Event) => {
+        event.stopPropagation();
+        this.#open(this.menuId!, "prices", "clashes");
+      }}
       @wt-menu-publish=${(event: CustomEvent<{ hash: string }>) => {
         event.stopPropagation();
         void this.#publish(event.detail.hash);
@@ -2547,7 +2562,10 @@ export class MenusScreen extends LitElement {
                 >`,
             )
           : statusLine(this.status);
-    const clashes = this.statusError ? 0 : (this.status?.clashes ?? 0);
+    const clashes =
+      this.statusError || (this.view === "preview" && this.previewError)
+        ? 0
+        : (this.status?.clashes ?? 0);
     const waits =
       clashes === 1
         ? t("menus.publish_waits_clash")
@@ -2799,8 +2817,9 @@ export class MenusScreen extends LitElement {
           { key: "preview", label: t("menus.tab_preview") },
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+          this.showPriceClashes = false;
           this.#showView(event.detail.value as Tab);
-          this.#url.write({ view: event.detail.value });
+          this.#url.write({ view: event.detail.value, "price-filter": null });
         }}
       >
         <div slot="structure">${this.#renderStructure()}</div>

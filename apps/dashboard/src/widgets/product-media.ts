@@ -51,14 +51,7 @@ export function productMedia(options: {
   open?: () => void;
 }) {
   const { key, productId = key, name, image, color, editable = true, busy, open } = options;
-  const painted = isStoredColor(color);
-  const frame = html`<span
-    part=${`${image ? "thumb-frame media-photo-frame" : "thumb-placeholder"} color-swatch media-frame${image && painted ? " photo-ring" : ""}${painted ? "" : " empty"}`}
-    data-test=${image ? "thumb" : "thumb-placeholder"}
-    style=${painted ? `--product-media-color:${color}` : nothing}
-    aria-hidden="true"
-    >${image ? html`<img part="thumbnail" src=${`/media/${image}`} alt="" draggable="false" />` : nothing}</span
-  >`;
+  const frame = productMediaFrame(image, color);
   if (!editable)
     return html`<span part="product-media swatch-box" data-test=${`color-${key}`} aria-hidden="true"
       >${frame}</span
@@ -83,5 +76,16 @@ export function productMedia(options: {
       open();
     }}
     >${frame}</a
+  >`;
+}
+
+export function productMediaFrame(image: string | null, color: string | null) {
+  const painted = isStoredColor(color);
+  return html`<span
+    part=${`${image ? "thumb-frame media-photo-frame" : "thumb-placeholder"} color-swatch media-frame${image && painted ? " photo-ring" : ""}${painted ? "" : " empty"}`}
+    data-test=${image ? "thumb" : "thumb-placeholder"}
+    style=${painted ? `--product-media-color:${color}` : nothing}
+    aria-hidden="true"
+    >${image ? html`<img part="thumbnail" src=${`/media/${image}`} alt="" draggable="false" />` : nothing}</span
   >`;
 }

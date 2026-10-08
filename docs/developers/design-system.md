@@ -2895,24 +2895,45 @@ words on the Price overrides tab itself. A click with a modifier key is left to 
 that does this today. Guards: `apps/dashboard/src/screens/menus-screen.heading.test.ts` and
 `menus-screen.heading.a11y.test.ts` beside it.
 
+The Preview clash link opens Price overrides with Clashes selected, including in a new tab.
+That explicit destination overrides a remembered price filter once after the rows load. Later
+filter choices stay in place through refreshes; an ordinary tab change keeps the remembered choice.
+
 A menu's Preview shows frozen customer content beside unpublished changes. Choose a content
 language independently of the dashboard language, or select Internal names for staff inspection.
-Keep publication state and actions outside the two scrolling panes. Stack the panes when the host
+Keep the live version in the editor header rather than repeating it in Preview. Show price clashes
+as a red sentence, with each conflicting price and its source below it. A menu included by other
+menus names those includers as links to their Preview tabs beside Publish; omit that note when
+there are none. Keep publication actions outside the two scrolling panes. Put unpublished changes
+on the left and the proposed menu on the right. Stack the panes with changes first when the host
 has less than 800px available. Each pane has its own accessible name and keyboard focus.
 
-Make a change row a native button. Its separate field and place controls use frozen names as labels
-and stable document IDs as destinations. Focus and highlight the actual value after opening its
-ancestors. Show removed values in the live before document, keeping a return to the proposal.
-Keep Return to selected change visible while the menu pane scrolls, so you can return from a detail
-without searching for its row. Home targets link to that menu’s Home settings. Give an unresolved
-target one focused explanation with a return to its change. When the preview refreshes, retain a
-resolvable selected change without moving keyboard focus, reset local inspection choices and
-announce when that selection disappears. Widget checks: `apps/dashboard/src/widgets/menu-preview-navigation.test.ts`;
-publication and accessibility checks remain beside it. Screen freshness checks in
-`apps/dashboard/src/screens/menus-screen.test.ts` keep the displayed snapshot and publish hash
-together. A failed refresh retires warning confirmation and publish controls; after a stale-hash
-refusal, hide the old document while reading its replacement. Local content-language and
-inspection choices do not request another preview. Changing the dashboard interface language
+Group changes by type under small headings, with one plain bullet per change. Keep a source note
+for a shared product or an included menu. A native View link expands the proposed tree's ancestors,
+scrolls its product or section row into view and marks it with `aria-current`. Keep keyboard focus
+on the link. Another View or an outside click clears the previous mark. Removed items point to
+their surviving parent section; a deleted product with no place has no View. Home changes link to
+that menu's Home tab.
+
+Draw the proposed document as a read-only Structure-style tree. Share row presentation with
+Structure, including indentation and the swatch slot; an image occupies that same slot, with a
+colour fallback when absent. Read names from the frozen document, with visible requested/default/
+staff fallback notes and the actual translation's language tag. Internal names have an empty
+language tag rather than inheriting the dashboard language. A replacement preview resets the
+tree's expansion and highlight without moving focus. Changing Content view makes no request.
+
+A Hide link removes a bullet and its group when the group becomes empty. Show all changes restores
+them and is disabled when nothing is hidden. Show the hidden count beside it and explain that
+Publish still includes every change. Keep hidden IDs in component state for the same menu,
+intersecting them with each refreshed change list; leaving the menu forgets them.
+
+Widget checks: `apps/dashboard/src/widgets/menu-preview-tree.test.ts` and
+`menu-preview-navigation.test.ts` beside it; publication and accessibility checks remain beside
+them. Screen freshness checks in `apps/dashboard/src/screens/menus-screen.test.ts` keep the
+displayed snapshot and publish hash together. A failed refresh retires warning confirmation and
+publish controls, drops the Preview heading's old clash count and keeps its known publication
+facts and existing refresh error. Recovery supplies the new count. After a stale-hash refusal,
+hide the old document while reading its replacement. Changing the dashboard interface language
 rebuilds its screen, so that separate operation reads the preview again.
 
 If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This
