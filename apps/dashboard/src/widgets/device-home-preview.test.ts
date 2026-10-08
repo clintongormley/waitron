@@ -21,6 +21,47 @@ const KILO = {
   hardwareUnit: "kg" as const,
 };
 
+it.each(
+  [360, 390].flatMap((width) =>
+    [2, 3].flatMap((columns) =>
+      (["colours", "thumbnails"] as const).map((mode) => ({ width, columns, mode })),
+    ),
+  ),
+)("fits $columns preview columns at $width px in $mode", async ({ width, columns, mode }) => {
+  const document = lunch(
+    [],
+    [drinks(), documentProduct("mi-lemonade", "p-lemonade"), documentProduct("mi-ham", "p-ham")],
+  );
+  document.offers["mi-lemonade"]!.name = "Extraordinariamenteextralargapalabra";
+  document.offers["mi-ham"]!.name = "Pollo asado con patatas y verduras";
+  const { el, host } = await mount({
+    document: display("handheld", { columns, tiles: mode }, document),
+  });
+  await widen(host, width);
+  const grid = root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
+  expect(tracks(grid)).toBe(columns);
+  expect(tiles(el, "structure")).toHaveLength(3);
+  for (const cell of tiles(el, "structure")) {
+    const box = cell.getBoundingClientRect();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    for (const content of cell.querySelectorAll<HTMLElement>(
+      ".name, .price, .kind, wt-icon, img",
+    )) {
+      const bounds = content.getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(box.left);
+      expect(bounds.right).toBeLessThanOrEqual(box.right);
+      expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+    }
+  }
+});
+
+it.each([360, 390])("shows three preview columns inside a %s px dashboard", async (width) => {
+  const { el, host } = await mount({ document: display("handheld", { columns: 3 }) });
+  await widen(host, width - 80);
+  for (const grid of grids(el)) expect(tracks(grid)).toBe(3);
+});
+
 function drinks(extra: Partial<Extract<DocumentMember, { kind: "section" }>> = {}): DocumentMember {
   return {
     ...(documentSection("s-drinks", "Drinks", [documentProduct("mi-beer", "p-beer")]) as Extract<
@@ -284,10 +325,10 @@ describe("dashboard-device-home-preview", () => {
     expect(readingOrder(till.el, "structure")).toEqual(wide);
   });
 
-  it("draws as many columns as a 390 px phone's till does, two, at the Handheld slider's most", async () => {
-    const handheld = await mount({ document: display("handheld", { columns: 6 }) });
+  it("draws as many columns as a 390 px phone's till does, three, at the Handheld slider's most", async () => {
+    const handheld = await mount({ document: display("handheld", { columns: 3 }) });
     await widen(handheld.host, 1600);
-    for (const grid of grids(handheld.el)) expect(tracks(grid)).toBe(2);
+    for (const grid of grids(handheld.el)) expect(tracks(grid)).toBe(3);
   });
 
   it("sizes the frame to a phone for Handheld and to a till for Till, never wider than the screen", async () => {

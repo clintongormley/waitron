@@ -206,4 +206,4 @@ export function indexDocument<P>(
 /** Up to `--columns` tracks, fewer wherever a tile would be narrower than its minimum. auto-fill
  * keeps a track's width the same however many tiles there are, so tiles fill row by row. */
 export const HOME_GRID_COLUMNS =
-  "repeat(auto-fill, minmax(max(calc(var(--wt-tap-min) * 2 + var(--wt-space-4)), calc((100% - (var(--columns) - 1) * var(--wt-space-3)) / var(--columns))), 1fr))";
+  "repeat(auto-fill, minmax(max(var(--home-tile-min, calc(var(--wt-tap-min) * 2 + var(--wt-space-4))), calc((100% - (var(--columns) - 1) * var(--wt-space-3)) / var(--columns))), 1fr))";

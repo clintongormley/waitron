@@ -274,7 +274,7 @@ Publishing keeps an empty slot for a target the document leaves out, so later sh
 positions.
 
 `handheld` and `till` are the two displays, each `{ columns, tiles, order }`. `columns` is a whole
-number from 2 to 6 for a handheld and from 6 to 10 for a till. `tiles` is `colours` or `thumbnails`,
+number from 2 to 3 for a handheld and from 4 to 10 for a till. `tiles` is `colours` or `thumbnails`,
 and `order` is `home_first` (the shortcuts, then the menu) or `menu_first`. A new menu starts with
 3 columns on a handheld and 6 on a till, both `colours` and `home_first` (`HOME_DISPLAY_DEFAULTS`,
 `packages/catalogue/src/device-home.ts`).

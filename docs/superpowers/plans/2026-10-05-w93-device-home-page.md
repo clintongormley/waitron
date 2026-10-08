@@ -1,5 +1,9 @@
 # One Device Home Page per menu, shown two ways (W93) — implementation plan
 
+> **2026-10-07, A339:** the historical column ranges below are superseded by handheld 2–3
+> (default 3) and till 4–10 (default 6). See the dated notes at Decisions 4 and 10 in
+> [the W93 spec](../specs/2026-10-05-w93-device-home-page-design.md).
+
 > **2026-10-06, A291:** the format-2 preview/republication steps and upgrade advice in this
 > historical plan are superseded. Unsupported live documents refuse with `menu.reset_required`;
 > reset the venue. See [the current contract](../../developers/product-categories.md).
