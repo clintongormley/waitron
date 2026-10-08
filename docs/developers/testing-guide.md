@@ -220,6 +220,24 @@ on 2026-09-09; [Vitest issue 10791](https://github.com/vitest-dev/vitest/issues/
 called `orchestrator.createTesters()` with no deadline in `BrowserPool.runNextTest`. That is a
 possible mechanism, not a diagnosis of those runs, and the hang was not reproduced locally.
 
+### A retained database fixture can keep the watchdog from taking a timer turn
+
+If your suite keeps its database across cases with `resetPerTest: false`, awaited synchronous
+queries can run from one case into the next without letting timers run. Give the event loop a
+turn between cases with an `afterEach` hook that awaits `setImmediate` from
+`node:timers/promises`. You keep the same rows and assertions while letting the venue watchdog
+record its next tick.
+
+Measured 2026-10-08 on Node v26.7.0, macOS, Vitest 4.1.11: a disposable copy of
+`apps/server/src/bill-payments.test.ts`, with `setVenueLivenessTimings` set to a 10-second kill
+bound, 100 ms tick and heartbeat, and 500 ms stack-capture bound, was killed after 57 cases.
+Its stack ended in the rollback snapshot equality assertion. Adding only the between-case
+`setImmediate` hook let all 103 cases pass at those same timings. Removing the hook killed
+another run after 47 cases. The snapshots, fixture and all assertions were retained. The
+unchanged production watchdog's bound is 120 seconds; these accelerated local probes do not
+measure Linux shard duration. CI run `37674514404`, attempts 1 and 2, each logged
+`venue.holder_frozen` inside that rollback comparison before the worker exit.
+
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
 Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is

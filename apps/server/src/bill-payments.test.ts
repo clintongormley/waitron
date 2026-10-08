@@ -1,10 +1,11 @@
 import crypto, { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
+import { setImmediate as yieldTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -95,9 +96,9 @@ import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
-// The bill payment guards at the level of the functions each route calls: the writers with no
-// route of their own, the orderings a route cannot show, and the payment slip of a bill paid by
-// several cards. The acceptance tests over HTTP are in `bill-payments-api.test.ts`.
+// The retained fixture runs synchronous work across cases; let the venue watchdog tick between them.
+afterEach(() => yieldTurn());
+
 const LOCALE = "es-ES";
 const OPERATOR = "cccccccc-0000-4000-8000-000000000001";
 
