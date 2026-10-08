@@ -420,6 +420,19 @@ sent.
   `packages/db/src/testing/errors.ts` names the old wrapper on purpose and is pinned verbatim by its
   test.
 
+## A1c. Dead pointers to deleted test suites
+
+Comments across many packages still cite deleted guard suites, from two deletions. The per-package
+`errors.reachability.test.ts` suites went on 2026-08-11 (the real guard is
+`scripts/errors-reachable.test.ts`); the outbox removal (#280) deleted
+`apps/server/src/sync-origin.test.ts` and left comments across the tree describing capture-origin
+machinery that no trigger does any more. Fix whenever a file is open anyway; the comment-pruning
+sweep (B9 → _Prune the comments_) reaches every package and takes these as it goes. Two grep
+hazards: searching `sync-origin.test.ts` finds only the comments that name the file and misses those
+that cite it obliquely; and searching "sync origin" also reaches a still-live thing — the mirror's
+own `origin_node_id` column (`packages/db/src/schema/mirror-config.ts`), which is outside this item
+and must not be swept with it.
+
 ## Decisions and deliberate limits
 
 **What slice 1 left (#490 and the preparation tasks):**
