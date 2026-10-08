@@ -6229,7 +6229,7 @@ approved.
 ### B9. CI and test infra
 
 - **A rebased branch's push was refused for an unsigned commit already on main (A392, owner
-  2026-10-08) — DONE.** Main's squash `6797bc03a` (#1377) has no `Signed-off-by`; the pre-push
+  2026-10-08) — DONE (#1421).** Main's squash `6797bc03a` (#1377) has no `Signed-off-by`; the pre-push
   hook checked every commit from the remote's old tip, so a rebase over it refused the push, and
   lanes D and E replaced their pull requests instead (#1379 → #1381, #1374 → #1399). The
   sign-off range now leaves out commits already on `origin/main`, and the typecheck scope adds the
