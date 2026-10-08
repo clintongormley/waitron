@@ -6279,6 +6279,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
   in two pull requests — monitors after slice 1, watcher printers retired after slice 4 — with its
   open decisions for the owner at its top.
+  Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
+  in two pull requests — each department's receipt with translated subtitle and footer after
+  slice 1, the department page's Receipt tab after slice 6 — with its open decisions at its top.
 - **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
   implemented through A261.** The first department is named after the venue; the
   four-value service style splits into separate settings, and a tab no longer needs a table; hours
