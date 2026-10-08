@@ -604,13 +604,15 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A420 part 2 — fill missing translations in place (lane E, pending).** The owner approved
+- **A420 part 2 — fill missing translations in place (lane E, in progress).** The owner approved
   [the spec](superpowers/specs/2026-10-08-a420-inline-translations.md) on 2026-10-08: one selected
   language, all nine name kinds, retained Kind/Why/search, default-language companion where
   required, and a bounded all-or-nothing save. The table and read-only report dialog landed in
-  #1448; next implement the translation-only writers, route and staged dialog with its unsaved
-  checks. Exercise full-app Open navigation and newly added language refresh when replacing the
-  report; #1448's review did not independently run those paths.
+  #1448. The [implementation plan](superpowers/plans/2026-10-08-a420-inline-translations.md)
+  divides the remaining work into bounded target reads, names-only writers, an atomic route and
+  a staged dialog with its unsaved checks. The internal target read model is built locally;
+  no inline translation route or editable dialog has landed. Exercise full-app Open navigation
+  and newly added language refresh when replacing the report; #1448's review did not independently run those paths.
 
 - **Translation report excludes image names (C122, #1006).** The media module's
   `contentTranslations` seat supplies only a kind and an id. Showing a name or editor link needs

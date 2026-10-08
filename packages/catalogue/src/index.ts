@@ -151,3 +151,6 @@ export * from "./catalogue-items.js";
 export { menusHolding } from "./menu-removal.js";
 
 export * from "./settings.js";
+
+export * from "./content-translation-types.js";
+export * from "./content-translation-targets.js";
