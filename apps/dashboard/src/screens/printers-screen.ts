@@ -2312,7 +2312,7 @@ export class PrintersScreen extends LitElement {
         unpair !== nothing
           ? unpair
           : html`<wt-button
-              variant="danger"
+              variant=${p.active ? "danger" : "secondary"}
               data-test=${`deactivate-printer-${p.id}`}
               ?disabled=${!p.active}
               @click=${() => void this.#deactivatePrinter(p.id)}

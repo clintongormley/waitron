@@ -1604,9 +1604,18 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   under it: the Products browser's toolbar Delete (Disable when only products are selected); on the
   Modifiers screen, the Delete confirmation, Add extras list, Add options list and the Used by
   window's Edit; Print on an equipment label; Print a copy on Reprint the receipt; the profile
-  window's Edit; and the backup key's Change the key. Not covered: a button disabled only while a
-  request is being sent, an action blocked by its own field checks, and the sign-in screens. Nothing
-  guards it across screens.
+  window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
+  button disabled because its row's own state rules the action out: it is drawn `secondary` while
+  ruled out and its own variant otherwise; which conditions disable it is unchanged. A427 brought
+  these under it: Disable on a printer that is already disabled; Disable on a service status whose
+  Active switch is off, saved or not; Publish on a menu's Preview while the menu has clashes, which
+  keeps its own variant while its own publish is being sent; and a modifier's Remove in the product
+  editor while the variant window, the image picker or any window the Products screen opens for the
+  editor is open, which keeps its own variant while the Products screen is sending a request for the
+  product (its `busy`). Not covered: a button disabled only while a
+  request is being sent, an action blocked by its own field checks, the sign-in screens, and the
+  canvas editor's Delete on a canvas's last tab (canvases are being retired, A182). Nothing guards it
+  across screens.
 
 These forms follow the rule so far; the others are being brought under it batch by batch
 ([backlog](../backlog.md) A331, [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),

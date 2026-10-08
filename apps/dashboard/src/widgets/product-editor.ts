@@ -604,7 +604,10 @@ export class ProductEditor extends LitElement {
     return structuredClone(this.draft);
   }
   private get suspended() {
-    return this.busy || this.childOpen || this.imageOpen || this.variantOpen;
+    return this.busy || this.windowOpen;
+  }
+  private get windowOpen() {
+    return this.childOpen || this.imageOpen || this.variantOpen;
   }
   private error(name: string) {
     return this.#errorsNow[name] ?? "";
@@ -1759,7 +1762,7 @@ export class ProductEditor extends LitElement {
             }}
             >${t("action.edit")}</wt-button
           ><wt-button
-            variant="danger"
+            variant=${this.busy || !this.windowOpen ? "danger" : "secondary"}
             data-test=${`remove-modifier-${key}`}
             .disabled=${this.suspended}
             @click=${(event: Event) => {

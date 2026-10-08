@@ -385,7 +385,7 @@ export class ServiceStatusScreen extends LitElement {
             >${t("action.save")}</wt-button
           >
           <wt-button
-            variant="danger"
+            variant=${s.active ? "danger" : "secondary"}
             size="sm"
             data-test="deactivate-${s.id}"
             ?disabled=${!s.active}
