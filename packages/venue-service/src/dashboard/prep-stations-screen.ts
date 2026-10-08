@@ -333,7 +333,9 @@ export class PrepStationsScreen extends LitElement {
   #writtenChoice?: RoutingPending;
   #cellRun = 0;
   #stationScope?: DraftScope<StationInput>;
+  #stationBaseline?: StationInput;
   #renameScope?: DraftScope<{ name: string }>;
+  #renameBaseline?: { name: string };
   #stationIdentity?: object;
   #renameIdentity?: object;
   #watcherRenameScope?: DraftScope<{ name: string }>;
@@ -488,11 +490,13 @@ export class PrepStationsScreen extends LitElement {
       });
     }
     if (this.editor?.kind !== "station") {
+      this.#stationBaseline = undefined;
       this.#stationScope?.dispose();
       this.#stationScope = undefined;
       this.#stationIdentity = undefined;
     } else if (!this.#stationIdentity) {
       const id = (this.#stationIdentity = {});
+      this.#stationBaseline ??= { ...this.draft };
       this.#leave ??= leaveCoordinatorFor(this);
       this.#stationScope = draftScopeFor(this, {
         id,
@@ -506,13 +510,16 @@ export class PrepStationsScreen extends LitElement {
           this.draft = { ...value };
         },
       }).scope;
+      this.#stationScope.commit(this.#stationBaseline);
     }
     if (!this.rename) {
+      this.#renameBaseline = undefined;
       this.#renameScope?.dispose();
       this.#renameScope = undefined;
       this.#renameIdentity = undefined;
     } else if (!this.#renameIdentity) {
       const id = (this.#renameIdentity = {});
+      this.#renameBaseline ??= { name: this.rename.name };
       this.#leave ??= leaveCoordinatorFor(this);
       this.#renameScope = draftScopeFor(this, {
         id,
@@ -523,6 +530,7 @@ export class PrepStationsScreen extends LitElement {
           if (this.rename) this.rename = { ...this.rename, name: value.name };
         },
       }).scope;
+      this.#renameScope.commit(this.#renameBaseline);
     }
     if (!this.watcherRename) {
       this.#watcherRenameScope?.dispose();
@@ -1194,6 +1202,7 @@ export class PrepStationsScreen extends LitElement {
           data-test=${`rename-${station.id}`}
           ?disabled=${this.busy}
           @click=${() => {
+            this.#renameBaseline = undefined;
             this.rename = {
               id: station.id,
               name: station.name,
@@ -1255,7 +1264,8 @@ export class PrepStationsScreen extends LitElement {
       return;
     }
     if (!this.isConnected || identity !== this.#renameIdentity) return;
-    scope?.commit({ name: draft.name });
+    this.#renameBaseline = { name: draft.name };
+    scope?.commit(this.#renameBaseline);
     if (!scope?.isDirty()) {
       this.renderRoot
         .querySelector<HTMLElementTagNameMap["wt-modal"]>("[data-test=station-rename]")
@@ -1323,6 +1333,7 @@ export class PrepStationsScreen extends LitElement {
     );
   }
   #openStation() {
+    this.#stationBaseline = undefined;
     this.stationAttempted = false;
     this.editor = { kind: "station" };
     this.draft = {
@@ -1338,8 +1349,12 @@ export class PrepStationsScreen extends LitElement {
   #change(field: keyof StationInput, value: string) {
     this.draft = { ...this.draft, [field]: field === "name" ? value : Number(value) };
     this.#stationScope?.changed();
-    this.fieldError = { ...this.fieldError, [field]: "" };
-    this.#showError("");
+    this.fieldError = this.stationAttempted
+      ? this.#stationErrors()
+      : { ...this.fieldError, [field]: "" };
+    this.#showError(
+      this.stationAttempted && Object.keys(this.fieldError).length ? t("prep.fix_fields") : "",
+    );
   }
   #stationErrors(): Record<string, string> {
     const d = this.draft;
@@ -1376,6 +1391,7 @@ export class PrepStationsScreen extends LitElement {
     try {
       await this.api.createStation(d);
       if (!this.isConnected || identity !== this.#stationIdentity) return;
+      this.#stationBaseline = { ...d };
       scope?.commit(d);
       if (!scope?.isDirty()) {
         this.renderRoot

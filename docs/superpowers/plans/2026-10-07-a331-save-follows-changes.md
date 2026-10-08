@@ -1795,9 +1795,11 @@ Settings fallback **is** a normal Save: retain its two presses and reset confirm
   coordinator presence, never scope presence: audit `#leavePrinters`, `#leaveSettings`,
   `#leaveWatcherInline`, `#beforeStationClose`, `#beforeWatcherRenameClose` and modal bindings.
 - [x] **New station validation.** After a changed invalid submission, keep Save primary/disabled
-  until the draft passes its local checks; server refusals alone remain retryable. Test a retained
+  until the draft passes its local checks; keep field messages and the bottom summary in step
+  with revalidation after an attempt. Server refusals alone remain retryable. Test a retained
   Add/Rename editor disconnected and reattached without reopening, then edit and request leave:
   detached updates must not register a standalone scope before the application reconnects.
+  Keep its opened/submitted baseline if it was dirty before detaching; undo still compares to that baseline.
 - [x] **Preserve asynchronous behavior.** Retain Cancel/Escape/backdrop/tab/replacement decisions,
   pending-write locks, identity checks and inert stale controls/answers. Commit submitted values,
   keeping newer input dirty in editors that accept it during a write; Settings blocks such input.

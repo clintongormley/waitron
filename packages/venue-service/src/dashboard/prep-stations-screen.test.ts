@@ -6998,6 +6998,45 @@ describe("Save follows changes", () => {
     await settle(form.el);
     await state(form.button(), true);
   });
+  it("New station keeps its validation summary until both invalid fields are fixed", async () => {
+    setLocale("en");
+    const form = await openSave("create");
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
+    form.button().click();
+    await settle(form.el);
+    expect(form.query('[data-field-error="name"]')).not.toBeNull();
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    await form.edit("New station");
+    expect(form.query('[data-field-error="name"]')).toBeNull();
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    expect(form.query("wt-modal")!.textContent).toContain(
+      "Correct the highlighted fields to continue.",
+    );
+    expect(form.button().disabled).toBe(true);
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "15");
+    expect(form.query('[role="alert"]')).toBeNull();
+    await state(form.button(), true);
+    expect(form.a.createStation).not.toHaveBeenCalled();
+  });
+  it("New station explains a field broken again after a validation attempt", async () => {
+    setLocale("en");
+    const form = await openSave("create");
+    await form.edit("New station");
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
+    form.button().click();
+    await settle(form.el);
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "15");
+    await state(form.button(), true);
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
+    expect(form.button().variant).toBe("primary");
+    expect(form.button().disabled).toBe(true);
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    expect(form.query("wt-modal")!.textContent).toContain(
+      "Correct the highlighted fields to continue.",
+    );
+    expect(form.a.createStation).not.toHaveBeenCalled();
+  });
   it.each(["rename", "watcher-name"] as const)("%s compares trimmed names", async (mode) => {
     const form = await openSave(mode);
     await form.edit(` ${form.initial as string} `);

@@ -1701,7 +1701,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   choices, watcher Rename/follows/zones/pass/printer choices, and Settings rest/fallback/minutes
   use the shared Save state. An untouched fallback stays open without a confirmation or write;
   changing it keeps the two-press confirmation. Routing and station service operations remain
-  immediate actions. The delegated watcher form was already covered by batch 4c.
+  immediate actions. After an invalid New station attempt, field messages and the bottom summary
+  remain until corrected and return if a field breaks again. Retained Add/Rename drafts keep their
+  saved baseline through reconnect. The delegated watcher form was already covered by batch 4c.
   [Batch 4d's scope and checks](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4d--prep-stations-lane-e-a331-4d).
 - **Batch 4c — LANDED in #1418 (A331-4c, 2026-10-08).** The local holiday Add and Edit and the watcher form
   (New and Edit) in `packages/venue-service`, and the till's profile dialog, whose Switch now waits
