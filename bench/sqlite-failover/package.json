@@ -15,9 +15,9 @@
     "probe:linux": "node src/probes/linux-binaries.ts"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1140.0",
-    "@types/node": "^26.0.0",
-    "testcontainers": "^12.1.0",
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@types/node": "^26.6.4",
+    "testcontainers": "^12.2.0",
     "typescript": "^7.0.0"
   }
 }

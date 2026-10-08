@@ -37,11 +37,11 @@
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/ui": "workspace:*",
     "drizzle-orm": "^0.45.3",
-    "hono": "^4.13.9",
+    "hono": "^4.13.13",
     "lit": "^3.2.0"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.4",
     "@vitest/browser-playwright": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.11",
