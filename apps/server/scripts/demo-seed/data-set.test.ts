@@ -50,6 +50,9 @@ function customerTexts(set: DemoDataSet): [string, Text][] {
         texts.push([`${productImage} option ${list.name}/${label.name}`, label.customerName]);
     }
   }
+  for (const { productImage, lists } of set.productExtraLists)
+    for (const list of lists)
+      texts.push([`${productImage} extras list ${list.name}`, list.customerName]);
   for (const reason of set.adjustmentReasons)
     texts.push([`adjustment reason ${reason.names.en}`, reason.names]);
   return texts;

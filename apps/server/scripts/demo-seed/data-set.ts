@@ -97,6 +97,18 @@ export interface SeedProductOptionLists<L extends string = string> {
   lists: SeedOptionList<L>[];
 }
 
+export interface SeedProductExtraLists<L extends string = string> {
+  productImage: string;
+  lists: {
+    name: string;
+    customerName: DemoText<L>;
+    kitchenName: string;
+    minPicks: number;
+    maxPicks: number;
+    items: { productImage: string; price: string; portion: string; maxQuantity: number }[];
+  }[];
+}
+
 /** What a demo seed writes from one data set; a pack names one by `id`. */
 export interface DemoDataSet<L extends string = string> {
   readonly id: string;
@@ -110,6 +122,7 @@ export interface DemoDataSet<L extends string = string> {
     readonly drinksCustomerName: DemoText<L>;
   };
   readonly productOptionLists: readonly SeedProductOptionLists<L>[];
+  readonly productExtraLists: readonly SeedProductExtraLists<L>[];
   readonly floor: {
     readonly zones: readonly SeedZone[];
     readonly tables: readonly SeedTable[];

@@ -66,6 +66,33 @@ function tillConfigFor(venue: Venue): OriginConfig {
 }
 
 describe("demo seed end-to-end", () => {
+  it("keeps the chicken's existing options when attaching its optional extras", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
+      dataSet: {
+        ...CASA_DELGADO_ES,
+        productOptionLists: [
+          {
+            productImage: "pollo-asado.png",
+            lists: CASA_DELGADO_ES.productOptionLists[0]!.lists,
+          },
+        ],
+      },
+    });
+    const { products } = await withTransaction(suite.db, (tx) =>
+      listAvailableProducts(tx, venue.locationId),
+    );
+    const chicken = products.find((product) => product.name === "Pollo asado")!;
+    expect(chicken.offeredModifiers.map((list) => [list.kind, list.name])).toEqual([
+      ["options", "Punto"],
+      ["extras", "Guarniciones"],
+    ]);
+  });
+
   it("seeds a venue whose reports, menus, media, and mixed order all compose", async () => {
     const venue = await provisionVenue();
     const start = Date.now();
@@ -117,6 +144,22 @@ describe("demo seed end-to-end", () => {
     expect(read.menus[0]!.isDefault).toBe(true);
     const menuDelDia = read.menus.find((m) => m.name === "Menú del Día")!;
     expect(menuDelDia.isDefault).toBe(false);
+
+    const chicken = read.products.find((product) => product.name === "Pollo asado")!;
+    expect(chicken.offeredModifiers).toHaveLength(1);
+    expect(chicken.offeredModifiers[0]).toMatchObject({
+      kind: "extras",
+      name: "Guarniciones",
+      customerName: { en: "Choose your sides", es: "Elige tus acompañamientos" },
+      kitchenName: "GUARNICIÓN POLLO",
+      minPicks: 0,
+      maxPicks: 3,
+      items: [
+        { name: "Padrón peppers", price: "2.00", maxQuantity: 1, preselected: false },
+        { name: "Mixed salad", price: "1.50", maxQuantity: 1, preselected: false },
+        { name: "House bread", price: "0.50", maxQuantity: 1, preselected: false },
+      ],
+    });
 
     const casaProducts = read.products.filter((p) => p.catalogueName === "Casa Delgado");
     const diaProducts = read.products.filter((p) => p.catalogueName === "Menú del Día");
