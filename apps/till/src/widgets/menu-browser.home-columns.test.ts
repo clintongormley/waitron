@@ -92,6 +92,8 @@ it.each(cases)(
         id: "menu",
         name: "Carta",
         isDefault: true,
+        orderable: true,
+        audience: "customer",
         versionId: "v1",
         structure: {
           members: [
