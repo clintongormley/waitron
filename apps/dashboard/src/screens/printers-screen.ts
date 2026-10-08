@@ -2927,6 +2927,8 @@ export class PrintersScreen extends LitElement {
         .rows=${this.printers}
         .columns=${columns}
         .rowKey=${(p: Printer) => p.id}
+        .loading=${this.loading}
+        .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_printers")}
         >${this.printers.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
       >
