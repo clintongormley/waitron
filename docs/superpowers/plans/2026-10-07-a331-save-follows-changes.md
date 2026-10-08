@@ -808,15 +808,15 @@ a regression: stop and report it.
 **Forms that open already savable** (each passes `{ savableAtOpen: true }` — or the condition
 given — to `saveActionState`, and gets a save-state case asserting it opens enabled and `primary`).
 None of these forms needs the early return, because their action is never `unchanged`. Their
-registrations stay as they are — except the calibration wizard, which is savable at open only after
-a re-add: 3b.1b converts its registration, and its early return reads the same flag:
+registrations stay as they are — except the calibration wizard, which is savable at open only when
+an add opened it: 3b.1b converts its registration, and its early return reads the same flag:
 
 - **Printers, "name this printer" dialog** (`confirm-add-printer`, ~3511–3518, labelled Add or
   Enable). `#namePrinter` (~569–593) fills the name from what discovery reported, or from a
   switched-off printer's stored name (`discoveredNames[key] ?? #disabledPrinter(device)?.name ??
   #discoveredLabel(device)`, ~575–579), and pressing Add with that name registers the printer. It
   passes `savableAtOpen: true` every time it opens, not only after an add: opening it IS the add.
-- **Printers, the calibration wizard after re-adding a switched-off printer.** `#registerDiscovered`
+- **Printers, the calibration wizard when an add opened it (a fresh add or a re-add).** `#registerDiscovered`
   opens the wizard (`#openPrinter`, ~1376) and then sets `#readdingId` (~1399). Closing the wizard
   without saving switches the printer off again (`#finishCalibration`, ~668–677), so pressing Save
   with the settings as they are is what keeps it on — the test "leaves the printer switched on
@@ -824,11 +824,15 @@ a re-add: 3b.1b converts its registration, and its early return reads the same f
   stay as it is. `#savePrinter` clears `#readdingId` as it starts (~1707), so do not read
   `#readdingId` live in the render: set a flag of the wizard's own beside `#readdingId = disabled.id`
   (~1399) and clear it in `#disposeCalibrationDraft` (~661), or Save turns quiet while its
-  request is in flight. **After a FRESH add the wizard is not savable at open** (I believe): the
-  stored settings are what the wizard shows, an unchanged Save sends no request (`#savePrinter`
-  builds an empty patch, ~1700–1711) and only closes it, and Cancel closes it leaving the new
-  printer as created. Flagged for the plan reviewer: if the owner wants the wizard's last step to
-  read as a "finish" after a fresh add, that is a separate decision.
+  request is in flight. **Ruling (runner, 2026-10-08, after the plan review): after a FRESH add the
+  wizard is savable at open too.** The wizard exists to confirm the defaults the server filled in
+  (80mm, 180dpi, no drawer, not portable, ~1376–1398) — a pre-filled value the operator must
+  confirm. Today an untouched Save there closes the wizard with no request (`#savePrinter` builds
+  an empty patch, ~1700–1711); gating it would leave Cancel as the only way to finish, while Cancel
+  after a re-add means "switch it off again". So set ONE "opened by an add" flag in both branches
+  of `#registerDiscovered` (fresh and re-add), beside `#openPrinter`, and read it for
+  `savableAtOpen`. This changes no current behaviour. Editing an existing printer's calibration
+  (`edit-printer-*`) opens quiet. The PR names this ruling for the owner.
 - **Devices, the pairing dialog's settings step** (`pair-submit`, ~1890–1897). `#toSettings`
   (~798–817) fills the name with the device's own asked-for name (`waitingName(request)`) and, for a
   returning device, its old profile and station; pressing Pair approves the device as it asked. The
@@ -852,7 +856,7 @@ editor it opens already reports a change, because its scope's baseline is `null`
 while the draft is a canvas, so its Save opens enabled with no flag. "Payments adopt pre-filled" —
 true. Not in the notes: devices' pairing dialog also opens savable.
 
-**Two calls flagged for the plan reviewer**, both gated below on the 3a.2b ruling that a
+**Two calls the plan reviewer agreed with**, both gated below on the 3a.2b ruling that a
 submission of staged input is gated: the printers' Bluetooth Pair dialog (`confirm-pair`) sends a
 PIN to the agent rather than saving an edit, and the payments bill attestation (`confirm-bill-attest`)
 records an outcome with a note and a manager PIN. Both open with every required field empty
@@ -917,10 +921,10 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   `print-test-page-*`, `deactivate-printer-*`, `forget-pairing-*`, `edit-printer-*` (opens the
   wizard), `calibrate-printer-details`.
 - Save-state cases: an existing printer's wizard reaches step 3 with Save quiet and disabled;
-  changing paper width on step 1 makes it primary on step 3; changing it back makes it quiet; a
-  re-added printer's wizard opens with Save enabled and primary, and pressing it untouched keeps
+  changing paper width on step 1 makes it primary on step 3; changing it back makes it quiet; a re-added printer's wizard opens with Save enabled and primary, and pressing it untouched keeps
   the printer on (no `deactivatePrinter`) and stays primary while the request is in flight; a
-  freshly added printer's wizard opens quiet.
+  freshly added printer's wizard also opens with Save enabled and primary, and pressing it
+  untouched closes the wizard with no update request (today's behaviour).
 - Predicted changed checks (`printers-screen.test.ts`): "keeps the printer's saved paper width and
   resolution when calibration is run again" (~509–531) and "does not write unchanged calibration
   settings" (~818–825) — both press an untouched Save and expect no write: assert Save disabled
@@ -942,7 +946,7 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   untouched.
 - **Bluetooth Pair dialog** (`confirm-pair`, ~3573–3580, fixed `variant="primary"`,
   `?disabled=${pinInvalid}`) on `#pairScope` (`?.register`, ~1597–1607, `parent:
-  this.#addressScope?.id`): make it `draftScopeFor` and gate it (see "Two calls flagged").
+  this.#addressScope?.id`): make it `draftScopeFor` and gate it (see "Two calls the plan reviewer agreed with").
   Early return in `#pair` (~1610) before `pairAttempted = true`. Leave paths:
   `.beforeClose=${this.#pairScope ? …}` (~3534), `#beforePairClose`'s `!this.#pairScope ||
   this.#pairLeave!` (~756–757), `#closeModal`'s `if (id === "pair-printer-modal" && this.#pairScope)`
@@ -992,6 +996,9 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   and every OTHER field is sent as it was.
 - Suites: `src/screens/devices-screen src/screens/device-edit.unsaved
   src/screens/device-pair.unsaved`.
+- This task is the size of 3a.3 (receipts): commit at a green point and hand over if it nears ~80
+  tool calls (done, left, files, each check's state). While working, filter runs by test name
+  (`-t`); run the whole suites for the throw-probe and the final pass.
 
 ### Task 3b.3 — device profiles (`device-profiles-screen.ts`)
 
@@ -1018,6 +1025,9 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   ~2214, ~2231. The "…unchanged"/"…leaves alone" ones take the 3a.4a shape described in 3b.2.
 - Suites: `src/screens/device-profiles-screen` (the `.test`, `.a11y.test` and `.unsaved.test`
   files).
+- This task is the size of 3a.3 (receipts): commit at a green point and hand over if it nears ~80
+  tool calls (done, left, files, each check's state). While working, filter runs by test name
+  (`-t`); run the whole suites for the throw-probe and the final pass.
 
 ### Task 3b.4 — payments (`payments-screen.ts`)
 
@@ -1094,12 +1104,12 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
 - LOOK (dev stack from the worktree, `wa-wt demo waitron-feat-save-follows-changes-hardware`;
   check port 8080 and the venue folder's holders first): each form above unchanged and after one
   edit, desktop, light, English — including the forms that open savable (name a printer, a
-  re-added printer's wizard, device pairing, Add a reader with several readers, duplicate a
+  freshly added and a re-added printer's wizard, device pairing, Add a reader with several readers, duplicate a
   canvas). Then 390px, dark, Spanish on the printers screen (the printer page's name editor and
   the calibration wizard) and one dialog (Edit device).
 - `docs/developers/design-system.md` → Forms: add a "batch 3b" line to the list of forms that
   follow the rule, and name the 3b forms that open already savable beside the backup paragraph
-  (the name-a-printer dialog, the calibration wizard after a re-add, device pairing, Add a reader,
+  (the name-a-printer dialog, the calibration wizard when an add opened it, device pairing, Add a reader,
   duplicate a canvas).
 - Root `CLAUDE.md` §3: the clause becomes "batches 1, 3a and 3b follow it (list:
   design-system.md)". It is format-checked: run `pnpm format:check`.
