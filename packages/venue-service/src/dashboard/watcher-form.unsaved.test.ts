@@ -940,3 +940,81 @@ it("Watcher inline printer replacement protects its draft and departed controls"
   expect(writes).toEqual([]);
   expect(unload()).toBe(false);
 });
+
+async function putBack(form: WatcherForm) {
+  const parent = form.parentNode!;
+  form.remove();
+  await form.updateComplete;
+  parent.appendChild(form);
+  await form.updateComplete;
+}
+async function saveButton(form: WatcherForm) {
+  await form.updateComplete;
+  const button = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=save-watcher]",
+  )!;
+  await button.updateComplete;
+  return { variant: button.variant, disabled: button.disabled };
+}
+it("Watcher keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { screen } = await mount();
+  const { form } = await open(screen);
+  await change(form, "name", { value: "Runner" });
+  await putBack(form);
+  expect(value(form)).toBe("Runner");
+  expect(unload()).toBe(true);
+  expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
+  cancel(form);
+  expect((await question()).open).toBe(true);
+  expect(form.isConnected).toBe(true);
+});
+it("Watcher put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const write = deferred();
+  const { screen } = await mount(write.promise);
+  const { form } = await open(screen);
+  await valid(form);
+  save(form);
+  await screen.updateComplete;
+  await change(form, "name", { value: "Later runner" });
+  write.resolve();
+  await expect.poll(() => form.busy).toBe(false);
+  expect(form.isConnected).toBe(true);
+  await putBack(form);
+  await change(form, "name", { value: "Runner" });
+  expect(unload()).toBe(false);
+});
+it("Watcher switched to another watcher after a put-back opens quiet with that watcher", async () => {
+  const { screen } = await mount();
+  const { form } = await open(screen);
+  await change(form, "name", { value: "Runner" });
+  await putBack(form);
+  form.watcher = view.watchers[0]!;
+  await form.updateComplete;
+  expect(value(form)).toBe("Pass");
+  expect(unload()).toBe(false);
+  expect((await saveButton(form)).disabled).toBe(true);
+});
+it("Watcher leave answered before it was taken out and put back does not let the form close", async () => {
+  const { screen } = await mount();
+  const { form } = await open(screen);
+  const parent = form.parentNode!;
+  const leaving = form.requestLeave("cancel");
+  form.remove();
+  parent.appendChild(form);
+  expect(await leaving).toBe(false);
+  expect(form.isConnected).toBe(true);
+});
+it("Watcher write that started before the form was taken out and put back neither saves nor closes it", async () => {
+  const write = deferred();
+  const { screen } = await mount(write.promise);
+  const { form } = await open(screen);
+  await valid(form);
+  save(form);
+  await screen.updateComplete;
+  await putBack(form);
+  write.resolve();
+  await expect.poll(() => form.busy).toBe(false);
+  expect(form.isConnected).toBe(true);
+  expect(value(form)).toBe("  Runner  ");
+  expect(unload()).toBe(true);
+});
