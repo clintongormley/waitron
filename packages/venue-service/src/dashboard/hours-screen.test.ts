@@ -65,6 +65,9 @@ const FIESTA = {
   date: "2026-10-12",
   name: "Fiesta Nacional",
   colour: "red" as const,
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: false,
 };
 const STAFF = {
@@ -72,6 +75,9 @@ const STAFF = {
   date: "2026-10-13",
   name: "Staff day off",
   colour: "grey" as const,
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: true,
 };
 
@@ -1515,6 +1521,9 @@ describe("Hours: special dates", () => {
       date: "2028-12-25",
       name: "Christmas 2028",
       colour: "green" as const,
+      kind: "working_day" as const,
+      repeats: false,
+      ownHours: false,
       closeWholeVenue: false,
     };
     state.model.specialDates.push(far);
@@ -1995,6 +2004,9 @@ describe("Hours: the calendar", () => {
       date: "2026-10-21",
       name: "Market day",
       colour: "blue" as const,
+      kind: "working_day" as const,
+      repeats: false,
+      ownHours: false,
       closeWholeVenue: false,
     };
     state.writes.push(market);
@@ -2042,6 +2054,9 @@ describe("Hours: the calendar", () => {
       date: "2026-10-01",
       name: "Past party",
       colour: "amber" as const,
+      kind: "working_day" as const,
+      repeats: false,
+      ownHours: false,
       closeWholeVenue: false,
     };
     const deliClosed = {
@@ -2083,6 +2098,9 @@ describe("Hours: the calendar", () => {
       date: "2026-10-01",
       name: "Past party",
       colour: "amber" as const,
+      kind: "working_day" as const,
+      repeats: false,
+      ownHours: false,
       closeWholeVenue: false,
     };
     // The page's first read starts at yesterday; the calendar's month read holds the past date.
@@ -2161,6 +2179,9 @@ describe("Hours: the calendar", () => {
         date: "2026-10-21",
         name: "Market day",
         colour: "blue" as const,
+        kind: "working_day" as const,
+        repeats: false,
+        ownHours: false,
         closeWholeVenue: false,
       };
       state.writes.push(market);

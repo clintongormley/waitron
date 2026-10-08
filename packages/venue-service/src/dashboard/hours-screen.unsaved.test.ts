@@ -609,7 +609,16 @@ it("Configure hours background refresh leaves the edited seven-day draft protect
 const specialModel: HoursModel = {
   ...model,
   specialDates: [
-    { id: "fiesta", date: "2026-10-12", name: "Fiesta", colour: "red", closeWholeVenue: false },
+    {
+      id: "fiesta",
+      date: "2026-10-12",
+      name: "Fiesta",
+      colour: "red",
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
+      closeWholeVenue: false,
+    },
   ],
   specialCells: [
     {

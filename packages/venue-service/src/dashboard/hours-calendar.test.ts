@@ -42,6 +42,9 @@ const FIESTA: SpecialDate = {
   date: "2026-10-12",
   name: "Fiesta Nacional",
   colour: "red",
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: false,
 };
 const STAFF: SpecialDate = {
@@ -49,6 +52,9 @@ const STAFF: SpecialDate = {
   date: "2026-10-13",
   name: "Staff day off",
   colour: "grey",
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: true,
 };
 const AUTUMN: SpecialDate = {
@@ -56,6 +62,9 @@ const AUTUMN: SpecialDate = {
   date: "2026-11-20",
   name: "Late autumn",
   colour: "green",
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: false,
 };
 const SPECIALS = [FIESTA, STAFF, AUTUMN];

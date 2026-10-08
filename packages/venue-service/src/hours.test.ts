@@ -560,10 +560,13 @@ describe("special dates", () => {
       }),
     );
     expect(saved).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: expect.any(String),
       date: "2026-10-09",
       name: "Harvest festival",
-      colour: "amber",
+      colour: "blue",
       closeWholeVenue: false,
     });
 
@@ -607,10 +610,13 @@ describe("special dates", () => {
       }),
     );
     expect(edited).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: first.id,
       date: "2026-10-12",
       name: "Founders' day",
-      colour: "purple",
+      colour: "blue",
       closeWholeVenue: true,
     });
     expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, first.id))).toEqual({
@@ -689,7 +695,11 @@ describe("special dates", () => {
     ["an impossible date", () => specialInput({ date: "2026-02-30" }), "date"],
     ["a date in another shape", () => specialInput({ date: "2026-2-3" }), "date"],
     ["a blank name", () => specialInput({ name: "  " }), "name"],
-    ["a colour outside the palette", () => specialInput({ colour: "pink" as never }), "colour"],
+    [
+      "a kind outside the named-day kinds",
+      () => ({ ...specialInput(), kind: "other" as never }),
+      "kind",
+    ],
     [
       "a closure flag that is not true or false",
       () => specialInput({ closeWholeVenue: "yes" as never }),
@@ -1024,10 +1034,13 @@ describe("hours either side of a special date", () => {
     const input = { ...lateFriday(f), closeWholeVenue: true };
     const saved = await saveDate(f, null, input);
     expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saved.id))).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: saved.id,
       date: "2026-10-09",
       name: "Harvest festival",
-      colour: "amber",
+      colour: "blue",
       closeWholeVenue: true,
       cells: input.cells,
     });
@@ -1566,7 +1579,7 @@ describe("the calendar's Closed colour", () => {
             AT,
           ),
         );
-      expect(await tone(f, date)).toBe(open ? colour : "closed");
+      expect(await tone(f, date)).toBe(open ? "blue" : "closed");
     }
     const { terraceDepartment: terrace } = await addSubjects(f);
     expect(await tone(f, "2026-10-21")).toBe("closed");
@@ -1588,7 +1601,7 @@ describe("the calendar's Closed colour", () => {
         AT,
       );
     });
-    expect(await tone(f, "2026-10-21")).toBe("green");
+    expect(await tone(f, "2026-10-21")).toBe("blue");
     await setDepartmentActive(terrace, false);
     expect(await tone(f, "2026-10-21")).toBe("closed");
     await saveDate(
@@ -1685,10 +1698,13 @@ describe("holiday facts beside the calendar", () => {
     );
     let days = await calendar(f, reader);
     expect(days[1]!.specialDate).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: added.id,
       date: "2026-10-14",
       name: "Our own party",
-      colour: "purple",
+      colour: "blue",
       closeWholeVenue: false,
     });
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
@@ -1719,27 +1735,36 @@ describe("holiday facts beside the calendar", () => {
       {
         date: "2026-10-16",
         specialDate: {
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           id: added.id,
           date: "2026-10-16",
           name: "Harvest festival",
-          colour: "amber",
+          colour: "blue",
           closeWholeVenue: false,
         },
         holidays: [FACTS[2]],
-        tone: "amber",
+        tone: "blue",
       },
     ]);
   });
 
-  it("refuses the standard and Closed colours, which no special date may take", async () => {
+  it("ignores the old reserved colour values and stores the kind's colour", async () => {
     const f = await fixture();
-    for (const colour of ["standard", "closed"])
-      await expect(
-        saveDate(f, null, specialInput({ colour: colour as never })),
-      ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "colour" } });
+    for (const [index, colour] of ["standard", "closed"].entries()) {
+      const date = index === 0 ? "2026-10-09" : "2026-10-10";
+      const saved = await saveDate(f, null, specialInput({ date, colour: colour as never }));
+      expect(saved).toMatchObject({ date, colour: "blue", kind: "working_day" });
+      const [row] = await db.select().from(specialDates).where(eq(specialDates.id, saved.id));
+      expect(row).toMatchObject({ date, colour: "blue", kind: "working_day" });
+    }
     expect(
-      await withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-09", "2026-10-09")),
-    ).toMatchObject([{ specialDate: null }]);
+      await withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-09", "2026-10-10")),
+    ).toMatchObject([
+      { date: "2026-10-09", tone: "blue" },
+      { date: "2026-10-10", tone: "blue" },
+    ]);
   });
 
   it("gives the page model the same facts", async () => {
@@ -2659,7 +2684,7 @@ describe("Hours with the holiday store", () => {
     expect((await calendar())[1]).toEqual({
       ...before[1],
       specialDate: { ...added },
-      tone: "amber",
+      tone: "blue",
     });
     await saveDate(f, added.id, specialInput({ date: "2026-12-25", name: "Renamed" }));
     expect((await calendar())[1]!.holidays).toEqual(before[1]!.holidays);
@@ -2736,17 +2761,23 @@ describe("Hours with the holiday store", () => {
     });
     expect(copies).toEqual([
       {
+        kind: "working_day",
+        repeats: false,
+        ownHours: false,
         id: expect.any(String),
         date: "2026-12-25",
         name: "National label · Regional label · Town label",
-        colour: "purple",
+        colour: "blue",
         closeWholeVenue: true,
       },
       {
+        kind: "working_day",
+        repeats: false,
+        ownHours: false,
         id: expect.any(String),
         date: "2026-12-29",
         name: "Summer opening",
-        colour: "purple",
+        colour: "blue",
         closeWholeVenue: true,
       },
     ]);

@@ -317,23 +317,29 @@ describe("reading Hours", () => {
         {
           date: "2030-10-15",
           specialDate: {
+            kind: "working_day",
+            repeats: false,
+            ownHours: false,
             id: party.id,
             date: "2030-10-15",
             name: "Staff party",
-            colour: "purple",
+            colour: "blue",
             closeWholeVenue: false,
           },
           holidays: [],
-          tone: "purple",
+          tone: "blue",
         },
         { date: "2030-10-16", specialDate: null, holidays: [], tone: "standard" },
       ],
       specialDates: [
         {
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           id: party.id,
           date: "2030-10-15",
           name: "Staff party",
-          colour: "purple",
+          colour: "blue",
           closeWholeVenue: false,
         },
       ],
@@ -557,10 +563,13 @@ describe("writing Hours", () => {
     expect(created.status).toBe(201);
     const date = (await created.json()) as SpecialDate;
     expect(date).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: expect.any(String),
       date: "2030-10-15",
       name: "Staff party",
-      colour: "purple",
+      colour: "blue",
       closeWholeVenue: false,
     });
 

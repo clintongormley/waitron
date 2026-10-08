@@ -185,6 +185,9 @@ describe("station-only Hours page model", () => {
     ]);
     expect(model.specialDates).toEqual([
       {
+        kind: "working_day",
+        repeats: false,
+        ownHours: false,
         id: f.special,
         date: "2026-10-09",
         name: "Festival",
@@ -217,6 +220,9 @@ describe("station-only Hours page model", () => {
       {
         date: "2026-10-09",
         specialDate: {
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           id: f.special,
           date: "2026-10-09",
           name: "Festival",
@@ -264,6 +270,9 @@ describe("station-only Hours writers", () => {
           f.cfg,
           f.special,
           {
+            kind: "working_day",
+            repeats: false,
+            ownHours: false,
             date: "2026-10-09",
             name: "Changed",
             colour: "red",
@@ -384,10 +393,13 @@ it("ignores retained department clashes when editing a station-hours named date"
     ),
   );
   expect(saved).toEqual({
+    kind: "working_day",
+    repeats: false,
+    ownHours: false,
     id: f.special,
     date: "2026-10-09",
     name: "Renamed",
-    colour: "purple",
+    colour: "blue",
     closeWholeVenue: false,
   });
   const read = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special));

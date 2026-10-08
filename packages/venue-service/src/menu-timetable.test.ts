@@ -1300,10 +1300,13 @@ describe("a period no longer placed anywhere but a past special date", () => {
     );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.specialDates).toContainEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: true,
       id: lastChristmas.id,
       date: "2025-12-25",
       name: "Navidad",
-      colour: "red",
+      colour: "blue",
       closeWholeVenue: false,
     });
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
@@ -1941,12 +1944,24 @@ describe("the editor's model", () => {
       periods: [{ id: periods.mediodiaDeli }],
     });
     expect(model.specialDates).toEqual([
-      { id: yesterday.id, date: "2026-10-06", name: "Ayer", colour: "red", closeWholeVenue: false },
       {
+        kind: "working_day",
+        repeats: false,
+        ownHours: true,
+        id: yesterday.id,
+        date: "2026-10-06",
+        name: "Ayer",
+        colour: "blue",
+        closeWholeVenue: false,
+      },
+      {
+        kind: "working_day",
+        repeats: false,
+        ownHours: true,
         id: christmas.id,
         date: CHRISTMAS,
         name: "Navidad",
-        colour: "red",
+        colour: "blue",
         closeWholeVenue: false,
       },
     ]);
@@ -2148,7 +2163,16 @@ describe("the editor's model of two venues", () => {
     );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.specialDates).toEqual([
-      { id: ours.id, date: CHRISTMAS, name: "Navidad", colour: "red", closeWholeVenue: false },
+      {
+        kind: "working_day",
+        repeats: false,
+        ownHours: true,
+        id: ours.id,
+        date: CHRISTMAS,
+        name: "Navidad",
+        colour: "blue",
+        closeWholeVenue: false,
+      },
     ]);
   });
 });
@@ -2642,7 +2666,16 @@ describe("department service periods", () => {
       dates: [],
     });
     expect(model.specialDates).toEqual([
-      { id: date.id, date: FRIDAY, name: "Navidad", colour: "red", closeWholeVenue: false },
+      {
+        kind: "working_day",
+        repeats: false,
+        ownHours: true,
+        id: date.id,
+        date: FRIDAY,
+        name: "Navidad",
+        colour: "red",
+        closeWholeVenue: false,
+      },
     ]);
   });
 

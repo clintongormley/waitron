@@ -183,7 +183,7 @@ describe("station-hours calendar follows department service periods", () => {
       );
     });
     expect(await tones(f.cfg, "2026-10-19")).toEqual({ calendar: ["closed"], model: ["closed"] });
-    expect(await tones(f.cfg, "2026-10-26")).toEqual({ calendar: ["purple"], model: ["purple"] });
+    expect(await tones(f.cfg, "2026-10-26")).toEqual({ calendar: ["blue"], model: ["blue"] });
   });
 
   it("uses special-day ranges to open a closed weekday, and whole-venue closure wins", async () => {

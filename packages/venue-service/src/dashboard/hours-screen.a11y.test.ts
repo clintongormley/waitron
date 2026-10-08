@@ -22,6 +22,9 @@ const special = {
   date: "2026-10-12",
   name: "Fiesta Nacional",
   colour: "red" as const,
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: false,
 };
 

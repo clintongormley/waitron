@@ -28,9 +28,21 @@ const SPECIALS: SpecialDate[] = [
     date: addDays("2026-10-12", index),
     name: `${colour} day`,
     colour,
+    kind: "working_day" as const,
+    repeats: false,
+    ownHours: false,
     closeWholeVenue: false,
   })),
-  { id: "shut", date: "2026-10-19", name: "Staff day off", colour: "red", closeWholeVenue: true },
+  {
+    id: "shut",
+    date: "2026-10-19",
+    name: "Staff day off",
+    colour: "red",
+    kind: "working_day",
+    repeats: false,
+    ownHours: false,
+    closeWholeVenue: true,
+  },
 ];
 
 function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
