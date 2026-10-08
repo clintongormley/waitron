@@ -42,20 +42,15 @@ import {
   writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import {
-  setDepartmentAllDayMenu,
-  setDepartmentMenus,
-  setZoneAllDayMenu,
-} from "./department-menus.js";
-import {
   clearSpecialDateMenus,
   deleteMenuPeriod,
-  readMenuTimetableModel,
+  readOpeningHoursModel,
   replaceMenuWeek,
   saveMenuPeriod,
   saveSpecialDateMenus,
-  setZonePeriodMenu,
   updateMenuPeriod,
 } from "./menu-timetable.js";
+import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -114,6 +109,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_period.in_use": 409,
   "menu_period.name_taken": 409,
   "menu_timetable.invalid": 400,
+  "menu_period.invalid": 400,
   "zone.name_taken": 409,
   "catalogue.not_found": 404,
   "route.subject_not_found": 404,
@@ -196,9 +192,16 @@ function requireReleaseReminderMinutes(value: unknown): number | null {
   return value;
 }
 
-function requireMenuIds(value: unknown): string[] {
-  if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field: "menuIds" });
-  return value.map((menuId) => requireBodyUuid(menuId, "menuIds"));
+function requirePeriodColour(value: unknown): CalendarColour {
+  if (typeof value !== "string" || !CALENDAR_COLOURS.includes(value as CalendarColour))
+    throw new AppError("management.request_invalid", { field: "colour" });
+  return value as CalendarColour;
+}
+
+function requireStaffMenuIds(value: unknown): string[] {
+  if (!Array.isArray(value))
+    throw new AppError("management.request_invalid", { field: "staffMenuIds" });
+  return value.map((menuId) => requireBodyUuid(menuId, "staffMenuIds"));
 }
 
 function requireName(value: unknown, field: string): string {
@@ -932,47 +935,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.put("/management-api/venue-service/departments/:departmentId/menus", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["menuIds"]);
-        const menuIds = requireMenuIds(body.menuIds);
-        await gated(sessionId, (tx) => setDepartmentMenus(tx, ctx.cfg, departmentId, menuIds));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/departments/:departmentId/all-day-menu", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["menuId"]);
-        const menuId = requireNullableBodyUuid(body.menuId, "menuId");
-        await gated(sessionId, (tx) => setDepartmentAllDayMenu(tx, ctx.cfg, departmentId, menuId));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/zones/:zoneId/all-day-menu", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["menuId"]);
-        const menuId = requireNullableBodyUuid(body.menuId, "menuId");
-        await gated(sessionId, (tx) => setZoneAllDayMenu(tx, ctx.cfg, zoneId, menuId));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.get("/management-api/venue-service/menu-timetable", (c) =>
+    app.get("/management-api/venue-service/opening-hours", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const at = new Date();
-        return c.json(await viewed(sessionId, (tx) => readMenuTimetableModel(tx, ctx.cfg, at)));
+        return c.json(await viewed(sessionId, (tx) => readOpeningHoursModel(tx, ctx.cfg, at)));
       }),
     );
 
@@ -981,11 +948,17 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["name", "menuId"]);
+        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds"]);
         const name = requireString(body.name, "name");
         const menuId = requireBodyUuid(body.menuId, "menuId");
+        const input = {
+          name,
+          menuId,
+          ...(body.colour === undefined ? {} : { colour: requirePeriodColour(body.colour) }),
+          staffMenuIds: requireStaffMenuIds(body.staffMenuIds),
+        };
         const period = await gated(sessionId, (tx) =>
-          saveMenuPeriod(tx, ctx.cfg, departmentId, { name, menuId, staffMenuIds: [] }),
+          saveMenuPeriod(tx, ctx.cfg, departmentId, input),
         );
         return c.json(period, 201);
       }),
@@ -996,12 +969,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["name", "menuId"]);
-        if (body.name === undefined && body.menuId === undefined)
+        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds"]);
+        if (Object.keys(body).length === 0)
           throw new AppError("management.request_invalid", { field: "body" });
         const period = {
           ...(body.name === undefined ? {} : { name: requireString(body.name, "name") }),
           ...(body.menuId === undefined ? {} : { menuId: requireBodyUuid(body.menuId, "menuId") }),
+          ...(body.colour === undefined ? {} : { colour: requirePeriodColour(body.colour) }),
+          ...(body.staffMenuIds === undefined
+            ? {}
+            : { staffMenuIds: requireStaffMenuIds(body.staffMenuIds) }),
         };
         await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period));
         return c.body(null, 204);
@@ -1055,19 +1032,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         await gated(sessionId, (tx) => clearSpecialDateMenus(tx, ctx.cfg, id, departmentId, at));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/zones/:zoneId/period-menus/:periodId", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-        const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["menuId"]);
-        const menuId = requireNullableBodyUuid(body.menuId, "menuId");
-        await gated(sessionId, (tx) => setZonePeriodMenu(tx, ctx.cfg, zoneId, periodId, menuId));
         return c.body(null, 204);
       }),
     );
