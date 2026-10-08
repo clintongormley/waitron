@@ -1610,8 +1610,8 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   these under it: Disable on a printer that is already disabled; Disable on a service status whose
   Active switch is off, saved or not; Publish on a menu's Preview while the menu has clashes, which
   keeps its own variant while its own publish is being sent; and a modifier's Remove in the product
-  editor while the variant window, the image picker or a list editor opened from the product editor
-  is open, which keeps its own variant while the Products screen is sending a request for the
+  editor while the variant window, the image picker or any window the Products screen opens for the
+  editor is open, which keeps its own variant while the Products screen is sending a request for the
   product (its `busy`). Not covered: a button disabled only while a
   request is being sent, an action blocked by its own field checks, the sign-in screens, and the
   canvas editor's Delete on a canvas's last tab (canvases are being retired, A182). Nothing guards it
