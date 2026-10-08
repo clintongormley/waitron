@@ -59,7 +59,7 @@ import {
 
 export const ROOT_KEY = "root";
 
-/** A category's swatch slot, at a product photo's width. */
+/** A swatch slot, at a product photo's width. */
 const folderFrame = (content: unknown) => html`<span part="folder-frame">${content}</span>`;
 /** How long a drag must rest on a closed category before it opens. */
 export const HOVER_OPEN_MS = 600;

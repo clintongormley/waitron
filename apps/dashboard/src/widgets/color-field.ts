@@ -133,9 +133,8 @@ export const colorFieldStyles = css`
 export interface ColorFieldOptions {
   /** A hex colour, or null for none. */
   color: string | null;
-  /** Given, the no-colour choice reads "Use category colour" and shows the category's colour in a
-   * chip read as its description, or, for null, says as its second line that there is none. Absent,
-   * it reads "No colour" and says nothing more. */
+  /** Given, the no-colour choice shows it in a chip read as its description, or, for null, says as
+   * its second line that there is none. Absent, it reads "No colour" and says nothing more. */
   categoryColor?: string | null;
   /** Where `categoryColor` comes from; "default" names the choice "Use default colour". */
   inheritedFrom?: "category" | "default";
