@@ -577,6 +577,70 @@ describe("routing cells in a staged import", () => {
     expect(cells.rows[0]!.count).toBe(0);
   });
 
+  it("refuses a cell whose zone's department is switched off, naming the choice, and writes nothing", async () => {
+    const { bundle, versions } = await exported();
+    const comedor = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
+    expect(comedor.active).toBe(1);
+    const terraza = bundle.tables.floor_zones!.find((row) => row.name === "Terraza")!;
+    const switchedOff: ConfigurationBundle = {
+      ...bundle,
+      tables: {
+        ...bundle.tables,
+        departments: bundle.tables.departments!.map((row) =>
+          row === comedor ? { ...row, active: 0 } : row,
+        ),
+      },
+    };
+    const refusal = {
+      code: "service_zone.not_found",
+      params: {
+        zoneId: terraza.id,
+        zoneName: "Terraza",
+        departmentId: comedor.id,
+        departmentName: "Comedor",
+        row: "product",
+        name: "Mojito",
+      },
+    };
+    const { stateDir, result } = await staged(switchedOff, versions);
+    await expect(result).rejects.toMatchObject(refusal);
+    expect(await readdir(stateDir)).toEqual([]);
+
+    const request = venue("B24681363");
+    await expect(
+      applyVenue(planVenue(request, ALL_MODULES), {
+        db: target.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, created) =>
+          importConfigurationTables(
+            tx,
+            switchedOff,
+            { locationId: created.locationId },
+            ALL_MODULES,
+            versions,
+          ),
+      }),
+    ).rejects.toMatchObject(refusal);
+    const tenants = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from tenants where tax_id = ${request.taxId}`,
+    );
+    expect(tenants.rows[0]!.count).toBe(0);
+    const cells = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from routing_cells`,
+    );
+    expect(cells.rows[0]!.count).toBe(0);
+
+    const withoutCell: ConfigurationBundle = {
+      ...switchedOff,
+      tables: {
+        ...switchedOff.tables,
+        routing_cells: switchedOff.tables.routing_cells!.filter((row) => row.zone_id === null),
+      },
+    };
+    const accepted = await staged(withoutCell, versions);
+    await expect(accepted.result).resolves.toMatchObject({ counts: { routing_cells: 1 } });
+  });
+
   it("refuses a bundle exported before the routing grid by its venue-service version, before any write", async () => {
     const { bundle, versions } = await exported();
     const journal = JSON.parse(

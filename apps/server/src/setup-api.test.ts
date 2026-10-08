@@ -1225,6 +1225,17 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ["recovery.passphrase_invalid", 422, {}],
     ["image.invalid_metadata", 400, {}],
     ["content.language_invalid", 400, {}],
+    [
+      "service_zone.not_found",
+      400,
+      {
+        zoneId: "z",
+        zoneName: "Terraza",
+        departmentId: "d",
+        departmentName: "Comedor",
+        row: "all",
+      },
+    ],
   ] as const)(
     "maps a staged configuration's %s, thrown at import, to %i",
     async (code, status, params) => {
@@ -1595,6 +1606,26 @@ describe("POST /setup-api/configuration", () => {
       });
     },
   );
+
+  it("answers 400 with the routing choice's params when staging refuses an export for service_zone.not_found", async () => {
+    const params = {
+      zoneId: "z",
+      zoneName: "Terraza",
+      departmentId: "d",
+      departmentName: "Comedor",
+      row: "all",
+    } as const;
+    const stageConfiguration = vi.fn(async () => {
+      throw new AppError("service_zone.not_found", params);
+    });
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+
+    const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: { code: "service_zone.not_found", params } });
+  });
 
   it.each([
     ["backup.artifact_invalid", 422, { reason: "bad_magic" }],

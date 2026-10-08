@@ -323,9 +323,35 @@ const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
   "product.name_taken": "shell.configuration.product_name_taken",
 };
 
+const DEPARTMENT_OFF_MESSAGES: Record<string, StringKey> = {
+  category: "shell.configuration.department_off_category",
+  product: "shell.configuration.department_off_product",
+  no_category: "shell.configuration.department_off_no_category",
+  all: "shell.configuration.department_off_all",
+};
+
+const isName = (value: unknown): value is string => typeof value === "string" && value !== "";
+
+/** The sentence for a routing cell on a zone whose department is switched off, when it says which. */
+function describeDepartmentOff(params: Record<string, unknown> | undefined): Message | undefined {
+  const { zoneName: zone, departmentName: department, row, name } = params ?? {};
+  if (!isName(zone) || !isName(department) || typeof row !== "string") return undefined;
+  const key = Object.hasOwn(DEPARTMENT_OFF_MESSAGES, row)
+    ? DEPARTMENT_OFF_MESSAGES[row]
+    : undefined;
+  if (key === undefined) return undefined;
+  if (row === "category" || row === "product")
+    return isName(name) ? sayWith(key, { zone, department, name }) : undefined;
+  return sayWith(key, { zone, department });
+}
+
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
+  if (code === "service_zone.not_found") {
+    const message = describeDepartmentOff(params);
+    if (message !== undefined) return message;
+  }
   if (
     code === "setup.request_invalid" &&
     typeof params?.field === "string" &&
@@ -337,7 +363,7 @@ function describeConfigurationRefusal(error: unknown): Message {
   }
   const key = typeof code === "string" ? CONFIGURATION_NAME_MESSAGES[code] : undefined;
   const name = params?.name;
-  return key !== undefined && typeof name === "string" && name !== ""
+  return key !== undefined && isName(name)
     ? sayWith(key, { name })
     : say("shell.configuration.could_not_open");
 }

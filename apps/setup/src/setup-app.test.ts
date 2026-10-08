@@ -2794,6 +2794,118 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     },
   );
 
+  const switchedOffTail =
+    "in the zone “Terraza”, but that zone's department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.";
+  const switchedOffTailEs =
+    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.";
+  it.each([
+    [
+      "en-GB",
+      "category",
+      `The export has a routing setting for the category “Bebidas” ${switchedOffTail}`,
+    ],
+    [
+      "en-GB",
+      "product",
+      `The export has a routing setting for the product “Bebidas” ${switchedOffTail}`,
+    ],
+    [
+      "en-GB",
+      "no_category",
+      `The export has a routing setting for the No category row ${switchedOffTail}`,
+    ],
+    [
+      "en-GB",
+      "all",
+      `The export has a routing setting for the All categories row ${switchedOffTail}`,
+    ],
+    [
+      "es-ES",
+      "category",
+      `La exportación tiene un ajuste de asignación para la categoría «Bebidas» ${switchedOffTailEs}`,
+    ],
+    [
+      "es-ES",
+      "product",
+      `La exportación tiene un ajuste de asignación para el producto «Bebidas» ${switchedOffTailEs}`,
+    ],
+    [
+      "es-ES",
+      "no_category",
+      `La exportación tiene un ajuste de asignación para la fila Sin categoría ${switchedOffTailEs}`,
+    ],
+    [
+      "es-ES",
+      "all",
+      `La exportación tiene un ajuste de asignación para la fila Todas las categorías ${switchedOffTailEs}`,
+    ],
+  ] as const)(
+    "names the routing choice whose zone's department is switched off (%s, %s)",
+    async (locale, row, sentence) => {
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            stageConfiguration: vi.fn().mockRejectedValue({
+              code: "service_zone.not_found",
+              params: {
+                zoneId: "z-1",
+                zoneName: "Terraza",
+                departmentId: "d-1",
+                departmentName: "Comedor",
+                row,
+                ...(row === "category" || row === "product" ? { name: "Bebidas" } : {}),
+              },
+              status: 400,
+            }),
+          }),
+        );
+        setLocale(locale);
+        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+        expect(readDraft(el).configurationImport).toBeUndefined();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each([
+    [{ zoneId: "z-1" }],
+    [{ zoneId: "z-1", zoneName: "Terraza", departmentName: "Comedor" }],
+    [{ zoneId: "z-1", zoneName: "Terraza", departmentName: "Comedor", row: "category" }],
+    [
+      {
+        zoneId: "z-1",
+        zoneName: "Terraza",
+        departmentName: "Comedor",
+        row: "other",
+        name: "Bebidas",
+      },
+    ],
+    [{ zoneId: "z-1", zoneName: "Terraza", row: "all" }],
+    [{ zoneId: "z-1", departmentName: "Comedor", row: "all" }],
+    [{ zoneId: "z-1", zoneName: "", departmentName: "Comedor", row: "all" }],
+    [{ zoneId: "z-1", zoneName: "Terraza", departmentName: "", row: "all" }],
+    [{ zoneId: "z-1", zoneName: "Terraza", departmentName: "Comedor", row: "product", name: "" }],
+  ])(
+    "falls back to the could-not-open sentence for a switched-off department refusal missing its details (%o)",
+    async (params) => {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "service_zone.not_found", params, status: 400 }),
+        }),
+      );
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+        "The configuration export could not be opened. Check the file and passphrase.",
+      );
+    },
+  );
+
   it("falls back to the could-not-open sentence for a duplicate refusal carrying no name", async () => {
     const el = await mountSetupApp(
       stubApi({

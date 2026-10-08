@@ -31,7 +31,18 @@ declare module "@waitron/shared" {
     "department.not_found": { departmentId: string };
     "department.last_active": { departmentId: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };
-    "service_zone.not_found": { zoneId: string };
+    /**
+     * An import's refusal adds the zone's switched-off department, the routing row it refused, and
+     * each name the export holds.
+     */
+    "service_zone.not_found": {
+      zoneId: string;
+      zoneName?: string;
+      departmentId?: string;
+      departmentName?: string;
+      row?: "category" | "product" | "no_category" | "all";
+      name?: string;
+    };
     /** A default names a menu the department's list does not hold. */
     "department_menu.not_found": { departmentId: string; menuId: string };
     /** Removing a menu from a department's list that `uses` still name, every one of them. */
