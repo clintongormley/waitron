@@ -1533,7 +1533,7 @@ A form that saves opens with its primary action (Save, Create, Add…) disabled 
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
 `primary`; undoing the change back to the opened values makes it quiet and disabled again (owner
 decision, 2026-10-07, A331). "Changed" is the draft scope's `isDirty()`, never a second comparison
-written per screen:
+written per screen (one stated exception, the till's profile dialog, is in the batch 4c entry below):
 
 - take the scope with `draftScopeFor(this, owner)` from `@waitron/ui`. It hands back the
   application's `coordinator` — `undefined` where no `LeaveController` is above the form, as in a
@@ -1545,7 +1545,8 @@ written per screen:
   `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
   return a form taken out of the page takes a new scope while detached, and once put back it does
   not ask before discarding. The till's party name, invoice recipient, extras picker and station
-  dialogs do this; with the return deleted, a reconnect case in each one's `*.unsaved.test.ts`
+  dialogs and the venue-service watcher form do this, each also asking for an update when it is put
+  back (Lit runs none on reconnect); with the return deleted, a reconnect case in each one's `*.unsaved.test.ts`
   fails. The dashboard forms that take their scope in `willUpdate` (person edit and new person,
   product editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether
   they show the fault is untested;
@@ -1580,6 +1581,14 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
+- batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
+  confirmations, and the holiday area saves on choice); the watcher form, New and Edit; and the
+  till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
+  the one form that writes its own comparison (`chosen !== activeProfileId`) instead of a draft
+  scope: a scope registered with the till's coordinator would be unsaved whenever another profile is
+  chosen, so the app's unsaved-changes check before a switch (`#onProfileSwitch` in
+  `apps/till/src/till-app.ts`) would ask about the switch itself every time. See
+  [the Batch 4c table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4c--the-venue-service-forms-nobody-else-is-changing-and-the-tills-profile-dialog-lane-c-a331-4c);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look).

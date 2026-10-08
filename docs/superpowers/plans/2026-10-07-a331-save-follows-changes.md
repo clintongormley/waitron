@@ -616,7 +616,8 @@ adopt `draftScopeFor` / `saveActionState` test-first where its owning batch has 
   `customer-menu*`, `add-to-menus`, `include-folder-form` and `section-*` under that widgets folder.
 - Venue-service batch 4b / `feat/service-periods-slice-1`: all `packages/venue-service/`, including
   hours/date/holiday/menu-slot editors, watcher, service settings, venue operations, timetable
-  and preparation-station forms.
+  and preparation-station forms. (2026-10-08: the local holiday editor and the watcher form were
+  done in Batch 4c below.)
 - Parked invoice part 1, [#1399](https://github.com/clintongormley/waitron/pull/1399):
   `apps/server/src/configuration-transfer*`, `apps/server/src/setup-api.ts`,
   `packages/db/src/configuration-transfer.ts`, `apps/till/src/i18n/codes*`, and print-agent
@@ -1116,3 +1117,130 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
 - `docs/backlog.md` A331: batch 3b's status in the headline, and
   a 3b bullet listing the forms, the ones that open savable, and what the look found.
 - Light review path (no risk trigger).
+
+## Batch 4c — the venue-service forms nobody else is changing, and the till's profile dialog (Lane C, A331-4c)
+
+Branch `feat/save-follows-changes-venue-service`, worktree
+`/Users/clintongormley/workspace/worktrees/waitron-feat-save-follows-changes-venue-service`. Line
+numbers (~NNN) were read at `9845a79a5` on 2026-10-08 and checked by the plan's fresh-context
+reviewer, whose findings are folded in. Not in this batch, because other lanes are
+changing them: `hours-screen.ts`, `menu-timetable-screen.ts`, `venue-operations-screen.ts` (lane D's
+`feat/service-periods-slice-1`), `prep-stations-screen.ts` (lane E's `fix/drag-edge-scroll`), every
+`configuration-transfer*` file, and `apps/till/src/i18n/codes*` (#1399). This batch edits none of
+them; a changed check in `prep-stations-screen.test.ts` is allowed (a test file only, different
+hunks from a drag test), and whichever branch lands second rebases. (2026-10-08: #1416, which was
+`fix/drag-edge-scroll`, landed first; this branch rebased onto it.)
+
+**The 3a rules block and Batch 5's three extra rules apply to every task** (watch for
+`Unhandled error`; the temporary THROW probe at each new early return; an `if (scope) … else …`
+whose `else` stood for "no coordinator"). Also design-system.md → Forms: a form that takes its scope
+in `willUpdate` and disposes it on disconnect returns before `draftScopeFor` while
+`!this.isConnected`, with a reconnect case in its `*.unsaved.test.ts`. Checks per task: the named
+suites, the package's `typecheck`, `pnpm format:check`, `pnpm lint`, `git commit -s`.
+
+| Form | Decision | Why |
+| --- | --- | --- |
+| Local holiday, Add and Edit (`local-holidays-editor.ts`, `data-test="save-local"`, editor `kind: "entry"`) | SAVE | Writes a stored holiday (`api.saveLocalHoliday`, ~303); Edit opens pre-filled from the stored entry, Add opens empty. |
+| Local holiday, Remove and Forget an earlier address (same modal, `kind: "remove"` / `"forget"`) | ACTION | A confirmation of a delete; drawn `danger`, unchanged. |
+| Holiday area (`holidayArea` combobox) | ACTION | Saves on choice (`#saveArea`, ~514); there is no Save button. |
+| Watcher, New and Edit (`watcher-form.ts`, `data-test="save-watcher"`) | SAVE | Emits `watcher-save`, which the prep stations screen writes (`prep-stations-screen.ts` ~2999); Edit opens pre-filled from the stored watcher. |
+| Till profile (`apps/till/src/widgets/profile-dialog.ts`, `data-test="profile-switch"`) | SAVE | Changes the device's stored profile (`api.switchDeviceProfile`, `till-app.ts` ~4466); opens on the active profile. Pressing Switch with the active profile still chosen sends no request today — the app closes the dialog (`till-app.ts` ~4413–4416; pinned by `till-app.test.ts` ~15922–15932 and ~16294–16300) — so gating stops nothing that reaches the server, and a different profile's switch is sent exactly as before. That is why this batch takes the light review path although a profile bounds what a till may do (CLAUDE.md §3). |
+
+No form here opens already savable, so none passes `savableAtOpen`.
+
+### Task 4c.1 — local holidays (`packages/venue-service/src/dashboard/local-holidays-editor.ts`)
+
+`#begin` (~201–237) registers the entry scope with `this.#leave?.register` — make it
+`draftScopeFor(this, owner)` (same owner), keeping `#leave` as the coordinator it returns. Leave
+paths that read "a scope exists" and must gate on the coordinator too: `#open` (~189–199,
+`if (scope) this.#leave!.request…`), `#beforeClose` (~228–236, `!scope || …this.#leave!…`), and
+Cancel (~491–495, `if (!this.#scope) this.#close()`). Save (~498–506): for an entry,
+`variant=${s.variant}` and `?disabled=${this.busy || own errors || s.unchanged}`; for remove and
+forget keep `variant="danger"` and today's `?disabled` — compute `s` and the early return only when
+`editor.kind === "entry"`, because Remove and Forget have no scope and `saveActionState(undefined)`
+reads as unchanged; they still take `#leave` from the coordinator. The early return goes in `#submit`
+(~279) before `attempted` is set, for an entry only. The new-entry "the address moved" warning (~288–296)
+keeps the draft changed, so the second press still sends. Equality is today's (date, trimmed name).
+Tests first, in a new `local-holidays-editor.save-state.test.ts`: Edit opens disabled/secondary on
+host and inner button; Add with nothing typed opens disabled; one edit enables primary; typing the
+stored value back (and the stored name with spaces around it) disables it; an untouched press sends
+no `saveLocalHoliday`; a refused save stays enabled; Remove and Forget open enabled and `danger`.
+Axe both states, both themes, in `local-holidays-editor.a11y.test.ts` (~134, ~146). Predicted
+changed checks (the reviewer's reading; the throw-probe still runs): `local-holidays-editor.test.ts`
+~392 presses an empty Add and is the only test asserting "Enter a date." and "Enter a name." — a
+blank name equals the empty baseline (equality trims), so the two can no longer show together:
+split it into a name typed with no date ("Enter a date.") and a date typed with a blank name ("Enter
+a name."); ~634 (an `it.each` of seven Edit cases, whose ~641 asserts the unedited name) and ~899
+(Edit) edit the name before pressing, and ~641 expects the edited name; ~680 asserts `disabled ===
+false` on a reopened empty Add — it becomes `true`, then one edit and `false` (it is not a press, so
+the throw-probe does not find it); `a11y.test.ts` ~134 presses an empty Add — type a name only. Suites: `pnpm --filter @waitron/venue-service exec vitest run
+src/dashboard/local-holidays-editor src/dashboard/hours-screen`.
+
+### Task 4c.2 — watchers (`packages/venue-service/src/dashboard/watcher-form.ts`)
+
+`willUpdate` (~123–162, registering at ~147–160) takes the scope with `leaveCoordinatorFor(this)` and `this.leave?.register`:
+make it `draftScopeFor(this, owner)`, returning first while `!this.isConnected` (it disposes on
+disconnect, ~87–93), and override `connectedCallback` to call `super.connectedCallback();
+this.requestUpdate();` as the batch 5 dialogs do (`party-name-dialog.ts` ~51–54,
+`station-choice-dialog.ts` ~57–60): Lit runs no update on reconnect, so without it Save is stuck
+disabled and the first edit's `willUpdate` re-seeds the draft and wipes that edit. The reconnect case
+in `watcher-form.unsaved.test.ts` removes the form, re-appends it, edits, presses Cancel and expects
+the question; with the `isConnected` return deleted it must fail. `requestLeave`
+(~111–117, `if (!this.scope) return true; … this.leave!.request`) gates on the coordinator.
+`commitSubmitted` (~119–123) keeps its contract (true when the form is now clean) but its
+`equalInput` fallback stood for "no scope", which can no longer happen while connected: delete the
+fallback if unreachable, or say why not. Save (~341–346, no `variant` today, so `secondary`): bind
+`variant=${s.variant}` and `?disabled=${this.busy || (this.attempted && this.invalid) || s.unchanged}`;
+the early return goes in `save()` (~227) before `attempted` is set. Tests first, in a new
+`watcher-form.save-state.test.ts`: an existing watcher with stations, zones, "every" choices and
+`runsPass` filled opens disabled/secondary; New opens disabled; one edit enables primary; undoing it
+(re-ticking the same station, retyping the name) disables it; an untouched press emits no
+`watcher-save`; a refused save (`refusal` set) stays enabled; after `commitSubmitted` with the form
+still mounted, Save goes quiet. Axe both states, both themes, in the new file (there is no
+`watcher-form.a11y.test.ts`). Predicted changed checks (the reviewer's reading; the throw-probe still runs):
+`watcher-form.test.ts` ~40 is its only untouched press — typing spaces into the name is not a change
+(`input` trims it), so toggle `runsPass` instead, which is a change and leaves all three fields
+invalid; `watcher-form.unsaved.test.ts` ~333 saves a seeded Edit whose draft (`"  Pass  "`, stations
+in reverse order) equals its baseline, so it will emit nothing; ~361 and ~404 press a form already
+out of the page — they trip the throw-probe (no scope) but pass with the plain `return`, so they are
+not changed checks. `prep-stations-screen.test.ts` presses `data-test="save-watcher"` three times
+(~5164, ~5182, ~5186), each after an edit; its other `save-watcher-*` buttons are different, ungated
+buttons. Suites: `pnpm --filter @waitron/venue-service exec vitest run
+src/dashboard/watcher-form src/dashboard/prep-stations-screen src/dashboard/watchers-seen`.
+
+### Task 4c.3 — the till's profile dialog (`apps/till/src/widgets/profile-dialog.ts`)
+
+It has no draft scope, and does not get one registered with the app's coordinator: the app asks
+that coordinator about `scopes: "all"` (except the basket) before switching (`till-app.ts`
+~4415–4436), so a registered dialog scope would join the question the switch itself asks. "Changed"
+is the one comparison `this.chosen !== this.activeProfileId`, passed as
+`saveActionState({ isDirty: () => … })` (as `receipts-screen.ts` ~274 passes its own `isDirty`). This is the one
+place a comparison is written per form, against design-system.md → Forms' "never a second comparison
+written per screen": there is no first one, and a registered scope would join the app's question;
+Task 4c.4 says so in Forms.
+`data-test="profile-switch"` (~122–127, fixed `variant="primary"`) binds `variant=${s.variant}` and
+`?disabled=${s.unchanged}`, keeping `?loading=${this.busy}`; its click handler returns early while
+unchanged. The app's own `profileId === this.activeProfileId` branch (`till-app.ts` ~4411–4414)
+stays: it is the app's rule for an event, and tests dispatch the event directly. A refusal (about
+the chosen profile, or an order-open or draft notice) leaves the choice changed, so Switch stays
+enabled. Tests first in `profile-dialog.test.ts` (or a new `profile-dialog.save-state.test.ts`):
+opens disabled/secondary on host and inner button; choosing another profile enables primary;
+choosing the active one again disables it; an untouched press emits no `profile-switch`; with a
+`device_profile.not_approved` notice and a different choice, Switch is enabled. Axe both states,
+both themes, in `profile-dialog.a11y.test.ts`. Predicted changed checks: none (the reviewer's reading: the one
+real press, `till-app.test.ts` ~16022, chooses another profile first; the other uses dispatch the
+event directly). The throw-probe still runs. Suites: `pnpm --filter @waitron/till exec vitest run
+src/widgets/profile-dialog src/till-app.test src/till-app-boot-and-counter src/till-app-drafts
+src/till-app-menu-timetable`.
+
+### Task 4c.4 — look, docs, backlog
+
+LOOK (forms mounted with test data in Chromium, as batch 5 did; or the dev stack from this worktree,
+checking port 8080 and the venue folder's holders first): each form unchanged and changed at 1280px,
+light, English; the watcher form and the profile dialog also at 390px, dark, Spanish. design-system.md
+→ Forms: add the three forms and the till profile decision to the list of forms that follow the rule,
+and one sentence naming the profile dialog as the stated exception to "never a second comparison"
+(why: Task 4c.3);
+`willUpdate` paragraph: add the watcher form if it takes the `isConnected` return. Update the A331
+backlog entry: batch 4c landed, the profile dialog open point closed, batch 4b's remaining forms
+(hours, timetable, operations, prep stations) still open. Light review path.

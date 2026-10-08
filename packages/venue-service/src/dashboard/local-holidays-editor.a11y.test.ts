@@ -131,10 +131,32 @@ const states: Record<string, (theme: "light" | "dark") => Promise<LocalHolidaysE
   "an add after a failed press": async (theme) => {
     const el = await mount(theme);
     await press(el, '[data-test="add-local"]');
+    await set(el, "holidayName", "Sant Joan");
     await press(el, '[data-test="save-local"]');
     expect((deep(el, '[name="holidayDate"]') as HTMLElement & { error: string }).error).not.toBe(
       "",
     );
+    return el;
+  },
+  "an untouched edit, Save quiet": async (theme) => {
+    const el = await mount(theme);
+    await press(el, '[data-test="edit-local"]');
+    const save = deep(el, '[data-test="save-local"]') as HTMLElement & {
+      variant: string;
+      disabled: boolean;
+    };
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    return el;
+  },
+  "an edited entry, Save ready": async (theme) => {
+    const el = await mount(theme);
+    await press(el, '[data-test="edit-local"]');
+    await set(el, "holidayName", "Sant Joan de Vielha");
+    const save = deep(el, '[data-test="save-local"]') as HTMLElement & {
+      variant: string;
+      disabled: boolean;
+    };
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
     return el;
   },
   "an edit refused at the bottom": async (theme) => {

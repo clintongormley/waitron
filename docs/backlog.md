@@ -1539,7 +1539,8 @@ The tree owns its drag lifecycle, so this needs a change to `menu-structure-tabl
 is reserved by the watcher for Lane D's Preview bundle.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 5 (the till) in #1414; batch 6 audited with no
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
+venue-service forms and the till's profile dialog); batch 5 (the till) in #1414; batch 6 audited with no
 stored-setting editors; batch 7 unreserved forms audited; batches 2 and 4b OPEN.** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
@@ -1617,7 +1618,21 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
   and SumUp Connect/Pair/Try again remain provider operations;
   [classification and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
-- **Batch 4b — OPEN.** Venue-service module screens.
+- **Batch 4b — OPEN.** The venue-service screens other branches are changing: hours, the menu
+  timetable and venue operations (after `feat/service-periods-slice-1`). Preparation stations were
+  held for `fix/drag-edge-scroll`, which landed as #1416, and are no longer reserved.
+- **Batch 4c — DONE (A331-4c, 2026-10-08).** The local holiday Add and Edit and the watcher form
+  (New and Edit) in `packages/venue-service`, and the till's profile dialog, whose Switch now waits
+  until another profile is chosen — this closes the profile-dialog point left open by batch 5. A
+  Switch with the current profile still chosen never reached the server before either: the app
+  closed the dialog. Holiday Remove and Forget stay red confirmations and the holiday area saves on
+  choice; [the Batch 4c table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4c--the-venue-service-forms-nobody-else-is-changing-and-the-tills-profile-dialog-lane-c-a331-4c)
+  gives the call path for each. Looked at on 2026-10-08 in 13 screenshots of the forms mounted with
+  test data in Chromium (the holiday Add and Edit, the watcher form's Edit and the profile dialog,
+  each unchanged and after one edit at 1280px, light, English, plus the holiday Remove confirmation;
+  the watcher Edit and the profile dialog also at 390px, dark, Spanish; the watcher form's New was
+  not captured), kept outside the repository in
+  `~/waitron-campaign-c/a331-4c-shots/`: no defect found.
 - **Batch 5 — LANDED in #1414 (A331-5).** The till's five forms that save an edit: the party name dialog,
   the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
   when it edits a line, and the station dialog's Make at. Adding a dish never waits for a change
@@ -1633,10 +1648,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   mode and the station dialog's Move were byte-identical to screenshots of the code before the
   batch. Left open: the station dialog widens or narrows with the chosen station's name, so its
   buttons shift a little as a station is picked (it did so before this batch). Also left open from
-  #1414's review: (1) the till's profile dialog (`apps/till/src/widgets/profile-dialog.ts`) opens on
-  the current profile and its Switch sends a switch even when nothing changed — it may be a save,
-  and is one of the till forms with no unsaved-changes tracking that batch 5 did not classify;
-  (2) the four batch 5 dialogs had to stop registering their draft while out of the page, or a
+  #1414's review: (1) the till's profile dialog — done in batch 4c; (2) the four batch 5 dialogs had to stop registering their draft while out of the page, or a
   reattached dialog stopped asking before discarding; design-system.md → Forms names seven
   dashboard forms that still register that way, untested for the same fault.
 - **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.
@@ -1656,9 +1668,10 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   printer/agent/calibration, device/profile, reader and canvas forms (gated by batch 3b) still await
   a rerun of Batch 7's two inventories; till dialogs left for after
   `feat/save-follows-changes-till` lands; device-home, menus and Preview widgets left for after
-  `fix/home-column-ranges` and its following Preview work land; hours/date/holiday/slot, watcher,
-  service settings, operations, timetable and preparation-station forms left for after
-  `feat/service-periods-slice-1` lands (batch 4b); invoice configuration/setup and agent paths left
+  `fix/home-column-ranges` and its following Preview work land; hours/date/slot, service
+  settings, operations and timetable forms left for after
+  `feat/service-periods-slice-1` lands (batch 4b; the local holiday and watcher forms are done in
+  batch 4c); invoice configuration/setup and agent paths left
   for after parked invoice part 1 [#1399](https://github.com/clintongormley/waitron/pull/1399) lands.
   Next action: rerun Batch 7's inventories over those paths after landing, then apply the shared
   gate test-first to any true Save editor its owning batch leaves uncovered.

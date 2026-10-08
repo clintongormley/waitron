@@ -1,7 +1,7 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, saveActionState } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -81,9 +81,19 @@ export class TillProfileDialog extends LitElement {
     return codeMessage(notice.code);
   }
 
+  #switchState() {
+    return saveActionState({ isDirty: () => this.chosen !== this.activeProfileId });
+  }
+
+  #switch(): void {
+    if (this.#switchState().unchanged) return;
+    this.#emit<{ profileId: string }>("profile-switch", { profileId: this.chosen });
+  }
+
   override render() {
     if (!this.open) return nothing;
     const fieldError = this.#fieldError();
+    const switchState = this.#switchState();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -121,9 +131,10 @@ export class TillProfileDialog extends LitElement {
         >
         <wt-button
           data-test="profile-switch"
-          variant="primary"
+          variant=${switchState.variant}
+          ?disabled=${switchState.unchanged}
           ?loading=${this.busy}
-          @click=${() => this.#emit<{ profileId: string }>("profile-switch", { profileId: this.chosen })}
+          @click=${() => this.#switch()}
           >${t("profile.switch")}</wt-button
         >
       </wt-form-actions>

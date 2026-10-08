@@ -2,8 +2,9 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
-  leaveCoordinatorFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -84,6 +85,11 @@ export class WatcherForm extends LitElement {
   private identity?: object;
   private watcherId?: string;
 
+  override connectedCallback() {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback() {
     this.scope?.dispose();
     this.scope = undefined;
@@ -109,18 +115,19 @@ export class WatcherForm extends LitElement {
   readonly requestLeave = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy || !this.isConnected) return false;
     const identity = this.identity;
-    if (!this.scope) return true;
-    const outcome = await this.leave!.request({ scopes: [this.scope.id], reason, proceed() {} });
+    if (!this.scope || !this.leave) return true;
+    const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
     return this.isConnected && identity === this.identity && outcome === "proceeded";
   };
 
   commitSubmitted(input: WatcherInput): boolean {
     if (!this.isConnected) return false;
     this.scope?.commit(input);
-    return this.scope ? !this.scope.isDirty() : this.equalInput(this.input, input);
+    return !this.scope?.isDirty();
   }
 
   protected override willUpdate() {
+    if (!this.isConnected) return;
     if (!this.identity || this.watcherId !== this.watcher?.id) {
       this.scope?.dispose();
       this.identity = {};
@@ -144,8 +151,7 @@ export class WatcherForm extends LitElement {
             runsPass: false,
           };
       this.attempted = false;
-      this.leave = leaveCoordinatorFor(this);
-      this.scope = this.leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: this.identity,
         current: () => this.input,
         snapshot: (input) => ({
@@ -158,6 +164,8 @@ export class WatcherForm extends LitElement {
           this.draft = { ...input, stationIds: [...input.stationIds], zoneIds: [...input.zoneIds] };
         },
       });
+      this.leave = coordinator;
+      this.scope = scope;
     }
   }
   private get visibleStations() {
@@ -217,7 +225,7 @@ export class WatcherForm extends LitElement {
   }
 
   private save() {
-    if (this.busy) return;
+    if (this.busy || saveActionState(this.scope).unchanged) return;
     this.attempted = true;
     if (this.invalid) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
@@ -235,6 +243,7 @@ export class WatcherForm extends LitElement {
         : this.refusal && !nameError && !stationError && !zoneError
           ? t("prep.save_error")
           : "";
+    const s = saveActionState(this.scope);
     return html`<div class="body">
         <div>
           <wt-input
@@ -340,7 +349,8 @@ export class WatcherForm extends LitElement {
         >
         <wt-button
           data-test="save-watcher"
-          ?disabled=${this.busy || (this.attempted && this.invalid)}
+          variant=${s.variant}
+          ?disabled=${this.busy || (this.attempted && this.invalid) || s.unchanged}
           @click=${() => this.save()}
           >${t("venue.save")}</wt-button
         >

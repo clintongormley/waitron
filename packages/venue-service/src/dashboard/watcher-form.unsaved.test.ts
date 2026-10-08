@@ -306,6 +306,20 @@ it("Watcher disconnect aborts its question and removes unload handling", async (
   await expect.poll(async () => (await question()).open).toBe(false);
   expect(unload()).toBe(false);
 });
+it("Watcher taken out of the page and put back keeps an edit made afterwards and asks before discarding it", async () => {
+  const { screen } = await mount();
+  const { form } = await open(screen);
+  const parent = form.parentNode!;
+  form.remove();
+  await form.updateComplete;
+  parent.appendChild(form);
+  await form.updateComplete;
+  await change(form, "name", { value: "Runner" });
+  expect(value(form)).toBe("Runner");
+  expect(unload()).toBe(true);
+  cancel(form);
+  expect((await question()).open).toBe(true);
+});
 
 it("Watcher seeded edit keeps its starting snapshot across refreshed rows and offered order", async () => {
   const { screen } = await mount();
@@ -326,6 +340,7 @@ it("Watcher seeded edit keeps its starting snapshot across refreshed rows and of
   await choose("keep");
   await change(form, "name", { value: "  Pass  " });
   expect(unload()).toBe(false);
+  await change(form, "runsPass", { checked: true });
   const writes: unknown[] = [];
   form.addEventListener("watcher-save", (event) =>
     writes.push((event as CustomEvent).detail.input),
@@ -338,7 +353,7 @@ it("Watcher seeded edit keeps its starting snapshot across refreshed rows and of
       stationIds: ["grill", "bar"],
       everyZone: false,
       zoneIds: ["terrace"],
-      runsPass: false,
+      runsPass: true,
       displayOrder: 7,
     },
   ]);
