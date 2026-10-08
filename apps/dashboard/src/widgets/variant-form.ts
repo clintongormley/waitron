@@ -71,9 +71,15 @@ export class VariantForm extends LitElement {
 
   #scope?: DraftScope<ProductEditorVariant>;
   #leave?: LeaveCoordinator;
+  #baseline?: ProductEditorVariant;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
 
   override disconnectedCallback(): void {
     this.#scope?.dispose();
@@ -104,12 +110,14 @@ export class VariantForm extends LitElement {
       this.#focusField = null;
       this.#scope?.dispose();
       this.#scope = undefined;
+      this.#baseline = undefined;
     }
     if (!this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
+    } else if (this.isConnected && !this.#scope) {
+      this.#baseline ??= this.#currentValue();
       const { coordinator, scope } = draftScopeFor<ProductEditorVariant>(this, {
         id: this,
         parent: this.draftParent,
@@ -131,6 +139,7 @@ export class VariantForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
 
