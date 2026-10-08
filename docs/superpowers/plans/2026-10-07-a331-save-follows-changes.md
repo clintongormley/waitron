@@ -614,6 +614,8 @@ adopt `draftScopeFor` / `saveActionState` test-first where its owning batch has 
   `apps/dashboard/src/widgets/device-home-preview.ts`; `screens/menus-screen.ts` and its tests;
   menu widgets `menu-preview`, `menu-prices-table`, `menu-structure-table`, `menu-publications`,
   `customer-menu*`, `add-to-menus`, `include-folder-form` and `section-*` under that widgets folder.
+  (2026-10-08: `include-folder-form` and `section-details-form` were done in Batch 2b below;
+  `section-add-products`, `menu-publications` and `add-to-menus` are batch 2a's.)
 - Venue-service batch 4b / `feat/service-periods-slice-1`: all `packages/venue-service/`, including
   hours/date/holiday/menu-slot editors, watcher, service settings, venue operations, timetable
   and preparation-station forms. (2026-10-08: the local holiday editor and the watcher form were
@@ -1558,3 +1560,194 @@ sha, for 2b to take:
   and that 2b — the section/menu details form, the include dialog and the menus screen's own
   forms — waits on lane D's Preview branch.
 - Light review path (no risk trigger).
+
+## Batch 2b — the menus screen and the Preview bundle's files (Lane C, A331-2b)
+
+Branch `feat/save-follows-changes-menus`, worktree
+`/Users/clintongormley/workspace/worktrees/waitron-feat-save-follows-changes-menus`, off `main` at
+`f11acc977` (lane D's Preview bundle, #1417, is on it). Line numbers (~NNN) were read there on
+2026-10-08. Paths are under `apps/dashboard/src/`.
+
+**Overlap with batch 2a.** Lane B's 2a (`feat/save-follows-changes-catalogue`, its own section of
+this plan, not yet on `main`) hands two forms to 2b by name — its Task 2a.7, "carried to 2b: the
+section and include dialogs" (`widgets/section-details-form.ts`, `widgets/include-folder-form.ts`)
+— because only `menus-screen.ts` mounts them and gating them forces edits to
+`menus-screen.test.ts`. The batch list above puts `section-*` and `include-folder-form` in batch 2,
+but `git diff --name-only origin/main...feat/save-follows-changes-catalogue` (2026-10-08, 2a tip
+`dc7f9229b`, with 2a.5 and 2a.6 committed) touches neither file nor any file below except this
+plan, so 2b takes them. 2b does not edit 2a's files: `add-to-menus.ts`, `section-add-products.ts` and `menu-publications.ts`
+(2a.5, 2a.6) are 2a's, though `menus-screen.ts` mounts all three. 2a's rule for 2a.5 and 2a.6 is
+to run `menus-screen.test.ts` unedited, and to move a widget to 2b if the gate breaks it there; if
+that happens, 2b takes it in a task added after 2a lands. Both branches edit this plan,
+`design-system.md` → Forms and the A331 backlog entry: whichever lands second rebases and keeps
+both.
+
+**Rules.** The 3a rules block, and Batch 5's three extra rules (watch for `Unhandled error`; the
+temporary THROW probe at each new early return; an `if (scope) … else …` whose `else` stood for "no
+coordinator"), apply to every task. design-system.md → Forms: a form that takes its scope in
+`willUpdate` and disposes it on disconnect skips `draftScopeFor` while `!this.isConnected`, asks for
+an update when put back, and has a reconnect case in its `*.unsaved.test.ts`. Both 2b forms take
+their scope in `willUpdate` and dispose it on disconnect (`section-details-form.ts` ~90–95, ~118–133; `include-folder-form.ts` ~105–110, ~141–154).
+Two of 2a's rules apply too, restated here because 2a's text is not on `main`:
+
+- **A refusal handed to an untouched form fails by assertion, not by the throw-probe.** A test that
+  mounts the form with `fieldErrors` or `refusal` and then asserts Save enabled now sees it
+  disabled, because nothing was edited. In the app a refusal always follows a changed press, so make
+  an edit first and keep the "a refusal never disables Save" assertion. Find them with
+  `rg -U -n 'disabled,?\s*\)\.toBe\(false\)|disabled"\)\)\.toBe\(false\)'` over the task's suites.
+- **A form that opens on a stored value it shows differently takes that shown value as its
+  baseline**, so it opens quiet. A test whose point is that an untouched Save sends that value
+  instead edits one OTHER field and checks the value is still sent as shown.
+
+Checks per task: the named suites, `pnpm --filter @waitron/dashboard typecheck`,
+`pnpm format:check`, `pnpm lint`, `git commit -s`. Light review path: no risk trigger, no migration.
+
+**Forms that open already savable:** none. `git grep -n -i 'duplicat\|clone\|prefill'` over the 2b
+files finds only an error code (`menus-screen.ts` ~166) and `structuredClone` calls. Checked
+opening by opening: a new menu opens with `menuDetails = null` (`menus-screen.ts` ~1207–1221), a
+rename on the menu's stored root (~1213); a new section with `editingSection = null` (~1405–1408),
+an edit on the stored section (~2218); an include's Edit on its stored folder or, with none,
+`FOLLOWING_FOLDER` (`include-folder-form.ts` ~132), which is what a missing folder already reads as
+(`packages/catalogue/src/section-graph.ts` ~105), so an untouched save changes nothing.
+
+**Not a save — no code change** (each acts at once, confirms an operation, or only shows):
+
+| Where | What | Why |
+| --- | --- | --- |
+| `menus-screen.ts` | Add a shortcut (~2507–2541), Include a menu (~2644–2674) | No Save button: choosing in the combobox writes at once (`#addShortcut` ~1615, `#includeMenu` ~1507). |
+| `menus-screen.ts` | Delete section (`delete-section-save`, ~2676–2726) | A `danger` confirmation of a delete. |
+| `menus-screen.ts` | The home display slider and radios (~2387–2398, ~2443–2456) | Each change saves at once (`#saveDisplay` ~1689). The device radios above them (~2367–2384) only switch which device's display is shown. |
+| `menus-screen.ts` | Add menu, Reorder and Done, the retry buttons | Open a form, switch a mode, read again. |
+| `menus-screen.ts` | The Add products window (~2735–2786) | Hosts 2a's picker. Its Cancel and `beforeClose` already ask for the coordinator itself (`leaveCoordinatorFor(this)`, ~1532–1537, ~2741, ~2776), so 2a's change to the picker needs nothing here. |
+| `widgets/menu-prices-table.ts` | Each price override field (~870–886) and Undo (~1273–1285); Show clashes (~1178) | No Save button: a price saves on Enter or on leaving the field (`#commit` ~946); Undo writes the old price back at once; Show clashes only filters the table. |
+| `widgets/menu-structure-table.ts` | Row menus' Add, Edit, Delete, Remove, the colour swatch, drag to reorder (~718–810) | Each opens one of the forms above or writes at once. |
+| `widgets/menu-preview.ts` | Publish (`publish` ~732–741) and its confirmation (`publish-confirm` ~862–867) | Publishes the menu's staged changes, an operation; Publish is drawn only while there is something to publish (`#renderPublish` ~727–729). Show all changes, the view combobox (~698) and Retry change only what is shown. |
+| `widgets/menu-document-tree.ts`, `widgets/menu-tree-presentation.ts`, `widgets/device-home-preview.ts` | — | Draw only: no form controls besides the preview's navigation tiles. |
+| `widgets/menu-price-inheritance.ts`, `widgets/section-writes.ts`, `widgets/off-menus.ts`, `packages/catalogue/src/customer-menu-presentation.ts` (Batch 7 held `customer-menu*` for this work) | — | Helpers with no controls (`git grep -n 'wt-button\|register(\|leaveCoordinatorFor'` finds none). |
+| `navigation.ts`, `i18n/strings.ts` | — | The URL map and `leftToBrowser` (~1–34); strings need nothing new. |
+
+So the code change is two files; the rest of 2b is the menus screen's tests.
+
+### Task 2b.1a — section and menu details: wire the gate (`widgets/section-details-form.ts`)
+
+The menus screen mounts this one form twice: the menu form (create and rename,
+`menus-screen.ts` ~1986–2007) and the section form (new and edit, ~2620–2642).
+
+- In `willUpdate` (~118–133) replace `leaveCoordinatorFor(this)` + `this.#leave?.register` with
+  `draftScopeFor(this, owner)` (same owner), `#leave` taking the coordinator. Skip that branch while
+  `!this.isConnected` (the reseed and the `!this.open` dispose above it stay as they are), and add
+  `override connectedCallback() { super.connectedCallback(); this.requestUpdate(); }`.
+- "A scope exists" sites, to gate on `#leave`: `#beforeClose`'s `this.#leave!` (~85–88),
+  `#cancel`'s `if (this.#scope)` (~214), `.beforeClose=${this.#scope ? …}` (~235).
+- Save (`data-test="save"`, ~328–333, fixed `variant="primary"`): `variant=${s.variant}`,
+  `.disabled=${s.unchanged || this.busy || this.pickerOpen || invalid}`. No early return yet (2b.1b),
+  so tests that press an untouched Save still reach the handler; only checks that ASSERT the
+  enabled state change in this task.
+- `#submissionValue` (~191–202) trims the internal name and drops blank customer names, so typing
+  `" "` into an empty create is unchanged. The `dispose()` calls inside `willUpdate` (~103, ~115)
+  now ask for an update: read the run for Lit's "scheduled an update after an update completed"
+  warning.
+- Tests first, new `section-details-form.save-state.test.ts`: a stored section with both customer
+  names, an image and a colour opens with Save disabled on the host and its inner `<button>` and
+  `variant="secondary"`; a create with nothing typed opens disabled; one edit (name, a customer
+  name, the colour, the image) enables it and draws it `primary`; typing the stored name back, and
+  `" Drinks "` for `Drinks`, disables it; a changed form with an empty internal name, pressed, shows
+  its error and stays `primary` and disabled; `fieldErrors` after a changed press keeps Save
+  enabled; `commitSaved` with the form still open makes it quiet. Reconnect case in
+  `section-details-form.unsaved.test.ts`: remove the open form, put it back, edit, press Cancel,
+  and the question opens; with the `isConnected` skip deleted it must fail. Axe both states, both
+  themes: add a "changed" state to `section-details-form.a11y.test.ts`.
+- Predicted changed checks (assertions of the enabled state): `section-details-form.test.ts` ~185
+  (reopened, now disabled), ~173 (the name typed back to `Drinks` is the undo: now disabled), ~197
+  and ~212 (a refusal at mount, no edit: edit first); `menus-screen.test.ts` "the name forms"
+  ~7841–7847 (types `" "` into an empty create: now disabled — assert that), ~7917–7930
+  ("starts again when it is reopened": reopened disabled).
+- Suites: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/section-details-form
+  src/screens/menus-screen src/screens/menu-details.unsaved` (the `menus-screen` prefix takes the
+  `.a11y`, `.heading` and `.home-columns` files too).
+
+### Task 2b.1b — section and menu details: the early return, and the tests it changes
+
+- `#submit` (~177) returns while `saveActionState(this.#scope).unchanged`, after the
+  `busy || pickerOpen` return (~179) and BEFORE `attempted = true` (~180). Test first: an untouched
+  press emits no `wt-submit`. Then the throw-probe over the 2b.1a suites. Some untouched presses
+  show under the probe only as `Unhandled error` lines in tests that stay green: the a11y presses
+  (`section-details-form.a11y.test.ts` ~38, `menus-screen.a11y.test.ts` ~315) are changed checks
+  all the same; `menus-screen.test.ts` ~2071 is not — the live change has already closed the
+  form, so that press sent nothing before either; leave it.
+- Predicted changed checks (from reading; the throw-probe is the list that counts):
+  `section-details-form.test.ts` ~8–23 (an empty create pressed: type a customer name, then press,
+  and the internal name's error shows), ~222–237 (a translation refusal pressed untouched), ~238–264
+  (the first press at ~247 is untouched), ~307–317 (no colour, pressed untouched: edit the name and
+  check `color` is still sent as `null`); `section-details-form.a11y.test.ts` ~37–40 (the "invalid"
+  state presses an empty create: type a customer name first). `menus-screen.test.ts`: ~1796–1815
+  (empty menu create pressed at ~1803), ~2030–2060 (empty section create pressed at ~2042) —
+  type a customer name first in both; "the name forms" (`it.each` over the menu form and the new
+  section form), each test twice: ~7849–7872 (`""` into an empty create is no change: type a
+  customer name, then empty the internal name), ~7894–7915 (the second press at ~7911 follows
+  emptying the name back to unchanged), ~7917–7930 (its press at ~7920 is an empty create, which
+  the test needs to have shown errors before the reopen: same fix as ~7849), ~7932–7945 (same as
+  ~7849); `menus-screen.a11y.test.ts` ~309–318 and ~368–390 (blank name refused: type a customer name first). Presses after a typed
+  name (~964, ~1074, ~1858, ~1874, ~1888–1894, ~1932, ~2022, ~2071–2151, ~2999, ~3178, ~3758,
+  ~3772, ~8387) and `menu-details.unsaved.test.ts` (~94–107, fills the name first) should not change.
+- Suites: as 2b.1a.
+
+### Task 2b.2 — an include's Edit dialog (`widgets/include-folder-form.ts`)
+
+- In `willUpdate` (~141–154) `draftScopeFor(this, owner)` (same owner, `#leave` from the
+  coordinator), the same `isConnected` skip and `connectedCallback` as 2b.1a. "A scope exists"
+  sites: `#beforeClose` (~100–103), `#cancel`'s `if (this.#scope)` (~240), `.beforeClose`
+  (~315) — gate on `#leave`.
+- Save (~359–364, fixed `variant="primary"`): `variant=${s.variant}`,
+  `.disabled=${s.unchanged || this.busy || this.pickerOpen}`. Early return in `#submit` (~193)
+  after the `busy || pickerOpen` return (~195), BEFORE `#dismiss` (~196). It has no checks of its
+  own, so nothing else joins `?disabled`.
+- The baseline is `#submissionValue()` at open, worked out by `folderOverridesFrom` (~217–224), so
+  an include whose stored overrides match the included menu's own values opens quiet (2a's
+  shown-value rule).
+- Tests first, new `include-folder-form.save-state.test.ts`: a stored folder with names, image and
+  colour opens disabled/secondary on host and inner button; `value: null` opens disabled; turning
+  the switch off enables it, back on disables it; typing a name and typing it back disables it; an
+  untouched press emits no `wt-submit`; a refusal after a changed press keeps Save enabled;
+  `commitSaved` with the form open makes it quiet. Reconnect case in
+  `include-folder-form.unsaved.test.ts`, as 2b.1a. Axe both states, both themes: add a "changed"
+  state to `include-folder-form.a11y.test.ts`.
+- Measured 2026-10-08 (see "Plan review" below): every failure and `Unhandled error` the
+  throw-probe raised in these suites is at a site listed in 2b.1a, 2b.1b or 2b.2 (~2071 is listed there as one to leave).
+- Predicted changed checks: `include-folder-form.test.ts` ~129–137 (keeps a name in a language the
+  form does not show, pressed untouched: edit the colour and check `fr` is still sent), ~204–218
+  (`it.each`, three rows: refusal at mount, Save asserted enabled at ~216 — edit first);
+  `menus-screen.test.ts` ~4255–4279, ~4281–4317 (`it.each`, two rows), ~4319–4332 (an include
+  opened and pressed untouched to see the server's refusal: edit the colour first, as ~4231–4253
+  does); `menus-screen.a11y.test.ts` ~347–366 ("refused: true" presses untouched).
+- Suites: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/include-folder-form
+  src/screens/menus-screen`.
+
+### Task 2b.3 — look, docs, backlog
+
+- LOOK, with the forms mounted with test data in the workspace's Playwright Chromium (as batch 5
+  did), screenshots into `~/waitron-campaign-c/a331-2b-shots/`: New menu, Rename menu, New section,
+  Edit section and an include's Edit, each unchanged and after one edit, at 1280px, light, English;
+  then 390px, dark, Spanish on Rename menu and the include's Edit. Also the Edit section form
+  quiet again after a refused-then-fixed save. The changed-checks inventory (`file:line`, before →
+  after, why) goes in `~/waitron-campaign-c/item-a331-2b-changed-tests.md` and the PR's "Changed
+  test checks".
+- `docs/developers/design-system.md` → Forms: add a "batch 2b" line to the list of forms that
+  follow the rule (the menu details form, new and rename; the section form, new and edit; an
+  include's Edit), add the two forms to the `willUpdate` paragraph's list of forms that take the
+  `isConnected` skip, and one sentence that the menus screen's own windows, the price fields and
+  Publish act at once, except the Add products window and the publication schedule, which are
+  batch 2a's, pointing at this section. Nothing joins "These open already savable".
+- `docs/backlog.md` A331: batch 2b's status in the headline and a 2b bullet (the forms, the not-a-save
+  table in one line, what the look found). If 2a has not landed, batch 2 stays OPEN for 2a.
+
+**Plan review (fresh context, 2026-10-08, at `a50333417`).** A temporary probe wired both forms as
+2b.1a and 2b.2 describe (`draftScopeFor`, the `isConnected` skip, the leave paths on `#leave`, Save
+bound to `saveActionState`) with `throw new Error("untouched save")` at both early returns, then ran
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/section-details-form
+src/widgets/include-folder-form src/screens/menus-screen src/screens/menu-details.unsaved`: 595
+tests, 31 failed, 28 `Unhandled error` lines, every one at a site listed in 2b.1a, 2b.1b or 2b.2
+except `menus-screen.test.ts` ~2071 (explained in 2b.1b) and ~7920 (added to 2b.1b). No failure in
+either form's `*.unsaved.test.ts` or `menu-details.unsaved.test.ts`. The probe was reverted. Because
+it bound `disabled` and the early return together, it does not say which task each failure falls
+in; the split above is from reading.

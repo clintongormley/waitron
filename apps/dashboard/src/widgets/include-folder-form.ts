@@ -1,7 +1,13 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import { resolveMenuText } from "@waitron/catalogue/src/customer-menu-presentation.js";
@@ -102,6 +108,11 @@ export class IncludeFolderForm extends LitElement {
     !this.pickerOpen &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -138,9 +149,8 @@ export class IncludeFolderForm extends LitElement {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<IncludeFolderInput>({
+    } else if (!this.#scope && this.isConnected) {
+      const { coordinator, scope } = draftScopeFor<IncludeFolderInput>(this, {
         id: this,
         parent: this.draftParent,
         current: () => this.#submissionValue(),
@@ -151,6 +161,8 @@ export class IncludeFolderForm extends LitElement {
         restore: (value) =>
           this.#show(value.showAsFolder, value.overrides ?? this.#loaded.stored.overrides),
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
   protected override updated(changes: PropertyValues<this>): void {
@@ -193,6 +205,7 @@ export class IncludeFolderForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.#dismiss(...Object.keys(this.fieldErrors));
     this.#emit(event, "wt-submit", this.#submissionValue());
   }
@@ -237,7 +250,7 @@ export class IncludeFolderForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.pickerOpen || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#emit(event, "wt-cancel", {});
   }
   #folderFields(errors: Record<string, string>) {
@@ -309,10 +322,11 @@ export class IncludeFolderForm extends LitElement {
       " ",
     );
     const hint = t("menus.include_direct_hint");
+    const action = saveActionState(this.#scope);
     return html`<wt-modal
       size="standard"
       .open=${this.open}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${t("menus.include_edit_heading").replace("{name}", this.menuName)}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
@@ -358,8 +372,8 @@ export class IncludeFolderForm extends LitElement {
         >
         <wt-button
           data-test="save"
-          variant="primary"
-          .disabled=${this.busy || this.pickerOpen}
+          variant=${action.variant}
+          .disabled=${action.unchanged || this.busy || this.pickerOpen}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

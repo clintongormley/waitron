@@ -311,9 +311,23 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     q(el, '[data-test="add-menu"]').click();
     await el.updateComplete;
     q(el, '[data-test="menu-form"]')
+      .shadowRoot!.querySelector('wt-input[name="names-es"]')!
+      .dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Brunch" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    await el.updateComplete;
+    q(el, '[data-test="menu-form"]')
       .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
       .click();
     await el.updateComplete;
+    const name = q(el, '[data-test="menu-form"]').shadowRoot!.querySelector(
+      'wt-input[name="internalName"]',
+    )!;
+    expect((name as HTMLElementTagNameMap["wt-input"]).error).toBe(t("menus.name_required"));
     await expectNoA11yViolations(host);
   });
 
@@ -353,6 +367,8 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const form = q(el, '[data-test="include-folder-form"]');
     await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-modal")!.open).toBe(true));
     if (refused) {
+      form.shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+      await (form as HTMLElementTagNameMap["dashboard-include-folder-form"]).updateComplete;
       form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await vi.waitFor(() =>
         expect(
@@ -372,6 +388,16 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       await editDrinks(el);
       await rowAction(el, "m-drinks", "new-section");
       if (refused) {
+        q(el, '[data-test="section-form"]')
+          .shadowRoot!.querySelector('wt-input[name="names-es"]')!
+          .dispatchEvent(
+            new CustomEvent("wt-change", {
+              detail: { value: "Sidras" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        await el.updateComplete;
         q(el, '[data-test="section-form"]')
           .shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!
           .click();

@@ -79,6 +79,11 @@ async function question(app: IncludeLeaveApp) {
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 const nameValue = (form: Form, name: string) =>
   form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)?.value;
 
@@ -201,4 +206,18 @@ it("Discard restores a starting point with the switch off, filling the hidden fi
   await toggle(form);
   expect(nameValue(form, "names-en")).toBe("Bar");
   expect(nameValue(form, "names-es")).toBe("Bebidas");
+});
+it("an include taken out of the page and put back asks before discarding an edit made afterwards", async () => {
+  const { app, form } = await mount();
+  const parent = form.parentNode!;
+  form.remove();
+  await form.updateComplete;
+  parent.appendChild(form);
+  await form.updateComplete;
+  await edit(form, "names-es", "Barra");
+  expect(nameValue(form, "names-es")).toBe("Barra");
+  expect(unload()).toBe(true);
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
 });

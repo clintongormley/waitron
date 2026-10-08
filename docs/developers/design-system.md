@@ -1544,12 +1544,14 @@ written per screen (one stated exception, the till's profile dialog, is in the b
 - a form that takes its scope in `willUpdate` and disposes it on disconnect returns before
   `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
   return a form taken out of the page takes a new scope while detached, and once put back it does
-  not ask before discarding. The till's party name, invoice recipient, extras picker and station
-  dialogs, the venue-service watcher form, and the dashboard's unit, ingredient, extras list, option
+  not ask before discarding an edit made after that (an edit made before it was taken out is a
+  separate open point: backlog A331, batches 2a, 2b and 4c). The till's party name, invoice recipient, extras picker and station
+  dialogs, the venue-service watcher form, the dashboard's unit, ingredient, extras list, option
   list and option label forms, recipe editor, Add to menus picker and a section's Add products
-  picker do this, each also asking for an update when it is put back (Lit runs none on reconnect);
-  with the return deleted, a reconnect case in the `*.unsaved.test.ts` that covers it fails. The
-  other dashboard forms that take their scope in `willUpdate` (person edit and new person, product
+  picker, and the menus screen's section and menu details form and an include's Edit dialog do
+  this, each also asking for an update when it is put back (Lit runs none on reconnect); with the
+  return deleted, a reconnect case in the `*.unsaved.test.ts` that covers it fails. The other
+  dashboard forms that take their scope in `willUpdate` (person edit and new person, product
   editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether they show
   the fault is untested;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
@@ -1598,6 +1600,12 @@ and nothing guards it across screens:
   chosen, so the app's unsaved-changes check before a switch (`#onProfileSwitch` in
   `apps/till/src/till-app.ts`) would ask about the switch itself every time. See
   [the Batch 4c table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4c--the-venue-service-forms-nobody-else-is-changing-and-the-tills-profile-dialog-lane-c-a331-4c);
+- batch 2b, the menus screen: the menu details form, new and rename; the section form, new and
+  edit (one form, `dashboard-section-details-form`, mounted twice); and an include's Edit dialog.
+  The screen's other windows, the menu price fields and Publish act at once, confirm an operation or
+  only show, so they have no Save to gate, except the Add products window and the publication
+  schedule, which are batch 2a's; the list is in
+  [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look).

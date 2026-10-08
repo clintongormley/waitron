@@ -1800,6 +1800,9 @@ it("creating a menu needs a name: an empty one is explained beside the field and
   expect(modal(el, "menu-form").open).toBe(true);
   const name = inModal<HTMLElementTagNameMap["wt-input"]>(el, "menu-form", 'wt-input[name="name"]');
   expect(name.required).toBe(true);
+  const customerName = inModal(el, "menu-form", 'wt-input[name="names-es"]');
+  type(customerName, "Brunch");
+  await el.updateComplete;
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await el.updateComplete;
   expect(name.error).toBe(t("menus.name_required"));
@@ -1807,6 +1810,7 @@ it("creating a menu needs a name: an empty one is explained beside the field and
   expect(client.createCatalogue).not.toHaveBeenCalled();
 
   type(name, "  Brunch  ");
+  type(customerName, "");
   await el.updateComplete;
   expect(name.error).toBe("");
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
@@ -2039,6 +2043,9 @@ it("creates a section without leaving the editor and adds it to the list being e
     'wt-input[name="internalName"]',
   );
   expect(name.required).toBe(true);
+  const customerName = inModal(el, "new-section", 'wt-input[name="names-es"]');
+  type(customerName, "Sidras");
+  await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await el.updateComplete;
   expect(name.error).toBe(t("sections.internal_name_required"));
@@ -2046,6 +2053,7 @@ it("creates a section without leaving the editor and adds it to the list being e
   expect(writeCalls(client)).toEqual([]);
 
   type(name, "Ciders");
+  type(customerName, "");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
@@ -4267,6 +4275,8 @@ describe("an include's Edit dialog", () => {
     );
     const el = await mountLunch(client);
     await openWines(el);
+    includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+    await includeForm(el).updateComplete;
     includeSave(el).click();
     await vi.waitFor(() =>
       expect(includeField(el, "names-en").error).toBe(
@@ -4305,6 +4315,8 @@ describe("an include's Edit dialog", () => {
       );
       const el = await mountLunch(client);
       await openWines(el);
+      includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+      await includeForm(el).updateComplete;
       includeSave(el).click();
       await vi.waitFor(() =>
         expect(includeForm(el).shadowRoot!.querySelector(`#${errorId}`)?.textContent?.trim()).toBe(
@@ -4323,6 +4335,8 @@ describe("an include's Edit dialog", () => {
     );
     const el = await mountLunch(client);
     await openWines(el);
+    includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+    await includeForm(el).updateComplete;
     includeSave(el).click();
     await vi.waitFor(async () =>
       expect(await bottomIn(includeModal(el))).toBe(codeMessage("menu_section.not_found")),
@@ -7827,6 +7841,8 @@ describe("the name forms", () => {
         inModal<HTMLElementTagNameMap["wt-input"]>(el, form.form, `wt-input[name="${form.field}"]`),
       save: () =>
         inModal<HTMLElementTagNameMap["wt-button"]>(el, form.form, `[data-test="${form.save}"]`),
+      customerName: () =>
+        inModal<HTMLElementTagNameMap["wt-input"]>(el, form.form, 'wt-input[name="names-es"]'),
     };
   }
 
@@ -7843,14 +7859,15 @@ describe("the name forms", () => {
     await rename(el, name(), " ");
     expect(name().error).toBe("");
     expect(await bottom(el, form.form)).toBe("");
-    expect(save().disabled).toBe(false);
+    expect(save().disabled).toBe(true);
   });
 
   it.each(forms)(
     "$form focuses the name on an invalid Save, holds Save until it is fixed, and re-checks every change",
     async (form) => {
       const client = api();
-      const { el, name, save } = await opened(form, client);
+      const { el, name, save, customerName } = await opened(form, client);
+      await rename(el, customerName(), "Terraza");
       await rename(el, name(), "");
       save().click();
       await el.updateComplete;
@@ -7895,7 +7912,8 @@ describe("the name forms", () => {
     "$form leaves Save working after a refusal naming no field, and drops it on the next Save",
     async (form) => {
       const client = api({ [form.write]: vi.fn().mockRejectedValue({ code: "server.internal" }) });
-      const { el, name, save } = await opened(form, client);
+      const { el, name, save, customerName } = await opened(form, client);
+      await rename(el, customerName(), "Terraza");
       await rename(el, name(), "Terrace");
       save().click();
       await vi.waitFor(async () =>
@@ -7915,10 +7933,13 @@ describe("the name forms", () => {
   );
 
   it.each(forms)("$form starts again when it is reopened", async (form) => {
-    const { el, name, save } = await opened(form);
+    const { el, name, save, customerName } = await opened(form);
+    await rename(el, customerName(), "Terraza");
     await rename(el, name(), "");
     save().click();
     await el.updateComplete;
+    expect(name().error).toBe(t(form.required));
+    await rename(el, customerName(), "");
     inModal(el, form.form, `[data-test="${form.form}-cancel"]`).click();
     await el.updateComplete;
     expect(modal(el, form.form).open).toBe(false);
@@ -7926,15 +7947,17 @@ describe("the name forms", () => {
     await vi.waitFor(() => expect(modal(el, form.form).open).toBe(true));
     expect(name().error).toBe("");
     expect(await bottom(el, form.form)).toBe("");
-    expect(save().disabled).toBe(false);
+    expect(save().disabled).toBe(true);
   });
 
   it.each(forms)("$form keeps no message once it is cancelled", async (form) => {
-    const { el, name, save } = await opened(form);
+    const { el, name, save, customerName } = await opened(form);
+    await rename(el, customerName(), "Terraza");
     await rename(el, name(), "");
     save().click();
     await el.updateComplete;
     expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
+    await rename(el, customerName(), "");
     inModal(el, form.form, `[data-test="${form.form}-cancel"]`).click();
     await el.updateComplete;
     expect(modal(el, form.form).open).toBe(false);

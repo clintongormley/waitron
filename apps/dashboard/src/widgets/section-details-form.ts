@@ -1,7 +1,13 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { sameValue } from "./product-editor-model.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -87,6 +93,11 @@ export class SectionDetailsForm extends LitElement {
     !this.pickerOpen &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -115,9 +126,8 @@ export class SectionDetailsForm extends LitElement {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<SectionInput>({
+    } else if (!this.#scope && this.isConnected) {
+      const { coordinator, scope } = draftScopeFor<SectionInput>(this, {
         id: this,
         parent: this.draftParent,
         current: () => this.#submissionValue(),
@@ -130,6 +140,8 @@ export class SectionDetailsForm extends LitElement {
           this.color = value.color ?? null;
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
   protected override updated(changes: PropertyValues<this>): void {
@@ -177,6 +189,7 @@ export class SectionDetailsForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.#dismiss(
       ...Object.keys(this.fieldErrors),
@@ -211,7 +224,7 @@ export class SectionDetailsForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.pickerOpen || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#emit(event, "wt-cancel", {});
   }
   override render() {
@@ -229,10 +242,11 @@ export class SectionDetailsForm extends LitElement {
       " ",
     );
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const action = saveActionState(this.#scope);
     return html`<wt-modal
       size="standard"
       .open=${this.open}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${this.heading}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
@@ -327,8 +341,8 @@ export class SectionDetailsForm extends LitElement {
         >
         <wt-button
           data-test="save"
-          variant="primary"
-          .disabled=${this.busy || this.pickerOpen || invalid}
+          variant=${action.variant}
+          .disabled=${action.unchanged || this.busy || this.pickerOpen || invalid}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions
