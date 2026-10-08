@@ -1280,19 +1280,12 @@ export class ProductList extends LitElement {
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              >${folderFrame(
-                html`<button
-                  part="swatch-button"
-                  type="button"
-                  data-test="color-root"
-                  aria-label=${t("folders.edit_color").replace("{name}", t("folders.all_products"))}
-                  @click=${(event: Event) => {
-                    event.stopPropagation();
-                    this.#send("root-color", {});
-                  }}
-                >
-                  ${swatchChip(this.defaultColor)}
-                </button>`,
+              >${this.#swatchButton(
+                ROOT_KEY,
+                t("folders.all_products"),
+                this.defaultColor,
+                "root-color",
+                {},
               )}<span part="folder-name"
                 ><span
                   ><strong>${t("folders.all_products")}</strong
@@ -1332,20 +1325,9 @@ export class ProductList extends LitElement {
                       part="name-after"
                       >${after}</span
                     >`
-                : html`${folderFrame(
-                      html`<button
-                        part="swatch-button"
-                        type="button"
-                        data-test=${`color-${folder.id}`}
-                        aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
-                        @click=${(event: Event) => {
-                          event.stopPropagation();
-                          this.#send("folder-color", { folderId: folder.id });
-                        }}
-                      >
-                        ${swatchChip(folder.color)}
-                      </button>`,
-                    )}<span part="folder-name"
+                : html`${this.#swatchButton(folder.id, folder.name, folder.color, "folder-color", {
+                      folderId: folder.id,
+                    })}<span part="folder-name"
                       ><span><strong>${folder.name}</strong>${after}</span></span
                     >`
             }</span
@@ -1424,6 +1406,23 @@ export class ProductList extends LitElement {
 
   #table(): WtDataTable<ListRow> | null {
     return this.shadowRoot?.querySelector<WtDataTable<ListRow>>("wt-data-table") ?? null;
+  }
+
+  #swatchButton(key: string, name: string, color: string | null, event: string, detail: unknown) {
+    return folderFrame(
+      html`<button
+        part="swatch-button"
+        type="button"
+        data-test=${`color-${key}`}
+        aria-label=${t("folders.edit_color").replace("{name}", name)}
+        @click=${(clicked: Event) => {
+          clicked.stopPropagation();
+          this.#send(event, detail);
+        }}
+      >
+        ${swatchChip(color)}
+      </button>`,
+    );
   }
 
   #send(name: string, detail: unknown): void {
