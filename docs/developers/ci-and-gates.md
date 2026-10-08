@@ -798,8 +798,10 @@ each checked against a pinned SHA-256. Run locally with `CI=true` on the owner's
 that job's command took 72 seconds: the loop test 13 and the pause test 70, the two files running
 side by side (`apps/server/vitest.config.ts` sets `maxWorkers: 4`). Guard:
 `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT. Its test step sets `TMPDIR=/dev/shm`
-([testing-guide.md](testing-guide.md), "In CI their temporary files are in memory"); the
-2026-09-26 timings in this section were taken before that setting existed.
+([testing-guide.md](testing-guide.md), "In CI their temporary files are in memory"), and a step
+before it sets loopback's MTU to 1500
+([testing-guide.md](testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size));
+the 2026-09-26 timings in this section were taken before either setting existed.
 
 Measured on CI, one run each side (2026-09-26). After: run 36231025265, PR #682 at `81b07b698`.
 Before: run 36229776393, `main` at `1821da0e0`, the last run before the change to execute the

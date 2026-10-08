@@ -826,9 +826,7 @@ jobs:
           node scripts/setup-litestream.mjs
           node scripts/setup-s3-test-server.mjs
 
-      # At loopback's default 65536-byte packet size, Litestream's restore made the kernel drop data
-      # and the pause test's restore stalled past its 30 s bound (testing-guide.md, "The stream tests'
-      # CI job gives loopback a normal network's packet size").
+      # Why: testing-guide.md, "The stream tests' CI job gives loopback a normal network's packet size".
       - name: Give loopback a normal network's packet size
         run: sudo ip link set dev lo mtu 1500
 

@@ -192,9 +192,8 @@ hook, or how tests are scheduled:
   the step's test files. Receipt: [testing-guide.md](docs/developers/testing-guide.md), "In CI their
   temporary files are in memory".
 - **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Cost: the
-  pause test's restore stalled past its 30 s ceiling twice in CI; at the runner's default MTU the
-  kernel dropped data arriving for downloads the restore had not read yet, and the retransmission
-  backoff outlasted the ceiling.
+  pause test's last restore failed twice in CI, each about 31 s after the stream resumed, just past
+  its 30 s ceiling.
   Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
 

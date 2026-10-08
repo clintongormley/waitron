@@ -5970,21 +5970,13 @@ approved.
   caller starts that control. The original one-off race has not been reproduced locally; the
   changed real-binary stream pause and loop suites passed together on 2026-10-03. If the control
   fails again, retain that run's log and inspect the child state before naming another cause.
-- **The stream pause test's last restore failed in CI, about 31 s after the stream resumed
-  (runs 37042034082 and 37690377712; cause found and fixed in CI by A387, 2026-10-08).** The
-  probe's `litestream restore` was abandoned at its 30 s ceiling with empty output. A387
-  reproduced it on GitHub's Linux runner and found it in the runner's loopback, not in Waitron or
-  Litestream: the restore leaves most of its downloads unread, the kernel dropped data it had
-  advertised room for (`TcpExtTCPRcvQDrop`), and the sender's retransmission backoff outlasted the
-  ceiling. With loopback at MTU 1500 the reproducing harness made 1,692 restores with no drop and
-  no hang, against six hangs in six jobs at the default MTU 65536. `test-server-stream` now sets
-  that MTU before the stream tests. Receipt:
+- **The stream pause test's last restore failed in CI (runs 37042034082 and 37690377712) — DONE
+  (A387, 2026-10-08).** `test-server-stream` sets loopback's MTU to 1500, under which the
+  reproducing harness never hung. Receipt:
   [testing-guide.md](developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
-  Left open: a local Linux run keeps the machine's own loopback and can still meet the stall (not
-  measured how often; a Docker Desktop container did not, in 627 restores), and a box's restore
-  over a real network was not measured — its two-minute no-progress bound (`RESTORE_STALL_MS`,
-  `packages/stream/src/restore.ts`) is what would end such a stall there. No timeout increase or
-  retry was introduced.
+  Left open: a local Linux run keeps the machine's own loopback and can still meet the stall (how
+  often was not measured), and a box's restore over a real network was not measured. No timeout
+  increase or retry was introduced.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
   container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
