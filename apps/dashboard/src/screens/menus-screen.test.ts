@@ -482,6 +482,9 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     listCatalogues: vi.fn().mockResolvedValue(menus),
     listLibraryProducts: vi.fn().mockResolvedValue(products),
     listCategories: vi.fn().mockResolvedValue(categories),
+    getCatalogueSettings: vi
+      .fn()
+      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
@@ -8673,6 +8676,38 @@ describe("colour swatches on the Structure tab", () => {
     await vi.waitFor(() => expect(form.open).toBe(true));
     expect(form.value?.id).toBe("s-drinks");
     expect(form.getAttribute("heading")).toBe(t("menus.edit_section"));
+  });
+
+  it("paints the venue default on a product with nothing coloured above it, and follows a new default", async () => {
+    const live = new LiveData();
+    const client = api({
+      liveData: live,
+      listLibraryProducts: vi
+        .fn()
+        .mockResolvedValue(
+          products.map((item) =>
+            item.id === "p-burger" ? { ...item, categoryId: null, color: null } : item,
+          ),
+        ),
+      getCatalogueSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: "#b12525" }),
+    });
+    const el = await mountLunch(client);
+    await settleStructure(el);
+    const burgerChip = () =>
+      inStructure(el, '[data-test="color-m-burger"] [part~="color-swatch"]')!;
+    expect(getComputedStyle(burgerChip()).backgroundColor).toBe("rgb(177, 37, 37)");
+
+    client.getCatalogueSettings.mockResolvedValue({
+      defaultProductVatClass: "general",
+      defaultColor: "#256bb1",
+    });
+    live.invalidate([{ type: "catalogue_settings" }]);
+    await vi.waitFor(async () => {
+      await settleStructure(el);
+      expect(getComputedStyle(burgerChip()).backgroundColor).toBe("rgb(37, 107, 177)");
+    });
   });
 });
 

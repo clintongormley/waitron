@@ -58,6 +58,10 @@ it.each(["en", "es-ES"])(
         listCatalogues: async () => [{ id: "menu", name: "Carta", active: true, version: 1 }],
         listLibraryProducts: async () => [],
         listCategories: async () => [],
+        getCatalogueSettings: async () => ({
+          defaultProductVatClass: "general",
+          defaultColor: null,
+        }),
         getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es", "en"] }),
         getMenuStructure: async () => structure,
         getMenuHome: async () => home,

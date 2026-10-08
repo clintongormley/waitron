@@ -87,6 +87,9 @@ function api(
     listCatalogues: vi.fn().mockResolvedValue(menus),
     listLibraryProducts: vi.fn().mockResolvedValue([burger]),
     listCategories: vi.fn().mockResolvedValue([]),
+    getCatalogueSettings: vi
+      .fn()
+      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getMenuStructure: vi.fn().mockResolvedValue({
       rootSectionId: "root-lunch",
