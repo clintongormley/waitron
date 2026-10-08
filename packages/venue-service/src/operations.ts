@@ -37,14 +37,7 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
-import {
-  zoneAllDayMenus,
-  zonePeriodMenus,
-  menuPeriods,
-  menuPeriodStaffMenus,
-  menuDayTimetables,
-  menuSlots,
-} from "./schema/menus.js";
+import { menuPeriods, menuPeriodStaffMenus, menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
@@ -449,23 +442,6 @@ export async function configureZone(
   if (zone.active && !department.active) {
     throw new AppError("zone.department_inactive", { zoneId: input.zoneId });
   }
-  // A zone moving department drops its own menus, which named the old department's list and periods.
-  await tx
-    .delete(zoneAllDayMenus)
-    .where(
-      and(
-        eq(zoneAllDayMenus.zoneId, input.zoneId),
-        ne(zoneAllDayMenus.departmentId, input.departmentId),
-      ),
-    );
-  await tx
-    .delete(zonePeriodMenus)
-    .where(
-      and(
-        eq(zonePeriodMenus.zoneId, input.zoneId),
-        ne(zonePeriodMenus.departmentId, input.departmentId),
-      ),
-    );
   await tx
     .insert(zoneServicePolicies)
     .values({

@@ -46,10 +46,8 @@ function openHoursPage(departmentId: string): void {
   openPage(`/manage/hours/department/${encodeURIComponent(departmentId)}`);
 }
 
-const menuTimetablePath = (departmentId: string | null) =>
-  departmentId === null
-    ? "/manage/menu-timetable"
-    : `/manage/menu-timetable/department/${encodeURIComponent(departmentId)}`;
+const openingHoursPath = (departmentId: string) =>
+  `/manage/opening-hours?department=${encodeURIComponent(departmentId)}`;
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "ticket_then_pay"];
 type View = "departments" | "zones";
@@ -112,7 +110,7 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(edit-department-name),
       wt-data-table::part(edit-zone-name),
       wt-data-table::part(edit-trading-name),
-      wt-data-table::part(zone-readiness-action) {
+      wt-data-table::part(department-readiness-action) {
         border: 0;
         background: transparent;
         color: var(--wt-color-primary-text);
@@ -150,7 +148,16 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(inherited-value) {
         color: var(--wt-color-text-muted);
       }
-      wt-data-table::part(zone-readiness) {
+      wt-data-table::part(department-summary) {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--wt-space-1);
+        width: min(calc(var(--wt-tap-min) * 6), calc(100vw - var(--wt-tap-min) * 4));
+        white-space: normal;
+      }
+      wt-data-table::part(zone-readiness),
+      wt-data-table::part(department-readiness) {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
@@ -957,8 +964,8 @@ export class VenueOperationsScreen extends LitElement {
         return t("venue.readiness.department_missing");
       case "zone.department_missing":
         return `${issue.zoneName} ${t("venue.readiness.zone_department_missing")}`;
-      case "zone.menu_missing":
-        return `${issue.zoneName} ${t("venue.readiness.zone_menu_missing")}`;
+      case "department.no_periods":
+        return `${issue.departmentName} ${t("venue.readiness.department_no_periods")}`;
       case "zone.menu_unpublished":
         return `${issue.zoneName} ${t("venue.readiness.zone_menu_unpublished")}`;
       case "zone.menu_empty":
@@ -1092,37 +1099,48 @@ export class VenueOperationsScreen extends LitElement {
                 (issue) =>
                   html`<div part="zone-readiness" data-test="zone-readiness">
                     ${this.#readinessMessage(issue)}
-                    ${
-                      issue.code === "zone.menu_missing"
-                        ? html`<a
-                            part="zone-readiness-action"
-                            data-test="zone-readiness-action"
-                            href=${menuTimetablePath(row.departmentId)}
-                            >${t("venue.set_up_menus")}</a
-                          >`
-                        : nothing
-                    }
                   </div>`,
               )}`;
           const displayName = row.department.name;
           if (this.departmentNameEditor !== row.department.id)
-            return html`<button
-                type="button"
-                part="edit-department-name"
-                data-test="edit-department-name"
-                aria-label=${`${row.department.name}: ${t("venue.name")}`}
-                @click=${() => {
-                  this.#openName("department", row.department.id, row.department.name);
-                }}
-              >
-                ${displayName}</button
-              >${
-                row.department.active
-                  ? nothing
-                  : html`<span part="inactive-department-label"
-                      >${t("venue.department_disabled")}</span
-                    >`
-              }`;
+            return html`<span part="department-summary"
+              ><span
+                ><button
+                  type="button"
+                  part="edit-department-name"
+                  data-test="edit-department-name"
+                  aria-label=${`${row.department.name}: ${t("venue.name")}`}
+                  @click=${() => {
+                    this.#openName("department", row.department.id, row.department.name);
+                  }}
+                >
+                  ${displayName}</button
+                >${
+                  row.department.active
+                    ? nothing
+                    : html`<span part="inactive-department-label"
+                        >${t("venue.department_disabled")}</span
+                      >`
+                }${model.readiness
+                  .filter(
+                    (issue) =>
+                      issue.code === "department.no_periods" &&
+                      issue.departmentId === row.department.id,
+                  )
+                  .map(
+                    (issue) =>
+                      html`<div part="department-readiness" data-test="department-readiness">
+                        ${this.#readinessMessage(issue)}
+                        <a
+                          part="department-readiness-action"
+                          data-test="department-readiness-action"
+                          href=${openingHoursPath(row.department.id)}
+                          >${t("venue.set_up_periods")}</a
+                        >
+                      </div>`,
+                  )}</span
+              ></span
+            >`;
           return html`<div part="name-editor">
             <wt-input
               name="departmentName"
