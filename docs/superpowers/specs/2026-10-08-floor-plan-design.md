@@ -1,7 +1,7 @@
 # Floor plans: the saved plan, today's plan and the till's map
 
 **Status:** owner decisions of 2026-10-08, from one brainstorm that used Square for Restaurants'
-floor plan editor as the reference. Not built. Behaviour below is the target design, not a claim
+floor plan editor as the reference. The owner approved this written spec on 2026-10-08. Not built. Behaviour below is the target design, not a claim
 about what runs today; section 2 is the only part that describes today's code, and it cites where.
 
 **What this replaces.** Where this document disagrees with an earlier one, this one wins:
