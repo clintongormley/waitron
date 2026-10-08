@@ -155,7 +155,8 @@ hook, or how tests are scheduled:
   37771042263's image smoke sat silent in `apt-get update` until its 15-minute limit, and `publish`
   was cancelled with it. Guards: the apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs`
   and the apt-wait cases in `scripts/deploy-image-env.test.ts`, weaker than their names — they read
-  text and do not check the retries. Receipt:
+  text and do not check the retries; the `apt_get` wrapper cases in `scripts/waitron-sh.test.mjs` run
+  waitron.sh's retries under stubs. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-apt-wait-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.

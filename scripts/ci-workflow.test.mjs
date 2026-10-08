@@ -1912,7 +1912,7 @@ describe("the workflows' apt waits", () => {
 });
 
 /**
- * `playwright install --with-deps` runs apt-get where no apt option or guard above reaches it, so
+ * `playwright install --with-deps` runs apt-get where no `-o` option or guard above reaches it, so
  * it takes the same outer limit. Reads TEXT through the same step reader, line by line, and does not
  * check that the step retries or judge the number.
  */

@@ -806,8 +806,8 @@ Every `apt-get update` and `apt-get install` in a workflow, in `deploy/Dockerfil
 `deploy/waitron.sh` and in the bench's CA probe image (`bench/sqlite-failover/src/probes/linux-binaries.ts`)
 runs under an outer `timeout`, and runs again when it stalls or exits non-zero (in the workflow, the
 update and the install run again together), because apt's own read timeout did not end a wait on a
-mirror sending a byte every 5 s. A workflow's `playwright install --with-deps` runs apt itself, out
-of reach of any apt option, so it must run under `timeout <n>` too; no workflow runs it today.
+mirror sending a byte every 5 s. A workflow's `playwright install --with-deps` runs apt itself,
+where no `-o` option on our command line reaches it, so it must run under `timeout <n>` too.
 
 An `apt-get update` that could not connect, or timed out waiting, warned "Failed to fetch" and
 exited 0 (apt 2.8.3 and 3.0.3), so a retry loop never saw it fail. The Dockerfile and the bench image
@@ -854,7 +854,7 @@ The limits chosen:
 - In `deploy/waitron.sh`, `apt_get` is the wrapper: three attempts, each under `timeout` (or
   `gtimeout`) for 300 s for an update and 1800 s for an install, with `Acquire::Retries=3` and the
   two read timeouts on the command line, so nothing is written to the box. An install gets longer
-  because Docker's packages are about 120 MB, which a slow box link can take more than 300 s to fetch.
+  because Docker's packages are large enough that a slow box link can take more than 300 s to fetch.
   The script stops with a message after the third failed attempt, or before the first when neither
   timeout command is installed.
 
@@ -895,8 +895,9 @@ cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — all r
 `--with-deps` case asks only for `timeout <n>` earlier on the same line, not a retry. The waitron.sh
 case asks that every `apt-get` outside a whole-line comment or a `command -v apt-get` sits inside
 `apt_get()` and that its body runs apt
-under `"$limit" <n>`; it does not run the shell. The wrapper's limits, retries and stop are run, with
-stubs, by "the apt_get wrapper inside waitron.sh" cases in `scripts/waitron-sh.test.mjs`. The
+under `"$limit" <n>`; it does not run the shell. The numbers it hands to `timeout`, its retries and its
+stop are run with stubs (the `timeout` stub drops the limit, so no stall is ever cut off) by "the
+apt_get wrapper inside waitron.sh" cases in `scripts/waitron-sh.test.mjs`. The
 workflow case reads steps through the same reader as the "apt installs" case, so it misses every
 install that case's comment lists as passing — among them apt run by a script the step calls, by a
 composite or Docker action, by a tool itself (`playwright install --with-deps`, which only the

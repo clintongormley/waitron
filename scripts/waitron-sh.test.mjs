@@ -377,7 +377,7 @@ function sandbox({
 
 // Two budgets, protecting against different failures. Vitest's per-test timeout bounds how long the
 // whole TEST may take, and a test it fails for its duration alone is a healthy run reported as
-// broken. Every case below makes exactly ONE `run()` call and does no other slow work, so bounding
+// broken. Every `run()` case below makes exactly ONE `run()` call and does no other slow work, so bounding
 // the test above the spawn timeout covers that side. That reasoning is about THIS suite, not a
 // general rule: a test that waits twice can outlast such a bound. Guard:
 // `scripts/spawn-timeout-budget.test.ts`.
@@ -1611,7 +1611,6 @@ describe("the apt_get wrapper inside waitron.sh", () => {
     expect(r.apts).toEqual([`apt-get ${OPTIONS} update`]);
   });
 
-  // Docker's packages are about 120 MB, which a slow box link can take longer than 300 s to fetch.
   it("gives an install 1800 s per attempt, because a slow link can take longer than 300 s", () => {
     const r = aptGet(["install", "-y", "docker-ce"]);
     expect(r.status).toBe(0);
