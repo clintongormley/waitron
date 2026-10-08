@@ -52,6 +52,24 @@
 > each part, re-read every line cited from the slice it waits on, and diff what that slice changed
 > after the commit read here.
 
+> **Implementation grounding, 2026-10-08 (Lane E, Part A).** Slice 1 landed in PR #1460 as
+> `685a6074b152eeb904a66cfac9f83e8f432196ab`; this branch starts at
+> `8d52162e3`. `git diff --name-only bdf64d9cd8b0a6527cc9110aa9a2b09988f608fd
+> 685a6074b152eeb904a66cfac9f83e8f432196ab -- packages/venue-service packages/module
+> packages/catalogue apps/till apps/server/src/till-api.ts scripts/schema-constraints.test.ts
+> scripts/migration-upgrade.test.ts` printed no paths. The S1 code cited below therefore matches
+> the landed tree for those paths; historical doc line numbers are not used to locate entries.
+> The owner's 21:55 answer in Lane C's questions approves all 19 decisions.
+> At start, slice 2 and slice 5 Part A have no worktree or open PR. Lane D instead has A432 in
+> `feat/period-end-offset`, including a venue-service migration numbered 0034 and changes to
+> period validation and contract types. Both branches proceed under the queue's overlap waiver;
+> whoever lands second regenerates any colliding migrations and keeps the extended end as the
+> reference for A432's offset. Lane A is working on menu structure; Lane B's venue forms are
+> outside Task A1. The read-only file inventory is retained in Lane E's local receipts.
+> Per the owner's 17:10 queue instruction, implementation runs focused checks and the explicit
+> migration/fiscal guards; mandatory package tests and coverage remain in CI. Part A is one PR;
+> Tasks B1–B4 belong to Lane D. The unattended runner authorises landing after green checks.
+
 **Goal:** during service, a manager keeps a period open later than planned ("Keep Lunch open until
 14:30 today") from the till, and, once zones have closed times, keeps a zone open later ("Keep the
 Terrace open until 01:30 today"). Staff close a prep station for the rest of the day, or open it,
