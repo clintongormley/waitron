@@ -2880,6 +2880,7 @@ it.each([
   };
   try {
     await page.viewport(width, 900);
+    expect(window.innerWidth).toBe(width);
     setLocale(locale);
     history.replaceState(null, "", "/manage/prep-stations");
     const next = withUpstairs(
@@ -2922,6 +2923,10 @@ it.each([
         : "Upstairs bar: Fuera de su horario, el trabajo va a",
     );
     await expectNoA11yViolations(host);
+    fallback.scrollIntoView({ block: "nearest", inline: "end" });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(fallback.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+    expect(fallback.getBoundingClientRect().right).toBeLessThanOrEqual(width);
     await page.screenshot({ path: `__screenshots__/a8-settings-${locale}-${theme}-${width}.png` });
   } finally {
     document.body.style.background = previous.body;
