@@ -29,6 +29,7 @@ import type {
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
+import { namedDaysOn } from "./named-days.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { periodExtensions } from "./schema/period-extensions.js";
@@ -302,19 +303,8 @@ export async function departmentDay(
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   if (moment === null) return { periods, staff, ranges: [], previousRanges: [], extension: null };
   const yesterday = addDays(moment.businessDay, -1);
-  const dates = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      closeWholeVenue: specialDates.closeWholeVenue,
-    })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        inArray(specialDates.date, [yesterday, moment.businessDay]),
-      ),
-    );
+  const named = await namedDaysOn(tx, cfg, [yesterday, moment.businessDay]);
+  const dates = [...named.values()];
   const timetables = await tx
     .select({
       id: menuDayTimetables.id,
@@ -337,10 +327,10 @@ export async function departmentDay(
       ),
     );
   const timetableOn = (date: string) => {
-    const special = dates.find((entry) => entry.date === date);
+    const special = named.get(date);
     if (special?.closeWholeVenue) return undefined;
     return (
-      (special === undefined
+      (!special?.ownHours
         ? undefined
         : timetables.find((entry) => entry.specialDateId === special.id)) ??
       timetables.find((entry) => entry.weekday === weekdayOf(date))
@@ -914,6 +904,7 @@ export async function readOpeningHoursModel(
           ? undefined
           : or(
               gte(specialDates.date, addDays(moment.businessDay, -1)),
+              isNotNull(specialDates.repeatOn),
               inArray(
                 specialDates.id,
                 timetables.flatMap((row) =>

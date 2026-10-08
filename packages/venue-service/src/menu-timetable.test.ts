@@ -732,7 +732,14 @@ const dateInput = (date: string, overrides: Partial<SpecialDateInput> = {}): Spe
   ...overrides,
 });
 const makeDate = (v: Venue, date: string, overrides: Partial<SpecialDateInput> = {}) =>
-  scoped((tx) => saveSpecialDate(tx, v.cfg, null, dateInput(date, overrides), AT));
+  scoped(async (tx) => {
+    const saved = await saveSpecialDate(tx, v.cfg, null, dateInput(date, overrides), AT);
+    await tx
+      .update(specialDates)
+      .set({ ownHours: !overrides.closeWholeVenue })
+      .where(eq(specialDates.id, saved.id));
+    return saved;
+  });
 const dateMenus = (v: Venue, specialDateId: string, slots: MenuSlot[], at = AT) =>
   scoped((tx) => saveSpecialDateMenus(tx, v.cfg, specialDateId, v.restaurant, slots, at));
 

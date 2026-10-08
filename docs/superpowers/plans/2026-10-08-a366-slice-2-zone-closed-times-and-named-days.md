@@ -419,9 +419,14 @@ Each reads `special_dates` once: rows whose `date` is asked for, or whose `repea
 and day of an asked date and whose `date` is not after it; `occursOn` (Task 1) decides. Until
 Task 5 writes `repeat_on`, tests insert rows directly.
 
-`OpeningHoursModel.specialDates` becomes `namedDays: { id; date; name; kind; repeats; ownHours;
+`OpeningHoursModel.specialDates` becomes (in Task 18, together with its browser consumers) `namedDays: { id; date; name; kind; repeats; ownHours;
 closeWholeVenue }[]`, listing every repeating day, every one-off day from the business day before
 today on, and any day holding dated rows (as `:686-696` does for timetables).
+
+Task 3 keeps the existing wire shape while including old repeats in the list; Task 18 changes the
+shape together with `opening-hours-screen.ts`, `opening-hours-day.ts` and their fixtures.
+`duplicateSpecialDate` copies `ownHours` in Task 3 so the existing dated-timetable copy assertions
+keep their behavior; Task 5 owns the remaining named-day copy fields and validation.
 
 The resolver and `calendarDays`: for the business day (and, in the resolver, the day before) the
 named day on that date decides — whole-venue closure: closed; own hours: the department's dated

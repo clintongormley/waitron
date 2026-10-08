@@ -426,6 +426,7 @@ describe("reading Hours", () => {
       return period;
     });
     const special = await createDate(fx, input({ date: "2030-10-14", colour: "green", cells: [] }));
+    await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
     await withTransaction(db, (tx) =>
       saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date()),
     );

@@ -1553,6 +1553,7 @@ describe("the calendar's Closed colour", () => {
           cells: [{ subject: f.bar, cell: { mode: "all_day", periods: [] } }],
         }),
       );
+      await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
       if (open)
         await withTransaction(db, (tx) =>
           saveSpecialDateMenus(

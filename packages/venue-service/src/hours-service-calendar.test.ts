@@ -14,7 +14,7 @@ import { locationId } from "@waitron/shared";
 import { readCalendarDays, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { hoursWeekCells, specialDateHours } from "./schema/hours.js";
+import { hoursWeekCells, specialDateHours, specialDates } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
@@ -166,6 +166,7 @@ describe("station-hours calendar follows department service periods", () => {
         },
         at,
       );
+      await tx.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
       await saveSpecialDateMenus(tx, f.cfg, special.id, f.department, [], at);
       await saveSpecialDate(
         tx,
@@ -199,6 +200,10 @@ describe("station-hours calendar follows department service periods", () => {
           { date, name: "Special Tuesday", colour: "blue", closeWholeVenue, cells: [] },
           at,
         );
+        await tx
+          .update(specialDates)
+          .set({ ownHours: !closeWholeVenue })
+          .where(eq(specialDates.id, special.id));
         await saveSpecialDateMenus(
           tx,
           f.cfg,

@@ -44,6 +44,7 @@ import {
   specialDateHoursPeriods,
   specialDates,
 } from "./schema/hours.js";
+import { namedDaysOn } from "./named-days.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import "./errors.js";
 
@@ -858,7 +859,7 @@ export async function duplicateSpecialDate(
   for (const date of targets) {
     const [row] = await tx
       .insert(specialDates)
-      .values({ ...values, date, locationId: cfg.locationId })
+      .values({ ...values, ownHours: source.ownHours, date, locationId: cfg.locationId })
       .returning({ id: specialDates.id });
     const targetId = row!.id;
     for (const { subject, cell } of cells)
@@ -966,6 +967,7 @@ async function readRange(
         eq(specialDates.locationId, cfg.locationId),
         or(
           and(gte(specialDates.date, dates[0]!), lte(specialDates.date, dates[dates.length - 1]!)),
+          and(isNotNull(specialDates.repeatOn), lte(specialDates.date, dates[dates.length - 1]!)),
           listFrom === undefined ? undefined : gte(specialDates.date, listFrom),
         ),
       ),
@@ -998,7 +1000,8 @@ async function readRange(
       cell: cellOf(cell.mode, datePeriods.get(cell.id) ?? []),
     });
   for (const cells of cellsByDate.values()) cells.sort(bySubjectId);
-  return { subjects, weeks, specials, cellsByDate };
+  const named = await namedDaysOn(tx, cfg, dates);
+  return { subjects, weeks, specials, cellsByDate, named };
 }
 
 function calendarDays(
@@ -1007,7 +1010,7 @@ function calendarDays(
   range: Awaited<ReturnType<typeof readRange>>,
   holidays: readonly HolidayFact[],
 ): CalendarDay[] {
-  const specialOn = new Map(range.specials.map((special) => [special.date, special]));
+  const colourById = new Map(range.specials.map((special) => [special.id, special.colour]));
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of holidays) {
     const facts = factsOn.get(fact.date);
@@ -1016,14 +1019,23 @@ function calendarDays(
   }
   const active = opening.departments.filter((department) => department.active);
   return dates.map((date) => {
-    const special = specialOn.get(date) ?? null;
+    const occurrence = range.named.get(date);
+    const special =
+      occurrence === undefined
+        ? null
+        : {
+            id: occurrence.id,
+            date,
+            name: occurrence.name,
+            colour: colourById.get(occurrence.id)!,
+            closeWholeVenue: occurrence.closeWholeVenue,
+          };
     const open =
       !special?.closeWholeVenue &&
       active.some((department) => {
-        const own =
-          special === null
-            ? undefined
-            : department.dates.find((day) => day.specialDateId === special.id);
+        const own = !occurrence?.ownHours
+          ? undefined
+          : department.dates.find((day) => day.specialDateId === occurrence.id);
         const slots =
           own?.slots ?? department.week.find((day) => day.weekday === weekdayOf(date))!.slots;
         return slots.length > 0;
