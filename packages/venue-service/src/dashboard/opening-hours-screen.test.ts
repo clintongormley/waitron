@@ -201,7 +201,7 @@ it("creates the changed draft and closes it before refreshing the list", async (
     writes.push({ path, method, body });
     data.departments[0]!.periods = [
       ...data.departments[0]!.periods,
-      { id: "p2", name: "Dinner", colour: "blue", menuId: "lunch", staffMenuIds: [], weekdays: [] },
+      { id: "p2", name: "Dinner", colour: "red", menuId: "lunch", staffMenuIds: [], weekdays: [] },
     ];
     return { id: "p2" };
   }) as DashboardRequest);
@@ -216,7 +216,7 @@ it("creates the changed draft and closes it before refreshing the list", async (
     {
       path: "/management-api/venue-service/departments/restaurant/menu-periods",
       method: "POST",
-      body: { name: "Dinner", colour: "blue", menuId: "lunch", staffMenuIds: [] },
+      body: { name: "Dinner", colour: "red", menuId: "lunch", staffMenuIds: [] },
     },
   ]);
   await expect.poll(() => table(el).rows.length).toBe(2);
@@ -667,3 +667,46 @@ it("does not show a late deletion refusal on a disconnected screen", async () =>
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=delete-error]")).toBeNull();
 });
+
+it.each([
+  [[], "red"],
+  [["red", "green"], "amber"],
+  [["red", "amber", "grey", "blue", "green", "purple"], "red"],
+] as const)(
+  "starts a new period with the first unused colour (%j → %s)",
+  async (used, expected) => {
+    const data = model();
+    data.departments[0]!.periods = used.map((colour, index) => ({
+      ...model().departments[0]!.periods[0]!,
+      id: `p${index}`,
+      colour,
+    }));
+    const writes: unknown[] = [];
+    const el = await mount((async (path, method, body) => {
+      if (method === "GET") return structuredClone(data);
+      writes.push({ path, method, body });
+      return { id: "new" };
+    }) as DashboardRequest);
+    const editor = await edit(el);
+    const colour =
+      editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=colour]")!;
+    const save =
+      editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=save-period]",
+      )!;
+    expect(colour.value).toBe(expected);
+    expect(save.variant).toBe("secondary");
+    expect(save.disabled).toBe(true);
+    await change(editor, "name", "Breakfast");
+    await change(editor, "menuId", "lunch");
+    submit(editor);
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes).toEqual([
+      {
+        path: "/management-api/venue-service/departments/restaurant/menu-periods",
+        method: "POST",
+        body: { name: "Breakfast", colour: expected, menuId: "lunch", staffMenuIds: [] },
+      },
+    ]);
+  },
+);
