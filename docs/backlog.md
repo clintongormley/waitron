@@ -3772,6 +3772,57 @@ The original walkthrough is retained under _Detail → Setup wizard_.
 
 **Open — screens:**
 
+- **A396 — adding and calibrating a printer (owner, 2026-10-08; open):**
+  1. **The Add-a-printer scan shows an empty box while it searches.** Say something like "No
+     printers found yet" while scanning, and something clearer if the scan ends with nothing found.
+  2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
+     width ruler" (nobody knows what it means — e.g. "Print width test"); the action button goes on
+     the right, on its own row; then a row of the two things the person enters (last number fully
+     visible on the ruler, the QR square's size); then a row of the two results (paper width and
+     print resolution). Resolution is never shown as a result today, yet the mismatch message
+     ("The ruler shows 384 dots, but this paper width and resolution print 360 dots…") talks about
+     it. **Open question for the task:** is the QR measurement needed at all, or does the ruler
+     alone settle what printing needs? Answer it from the code (does anything need the width in
+     millimetres rather than dots?) before redesigning.
+  3. **The sample receipt (calibration step 2).** Print it in the venue's default receipt language,
+     which follows the province chosen at setup (Catalan for the owner's venue), not always
+     Spanish. Drop the "Café, jamón, niño, pingüino · 5 €" line; test the language's accented
+     letters as ordered items instead (for Catalan: à è é í ï ò ó ú ü ç and l·l). Add horizontal
+     rules so the receipt reads in blocks: after the venue name and NIF, before the first item,
+     before the tax lines, and before the total. (The owner's photo showed TOTAL and Cambio printed a
+     line below their labels; that was the paper curling — nothing to fix.)
+  4. **Rename and move "Carried by one device at a time".** It means a portable printer (a waiter's
+     belt printer): one device holds it, and another device choosing it is asked to take it over
+     (`device.equipment_held`); off means a fixed printer any number of devices share. Name it
+     e.g. "Portable printer", with the explanation as its hint. It sits under calibration step 3's
+     heading "Does this printer have a cash drawer?", which is not what it is about — give it its
+     own heading or a wider one for the step. The same label shows on the printer details
+     (A397), and changes there too.
+
+- **A397 — printer details and the print queue (owner, 2026-10-08; open):**
+  1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
+     Edit opens the name field off to the right, away from the title it changes; whether the
+     printer is active shows three times (a "Status" heading, "Status: Active" and an Active
+     toggle); times print raw ("2026-10-08 11:13"). "Calibrate printer" is hidden inside the
+     collapsed Calibration section — it is an ordinary action and is always visible with the
+     modal's other actions. A modal also fixes the print queue's link: clicking a printer name there
+     opens the details with an "All printers" link that goes back to the print queue; a modal
+     simply closes back to wherever it was opened.
+  2. **The connection line says the opposite of the truth for USB and Bluetooth printers.**
+     `printers.connection_roaming` ("Can roam between agents", `printers-screen.ts`) is shown for
+     them, but a USB or Bluetooth printer is tied to the one agent it is plugged into or paired
+     with; it is a network printer that any venue agent can reach. Say it is connected to one print
+     agent and name it (e.g. "Connected through: Waitron", from what "Last seen by" shows); fix the
+     Spanish ("Puede cambiar de agente") with it. Check whether anything besides the label treats
+     USB or Bluetooth printers as able to move between agents.
+  3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
+     printer off (C109, #960), and the only way back is adding it again as a new printer. Offer
+     "Pair again" (or similar) on the same printer record.
+  4. **Reprint on the print queue lets the person choose a different printer**, for when the
+     original is out of service. Offer active printers, the original chosen by default; check
+     whether a job laid out for one paper width needs laying out again for another. Drawer jobs
+     stay unresendable (CLAUDE.md §5).
+
 - **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
   `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
   not `wt-data-table`, so `pinned` does not reach them; `product-editor.ts` also contains both a
@@ -5218,6 +5269,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   after a passkey is added or removed, the Profile screen makes one request more than it needs (the
   signals read beside the profile reload); folding the signal data into the profile response would
   remove it.
+
+- **A395 — sign-in and passkey fixes (owner, 2026-10-08; open):**
+  1. **Choosing a passkey on the password step asks to discard unsaved changes.** On the dashboard
+     sign-in: enter an email, press Next, then press "Log in with passkey" on the password step — the
+     "discard unsaved changes" dialog appears. Moving between sign-in methods loses nothing the
+     person would want kept, so no dialog.
+  2. **Remove the passkey name field.** Each passkey already shows which password manager holds it
+     (C100, #945), so a name typed by the person is no longer needed.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Input
   since C128 (#1031): `sale.take_payment` gates every till payment route and is held by every role,
