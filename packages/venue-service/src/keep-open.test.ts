@@ -301,6 +301,7 @@ it("permits shortening an extension above its scheduled end, but never into the 
 });
 
 it.each([
+  { offset: -15, time: "13:50", orderable: true, sendable: true },
   { offset: -15, time: "14:44", orderable: true, sendable: true },
   { offset: -15, time: "14:45", orderable: false, sendable: false },
   { offset: 15, time: "15:00", orderable: false, sendable: true },

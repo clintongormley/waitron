@@ -71,3 +71,14 @@ it("a busy dialog keeps its action colour and refuses a duplicate host press", a
   submit.click();
   expect(heard).toEqual([]);
 });
+
+it("clears a rejected destination's field and summary on a different choice", async () => {
+  const el = await mount({ refusal: "station.destination_invalid" });
+  const field = el.shadowRoot!.querySelector("wt-combobox")!;
+  field.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(field.error).toBe("");
+  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+});

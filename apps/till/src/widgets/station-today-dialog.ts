@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
@@ -34,6 +34,7 @@ export class TillStationTodayDialog extends LitElement {
   @property() refusal: string | null = null;
   @state() private active = true;
   @state() private savableAtOpen = true;
+  @state() private fieldEdited = false;
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
   #baseline?: { value: string };
@@ -57,8 +58,9 @@ export class TillStationTodayDialog extends LitElement {
       ? this.selected!
       : (this.destinations.find((d) => d.isDefault)?.id ?? this.destinations[0]?.id ?? "");
   }
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues): void {
     if (!this.isConnected || !this.active) return;
+    if (changed.has("refusal")) this.fieldEdited = false;
     this.selected = this.#choice();
     if (this.#scope) {
       if (this.selected !== this.#observed) {
@@ -95,6 +97,7 @@ export class TillStationTodayDialog extends LitElement {
       saveActionState(this.#scope, { savableAtOpen: this.savableAtOpen }).unchanged
     )
       return;
+    this.fieldEdited = true;
     this.dispatchEvent(
       new CustomEvent("station-today-confirm", {
         detail: { sendsToStationId: this.#choice() },
@@ -118,7 +121,9 @@ export class TillStationTodayDialog extends LitElement {
   override render() {
     const action = saveActionState(this.#scope, { savableAtOpen: this.savableAtOpen });
     const missing = !this.#choice();
-    const refusal = this.refusal === null ? "" : codeMessage(this.refusal);
+    const fieldRefusal = this.refusal === "station.destination_invalid";
+    const refusal =
+      this.refusal === null || (fieldRefusal && this.fieldEdited) ? "" : codeMessage(this.refusal);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -135,17 +140,18 @@ export class TillStationTodayDialog extends LitElement {
           .options=${this.destinations.map((d) => ({ value: d.id, label: d.isDefault ? t("station_today.default_choice").replace("{station}", () => d.name) : d.name }))}
           .value=${this.#choice()}
           .disabled=${this.busy}
-          .error=${this.refusal === "station.destination_invalid" ? refusal : ""}
+          .error=${fieldRefusal ? refusal : ""}
           @wt-change=${(e: CustomEvent<{ value: string }>) => {
             e.stopPropagation();
             if (!this.isConnected || !this.active || this.busy) return;
             this.selected = e.detail.value;
+            this.fieldEdited = true;
             this.#observed = this.#choice();
             this.#scope?.changed();
           }}
         ></wt-combobox>
         <p>${t("station_today.sent_stay")}</p>
-        ${refusal ? html`<p class="refusal" role="alert">${refusal}</p>` : nothing}
+        ${refusal ? html`<p class="refusal" role="alert">${fieldRefusal ? t("form.fix_fields") : refusal}</p>` : nothing}
       </div>
       <wt-button
         slot="footer"

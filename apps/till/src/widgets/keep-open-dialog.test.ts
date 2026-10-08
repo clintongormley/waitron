@@ -112,6 +112,7 @@ it("places a refusal carrying until beside that field and a correction above the
   );
   await choose(el, "14:30");
   expect(el.shadowRoot!.querySelector("wt-combobox")!.error).toBe("");
+  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
 });
 it("a refusal about the period does not mark the endpoint", async () => {
   const el = await mount({ refusal: "period_extension.invalid", refusalField: "periodId" });

@@ -390,13 +390,7 @@ export async function departmentDay(
   };
 }
 
-export function keepOpenSubject(
-  ranges: readonly ServiceRange[],
-  day: Awaited<ReturnType<typeof departmentDay>>,
-  moment: ServiceMoment | null,
-  cutover: string,
-): DepartmentService["keepOpen"] {
-  if (moment === null) return null;
+function serviceRuns(ranges: readonly ServiceRange[]): ServiceRange[] {
   const runs: ServiceRange[] = [];
   for (const range of ranges) {
     const last = runs.at(-1);
@@ -404,6 +398,17 @@ export function keepOpenSubject(
       last.endsAt = range.endsAt;
     else runs.push({ ...range });
   }
+  return runs;
+}
+
+export function keepOpenSubject(
+  ranges: readonly ServiceRange[],
+  day: Awaited<ReturnType<typeof departmentDay>>,
+  moment: ServiceMoment | null,
+  cutover: string,
+): DepartmentService["keepOpen"] {
+  if (moment === null) return null;
+  const runs = serviceRuns(ranges);
   const running = rangeInForce(runs, moment.minute, cutover);
   const run =
     running ??
@@ -469,7 +474,7 @@ export async function resolveDepartmentService(
     running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
   const occurrences = [
     ...day.previousRanges.map((range) => ({ range, day: -1440 })),
-    ...ranges.map((range) => ({ range, day: 0 })),
+    ...serviceRuns(ranges).map((range) => ({ range, day: 0 })),
   ];
   const eligibleMenus = (selection: boolean): string[] => [
     ...new Set(

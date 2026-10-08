@@ -131,7 +131,10 @@ export class TillKeepOpenDialog extends LitElement {
     if (!p) return nothing;
     const action = saveActionState(this.#scope),
       missing = !p.choices.includes(this.selected);
-    const refusal = this.refusal === null ? "" : codeMessage(this.refusal);
+    const refusal =
+      this.refusal === null || (this.refusalField === "until" && this.fieldEdited)
+        ? ""
+        : codeMessage(this.refusal);
     const fieldError = this.refusalField === "until" && !this.fieldEdited ? refusal : "";
     const delay = this.#delay();
     return html`<wt-dialog

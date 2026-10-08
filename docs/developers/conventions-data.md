@@ -1229,8 +1229,9 @@ A366's plan; these experiments are not a complete-slice result.
 ### Today's station destination and period extension
 
 A station's by-hand state and chosen destination belong to one business date. Routing tries
-that destination before the configured fallback; if the walk finds no open station, the active
-venue default receives the work. Opening the station does not move already sent work back.
+that destination before the configured fallback. If a walk that followed today's destination
+finds no open station, the active venue default receives the work. A failed walk that never
+followed today's destination keeps its previous no-replacement result. Opening the station does not move already sent work back.
 Period extensions also belong to one business date: the resolver overlays the stored range
 before choosing the running and ended menus. The extension read offers future quarter-hours
 through the business-day boundary. Configuration exports omit both `station_day_states` and
