@@ -1489,3 +1489,92 @@ describe("validateRoutingConfiguration", () => {
     expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));
   });
 });
+
+describe("a switched-on zone whose department is switched off", () => {
+  const PATIO = "z-patio";
+  const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+  function zoneTables(): Tables {
+    return {
+      departments: [
+        { id: RESTAURANT, name: "Restaurant", active: 1 },
+        { id: DELI, name: "Deli", active: 0 },
+      ],
+      floor_zones: [{ id: PATIO, name: "Patio", active: 1 }],
+      zone_service_policies: [{ zone_id: PATIO, department_id: DELI }],
+      kitchen_stations: [{ id: KITCHEN, is_default: 1, active: 1 }],
+    };
+  }
+  const refusalOf = (tables: Tables) => {
+    try {
+      validate(tables);
+    } catch (error) {
+      return error;
+    }
+    throw new Error("the bundle was accepted");
+  };
+
+  it("is refused with the zone's own code, naming the zone and its department", () => {
+    const error = refusalOf(zoneTables());
+    expect(error).toMatchObject({ code: "zone.department_inactive" });
+    expect((error as { params: unknown }).params).toEqual({
+      zoneId: PATIO,
+      zoneName: "Patio",
+      departmentId: DELI,
+      departmentName: "Deli",
+    });
+  });
+
+  it.each([
+    ["no zone or department name", undefined, undefined],
+    ["empty zone and department names", "", ""],
+    ["a non-text zone and department name", 7, null],
+  ])("leaves out a name the bundle does not hold as text (%s)", (_, zoneName, departmentName) => {
+    const tables = zoneTables();
+    const zone = tables.floor_zones![0]!;
+    const department = tables.departments!.find((row) => row.id === DELI)!;
+    if (zoneName === undefined) delete zone.name;
+    else zone.name = zoneName;
+    if (departmentName === undefined) delete department.name;
+    else department.name = departmentName;
+    const error = refusalOf(tables);
+    expect(error).toMatchObject({ code: "zone.department_inactive" });
+    expect((error as { params: unknown }).params).toEqual({ zoneId: PATIO, departmentId: DELI });
+  });
+
+  it("is accepted once its department is switched on", () => {
+    const tables = zoneTables();
+    tables.departments!.find((row) => row.id === DELI)!.active = 1;
+    expect(() => validate(tables)).not.toThrow();
+  });
+
+  it("is accepted once the zone is switched off too, as switching a department off leaves it", () => {
+    const tables = zoneTables();
+    tables.floor_zones![0]!.active = 0;
+    expect(() => validate(tables)).not.toThrow();
+  });
+
+  it("still gets the routing grid's refusal, naming the row, when a routing cell names the zone", () => {
+    const tables = zoneTables();
+    tables.routing_cells = [
+      {
+        id: "cell",
+        location_id: "location",
+        category_id: null,
+        product_id: null,
+        zone_id: PATIO,
+        station_id: KITCHEN,
+        no_preparation: 0,
+        no_category: 0,
+      },
+    ];
+    const error = refusalOf(tables);
+    expect(error).toMatchObject({ code: "service_zone.not_found" });
+    expect((error as { params: unknown }).params).toEqual({
+      zoneId: PATIO,
+      zoneName: "Patio",
+      departmentId: DELI,
+      departmentName: "Deli",
+      row: "all",
+    });
+  });
+});

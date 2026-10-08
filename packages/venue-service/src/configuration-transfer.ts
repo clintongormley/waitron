@@ -552,6 +552,26 @@ export function validateRoutingConfiguration(tables: Tables): void {
   }
 }
 
+/**
+ * Refuses (`zone.department_inactive`) a switched-on zone whose department the bundle holds switched
+ * off, which no save produces: switching a department off switches its zones off.
+ */
+function validateZoneDepartments(tables: Tables): void {
+  const zones = new Map((tables.floor_zones ?? []).map((row) => [row.id, row]));
+  const departments = new Map((tables.departments ?? []).map((row) => [row.id, row]));
+  for (const policy of tables.zone_service_policies ?? []) {
+    const zone = zones.get(policy.zone_id);
+    const department = departments.get(policy.department_id);
+    if (zone?.active !== 1 || department === undefined || department.active === 1) continue;
+    throw new AppError("zone.department_inactive", {
+      zoneId: String(policy.zone_id),
+      ...nameOf("zoneName", zone),
+      departmentId: String(policy.department_id),
+      ...nameOf("departmentName", department),
+    });
+  }
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string },
@@ -562,6 +582,8 @@ function validateVenueServiceConfiguration(
   validateMenuTimetables(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
+  // After the routing check, whose refusal of such a zone's cell also names the cell's row.
+  validateZoneDepartments(tables);
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
