@@ -25,7 +25,7 @@ import {
 import { BATCH_SIZE } from "./batches.js";
 import * as vatRates from "./vat-rates.js";
 import { createCategory, updateCategory } from "./categories.js";
-import { saveCatalogueDefaultColor } from "./settings.js";
+import * as settings from "./settings.js";
 import {
   createCatalogue,
   createProduct,
@@ -326,8 +326,20 @@ describe("each offer's colour", () => {
 
   it("freezes the venue default on an offered product with nothing coloured above it", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => saveCatalogueDefaultColor(tx, "#777777"));
+    await app((tx) => settings.saveCatalogueDefaultColor(tx, "#777777"));
     expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", "#777777");
+  });
+
+  it("reads the venue default only for a menu that offers products", async () => {
+    const f = await menusFixture(fx.db);
+    const empty = await app((tx) => createCatalogue(tx, { name: "Empty" }));
+    const reads = vi.spyOn(settings, "readCatalogueSettings");
+    await build(f.lunch);
+    expect(reads).toHaveBeenCalledTimes(1);
+    reads.mockClear();
+    const document = await build(empty.id);
+    expect(document.root.members).toEqual([]);
+    expect(reads).not.toHaveBeenCalled();
   });
 
   it("keeps a section's colour on the section only", async () => {
