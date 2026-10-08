@@ -3443,7 +3443,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07)
 
 - **The Departments and zones inline name editors put Save before Cancel**, while the screen's
-  editor window puts Cancel first, as `design-system.md` → Forms asks. Left open by A331 batch 4b.
+  editor window puts Cancel first, as `design-system.md` → Forms asks. Left open by A331 batch 4b (#1462).
 
 - **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
   The native status colour fields show an ellipsis instead of the full label in the inspected
