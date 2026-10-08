@@ -392,7 +392,8 @@ export class TillTabShell extends LitElement {
       return run !== this.#run;
     };
     if (this.#stepBackOwed && !this.#menuOpen()) {
-      this.#stepBackOwed = false;
+      // Still owed until it finishes: a newer fit, which may owe none of its own (after a
+      // `transferCount` change), finishes it instead.
       while (this.steps > 0) {
         this.steps -= 1;
         if (await stale()) return;
@@ -402,6 +403,7 @@ export class TillTabShell extends LitElement {
           break;
         }
       }
+      this.#stepBackOwed = false;
     }
     const most = this.#present().length + 1;
     while (this.#wraps() && this.steps < most) {

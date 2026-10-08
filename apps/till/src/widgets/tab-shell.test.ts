@@ -1224,6 +1224,60 @@ describe("till-tab-shell above phone width", () => {
     });
   });
 
+  const shortName = { operatorName: "Ana" };
+  const longName = { operatorName: "María de los Ángeles Fernández-Villaverde y Castro" };
+
+  it.each([
+    [
+      "the name grows, then the transfer count changes",
+      shortName,
+      longName,
+      { transferCount: 120 },
+    ],
+    [
+      "the name shrinks, then the transfer count changes",
+      longName,
+      shortName,
+      { transferCount: 3 },
+    ],
+    ["the name grows, then shrinks back", shortName, longName, shortName],
+  ] as const)(
+    "fits as a fresh bar does when %s before the first refit has finished",
+    async (_how, start, first, second) => {
+      await withLocale("en-GB", () =>
+        atViewport(1280, async () => {
+          const { el: fresh } = await mountWidget<TillTabShell>("till-tab-shell", {
+            ...full,
+            ...start,
+            ...first,
+            ...second,
+          });
+          await settle(fresh);
+          const want = inMore(fresh);
+          fresh.remove();
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", { ...full, ...start });
+          await settle(el);
+          const differs: string[] = [];
+          // Each pass starts the second fit one microtask later than the last, so some pass cuts
+          // the first short at each of its waits.
+          for (let ticks = 0; ticks <= 40; ticks += 1) {
+            Object.assign(el, full, start);
+            await settle(el);
+            Object.assign(el, first);
+            for (let i = 0; i < ticks; i += 1) await Promise.resolve();
+            Object.assign(el, second);
+            await settle(el);
+            expectOneRow(el);
+            if (inMore(el).join() !== want.join()) differs.push(`${ticks}: ${inMore(el).join()}`);
+          }
+          expect(want.length).toBeGreaterThan(0);
+          expect(want.length).toBeLessThan(leaveOrder.length);
+          expect(differs, `fresh: ${want.join()}`).toEqual([]);
+        }),
+      );
+    },
+  );
+
   it("reports no ResizeObserver loop while the screen narrows and widens across the phone width", async () => {
     await atViewport(1280, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
