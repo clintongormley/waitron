@@ -93,7 +93,7 @@ export interface MenuVariant {
 /** One Active size's price setting on one menu. */
 export interface MenuPriceVariant extends MenuVariant {
   active: boolean;
-  /** Whether a till may sell it now (`products.available`); every listed row is Active. */
+  /** The size's own Available flag (`products.available` on its row). */
   available: boolean;
 }
 
@@ -114,7 +114,7 @@ export interface MenuPriceRow {
   effectivePrice: string;
   /** The product's own Active state. A size's is on its `variants` entry. */
   active: boolean;
-  /** Whether a till may sell it now (`products.available`); every listed row is Active. */
+  /** The product's own Available flag (`products.available`). A size's is on its `variants` entry. */
   available: boolean;
   /** Every Active size, in variant order; an Inactive one is on no menu. */
   variants: MenuPriceVariant[];

@@ -1726,8 +1726,8 @@ Where the two differ, and why:
   a slow save would otherwise freeze the field the person wants to correct. Its saves go one at a
   time in the order they were made (`ListWriteQueue`, `apps/dashboard/src/widgets/section-writes.ts`),
   and a save of a value the field already holds sends nothing.
-- The price table's `label` names its row ("Price override for Lemonade — Large"), so a screen
-  reader hears which row the field belongs to. The course list's label names no row: a course's
+- The price table's `label` names its row ("Price override for Lemonade — Large"), adding ", set on
+  this menu" while this menu stores a price for it, so a screen reader hears which row the field belongs to. The course list's label names no row: a course's
   field is labelled "Name", and the new course's field "New course" (`#nameField`).
 - The price table moves focus to the field a refusal names, even when the person has moved on to
   another row, opening a size's product first if it is folded shut (`#focusField`). The course list

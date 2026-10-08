@@ -842,7 +842,6 @@ test("an overriding field keeps its value upright inside italic text, where an o
   expect(getComputedStyle(field(el).input).fontStyle).toBe("normal");
 });
 
-// A control: it passes before the change too, and must still pass after it.
 test("a field that is not overriding draws no bar and its placeholder muted and italic, its value at the inherited weight", async () => {
   const el = await mount('<wt-price-input label="Price" placeholder="3.00"></wt-price-input>');
   const { field: box, input } = field(el);

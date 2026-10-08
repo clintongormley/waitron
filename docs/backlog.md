@@ -2593,7 +2593,7 @@ owner 2026-10-04).**
 2026-10-05; owner 2026-10-04).** Not checked:
 the tab on the running dev stack — the product page opening from a Status link, a real save and
 the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
-only).
+only). (2026-10-08, A348: the Status link is gone; a row's ⋮ Edit product opens the product instead.)
 W95's implementation now uses Price override / Precio propio for Preview clashes.
 Left open, raised in #1239's review and not taken: a size with its own price decides whether
 its clash comes from its product by matching the two clashes, which can be misread in a
