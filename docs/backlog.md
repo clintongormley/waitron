@@ -5971,39 +5971,20 @@ approved.
   changed real-binary stream pause and loop suites passed together on 2026-10-03. If the control
   fails again, retain that run's log and inspect the child state before naming another cause.
 - **The stream pause test's last restore failed in CI, about 31 s after the stream resumed
-  (PR #1055, run 37042034082, job 110955048468, 2026-10-02; not fixed).** In
-  `apps/server/src/stream-pause.e2e.test.ts` step 10, the probe that restores the generation to
-  find the sale made while the bucket was frozen threw `backup.stream_restore_failed` from
-  `restoreGeneration` (`packages/stream/src/restore.ts`) instead of returning, so the wait ended
-  at once. The six green runs of the same job read that day went from the resume to the end of the
-  test in about 2.5 s. Since 31 s is just past the probe's 30 s `RESTORE_MS` ceiling, the likeliest
-  reading is a `litestream restore` against versitygw that never finished and was stopped there.
-  That is inferred: the error's `exitCode` was not in the log, and the run was not repeated before
-  this was written down. W30 adds failure diagnostics with the
-  child exit code when available, whether the restore was abandoned, and whatever Litestream
-  output was captured; output may be empty on abandonment. The cause of the one-off failure remains
-  open. Next action: inspect those details from any new failing run before choosing a repair.
-  **Observed again during A364, 2026-10-07:** PR #1386, run `37690377712`, job
-  `113028865726`, final restore at step 10. The retained log now reports
-  `exitCode=null, abandoned=true`, empty Litestream output and `diskFull=false`,
-  about 31 seconds after resuming. The earlier frozen/pause sale timings passed.
-  Cause remains open; inspect the waiting restore process and bucket requests in a retained
-  reproduction before choosing a repair. A364 changes no restore or stream-loop code.
-  **A382 bounded investigation, 2026-10-08; still not fixed:** on commit
-  `a9b2d487e6994f9afd1678011bd36b98ee93ff71`, Node v26.7.0, macOS arm64,
-  Litestream 0.5.17 and versitygw 1.8.0, six unchanged runs of
-  `pnpm --filter @waitron/server exec vitest run src/stream-pause.e2e.test.ts`
-  each passed one test without skips. Three used disk scratch directories; three set `TMPDIR`
-  to a 512 MiB HFS+ RAM disk. Two more RAM-disk runs used CI's `test:shard` command with
-  `src/stream-loop.e2e.test.ts`, `src/stream-pause.e2e.test.ts` and
-  `src/testing/s3-test-server.test.ts`, coverage and `CI=true`; each passed all ten tests.
-  The restore ceiling remained 30 seconds. External process polling every 0.2 seconds retained
-  child states and pause-bucket file listings when it observed a restore; none of the observed
-  restores stayed alive for five seconds, so no hanging child was sampled.
-  These runs did not reproduce the abandonment or identify its cause. They do not reproduce
-  the native Linux CI runner or its `/dev/shm` filesystem. If this fails again, capture the
-  waiting child's stack and network state, Litestream logs and bucket requests before choosing
-  a repair. No timeout increase or retry was introduced.
+  (runs 37042034082 and 37690377712; cause found and fixed in CI by A387, 2026-10-08).** The
+  probe's `litestream restore` was abandoned at its 30 s ceiling with empty output. A387
+  reproduced it on GitHub's Linux runner and found it in the runner's loopback, not in Waitron or
+  Litestream: the restore leaves most of its downloads unread, the kernel dropped data it had
+  advertised room for (`TcpExtTCPRcvQDrop`), and the sender's retransmission backoff outlasted the
+  ceiling. With loopback at MTU 1500 the reproducing harness made 1,692 restores with no drop and
+  no hang, against six hangs in six jobs at the default MTU 65536. `test-server-stream` now sets
+  that MTU before the stream tests. Receipt:
+  [testing-guide.md](developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
+  Left open: a local Linux run keeps the machine's own loopback and can still meet the stall (not
+  measured how often; a Docker Desktop container did not, in 627 restores), and a box's restore
+  over a real network was not measured — its two-minute no-progress bound (`RESTORE_STALL_MS`,
+  `packages/stream/src/restore.ts`) is what would end such a stall there. No timeout increase or
+  retry was introduced.
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full (in a Linux
   container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's Linux runner
