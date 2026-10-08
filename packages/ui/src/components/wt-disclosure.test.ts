@@ -91,6 +91,7 @@ test("reopening during collapse continues from the current height", async () => 
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
   const pauseHeightTransition = (previous?: Animation): Promise<Animation> =>
     new Promise((resolve, reject) => {
+      let frames = 0;
       const pause = () => {
         if (!body.isConnected) {
           reject(new Error("Disclosure removed before its height transition started"));
@@ -105,6 +106,14 @@ test("reopening during collapse continues from the current height", async () => 
               candidate.transitionProperty === "height",
           );
         if (!animation) {
+          if (++frames === 3) {
+            reject(
+              new Error(
+                `No height transition started; body is ${body.getBoundingClientRect().height}px`,
+              ),
+            );
+            return;
+          }
           requestAnimationFrame(pause);
           return;
         }
