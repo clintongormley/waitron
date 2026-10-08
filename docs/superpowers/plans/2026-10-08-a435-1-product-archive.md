@@ -6,7 +6,7 @@
 
 **Goal:** Archiving a product or variant becomes permanent: nothing switches it back on or changes
 what it is, archiving is refused while a live or scheduled menu includes it, and the dashboard shows
-archived products read-only.
+an archived product's details in a read-only panel.
 
 **Architecture:** One new catalogue module, `packages/catalogue/src/archive.ts`, owns archiving. It
 finds the published menus that include a product and refuses with `product.on_live_menu`; it
@@ -14,8 +14,8 @@ performs the archive (the product, its variants, menu drafts, extras lists); and
 `assertProductWritable` refuses a write to an archived row with `product.archived`. Every path that
 archives — `patchProduct`, `saveProductEditor`, `writeProductVariants`, `deleteCatalogueItems` —
 goes through it, and every path that changes what a product is calls `assertProductWritable`. The
-dashboard swaps Disable/Enable for Archive/View and opens an archived product with its fields
-disabled.
+dashboard swaps Disable/Enable for Archive/View; View opens a read-only details panel (owner,
+2026-10-08), and the product editor never opens an archived product.
 
 **Tech Stack:** TypeScript, drizzle on the venue's SQLite store (`node:sqlite`), Vitest (catalogue,
 recipes and server: database suites; dashboard: browser mode in real headless Chromium), Lit.
@@ -947,7 +947,7 @@ leave a key they still read for Task 9 to delete).
 - [ ] **Step 3: Write the failing screen and list tests.**
   - `product-list.test.ts`: a row is archived when `rowActive` says so (a variant of an archived
     product counts as archived); an archived row's actions hold only **View** (emits
-    `edit-product`); an active row's hold Edit and **Archive** (emits `delete-product`); the Status
+    `view-product`); an active row's hold Edit and **Archive** (emits `delete-product`); the Status
     filter offers "Active" and "Archived".
   - `catalogue-screen.test.ts`: the archive dialog's heading and warning use the archive keys and
     its confirm button reads Archive; a `product.on_live_menu` refusal in that dialog shows the
@@ -960,7 +960,7 @@ leave a key they still read for Task 9 to delete).
 
 - [ ] **Step 5: Implement.**
   - `product-list.ts` actions column: decide with `rowActive(row)`, not the row's own flag. Archived:
-    one button View (`data-test="view-${id}"`, event `edit-product`). Active: Edit and a danger
+    one button View (`data-test="view-${id}"`, event `view-product`; Task 9 wires the screen). Active: Edit and a danger
     Archive (`data-test="delete-${id}"`, event `delete-product`). Remove `restore-product`. The
     status cell and filter labels use the archived badge keys.
   - `catalogue-screen.ts`: delete `#restoreProduct` and the `@restore-product` listener; the delete
@@ -1020,17 +1020,68 @@ git commit -s -m "Dashboard: folder actions archive, and the extras picker leave
 
 ---
 
-### Task 9: The editor opens an archived product with its fields disabled; variants archive on save
+### Task 9: A read-only details panel for an archived product
+
+**Files:**
+- Create: `apps/dashboard/src/widgets/product-details.ts` (`<dashboard-product-details>`)
+- Modify: `apps/dashboard/src/screens/catalogue-screen.ts`, `apps/dashboard/src/i18n/strings.ts`
+- Test: `widgets/product-details.test.ts`, `widgets/product-details.a11y.test.ts` (new),
+  `screens/catalogue-screen.test.ts`
+
+The owner chose a details panel over a greyed-out editor (2026-10-08): View shows the product as
+plain text, not as a form. The editor is never opened for an archived product.
+
+**Interfaces:**
+- `<dashboard-product-details>` properties: `open: boolean`, `value: ProductEditorValue | null`
+  (as `getProductEditor` returns it), `categories: CategorySummary[]`,
+  `extraLists: ModifierListChoice[]`, `optionLists: ModifierListChoice[]` (the same types the
+  editor takes — read them from `product-editor.ts`'s properties). Event: `wt-close`
+  (`bubbles: true, composed: true`), from its Close button, the modal's close button and Escape.
+
+- [ ] **Step 1: Strings** — the panel's heading is the product's staff name, so it needs no key.
+  Add only what the panel labels that `strings.ts` does not already hold (reuse the
+  editor's field labels — `editor.*`, `product.price`, `product.allergens` — wherever one exists;
+  `grep -n` before adding). Every new key has English and Spanish.
+
+- [ ] **Step 2: Failing tests.**
+  - `product-details.test.ts`: given a value, it shows the staff name as the heading, the
+    `product.archived_notice` sentence, then as a definition list: customer name per language,
+    kitchen name, price with its unit, VAT class, category (by name, from `categories`), each
+    variant (name and price; its own archived badge), allergens, and the options and extras lists
+    attached (by name). A field with no value is left out rather than shown blank. There is no input,
+    no switch and no Save. Close, the modal's close button and Escape each emit `wt-close`.
+  - A fixture whose staff, customer and kitchen names are three DIFFERENT texts (CLAUDE.md §3), so
+    a label reading the wrong name fails.
+  - `product-details.a11y.test.ts`: axe over the open panel, both themes.
+  - `catalogue-screen.test.ts`: View on an archived row (and on a variant of an archived product)
+    opens the panel, not the editor; opening an archived product by its link (the `?product=` deep
+    link `#openProduct` serves) opens the panel too; an active product still opens the editor.
+
+- [ ] **Step 3: Run to see them fail** —
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-details src/screens/catalogue-screen.test.ts`.
+
+- [ ] **Step 4: Implement.** The panel is a `wt-modal` holding a `<dl>`; every colour, space and
+  font reads a `--wt-*` token. The screen listens for `view-product`, reads the value with
+  `getProductEditor` (passive read, as other automatic reads are), and opens the panel; in
+  `#openProduct`, a value with `active: false` goes to the panel instead of the editor.
+
+- [ ] **Step 5: Run** the same command, then `src/screens/catalogue src/widgets/product-list`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/dashboard
+git commit -s -m "Dashboard: View opens an archived product's details as a read-only panel"
+```
+
+---
+
+### Task 9b: Variants archive on save in the editor
 
 **Files:** `apps/dashboard/src/widgets/product-editor.ts`, `apps/dashboard/src/widgets/variant-table.ts`,
 `apps/dashboard/src/i18n/strings.ts`, `docs/superpowers/specs/2026-10-08-delete-and-archive-design.md`;
 tests `widgets/product-editor.test.ts`, `widgets/product-editor.save-state.test.ts`,
-`widgets/product-editor.a11y.test.ts`, `widgets/variant-table.test.ts`
-
-Disabled, not `readonly`: the design system's read-only field state exists only on `wt-input`
-(`docs/developers/design-system.md`, Forms → "The field box"), and this editor also holds switches,
-choosers and `wt-price-input`, which has no read-only setting. Nothing in an archived editor can
-change, so its draft scope never reports a change.
+`widgets/variant-table.test.ts`
 
 - [ ] **Step 1: Strings.**
 
@@ -1044,57 +1095,46 @@ leftovers (`product.disable`, `product.enable`, `product.disabled_notice`,
 `product.variant_disabled_badge`) once unread.
 
 - [ ] **Step 2: Failing tests.**
-  - `product-editor.test.ts`, opened on a saved value with `active: false`: every field and the
-    variant table are disabled; there is no Save and no Enable button; the Available switch is
-    absent; the notice reads `product.archived_notice`; Cancel, the close button AND Escape all close
-    it.
-  - `product-editor.test.ts`: a saved variant archived in this draft is submitted with
-    `active: false`; a variant archived before is submitted unchanged at its own position (the
-    server accepts it and writes nothing to it, Task 3).
-  - `variant-table.test.ts`: a variant whose id is in `archivedIds` is not drawn at all; a saved
-    variant switched off in this draft shows "Archived when saved" and a Keep action (emits
-    `wt-restore`); an active saved variant's danger action reads Archive; an unsaved one's reads
-    Remove; there is no show/hide toggle.
-  - `product-editor.a11y.test.ts`: the archived state, both themes.
+  - `product-editor.test.ts`: there is no Enable button for any value; a saved variant archived in
+    this draft is submitted with `active: false`; a variant archived before is submitted unchanged
+    at its own position (the server accepts it and writes nothing to it, Task 3).
+  - `variant-table.test.ts`: a variant whose id is in `archivedIds` is not drawn; a saved variant
+    switched off in this draft shows "Archived when saved" and a Keep action (emits `wt-restore`);
+    an active saved variant's danger action reads Archive; an unsaved one's reads Remove; there is no
+    show/hide toggle.
 
 - [ ] **Step 3: Run to see them fail** —
-  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts src/widgets/variant-table.test.ts src/widgets/product-editor.a11y.test.ts`.
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts src/widgets/variant-table.test.ts`.
 
 - [ ] **Step 4: Implement.**
-  - `product-editor.ts`: `private get archived() { return this.value?.id !== undefined && this.value.active === false; }`;
-    `suspended` returns `this.busy || this.windowOpen || this.archived`. Everything that must stay
-    usable when archived reads `this.busy || this.windowOpen` instead: the Cancel button, the modal's
-    `dismissible`, and `#beforeClose` (which today refuses to close while suspended). No Save and no
-    Enable button when archived; delete the Enable button and the `restore` parameter of `save` and
-    `submissionValue`. Hide the Available switch when archived. The inactive notice uses
-    `product.archived_notice`.
-  - Remove the show/hide-inactive toggle and `showInactive`. Pass
+  - `product-editor.ts`: delete the Enable button, the inactive notice, and the `restore` parameter
+    of `save` and `submissionValue`. Remove the show/hide-inactive toggle and `showInactive`. Pass
     `.archivedIds=${new Set((this.value?.variants ?? []).filter((v) => !v.active).map((v) => v.id))}`
     to the table.
   - `variant-table.ts`: `@property({ attribute: false }) archivedIds: ReadonlySet<string> = new Set();`.
-    Skip rows whose id is in it (keeping every other row's index as its position in the whole list,
-    which every row action reports). A saved row switched off in the draft: badge
+    Skip rows whose id is in it, keeping every other row's index as its position in the whole list
+    (every row action reports that index). A saved row switched off in the draft: badge
     `product.variant_archive_pending_badge`, action `restore` labelled `product.keep_variant`. An
     active saved row's danger action reads `product.archive`. Remove `showInactive` and its event.
 
 - [ ] **Step 5: Run** the same command, then
   `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor src/widgets/variant-table src/screens/catalogue`.
 
-- [ ] **Step 6: Look at it** on the dev stack: open an archived product from the Archived filter
-  (close it with Escape), archive a variant in the editor and Keep it, then archive one and save;
-  phone width; both themes.
+- [ ] **Step 6: Look at it** on the dev stack: View an archived product, archive a variant in the
+  editor and Keep it, then archive one and save; phone width; both themes.
 
-- [ ] **Step 7: Correct the spec** where this step settled it differently, in its Products section:
-  the editor footer gains no Archive (archiving is from the product list, a folder and the variant
-  table); the editor's own "show disabled variants" toggle goes and archived variants are not shown
-  in the editor; the writes this step leaves alone (translation fixes, the main reporting category,
-  folder moves); the archive dialog's warning names extras lists rather than counting them.
+- [ ] **Step 7: Correct the spec**, Products section, where this step settled it: View opens a
+  read-only details panel, not the editor; the editor footer gains no Archive (archiving is from the
+  product list, a folder and the variant table); the editor shows no archived variants and loses
+  its "show disabled" toggle; the writes this step leaves alone (translation fixes, the main
+  reporting category, folder moves); the archive warning names extras lists rather than counting
+  them.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add apps/dashboard docs/superpowers/specs
-git commit -s -m "Dashboard: an archived product opens disabled and read-only, and variants archive on save with Keep"
+git commit -s -m "Dashboard: variants archive on save in the editor, with Keep to undo before saving"
 ```
 
 ---
