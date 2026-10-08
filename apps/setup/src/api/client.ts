@@ -78,6 +78,7 @@ export interface ProvisionBody {
 export interface ProvisionResult {
   provisioned: true;
   restarting: true;
+  openingHours?: { departmentId: string };
 }
 
 export interface AdoptBody {

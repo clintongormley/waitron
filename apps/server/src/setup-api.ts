@@ -69,6 +69,7 @@ export interface SetupDeps {
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
   /** Reconstructs the one venue committed by this persisted request after a process interruption. */
   recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  readOpeningHours?: (result: VenueResult) => Promise<{ departmentId: string } | undefined>;
   /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
    * it. */
   seedDemo?: (result: VenueResult, req: ProvisionRequest) => Promise<void>;
@@ -741,7 +742,20 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation?.advance("publishing");
       }
 
-      const response = c.json({ provisioned: true, restarting: true }, 200);
+      let openingHours: { departmentId: string } | undefined;
+      try {
+        openingHours = await deps.readOpeningHours?.(result);
+      } catch {
+        log("warn", "setup.opening_hours_read_failed", {});
+      }
+      const response = c.json(
+        {
+          provisioned: true,
+          restarting: true,
+          ...(openingHours === undefined ? {} : { openingHours }),
+        },
+        200,
+      );
       setTimeout(() => requestRestart(), 0);
       return response;
     };

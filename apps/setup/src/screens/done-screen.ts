@@ -84,6 +84,8 @@ export class SetupDoneScreen extends LitElement {
    */
   @property({ type: Boolean }) mirrorJoin = false;
 
+  @property({ attribute: false }) openingHours?: { departmentId: string };
+
   @property() onboardingIntent?: "demo" | "prepare" | "live";
 
   /** True after a rebuild from the owner's bucket, whose devices may need pointing at this server. */
@@ -176,6 +178,17 @@ export class SetupDoneScreen extends LitElement {
           >${t("done.description.email")}</wt-choice-row
         >
       </div>
+      ${
+        this.openingHours === undefined
+          ? nothing
+          : html`<wt-card data-test="opening-hours">
+              <p>${t("done.opening_hours")}</p>
+              <a
+                href=${`/manage/opening-hours/department/${encodeURIComponent(this.openingHours.departmentId)}`}
+                >${t("done.change_opening_hours")}</a
+              >
+            </wt-card>`
+      }
       ${this.rebuilt ? this.#deviceSteps() : nothing} ${this.#breakGlass()}
       ${
         this.onboardingIntent === "demo" || this.rebuilt

@@ -172,6 +172,7 @@ import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
+import { readSetupOpeningHours } from "./setup-opening-hours.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
 import { runFiscalDrain } from "./onboarding-policy.js";
@@ -1056,6 +1057,7 @@ async function bootServer(
           return result;
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
+        readOpeningHours: (result) => readSetupOpeningHours(db, result),
         adopt: (req, hooks) =>
           adoptFromPrimary(
             {

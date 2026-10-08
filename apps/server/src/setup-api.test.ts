@@ -266,6 +266,48 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
 describe("POST /setup-api/provision — orchestration, onboarding intent, cert gate, latch", () => {
+  it("still completes setup when the optional hours summary cannot be read", async () => {
+    const app = new Hono();
+    const deps = makeDeps({
+      readOpeningHours: async () => {
+        throw new Error("unreadable schedule");
+      },
+    });
+    mountSetup(app, deps.deps, noopLog);
+    const response = await postProvision(app, { ...demoBody(), mode: "prepare" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+    await vi.waitFor(() => expect(deps.requestRestart).toHaveBeenCalledOnce());
+  });
+
+  it("returns saved first hours and preserves that summary in a completed replay", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-opening-summary-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const app = new Hono();
+      const deps = makeDeps({
+        operations,
+        readOpeningHours: async () => ({ departmentId: "first-department" }),
+      } as Partial<SetupDeps>);
+      mountSetup(app, deps.deps, noopLog);
+      const body = { ...demoBody(), mode: "prepare" };
+      expect(await (await postProvision(app, body)).json()).toEqual({
+        provisioned: true,
+        restarting: true,
+        openingHours: { departmentId: "first-department" },
+      });
+      const restarted = new Hono();
+      mountSetup(restarted, makeDeps({ operations: createSetupOperationStore(dir) }).deps, noopLog);
+      expect(await (await postProvision(restarted, body)).json()).toEqual({
+        provisioned: true,
+        restarting: true,
+        openingHours: { departmentId: "first-department" },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("runs an explicit fiscal test and refuses activation when its bound evidence is absent", async () => {
     const fiscalTest = new Hono();
     const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });

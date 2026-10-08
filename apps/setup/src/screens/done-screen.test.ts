@@ -35,6 +35,34 @@ afterEach(() => {
 });
 
 describe("setup-done-screen", () => {
+  it.each([
+    ["en-GB", "Opening hours: Monday to Friday, 09:00–17:00", "Change opening hours"],
+    [
+      "es-ES",
+      "Horario de apertura: de lunes a viernes, 09:00–17:00",
+      "Cambiar el horario de apertura",
+    ],
+  ] as const)(
+    "shows the saved first hours and their department link in %s",
+    async (locale, hours, link) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}), {
+        openingHours: { departmentId: "first-department" },
+      } as Partial<SetupDoneScreen>);
+      expect(q(el, "[data-test=opening-hours]")?.textContent).toContain(hours);
+      const anchor = q(el, "[data-test=opening-hours] a");
+      expect(anchor?.textContent?.trim()).toBe(link);
+      expect(anchor?.getAttribute("href")).toBe(
+        "/manage/opening-hours/department/first-department",
+      );
+    },
+  );
+
+  it("does not invent hours on a response without a first schedule", async () => {
+    const el = await mountDone(() => new Promise(() => {}));
+    expect(q(el, "[data-test=opening-hours]")).toBeNull();
+  });
+
   it("announces the restart on the provision/restore path", async () => {
     const el = await mountDone(() => new Promise(() => {}));
     expect(el.shadowRoot!.textContent).toContain(RESTART_EN);
