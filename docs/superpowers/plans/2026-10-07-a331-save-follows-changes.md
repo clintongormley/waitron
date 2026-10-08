@@ -1254,7 +1254,9 @@ numbers (~NNN) were read from the tree at `3abb870b6` on 2026-10-08. Paths are u
 `screens/menus-screen.ts` and `menus-screen.test.ts`, `navigation*`, `menu-preview*`,
 `menu-prices-table*`, `menu-structure-table.ts`, `menu-document-tree*`, `menu-tree-presentation.ts`,
 `product-media.ts` and `i18n/strings.ts`; none of the 15 files below, and none of their own test
-files. Open PRs #1399 and #1309 touch no file under `screens/` or `widgets/`.
+files. Open PRs #1399 and #1309 touch no file under `screens/` or `widgets/`; #1416 touches
+`widgets/product-list.ts` and `packages/ui`'s reorder table, none of the 15 (`gh pr view <n> --json
+files`, 2026-10-08).
 
 **The 3a rules block and the two 3b rules apply to every task below.** Three more, for this batch:
 
@@ -1266,11 +1268,14 @@ files. Open PRs #1399 and #1309 touch no file under `screens/` or `widgets/`.
   `menus-screen.ts` mounts runs `src/screens/menus-screen.test.ts` UNEDITED, throw-probe included; a
   failure there caused by the gate means that widget moves to 2b: revert it and say so.
 - **A refusal handed to an untouched form fails by assertion, not by the throw-probe.** Tests that
-  mount a form with `fieldErrors` (or emit `wt-submit` from outside with values the form never
-  held) and then assert Save enabled now see Save disabled, because nothing was edited. In the app
-  a refusal always follows a changed press, so make the edit in the form first and keep the "a
-  refusal never disables Save" assertion. Find them with
-  `git grep -n 'disabled).toBe(false)\|disabled")).toBe(false)'` over the task's suites.
+  mount a form with `fieldErrors` (or emit the form's own event — `wt-submit`, `create-ingredient`
+  — from outside with values the form never held) and then assert Save enabled now see Save
+  disabled, because nothing was edited. In the app a refusal always follows a changed press, so
+  make the edit in the form first and keep the "a refusal never disables Save" assertion. Find
+  them with `rg -U -n 'disabled,?\s*\)\.toBe\(false\)|disabled"\)\)\.toBe\(false\)'` over the
+  task's suites: prettier wraps most screen-level ones as `.disabled,` / `).toBe(false)` on two
+  lines, which a one-line grep misses (it finds none of the three in `units-screen.test.ts`,
+  `recipe-screen.test.ts` and `modifiers-screen.test.ts`).
 - A form that opens on a stored value it shows differently (a normalised default, a 0 shown as an
   empty box) takes that shown value as its baseline, so it opens quiet. A test whose point is that
   an untouched Save sends that value takes the 3a.4a shape: the form opens disabled, one OTHER
@@ -1293,9 +1298,10 @@ nothing. The catalogue default VAT class is always a stored `VatClass`
 - `screens/units-screen.ts` — the unit editor is `unit-form` (2a.2). The screen's own scope
   (`#reassignmentScope`, ~147–164) backs the in-use dialog's "Change unit" (`change-unit`,
   ~672–682): an operation on the selected products, beside the dialog's own Delete (`delete-unit`,
-  danger, ~710–716). Its `?disabled` (~675–679) already refuses it until products and a target are
-  chosen, which is exactly when its scope is unchanged (baseline `{ products: [], target: "" }`,
-  ~163, ~166, ~376), and `#changeUnit` already returns on the same condition (~358–364). Treat it
+  danger, ~710–716). Its `?disabled` (~675–679) holds while either products or a target is
+  missing, so it already holds whenever its scope is unchanged (baseline `{ products: [], target:
+  "" }`, ~163, ~166, ~376), and `#changeUnit` already returns on the same condition (~358–364).
+  Treat it
   as an action: it keeps `variant="secondary"`, and the scope stays coordinator-only.
 - `widgets/catalogue-browser.ts` — its scope (`#operationScope`, ~145–147, ~207–222) backs the
   move/delete dialog (`#operationDialog`, ~521–740), a confirmation of an operation on the
@@ -1359,32 +1365,50 @@ Both stay on screen after a save, so each needs the "quiet again after a save" c
 - Predicted changed checks (`unit-form.test.ts`): ~281–305 and ~307–325 open a stored unit, switch
   the default language and press untouched to see the missing translation's error (edit one field
   first); ~520–525 presses an empty create; ~584–592 mounts with a refusal and presses untouched;
-  ~609–614 "starts again when reopened… Save working" (Save now opens disabled). By assertion:
-  `units-screen.test.ts` ~467–475 and `catalogue-screen.test.ts` ~1366–1382 emit `wt-submit` with
-  values the form never held, then assert Save enabled — type the values into the form and press.
-  (`ingredient-form.test.ts`): ~138–142, ~164–166, ~190–192, ~210–212 press an empty create; ~273–283
-  and ~351–364 press an untouched edit to check the patch sent (3a.4a shape).
+  ~609–614 "starts again when reopened… Save working" (Save now opens disabled); by assertion,
+  ~489–500 (an empty create asserted enabled) and ~546–556 (a refusal at mount, no edit, asserted
+  enabled). By assertion: `units-screen.test.ts` ~467–475 and `catalogue-screen.test.ts`
+  ~1366–1382 emit `wt-submit` with values the form never held, then assert Save enabled — type the
+  values into the form and press; `recipe-screen.test.ts` ~270–293 does the same to the ingredient
+  form with `create-ingredient`.
+  (`ingredient-form.test.ts`): ~138–142, ~164–166, ~190–192, ~210–212 and ~483–488 press an
+  empty create; ~182–188 asserts an empty create enabled; ~273–283 and ~351–364 press an untouched edit
+  to check the patch sent (3a.4a shape).
 - Suites: `src/widgets/unit-form src/screens/units-screen src/screens/unit-owners.unsaved
   src/widgets/catalogue-forms.unsaved src/screens/catalogue-screen src/widgets/ingredient-form
   src/screens/recipe-screen`.
 
-### Task 2a.3 — option lists and their option window (`widgets/option-list-form.ts`, `widgets/option-label-form.ts`)
+### Task 2a.3a — the option window (`widgets/option-label-form.ts`)
 
-- **Option list** `save` (~794–799, fixed `variant="primary"`, `.disabled=${this.busy ||
-  invalid}`) on `#scope` (`?.register` in `#registerDraft`, ~194–210): make it `draftScopeFor`.
-  Early return in `#submit` (~458) after `busy`, BEFORE `attempted = true` (~461). "A scope exists"
-  sites: `#beforeClose` (~183–185), `#cancel`'s `if (this.#scope)` (~513), `.beforeClose` (~736) —
-  gate on `#leave`. `#reseed` normalises the default through `#keepDefault` (~271–272, ~278–280)
-  before the scope registers (~242), so a list whose stored default is empty or unavailable opens
-  quiet: the shown default is the one the server would store.
-- **Option window** `save` (~347–352, fixed `variant="primary"`, `.disabled=${this.busy ||
-  invalid}`) on `#scope` (`?.register` in `#registerDraft`, ~102–118, `parent: this.draftParent`):
-  make it `draftScopeFor`. Its Save writes into the list's draft, not to the server
-  (`option-list-form.ts` `#saveLabel`, ~382–397, which calls `closeSaved`) — gated like batch 1's
-  variant form. Early return in `#submit` (~188) after `busy`, BEFORE `attempted = true` (~191).
-  "A scope exists" sites: `#beforeClose` (~91–93), `#cancel` (~234), `.beforeClose` (~296) — gate
-  on `#leave`. Add option opens empty (`.value=${editing === "new" ? null : editing}`,
-  `option-list-form.ts` ~711): the name is required (`#validate`, ~165–167).
+Split from the option list (2a.3b) for size; the window goes first, and each commit is green alone.
+
+- `save` (~347–352, fixed `variant="primary"`, `.disabled=${this.busy || invalid}`) on `#scope`
+  (`?.register` in `#registerDraft`, ~102–118, `parent: this.draftParent`): make it
+  `draftScopeFor`. Its Save writes into the list's draft, not to the server (`option-list-form.ts`
+  `#saveLabel`, ~382–397, which calls `closeSaved`) — gated like batch 1's variant form. Early
+  return in `#submit` (~188) after `busy`, BEFORE `attempted = true` (~191). "A scope exists"
+  sites: `#beforeClose` (~91–93), `#cancel` (~234), `.beforeClose` (~296) — gate on `#leave`. Add
+  option opens empty (`.value=${editing === "new" ? null : editing}`, `option-list-form.ts` ~711):
+  the name is required (`#validate`, ~165–167).
+- Predicted changed checks (`option-label-form.test.ts`): ~353–355, ~421–428, ~442–444 (an empty
+  press, a refusal at mount pressed untouched, "starts again when reopened… Save working"); its
+  enabled-Save assertions at ~283, ~332–339 and ~368–394 are to be read against the assertion
+  rule above. The throw-probe over `option-list-form.test.ts` finds any list test that presses the
+  window's Save untouched; those are this task's.
+- Suites: `src/widgets/option-label-form src/widgets/option-list-form
+  src/widgets/modifier-forms.unsaved src/widgets/section-details-form.test.ts`
+  (`section-details-form.test.ts` ~347–352 mounts the option window for a style comparison only).
+
+### Task 2a.3b — option lists (`widgets/option-list-form.ts`)
+
+- `save` (~794–799, fixed `variant="primary"`, `.disabled=${this.busy || invalid}`) on `#scope`
+  (`?.register` in `#registerDraft`, ~194–210): make it `draftScopeFor`. Early return in
+  `#submit` (~458) after `busy`, BEFORE `attempted = true` (~461). "A scope exists" sites:
+  `#beforeClose` (~183–185), `#cancel`'s `if (this.#scope)` (~513), `.beforeClose` (~736) — gate
+  on `#leave`. `#reseed` normalises the default through `#keepDefault` (~271–272, ~278–280) before
+  the scope registers (~242), so a list whose stored default is empty or unavailable opens quiet:
+  the shown default is the one the server would store (`option-contract.ts` ~113 normalises with
+  the same `effectiveDefaultLabelId`).
 - Not gated: Add option (`add-option`, opens the window), Edit (`edit-label-*`), Delete
   (`remove-label-*`) and the default radios — draft edits of the list.
 - Predicted changed checks (`option-list-form.test.ts`): ~951–958 and ~960–976 press untouched to
@@ -1392,16 +1416,12 @@ Both stay on screen after a save, so each needs the "quiet again after a save" c
   mounts with a refusal and presses untouched; ~1648–1650 "starts again when reopened… Save
   working". By assertion (a refusal at mount, no edit, then Save asserted enabled): ~978–988,
   ~1157–1161, ~1580–1582, ~1609–1611. `option-list-form.a11y.test.ts` ~82–84 presses the empty
-  create for its "invalid" state. (`option-label-form.test.ts`): ~353–355, ~421–428, ~442–444 by
-  the same three shapes; its enabled-Save assertions at ~283, ~338–394 are to be read against the
-  assertion rule above.
+  create for its "invalid" state.
 - Suites: `src/widgets/option-list-form src/widgets/option-label-form
-  src/widgets/modifier-forms.unsaved src/widgets/section-details-form.test.ts
-  src/screens/modifiers-screen src/screens/modifier-owners.unsaved src/screens/catalogue-screen`
-  (`section-details-form.test.ts` ~347–352 mounts the option window for a style comparison only).
-- This task carries the most changed checks of the batch: commit at a green point and hand over if
-  it nears ~80 tool calls. Filter by test name (`-t`) while working; run whole suites for the
-  throw-probe and the final pass.
+  src/widgets/modifier-forms.unsaved src/screens/modifiers-screen src/screens/modifier-owners.unsaved
+  src/screens/catalogue-screen`.
+- Commit at a green point and hand over if it nears ~80 tool calls. Filter by test name (`-t`)
+  while working; run whole suites for the throw-probe and the final pass.
 
 ### Task 2a.4 — extras lists (`widgets/extra-list-form.ts`)
 
@@ -1418,12 +1438,15 @@ Both stay on screen after a save, so each needs the "quiet again after a save" c
   at mount, untouched press), ~2226–2228 ("starts again when reopened… Save working"); ~254–266,
   ~383–387, ~1044–1055, ~1068–1085, ~1112–1123, ~1326–1344, ~1372–1382, ~2370–2374 and
   ~2460–2471 were flagged too and may edit through a helper the script does not know.
-  By assertion (a refusal at mount, no edit): ~440–455, ~789–793. `extra-list-form.a11y.test.ts` ~138–140 ("invalid" state) and
-  ~153–185 (a stored list with an empty required portion, pressed untouched to show the error:
-  edit another field first).
+  By assertion (a refusal at mount, no edit): ~440–455, ~789–793; `modifiers-screen.test.ts`
+  ~1121–1143 opens a create, emits `wt-submit` from outside, then asserts Save enabled after the
+  refusal — type a name into the form and press. `extra-list-form.a11y.test.ts` ~138–140
+  ("invalid" state) and ~153–185 (a stored list with an empty required portion, pressed untouched
+  to show the error: edit another field first).
 - Suites: `src/widgets/extra-list-form src/widgets/modifier-forms.unsaved src/screens/modifiers-screen
   src/screens/modifier-owners.unsaved src/screens/catalogue-screen`.
-- Size of 3a.3: commit at a green point and hand over if it nears ~80 tool calls.
+- One file, so it cannot split along a file seam: commit at a green point and hand over if it
+  nears ~80 tool calls.
 
 ### Task 2a.5 — the two pickers (`widgets/add-to-menus.ts`, `widgets/section-add-products.ts`)
 
@@ -1451,13 +1474,16 @@ Both are an Add whose staged input is a set of ticks; nothing ticked is unchange
   presses and "Add working" after reopen), ~352–356 (asserts `variant="primary"` at open: tick a
   place first); `add-to-menus.a11y.test.ts` ~86–89 ("invalid" state, empty press).
   (`section-add-products.test.ts`): ~285–295 and ~497–504 press with nothing ticked (assert Add
-  disabled; reach the message through ~256–267's path). `menu-selections.unsaved.test.ts` ticks
+  disabled; reach the message through ~256–267's path); `section-add-products.a11y.test.ts`
+  ~81–84 ("invalid" state, empty press — same path). `menu-selections.unsaved.test.ts` ticks
   before every press (~98–100, ~119–131, ~227–241, ~273–274): no change predicted.
 - `menus-screen.test.ts` mounts the products picker, but every Add there either emits
   `wt-add-products` itself (~2743, ~2759, ~3793, ~3909, ~3992) or ticks first (~8973–8985): no
   change predicted. Run it unedited (rule above).
 - Suites: `src/widgets/add-to-menus src/widgets/section-add-products
-  src/widgets/menu-selections.unsaved src/screens/catalogue-screen src/screens/menus-screen.test.ts`.
+  src/widgets/menu-selections.unsaved src/screens/catalogue-screen src/screens/menus-screen
+  src/screens/menu-details.unsaved` (the last two prefixes take every suite that mounts the menus
+  screen, lane D's included, all run unedited).
 
 ### Task 2a.6 — scheduling a menu (`widgets/menu-publications.ts`)
 
@@ -1480,7 +1506,8 @@ Both are an Add whose staged input is a set of ticks; nothing ticked is unchange
   `menu-publications.a11y.test.ts` ~169–187 presses the empty form for its states with no
   refusal. `menus-screen.test.ts` only reads the widget's properties (~5581–5592, ~5603–5611) and
   never presses `schedule-submit`: no change predicted; run it unedited.
-- Suites: `src/widgets/menu-publications src/screens/menus-screen.test.ts`.
+- Suites: `src/widgets/menu-publications src/screens/menus-screen src/screens/menu-details.unsaved`
+  (run unedited, as in 2a.5).
 
 ### Task 2a.7 — carried to 2b: the section and include dialogs (`widgets/section-details-form.ts`, `widgets/include-folder-form.ts`)
 
