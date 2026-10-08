@@ -4120,6 +4120,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      screen with its own checks. Not yet looked into: whether one write path can take all of them,
      or the dialog needs one per kind. Spec first — this is the large half of the entry. The
      dialog holds staged input, so it takes a draft scope and a `*.unsaved.test.ts` (CLAUDE.md §3).
+     Proposed [part 2 spec](superpowers/specs/2026-10-08-a420-inline-translations.md): translation-only
+     commands for all nine kinds in one bounded, all-or-nothing save; owner approval still required.
 
 - **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
   2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/payments-screen.ts`.
