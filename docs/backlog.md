@@ -1521,7 +1521,7 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 5 (the till) built;
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 5 (the till) in #1414;
 batch 6 audited with no stored-setting editors; batch 7 unreserved forms audited; batches 2, 3b and
 4b OPEN.** The owner: "open a form with the Save button transparent (and disabled?). but as soon as
 you make a change, make the Save button active/blue",
@@ -1573,7 +1573,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   and SumUp Connect/Pair/Try again remain provider operations;
   [classification and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
 - **Batch 4b — OPEN.** Venue-service module screens.
-- **Batch 5 — BUILT (A331-5).** The till's five forms that save an edit: the party name dialog,
+- **Batch 5 — LANDED in #1414 (A331-5).** The till's five forms that save an edit: the party name dialog,
   the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
   when it edits a line, and the station dialog's Make at. Adding a dish never waits for a change
   (the extras picker passes `savableAtOpen` when it adds), and the station dialog's Move keeps its
@@ -1587,7 +1587,13 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   repository in `~/waitron-campaign-c/a331-5-shots/`: no defect found. The extras picker's add
   mode and the station dialog's Move were byte-identical to screenshots of the code before the
   batch. Left open: the station dialog widens or narrows with the chosen station's name, so its
-  buttons shift a little as a station is picked (it did so before this batch).
+  buttons shift a little as a station is picked (it did so before this batch). Also left open from
+  #1414's review: (1) the till's profile dialog (`apps/till/src/widgets/profile-dialog.ts`) opens on
+  the current profile and its Switch sends a switch even when nothing changed — it may be a save,
+  and is one of the till forms with no unsaved-changes tracking that batch 5 did not classify;
+  (2) the four batch 5 dialogs had to stop registering their draft while out of the page, or a
+  reattached dialog stopped asking before discarding; design-system.md → Forms names seven
+  dashboard forms that still register that way, untested for the same fault.
 - **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.
   Admin, venue and certificate Next buttons contribute to the provisioning draft; Connect adopts
   with credentials; Import stages configuration; reset, file/bucket/Cloud restore and provisioning
