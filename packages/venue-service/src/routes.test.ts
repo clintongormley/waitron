@@ -1246,13 +1246,13 @@ describe("venue service management routes", () => {
       (
         await send(
           fx.app,
-          "PUT",
-          `/management-api/venue-service/departments/${department.id}/menus`,
+          "POST",
+          `/management-api/venue-service/departments/${department.id}/menu-periods`,
           fx.managerCookie,
-          { menuIds: [fx.menuId] },
+          { name: "Open", menuId: fx.menuId, staffMenuIds: [] },
         )
       ).status,
-    ).toBe(204);
+    ).toBe(201);
     expect(
       (
         await send(
@@ -1263,7 +1263,7 @@ describe("venue service management routes", () => {
           { menuId: fx.menuId },
         )
       ).status,
-    ).toBe(204);
+    ).toBe(404);
     expect(
       (
         await send(
