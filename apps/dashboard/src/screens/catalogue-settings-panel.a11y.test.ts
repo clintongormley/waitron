@@ -22,7 +22,15 @@ it.each(cases)(
   async ({ theme, locale, width }) => {
     await page.viewport(width, 900);
     setLocale(locale);
-    for (const state of ["ready", "invalid", "saving", "save-error", "loading", "read-error"]) {
+    for (const state of [
+      "ready",
+      "changed",
+      "invalid",
+      "saving",
+      "save-error",
+      "loading",
+      "read-error",
+    ]) {
       const api = {
         liveData: new LiveData(),
         getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "reduced" }),
@@ -42,18 +50,21 @@ it.each(cases)(
       host.style.width = "100%";
       if (!["loading", "read-error"].includes(state)) {
         await expect.poll(() => el.shadowRoot?.querySelector("wt-combobox")).toBeTruthy();
-        if (state === "invalid") {
+        if (state !== "ready") {
           el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
             new CustomEvent("wt-change", {
-              detail: { value: "" },
+              detail: { value: state === "invalid" ? "" : "general" },
               bubbles: true,
               composed: true,
             }),
           );
           await el.updateComplete;
         }
+        const save =
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
+        expect(save.variant).toBe(state === "ready" ? "secondary" : "primary");
         if (["invalid", "saving", "save-error"].includes(state)) {
-          el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+          save.click();
           await el.updateComplete;
           if (state === "save-error")
             await expect

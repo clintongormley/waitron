@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./recipe-editor.js";
 import type { RecipeEditor } from "./recipe-editor.js";
@@ -58,12 +58,33 @@ const PRODUCT: Product = {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("recipe-editor a11y (%s theme)", (theme) => {
-  it("renders accessibly", async () => {
-    const { host } = await mountWidget<RecipeEditor>(
+  it("renders accessibly with an untouched recipe and Save quiet", async () => {
+    const { el, host } = await mountWidget<RecipeEditor>(
       "dashboard-recipe-editor",
       { product: PRODUCT, ingredients: INGREDIENTS, recipe: RECIPE },
       theme,
     );
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+    expect(save.variant).toBe("secondary");
+    expect(save.disabled).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with a changed recipe and Save primary", async () => {
+    const { el, host } = await mountWidget<RecipeEditor>(
+      "dashboard-recipe-editor",
+      { product: PRODUCT, ingredients: INGREDIENTS, recipe: RECIPE },
+      theme,
+    );
+    el.shadowRoot!.querySelector("[data-test=ing-i2]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true } }),
+    );
+    await el.updateComplete;
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+    expect(save.variant).toBe("primary");
+    expect(save.disabled).toBe(false);
     await expectNoA11yViolations(host);
   });
 });

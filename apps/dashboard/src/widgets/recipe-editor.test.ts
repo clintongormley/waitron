@@ -126,6 +126,7 @@ describe("recipe-editor", () => {
 
   it("emits save-recipe as a bubbling, composed event", async () => {
     const { el } = await mountWidget<RecipeEditor>("dashboard-recipe-editor", baseProps());
+    await setSwitch(el, "i1", true);
     const seen = nextEvent(el, "save-recipe");
     confirm(el);
     const event = await seen;
