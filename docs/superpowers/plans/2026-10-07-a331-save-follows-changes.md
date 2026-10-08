@@ -337,3 +337,86 @@ screen (floor), one dialog (person-edit) and one panel (backup). design-system.m
 which forms follow the rule: add the 3a forms there; the CLAUDE.md §3 clause says "batches 1 and
 3a follow it (list: design-system.md)" rather than naming 13 files. Update the A331 backlog entry
 (batches 1 and 3a landed; 2, 3b, 4–7 open). Light review path.
+
+## Batch 6 — setup stored-setting editors (Lane E, A331-6)
+
+**Source audit, 2026-10-08: zero candidates found.** Apply the shared helpers only to setup steps
+editing already stored settings. Continue/Next and sign-in remain excluded. Do not invent a Save
+or convert an operation into an editor to fill this batch. Behavioral checks and fresh-context
+review remain tasks below; this audit records source call chains, not a runtime result.
+
+The eight production screens found by `rg -l leaveCoordinatorFor apps/setup/src/screens -g '*.ts' -g '!*.test.ts'`
+are excluded as follows. Their events reach the shell through
+`apps/setup/src/setup-app.ts:1392`. A draft patch merges browser state
+(`apps/setup/src/setup-app.ts:673`); navigation changes the step (`apps/setup/src/setup-app.ts:767`),
+and venue's advance selects certificate or review (`apps/setup/src/setup-app.ts:834`).
+
+| Screen and action receipt | Exclusion and remaining call chain |
+| --- | --- |
+| `apps/setup/src/screens/admin-screen.ts:182` | Next patches the proposed admin and navigates to venue, through the draft/navigation handlers above. |
+| `apps/setup/src/screens/cert-screen.ts:260` | Next patches the proposed certificate and navigates to fiscal-test, through those same handlers. |
+| `apps/setup/src/screens/venue-screen.ts:611` | Next patches the proposed venue and emits advance, through the draft/advance handlers above. Imported values also enter this draft (`apps/setup/src/setup-app.ts:1198`); pre-filled wizard input is not a stored-setting editor. |
+| `apps/setup/src/screens/connect-screen.ts:182` | Connect requests adoption with credentials: `apps/setup/src/setup-app.ts:950`, `apps/setup/src/api/client.ts:215`, `apps/server/src/setup-api.ts:798` calls adopt. |
+| `apps/setup/src/screens/live-source-screen.ts:121` | Import stages configuration: `apps/setup/src/setup-app.ts:1178`, `apps/setup/src/api/client.ts:280`, `apps/server/src/setup-api.ts:1119` calls staging, wired at `apps/server/src/boot.ts:942`. Staging writes artifact, wrapped passphrase and marker files (`apps/server/src/configuration-import.ts:83`); it is not a stored-setting editor. Start empty (`apps/setup/src/screens/live-source-screen.ts:104`) patches the wizard and navigates. |
+| `apps/setup/src/screens/reset-screen.ts:169` | Reset authorizes clearing an incomplete adoption: `apps/setup/src/setup-app.ts:1309`, `apps/setup/src/api/client.ts:219`, `apps/server/src/setup-api.ts:872` checks the operation and `apps/server/src/setup-api.ts:894` stages reset. |
+| `apps/setup/src/screens/restore-screen.ts:188` | Restore requests archive recovery: `apps/setup/src/setup-app.ts:969`, `apps/setup/src/api/client.ts:245`, `apps/server/src/setup-api.ts:1009` stages restore. |
+| `apps/setup/src/screens/restore-bucket-screen.ts:224` | Restore requests a bucket rebuild: `apps/setup/src/setup-app.ts:1034`, `apps/setup/src/api/client.ts:271`, `apps/server/src/setup-api.ts:1077` calls staging, wired at `apps/server/src/boot.ts:927`. Venue confirmation is part of that request. |
+
+**Screens without that registration, also excluded:**
+
+- Review's Provision (`apps/setup/src/screens/review-screen.ts:229`) and provisioning's Retry
+  (`apps/setup/src/screens/provisioning-screen.ts:67`) share `apps/setup/src/setup-app.ts:848`,
+  `apps/setup/src/api/client.ts:206`, `apps/server/src/setup-api.ts:627`. This is initial provisioning
+  or its resumption (`apps/server/src/setup-api.ts:680`), including staged configuration
+  (`apps/server/src/boot.ts:1011`), not editing stored settings. Review's Edit links navigate
+  (`apps/setup/src/screens/review-screen.ts:127`); provisioning offers reset navigation or reload
+  (`apps/setup/src/screens/provisioning-screen.ts:84`). Do not gate confirmation or retry on dirtiness.
+- Mode and its live confirmation (`apps/setup/src/screens/mode-screen.ts:105`,
+  `apps/setup/src/screens/mode-screen.ts:140`), role (`apps/setup/src/screens/role-screen.ts:62`) and
+  configuration-preview (`apps/setup/src/screens/configuration-preview-screen.ts:69`) patch/navigate
+  through the handlers above. Connection Continue (`apps/setup/src/screens/connection-screen.ts:72`)
+  checks status (`apps/setup/src/setup-app.ts:654`, `apps/setup/src/api/client.ts:198`,
+  `apps/server/src/setup-api.ts:555`); its other action opens trust help.
+- Fiscal-test Run (`apps/setup/src/screens/fiscal-test-screen.ts:73`) reaches
+  `apps/setup/src/setup-app.ts:1216`, `apps/setup/src/api/client.ts:295`,
+  `apps/server/src/setup-api.ts:615`; Continue navigates to review. Cloud-restore actions
+  (`apps/setup/src/screens/cloud-restore-screen.ts:117`) reach `apps/setup/src/setup-app.ts:1122`,
+  `apps/setup/src/api/client.ts:223` and `apps/server/src/setup-api.ts:905` for start/status/start-again;
+  recovery uses `apps/setup/src/api/client.ts:236` and staging at `apps/server/src/setup-api.ts:939`.
+- Done polls status and offers links (`apps/setup/src/screens/done-screen.ts:127`,
+  `apps/setup/src/screens/done-screen.ts:169`). The old-box checkbox only supplies a recovery answer
+  (`apps/setup/src/screens/old-box-question.ts:52`). The shell language chooser changes the current
+  language (`apps/setup/src/setup-app.ts:482`, `apps/setup/src/i18n/t.ts:17`), with no Save action.
+
+### Tasks 6.1–6.4 — confirm, check, document, land
+
+1. Fresh-context review: repeat the screen search and inspect every action in the shell's screen
+   switch (`apps/setup/src/setup-app.ts:1421`), including confirmation, retry and imported/pre-filled
+   drafts. Recheck the receipts against the current tree. If a true stored-setting editor is found,
+   revise this scope before implementation; use TDD and only `draftScopeFor` plus `saveActionState`
+   with the save-handler early return. These remain the sole mechanism for future true saves;
+   leave paths gate on the returned coordinator. No helper rollout is needed for the exclusions.
+2. Run existing behavioral, unsaved-change and accessibility suites in Chromium:
+   `pnpm --filter @waitron/setup exec vitest run src/screens src/setup-app src/api/client.test.ts`.
+   Record test counts and failures; the screen selection includes the existing `*.a11y.test.ts`
+   suites. Preserve their assertions and existing navigation/action behavior. No new code or tests
+   are needed if review still finds zero candidates.
+3. In the execution change, update only the A331 Batch 6 status in `docs/backlog.md` and Forms in
+   `docs/developers/design-system.md`: record the audited setup exclusions and link here, without
+   listing setup as an implemented save-form rollout or changing other batches' status.
+4. If zero candidates remain and checks pass, verify the entire change is `docs/`-only and use
+   the item-specific own-PR workflow: `git commit -s`, finish-branch with the normal push hook and
+   current-head CI, then the authorized land-branch under the shared landing lock. The production-code
+   review is skipped for this documentation audit. Update only Lane E campaign state; preserve the
+   other batches and lanes.
+
+**Completed 2026-10-08 against base `d401dcaac4212bb60db7d43e9859957e21af711a`.**
+The fresh-context source review found no missed stored-setting editor and checked the numbered
+receipts. Its cloud-action wording correction is included. Task 6.2's command passed 1,249 tests
+in 47 files, including existing accessibility suites; the unedited `write-path.e2e.test.ts` and
+`inmutabilidad.test.ts` passed 20 tests with
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
+Backlog and Forms now record the audit. Only documentation changed; no new Save state, test
+assertion or visible screen change was introduced, so no red-green cycle, new save-state axe matrix
+or visual-change inspection is claimed. Logs and the source-review triage are retained outside the
+repository in `~/waitron-campaign-e/receipts/a331-6/`.

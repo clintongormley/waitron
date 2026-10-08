@@ -1559,6 +1559,15 @@ schedule is not a wall-clock one, or no retention is stored, the form cannot sho
 so it opens with its own defaults and Save ready (`#policyReplaced` in
 `apps/dashboard/src/screens/backup-screen.ts`).
 
+The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
+Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
+credentials; Import stages configuration for provisioning; reset and restore controls run recovery
+operations. Review confirms provisioning. These actions stay outside the Save rule, including when
+the wizard reopens with filled input. The per-screen call paths and the remaining setup controls are
+listed in [the Batch 6 audit](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-6--setup-stored-setting-editors-lane-e-a331-6).
+If you add a setup editor that saves already stored settings, use `draftScopeFor` and
+`saveActionState` with the early return, as described above.
+
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.
 Switching it off hides the fields without clearing them, and switching it back on shows what they
