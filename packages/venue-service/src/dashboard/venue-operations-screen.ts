@@ -8,12 +8,14 @@ import { live } from "lit/directives/live.js";
 import { codeOf, tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
   leaveCoordinatorFor,
   navigationGuardFor,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  saveActionState,
   submitOnEnter,
   UrlStateController,
   type DataTableColumn,
@@ -529,16 +531,16 @@ export class VenueOperationsScreen extends LitElement {
     );
   }
   protected override updated(): void {
-    if (this.#editorIdentity !== this.editor) {
+    // Disposing a scope redraws the screen, and a scope taken while detached reaches no application.
+    if (this.isConnected && this.#editorIdentity !== this.editor) {
       this.#editorScope?.dispose();
       this.#editorScope = undefined;
       this.#editorIdentity = this.editor;
       if (this.editor && this.editor.kind !== "disable") {
         const modal = this.renderRoot.querySelector("wt-modal")!;
-        this.#leave ??= leaveCoordinatorFor(this);
         const baseline = (this.#editorBaseline ??= this.#editorValues(modal));
         let registering = true;
-        this.#editorScope = this.#leave?.register({
+        const { coordinator, scope } = draftScopeFor<EditorValues>(this, {
           id: this.editor,
           current: () => (registering ? baseline : this.#editorValues(modal)),
           snapshot: (value) => ({ ...value }),
@@ -551,15 +553,17 @@ export class VenueOperationsScreen extends LitElement {
             }
           },
         });
+        this.#leave = coordinator;
+        this.#editorScope = scope;
         registering = false;
-        this.#editorScope?.changed();
+        scope.changed();
       }
     }
   }
   readonly #beforeEditorClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy || !this.isConnected) return false;
     const editor = this.editor;
-    if (!this.#editorScope) return true;
+    if (!this.#leave || !this.#editorScope) return true;
     const outcome = await this.#leave!.request({
       scopes: [this.#editorScope.id],
       reason,
@@ -1916,6 +1920,7 @@ export class VenueOperationsScreen extends LitElement {
     </div>`;
   }
   #submit(content: EditorContent): void {
+    if (this.#editorSaveState()?.unchanged) return;
     this.attempted = true;
     this.refusedFields = {};
     this.editorError = undefined;
@@ -1927,6 +1932,12 @@ export class VenueOperationsScreen extends LitElement {
     }
     this.#focusInvalid();
   }
+  /** Undefined for the Disable confirmation, which has no draft. */
+  #editorSaveState() {
+    return this.editor && this.editor.kind !== "disable"
+      ? saveActionState(this.#editorScope)
+      : undefined;
+  }
   #modal() {
     if (!this.editor) return nothing;
     const editor = this.editor;
@@ -1936,6 +1947,8 @@ export class VenueOperationsScreen extends LitElement {
     const recheck = (event: Event) => {
       if (!this.isConnected || this.editor !== editor) return;
       this.#editorScope?.changed();
+      // The fields are read from the page, not reactive properties, so nothing else redraws Save.
+      this.requestUpdate();
       const controlName = (event.target as HTMLInputElement).name;
       const name =
         editor.kind === "transfers" && controlName?.startsWith("transfer-destination-")
@@ -1950,6 +1963,7 @@ export class VenueOperationsScreen extends LitElement {
       if (this.attempted) this.fieldErrors = content.check();
     };
     const confirming = editor.kind === "disable";
+    const save = this.#editorSaveState();
     return keyed(
       editor,
       html`<wt-modal
@@ -1989,8 +2003,8 @@ export class VenueOperationsScreen extends LitElement {
             >${t("venue.cancel")}</wt-button
           ><wt-button
             data-test="save-editor"
-            variant=${confirming ? "danger" : "primary"}
-            ?disabled=${this.busy || invalid}
+            variant=${save?.variant ?? "danger"}
+            ?disabled=${this.busy || invalid || !!save?.unchanged}
             @click=${() => {
               if (this.editor === editor && this.isConnected) this.#submit(content);
             }}
