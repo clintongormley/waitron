@@ -154,6 +154,15 @@ WebCrypto and bundle-size warnings remain in logs. No package coverage or CI cla
 Task 7 still owes shared-name/publication/recorded-sale consumers, its complete installed
 control set and opening the built application. Task 8 owns the branch review/push/CI/land.
 
+Task 6 follow-up, 2026-10-08: after the first signed-off checkpoint, the reverse
+ordering was reproduced: an old passive scan's refusal replaced a newer successful
+explicit review. `old passive scan refusal` failed before fencing each scan read's
+refusal by opening and snapshot revision. Current focused run passes 121 cases;
+dashboard types/lint/format pass. Deleting that revision comparison in another
+installed disposable candidate fails an assertion, restored run passes 121 and the
+candidate is removed. This adds no layout or subscription dependency change. The
+earlier 120-case receipt remains the measurement of the first checkpoint.
+
 ## Task 7: Consumer evidence, deletion controls and visual acceptance
 
 **Files:** Extend `packages/catalogue/src/menu-publication.test.ts`, `product-presentation.test.ts`, `option-snapshot-labels.test.ts`; `apps/server/src/till-api.receipt.test.ts`; new dialog `.a11y.test.ts`; update `docs/developers/products.md` and A420 entry in `docs/backlog.md` when stale.

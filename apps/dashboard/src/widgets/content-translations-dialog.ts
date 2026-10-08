@@ -230,6 +230,15 @@ export class ContentTranslationsDialog extends LitElement {
     const revision = ++this.#snapshotRevision;
     const language = this.language;
     const client = this.api.background ?? this.api;
+    const read = async (query: Parameters<DashboardApi["getContentTranslationTargets"]>[1]) => {
+      try {
+        return await client.getContentTranslationTargets(language, query);
+      } catch (error) {
+        if (generation !== this.#generation || revision !== this.#snapshotRevision || !this.open)
+          return undefined;
+        throw error;
+      }
+    };
     const rows: TranslationTarget[] = [];
     const retained: TranslationTarget[] = [];
     let next: string | null = null;
@@ -247,12 +256,10 @@ export class ContentTranslationsDialog extends LitElement {
       first ??= value;
     };
     do {
-      const value = await client.getContentTranslationTargets(
-        language,
-        next === null ? {} : { after: next },
-      );
+      const value = await read(next === null ? {} : { after: next });
       if (generation !== this.#generation || revision !== this.#snapshotRevision || !this.open)
         return undefined;
+      if (!value) return undefined;
       check(value);
       rows.push(...value.rows);
       next = value.next;
@@ -264,11 +271,10 @@ export class ContentTranslationsDialog extends LitElement {
         .filter((row) => this.model!.isEdited(row))
         .map(({ kind, id }) => ({ kind, id })) ?? [];
     for (let offset = 0; offset < refs.length; offset += 50) {
-      const value = await client.getContentTranslationTargets(language, {
-        targets: refs.slice(offset, offset + 50),
-      });
+      const value = await read({ targets: refs.slice(offset, offset + 50) });
       if (generation !== this.#generation || revision !== this.#snapshotRevision || !this.open)
         return undefined;
+      if (!value) return undefined;
       check(value);
       retained.push(...value.rows);
     }

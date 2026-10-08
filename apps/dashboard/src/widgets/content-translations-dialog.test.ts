@@ -925,3 +925,29 @@ it("Review latest reveals a hidden conflict with its old, current and draft text
   );
   expect(field(el, "one").value).toBe("My draft");
 });
+
+it("an old passive scan refusal cannot replace a newer successful explicit review", async () => {
+  const one = target("one", { defaultRequired: false });
+  const liveData = new LiveData();
+  let refuse!: (error: Error) => void;
+  const read = vi.fn(async () => result([one]));
+  const { el } = await mount([one], { liveData, getContentTranslationTargets: read });
+  await edit(el, "one", "Draft");
+  read.mockImplementationOnce(
+    () =>
+      new Promise<TranslationPage>((_resolve, reject) => {
+        refuse = reject;
+      }),
+  );
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+  await click(el, "review");
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(4));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
+  );
+  refuse(Error("old passive failure"));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(q(el, "[data-test=read-error]")).toBeNull();
+  expect(field(el, "one").value).toBe("Draft");
+});
