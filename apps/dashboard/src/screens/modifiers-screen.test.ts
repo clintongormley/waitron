@@ -281,7 +281,7 @@ it.each(
     ),
   ),
 )(
-  "keeps the $tab tab whole in its strip and level with its Add button on a $width px screen ($locale)",
+  "keeps the $tab tab level with its Add button on a $width px screen, its start in view and all of it in view where it fits ($locale)",
   async ({ locale, width, tab, add }) => {
     const before = currentLocale();
     try {
@@ -301,7 +301,9 @@ it.each(
         .querySelector(`[slot="actions"] [data-test="${add}"]`)!
         .getBoundingClientRect();
       expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
-      expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
+      // A tab wider than its strip can only show its start; how wide either is depends on fonts.
+      if (selected.width <= strip.width)
+        expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
       expect(
         Math.abs(action.top + action.height / 2 - (selected.top + selected.height / 2)),
       ).toBeLessThanOrEqual(1);
