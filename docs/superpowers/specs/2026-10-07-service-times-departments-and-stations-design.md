@@ -112,7 +112,11 @@ skip is refused (`skippedEndpoint`).
 Each period gets a signed number of minutes from its end, negative for last orders before
 it, positive for sending leftovers after it. Slice 1 fixes it at 0 and accepts new dishes
 only while their own period runs. See [slice 1 decision 1](../plans/2026-10-07-a366-slice-1-service-periods.md).
-A432 adds the configurable value.
+**A432 implementation update, 2026-10-08:** the configurable signed offset now separates
+selection from sending. A negative offset stops both before the end; a positive offset keeps
+sending open after selection ends. Cutoffs are exclusive and placement bounds apply.
+See the [A432 decisions and implementation plan](../plans/2026-10-08-a432-period-end-offset.md).
+The bullets below preserve the earlier design.
 
 - **Only the current period's menus can be ordered**, the customer menu and its staff-only menus.
   The till opens on the customer menu.

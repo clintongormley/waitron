@@ -448,11 +448,19 @@ With a readable venue clock, a special date with no timetable row follows the no
 closes that department for the date's business day. Closing the whole venue closes every
 department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these cases.
 
-The till offers new items from the running period's customer and staff menus. Sending a new line
-or increasing a stored line's quantity requires that period too. An unsent basket or draft can
-retain its dishes after the period ends, but sending them is refused. Slice 1 fixes the period-end
-offset at 0 (owner, 2026-10-08); A432 adds the signed minute setting. Other edits retain the stored
-line.
+You set last orders with the period's signed whole-minute end offset, which defaults to 0.
+For Lunch 12:00–14:00, −15 stops selection and sending at 13:45. With +15, selection stops at
+14:00 and unsent dishes may be sent until 14:15. The cutoff minute itself is refused. Increasing
+a stored line's quantity uses the selection cutoff too; existing unchanged lines, decreases and
+notes retain their stored-line behavior. A fresh request during grace is accepted without checking
+when you selected its dishes, because the server receives no trusted selection timestamp.
+
+An offset is bounded to −1439…1439 minutes. Each placement must keep a nonempty sending window;
+a positive offset must stop strictly before the same department's next placement starts. The
+normal week and dated overrides are checked when you edit periods, timetables, dates or the venue
+clock, and during configuration import. Yesterday's grace can reach a closed business day only
+until its own cutoff. Selection and sending remain separate from the department's actual open state.
+The [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md) records the decisions.
 `apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
 Pricing reads static period membership, without resolving ranges, dates or the clock. If the venue
 clock cannot be read, timetable resolution leaves the department's period menus orderable.
@@ -1186,6 +1194,17 @@ when a save cannot read the cutover, the save checks every pair while import may
 pairs out. A default station's retained cells are not checked.
 
 ### Service-period configuration
+
+Measured 2026-10-08 for A432 with `pnpm --filter @waitron/venue-service exec vitest run
+src/schema/schema-conformance.test.ts src/migrations.test.ts src/period-end-offset.test.ts
+src/menu-timetable.test.ts src/menu-timetable-routes.test.ts src/configuration-transfer.test.ts
+src/hours.test.ts`: 550 cases passed. The offset cases exercised exclusive selection/sending
+cutoffs, yesterday's grace into a closed day, repeated and skipped wall minutes, and rejected
+calendar changes with unchanged saved rows. `pnpm --filter @waitron/server exec vitest run
+src/till-api.service-periods.test.ts src/configuration-transfer.test.ts src/venue-details.test.ts`
+passed 222 cases, including signed-offset roundtrips under remapped IDs, fresh requests during
+grace, refusal of stored increases and clock-edit rollback. These focused runs do not replace CI's
+package-wide coverage checks.
 
 Measured 2026-10-08 with `pnpm --filter @waitron/venue-service exec vitest run
 src/configuration-transfer.test.ts` and `pnpm --filter @waitron/server exec vitest run
