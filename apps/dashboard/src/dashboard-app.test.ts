@@ -6799,3 +6799,102 @@ it.each(["home", "clash"] as const)(
     }
   },
 );
+
+describe("inline translation application leave paths", () => {
+  it.each(["navigation", "locale", "logout", "editor"] as const)(
+    "%s retains translation edits on Keep and performs the action after Discard",
+    async (route) => {
+      const config = { defaultLanguage: "en", languages: ["en", "es"] };
+      const row = {
+        kind: "product",
+        id: "dish",
+        name: "STAFF Soup",
+        reason: "partial",
+        selectedText: null,
+        defaultText: "Customer soup",
+        effectiveSelectedText: null,
+        effectiveDefaultText: "Customer soup",
+        defaultRequired: false,
+        eligible: true,
+        unavailableReason: null,
+        owners: { kind: "product", parentId: null },
+        expected: "baseline",
+      };
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["person.manage"] }),
+        getContentLanguages: vi.fn().mockResolvedValue(config),
+        getContentLanguageRules: vi
+          .fn()
+          .mockResolvedValue({ required: [], official: ["en", "es"] }),
+        getContentTranslationGaps: vi.fn().mockResolvedValue([
+          {
+            language: "es",
+            gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+          },
+        ]),
+        getContentTranslationTargets: vi.fn().mockResolvedValue({
+          language: "es",
+          config,
+          required: [],
+          rows: [row],
+          total: 1,
+          next: null,
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      navItem(el, "content-languages")!.click();
+      await flush(el);
+      const screen = el.shadowRoot!.querySelector("dashboard-content-languages-screen")!;
+      await vi.waitFor(() =>
+        expect(screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull(),
+      );
+      const table = screen.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-translations-es]")!.click();
+      await screen.updateComplete;
+      const form = screen.shadowRoot!.querySelector("dashboard-content-translations-dialog")!;
+      await vi.waitFor(() =>
+        expect(form.shadowRoot!.querySelector("wt-data-table")).not.toBeNull(),
+      );
+      const inputs = form.shadowRoot!.querySelector("wt-data-table")!;
+      await inputs.updateComplete;
+      const field = inputs.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        "[name=translation-text-product-dish]",
+      )!;
+      await field.updateComplete;
+      await userEvent.fill(field.shadowRoot!.querySelector("input")!, "Sopa nueva");
+      await form.updateComplete;
+      const act = () => {
+        if (route === "navigation") navStaff(el)!.click();
+        else if (route === "editor")
+          inputs.shadowRoot!.querySelector<HTMLAnchorElement>("tbody a")!.click();
+        else if (route === "locale")
+          emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
+        else logoutBtn(el)!.click();
+      };
+      const warning = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      act();
+      await vi.waitFor(() => expect(warning.open).toBe(true));
+      await warning.updateComplete;
+      warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await vi.waitFor(() => expect(warning.open).toBe(false));
+      expect(form.open).toBe(true);
+      expect(field.value).toBe("Sopa nueva");
+      expect(location.pathname).toBe("/manage/content-languages");
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(api.putLocale).not.toHaveBeenCalled();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      act();
+      await vi.waitFor(() => expect(warning.open).toBe(true));
+      await warning.updateComplete;
+      warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      if (route === "navigation")
+        await vi.waitFor(() => expect(location.pathname).toBe("/manage/staff"));
+      else if (route === "editor")
+        await vi.waitFor(() => expect(location.pathname).toBe("/manage/catalogue/product/dish"));
+      else if (route === "locale") await vi.waitFor(() => expect(currentLocale()).toBe("en-GB"));
+      else await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+    },
+  );
+});

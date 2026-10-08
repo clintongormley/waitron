@@ -1,3 +1,4 @@
+import { mountContentTranslationsApi, type GatedWork } from "./content-translations-api.js";
 import { isProductOrdering, nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
@@ -462,12 +463,6 @@ function refuseRetiredFields(body: Record<string, unknown>): void {
       throw new AppError("management.request_invalid", { field: retired });
 }
 
-type GatedWork = <T>(
-  c: Context,
-  sessionId: string,
-  fn: (tx: Transaction, personId: string) => Promise<T>,
-) => Promise<T>;
-
 /** Everything that differs between one kind of modifier list and another. */
 interface ListSurface<TList, TDependants> {
   /** The path segment under `/management-api/modifiers` that says which kind of list this is. */
@@ -833,6 +828,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
   mountMenuHomeRoutes(app, gated, log);
+  mountContentTranslationsApi(app, gated, log, {
+    fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
+    required: deps.contentLanguageRules?.required ?? [],
+  });
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {

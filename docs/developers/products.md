@@ -79,6 +79,28 @@ Turning the two frozen customer maps of a sold line into the one label a receipt
 `joinCustomerPresentationText`, which is separate because its callers are rendering something
 already *sold* — see below.
 
+## Filling missing customer names together
+
+When several items lack the same language, open that language's translation dialog from
+Content languages. You enter customer-facing text without changing staff or kitchen names.
+A missing default-language name needs its own explicit entry. For example, with English as
+base, Spanish “Limonada para clientes” needs an English companion only if that item has no
+English customer name already.
+
+A shared product, variant, option, extras list or unit changes wherever that definition is
+used in the working menus. A folder included in a menu keeps its own name override; translating
+that folder changes that inclusion. Check the menu preview and publish it separately to use
+the new text on the till.
+
+The `inline changes preserve publication and recorded names` cases in
+`packages/catalogue/src/menu-publication.test.ts` and `apps/server/src/till-api.receipt.test.ts`
+exercise this boundary. The catalogue case translates all nine kinds, reads both working menus,
+checks the audience-specific name consumers and retains the published rows until explicit
+publication. The server case files a sale, saves a customer name through the authenticated
+translation route and reprints the recorded customer text. It compares the complete stored
+sale, line, fiscal-record, invoice-series and publication rows before and after the save and
+reprint. These checks cover those fixtures; they do not exercise an external filing service.
+
 ## What a sold line freezes
 
 A line freezes its names, its gross price and its VAT class when it is added and never reads them

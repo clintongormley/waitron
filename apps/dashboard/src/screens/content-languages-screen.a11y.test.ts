@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, LanguageTranslationGaps, TranslationPage } from "../api/client.js";
 import type { AddContentLanguageDialog } from "../widgets/add-content-language.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { page, userEvent } from "vitest/browser";
@@ -33,6 +33,32 @@ function stubApi(
     getContentLanguageRules: vi.fn().mockResolvedValue(rules),
     updateContentLanguages: vi.fn(save),
     getContentTranslationGaps: vi.fn().mockResolvedValue(gaps),
+    getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
+      language,
+      config: { defaultLanguage: "es", languages: ["es", "ca", "en"] },
+      required: ["ca", "es"],
+      next: null,
+      rows: (
+        (gaps as LanguageTranslationGaps[]).find((row) => row.language === language)?.gaps ?? []
+      ).map((gap) => ({
+        ...gap,
+        selectedText: null,
+        defaultText: "Nombre predeterminado",
+        effectiveSelectedText: null,
+        effectiveDefaultText: "Nombre predeterminado",
+        defaultRequired: false,
+        eligible: true,
+        unavailableReason: null,
+        owners:
+          gap.kind === "product"
+            ? { kind: "product", parentId: null }
+            : gap.kind === "section"
+              ? { kind: "section", menuId: gap.parent!.id }
+              : { kind: "unit" },
+        expected: "token",
+      })),
+      total: 0,
+    })),
     getReceiptLanguage: vi.fn().mockResolvedValue({
       language: "es-ES",
       choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
@@ -116,9 +142,9 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
       );
       await flush(el);
       expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-          "wt-modal[data-test=translations-dialog]",
-        )!.open,
+        el
+          .shadowRoot!.querySelector("dashboard-content-translations-dialog")!
+          .shadowRoot!.querySelector("wt-modal")!.open,
       ).toBe(true);
       await expectNoA11yViolations(host);
       await page.screenshot({
@@ -217,7 +243,8 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
       theme,
     );
     await flush(el);
-    expect(el.shadowRoot!.querySelectorAll("wt-disclosure")).toHaveLength(3);
+    expect(el.shadowRoot!.querySelectorAll("wt-disclosure")).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector("dashboard-content-translations-dialog")).not.toBeNull();
     await el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
       "wt-data-table[data-test=languages]",
     )!.updateComplete;
