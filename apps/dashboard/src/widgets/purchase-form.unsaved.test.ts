@@ -78,9 +78,13 @@ it("a busy purchase ignores delivered field and VAT-choice events without dirtyi
   app.requestUpdate();
   await app.updateComplete;
   await form.updateComplete;
+  const confirm =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  expect(confirm.disabled).toBe(true);
   const sent: unknown[] = [];
   form.addEventListener("update-purchase", (event) => sent.push((event as CustomEvent).detail));
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  await change(form, "note", "Nota");
+  confirm.click();
   expect(sent).toEqual([
     {
       id: "pi-1",
@@ -94,7 +98,7 @@ it("a busy purchase ignores delivered field and VAT-choice events without dirtyi
           total: "121.00",
           regime: "general",
           deductibleProportion: "100.00",
-          note: null,
+          note: "Nota",
         },
         lines: [{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }],
       },

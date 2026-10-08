@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import { submitOnEnter, baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -129,8 +129,7 @@ export class ShiftDialog extends LitElement {
     }
     if (!this.open) this.#disposeDraft();
     else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<ShiftDraft>({
+      const { coordinator, scope } = draftScopeFor<ShiftDraft>(this, {
         id: this,
         current: () => this.#value(),
         snapshot: (value) => ({ ...value }),
@@ -145,12 +144,18 @@ export class ShiftDialog extends LitElement {
           this.shiftRole = value.shiftRole;
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
+  }
+
+  #incomplete(): boolean {
+    return this.start === "" || this.end === "";
   }
 
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy || this.start === "" || this.end === "") return;
+    if (this.busy || this.#incomplete() || saveActionState(this.#scope).unchanged) return;
     const startsOffsetMinutes = this.#startsOffsetMinutes;
     const endsOffsetMinutes = this.#endsOffsetMinutes;
     const startsAt = instantAt(this.day, this.start, startsOffsetMinutes);
@@ -200,12 +205,13 @@ export class ShiftDialog extends LitElement {
   }
 
   override render() {
+    const s = saveActionState(this.#scope);
     return html` <wt-dialog
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
       heading=${this.shift ? t("roster.edit_shift") : t("roster.new_shift")}
       .open=${this.open}
       .dismissible=${!this.busy}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       @wt-close=${() => (this.open = false)}
     >
       <wt-input
@@ -240,9 +246,9 @@ export class ShiftDialog extends LitElement {
       ${this.shift ? html`<wt-button slot="footer" variant="secondary" data-test="remove" ?disabled=${this.busy} @click=${(e: Event) => this.#remove(e)}>${t("action.remove")}</wt-button>` : nothing}
       <wt-button
         slot="footer"
-        variant="primary"
+        variant=${s.variant}
         data-test="confirm"
-        ?disabled=${this.busy}
+        ?disabled=${s.unchanged || this.busy || this.#incomplete()}
         @click=${(e: Event) => this.#confirm(e)}
       >
         ${this.shift ? t("action.save") : t("action.create")}

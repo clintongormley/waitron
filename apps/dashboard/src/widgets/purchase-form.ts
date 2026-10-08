@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { sameValue } from "./product-editor-model.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -286,8 +292,7 @@ export class PurchaseForm extends LitElement {
     }
     if (!this.open) this.#disposeDraft();
     else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<PurchaseDraft>({
+      const { coordinator, scope } = draftScopeFor<PurchaseDraft>(this, {
         id: this,
         current: () => this.#value(),
         snapshot,
@@ -305,6 +310,8 @@ export class PurchaseForm extends LitElement {
           this.lines = value.lines;
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -409,7 +416,7 @@ export class PurchaseForm extends LitElement {
 
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
+    if (this.busy || saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.#dismiss(...Object.keys(this.fieldErrors));
     if (Object.keys(this.#validate()).length > 0) {
@@ -529,6 +536,7 @@ export class PurchaseForm extends LitElement {
 
   override render() {
     const validation = this.attempted ? this.#validate() : {};
+    const s = saveActionState(this.#scope);
     const errors = this.#errors(validation);
     const marked = this.#fieldKeys(errors).length > 0;
     const bottom = [errors._form ?? "", marked ? t("form.fix_fields") : ""]
@@ -540,7 +548,7 @@ export class PurchaseForm extends LitElement {
         heading=${this.invoice ? t("purchase.edit") : t("purchase.new")}
         .open=${this.open}
         .dismissible=${!this.busy}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         @wt-close=${() => this.#onClose()}
       >
         <wt-input
@@ -670,9 +678,9 @@ export class PurchaseForm extends LitElement {
 
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
-            variant="primary"
+            variant=${s.variant}
             data-test="confirm"
-            ?disabled=${this.busy || Object.keys(validation).length > 0}
+            ?disabled=${s.unchanged || this.busy || Object.keys(validation).length > 0}
             @click=${(e: Event) => this.#confirm(e)}
             >${this.invoice ? t("action.save") : t("action.create")}</wt-button
           >

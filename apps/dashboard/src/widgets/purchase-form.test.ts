@@ -255,6 +255,7 @@ describe("purchase-form", () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     let fired = false;
     el.addEventListener("create-purchase", () => (fired = true));
+    await setInput(el, "supplier-name", "   ");
     await click(el, "confirm");
     expect(fired).toBe(false);
     for (const [field, key] of [
@@ -402,6 +403,7 @@ describe("purchase-form", () => {
 
   it("clears a header or line field's error once that field is fixed after a failed confirm", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await setInput(el, "supplier-tax-id", "   ");
     await click(el, "confirm");
     expect(errorOf(el, "supplier-name")).not.toBe("");
     await setInput(el, "supplier-name", "Proveedor");
@@ -464,13 +466,18 @@ describe("purchase-form", () => {
 
   it("starts again when reopened: no messages and Create working", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await setInput(el, "supplier-name", "   ");
     await click(el, "confirm");
+    expect(errorOf(el, "supplier-name")).not.toBe("");
     el.open = false;
     await el.updateComplete;
     el.open = true;
     await el.updateComplete;
     expect(errorOf(el, "supplier-name")).toBe("");
     expect(await bottomOf(el)).toBeNull();
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    await setInput(el, "supplier-name", "Proveedor");
+    expect(errorOf(el, "supplier-tax-id")).toBe("");
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
@@ -548,6 +555,7 @@ describe("purchase-form", () => {
       el,
       "update-purchase",
     );
+    await setInput(el, "note", "Nota nueva");
     await click(el, "confirm");
     const detail = (await updated).detail;
     expect(detail.id).toBe("pi-1");
@@ -561,7 +569,7 @@ describe("purchase-form", () => {
         total: "242.00",
         regime: "equivalence_surcharge",
         deductibleProportion: "50.00",
-        note: "Con nota",
+        note: "Nota nueva",
       },
       lines: [
         { rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" },
@@ -901,6 +909,8 @@ for (const locale of ["en", "es"]) {
         expect(native.value, id).toBe(locale === "es" ? saved!.replace(".", ",") : saved);
       }
     }
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    await setInput(el, "note", "Nota nueva");
     await click(el, "confirm");
     expect(emitted).toHaveLength(1);
     expect(emitted[0]).toMatchObject({
