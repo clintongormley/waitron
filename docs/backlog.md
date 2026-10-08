@@ -2961,8 +2961,8 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   the language chooser, and a "More" menu with everything else: department transfers, Find a bill,
   Kitchen, Pass, My schedule, Profile, Equipment, Allergens, the operator's name and Log out. The
   menu button shows a count of pending transfers. Above 40rem the bar is unchanged.
-  - **Done by A395:** at 1280 px the bar wrapped to two rows in English and three in Spanish.
-  - **Done by A395:** the More menu used the three-dot icon; it is now the hamburger.
+  - **Done by A395 (2026-10-08):** at 1280 px the bar wrapped to two rows in English and three in Spanish.
+  - **Done by A395 (2026-10-08):** the More menu used the three-dot icon; it is now the hamburger.
 - **A395 DONE: the till's top bar is one row at every width.** On a phone nothing changed. Wider,
   the bar moves items into the More menu one at a time, only as many as it needs to stay on one
   row, in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My
@@ -2974,7 +2974,7 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
     narrower ones with it. In screenshots of the demo counter in Spanish at 1024 px, and in both
     languages at 800 px, the transfer count and its button do not fit, so Find a bill, Kitchen and
     Pass are in More too, though the bar has empty room for some of them. Option: after the bar fits, bring back any item that left earlier and now fits, so the
-    order is no longer strict. Not done; the screenshots are in the A395 pull request.
+    order is no longer strict. Not done. Screenshots: `~/waitron-campaign/a395-shots/`.
 - **A379 DONE: standard till tab titles follow the UI language.** Standard key/title pairs
   Counter, Floor and Order read Mostrador, Sala and Pedido in Spanish; renamed and custom
   tabs keep their stored titles. The service-area selector reserves room for its full label,
@@ -4334,8 +4334,9 @@ The original walkthrough is retained under _Detail → Setup wizard_.
       countdown keeps running,
       since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
       or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
-    - **Done (lane C's W27, #1140) — the counter header fits at phone width.** The header, its tab row
-      and its button group wrap onto further rows (`apps/till/src/widgets/tab-shell.ts`). Measured
+    - **Done (lane C's W27, #1140) — the counter header fits at phone width.** (Since A395, 2026-10-08,
+      the bar does not wrap at any width: items move into a More menu instead; see A395.) The
+      header, its tab row and its button group wrap onto further rows (`apps/till/src/widgets/tab-shell.ts`). Measured
       in real Chromium at 390 px: with Find a bill, Kitchen, Pass, My schedule, Allergens, the
       language chooser, the operator and Log out all shown, every one sits on screen in English
       and Spanish, and with six tabs in English (`apps/till/src/widgets/tab-shell.test.ts`). The

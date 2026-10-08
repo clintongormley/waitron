@@ -246,7 +246,7 @@ export class TillTabShell extends LitElement {
   }
 
   /** 0: everything on the bar; 1: the name hidden; n: the name hidden and the first n − 1 present
-   * items of `LEAVE_ORDER` in More. Above phone width it is the fewest steps that keep one row. */
+   * items of `LEAVE_ORDER` in More. */
   @state() private steps = 0;
   #run = 0;
   #stepBackOwed = false;
@@ -291,8 +291,9 @@ export class TillTabShell extends LitElement {
     }
   }
 
-  /** The host's width does not depend on the bar's contents, so a fit never re-triggers it. The
-   * chooser is observed because its label can change once its language list loads. */
+  /** Observes the host, not the header: its width comes from its container, so a fit does not
+   * resize it ("reports no ResizeObserver loop", tab-shell.test.ts). The chooser is observed
+   * because its label can change once its language list loads. */
   #observe(): void {
     if (this.#observer === undefined) {
       this.#observer = new ResizeObserver((entries) => {
@@ -350,9 +351,8 @@ export class TillTabShell extends LitElement {
     return head.scrollWidth > head.clientWidth || tabs.scrollWidth > tabs.clientWidth;
   }
 
-  /** Adds steps while the bar wraps. Takes steps away only when owed — the host grew, the content
-   * or the language changed — and never while More is open, which would rebuild it under the
-   * finger; the owed step-back runs when it closes. */
+  /** Adds steps while the bar wraps. Takes steps away only when `#stepBackOwed`, and never while
+   * More is open, which would rebuild it under the finger; the owed step-back runs when it closes. */
   async #fit(): Promise<void> {
     const run = ++this.#run;
     await this.#settled();

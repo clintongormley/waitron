@@ -30,7 +30,7 @@ test("the till app registers the icons a dropdown draws: its chevron and the cho
   }
 });
 
-test("the till app registers the kebab a menu of more actions draws", async () => {
+test("the till app registers the kebab wt-row-actions draws by default", async () => {
   const el = document.createElement("wt-row-actions") as HTMLElement & {
     updateComplete: Promise<unknown>;
   };

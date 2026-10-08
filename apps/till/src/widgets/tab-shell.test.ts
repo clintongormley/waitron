@@ -427,7 +427,7 @@ const menuActions = [
   [".logout", "logout"],
 ] as const;
 
-/** Wide enough for `full`'s whole bar, in either language, to fit on one row. */
+/** Wide enough for `full`'s whole bar to fit on one row. */
 const ROOMY_WIDTH = 2560;
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
