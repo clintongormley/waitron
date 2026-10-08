@@ -2456,7 +2456,7 @@ inside it does something different. Four shapes cover what's needed so far:
   in.
 - **A field whose value can't be shown** (a password, a PIN): don't render a fake masked value —
   there's nothing real to show. Put the label and its one action ("Change") on the same row.
-- **A repeatable list** (passkeys and content languages today; the same shape applies to printers, staff, devices): each
+- **A repeatable list** (passkeys today; the same shape applies to printers, staff, devices): each
   item is its own row carrying its own action ("Remove"), and an "Add" action sits in the same
   footer position the single-form case uses for "Edit".
 - **A purely informational card** (a status sentence, nothing to edit): just the sentence, muted,
@@ -2471,9 +2471,13 @@ modal sizes itself independently; and there's no more "why doesn't the current p
 the sidebar while editing" confusion, since the page never stopped being the page. See "Card action
 buttons" below for the button styling this pairs with, and the `wt-modal` entry under "Primitives"
 above for the close-event race a shared, reused modal needs to guard against. One exception (C111,
-owner 2026-09-30): Content languages' Set as default and Remove save straight away, without a modal
-(removing a language keeps its translations); its Add language still opens one. A language Waitron
-keeps enabled for the venue's area has no Remove and shows "Required". A second exception (A212): the course
+owner 2026-09-30): Content languages' Make default and Delete save straight away, without a modal
+(deleting a language from the enabled list keeps its translations). Its table shows each language's
+missing-name count, or a loading/read-failure message while the report cannot supply that count.
+Every row has a pinned Actions menu; the default has no Make default or Delete, and a language kept
+enabled for the venue's area has no Delete and shows "Required". Add language opens its own dialog.
+Edit translations opens the existing grouped report in a read-only dialog with its Kind and Why
+filters and links to the relevant editors. Direct text entry is pending A420 part 2's spec approval. A second exception (A212): the course
 list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds, renames and disables
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's

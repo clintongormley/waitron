@@ -16,6 +16,9 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import type {
@@ -91,39 +94,19 @@ export class ContentLanguagesScreen extends LitElement {
         max-width: 60ch;
         margin-top: var(--wt-space-4);
       }
-      ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-      }
-      .action-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2) var(--wt-space-4);
-        padding-block: var(--wt-space-3);
-      }
-      .action-row + .action-row {
-        border-top: 1px solid var(--wt-color-border);
-      }
-      .text {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        min-width: 0;
-      }
-      .field-value {
+      wt-data-table::part(language-name) {
         color: var(--wt-color-text);
         font-weight: var(--wt-font-weight-bold);
         overflow-wrap: anywhere;
       }
-      .field-meta,
-      .note {
+      wt-data-table::part(language-meta) {
+        display: block;
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
       .note {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
         margin: var(--wt-space-2) 0 var(--wt-space-3);
       }
       .warning {
@@ -189,6 +172,8 @@ export class ContentLanguagesScreen extends LitElement {
   @state() private rules: ContentLanguageRules | null = null;
   @state() private loadFailed = false;
   @state() private adding = false;
+  @state() private translating = false;
+  @state() private translationLanguage = "";
   @state() private busy = false;
   @state() private saveError = "";
   @state() private gaps: LanguageTranslationGaps[] | null = null;
@@ -330,60 +315,16 @@ export class ContentLanguagesScreen extends LitElement {
       .filter((code) => code !== config.defaultLanguage)
       .map((code) => ({ code, name: name(code) }))
       .sort((a, b) => collator.compare(a.name, b.name));
-    const required = (code: string) => rules.required.includes(code);
-    const requiredMeta = (code: string) =>
-      required(code)
-        ? html`<span class="field-meta">${t("content_languages.required")}</span>`
-        : nothing;
     return html`${this.#renderNotice(config, rules)}
       ${this.receiptLanguage === null ? nothing : receiptLanguageWarning(this.receiptLanguage, config)}
       <wt-card>
-        <ul data-test="languages" aria-label=${t("content_languages.enabled")}>
-          <li class="action-row">
-            <div class="text">
-              <span class="field-value">${name(config.defaultLanguage)}</span>
-              <span class="field-meta">${t("content_languages.default")}</span>
-              ${requiredMeta(config.defaultLanguage)}
-            </div>
-          </li>
-          ${others.map(
-            ({ code, name }) =>
-              html`<li class="action-row">
-                <div class="text">
-                  <span class="field-value">${name}</span>
-                  ${requiredMeta(code)}
-                </div>
-                <div class="button-group">
-                  <wt-button
-                    data-test=${`set-default-${code}`}
-                    variant="secondary"
-                    class="card-action accent-primary"
-                    ?disabled=${this.busy}
-                    aria-label=${`${t("content_languages.set_default")}: ${name}`}
-                    @click=${() => void this.#save(code, config.languages)}
-                    >${t("content_languages.set_default")}</wt-button
-                  >
-                  ${
-                    required(code)
-                      ? nothing
-                      : html`<wt-button
-                          data-test=${`remove-${code}`}
-                          variant="secondary"
-                          class="card-action accent-danger"
-                          ?disabled=${this.busy}
-                          aria-label=${`${t("content_languages.remove")}: ${name}`}
-                          @click=${() =>
-                            void this.#save(
-                              config.defaultLanguage,
-                              config.languages.filter((language) => language !== code),
-                            )}
-                          >${t("content_languages.remove")}</wt-button
-                        >`
-                  }
-                </div>
-              </li>`,
-          )}
-        </ul>
+        <wt-data-table
+          data-test="languages"
+          aria-label=${t("content_languages.enabled")}
+          .rows=${[config.defaultLanguage, ...others.map(({ code }) => code)]}
+          .columns=${this.#languageColumns(config, rules)}
+          .rowKey=${(code: string) => code}
+        ></wt-data-table>
         <p class="note">${t("content_languages.preserve")}</p>
         ${formMessage(this.saveError)}
         <div class="card-footer">
@@ -412,6 +353,95 @@ export class ContentLanguagesScreen extends LitElement {
           this.adding = false;
         }}
       ></dashboard-add-content-language>`;
+  }
+
+  #languageColumns(
+    config: ContentLanguages,
+    rules: ContentLanguageRules,
+  ): DataTableColumn<string>[] {
+    const name = (code: string) =>
+      capitaliseFirst(
+        new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code)!,
+        currentLocale(),
+      );
+    return [
+      {
+        key: "language",
+        label: t("content_languages.language"),
+        cell: (code) => html`
+          <span part="language-name" class="field-value">${name(code)}</span>
+          ${code === config.defaultLanguage ? html`<span part="language-meta">${t("content_languages.default")}</span>` : nothing}
+          ${rules.required.includes(code) ? html`<span part="language-meta">${t("content_languages.required")}</span>` : nothing}
+        `,
+      },
+      {
+        key: "completeness",
+        label: t("content_languages.completeness"),
+        cell: (code) => {
+          if (this.gapsFailed) return t("content_gaps.load_error");
+          const report = this.gaps?.find((entry) => entry.language === code);
+          return !report
+            ? t("content_gaps.loading")
+            : report.gaps.length === 0
+              ? t("content_gaps.none")
+              : t("content_gaps.count").replace("{count}", String(report.gaps.length));
+        },
+      },
+      {
+        key: "actions",
+        label: t("content_languages.actions"),
+        pinned: "end",
+        cell: (code) => html`
+          <wt-row-actions label=${`${t("content_languages.actions")}: ${name(code)}`}>
+            ${
+              code === config.defaultLanguage
+                ? nothing
+                : html`
+                    <wt-button
+                      align="start"
+                      data-test=${`set-default-${code}`}
+                      variant="ghost"
+                      ?disabled=${this.busy}
+                      aria-label=${`${t("content_languages.set_default")}: ${name(code)}`}
+                      @click=${() => void this.#save(code, config.languages)}
+                      >${t("content_languages.set_default")}</wt-button
+                    >
+                    ${
+                      rules.required.includes(code)
+                        ? nothing
+                        : html`
+                            <wt-button
+                              align="start"
+                              data-test=${`remove-${code}`}
+                              variant="ghost"
+                              ?disabled=${this.busy}
+                              aria-label=${`${t("content_languages.remove")}: ${name(code)}`}
+                              @click=${() =>
+                                void this.#save(
+                                  config.defaultLanguage,
+                                  config.languages.filter((language) => language !== code),
+                                )}
+                              >${t("content_languages.remove")}</wt-button
+                            >
+                          `
+                    }
+                  `
+            }
+            <wt-button
+              align="start"
+              data-test=${`edit-translations-${code}`}
+              variant="ghost"
+              ?disabled=${this.busy}
+              @click=${() => {
+                this.translationLanguage = code;
+                this.translating = true;
+              }}
+              >${t("content_languages.edit_translations")}</wt-button
+            >
+          </wt-row-actions>
+        `,
+      },
+    ];
   }
 
   #gapColumnLists = new Map<string, { key: string; columns: DataTableColumn<TranslationGap>[] }>();
@@ -560,7 +590,7 @@ export class ContentLanguagesScreen extends LitElement {
               ? t("content_gaps.none")
               : t("content_gaps.count").replace("{count}", String(gaps.length))
           }
-          ?open=${required(language) && gaps.length > 0}
+          ?open=${this.translating ? language === this.translationLanguage : required(language) && gaps.length > 0}
           >${
             gaps.length === 0
               ? html`<p class="complete">
@@ -615,7 +645,28 @@ export class ContentLanguagesScreen extends LitElement {
       ${
         this.config && this.rules
           ? html`${this.#renderConfig(this.config, this.rules)}
-            ${this.#renderGaps(this.config, this.rules)}`
+              <wt-modal
+                data-test="translations-dialog"
+                size="wide"
+                .open=${this.translating}
+                heading=${t("content_languages.edit_translations")}
+                @wt-close=${(event: Event) => {
+                  event.stopPropagation();
+                  this.translating = false;
+                }}
+              >
+                ${this.#renderGaps(this.config, this.rules)}
+                <wt-form-actions slot="footer">
+                  <wt-button
+                    slot="cancel"
+                    variant="secondary"
+                    @click=${() => {
+                      this.translating = false;
+                    }}
+                    >${t("action.close")}</wt-button
+                  >
+                </wt-form-actions>
+              </wt-modal>`
           : this.loadFailed
             ? nothing
             : html`<p role="status">${t("content_languages.loading")}</p>`

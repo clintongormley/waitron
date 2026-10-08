@@ -279,8 +279,8 @@ holds no map for the report to read.
 A content-language save that leaves out a language Waitron keeps enabled for the venue's area (its
 area's `requiredContentLocales` in the country pack) is refused (`content.language_required`,
 `writeContentLanguages` in `packages/catalogue/src/content-languages.ts`), but nothing makes that
-language's text complete. What is missing is listed instead, on the dashboard's Content languages
-page, under **Missing translations** (`listTranslationGapReport`,
+language's text complete. On the dashboard's Content languages page, **Edit translations** in a
+language's row menu opens the **Missing translations** report in a read-only dialog (`listTranslationGapReport`,
 `packages/catalogue/src/content-translation-report.ts`, read through
 `GET /management-api/content-translation-gaps`). For each enabled language it lists the report's own
 gaps for that language, marked **Partly translated** (only these stop that language becoming the
