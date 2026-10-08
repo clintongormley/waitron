@@ -900,7 +900,7 @@ every queued callback in every component is cancelled. The revised review ran 39
 arrangements. Its scaled-ancestor/currency-part-padding probes found initial geometry different
 from the later observer content box. No matching app/package TypeScript/CSS consumer was found
 with `rg -n 'part\(currency\)|transform:\s*scale|zoom:' apps packages --glob '*.ts' --glob '*.css'`.
-The initial measurement assumes an unpadded, unbordered sign and unscaled ancestors; a consumer
+The initial measurement assumes no inline sign padding/borders or ancestor scaling; a consumer
 adding those styles needs a consistent measurement box. A consumer overriding the amount to
 `width:auto`, or moving a field during notification, still produced warnings on both base and
 candidate in the review probes. This fix's warning-free receipts do not cover those arrangements.

@@ -3499,7 +3499,7 @@ experiments, not a measured delay on a real menu. Five disposable deletion contr
 restoring the implementation passed 119 price-field cases. The updated eight-suite dashboard run
 passed 630 cases without the warning, and the unedited fiscal pair passed 20 cases. The revised Claude review ran 396 seconds and found no correctness bug in its tested arrangements;
 eight revised EN/ES/theme/width screenshots were inspected. Normal hook and current-head CI remain.
-Review follow-up: the initial geometry includes currency-part padding/border and ancestor scaling,
+Review follow-up: the initial geometry includes currency-part inline padding/borders and ancestor scaling,
 where later `contentRect` does not; scaled ancestors or currency-part padding can cause an initial
 width adjustment. A source search found no `part(currency)`, `transform: scale` or `zoom:` consumer
 in app/package TypeScript/CSS. Keep that limitation documented; use a consistent measurement box

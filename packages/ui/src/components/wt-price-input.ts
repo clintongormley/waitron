@@ -15,7 +15,7 @@ function queueCurrencyMeasurement(currency: Element, write: (width: number) => v
       // Read all rows before writing padding: interleaving them forces layout for every row.
       const measured = [...initialCurrencyMeasurements].map(([element, apply]) => ({
         apply,
-        // This agrees with the observer's content box only without sign padding/border or scaling.
+        // Inline padding/borders or ancestor scaling can differ from the observer's content width.
         width: element.getBoundingClientRect().width,
       }));
       initialCurrencyMeasurements.clear();
