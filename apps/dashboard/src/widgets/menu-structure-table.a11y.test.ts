@@ -123,6 +123,36 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with a product row's menu open on Edit product, and Yes and No in Available", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      {
+        nodes,
+        products: products.map((p) => ({ ...p, available: p.id !== "p-lager" })),
+        menuName: "Lunch Menu",
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    for (let round = 0; round < 3; round++) await table.updateComplete;
+    const inTable = (selector: string) => table.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    inTable('tr[data-row-key="m-drinks"] .row-activate').click();
+    await table.updateComplete;
+    const words = [...table.shadowRoot!.querySelectorAll('[data-test="available"]')].map((span) =>
+      span.textContent!.trim(),
+    );
+    expect(words).toContain(t("menus.available_yes"));
+    expect(words).toContain(t("menus.available_no"));
+    const menu = inTable(
+      '[data-test="actions-m-burger"]',
+    ) as HTMLElementTagNameMap["wt-row-actions"];
+    await menu.updateComplete;
+    menu.show();
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(menu.querySelector('a[href][data-test="edit-product-m-burger"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with colour swatches, a product's own, its category's and none, and a section's", async () => {
     const categories: CategorySummary[] = [
       { id: "c-drinks", name: "Bebidas", parentId: null, color: "#256bb1" },

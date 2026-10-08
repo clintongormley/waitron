@@ -4087,6 +4087,63 @@ describe("the Structure tree", () => {
     }
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "at 390 px a product row's ⋮ shows Edit product wholly on screen, and choosing it asks for that product's editor (%s)",
+    async (locale) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const before = currentLocale();
+      setLocale(locale);
+      onTestFinished(() => setLocale(before));
+      await page.viewport(390, 844);
+      onTestFinished(() => page.viewport(width, height));
+      const el = await mountLunch();
+      await settleStructure(el);
+      expect(window.innerWidth).toBe(390);
+      expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      const menu = inStructure<HTMLElementTagNameMap["wt-row-actions"]>(
+        el,
+        '[data-test="actions-m-burger"]',
+      )!;
+      menu.scrollIntoView({ block: "center" });
+      menu.show();
+      await vi.waitFor(() =>
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+      );
+      const link = inStructure<HTMLAnchorElement>(el, '[data-test="edit-product-m-burger"]')!;
+      expect(link.textContent!.trim()).toBe(t("product.edit"));
+      expect(link.getAttribute("href")).toBe("/manage/catalogue/product/p-burger");
+      await vi.waitFor(() => {
+        const at = link.getBoundingClientRect();
+        expect(at.width).toBeGreaterThan(0);
+        expect(at.left).toBeGreaterThanOrEqual(0);
+        expect(at.right).toBeLessThanOrEqual(window.innerWidth);
+        expect(at.top).toBeGreaterThanOrEqual(0);
+        expect(at.bottom).toBeLessThanOrEqual(window.innerHeight);
+      });
+      const at = link.getBoundingClientRect();
+      // The point lands in the screen's shadow trees, so walk the hit back to the link.
+      const deepest = (root: Document | ShadowRoot, x: number, y: number): Element | null => {
+        const found = root.elementFromPoint(x, y);
+        if (found?.shadowRoot && found.shadowRoot !== root) {
+          const inner = deepest(found.shadowRoot, x, y);
+          if (inner && inner !== found) return inner;
+        }
+        return found;
+      };
+      const target = deepest(document, at.x + at.width / 2, at.y + at.height / 2);
+      expect(target !== null && link.contains(target), "Edit product is covered").toBe(true);
+      expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+
+      const heard: unknown[] = [];
+      const listen = (event: Event) => heard.push((event as CustomEvent).detail);
+      document.addEventListener("wt-edit-product", listen);
+      onTestFinished(() => document.removeEventListener("wt-edit-product", listen));
+      link.click();
+      expect(heard).toEqual([{ productId: "p-burger" }]);
+    },
+  );
+
   it("keeps the open sections and the current one through a refresh that leaves them in place", async () => {
     const live = new LiveData();
     const client = api({ liveData: live });

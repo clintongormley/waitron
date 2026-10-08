@@ -6,6 +6,8 @@ import { DashboardApp } from "./dashboard-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { MenuPricesTable } from "./widgets/menu-prices-table.js";
 import "./widgets/menu-prices-table.js";
+import type { MenuStructureTable } from "./widgets/menu-structure-table.js";
+import "./widgets/menu-structure-table.js";
 import { productMedia } from "./widgets/product-media.js";
 import { cleanupWidgets, combinedFixture, mountWidget } from "./widgets/test-helpers.js";
 
@@ -1209,6 +1211,57 @@ describe("a price override row's Edit product link under the app's link router",
       `/manage/catalogue/product/${id}`,
     );
     await expect.poll(() => location.pathname).toBe(`/manage/catalogue/product/${id}`);
+    expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+  });
+});
+
+describe("a Structure tab product row's Edit product link under the app's link router", () => {
+  it("is routed in the app to that product's editor", async () => {
+    const m = await mount({
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        venueName: "Venue",
+        permissions: ["product.manage"],
+        modules: [],
+      }),
+    });
+    const host = document.createElement("div");
+    host.attachShadow({ mode: "open" });
+    m.screen.shadowRoot!.append(host);
+    const tree = document.createElement("dashboard-menu-structure-table") as MenuStructureTable;
+    tree.nodes = [{ memberId: "m-burger", ref: { kind: "product", productId: "p-burger" } }];
+    tree.products = [{ id: "p-burger", name: "Burger", image: null, available: true } as Product];
+    tree.menuName = "Lunch";
+    host.shadowRoot!.append(tree);
+    await tree.updateComplete;
+    const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-m-burger"]',
+    )!;
+    menu.show();
+    const link = menu.querySelector<HTMLAnchorElement>('a[data-test="edit-product-m-burger"]')!;
+    let leaked = false;
+    link.addEventListener("click", (event) => {
+      if (event.defaultPrevented) return;
+      leaked = true;
+      event.preventDefault();
+    });
+    const write = vi.spyOn(navigationGuardFor(window)!, "write");
+    const event = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(leaked).toBe(false);
+    expect(write).toHaveBeenCalled();
+    expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(
+      "/manage/catalogue/product/p-burger",
+    );
+    await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/p-burger");
     expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
   });
 });

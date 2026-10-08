@@ -41,6 +41,7 @@ import type {
   Product,
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
+import { leftToBrowser } from "../navigation.js";
 
 export const ROOT_KEY = "root";
 /** The Device Home Page row's key, and the list key its shortcuts' order is kept under. */
@@ -835,7 +836,21 @@ export class MenuStructureTable extends LitElement {
           this.#send("wt-member-delete", detail),
         )}`;
     }
-    return this.#remove(row, t("members.remove_from").replace("{list}", row.holder));
+    const productId = node.ref.productId;
+    return html`${
+      this.#productById.has(productId)
+        ? html`<a
+            data-test=${`edit-product-${key}`}
+            href=${`/manage/catalogue/product/${encodeURIComponent(productId)}`}
+            @click=${(event: MouseEvent) => {
+              if (leftToBrowser(event)) return;
+              event.preventDefault();
+              this.#send("wt-edit-product", { productId });
+            }}
+            >${t("product.edit")}</a
+          >`
+        : nothing
+    }${this.#remove(row, t("members.remove_from").replace("{list}", row.holder))}`;
   }
 
   #shortcutItems(row: HomeRow | ShortcutRow) {
@@ -880,6 +895,18 @@ export class MenuStructureTable extends LitElement {
             >`;
           return html`<span part=${row.readOnly ? "kind read-only" : "kind"} data-test="kind"
             >${memberKindLabel(row.node.ref)}</span
+          >`;
+        },
+      },
+      {
+        key: "available",
+        label: t("editor.available"),
+        cell: (row) => {
+          if (row.kind !== "member" || row.node.ref.kind !== "product") return nothing;
+          const product = this.#productById.get(row.node.ref.productId);
+          if (product === undefined) return nothing;
+          return html`<span part="available" data-test="available"
+            >${t(product.available ? "menus.available_yes" : "menus.available_no")}</span
           >`;
         },
       },
