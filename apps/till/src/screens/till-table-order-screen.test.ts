@@ -4500,7 +4500,7 @@ describe("closed department ordering", () => {
     const { el } = await mount({
       draftStore: draft,
       lines: [pendingLine],
-      service: { open: false, periodName: null },
+      service: { open: false, periodName: null, keepOpen: null },
       departmentName: "Restaurant",
     });
     expect(el.shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim()).toBe(
