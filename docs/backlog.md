@@ -2091,14 +2091,14 @@ refusal, including its could-not-open operator advice; provenance, HTTP400/domai
 unchanged-database and empty-staging checks remain. This is preproduction format rejection,
 with no backward-compatibility implementation.
 
-**Next action:** verify physical 58/80 mm paper and QR output, complete A231p's original-delivery
+**Next action:** verify physical 58/80 mm paper and QR output, complete A231q's remaining original-delivery
 choices, obtain the asesor's manual-remedy approval and settle applicable B2B delivery before
 enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
 offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
 and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the campaign's current
 queue order; this landing does not start another fiscal item.
 
-### A231d. Full invoices by email as a PDF, and on an office printer — APPROVED BUILD, PLAN RECONCILED (2026-10-07)
+### A231d. Full invoices by email as a PDF, and on an office printer — PART 1 LANDED (#1399); PART 2 OPEN
 
 The owner asked, approving A231's design, that an F1 can also be emailed to the customer as a PDF and
 printed on an ordinary office printer. The [design](superpowers/specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md)
@@ -2126,14 +2126,25 @@ printer. Its own driverless setup refused a printer taking only PWG Raster (appa
 CUPS 2.4.10 that later versions fix; Debian testing's 2.4.18 accepted it), and that printer did
 print through a route CUPS calls deprecated. CUPS held a job while the printer was away and printed
 it by itself later; its source code waits 7 days before counting such a job failed. The owner approved drawing pages ourselves (decision 10), and A231 has landed.
-**Part 1 approved for landing, 2026-10-08.** The owner approved
-[#1399](https://github.com/clintongormley/waitron/pull/1399). Its previous candidate
-`e30003052066ec9f8beeb0991224072419fcff78` passed CI `37712224664`, analysis
-`37712218418` and licence `37712224329`; every job was read back as successful or skipped.
-The branch rebased onto `1b770aea5b7bc7534beb6d55fe81940bc202bfcf` without conflicts.
-`git range-diff` matched all 37 earlier patches unchanged, so the completed reviews remain
-in use. New-head focused checks, the normal push hook and CI are required before merging.
-The following dated blockers describe earlier candidates.
+**Part 1 landed, 2026-10-08:** [#1399](https://github.com/clintongormley/waitron/pull/1399),
+merge `eb6403150efe76b16a15dd63a8486d3636ab50ee`. The stored-fact document, transient
+PDF/raster rendering, metadata-only delivery attempts, correlated receipt claims/results,
+queued email worker and SMTP settings/test endpoints are on main. Public F1 remains disabled.
+A231q still owes the setup/dashboard and delivery screens, provisioning/restore checks,
+office-printer discovery/registration/location selection and IPP transport, send-again/download
+and withdrawal actions, built-image renderer execution, box measurements and physical output.
+Physical checks require owner presence or arrangement; adviser confirmation and public F1
+acceptance gates remain separate.
+
+The final head `14961a9d54cec4573aa44575f6d89081c5a455d6` passed CI `37749055320`, licence
+`37749054920` and analysis `37749049741`; every job was read back as successful or skipped.
+The normal push hook passed 5,392 root tests, formatting and lint. The two completed run-it
+reviews and convention triage remained in use. The merge's own CI run is `37750207040`,
+with its result pending at this update. Earlier validation blockers below are historical;
+the owner approved landing on 2026-10-08 and part 2 no longer waits for part 1.
+
+**Next action:** follow the lane's UI priority order, then complete A231q. The following dated
+notes preserve earlier candidates and the owner's split decision.
 
 **Part 1 validation blocked, 2026-10-07 ([#1374](https://github.com/clintongormley/waitron/pull/1374)).** CI run `37674514404` attempts 1 and 2 each ended with a worker exit in `bill-payments.test.ts`, leaving the same 13 cases unfinished; the local suite passed 103 cases with coverage, and the cause remains unverified. After rebasing over A322, the normal push hook failed `scripts/migration-upgrade.test.ts`: renaming `__new_invoice_deliveries` encounters `section_members_media_image_fk_insert`, whose `new.folder_overrides` column is absent at that staged step. The catalogue journal dates `0029_include_folder` after media `0009_include_folder_image_references`; the test walks journal dates across sets. The push stopped, so the rebased branch remains local. **2026-10-08:** the queued UI work has landed and part 1 has resumed under the owner’s A231q instruction. The existing staged-upgrade test reproduced the trigger refusal (1 failed); regeneration from current main’s core migration history creates the final invoice tables directly, adds the staged choice, and restores its transition trigger. The upgrade, schema constraints, append-only, behavioural-trigger and schema-match suites passed 372 cases. The unmodified bill-payment suite passed 103 cases locally. Both CI stacks map to the full rollback snapshot equality; the venue watchdog logs its 120-second starvation report and kills the process. A disposable 10-second-watchdog probe was killed after 57 cases; adding a between-case event-loop turn passed all 103, and deleting that hook killed another run after 47. All snapshot fields, receipt bytes and existing assertions remain unchanged. Current-head Linux CI is still required; the accelerated local probe is not its result. The receipt is in [testing-guide.md](developers/testing-guide.md#a-retained-database-fixture-can-keep-the-watchdog-from-taking-a-timer-turn). The repaired candidate’s push is now blocked at sign-off: the hook checks old-remote-tip..new-tip and includes main’s unsigned A376 squash `6797bc03a8c5770718a6fdc1efca7fdd397c6092`. `scripts/check-signoff.sh` passed all 34 feature commits over main and failed the push range on that main commit alone. No hook bypass or main-history rewrite was attempted. **2026-10-08 fresh-branch resolution authorised:** the watcher instructs Lane E to push the repaired candidate to a new remote branch with the normal hook, open a replacement draft PR and close #1374 with its replacement link. The hook uses the main merge base for a new ref (`.husky/pre-push`); it remains unchanged. The normal hook passed on the replacement branch; [#1399](https://github.com/clintongormley/waitron/pull/1399) replaces the closed #1374. CI run `37710893780` then failed one `invoice-document.test.ts` check: it expected the variant alone, while the shared receipt resolver now returns the parent and relative variant under the landed #1381 rule. The focused file reproduced one failure and seven passes. The expected Spanish name now includes both frozen names; the full line equality, money and VAT assertions remain. Current-head CI is still required. Part 1 still needs owner sign-off before landing; part 2 waits.
 
@@ -2445,7 +2456,7 @@ hold, keep it, or add the overtaking case to the W41s-1b probe first.
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
 paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
 yet, so the screen should add an open-only filter or paging when it calls them.
-Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
+Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231q
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan. The following paragraph records the 2026-10-03 state;
@@ -3607,12 +3618,11 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   (`packages/db/src/schema/receipt-reprints.ts`); include that audit link when designing retention.
   Whether a future replication drain can carry the audit row to a node without its print job is
   unverified and needs a test when that drain is built.
-- **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
-  It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
-  invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
-  port 631; the owner's HP accepts PDF directly) and rules for which documents go to which printer.
-  It would share the PDF rendering with the virtual PDF printer above.
-  _2026-10-03: designed as A231d (above), for full invoices; not built._
+- **Printing A4 invoices on an office printer** (owner, 2026-09-14): foundation landed in #1399; transport and screens remain in A231q.
+  It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision. Remaining work
+  discovers and registers invoice printers, selects them by location and sends the rendered PDF
+  or raster through IPP, with the delivery and send-again screens listed under A231d.
+  _2026-10-08: A231p part 1 landed (#1399), including the shared document, PDF/raster renderers and page-printer schema. Discovery, registration and IPP delivery remain open in A231q; office printing is not yet complete._
 
 **Open — finding and adding printers:**
 
