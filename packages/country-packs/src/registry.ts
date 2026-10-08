@@ -114,8 +114,8 @@ export interface StartingContentLanguages {
   readonly required: readonly string[];
 }
 
-/** Switched on for every new venue, required nowhere (owner, 2026-10-06; docs/backlog.md →
- * "Content languages per region"). */
+/** Switched on for every new venue, required nowhere (owner, 2026-10-06;
+ * docs/developers/products.md → "Content languages per region"). */
 const ENGLISH = "en";
 
 /** The content languages a NEW venue starts with in this area, as language codes. */

@@ -3464,7 +3464,7 @@ export class TillApp extends LitElement {
    * unedited one has nothing to save.
    * `working_order.not_open` (already settled or placed) is swallowed so the pay routes replay the filed
    * ticket; `placeOrder` is not idempotent and still refuses. An idempotent `placeOrder` is a recorded
-   * backlog follow-up (docs/backlog.md).
+   * backlog follow-up (docs/backlog.md, "A re-sent "place" on an already-placed order answers 409").
    */
   async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
     if (!(this.#store.persisted && this.#store.dirty)) return true;
@@ -3613,7 +3613,8 @@ export class TillApp extends LitElement {
     if (!collected || session !== this.#operatorSession) return;
     // A collect settles the order, and the counter's prep-queue card offers Collect only on a
     // settled order. Only a collect opened from the waiting list re-reads the queue
-    // (docs/backlog.md, B16).
+    // (docs/backlog/till.md, "A collect straight after Place order does not re-read the kitchen
+    // queue").
     void this.#refreshListsAfterWrite(session, [
       ...(fromWaitingList ? [["station", "refresh.station_after_sale"] as const] : []),
       ["waiting", "refresh.waiting_after_sale"],

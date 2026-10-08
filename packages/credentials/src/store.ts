@@ -79,7 +79,7 @@ export async function tryGetCredential(
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new AppError("credentials.malformed_payload", { purpose: ref.purpose });
   }
-  // Not re-checked against `PURPOSES` (owner decision 2026-09-15, docs/backlog.md B7): a row sealed
+  // Not re-checked against `PURPOSES` (owner decision 2026-09-15, docs/backlog/box.md): a row sealed
   // under an older list comes back without a newer field, so the reader must check the fields it
   // uses.
   return parsed as Record<string, string>;

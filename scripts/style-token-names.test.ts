@@ -61,9 +61,10 @@ function isolatedGitEnv(): NodeJS.ProcessEnv {
 
 /**
  * Reads of undeclared names that carry a fallback, left as they are on purpose: the till's
- * caution and success text colours, which A4 in `docs/backlog.md` covers. Each entry is a file and
- * a name, and holds only for a read WITH a fallback. An entry that is no longer needed fails the
- * guard; nothing stops one being added, so keeping the list from growing is a job for review.
+ * caution and success text colours, which `docs/backlog.md`'s "Four till surfaces ask for a caution
+ * colour" entry covers. Each entry is a file and a name, and holds only for a read WITH a fallback.
+ * An entry that is no longer needed fails the guard; nothing stops one being added, so keeping the
+ * list from growing is a job for review.
  */
 const FALLBACK_READS: ReadonlyArray<{ readonly file: string; readonly name: string }> = [
   { file: "apps/till/src/screens/till-expo-screen.ts", name: "--wt-color-warning-text" },
