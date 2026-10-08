@@ -523,14 +523,14 @@ The conditions most likely to bite a person that no single task's happy path exe
   (`department_id`, `business_day`); check `period_extensions_step_ck` written as
   `menu_slots_step_ck` (`:135-139`, S1).
 
-- [ ] **Step 1: Failing test** in `migrations.test.ts`: `period_extensions` in `TABLES`; a second
+- [x] **Step 1: Failing test** in `migrations.test.ts`: `period_extensions` in `TABLES`; a second
   row for one department and business day is refused by the database; a row at `14:10` is
   refused; a row naming one department and another department's period is refused; deleting the
   period deletes its row; `station_day_states` takes a row with `sends_to_station_id` naming a
   station, refuses one naming nothing, and refuses one naming its own station. Run
   `pnpm --filter @waitron/venue-service exec vitest run --project node src/migrations.test.ts`;
   expected: fails (no such table or column).
-- [ ] **Step 2: Schema, then generate — in two generations**, because the new check is expected to
+- [x] **Step 2: Schema, then generate — in two generations**, because the new check is expected to
   make drizzle rebuild `station_day_states` (believed: drizzle-kit for SQLite cannot add a CHECK
   with `ALTER TABLE`; Step 2b reads the SQL to confirm), and the 0.31.11 trap forbids a generation
   that rebuilds a table and adds a column to it (CLAUDE.md §3).
@@ -545,15 +545,15 @@ The conditions most likely to bite a person that no single task's happy path exe
     (`grep -rln 'REFERENCES \`station_day_states\`' packages/*/drizzle/` printed nothing at M), so
     no child is emptied, and the copy keeps every row; an old row's null destination passes the
     check. If 2b does not rebuild (drizzle wrote an `ALTER`), keep it as generated.
-- [ ] **Step 3: Classification** — `period_extensions` as `state`. Add the keys, index and check to
+- [x] **Step 3: Classification** — `period_extensions` as `state`. Add the keys, index and check to
   `scripts/schema-constraints.test.ts`; add the table to the fixture clear list; add
   `expect(names).not.toContain("period_extensions")` beside `service.test.ts:94` (M).
-- [ ] **Step 4: Run** Step 1's test, the package's node project, the server package (for the
+- [x] **Step 4: Run** Step 1's test, the package's node project, the server package (for the
   clear list), and
   `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts scripts/migration-upgrade.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/id-columns-are-references.test.ts scripts/module-graph-honesty.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`. If the
   upgrade walk reports a casualty, STOP and report it: this slice promises no reset.
-- [ ] **Step 5: Commit** — `feat(venue-service): a station's destination today and period extensions (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): a station's destination today and period extensions (A366)`.
 
 ---
 

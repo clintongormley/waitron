@@ -246,6 +246,20 @@
       "when": 1791490605863,
       "tag": "0034_period_end_offset",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1791501789038,
+      "tag": "0035_station_destinations_and_period_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1791501797923,
+      "tag": "0036_station_destination_not_self",
+      "breakpoints": true
     }
   ]
 }

@@ -94,5 +94,6 @@ describe("VENUE_SERVICE", () => {
     expect(names).not.toContain("department_hours");
     expect(names).toContain("station_fallbacks");
     expect(names).not.toContain("station_day_states");
+    expect(names).not.toContain("period_extensions");
   });
 });

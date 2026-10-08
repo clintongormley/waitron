@@ -11,6 +11,7 @@ import {
   isRefusal,
   kitchenStations,
   locations,
+  UNIQUE_VIOLATION,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
@@ -40,6 +41,7 @@ const TABLES = [
   "device_profile_watchers",
   "station_fallbacks",
   "station_day_states",
+  "period_extensions",
   "routing_cells",
   "order_service_contexts",
   "working_line_contexts",
@@ -213,7 +215,17 @@ describe("the venue-service migration set carries no tenant column", () => {
       },
       station_day_states: {
         primaryKey: ["id"],
-        foreignKeys: ["(station_id) -> kitchen_stations(id)"],
+        foreignKeys: [
+          "(sends_to_station_id) -> kitchen_stations(id)",
+          "(station_id) -> kitchen_stations(id)",
+        ],
+      },
+      period_extensions: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(department_id) -> departments(id)",
+          "(period_id, department_id) -> menu_periods(id, department_id) on delete cascade",
+        ],
       },
       routing_cells: {
         primaryKey: ["id"],
@@ -325,6 +337,115 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION), constraint).toBe(true);
     expect(engineErrorMessage(error), constraint).toContain("FOREIGN KEY constraint failed");
   }
+
+  it("keeps only one period extension per department and business day", async () => {
+    const v = await venue();
+    const periodId = randomUUID();
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    const extension = (businessDay: string, start = "14:00:00", end = "14:30:00") =>
+      sql`insert into period_extensions (id, department_id, business_day, period_id, starts_at, ends_at)
+        values (${randomUUID()}, ${v.departmentId}, ${businessDay}, ${periodId}, ${start}, ${end})`;
+    await db.execute(extension("2026-10-08"));
+    await db.execute(extension("2026-10-09", "03:00:00", "06:00:00"));
+    expect(
+      (
+        await db.execute(sql`select business_day, starts_at, ends_at from period_extensions
+      where department_id = ${v.departmentId} order by business_day`)
+      ).rows,
+    ).toEqual([
+      { business_day: "2026-10-08", starts_at: "14:00:00", ends_at: "14:30:00" },
+      { business_day: "2026-10-09", starts_at: "03:00:00", ends_at: "06:00:00" },
+    ]);
+    const error = await captureError(() =>
+      db.transaction((tx) => tx.execute(extension("2026-10-08"))),
+    );
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain(
+      "period_extensions.department_id, period_extensions.business_day",
+    );
+  });
+
+  it.each([
+    ["14:10:00", "14:30:00"],
+    ["14:00:00", "14:10:00"],
+  ])("refuses period extension endpoints %s–%s between quarter-hours", async (start, end) => {
+    const v = await venue();
+    const periodId = randomUUID();
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+        values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    const error = await captureError(() =>
+      db.transaction((tx) =>
+        tx.execute(
+          sql`insert into period_extensions (id, department_id, business_day, period_id, starts_at, ends_at)
+          values (${randomUUID()}, ${v.departmentId}, '2026-10-08', ${periodId}, ${start}, ${end})`,
+        ),
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("period_extensions_step_ck");
+  });
+
+  it("ties an extension to its period's department and deletes it with its period", async () => {
+    const v = await venue();
+    const other = await venue();
+    const periodId = randomUUID();
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    const extension = (departmentId: string, targetPeriod: string) =>
+      sql`insert into period_extensions (id, department_id, business_day, period_id, starts_at, ends_at)
+        values (${randomUUID()}, ${departmentId}, '2026-10-08', ${targetPeriod}, '14:00:00', '14:30:00')`;
+    await refusal(extension(other.departmentId, periodId), "period_extensions_period_fk");
+    await refusal(extension(v.departmentId, randomUUID()), "period_extensions_period_fk");
+    await refusal(extension(randomUUID(), periodId), "period_extensions_department_fk");
+    await db.execute(extension(v.departmentId, periodId));
+    expect(
+      (
+        await db.execute(
+          sql`select period_id from period_extensions where department_id = ${v.departmentId}`,
+        )
+      ).rows,
+    ).toEqual([{ period_id: periodId }]);
+    await db.execute(sql`delete from menu_periods where id = ${periodId}`);
+    expect(
+      (
+        await db.execute(
+          sql`select period_id from period_extensions where department_id = ${v.departmentId}`,
+        )
+      ).rows,
+    ).toEqual([]);
+  });
+
+  it("stores a station's chosen destination while accepting a day with no destination", async () => {
+    const v = await venue();
+    const [station, destination] = await db
+      .insert(kitchenStations)
+      .values([
+        { locationId: brandLocationId(v.locationId), name: "Grill" },
+        { locationId: brandLocationId(v.locationId), name: "Bar" },
+      ])
+      .returning({ id: kitchenStations.id });
+    const state = (day: string, sendsTo: string | null) =>
+      sql`insert into station_day_states (id, station_id, business_day, open, sends_to_station_id)
+        values (${randomUUID()}, ${station!.id}, ${day}, 0, ${sendsTo})`;
+    await db.execute(state("2026-10-08", destination!.id));
+    await db.execute(state("2026-10-09", null));
+    expect(
+      (
+        await db.execute(sql`select business_day, sends_to_station_id from station_day_states
+      where station_id = ${station!.id} order by business_day`)
+      ).rows,
+    ).toEqual([
+      { business_day: "2026-10-08", sends_to_station_id: destination!.id },
+      { business_day: "2026-10-09", sends_to_station_id: null },
+    ]);
+    await refusal(state("2026-10-10", randomUUID()), "station_day_states_sends_to_fk");
+    const self = await captureError(() =>
+      db.transaction((tx) => tx.execute(state("2026-10-10", station!.id))),
+    );
+    expect(isRefusal(self, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(self)).toContain("station_day_states_sends_to_not_self_ck");
+  });
 
   it("retires the department and zone menu lists", async () => {
     const rows = await db.execute(sql`select name from sqlite_master where type = 'table'

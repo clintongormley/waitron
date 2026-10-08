@@ -133,8 +133,8 @@ const EXPECTED: Record<
   },
   station_day_states: {
     table: stationDayStates,
-    foreignKeys: ["station_day_states_station_fk"],
-    checks: [],
+    foreignKeys: ["station_day_states_station_fk", "station_day_states_sends_to_fk"],
+    checks: ["station_day_states_sends_to_not_self_ck"],
     indexes: ["station_day_states_day_key"],
     uniqueConstraints: [],
     primaryKeys: [],
