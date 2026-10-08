@@ -4039,6 +4039,19 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   is unverified. Unassigned Profile cells stay blank; the None profile filter selects them. No
   cell-wording change was queued.
 
+- **A429 — floor plans: a saved plan per zone, today's plan on the till (owner, 2026-10-08; spec
+  approved; plan written, awaiting the owner's review; not queued).** A Square-style editor on the
+  dashboard (one saved plan per zone, tables created in bulk, saved joins, Undo/Redo), and a till
+  map whose job is status and rearranging: today's plan is the saved plan plus today's moves,
+  joins, spares and seat changes, reset at the day cutover and on a button, with occupied tables
+  waiting for their tab to close. Table names are copied as text when a party closes or a delivery
+  ends, so a table can really be deleted. Five slices, each its own pull request; only slice 5
+  (removing the old floor screen tabs, placement routes and columns) needs a venue reset.
+  [Spec](superpowers/specs/2026-10-08-floor-plan-design.md),
+  [plan](superpowers/plans/2026-10-08-floor-plan.md) — its "Decisions this plan makes" list is
+  what the owner confirms. Overlaps: A366-6 rebuilds the Departments and zones screen the editor
+  opens from; A182 (canvases retired) and A414 touch the till's floor screen that slice 3 replaces.
+
 - **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1 lands).**
   1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
      411 CSS px wide) on the handheld's Floor tab: the page's body padding is 24px a side
@@ -4842,7 +4855,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
 - **Later: staff-to-table assignments (owner, 2026-09-20).** Design assigning responsibility for
   tables to staff, including handover and how assignments appear on the floor dashboard. The
   current workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
-- **Later: change the working floor layout during service (owner, 2026-09-20).** From the floor
+- **Later: change the working floor layout during service (owner, 2026-09-20) — covered by A429
+  (2026-10-08), whose spec §6 is this item.** From the floor
   plan, join or split tables, increase or decrease chair counts, move a whole tab or selected items
   to another table, and add or remove tables. Each service day starts from a saved default layout;
   changes during service affect that day's working layout. Define the service-day boundary and
@@ -7796,7 +7810,7 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A _Small_ item that
 turns out to need a design moves to its track.
 
-**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 LANDED as #1441 (a workforce request whose body names an unknown person or location answers 400, not 500); A394-2 LANDED as #1444 (a recipe or ingredient route naming an unknown product or ingredient answers 404, and an unknown or repeated ingredient in a recipe 400, not 200, 204 or 500; left open: `product.not_found` has no dashboard wording, so the recipe screen shows the generic message for it); A394-3 in progress (campaign lane C); A394-4 to A394-22 OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room.** Read, not
+**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 LANDED as #1441 (a workforce request whose body names an unknown person or location answers 400, not 500); A394-2 LANDED as #1444 (a recipe or ingredient route naming an unknown product or ingredient answers 404, and an unknown or repeated ingredient in a recipe 400, not 200, 204 or 500; left open: `product.not_found` has no dashboard wording, so the recipe screen shows the generic message for it); A394-3 LANDED as #1447 (five catalogue and course requests naming an unknown menu, location or product answer 404 for a path id and 400 for a body menu, not 200, 204 or 500; new code `location.not_found` with dashboard wording; left open: `GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an unknown location; a malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22, while the course route answers 404; the two location routes' body menu id keeps 404 until A394-11; `product.not_found` still has no dashboard wording; workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's PATH location answers `location.not_found` — if workforce moves to the new code, declare it in `packages/db/src/errors.ts`); A394-4 to A394-22 OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room.** Read, not
 run: of 49 boundaries, 96 status rows break the rule (`docs/developers/conventions-data.md`); 17 defects
 answer 500 or success for a missing id (A394-1 to -6 first); 16 owner questions; A394-8 settles A374's.
 The follow-ups and the rows: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
