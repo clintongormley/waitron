@@ -1264,6 +1264,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
 
+- **Sending grace after a period extension is replaced or expires** — decide whether a positive
+  end offset survives a later period's extension or the business-day changeover; two real-store
+  probes observed it ending with the replaced/expired row. The current one-row/today-only rule is
+  approved slice 3 decision 4. [Detail](backlog/service-periods.md#sending-grace-when-a-period-extension-is-replaced-or-expires)
 - **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
   the authorising person's identity unstored. Decide whether to retain that identity before
   adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-period-change)

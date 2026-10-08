@@ -49,6 +49,18 @@ hold the choice, but no person ID. Decide whether to retain that identity before
 view; this is separate from checking the manager's permission and PIN before a write.
 
 
+## Sending grace when a period extension is replaced or expires
+
+Decide whether a positive end offset should keep an earlier period's dishes sendable after you
+extend another period, and after an extended last period reaches the business-day changeover.
+The approved slice 3 decision 4 keeps one extension per department and day, replaces that row,
+and reads only today's extension. Two real-store probes on 2026-10-09 observed the resulting
+limit: Lunch extended to 14:45 with a +15-minute offset was sendable at 14:50 before extending
+Afternoon, then was not; a night period extended to 06:00 was sendable at 05:59, then was not
+at 06:05 despite its +15-minute offset. These probes measured the current behavior; they do not
+settle which behavior you want. Retaining an earlier or yesterday's effective end needs a decision
+about the row's meaning and cleanup before changing the reader or writer.
+
 ## Changing the business-day start after saving service hours
 
 The second A366-1 review directly changed the stored setting from 05:00 to 03:00. A saved
