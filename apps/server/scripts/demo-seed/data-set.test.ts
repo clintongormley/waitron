@@ -92,14 +92,16 @@ const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = 
 };
 
 describe("demo data sets", () => {
-  it("gives every country pack distinct stored colours for its top-level categories", () => {
+  it("gives every country pack distinct lowercase hex colours for its top-level categories", () => {
     for (const pack of COUNTRY_PACKS.filter((pack) => pack.demo !== undefined)) {
       const set = demoDataSetFor(pack.demo!);
       const categories = [set.menus.restaurant, set.menus.deli, set.menus.lunch].flatMap(
         (menu) => menu.categories,
       );
       for (const category of categories)
-        expect(category.color, `${pack.countryCode}: ${category.name.en}`).toMatch(/^#[0-9a-f]{6}$/);
+        expect(category.color, `${pack.countryCode}: ${category.name.en}`).toMatch(
+          /^#[0-9a-f]{6}$/,
+        );
       expect(new Set(categories.map((category) => category.color)).size).toBe(categories.length);
     }
   });
