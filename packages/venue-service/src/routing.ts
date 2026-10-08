@@ -355,8 +355,8 @@ export interface ChangeReach {
 }
 
 /**
- * The zones and products whose `chooseMaker` can read the cell at `address`, so the only ones a
- * change to that cell can move. `covers` compares ids as given, as `selectRoutingCell` does.
+ * The zones and products whose `chooseMaker` can read the cell at `address`. `covers` compares
+ * ids as given, as `selectRoutingCell` does.
  */
 export function changeReach(
   parentOf: ReadonlyMap<string, string | null>,

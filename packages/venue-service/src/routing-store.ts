@@ -433,7 +433,7 @@ export async function previewRoutingChange(
   const moves: RoutingMove[] = [];
   const dishChoices = new Map<string, { before: MakerChoice; after: MakerChoice }>();
   for (const product of productsToCheck) {
-    const facts = productFacts(product);
+    const facts = rowFacts(product);
     if (!reach.covers(facts)) continue;
     for (const zone of zoneList) {
       const previous = chooseMaker(rules, facts, zone.id, null);
@@ -474,7 +474,7 @@ export async function previewRoutingChange(
   );
 }
 
-const productFacts = (product: { id: string; routedId: string; categoryId: string | null }) => ({
+const rowFacts = (product: { id: string; routedId: string; categoryId: string | null }) => ({
   productId: storedUuid(product.id),
   routedProductId: storedUuid(product.routedId),
   categoryId: product.categoryId,
@@ -563,12 +563,12 @@ async function extraMoves(
     return choice;
   };
   for (const dish of dishes) {
-    const dishFacts = productFacts(dish);
+    const dishFacts = rowFacts(dish);
     const dishInReach = reach.covers(dishFacts);
     for (const [extraId, inZones] of extrasByDish.get(dishFacts.productId) ?? []) {
       const extra = active.get(extraId);
       if (extra === undefined) continue;
-      const facts = productFacts(extra);
+      const facts = rowFacts(extra);
       if (!dishInReach && !reach.covers(facts)) continue;
       for (const zone of zones) {
         if (!inZones.has(zone.id)) continue;

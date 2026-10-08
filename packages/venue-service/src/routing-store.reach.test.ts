@@ -25,11 +25,11 @@ import * as routing from "./routing.js";
 import { previewRoutingChange } from "./routing-store.js";
 
 vi.mock("./routing.js", async (importOriginal) => {
-  const real = await importOriginal<typeof import("./routing.js")>();
+  const actual = await importOriginal<typeof import("./routing.js")>();
   return {
-    ...real,
-    chooseMaker: vi.fn(real.chooseMaker),
-    chooseExtraMakerBeside: vi.fn(real.chooseExtraMakerBeside),
+    ...actual,
+    chooseMaker: vi.fn(actual.chooseMaker),
+    chooseExtraMakerBeside: vi.fn(actual.chooseExtraMakerBeside),
   };
 });
 
