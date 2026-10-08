@@ -3213,7 +3213,13 @@ describe("department transfers across operator lifetimes", () => {
             const status = shell(el)!.shadowRoot!.querySelector<HTMLElement>('[role="status"]')!;
             expect(status.textContent).toContain(pending);
             expect(status.checkVisibility()).toBe(true);
-            expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            if (width === 390) {
+              const menu =
+                shell(el)!.shadowRoot!.querySelector<HTMLElement>('[data-test="more-menu"]')!;
+              await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+            }
+            await vi.waitFor(() => expect(pendingCount(el)!.checkVisibility()).toBe(true));
+            expect(pendingCount(el)!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
             await expectNoA11yViolations(host);
             await page.screenshot({
               path: `../__screenshots__/w101-app-count/${locale}-${theme}-${width}.png`,

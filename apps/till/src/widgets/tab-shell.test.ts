@@ -482,7 +482,7 @@ describe("till-tab-shell at phone width", () => {
     },
   );
 
-  it("puts every action, the operator's name and the transfer status in one menu, by touch", async () => {
+  it("puts every action button, the operator's name and the transfer count in one menu, by touch", async () => {
     await atViewport(390, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
       const menu = menuOf(el)!;

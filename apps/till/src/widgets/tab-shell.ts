@@ -100,7 +100,7 @@ export class TillTabShell extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* One row on a phone: the tabs scroll sideways rather than wrap, the rest sits in the menu. */
+      /* One row on a phone: the tabs scroll sideways rather than wrap. */
       .head.phone {
         flex-wrap: nowrap;
         gap: var(--wt-space-2);

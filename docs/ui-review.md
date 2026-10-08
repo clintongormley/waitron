@@ -171,7 +171,8 @@ Much more polished than the login screen (proper top bar, product grid, basket c
       tab should carry the venue name.
 - [x] The counter uses the same language-name and bottom-right placement decision as login.
       Implementation is covered by the general corrections above. Since 2026-10-02 (A187) the
-      chooser sits in the till's top bar, before the operator's name.
+      chooser sits in the till's top bar, before the operator's name. On a phone, since 2026-10-08
+      (A378), it sits before the More menu that holds the name.
 
 
 ### B1 — certificate installation and recovery, 2026-09-12
