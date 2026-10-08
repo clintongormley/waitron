@@ -712,6 +712,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   layout. Left open by W93 (#1287).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
+- **On the Home page tab, a missing shortcut and one devices do not show look alike**: both are
+  dashed and muted and differ only in their words ("Missing: <name>" against "Not shown on
+  devices"), because the dashboard has no warning icon. Left open by A336.
+
 - **Configuration export/import still leaves publications behind.** Reset the venue instead of
   republishing old menus. Left open by A291 (2026-10-06, removed format-2 preview/republication).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
