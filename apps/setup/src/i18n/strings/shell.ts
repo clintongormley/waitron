@@ -126,6 +126,14 @@ export const shellEn = {
     "The export has two categories named “{name}” in the same place. Rename one in your prepared restaurant, export again, then load the new export.",
   "shell.configuration.product_name_taken":
     "The export has two active products or variants named “{name}”. Rename one in your prepared restaurant, export again, then load the new export.",
+  "shell.configuration.department_off.category":
+    "The export routes the category “{name}” in the zone “{zone}”, but that zone's department, “{department}”, is switched off. Switch “{department}” on in your prepared restaurant, export again, then load the new export.",
+  "shell.configuration.department_off.product":
+    "The export routes the product “{name}” in the zone “{zone}”, but that zone's department, “{department}”, is switched off. Switch “{department}” on in your prepared restaurant, export again, then load the new export.",
+  "shell.configuration.department_off.no_category":
+    "The export routes products with no category in the zone “{zone}”, but that zone's department, “{department}”, is switched off. Switch “{department}” on in your prepared restaurant, export again, then load the new export.",
+  "shell.configuration.department_off.all":
+    "The export routes all categories in the zone “{zone}”, but that zone's department, “{department}”, is switched off. Switch “{department}” on in your prepared restaurant, export again, then load the new export.",
 } as const;
 
 export const shellEs: Record<keyof typeof shellEn, string> = {
@@ -259,4 +267,12 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "La exportación tiene dos categorías llamadas «{name}» en el mismo lugar. Cambia el nombre de una en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.product_name_taken":
     "La exportación tiene dos productos o variantes activos llamados «{name}». Cambia el nombre de uno en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.department_off.category":
+    "La exportación envía a cocina la categoría «{name}» en la zona «{zone}», pero el departamento de esa zona, «{department}», está desactivado. Activa «{department}» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.department_off.product":
+    "La exportación envía a cocina el producto «{name}» en la zona «{zone}», pero el departamento de esa zona, «{department}», está desactivado. Activa «{department}» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.department_off.no_category":
+    "La exportación envía a cocina los productos sin categoría en la zona «{zone}», pero el departamento de esa zona, «{department}», está desactivado. Activa «{department}» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.department_off.all":
+    "La exportación envía a cocina todas las categorías en la zona «{zone}», pero el departamento de esa zona, «{department}», está desactivado. Activa «{department}» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
 };

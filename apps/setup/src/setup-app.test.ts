@@ -2794,6 +2794,86 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     },
   );
 
+  const switchedOffTail =
+    "in the zone “Terraza”, but that zone's department, “Comedor”, is switched off. Switch “Comedor” on in your prepared restaurant, export again, then load the new export.";
+  const switchedOffTailEs =
+    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está desactivado. Activa «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.";
+  it.each([
+    ["en-GB", "category", `The export routes the category “Bebidas” ${switchedOffTail}`],
+    ["en-GB", "product", `The export routes the product “Bebidas” ${switchedOffTail}`],
+    ["en-GB", "no_category", `The export routes products with no category ${switchedOffTail}`],
+    ["en-GB", "all", `The export routes all categories ${switchedOffTail}`],
+    [
+      "es-ES",
+      "category",
+      `La exportación envía a cocina la categoría «Bebidas» ${switchedOffTailEs}`,
+    ],
+    [
+      "es-ES",
+      "product",
+      `La exportación envía a cocina el producto «Bebidas» ${switchedOffTailEs}`,
+    ],
+    [
+      "es-ES",
+      "no_category",
+      `La exportación envía a cocina los productos sin categoría ${switchedOffTailEs}`,
+    ],
+    ["es-ES", "all", `La exportación envía a cocina todas las categorías ${switchedOffTailEs}`],
+  ] as const)(
+    "names the routing choice whose zone's department is switched off (%s, %s)",
+    async (locale, row, sentence) => {
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            stageConfiguration: vi.fn().mockRejectedValue({
+              code: "service_zone.not_found",
+              params: {
+                zoneId: "z-1",
+                zone: "Terraza",
+                departmentId: "d-1",
+                department: "Comedor",
+                row,
+                ...(row === "category" || row === "product" ? { name: "Bebidas" } : {}),
+              },
+              status: 400,
+            }),
+          }),
+        );
+        setLocale(locale);
+        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+        expect(readDraft(el).configurationImport).toBeUndefined();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each([
+    [{ zoneId: "z-1" }],
+    [{ zoneId: "z-1", zone: "Terraza", department: "Comedor" }],
+    [{ zoneId: "z-1", zone: "Terraza", department: "Comedor", row: "category" }],
+    [{ zoneId: "z-1", zone: "Terraza", department: "Comedor", row: "other", name: "Bebidas" }],
+    [{ zoneId: "z-1", zone: "Terraza", row: "all" }],
+  ])(
+    "falls back to the could-not-open sentence for a switched-off department refusal missing its details (%o)",
+    async (params) => {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "service_zone.not_found", params, status: 400 }),
+        }),
+      );
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+        "The configuration export could not be opened. Check the file and passphrase.",
+      );
+    },
+  );
+
   it("falls back to the could-not-open sentence for a duplicate refusal carrying no name", async () => {
     const el = await mountSetupApp(
       stubApi({

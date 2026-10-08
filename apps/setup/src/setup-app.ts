@@ -323,9 +323,34 @@ const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
   "product.name_taken": "shell.configuration.product_name_taken",
 };
 
+const DEPARTMENT_OFF_MESSAGES: Record<string, StringKey> = {
+  category: "shell.configuration.department_off.category",
+  product: "shell.configuration.department_off.product",
+  no_category: "shell.configuration.department_off.no_category",
+  all: "shell.configuration.department_off.all",
+};
+
+/** The sentence for a routing cell on a zone whose department is switched off, when it says which. */
+function describeDepartmentOff(params: Record<string, unknown> | undefined): Message | undefined {
+  const { zone, department, row, name } = params ?? {};
+  if (typeof zone !== "string" || typeof department !== "string" || typeof row !== "string")
+    return undefined;
+  const key = Object.hasOwn(DEPARTMENT_OFF_MESSAGES, row)
+    ? DEPARTMENT_OFF_MESSAGES[row]
+    : undefined;
+  if (key === undefined) return undefined;
+  if (row === "category" || row === "product")
+    return typeof name === "string" ? sayWith(key, { zone, department, name }) : undefined;
+  return sayWith(key, { zone, department });
+}
+
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
+  if (code === "service_zone.not_found") {
+    const message = describeDepartmentOff(params);
+    if (message !== undefined) return message;
+  }
   if (
     code === "setup.request_invalid" &&
     typeof params?.field === "string" &&
