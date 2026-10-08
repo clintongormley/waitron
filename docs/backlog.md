@@ -4101,13 +4101,17 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   stay with the parked C125 entry (A8).
 
 - **A420 — the Content languages screen becomes a table, with translations filled in a dialog
-  (owner, 2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/content-languages-screen.ts`.
+  (owner, 2026-10-08; part 1 implemented on `feat/content-language-table`, review/CI pending; part 2 awaiting spec approval; campaign lane E).** `apps/dashboard/src/screens/content-languages-screen.ts`.
   1. **One table, one row per content language**: the language, how complete its translations are,
      and a row menu (`key: "actions"`, `pinned: "end"`, CLAUDE.md §3). The menu holds **Make
      default** (was "Set as default"), **Delete** (was "Remove") and **Edit translations**. The
      separate "Missing translations" section below the list goes; whether its Kind and Why filters
      move into the dialog is part of the design. This retires C111's left-open point about
      "Hacer predeterminado" and "Quitar" stacking on a narrow phone (A7).
+     Part 1 retains the current grouped report, Kind/Why filters, required-language warnings and
+     editor links inside the row action's read-only dialog. Inline writes remain part 2.
+     Chromium table/report/menu captures cover EN/ES, both themes and measured 390/1280 widths;
+     pinned triggers and native popovers are bounded by the viewport in those fixtures.
   2. **Edit translations opens a dialog where the missing names are typed in place**, rather than
      following a link to each product's, menu's or list's own screen (`gapHref` today). The gap
      report covers products, variants, option lists and their labels, extras lists, menus,
@@ -5378,10 +5382,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   others) are held only by the dialog's own 768px limit — whether they should follow the modal's
   form width is the owner's call.
 
-- **Content languages are managed on the page itself (C111, #987) — left open:** at 390px the
-  Spanish "Hacer predeterminado" and "Quitar" fit side by side with the dashboard's own padding
-  (16px a side), and stack when the page is padded 24px a side, so on a phone narrower than 390px
-  they can stack.
+- **Content language actions at phone width (C111, #987):** A420 part 1 replaces the side-by-side
+  action buttons with a pinned row menu. Its branch `feat/content-language-table` has EN/ES
+  390px trigger/popover bounds checks; review, CI and landing remain pending.
 
 - **Hints shown as placeholders (C104, #966; C119, #967):** the owner chose on 2026-10-01 to leave as
   they are the hints cut off in their fields and the fields whose own placeholder shows instead of
@@ -5898,8 +5901,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 - **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).** The
-  Content languages page's **Missing translations** section lists, per enabled language, what has
-  no customer-facing name in it.
+  The original Content languages page's **Missing translations** section lists, per enabled
+  language, what has no customer-facing name in it. A420 part 1 moves that report into a read-only
+  dialog opened from the new table; review/CI and landing remain pending.
   - What a diner sees when a name is missing (measured 2026-10-01): with default Spanish and a
     receipt in Catalan or English, a customer name holding only Spanish printed its Spanish text,
     and a product with no customer name printed its staff name; an option's receipt text (a direct
@@ -5915,7 +5919,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     staff name stands as that language's text — so in a new Barcelona venue (default Catalan) a
     Spanish staff name with no customer name is not flagged under Catalan.
   - Open: a section's own form has no address, so a section links to its menu's Structure tab.
-- **Fill in every missing translation in one place — OPEN, unqueued (owner 2026-10-06 ~17:23).**
+- **Fill in every missing translation in one place — OPEN, A420 part 2 in lane E (owner 2026-10-06 ~17:23).**
   The Missing translations section (#1006) lists each gap and links it to the screen where it is
   edited (for an option, a section or a unit, the screen that holds it);
   the owner wants one screen where every missing customer-facing name can be filled in directly, so

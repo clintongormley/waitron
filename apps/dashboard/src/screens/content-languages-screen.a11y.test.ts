@@ -3,6 +3,9 @@ import type { DashboardApi } from "../api/client.js";
 import type { AddContentLanguageDialog } from "../widgets/add-content-language.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { page, userEvent } from "vitest/browser";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
+registerIcons(DASHBOARD_ICONS);
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./content-languages-screen.js";
 import type { ContentLanguagesScreen } from "./content-languages-screen.js";
@@ -60,11 +63,42 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
       expect(window.innerWidth).toBe(width);
       const { el, host } = await mountWidget<ContentLanguagesScreen>(
         "dashboard-content-languages-screen",
-        { api: stubApi(LOADED) },
+        {
+          api: stubApi(LOADED, undefined, VALENCIA, [
+            { language: "es", gaps: [] },
+            {
+              language: "ca",
+              gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+            },
+            { language: "en", gaps: [] },
+          ]),
+        },
         theme,
       );
       await flush(el);
-      const actions = el.shadowRoot!.querySelectorAll(".card-action");
+      const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+        "wt-data-table[data-test=languages]",
+      )!;
+      await table.updateComplete;
+      const menu = table.shadowRoot!.querySelectorAll("wt-row-actions")[1]!;
+      const trigger = menu.shadowRoot!.querySelector("button")!;
+      expect(trigger.querySelector("wt-icon")!.shadowRoot!.querySelector("svg")).not.toBeNull();
+      const edge = document.documentElement.clientWidth;
+      const box = trigger.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(edge);
+      await page.screenshot({
+        element: host,
+        path: `__screenshots__/look/a420-table-${locale}-${theme}-${width}.png`,
+      });
+      await userEvent.click(trigger);
+      await vi.waitFor(() =>
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+      );
+      const popup = menu.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+      expect(popup.left).toBeGreaterThanOrEqual(0);
+      expect(popup.right).toBeLessThanOrEqual(edge);
+      const actions = menu.querySelectorAll("wt-button");
       expect(actions.length).toBeGreaterThan(0);
       for (const action of actions) {
         const inner = action.shadowRoot!.querySelector("button")!;
@@ -73,8 +107,22 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
         await expectNoA11yViolations(host);
       }
       await page.screenshot({
-        element: host,
-        path: `__screenshots__/look/a319-languages-${locale}-${theme}-${width}.png`,
+        path: `__screenshots__/look/a420-menu-${locale}-${theme}-${width}.png`,
+      });
+      await userEvent.click(
+        menu
+          .querySelector("wt-button[data-test^=edit-translations]")!
+          .shadowRoot!.querySelector("button")!,
+      );
+      await flush(el);
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+          "wt-modal[data-test=translations-dialog]",
+        )!.open,
+      ).toBe(true);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `__screenshots__/look/a420-report-${locale}-${theme}-${width}.png`,
       });
     } finally {
       setLocale(previous);
@@ -170,6 +218,15 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
     );
     await flush(el);
     expect(el.shadowRoot!.querySelectorAll("wt-disclosure")).toHaveLength(3);
+    await el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    )!.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    )!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-translations-ca]")!
+      .click();
+    await flush(el);
     await expectNoA11yViolations(host);
   });
 
@@ -183,6 +240,15 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
     );
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=gaps-error]")).not.toBeNull();
+    await el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    )!.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    )!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-translations-ca]")!
+      .click();
+    await flush(el);
     await expectNoA11yViolations(host);
   });
 
@@ -210,7 +276,14 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=set-default-ca]")!.click();
+    await el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    )!.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    )!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=set-default-ca]")!
+      .click();
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-error]")).not.toBeNull());
     await expectNoA11yViolations(host);
   });

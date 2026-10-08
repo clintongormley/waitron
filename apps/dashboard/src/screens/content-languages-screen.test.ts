@@ -32,7 +32,13 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
 }
 
 const q = (el: ContentLanguagesScreen, selector: string) =>
-  el.shadowRoot!.querySelector<HTMLElement>(selector);
+  el.shadowRoot!.querySelector<HTMLElement>(selector) ??
+  el
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    )
+    ?.shadowRoot?.querySelector<HTMLElement>(selector) ??
+  null;
 const dialog = (el: ContentLanguagesScreen) =>
   el.shadowRoot!.querySelector<AddContentLanguageDialog>("dashboard-add-content-language")!;
 const name = (code: string) =>
@@ -41,7 +47,9 @@ const name = (code: string) =>
     currentLocale(),
   );
 const rows = (el: ContentLanguagesScreen) => [
-  ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=languages] > li"),
+  ...el
+    .shadowRoot!.querySelector("[data-test=languages]")!
+    .shadowRoot!.querySelectorAll<HTMLElement>("tbody tr"),
 ];
 const shown = (el: ContentLanguagesScreen) =>
   rows(el).map((row) => row.querySelector(".field-value")!.textContent!.trim());
@@ -52,6 +60,9 @@ const saveMessage = (el: ContentLanguagesScreen) => q(el, "wt-card [data-error]"
 async function flush(el: ContentLanguagesScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
+  await el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    "wt-data-table[data-test=languages]",
+  )?.updateComplete;
 }
 
 async function mount(client: DashboardApi): Promise<ContentLanguagesScreen> {
@@ -342,9 +353,9 @@ describe("content languages screen", () => {
     expect(dialog(el).open).toBe(false);
   });
 
-  it("gives the default no actions, and every other language Set as default and Remove", async () => {
+  it("gives every language Edit translations and every other language Make default and Delete", async () => {
     const el = await mount(api());
-    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(0);
+    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(1);
     for (const [index, code] of [
       [1, "de"],
       [2, "en"],
@@ -353,23 +364,28 @@ describe("content languages screen", () => {
       expect(buttons.map((button) => button.dataset.test)).toEqual([
         `set-default-${code}`,
         `remove-${code}`,
+        `edit-translations-${code}`,
       ]);
       expect(buttons.map((button) => button.textContent!.trim())).toEqual([
         t("content_languages.set_default"),
         t("content_languages.remove"),
+        t("content_languages.edit_translations"),
       ]);
       expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
         `${t("content_languages.set_default")}: ${name(code)}`,
         `${t("content_languages.remove")}: ${name(code)}`,
+        null,
       ]);
     }
   });
 
-  it("separates the rows with a hairline, none above the first, and shows each name in bold", async () => {
+  it("uses the shared table separators and shows each name in bold", async () => {
     const el = await mount(api());
     const [first, ...others] = rows(el);
-    expect(getComputedStyle(first!).borderTopStyle).toBe("none");
-    for (const row of others) expect(getComputedStyle(row).borderTopStyle).toBe("solid");
+    expect(getComputedStyle(first!.querySelector("td")!).borderBottomStyle).toBe("solid");
+    for (const row of others.slice(0, -1))
+      expect(getComputedStyle(row.querySelector("td")!).borderBottomStyle).toBe("solid");
+    expect(getComputedStyle(others.at(-1)!.querySelector("td")!).borderBottomStyle).toBe("none");
     const bold = getComputedStyle(el).getPropertyValue("--wt-font-weight-bold").trim();
     for (const row of rows(el)) {
       expect(getComputedStyle(row.querySelector(".field-value")!).fontWeight).toBe(bold);
@@ -393,7 +409,7 @@ describe("content languages screen", () => {
     await vi.waitFor(() => expect(shown(el)).toEqual(["Inglés", "Alemán", "Catalán"]));
     expect(client.updateContentLanguages).toHaveBeenCalledWith(saved);
     expect(currentContentLanguages()).toEqual(saved);
-    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(0);
+    expect(rows(el)[0]!.querySelectorAll("wt-button")).toHaveLength(1);
   });
 
   it("removes a language, keeping the default, and saves", async () => {
@@ -851,6 +867,8 @@ describe("missing translations", () => {
       const el = await mount(
         gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
       );
+      q(el, "[data-test=edit-translations-ca]")!.click();
+      await flush(el);
       await table(el, "ca")!.updateComplete;
       return table(el, "ca")!;
     }, cleanupWidgets);
@@ -1271,7 +1289,9 @@ it("keeps gap column inputs on redraw and refreshes new kinds and language", asy
       ]),
   });
   const el = await mount(client);
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    "wt-data-table[data-test=gaps-table-en]",
+  )!;
   await table.updateComplete;
   const columns = table.columns;
   el.requestUpdate();
@@ -1334,7 +1354,11 @@ it("keeps separate gap columns for languages with different missing choices", as
       ]),
     }),
   );
-  const tables = [...el.shadowRoot!.querySelectorAll("wt-data-table")];
+  const tables = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test^=gaps-table-]",
+    ),
+  ];
   expect(tables).toHaveLength(2);
   await Promise.all(tables.map((table) => table.updateComplete));
   const columns = tables.map((table) => table.columns);
@@ -1349,4 +1373,118 @@ it("keeps separate gap columns for languages with different missing choices", as
         .filter!.options.map(({ value }) => value),
     ),
   ).toEqual([["unit"], ["product"]]);
+});
+
+describe("A420 content language table", () => {
+  it("shows one row per language with completeness and a pinned menu", async () => {
+    setLocale("en-GB");
+    const el = await mount(
+      api({
+        getContentTranslationGaps: vi.fn().mockResolvedValue([
+          { language: "ca", gaps: [] },
+          {
+            language: "en",
+            gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+          },
+          { language: "de", gaps: [] },
+        ]),
+      }),
+    );
+    const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      "wt-data-table[data-test=languages]",
+    );
+    expect(table).not.toBeNull();
+    await table!.updateComplete;
+    expect(table!.rows).toEqual(["ca", "en", "de"]);
+    expect(table!.columns.map(({ key }) => key)).toEqual(["language", "completeness", "actions"]);
+    expect(table!.columns.find(({ key }) => key === "actions")!.pinned).toBe("end");
+    const rows = [...table!.shadowRoot!.querySelectorAll("tbody tr")];
+    expect(rows[0]!.textContent).toContain("Nothing missing");
+    expect(rows[1]!.textContent).toContain("1 missing");
+    const menu = rows[1]!.querySelector("wt-row-actions")!;
+    expect(menu.label).toBe("Actions: English");
+    expect(
+      [...menu.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+    ).toEqual(["Make default", "Delete", "Edit translations"]);
+    expect(rows[0]!.querySelector("[data-test=set-default-ca]")).toBeNull();
+    expect(rows[0]!.querySelector("[data-test=remove-ca]")).toBeNull();
+    expect(rows[0]!.querySelector("[data-test=edit-translations-ca]")).not.toBeNull();
+  });
+});
+
+it("opens the existing translation report from a row menu, keeping it off the page until asked", async () => {
+  const el = await mount(
+    api({
+      getContentTranslationGaps: vi.fn().mockResolvedValue([
+        { language: "ca", gaps: [] },
+        { language: "de", gaps: [] },
+        {
+          language: "en",
+          gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+        },
+      ]),
+    }),
+  );
+  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    "wt-modal[data-test=translations-dialog]",
+  );
+  expect(modal).not.toBeNull();
+  expect(modal!.open).toBe(false);
+  expect(
+    el.shadowRoot!.querySelector("[data-test=missing-translations]")!.closest("wt-modal"),
+  ).toBe(modal);
+  q(el, "[data-test=edit-translations-en]")!.click();
+  await flush(el);
+  expect(modal!.open).toBe(true);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>("[data-test=gaps-en]")!
+      .open,
+  ).toBe(true);
+  expect(el.shadowRoot!.querySelector("[data-test=gaps-table-en]")).not.toBeNull();
+  modal!.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await flush(el);
+  expect(modal!.open).toBe(false);
+});
+
+it("shows completeness only from a successful report and refreshes the language rows live", async () => {
+  const liveData = new LiveData();
+  const client = api({
+    liveData,
+    getContentTranslationGaps: vi.fn().mockResolvedValue([
+      { language: "ca", gaps: [] },
+      {
+        language: "en",
+        gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+      },
+    ]),
+  });
+  const el = await mount(client);
+  const completeness = () =>
+    rows(el)
+      .find((row) => row.querySelector(".field-value")!.textContent!.trim() === name("en"))!
+      .querySelector("td:nth-child(2)")!
+      .textContent!.trim();
+  expect(completeness()).toBe(t("content_gaps.count").replace("{count}", "1"));
+  vi.mocked(client.getContentTranslationGaps).mockRejectedValueOnce(new Error("offline"));
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(completeness()).toBe(t("content_gaps.load_error")));
+  vi.mocked(client.getContentTranslationGaps).mockResolvedValue([{ language: "en", gaps: [] }]);
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(completeness()).toBe(t("content_gaps.none")));
+});
+
+it("does not describe a language absent from the report as complete, and closes the report with its Close button", async () => {
+  const el = await mount(api());
+  expect(rows(el)[0]!.querySelector("td:nth-child(2)")!.textContent!.trim()).toBe(
+    t("content_gaps.loading"),
+  );
+  q(el, "[data-test=edit-translations-ca]")!.click();
+  await flush(el);
+  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    "wt-modal[data-test=translations-dialog]",
+  )!;
+  expect(modal.open).toBe(true);
+  modal.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await flush(el);
+  expect(modal.open).toBe(false);
 });
