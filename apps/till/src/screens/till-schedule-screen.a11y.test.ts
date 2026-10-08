@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-schedule-screen.js";
 import { t } from "../i18n/t.js";
@@ -74,6 +76,44 @@ describe.each(["light", "dark"] as const)("till-schedule-screen a11y (%s theme)"
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with each request untouched (quiet), then changed (primary)", async () => {
+    const { el, host } = await mountWidget<TillScheduleScreen>(
+      "till-schedule-screen",
+      { api: stubApi(), staff, operatorPersonId: "me" },
+      theme,
+    );
+    await flush(el);
+    const root = el.shadowRoot!;
+    const actions = () =>
+      [".cover-submit", ".abs-submit"].map((selector) =>
+        root.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!,
+      );
+    for (const button of actions()) {
+      await button.updateComplete;
+      expect(button.variant).toBe("secondary");
+      expect(button.disabled).toBe(true);
+    }
+    await expectNoA11yViolations(host);
+    await chooseOption(root.querySelector("wt-combobox[name=cover-shift]")!, "s1");
+    await chooseOption(root.querySelector("wt-combobox[name=cover-colleague]")!, "col1");
+    for (const [name, value] of [
+      ["abs-from", "2026-06-01"],
+      ["abs-to", "2026-06-03"],
+    ]) {
+      const field = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        `wt-input[name=${name}]`,
+      )!;
+      await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
+    }
+    await el.updateComplete;
+    for (const button of actions()) {
+      await button.updateComplete;
+      expect(button.variant).toBe("primary");
+      expect(button.disabled).toBe(false);
+    }
     await expectNoA11yViolations(host);
   });
 
