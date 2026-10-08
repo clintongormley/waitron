@@ -231,24 +231,24 @@ till `src/till-app-menu-timetable.test.ts`, `state/working-order.test.ts`,
 `opening-hours-screen.test.ts`, `opening-hours-client.test.ts`, `opening-hours-week.test.ts`,
 `opening-hours-day.test.ts` in that dashboard directory.
 
-- [ ] RED: native input starts at 0/new or saved signed value/edit; changing only offset makes
+- [x] RED: native input starts at 0/new or saved signed value/edit; changing only offset makes
   Save active and sends a JSON number; restoring the saved value makes Save quiet/disabled.
   Fraction, empty and out-of-range text gets field/bottom errors after attempted save, preserves
   input and blocks action until fixed. Request refusal on `endOffsetMinutes` marks the field
   and bottom while leaving retry enabled. Unchanged programmatic submission emits nothing.
-- [ ] Add `wt-input name="endOffsetMinutes"`, labelled EN “Period end offset (minutes)” /
+- [x] Add `wt-input name="endOffsetMinutes"`, labelled EN “Period end offset (minutes)” /
   ES “Desfase del final del periodo (minutos)”, required, with a signed-integer text input.
   Keep draft text separate from parsed numeric input so invalid text survives. Accept a leading
   + or − sign and whole decimal digits only; normalize equivalent integer spellings for dirty
   comparison. Empty is invalid, never converted with `Number("")`. Add an always visible short
   EN/ES explanation: “Negative: stop new dishes before the end. Positive: send leftovers after
   the end. 0: use the period end.” Use existing token styles; no new primitive/help button.
-- [ ] Include offset in draft snapshot/equality/restore/submitted-generation commit and field
+- [x] Include offset in draft snapshot/equality/restore/submitted-generation commit and field
   refusal mapping. Close after successful write; a failed refresh remains a load failure. Carry
   the value through all three embedded editors and show a signed minutes column in Periods.
   Timetable `end_offset` refusals show the affected day/department and localized wording about
   changing the period's offset; retain Week/Day drafts and existing server-refusal retry rules.
-- [ ] Pin offset-only Stay/Discard/navigation/reopen behavior in the unsaved suite; run axe on
+- [x] Pin offset-only Stay/Discard/navigation/reopen behavior in the unsaved suite; run axe on
   normal and invalid/refused forms in both themes, using native control values/accessibility.
   Check Enter submission and restore language after each case. Run focused files and commit.
 

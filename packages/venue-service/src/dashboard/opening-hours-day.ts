@@ -118,6 +118,7 @@ export class OpeningHoursDay extends LitElement {
   @state() private error = "";
   @state() private errorDepartment = "";
   @state() private skippedTime = false;
+  @state() private offsetClash = false;
   private scope?: DraftScope<Draft>;
   private baseline: Draft = {};
   private source?: OpeningHoursModel;
@@ -300,6 +301,7 @@ export class OpeningHoursDay extends LitElement {
     this.error = "";
     this.errorDepartment = "";
     this.skippedTime = false;
+    this.offsetClash = false;
     try {
       for (const department of this.departments()) {
         const days = submitted[department.id];
@@ -320,6 +322,8 @@ export class OpeningHoursDay extends LitElement {
               : new RegExp(`^days\\.${weekday}(?:\\.|$)`).test(field))
           ) {
             this.errorDepartment = department.id;
+            this.offsetClash =
+              (error as { params?: { reason?: unknown } }).params?.reason === "end_offset";
             this.skippedTime =
               (error as { params?: { reason?: unknown } }).params?.reason === "clock_skips";
           }
@@ -430,7 +434,7 @@ export class OpeningHoursDay extends LitElement {
               @grid-block-open=${this.openRange}
               @grid-block-change=${this.resize}
             >
-              ${this.errorDepartment ? html`<p slot=${`header-${this.errorDepartment}`} class="refusal" data-department-error=${this.errorDepartment}>${t(this.skippedTime ? "menu.time_skipped" : "opening.check_day")}</p>` : nothing}
+              ${this.errorDepartment ? html`<p slot=${`header-${this.errorDepartment}`} class="refusal" data-department-error=${this.errorDepartment}>${t(this.skippedTime ? "menu.time_skipped" : this.offsetClash ? "menu.offset_timetable" : "opening.check_day")}</p>` : nothing}
             </service-grid>`
           : html`<p>${t("menu.no_departments")}</p>`
       }

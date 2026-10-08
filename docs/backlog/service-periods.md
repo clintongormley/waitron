@@ -43,8 +43,8 @@ Owner, 2026-10-08: one signed whole-minute setting per service period, measured 
 Slice 1 fixes it at 0. Negative means last orders before the end; positive allows unsent dishes
 within the window after it. Keep the editor, server refusal and till selection/sending rules aligned.
 Continue the [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md) with
-the Periods editor field. Storage, placement checks and selection/sending windows are
-implemented on the active branch. Focused cases check rollback of calendar/clock refusals,
+final review and CI. Storage, placement checks, selection/sending windows and the Periods editor
+are implemented on the active branch. Focused cases check rollback of calendar/clock refusals,
 exclusive cutoffs, bounded grace, and the till's refusal of additions/increases after selection ends.
 Campaign lane D queues A432 immediately after slice 1.
 

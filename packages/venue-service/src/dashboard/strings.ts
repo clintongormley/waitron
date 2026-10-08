@@ -608,6 +608,14 @@ const en = {
   "menu.period_name": "Name",
   "menu.period_menu": "Menu",
   "menu.period_uses": "Placed on",
+  "menu.end_offset": "Period end offset (minutes)",
+  "menu.end_offset_column": "End offset (min)",
+  "menu.offset_explanation":
+    "Negative: stop new dishes before the end. Positive: send leftovers after the end. 0: use the period end.",
+  "menu.offset_invalid": "Enter whole minutes from -1439 to 1439.",
+  "menu.offset_placement":
+    "Change the offset so orders end after this period starts and before the next period starts.",
+  "menu.offset_timetable": "Change this period’s end offset to fit these time ranges.",
   "menu.not_placed": "Not placed",
   "menu.actions": "Actions",
   "menu.row_actions": "Actions: {name}",
@@ -1294,6 +1302,15 @@ const es: Record<keyof typeof en, string> = {
   "menu.inactive": "(inactivo)",
   "menu.no_departments": "Todavía no hay departamentos. Añade uno en Departamentos y zonas.",
   "menu.period_name": "Nombre",
+  "menu.end_offset": "Desfase del final del periodo (minutos)",
+  "menu.end_offset_column": "Desfase del final (min)",
+  "menu.offset_explanation":
+    "Negativo: deja de añadir platos antes del final. Positivo: envía los platos pendientes después del final. 0: usa el final del periodo.",
+  "menu.offset_invalid": "Introduce minutos enteros entre -1439 y 1439.",
+  "menu.offset_placement":
+    "Cambia el desfase para que los pedidos terminen después del inicio de este periodo y antes del inicio del siguiente.",
+  "menu.offset_timetable":
+    "Cambia el desfase del final de este periodo para ajustarlo a estos horarios.",
   "menu.period_menu": "Carta",
   "menu.period_uses": "Se usa en",
   "menu.not_placed": "Sin colocar",

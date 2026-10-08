@@ -21,7 +21,12 @@ import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
-type Draft = MenuPeriodInput & { colour: CalendarColour };
+type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
+  colour: CalendarColour;
+  endOffsetMinutes: string;
+};
+const offsetNumber = (text: string): number | undefined =>
+  /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
 const empty = (usedColours: readonly CalendarColour[] = []): Draft => ({
@@ -29,8 +34,9 @@ const empty = (usedColours: readonly CalendarColour[] = []): Draft => ({
   colour: CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0],
   menuId: "",
   staffMenuIds: [],
+  endOffsetMinutes: "0",
 });
-const fields: Field[] = ["name", "colour", "menuId", "staffMenuIds"];
+const fields: Field[] = ["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"];
 
 @customElement("period-editor")
 export class PeriodEditor extends LitElement {
@@ -100,6 +106,7 @@ export class PeriodEditor extends LitElement {
             colour: this.period.colour,
             menuId: this.period.menuId,
             staffMenuIds: [...this.period.staffMenuIds],
+            endOffsetMinutes: String(this.period.endOffsetMinutes),
           }
         : empty(this.usedColours);
       this.baseline = copy(this.input);
@@ -116,6 +123,7 @@ export class PeriodEditor extends LitElement {
           a.name === b.name &&
           a.colour === b.colour &&
           a.menuId === b.menuId &&
+          a.endOffsetMinutes === b.endOffsetMinutes &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
           a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
         restore: (value) => {
@@ -128,13 +136,21 @@ export class PeriodEditor extends LitElement {
     }
   }
   private get input(): Draft {
-    return { ...this.draft, name: this.draft.name.trim() };
+    const offset = offsetNumber(this.draft.endOffsetMinutes);
+    return {
+      ...this.draft,
+      name: this.draft.name.trim(),
+      endOffsetMinutes: offset === undefined ? this.draft.endOffsetMinutes : String(offset),
+    };
   }
   private get ownErrors(): Partial<Record<Field, string>> {
     const errors: Partial<Record<Field, string>> = {};
     if (!this.input.name) errors.name = t("menu.name_required");
     if (!this.input.menuId) errors.menuId = t("menu.menu_required");
     if (!CALENDAR_COLOURS.includes(this.input.colour)) errors.colour = t("hours.colour_required");
+    const offset = offsetNumber(this.draft.endOffsetMinutes);
+    if (offset === undefined || !Number.isSafeInteger(offset) || Math.abs(offset) > 1439)
+      errors.endOffsetMinutes = t("menu.offset_invalid");
     return errors;
   }
   private refusalField(): Field | undefined {
@@ -161,6 +177,8 @@ export class PeriodEditor extends LitElement {
     if (this.refusalField() === field) {
       if (this.refusal?.code === "menu_period.name_taken") return t("menu.name_taken");
       if (this.refusal?.code === "catalogue.not_found") return t("opening.active_menus_required");
+      if (field === "endOffsetMinutes" && this.refusal?.params?.reason === "placement")
+        return t("menu.offset_placement");
       return t("menu.field_refused");
     }
     return this.attempted ? (this.ownErrors[field] ?? "") : "";
@@ -188,7 +206,13 @@ export class PeriodEditor extends LitElement {
     this.submitted = copy(this.input);
     this.dispatchEvent(
       new CustomEvent("period-save", {
-        detail: { periodId: this.period?.id ?? null, input: copy(this.input) },
+        detail: {
+          periodId: this.period?.id ?? null,
+          input: {
+            ...copy(this.input),
+            endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)!,
+          },
+        },
         bubbles: true,
         composed: true,
       }),
@@ -197,7 +221,11 @@ export class PeriodEditor extends LitElement {
   commitSubmitted(input: MenuPeriodInput): boolean {
     if (!this.open || !this.isConnected || this.submittedGeneration !== this.generation)
       return false;
-    const submitted = { ...input, colour: input.colour ?? this.submitted!.colour };
+    const submitted: Draft = {
+      ...input,
+      colour: input.colour ?? this.submitted!.colour,
+      endOffsetMinutes: String(input.endOffsetMinutes ?? this.submitted!.endOffsetMinutes),
+    };
     this.baseline = copy(submitted);
     this.scope?.commit(submitted);
     return !this.scope?.isDirty();
@@ -297,6 +325,19 @@ export class PeriodEditor extends LitElement {
               if (current()) this.changed("menuId", event.detail.value);
             }}
           ></wt-combobox>
+          <wt-input
+            name="endOffsetMinutes"
+            label=${t("menu.end_offset")}
+            required
+            .value=${this.draft.endOffsetMinutes}
+            .error=${this.error("endOffsetMinutes")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (current()) this.changed("endOffsetMinutes", event.detail.value);
+            }}
+          ></wt-input>
+          <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
           <wt-combobox
             name="staffMenuIds"
             label=${t("opening.staff_menus")}
