@@ -806,7 +806,11 @@ export type ModuleConfigurationTransfer =
       readonly tables: readonly ConfigurationTransferTable[];
       readonly validate?: (
         tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
-        bundle?: { readonly createdAt: Date; readonly timeZone: string },
+        bundle?: {
+          readonly createdAt: Date;
+          readonly timeZone: string;
+          readonly dayCutover: string;
+        },
       ) => void;
       /** Runs in the import's transaction after every module's rows are inserted, each module's in
        * module order, to set what the module derives from those rows rather than letting a bundle

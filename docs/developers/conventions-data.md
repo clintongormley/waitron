@@ -426,6 +426,13 @@ is in production" below).
 
 ## Menu timetables share the special-date calendar
 
+**2026-10-08, A366 slice 1:** the W98 description below records the earlier model. The current
+work replaces all-day and zone-period choices with customer/staff period membership and
+business-day ranges. Configuration-transfer verification is recorded under
+[service-period configuration](#service-period-configuration) below; schema retirement and
+remaining consumers are tracked in the [slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md).
+
+
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"
 and its menu), `menu_day_timetables` (one weekday of the department's week, or one special date),
@@ -1139,12 +1146,31 @@ number the same as its own, as when it names none and the parent has no primary 
 argument, `{ createdAt, timeZone }`, which `validateConfigurationBundle`
 (`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
 `validate` before the import writes anything. Core, catalogue and media take only the tables.
-Venue-service uses it to leave out a clash between two days already past in the venue's zone when
-the bundle was made, as a save does, so a venue's own export imports again. It reads no day
-cutover: for a venue whose cutover or numeric-offset zone a save cannot read, the save checks every
-pair while the import still leaves past pairs out. It also refuses a special-date period that opens
-or closes at a minute the clocks skip in that zone, unless that date and the day after it were both
-past when the bundle was made; a default station's kept cells are not checked.
+Venue-service's station-hours validator uses the export date and zone to leave past neighbour
+pairs out and check skipped endpoints. Its menu validator uses the exported day changeover:
+see the service-period checks below. The station-hours validator still reads no changeover;
+when a save cannot read the cutover, the save checks every pair while import may leave past
+pairs out. A default station's retained cells are not checked.
+
+### Service-period configuration
+
+Measured 2026-10-08 with `pnpm --filter @waitron/venue-service exec vitest run
+src/configuration-transfer.test.ts` and `pnpm --filter @waitron/server exec vitest run
+src/configuration-transfer.test.ts`: period colours and ordered staff-menu rows travelled to a
+second real venue under new period, department and menu IDs. The server roundtrip uses 04:30:
+21:00–03:00 imports, 21:00–05:00 is refused with `setup.request_invalid`, field `menu_slots`.
+Replacing the export's changeover with 06:00 in an installed disposable checkout made that
+refusal assertion fail. The callback context now carries `createdAt`, `timeZone`, and
+`dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
+
+The menu validator uses `parseServiceDay`, so ranges stop at the business-day boundary and
+use quarter-hours. Special-date endpoints below changeover are checked on the next calendar
+morning; an end exactly at changeover is next morning and a start there is the business date.
+Removing each endpoint-date branch in the disposable checkout failed its skipped-time
+assertion. Unlike station hours, the menu writer and import check skipped endpoints on past
+business dates too (`saveSpecialDateMenus`, `packages/venue-service/src/menu-timetable.ts`).
+The station-hour assertions were retained. Remaining schema and screen work is tracked in
+A366's plan; these experiments are not a complete-slice result.
 
 **Transactions**
 
