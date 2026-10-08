@@ -2412,3 +2412,63 @@ describe("search and the Available filter", () => {
     expect(shown(el)).toEqual(["m-burger", "m-fav", "m-drinks"]);
   });
 });
+
+describe("Select mode", () => {
+  const boxes = (el: MenuStructureTable) =>
+    all<HTMLInputElement>(el, 'input[type="checkbox"][data-test^="select-"]').filter(
+      (box) => box.dataset.test !== "select-all",
+    );
+
+  it("draws no row box until selecting, then one on every row the menu owns, labelled by its name", async () => {
+    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+    await toggle(el, "m-drinks");
+    await toggle(el, "included-wine");
+    expect(boxes(el)).toEqual([]);
+
+    el.selecting = true;
+    await settle(el);
+    expect(boxes(el).map((box) => box.dataset.test)).toEqual([
+      "select-m-burger",
+      "select-m-drinks",
+      "select-m-drinks/m-lager",
+      "select-m-drinks/m-beer",
+      "select-m-drinks/m-lemonade",
+      "select-m-fav",
+      "select-included-wine",
+    ]);
+    expect(item(el, "select-m-drinks/m-lager").getAttribute("aria-label")).toBe("Lager");
+    expect(item(el, "select-included-wine").getAttribute("aria-label")).toBe(menuLabel("Wines"));
+    // Rows inside an included menu are edited only from that menu's own page.
+    expect(shown(el)).toContain("included-wine/wine-lager");
+    expect(inTable(el, '[data-test="select-included-wine/wine-lager"]')).toBeNull();
+    expect(inTable(el, '[data-test="select-included-wine/wine-red"]')).toBeNull();
+  });
+
+  it("ticks the rows it is given and reports a person's tick once, from itself", async () => {
+    const el = await mount({ selecting: true, selected: ["m-burger"] });
+    expect(
+      boxes(el)
+        .filter((box) => box.checked)
+        .map((box) => box.dataset.test),
+    ).toEqual(["select-m-burger"]);
+    const changes: { target: EventTarget | null; detail: unknown }[] = [];
+    el.addEventListener("wt-selection-change", (event) =>
+      changes.push({ target: event.target, detail: (event as CustomEvent).detail }),
+    );
+    item(el, "select-m-fav").click();
+    await settle(el);
+    expect(changes).toEqual([{ target: el, detail: { selected: ["m-burger", "m-fav"] } }]);
+  });
+
+  it("forwards a slotted selection bar into the table's toolbar-bottom slot", async () => {
+    const el = await mount({ selecting: true });
+    const bar = document.createElement("div");
+    bar.slot = "toolbar-bottom";
+    bar.textContent = "bar";
+    el.append(bar);
+    await settle(el);
+    expect(bar.assignedSlot?.name).toBe("toolbar-bottom");
+    expect(bar.assignedSlot!.assignedSlot?.name).toBe("toolbar-bottom");
+    expect(bar.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
+});

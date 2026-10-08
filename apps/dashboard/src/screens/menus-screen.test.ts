@@ -339,6 +339,7 @@ const WRITES = [
   "addSectionMember",
   "addSectionProducts",
   "removeSectionMember",
+  "removeSectionMembers",
   "moveSectionMember",
   "updateMenuItem",
   "setMenuVariantPrice",
@@ -540,6 +541,12 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     addSectionMember: vi.fn().mockResolvedValue(sectionMember("m-new", 3, "s-new")),
     addSectionProducts: vi.fn().mockResolvedValue({ added: 1 }),
     removeSectionMember: vi.fn().mockResolvedValue(undefined),
+    removeSectionMembers: vi.fn(async (members: { listId: string; memberId: string }[]) => {
+      const gone = members
+        .filter(({ listId }) => listId === "root-lunch")
+        .map(({ memberId }) => memberId);
+      root = root.filter((node) => !gone.includes(node.memberId));
+    }),
     moveSectionMember: vi.fn(async (list: string, memberId: string, to: number) => {
       if (list === "root-lunch") {
         const moved = root.find((node) => node.memberId === memberId)!;
@@ -3840,6 +3847,313 @@ describe("the Structure tree", () => {
       await settleStructure(el);
       expect(structure(el).search).toBe("");
       expect(searchBox(el)?.value ?? "").toBe("");
+    });
+  });
+
+  describe("Select mode", () => {
+    beforeEach(() => {
+      const before = currentLocale();
+      setLocale("en");
+      onTestFinished(() => setLocale(before));
+    });
+
+    const selectToggle = (el: MenusScreen) => q<HTMLButtonElement>(el, '[data-test="select"]')!;
+    const bar = (el: MenusScreen) => q(el, '[data-test="selection-bar"]');
+    const removeButton = (el: MenusScreen) =>
+      q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-remove"]')!;
+    const rowBoxes = (el: MenusScreen) =>
+      allInStructure<HTMLInputElement>(el, 'input[type="checkbox"][data-test^="select-"]').filter(
+        (box) => box.dataset.test !== "select-all",
+      );
+
+    async function pressSelect(el: MenusScreen): Promise<void> {
+      selectToggle(el).click();
+      await settleStructure(el);
+    }
+
+    async function tick(el: MenusScreen, key: string): Promise<void> {
+      inStructure<HTMLInputElement>(el, `[data-test="${CSS.escape(`select-${key}`)}"]`)!.click();
+      await settleStructure(el);
+    }
+
+    async function openRemove(el: MenusScreen): Promise<void> {
+      removeButton(el).click();
+      await vi.waitFor(() => expect(modal(el, "remove-selected").open).toBe(true));
+      await el.updateComplete;
+    }
+
+    it("offers Select as an icon button beside Reorder; pressed, rows carry boxes and the bar shows", async () => {
+      const el = await mountLunch();
+      const toggle = selectToggle(el);
+      expect(toggle.localName).toBe("button");
+      expect(toggle.getAttribute("type")).toBe("button");
+      expect(toggle.getAttribute("slot")).toBe("toolbar-start");
+      expect(toggle.classList.contains("icon-button")).toBe(true);
+      expect(toggle.querySelector("wt-icon")!.getAttribute("name")).toBe("select-rows");
+      expect(toggle.getAttribute("aria-label")).toBe("Select");
+      expect(toggle.querySelector(".icon-tooltip")!.textContent!.trim()).toBe("Select");
+      expect(toggle.getAttribute("aria-pressed")).toBe("false");
+      expect(toggle.previousElementSibling).toBe(reorderToggle(el));
+      expect(toggle.assignedSlot).not.toBeNull();
+      expect(toggle.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(rowBoxes(el)).toEqual([]);
+      expect(bar(el)).toBeNull();
+
+      await pressSelect(el);
+      expect(toggle.getAttribute("aria-pressed")).toBe("true");
+      expect(structure(el).selecting).toBe(true);
+      expect(rowBoxes(el).map((box) => box.dataset.test)).toEqual([
+        "select-m-burger",
+        "select-m-drinks",
+        "select-m-fav",
+      ]);
+      expect(bar(el)!.getAttribute("slot")).toBe("toolbar-bottom");
+      expect(bar(el)!.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+      expect(q(el, '[data-test="selected-count"]')!.getAttribute("aria-live")).toBe("polite");
+      expect(removeButton(el).disabled).toBe(true);
+      expect(removeButton(el).variant).toBe("secondary");
+
+      await tick(el, "m-burger");
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
+      expect(removeButton(el).disabled).toBe(false);
+      expect(removeButton(el).variant).toBe("danger");
+      // Grips are Reorder's; Select alone draws none.
+      expect(allInStructure(el, '[data-test^="drag-"]')).toEqual([]);
+
+      await pressSelect(el);
+      expect(rowBoxes(el)).toEqual([]);
+      expect(bar(el)).toBeNull();
+      expect(structure(el).selected).toEqual([]);
+    });
+
+    it("names Select, the count and the bar's actions in Spanish", async () => {
+      setLocale("es");
+      const el = await mountLunch();
+      expect(selectToggle(el).getAttribute("aria-label")).toBe("Seleccionar");
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 seleccionado");
+      await tick(el, "m-fav");
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 seleccionados");
+      expect(text(removeButton(el))).toBe("Quitar de la carta");
+      expect(text(q(el, '[data-test="selection-sections-note"]'))).toBe(
+        "Las secciones se eliminan desde el ⋮ de su fila.",
+      );
+      expect(text(q(el, '[data-test="selection-done"]'))).toBe("Listo");
+    });
+
+    it("keeps Remove quiet and disabled, and says why, while a section the menu owns is selected", async () => {
+      const el = await mountLunch();
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      expect(q(el, '[data-test="selection-sections-note"]')).toBeNull();
+      await tick(el, "m-drinks");
+      expect(removeButton(el).disabled).toBe(true);
+      expect(removeButton(el).variant).toBe("secondary");
+      expect(text(q(el, '[data-test="selection-sections-note"]'))).toBe(
+        "Sections are deleted from their own row's ⋮.",
+      );
+      removeButton(el).click();
+      await el.updateComplete;
+      expect(modal(el, "remove-selected").open).toBe(false);
+      await tick(el, "m-drinks");
+      expect(removeButton(el).disabled).toBe(false);
+      expect(q(el, '[data-test="selection-sections-note"]')).toBeNull();
+    });
+
+    it("removes the selected rows in one request after a confirm naming the count and where each leaves", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      await toggleRow(el, "m-drinks");
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await tick(el, "m-drinks/m-lemonade");
+      await openRemove(el);
+      const dialog = modal(el, "remove-selected");
+      expect(dialog.getAttribute("size")).toBe("compact");
+      expect(dialog.getAttribute("heading")).toBe("Remove 2 items from their sections?");
+      expect(
+        [...dialog.querySelectorAll('[data-test="remove-selected-items"] li')].map(text),
+      ).toEqual(["Burger, from Lunch Menu", "Lemonade, from Drinks"]);
+      const confirm = inModal<HTMLElementTagNameMap["wt-button"]>(
+        el,
+        "remove-selected",
+        '[data-test="remove-selected-save"]',
+      );
+      expect(confirm.variant).toBe("danger");
+      expect(text(confirm)).toBe("Remove");
+      confirm.click();
+      await vi.waitFor(() =>
+        expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "root-lunch", memberId: "m-burger" },
+          { listId: "s-drinks", memberId: "m-lemonade" },
+        ]),
+      );
+      expect(writeCalls(client)).toEqual(["removeSectionMembers"]);
+      await vi.waitFor(() => expect(modal(el, "remove-selected").open).toBe(false));
+      await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      await afterDialogCloses(el);
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual([]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+      expect(selectToggle(el).getAttribute("aria-pressed")).toBe("true");
+      expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+    });
+
+    it("names one item in the singular", async () => {
+      const el = await mountLunch();
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await openRemove(el);
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
+        "Remove 1 item from its section?",
+      );
+      setLocale("es");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
+        "¿Quitar 1 elemento de su sección?",
+      );
+    });
+
+    it("keeps the dialog open with the refusal's message, holding Cancel while the request is out", async () => {
+      const removing = deferred<void>();
+      const client = api({ removeSectionMembers: vi.fn(() => removing.promise) });
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await openRemove(el);
+      const confirm = inModal<HTMLElementTagNameMap["wt-button"]>(
+        el,
+        "remove-selected",
+        '[data-test="remove-selected-save"]',
+      );
+      const cancel = inModal<HTMLElementTagNameMap["wt-button"]>(
+        el,
+        "remove-selected",
+        '[data-test="remove-selected-cancel"]',
+      );
+      confirm.click();
+      await vi.waitFor(() => expect(client.removeSectionMembers).toHaveBeenCalledOnce());
+      await el.updateComplete;
+      expect(confirm.variant).toBe("danger");
+      expect(cancel.disabled).toBe(true);
+      cancel.click();
+      await el.updateComplete;
+      expect(modal(el, "remove-selected").open).toBe(true);
+
+      removing.reject({ code: "menu_section.not_found" });
+      await vi.waitFor(() =>
+        expect(bottom(el, "remove-selected")).resolves.toBe(codeMessage("menu_section.not_found")),
+      );
+      expect(modal(el, "remove-selected").open).toBe(true);
+      expect(confirm.disabled).toBe(false);
+      expect(cancel.disabled).toBe(false);
+      expect(structure(el).selected).toEqual(["m-burger"]);
+      cancel.click();
+      await vi.waitFor(() => expect(modal(el, "remove-selected").open).toBe(false));
+      expect(client.removeSectionMembers).toHaveBeenCalledOnce();
+    });
+
+    it("leaves the mode by Done, clearing the selection and handing focus back to Select", async () => {
+      const el = await mountLunch();
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      const done = q(el, '[data-test="selection-done"]')!;
+      expect(text(done)).toBe("Done");
+      done.focus();
+      await userEvent.keyboard("{Enter}");
+      await settleStructure(el);
+      expect(bar(el)).toBeNull();
+      expect(structure(el).selecting).toBe(false);
+      expect(structure(el).selected).toEqual([]);
+      expect(selectToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+      await pressSelect(el);
+      expect(rowBoxes(el).filter((box) => box.checked)).toEqual([]);
+    });
+
+    it("clears the selection when the search changes and when a filter changes", async () => {
+      const el = await mountLunch();
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      emit(q(el, 'wt-input[name="structure-search"]')!, "wt-change", { value: "Burger" });
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual([]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+
+      emit(q(el, 'wt-input[name="structure-search"]')!, "wt-change", { value: "" });
+      await settleStructure(el);
+      await tick(el, "m-burger");
+      expect(structure(el).selected).toEqual(["m-burger"]);
+      await chooseOption(inStructure(el, 'wt-combobox[data-filter="available"]')!, "yes");
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual([]);
+      expect(structure(el).selecting).toBe(true);
+    });
+
+    it("turns the mode off when another menu is opened", async () => {
+      const el = await mountLunch();
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await visit(el, DINNER_PATH, "Dinner Menu");
+      await settleStructure(el);
+      expect(structure(el).selecting).toBe(false);
+      expect(structure(el).selected).toEqual([]);
+      expect(bar(el)).toBeNull();
+    });
+
+    it("drops a selected row a refresh no longer draws", async () => {
+      let burgerGone = false;
+      const client = api({
+        getMenuStructure: vi.fn(async () =>
+          lunchWith(burgerGone ? lunchNodes().slice(1) : lunchNodes()),
+        ),
+        removeSectionMember: vi.fn(async () => {
+          burgerGone = true;
+        }),
+      });
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await tick(el, "m-fav");
+      await rowAction(el, "m-burger", "remove");
+      await vi.waitFor(() => expect(rowOf(el, "m-burger")).toBeNull());
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual(["m-fav"]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
+    });
+
+    it("turns Select off and puts focus on the empty box's first add when a bulk remove empties the menu", async () => {
+      let removed = false;
+      const client = api({
+        getMenuStructure: vi.fn(async () =>
+          lunchWith(removed ? [] : [productNode("m-burger", "p-burger")]),
+        ),
+        removeSectionMembers: vi.fn(async () => {
+          removed = true;
+        }),
+      });
+      const el = await mountLunch(client);
+      await vi.waitFor(() => expect(rowOf(el, "m-burger")).not.toBeNull());
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await openRemove(el);
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(
+          structure(el).shadowRoot!.querySelector('[data-test="new-section-empty"]'),
+        ).not.toBeNull(),
+      );
+      await afterDialogCloses(el);
+      await settleStructure(el);
+      expect(structure(el).selecting).toBe(false);
+      expect(bar(el)).toBeNull();
+      expect(selectToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(structure(el).shadowRoot!.activeElement?.getAttribute("data-test")).toBe(
+        "new-section-empty",
+      );
     });
   });
 

@@ -171,6 +171,34 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     },
   );
 
+  it("renders accessibly selecting, with rows ticked, open sections, and read-only rows without a box", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      {
+        nodes,
+        products,
+        menuName: "Lunch Menu",
+        selecting: true,
+        selected: ["m-burger", "m-drinks/m-lager"],
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    for (let round = 0; round < 3; round++) await table.updateComplete;
+    for (const key of ["m-drinks", "included-wine"]) {
+      table
+        .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .row-activate`)!
+        .click();
+      await table.updateComplete;
+    }
+    const box = (key: string) =>
+      table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`);
+    expect(box("m-drinks/m-lager")!.checked).toBe(true);
+    expect(box("included-wine")).not.toBeNull();
+    expect(box("included-wine/wine-lager")).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with a product row's menu open on Edit product, and Yes and No in Available", async () => {
     const { el, host } = await mountWidget<MenuStructureTable>(
       "dashboard-menu-structure-table",

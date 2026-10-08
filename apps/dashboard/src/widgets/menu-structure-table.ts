@@ -182,6 +182,10 @@ export class MenuStructureTable extends LitElement {
   @property({ type: Boolean, reflect: true }) reordering = true;
   /** The search box's text; while it lasts, the table holds every section above a match open. */
   @property() search = "";
+  /** Whether rows the menu owns carry a box; the host owns which are ticked. */
+  @property({ type: Boolean }) selecting = false;
+  /** The ticked rows' keys. */
+  @property({ attribute: false }) selected: string[] = [];
 
   #rowByKey = new Map<string, Row>();
   #productById = new Map<string, Product>();
@@ -837,6 +841,14 @@ export class MenuStructureTable extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(row: Row) => row.key}
         .rowParent=${(row: Row) => row.parentKey}
+        .selectable=${this.selecting}
+        .selected=${this.selected}
+        .rowSelectable=${(row: Row) => !row.readOnly}
+        .selectionLabel=${(row: Row) => row.name}
+        @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
+          event.stopPropagation();
+          this.#send("wt-selection-change", { selected: event.detail.selected });
+        }}
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
         ><slot name="toolbar-search" slot="toolbar-search"></slot>${
@@ -853,6 +865,7 @@ export class MenuStructureTable extends LitElement {
                 >${this.#adds([], "top")}</wt-row-actions
               >`
         }<slot name="toolbar-end" slot="toolbar-end"></slot
+        ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot
       ></wt-data-table>
       <div role="status" aria-live="polite" class="reorder-status">${this.announcement}</div>
       ${dragGhost(this.ghost)}`;

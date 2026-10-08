@@ -193,6 +193,34 @@ function trailOf(structure: MenuStructure | null, path: readonly string[]): Menu
   return trail;
 }
 
+/** The node at `path`, of any kind, or undefined when the path leaves the structure. */
+function nodeAt(
+  structure: MenuStructure | null,
+  path: readonly string[],
+): MenuStructureNode | undefined {
+  let nodes = structure?.nodes ?? [];
+  let node: MenuStructureNode | undefined;
+  for (const memberId of path) {
+    node = nodes.find((candidate) => candidate.memberId === memberId);
+    if (!node) return undefined;
+    nodes = node.children ?? [];
+  }
+  return node;
+}
+
+/** The keys of the tree rows the menu owns: everything but what an included menu holds. */
+function ownedKeys(nodes: readonly MenuStructureNode[], parent = ""): string[] {
+  return nodes.flatMap((node) => {
+    const key = parent ? `${parent}/${node.memberId}` : node.memberId;
+    return [key, ...(node.includedMenuId ? [] : ownedKeys(node.children ?? [], key))];
+  });
+}
+
+/** A selected row whose ancestor is also selected goes with that ancestor. */
+function outermost(keys: readonly string[]): string[] {
+  return keys.filter((key) => !keys.some((other) => key.startsWith(`${other}/`)));
+}
+
 function listIdOf(structure: MenuStructure | null, trail: MenuStructureNode[]): string | null {
   const last = trail.at(-1);
   return last?.ref.kind === "section" ? last.ref.sectionId : (structure?.rootSectionId ?? null);
@@ -285,6 +313,19 @@ export class MenusScreen extends LitElement {
       }
       :host {
         display: block;
+      }
+      .selection-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3) 0;
+      }
+      .selection-note {
+        flex-basis: 100%;
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       h1 {
         margin: 0 0 var(--wt-space-4);
@@ -568,6 +609,12 @@ export class MenusScreen extends LitElement {
   /** Whether the Structure tree shows its grips; each menu opens with it off. */
   @state() private structureReordering = false;
   @state() private structureSearch = "";
+  @state() private structureSelecting = false;
+  /** The Structure tree's ticked rows, as row keys. */
+  @state() private structureSelected: string[] = [];
+  /** The row keys the open Remove confirm sends, or null while it is shut. */
+  @state() private removingSelected: string[] | null = null;
+  @state() private removeSelectedError = "";
   @state() private memberError: string | null = null;
   @state() private view: Tab = TABS[0];
 
@@ -776,7 +823,15 @@ export class MenusScreen extends LitElement {
       const reached = reachable(this.structure?.nodes ?? []);
       this.#onMenu = reached.products;
       // An empty menu's table draws no toolbar, so nothing could turn the mode off.
-      if (this.structure?.nodes.length === 0) this.structureReordering = false;
+      if (this.structure?.nodes.length === 0) {
+        this.structureReordering = false;
+        this.structureSelecting = false;
+      }
+      const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
+      const kept = this.structureSelecting
+        ? this.structureSelected.filter((key) => owned.has(key))
+        : [];
+      if (kept.length !== this.structureSelected.length) this.structureSelected = kept;
     }
     if (changed.has("structure") || changed.has("addingProducts")) {
       const target = this.addingProducts;
@@ -1169,6 +1224,9 @@ export class MenusScreen extends LitElement {
     this.path = [];
     this.structureReordering = false;
     this.structureSearch = "";
+    this.structureSelecting = false;
+    this.structureSelected = [];
+    this.removingSelected = null;
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
@@ -2250,7 +2308,17 @@ export class MenusScreen extends LitElement {
         .busy=${this.busy}
         .reordering=${this.structureReordering}
         .search=${this.structureSearch}
+        .selecting=${this.structureSelecting}
+        .selected=${this.structureSelected}
         menuName=${this.#menuName()}
+        @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
+          event.stopPropagation();
+          this.structureSelected = event.detail.selected;
+        }}
+        @wt-filter-change=${(event: Event) => {
+          event.stopPropagation();
+          this.structureSelected = [];
+        }}
         @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
           event.stopPropagation();
           this.#edit(event.detail.path);
@@ -2314,7 +2382,25 @@ export class MenusScreen extends LitElement {
           @blur=${trackIconTooltip}
         >
           <wt-icon name="grip"></wt-icon
-          ><span class="icon-tooltip" aria-hidden="true">${t("menus.reorder")}</span>
+          ><span class="icon-tooltip" aria-hidden="true">${t("menus.reorder")}</span></button
+        ><button
+          type="button"
+          slot="toolbar-start"
+          class="icon-button"
+          data-test="select"
+          aria-label=${t("folders.select")}
+          aria-pressed=${String(this.structureSelecting)}
+          @click=${() => {
+            this.structureSelected = [];
+            this.structureSelecting = !this.structureSelecting;
+          }}
+          @pointerenter=${trackIconTooltip}
+          @pointerleave=${trackIconTooltip}
+          @focus=${trackIconTooltip}
+          @blur=${trackIconTooltip}
+        >
+          <wt-icon name="select-rows"></wt-icon
+          ><span class="icon-tooltip" aria-hidden="true">${t("folders.select")}</span>
         </button>
         <wt-input
           slot="toolbar-search"
@@ -2325,8 +2411,10 @@ export class MenusScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.structureSearch = event.detail.value;
+            this.structureSelected = [];
           }}
         ></wt-input>
+        ${this.structureSelecting ? this.#renderSelectionBar() : nothing}
         ${
           this.structureReordering
             ? html`<wt-button
@@ -2339,6 +2427,108 @@ export class MenusScreen extends LitElement {
             : nothing
         }</dashboard-menu-structure-table
       >`;
+  }
+
+  #renderSelectionBar() {
+    const count = this.structureSelected.length;
+    const sectionSelected = this.structureSelected.some((key) => {
+      const node = nodeAt(this.structure, key.split("/"));
+      return node?.ref.kind === "section" && !node.includedMenuId;
+    });
+    const removable = count > 0 && !sectionSelected;
+    return html`<div
+      slot="toolbar-bottom"
+      class="selection-bar"
+      data-test="selection-bar"
+      role="group"
+      aria-label=${t("folders.select")}
+    >
+      <span data-test="selected-count" aria-live="polite"
+        >${t(count === 1 ? "folders.selected_one" : "folders.selected").replace(
+          "{count}",
+          String(count),
+        )}</span
+      >
+      <wt-button
+        data-test="selection-remove"
+        variant=${removable && !this.busy ? "danger" : "secondary"}
+        .disabled=${!removable || this.busy}
+        @click=${() => {
+          if (!removable || this.busy) return;
+          this.removeSelectedError = "";
+          this.removingSelected = outermost(this.structureSelected);
+        }}
+        >${t("menus.remove_selected")}</wt-button
+      >
+      <wt-button
+        data-test="selection-done"
+        variant="secondary"
+        @click=${() => void this.#leaveSelecting()}
+        >${t("action.done")}</wt-button
+      >
+      ${
+        sectionSelected
+          ? html`<p class="selection-note" data-test="selection-sections-note">
+              ${t("menus.selection_sections_note")}
+            </p>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  /** Each selected row as the list holding it and its member id, with the names the confirm shows. */
+  #selectedMembers(keys: readonly string[]) {
+    const productNames = new Map(this.products.map(({ id, name }) => [id, name]));
+    return keys.flatMap((key) => {
+      const path = key.split("/");
+      const node = nodeAt(this.structure, path);
+      if (!node) return [];
+      const target = this.#targetAt(path.slice(0, -1));
+      const name = memberName(node.ref, productNames, this.#sectionNames);
+      return [
+        {
+          listId: target.listId,
+          memberId: node.memberId,
+          name: node.includedMenuId ? t("menus.menu_prefix").replace("{name}", name) : name,
+          list: target.name,
+        },
+      ];
+    });
+  }
+
+  async #removeSelected(): Promise<void> {
+    const keys = this.removingSelected;
+    if (!keys || this.busy) return;
+    const members = this.#selectedMembers(keys).map(({ listId, memberId }) => ({
+      listId,
+      memberId,
+    }));
+    this.busy = true;
+    this.removeSelectedError = "";
+    try {
+      await this.api.removeSectionMembers(members);
+    } catch (error) {
+      this.removeSelectedError = codeMessage(codeOf(error));
+      this.busy = false;
+      return;
+    }
+    this.removingSelected = null;
+    this.structureSelected = [];
+    await this.#refresh();
+    this.busy = false;
+    await this.updateComplete;
+    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
+    if (this.structureSelecting)
+      this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+    else tree?.focusRowMenu("");
+  }
+
+  /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
+  async #leaveSelecting(): Promise<void> {
+    this.structureSelected = [];
+    this.structureSelecting = false;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
 
   /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
@@ -2828,7 +3018,36 @@ export class MenusScreen extends LitElement {
         },
         closed: () => this.#windowClosed(),
         submit: () => void this.#deleteSection(),
-      })}`;
+      })}
+      ${this.#renderRemoveSelected()}`;
+  }
+
+  #renderRemoveSelected() {
+    const keys = this.removingSelected ?? [];
+    const members = this.#selectedMembers(keys);
+    return this.#formModal({
+      test: "remove-selected",
+      open: this.removingSelected !== null,
+      heading: t(
+        keys.length === 1 ? "menus.remove_selected_heading_one" : "menus.remove_selected_heading",
+      ).replace("{count}", String(keys.length)),
+      body: html`<ul data-test="remove-selected-items">
+        ${members.map(
+          ({ name, list }) =>
+            html`<li>
+              ${t("menus.remove_selected_from").replace("{name}", name).replace("{list}", list)}
+            </li>`,
+        )}
+      </ul>`,
+      save: "remove-selected-save",
+      saveLabel: t("menus.remove_selected_confirm"),
+      saveVariant: "danger",
+      errors: { blocked: false, bottom: this.removeSelectedError },
+      close: () => {
+        this.removingSelected = null;
+      },
+      submit: () => void this.#removeSelected(),
+    });
   }
 
   #ownedDescendants(nodes: readonly MenuStructureNode[]): number {

@@ -562,6 +562,43 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("accessible Structure tab in Select mode, the bar showing with a section selected and its note", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    q(el, '[data-test="select"]').click();
+    await vi.waitFor(() => expect(q(el, '[data-test="selection-bar"]')).not.toBeNull());
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLInputElement>('[data-test="select-m-drinks"]')!.click(),
+    );
+    await vi.waitFor(() => expect(q(el, '[data-test="selection-sections-note"]')).not.toBeNull());
+    expect(q(el, '[data-test="select"]').getAttribute("aria-pressed")).toBe("true");
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible Remove confirm for the selected rows", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    q(el, '[data-test="select"]').click();
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
+    );
+    await vi.waitFor(() =>
+      treeRows(el)
+        .querySelector<HTMLInputElement>('[data-test="select-m-drinks/m-lager"]')!
+        .click(),
+    );
+    await vi.waitFor(() =>
+      expect(
+        (q(el, '[data-test="selection-remove"]') as HTMLElement & { disabled: boolean }).disabled,
+      ).toBe(false),
+    );
+    q(el, '[data-test="selection-remove"]').click();
+    await vi.waitFor(() =>
+      expect(
+        (q(el, 'wt-modal[data-test="remove-selected"]') as HTMLElement & { open: boolean }).open,
+      ).toBe(true),
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("accessible Reorder tooltip on keyboard focus", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     const toggle = q(el, '[data-test="reorder"]');
