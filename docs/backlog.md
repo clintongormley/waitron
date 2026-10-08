@@ -1673,9 +1673,13 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     still kept their colour — Disable on an already-disabled printer and on an inactive service
     status, Publish on a menu's Preview while it has clashes, and the product editor's modifier
     Remove while a window opened from it is still open. Owner, 2026-10-08: "a", draw them grey too;
-    A427 does those four. Delete on a canvas's last tab is left as it is, because canvases are
-    being deleted (A182, owner 2026-10-08). Also seen in A416's look and not changed: the reprint dialog says there is
-    no active printer while its printer list is still loading;
+    A427 does those four, and Remove keeps its red while the editor's own save is being sent.
+    **Landed as #1446.** Delete on a canvas's last tab is left as it is, because canvases are
+    being deleted (A182, owner 2026-10-08). **Left open by A427, not queued:** the product editor's
+    image picker can still be opened while the editor's own save is being sent (found by #1446's
+    Codex review, which held the save request open and clicked the image chooser). Also seen in
+    A416's look and not changed: the reprint dialog says there is no active printer while its
+    printer list is still loading (queued as A428, lane B);
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
     window with Save active, and pressing it untouched gives the option back to the list, which
