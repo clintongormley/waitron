@@ -63,9 +63,10 @@ declare module "@waitron/shared" {
     "menu_period.name_taken": { departmentId: string; name: string };
     "menu_timetable.invalid": {
       field: string;
+      periodId?: string;
       date?: string;
       departmentId?: string;
-      reason?: "overlap" | "clock_skips" | "empty" | "order" | "step";
+      reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
     };
     "zone.name_taken": { name: string };
     /** An import's refusal adds the department and each name the export holds. */

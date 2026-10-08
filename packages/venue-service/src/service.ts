@@ -19,7 +19,11 @@ import {
   stationStates,
 } from "./routing-store.js";
 import type { VenueServiceContribution } from "@waitron/module";
-import { resolveDefaultMenu, resolveDepartmentService } from "./menu-timetable.js";
+import {
+  assertPeriodEndOffsets,
+  resolveDefaultMenu,
+  resolveDepartmentService,
+} from "./menu-timetable.js";
 import {
   copyOrderServiceContext,
   copyWorkingLineContext,
@@ -65,6 +69,7 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  assertPeriodEndOffsets,
   withdrawPendingDepartmentTransfers,
   listDepartmentTransferDestinations,
   listIncomingDepartmentTransfers,

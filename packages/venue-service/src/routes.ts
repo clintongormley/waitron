@@ -402,7 +402,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const at = new Date();
         const body = await readJsonBody<SpecialDateInput>(c);
         return c.json(
-          await gated(sessionId, (tx) => saveSpecialDate(tx, ctx.cfg, null, body, at)),
+          await gated(sessionId, (tx) =>
+            saveSpecialDate(tx, ctx.cfg, null, body, at, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+          ),
           201,
         );
       }),

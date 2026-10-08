@@ -18,7 +18,7 @@ import {
 import type { SpecialDateParticipant } from "./hours.js";
 import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
-import { parseEndOffsetMinutes } from "./period-end-offset.js";
+import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
 import type {
   DepartmentService,
   OpeningHoursModel,
@@ -190,6 +190,98 @@ async function writeDay(
         endsAt: storedTime(slot.endsAt),
       })),
     );
+}
+
+async function endOffsetClash(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId?: string,
+  cutover?: string,
+  validateZeroOffsets = false,
+) {
+  const periods = await tx
+    .select({
+      id: menuPeriods.id,
+      departmentId: menuPeriods.departmentId,
+      offset: menuPeriods.endOffsetMinutes,
+    })
+    .from(menuPeriods)
+    .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
+    .where(
+      and(
+        eq(departments.locationId, cfg.locationId),
+        departmentId === undefined ? undefined : eq(departments.id, departmentId),
+      ),
+    );
+  if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
+  const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
+  const timetables = await tx
+    .select({
+      id: menuDayTimetables.id,
+      departmentId: menuDayTimetables.departmentId,
+      weekday: menuDayTimetables.weekday,
+      specialDateId: menuDayTimetables.specialDateId,
+    })
+    .from(menuDayTimetables)
+    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
+    .where(
+      and(
+        eq(departments.locationId, cfg.locationId),
+        departmentId === undefined ? undefined : eq(departments.id, departmentId),
+      ),
+    );
+  const slots = await slotsByTimetable(
+    tx,
+    timetables.map((day) => day.id),
+  );
+  const dates = await tx
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
+    .from(specialDates)
+    .where(eq(specialDates.locationId, cfg.locationId));
+  const dateById = new Map(dates.map((date) => [date.id, date.date]));
+  const offsets = new Map(periods.map((period) => [period.id, period.offset]));
+  for (const id of new Set(periods.map((period) => period.departmentId))) {
+    const clash = findScheduleEndOffsetClash(
+      timetables
+        .filter((day) => day.departmentId === id)
+        .map((day) => ({
+          weekday: day.weekday,
+          date: day.specialDateId === null ? null : dateById.get(day.specialDateId)!,
+          slots: slots.get(day.id)!,
+        })),
+      dates,
+      offsets,
+      dayCutover,
+    );
+    if (clash !== null) {
+      return {
+        periodId: clash.periodId,
+        weekday: clash.weekday,
+        date: clash.date,
+        departmentId: id,
+      };
+    }
+  }
+  return null;
+}
+
+export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
+  const clash = await endOffsetClash(tx, cfg, undefined, undefined, true);
+  if (clash !== null) invalidTimetable("dayCutover", { reason: "end_offset", ...clash });
+}
+
+async function assertCalendarEndOffsets(
+  tx: Transaction,
+  cfg: VenueScope,
+  field: string,
+  cutover?: string,
+): Promise<void> {
+  const clash = await endOffsetClash(tx, cfg, undefined, cutover);
+  if (clash !== null) throw new AppError("hours.invalid", { field, date: clash.date });
 }
 
 export async function resolveDepartmentService(
@@ -425,6 +517,16 @@ async function writeMenuPeriod(
         displayOrder,
       })),
     );
+  const clash = await endOffsetClash(tx, cfg, departmentId);
+  if (clash !== null)
+    throw new AppError("menu_period.invalid", {
+      field: "endOffsetMinutes",
+      reason: "placement",
+      periodId: clash.periodId,
+      departmentId,
+      weekday: clash.weekday,
+      date: clash.date,
+    });
   return { id: id! };
 }
 
@@ -529,6 +631,12 @@ export async function replaceMenuWeek(
     await tx.delete(menuDayTimetables).where(inArray(menuDayTimetables.id, emptied));
   for (const [weekday, slots] of week.slots.entries())
     if (slots.length > 0) await writeDay(tx, idOf(weekday), { departmentId, weekday }, slots);
+  const clash = await endOffsetClash(tx, cfg, departmentId, clock.dayCutover);
+  if (clash !== null)
+    invalidTimetable(
+      clash.weekday === undefined ? "days" : `days.${week.indexOf[clash.weekday]}.slots`,
+      { reason: "end_offset", ...clash },
+    );
 }
 
 export async function saveSpecialDateMenus(
@@ -557,6 +665,8 @@ export async function saveSpecialDateMenus(
       ),
     );
   await writeDay(tx, existing?.id, { departmentId, specialDateId }, parsed);
+  const clash = await endOffsetClash(tx, cfg, departmentId, clock.cutover);
+  if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
 }
 
 export async function clearSpecialDateMenus(
@@ -580,6 +690,8 @@ export async function clearSpecialDateMenus(
     );
   if (existing === undefined) return;
   await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.id, existing.id));
+  const clash = await endOffsetClash(tx, cfg, departmentId);
+  if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
 }
 
 async function dateTimetables(tx: Transaction, specialDateId: string) {
@@ -616,14 +728,19 @@ export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
       await writeDay(tx, undefined, { departmentId, specialDateId: targetId }, slots);
   },
   async afterCopies(tx, cfg, sourceId, targets, at) {
+    const clock = await readVenueClock(tx, cfg, at);
     await assertPlaced(
-      await readVenueClock(tx, cfg, at),
+      clock,
       await dateTimetables(tx, sourceId),
       targets.map((target) => target.date),
     );
+    await assertCalendarEndOffsets(tx, cfg, "date", clock.cutover);
   },
   async beforeMove(tx, cfg, id, toDate, at) {
     await assertPlaced(await readVenueClock(tx, cfg, at), await dateTimetables(tx, id), [toDate]);
+  },
+  async afterChange(tx, cfg, field) {
+    await assertCalendarEndOffsets(tx, cfg, field);
   },
   async beforeDelete() {},
 };

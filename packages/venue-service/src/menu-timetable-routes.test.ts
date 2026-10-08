@@ -677,3 +677,40 @@ describe("retired menu timetable routes", () => {
     ).toBe(r.deliParaLlevar);
   });
 });
+
+it("reports offset placement refusals on the submitted field and retains the complete model", async () => {
+  const r = await routed();
+  const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+    name: "Dinner",
+    menuId: r.almuerzo,
+    staffMenuIds: [],
+  });
+  expect(created.status).toBe(201);
+  const dinner = ((await created.json()) as { id: string }).id;
+  const days = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+    weekday,
+    slots: [
+      { periodId: r.mananas, startsAt: "12:00", endsAt: "14:00" },
+      { periodId: dinner, startsAt: "14:15", endsAt: "18:00" },
+    ],
+  }));
+  expect(
+    (await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, { days })).status,
+  ).toBe(204);
+  const before = await r.model();
+  await answers(
+    await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { endOffsetMinutes: 15 }),
+    400,
+    {
+      code: "menu_period.invalid",
+      params: {
+        field: "endOffsetMinutes",
+        reason: "placement",
+        periodId: r.mananas,
+        departmentId: r.restaurant,
+        weekday: 0,
+      },
+    },
+  );
+  expect(await r.model()).toEqual(before);
+});

@@ -365,6 +365,7 @@ export interface DepartmentTransferReceiver extends DepartmentTransferActor {
 
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;
   listDepartmentTransferDestinations(
     tx: Transaction,
     cfg: { locationId: LocationId },

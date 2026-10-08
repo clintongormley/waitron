@@ -138,12 +138,12 @@ generated `packages/venue-service/drizzle/0034_period_end_offset.sql`,
   minute, possibly >1440) and `findEndOffsetClash(days, offsets, cutover)` returning null or
   `{ periodId, dayIndex, slotIndex }`. `days` is ordered effective day arrays of `ServiceRange`;
   `offsets` is a read-only map by period ID. Flatten adjacent days with 1440-minute displacement
-  and apply decision 3. Use type-only service-day imports so browser/import can share it.
+  and apply decision 3. Use the browser-safe `rangeSpan` value and type-only `ServiceRange` import.
 - [ ] Load one department schedule snapshot in `menu-timetable.ts`. Validate cyclic week pairs
   and each stored special-date day with its predecessor/successor, including past dates; resolve
   whole-venue closure and missing/empty override exactly as the resolver does. No calendar
-  enumeration: the scalar limit means adjacent pairs are sufficient. Period save substitutes the
-  candidate offset; week/date saves validate the candidate timetable before replacing rows;
+  enumeration: the scalar limit means adjacent pairs are sufficient. Period and week/date saves validate
+  their proposed rows inside the caller-owned transaction before it commits;
   clear-override validates the restored week. Map a clash to the submitting field, even if an
   unchanged predecessor is the period with the conflicting offset.
 - [ ] RED then wire calendar mutation checks: copy, move, delete, create/update closure, and
@@ -151,7 +151,8 @@ generated `packages/venue-service/drizzle/0034_period_end_offset.sql`,
   `SpecialDateParticipant` and invoke it after save/delete inside the existing transaction;
   retain skipped-endpoint `beforeMove` and use existing `afterCopies` for batch copy checks.
   Pass participants through POST creation in `routes.ts`, which currently omits them; pin
-  real POST rollback when creating a date reveals a conflicting adjacent-day placement.
+  real POST rollback through a refusing participant. Use reopening, moving and deleting
+  existing overrides to exercise offset conflicts directly.
   Extend `menu_timetable.invalid` with `end_offset` and `periodId` in `errors.ts`.
   `MENU_TIMETABLE_CALENDAR_PARTICIPANT` runs the same snapshot validator. Assert rollback of
   date rows and child rows, with error mapped to `hours.invalid` and the submitted calendar field.

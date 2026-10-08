@@ -18,7 +18,7 @@ import {
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock, isReadableZone, skippedEndpoint } from "./hours-clock.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
-import { parseEndOffsetMinutes } from "./period-end-offset.js";
+import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
 import { calendarDateOfTime, parseServiceDay } from "./service-day.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
@@ -407,6 +407,23 @@ export function validateMenuTimetables(
         if (localTimeOccurrences(calendarDate, slot[end], bundle.timeZone).length === 0)
           refuse(`menu_slots.${end === "startsAt" ? "starts_at" : "ends_at"}`);
       }
+  }
+  const offsets = new Map(
+    (tables.menu_periods ?? []).map((row) => [
+      row.id as string,
+      (row.end_offset_minutes ?? 0) as number,
+    ]),
+  );
+  const calendar = (tables.special_dates ?? []).map((row) => ({
+    date: row.date as string,
+    closeWholeVenue: row.close_whole_venue === 1,
+  }));
+  for (const departmentId of departments) {
+    const schedule = [...days]
+      .filter(([, day]) => day.departmentId === departmentId)
+      .map(([id, day]) => ({ weekday: day.weekday, date: day.date, slots: slotsByDay.get(id)! }));
+    if (findScheduleEndOffsetClash(schedule, calendar, offsets, bundle.dayCutover) !== null)
+      refuse("menu_slots");
   }
 }
 

@@ -28,12 +28,21 @@ import {
   diningTables,
 } from "@waitron/db";
 import { BOOKINGS_FLOOR_ANNOTATIONS, bookings } from "@waitron/bookings";
-import { stationStates, stationDayStates } from "@waitron/venue-service";
+import {
+  saveMenuPeriod,
+  replaceMenuWeek,
+  createDepartment,
+  stationStates,
+  stationDayStates,
+} from "@waitron/venue-service";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
+import { venueFiscalSelection } from "@waitron/provisioning";
+import { ALL_MODULES } from "./modules.js";
+import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -773,6 +782,22 @@ describe("venue details preserve committed history", () => {
         ),
       ),
     );
+    await withTransaction(suite.db, async (tx) => {
+      const periods = await tx.execute<{ id: string; department_id: string }>(
+        sql`select p.id, p.department_id from menu_periods p join departments d on d.id = p.department_id where d.location_id = ${venue.cfg.locationId} and p.name = 'Always'`,
+      );
+      for (const period of periods.rows)
+        await replaceMenuWeek(
+          tx,
+          venue.cfg,
+          period.department_id,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            slots: [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }],
+          })),
+          new Date(),
+        );
+    });
     const initial = await read();
     const edit = withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, venue.cfg, {
@@ -1484,4 +1509,75 @@ describe("reviewed legacy geography and clock repairs", () => {
       suite.db.all(sql`select day_cutover from locations where id = ${venue.cfg.locationId}`),
     ).toEqual([{ day_cutover: "06:00:00" }]);
   });
+});
+
+it("refuses a changed cutover that empties an offset placement and rolls back other details", async () => {
+  const initial = await read();
+  await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, venue.cfg, {
+      name: "Offset clock department",
+      defaultServiceMode: "prepay",
+    });
+    const menu = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`)).rows[0]!
+      .id;
+    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
+      name: "Lunch",
+      menuId: menu,
+      staffMenuIds: [],
+      endOffsetMinutes: -119,
+    });
+    await replaceMenuWeek(
+      tx,
+      venue.cfg,
+      department.id,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [{ periodId: period.id, startsAt: "12:00", endsAt: "14:00" }],
+      })),
+      new Date(),
+    );
+  });
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { dayCutover: "13:00", name: "Must roll back" },
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "venue.detail_invalid",
+    params: { field: "dayCutover", reason: "end_offset" },
+  });
+  const app = new Hono();
+  mountLocationSettingsApi(
+    app,
+    {
+      db: suite.db,
+      cfg: venue.cfg,
+      fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
+    },
+    () => {},
+  );
+  const { rows } = await suite.db.execute<{ id: string }>(
+    sql`select id from persons where role = 'manager' limit 1`,
+  );
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { personId: rows[0]!.id }),
+  );
+  const response = await app.request("/management-api/venue-details", {
+    method: "PATCH",
+    headers: {
+      cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      expected: initial.details,
+      changes: { dayCutover: "13:00", name: "Must roll back" },
+    }),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "venue.detail_invalid", params: { field: "dayCutover", reason: "end_offset" } },
+  });
+  expect((await read()).details).toEqual(initial.details);
 });
