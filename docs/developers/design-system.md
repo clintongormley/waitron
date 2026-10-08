@@ -1544,7 +1544,8 @@ written per screen (one stated exception, the till's profile dialog, is in the b
 - a form that takes its scope in `willUpdate` and disposes it on disconnect returns before
   `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
   return a form taken out of the page takes a new scope while detached, and once put back it does
-  not ask before discarding. The till's party name, invoice recipient, extras picker and station
+  not ask before discarding an edit made after that (an edit made before it was taken out is a
+  separate open point: backlog A331, batches 2a, 2b and 4c). The till's party name, invoice recipient, extras picker and station
   dialogs, the venue-service watcher form, the dashboard's unit, ingredient, extras list, option
   list and option label forms, recipe editor, Add to menus picker and a section's Add products
   picker, and the menus screen's section and menu details form and an include's Edit dialog do
@@ -1602,7 +1603,8 @@ and nothing guards it across screens:
 - batch 2b, the menus screen: the menu details form, new and rename; the section form, new and
   edit (one form, `dashboard-section-details-form`, mounted twice); and an include's Edit dialog.
   The screen's other windows, the menu price fields and Publish act at once, confirm an operation or
-  only show, so they have no Save to gate; the list is in
+  only show, so they have no Save to gate, except the Add products window and the publication
+  schedule, which are batch 2a's; the list is in
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a

@@ -614,6 +614,8 @@ adopt `draftScopeFor` / `saveActionState` test-first where its owning batch has 
   `apps/dashboard/src/widgets/device-home-preview.ts`; `screens/menus-screen.ts` and its tests;
   menu widgets `menu-preview`, `menu-prices-table`, `menu-structure-table`, `menu-publications`,
   `customer-menu*`, `add-to-menus`, `include-folder-form` and `section-*` under that widgets folder.
+  (2026-10-08: `include-folder-form` and `section-details-form` were done in Batch 2b below;
+  `section-add-products`, `menu-publications` and `add-to-menus` are batch 2a's.)
 - Venue-service batch 4b / `feat/service-periods-slice-1`: all `packages/venue-service/`, including
   hours/date/holiday/menu-slot editors, watcher, service settings, venue operations, timetable
   and preparation-station forms. (2026-10-08: the local holiday editor and the watcher form were
@@ -1584,8 +1586,8 @@ both.
 temporary THROW probe at each new early return; an `if (scope) … else …` whose `else` stood for "no
 coordinator"), apply to every task. design-system.md → Forms: a form that takes its scope in
 `willUpdate` and disposes it on disconnect skips `draftScopeFor` while `!this.isConnected`, asks for
-an update when put back, and has a reconnect case in its `*.unsaved.test.ts`. Both 2b forms do
-this (`section-details-form.ts` ~90–95, ~118–133; `include-folder-form.ts` ~105–110, ~141–154).
+an update when put back, and has a reconnect case in its `*.unsaved.test.ts`. Both 2b forms take
+their scope in `willUpdate` and dispose it on disconnect (`section-details-form.ts` ~90–95, ~118–133; `include-folder-form.ts` ~105–110, ~141–154).
 Two of 2a's rules apply too, restated here because 2a's text is not on `main`:
 
 - **A refusal handed to an untouched form fails by assertion, not by the throw-probe.** A test that
@@ -1710,8 +1712,8 @@ The menus screen mounts this one form twice: the menu form (create and rename,
   `commitSaved` with the form open makes it quiet. Reconnect case in
   `include-folder-form.unsaved.test.ts`, as 2b.1a. Axe both states, both themes: add a "changed"
   state to `include-folder-form.a11y.test.ts`.
-- Measured 2026-10-08 (see "Plan review" below): the throw-probe over these suites fails exactly the
-  tests listed here.
+- Measured 2026-10-08 (see "Plan review" below): every failure and `Unhandled error` the
+  throw-probe raised in these suites is at a site listed in 2b.1a, 2b.1b or 2b.2 (~2071 is listed there as one to leave).
 - Predicted changed checks: `include-folder-form.test.ts` ~129–137 (keeps a name in a language the
   form does not show, pressed untouched: edit the colour and check `fr` is still sent), ~204–218
   (`it.each`, three rows: refusal at mount, Save asserted enabled at ~216 — edit first);
@@ -1734,7 +1736,8 @@ The menus screen mounts this one form twice: the menu form (create and rename,
   follow the rule (the menu details form, new and rename; the section form, new and edit; an
   include's Edit), add the two forms to the `willUpdate` paragraph's list of forms that take the
   `isConnected` skip, and one sentence that the menus screen's own windows, the price fields and
-  Publish act at once, pointing at this section. Nothing joins "These open already savable".
+  Publish act at once, except the Add products window and the publication schedule, which are
+  batch 2a's, pointing at this section. Nothing joins "These open already savable".
 - `docs/backlog.md` A331: batch 2b's status in the headline and a 2b bullet (the forms, the not-a-save
   table in one line, what the look found). If 2a has not landed, batch 2 stays OPEN for 2a.
 

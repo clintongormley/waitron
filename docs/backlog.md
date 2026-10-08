@@ -1627,17 +1627,18 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   home display's slider and radios and the menu price fields write at once; Delete section and
   Publish confirm an operation; the rest open a form or only show (list:
   [the Batch 2b table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b)).
-  Test checks that pressed or asserted on an untouched form were changed to edit first; each is
-  listed in its commit message. Looked at on 2026-10-08 in 33 screenshots of the forms mounted with
+  The Add products window and the publication schedule do save; they are batch 2a's.
+  Test checks that pressed or asserted on an untouched form now edit first or expect Save
+  disabled; each is listed in its commit message. Looked at on 2026-10-08 in 33 screenshots of the forms mounted with
   test data (each unchanged, after one edit, and changed but blocked — an emptied required name
   for the details form, busy for the include — at 1280px light English and 390px dark Spanish,
   plus an Edit section refused, fixed and saved), kept outside the repository in
   `~/waitron-campaign-c/a331-2b-shots/`: no defect found. Left open: both forms keep their fields
   when taken out of the page and put back, and take what they then hold as the new starting point.
   Run on the branch on 2026-10-08 (a throwaway case: edit, remove, re-add): the edit was still in
-  the field, Save was quiet, and Cancel closed the form without asking. The same open point as the
-  watcher form's in batch 4c; main was not run. It matters only if the menus screen ever moves an
-  open form.
+  the field, Save was quiet, and Cancel closed the form without asking; main was not run. Related
+  to, but not the same as, the watcher form's point in batch 4c, where the edit may be replaced by
+  the stored watcher. It matters only if the menus screen ever moves an open form.
 - **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
   floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
   flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
@@ -1749,7 +1750,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   printer/agent/calibration, device/profile, reader and canvas forms (gated by batch 3b) still await
   a rerun of Batch 7's two inventories; till dialogs left for after
   `feat/save-follows-changes-till` lands; device-home, menus and Preview widgets left for after
-  `fix/home-column-ranges` and its following Preview work land; hours/date/slot, service
+  `fix/home-column-ranges` and its following Preview work land (the menus screen's section and
+  menu details form and an include's Edit dialog are done in batch 2b; Add products, the
+  publication schedule and Add to menus in batch 2a); hours/date/slot, service
   settings, operations and timetable forms left for after
   `feat/service-periods-slice-1` lands (batch 4b; the local holiday and watcher forms are done in
   batch 4c); invoice configuration/setup and agent paths left
