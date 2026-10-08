@@ -1471,8 +1471,8 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 6 audited with no stored-setting editors;
-batches 2, 3b, 4, 5 and 7 OPEN.** The owner: "open a form with the Save button
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 4a module forms; batch 6 audited with no
+stored-setting editors; batches 2, 3b, 4b, 5 and 7 OPEN.** The owner: "open a form with the Save button
 transparent (and disabled?). but as soon as you make a change, make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
