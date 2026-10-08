@@ -37,13 +37,16 @@ const NEW_ID_SQL =
  * `id` is null both produce `{"type": …}` alone, but the two have to be told apart before the
  * statement is built, because `new."id"` on a table with no such column is a PREPARE error rather
  * than a null.
+ *
+ * Every id is cast to text, because `ResourceIdentity.id` is a string and an integer column (a
+ * one-row settings table's `id`) would otherwise land in the JSON as a number.
  */
 function identitySql(row: "new" | "old", type: string, hasId: boolean): string {
   const literal = quoteLiteral(type);
   if (!hasId) return `json_object('type', ${literal})`;
   return (
     `case when ${row}."id" is null then json_object('type', ${literal}) ` +
-    `else json_object('type', ${literal}, 'id', ${row}."id") end`
+    `else json_object('type', ${literal}, 'id', cast(${row}."id" as text)) end`
   );
 }
 
@@ -59,7 +62,7 @@ function identitySql(row: "new" | "old", type: string, hasId: boolean): string {
 function resourcesSql(row: "new" | "old", source: ChangeSource, hasId: boolean): string {
   const related = (source.related ?? []).map((relation) => {
     const column = plainName("column", relation.column);
-    const object = `json_object('type', ${quoteLiteral(relation.type)}, 'id', ${row}."${column}")`;
+    const object = `json_object('type', ${quoteLiteral(relation.type)}, 'id', cast(${row}."${column}" as text))`;
     return ` || case when ${row}."${column}" is not null then ',' || ${object} else '' end`;
   });
   return `json('[' || ${identitySql(row, source.type, hasId)}${related.join("")} || ']')`;

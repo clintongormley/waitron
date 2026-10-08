@@ -23,6 +23,9 @@ describe("database change feed", () => {
       );
       db.run(sql.raw(`create table live_probe_alone (id text primary key)`));
       db.run(
+        sql.raw(`create table live_probe_counted (id integer primary key, parent_id integer)`),
+      );
+      db.run(
         sql.raw(
           `create table live_probe_keyless (left_id text not null, right_id text not null,` +
             ` primary key (left_id, right_id))`,
@@ -38,6 +41,11 @@ describe("database change feed", () => {
         // an omitted list has to become an empty list rather than the word "undefined".
         { table: "live_probe_alone", type: "alone" },
         { table: "live_probe_keyless", type: "keyless" },
+        {
+          table: "live_probe_counted",
+          type: "counted",
+          related: [{ type: "parent", column: "parent_id" }],
+        },
       ]);
     },
   });
@@ -81,6 +89,21 @@ describe("database change feed", () => {
   it("carries the type alone for a source table that has no id column", () => {
     suite.db.run(sql.raw(`insert into live_probe_keyless values ('l1', 'r1')`));
     expect(changes()).toEqual([{ resources: [{ type: "keyless" }] }]);
+  });
+
+  // `ResourceIdentity.id` is a string, and the dashboard's live connection drops a whole batch
+  // holding an id that is not one.
+  it("names an integer id, and an integer related column, as text on insert, update and delete", () => {
+    suite.db.run(sql.raw(`insert into live_probe_counted values (1, 7)`));
+    suite.db.run(sql.raw(`update live_probe_counted set parent_id = 8 where id = 1`));
+    suite.db.run(sql.raw(`delete from live_probe_counted where id = 1`));
+    const named = (parent: string) => ({
+      resources: [
+        { type: "counted", id: "1" },
+        { type: "parent", id: parent },
+      ],
+    });
+    expect(changes()).toEqual([named("7"), named("7"), named("8"), named("8")]);
   });
 
   it("invalidates both sides of a relationship change on an update", () => {
