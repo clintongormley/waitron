@@ -228,6 +228,42 @@ screen is designed.
   English when the tab shell is shown in a synthetic Spanish probe; check whether any
   real kitchen session shows that bar before widening the standard-tab translation.
 
+## A429 — floor plans: a master plan per zone, today's plan on the till
+
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; spec
+  approved; plan written; being queued).** A Square-style editor on the dashboard for each zone's
+  master plan (tables created in bulk, saved joins, Undo/Redo), and a till map whose job is status
+  and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
+  is edited freely and is copied into today's plan at the day's reset or on a button; everything
+  live points at today's plan; staff move, join, split and take off tables on today's plan but
+  never add or rename one (they keep spares in reserve); a table a party sits at waits and catches
+  up when its tab closes. Table names are copied as text when a party closes, and onto past orders
+  and bookings when a table is removed, so a table the master no longer has can really go. Five
+  slices, each its own pull request; only slice 5 (removing the old floor screen tabs, placement
+  routes and columns) needs a venue reset. [Spec](../superpowers/specs/2026-10-08-floor-plan-design.md),
+  [plan](../superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A366-6 rebuilds the Departments
+  and zones screen the editor opens from; A182 (canvases retired) and A414 touch the till's floor
+  screen that slice 3 replaces.
+
+## A414 — device screens on a phone
+
+- **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1 lands).**
+  1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
+     411 CSS px wide) on the handheld's Floor tab: the page's body padding is 24px a side
+     (`apps/till/index.html`), and the floor screen adds 16px a side inside it, leaving 331 of 411
+     px before the floor plan's own frame. Cut the body padding on narrow screens and stop screens
+     adding a second layer; check the Order tab and the other device screens too. The floor plan
+     itself is out of scope — the owner will redo it later.
+  2. **No demo bar on device screens.** A venue set up as a demo (or "prepare") shows the
+     Demo / Dashboard / Device / Email inbox bar on the till and handheld too
+     (`apps/till/src/till-app.ts`, `onboardingIntent`). Keep it in the dashboard only.
+  - **Watch, not a job yet:** on 2026-10-08 the phone's Chrome showed a white page for every box
+    address (`/`, `/dashboard`, the box's IP) while the laptop drew it. Read over USB debugging,
+    the page had loaded without errors and the join screen's element measured 679 px tall, while
+    the owner still saw white; quitting and reopening Chrome fixed it. A browser fault or something
+    of ours covering the page — not told apart. If it recurs, attach over USB before restarting
+    Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no

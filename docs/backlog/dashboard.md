@@ -97,6 +97,14 @@ sessions on their next request); storage (a table in identity's own migration se
 classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
 `roleName`, `apps/dashboard/src/i18n/domain.ts:135`, custom ones will not be).
 
+## Row menus in plain `<table>`s are unchecked at phone width
+
+- **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
+  `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
+  not `wt-data-table`, so `pinned` does not reach them; `product-editor.ts` also contains both a
+  `<table>` and a row menu (found by grep, not read). None has a phone-width case and none was
+  measured.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'

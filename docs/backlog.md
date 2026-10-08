@@ -697,6 +697,11 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
 - **A person who may not read routing sees "Kitchen routing unavailable" on every category**,
   because a refused read counts as a failed one. Left open by W86 (#1203, a category's Made at).
 
+- **A419 — Valencian offered as a content language in Spain's pack (owner, 2026-10-08; open;
+  campaign lane E).** The Content languages screen's "Add language" list shows Basque and Galician
+  under "Official languages" in a Catalan venue; the owner asks for Valencian there too.
+  [Detail](backlog/catalogue.md#a419--valencian-offered-as-a-content-language-in-spains-pack)
+
 ### Service periods, opening hours and departments
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them._
@@ -865,6 +870,21 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected). Left
   open by W93 (#1287).
 
+- **The native dialog's accessible name is tested, but actual screen-reader speech is unverified.**
+  Left open by A413 (#1436, the Devices screen and Add a device).
+
+- **Unassigned Profile cells stay blank; the None profile filter selects them.** No cell-wording
+  change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
+
+- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; spec
+  approved; plan written; being queued).** A Square-style editor on the dashboard for each zone's
+  master plan (tables created in bulk, saved joins, Undo/Redo), and a till map whose job is status
+  and rearranging.
+  [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
+
+- **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1
+  lands).** [Detail](backlog/till.md#a414--device-screens-on-a-phone)
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -915,6 +935,174 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
 - **Since W72c an imported print agent arrives with no node; the importing box's own agent still
   enrols as a new row beside it**, as it did before (read, not run). Left open by W72c (#1237).
 
+- **Adding a language to the venue also means adding its printer captions, and a language written
+  outside the Latin letters means widening the font table.** The width ruler's captions are
+  exhaustive over the locale list (`CAPTIONS` in `apps/server/src/test-page.ts`), so a new locale
+  fails to compile until its captions exist.
+  [Detail](backlog/printers.md#adding-a-language-to-the-venue-also-means-adding-its-printer-captions-and-a-language-written-outside-the-latin-letters-means-widening-the-font-table)
+
+- **Whether a job of pictures still needs the print area (`GS L`/`GS W`) that receipts, category
+  pages and the test page send is not measured.** The calibration ruler page sends a print area of
+  576 dots whatever the printer. Left open by C107 (#974).
+
+- **At 203 dpi a line could hold 32 columns on 58 mm paper (384 ÷ 12) and 48 on 80 mm (576 ÷ 12); it
+  keeps 30 and 42.** Left open by C107 (#974).
+
+- **The 28-dot line cuts letters: by the generator's own report, 67 of its characters lose at least
+  one dot that was half inside the letter, most of them accented capitals losing the top of the
+  accent.** Measured 2026-10-01 with a copy of the generator: a 30-dot line with the baseline 24
+  dots down leaves 3 (ď, ĥ, ŉ), and 31 or 32 dots still leave those 3. Left open by C107 (#974).
+
+- **The preview reads at most 4 MiB of a job and shows at most 2,048 blocks (one per printed line,
+  feed, cut or QR code, among others), so a job of more than about 2,040 lines is cut short at any
+  width.** The deep-tree case in `apps/server/src/category-sales-page.test.ts` printed about 14,500
+  lines on 58mm paper once rows carried their whole path (W73). Left open by C107 (#974).
+
+- **What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
+  measured.** The preview shrinks a picture wider than the job's line instead of cutting it, so on
+  the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every printer.
+  Left open by C107 (#974).
+
+- **Follow-up (ruling C): the preview no longer shows the QR link as text** for a raster receipt.
+  A possible fix is to carry the link alongside the print job so the preview can still show it as
+  text.
+
+- **Deferred (ruling H): the receipt logs no warning when no legal QR dot size exists.** No logger is
+  reachable from `receipt-print.ts`, and in practice the fallback is unreachable today for any link
+  `validate.ts` accepts (`apps/server/src/qr-link-range.test.ts`).
+
+- **Building the QR raster runs inside the sale-recording transaction** (via `formatReceipt` in
+  `enqueueSaleReceipt`). Left as an owner decision, not applied.
+  [Detail](backlog/printers.md#building-the-qr-raster-runs-inside-the-sale-recording-transaction)
+
+- **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
+  throwaway cases and not pinned.
+  [Detail](backlog/printers.md#still-counted-by-the-printers-printerjobs_waiting-alert-after-a167-975)
+
+- _2026-10-01 (3c-3): a dish moved to another station leaves its ticket at the old station's
+  printer counted by that printer's stuck alert in the same way, because nothing reprints there._
+
+- **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
+  [Detail](backlog/printers.md#the-virtual-pdf-printer)
+
+- **Printing A4 invoices on an office printer** (owner, 2026-09-14): foundation landed in #1399;
+  transport and screens remain in A231q.
+  [Detail](backlog/printers.md#printing-a4-invoices-on-an-office-printer). The same remaining work
+  is A231d's part 2, under _Fiscal records, invoices and the asesor_
+  ([detail](backlog/fiscal.md#a231d-full-invoices-by-email-as-a-pdf-and-on-an-office-printer--part-1-landed-1399-part-2-open)).
+
+- **Office-printer greying is proven on one office printer only.** The owner's HP Color LaserJet
+  MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
+  network. It has not run from the box's container, and no receipt printer that answers IPP has
+  been captured, so "A4 or letter means office printer" is a heuristic with one data point.
+
+- **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
+  `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
+  the box's container, where the lookup may fail outright; either way the printer stays addable.
+
+- **A typed address receives one HTTP request on port 631** after its connection check succeeds.
+  The 2026-09-12 address-check design allowed any unicast address (public, loopback, link-local)
+  because the check sent nothing; that reasoning no longer covers the follow-up query.
+
+- **No promise about how long a known-address check takes end to end.** The dialog polls and
+  reports a fresh result, but nothing bounds the round trip from pressing the button to an answer.
+
+- **While a discovery window is open, a device not reported within 45 seconds drops off the list**
+  until its next report; 45 seconds does not cover every scan pass (C102, #953).
+
+- **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority; not queued —
+  owner 2026-10-08: take it from here when a lane has room):**
+  [Detail](backlog/printers.md#a404--adding-and-calibrating-a-printer)
+
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued —
+  owner 2026-10-08: take it from here when a lane has room; after A404).**
+  [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
+
+- Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
+  though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
+
+**Bluetooth (read, not run, unless a line says otherwise):**
+
+- **A command queued behind a slow pair can run out of time.** A second command waiting behind that
+  pair can therefore expire on the server before it runs; its outcome is then ignored and the screen
+  says "No answer from the print agent — try again" whatever actually happened.
+  [Detail](backlog/printers.md#a-command-queued-behind-a-slow-pair-can-run-out-of-time)
+
+- **A Printers screen element taken out of the page and put back does not restart its background
+  status checks:** `disconnectedCallback` stops them and `connectedCallback` only reloads the lists
+  (`apps/dashboard/src/screens/printers-screen.ts`). Today nothing puts the same element back; it
+  matters only if the app starts keeping screen elements.
+
+- **A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both
+  languages' screens** (a wrong PIN would read "No se pudo emparejar: wrong PIN").
+  [Detail](backlog/printers.md#a-failed-pair-or-unpair-shows-the-agents-reason-as-the-agent-wrote-it-in-english-on-both-languages-screens)
+
+- **At phone width a Bluetooth address breaks mid-group** ("00:11:22:33:44:5" then "5"), because
+  of the width limit on the device details added on 2026-09-11.
+
+- **Left open by C109 (#960):** the printer details' Active switch can still switch a paired
+  Bluetooth printer off without unpairing it. [Detail](backlog/printers.md#left-open-by-c109-960)
+
+- **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
+  (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
+  switch it off with Disable, which the row then shows.
+  [Detail](backlog/printers.md#an-unpair-outcome-that-reaches-the-server-after-it-dropped-the-command-leaves-the-printer-on)
+
+- **A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not
+  covered")**, as a USB printer no agent sees does. A140 left this as it is: it needs two agents,
+  one of them older than A140.
+  [Detail](backlog/printers.md#a-bluetooth-printer-no-agent-reports-paired-still-waits-with-no-reason-on-the-job-a139s-not-covered)
+
+- **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
+  port is on another channel fails each job with the connection error.
+
+- **Follow-ups A140's review raised, not done (owner's call):**
+  [Detail](backlog/printers.md#follow-ups-a140s-review-raised-not-done-owners-call)
+
+**Owed at the box — nothing here has run on real hardware:**
+
+- **Photographs and timings of pictures on paper.** The owner's photographs of a receipt, a kitchen
+  ticket, the ruler page, a sample receipt and the test page (C108) on both printers are owed, and
+  so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How long a job of
+  pictures takes to print on the box is not measured").
+  [Detail](backlog/printers.md#photographs-and-timings-of-pictures-on-paper)
+
+- **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
+  reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
+  discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
+  have never produced paper either.
+
+- **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
+  whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
+  QR size is meant to count the code's blank border or only its dark squares.
+
+- **Repeat the 58mm physical receipt after the print-area fix.** The corrected paper output has not
+  yet been printed.
+  [Detail](backlog/printers.md#repeat-the-58mm-physical-receipt-after-the-print-area-fix)
+
+- **Nobody has yet typed a real printer's address into Check a known address.** The first things to
+  try on the box: add the Epson at `192.168.10.81:9100` (the sweep should also list it) and print to
+  it; then type the HP's `192.168.20.56:9100`, which should come back as an office printer.
+  [Detail](backlog/printers.md#nobody-has-yet-typed-a-real-printers-address-into-check-a-known-address)
+
+- **The setup-page link is unproven on the box.**
+  [Detail](backlog/printers.md#the-setup-page-link-is-unproven-on-the-box)
+
+- **Bluetooth at the box.** A first real pairing, and an Unpair, through the dashboard and the
+  agent, under the shipped AppArmor profile with bluetoothd's `autopair` plugin off — nobody has yet
+  paired or unpaired a real printer through the dashboard.
+  [Detail](backlog/printers.md#bluetooth-at-the-box)
+
+- **Printing over RFCOMM from INSIDE the print-agent container (A140).** A real RFCOMM connection
+  and print from inside the container under the shipped profile — CI's runners cannot load Bluetooth
+  at all — and whether the printer gets every byte before the connection closes. The owner printed
+  on channel 1 from the host only.
+  [Detail](backlog/printers.md#printing-over-rfcomm-from-inside-the-print-agent-container-a140)
+
+- **The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the
+  box is not confirmed.** It needs the fixed image on the box first.
+  [Detail](backlog/printers.md#the-owners-bluetooth-printer-was-listed-only-under-show-all-devices-a137--the-cause-on-the-box-is-not-confirmed)
+
 ### Payments and card readers
 
 _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backlog/payments.md).
@@ -944,6 +1132,10 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
 
 - **Product decision to take before production:** The orphan drift gate holds a customer's money
   pending a human, unbounded — nothing re-sweeps a closed period.
+
+- **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
+  2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/payments-screen.ts`.
+  [Detail](backlog/payments.md#a421--the-card-payments-screen-tabs-who-uses-a-reader-disconnect-disable)
 
 ### Users, sign-in and the dashboard shell
 
@@ -1037,6 +1229,10 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   `aria-pressed` through, and the Structure tab's Reorder toggle is a second hand-built icon button
   for the same reason. Left open by W83's review (#1193), not started.
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
+
+- **Row menus in plain `<table>`s are unchecked at phone width.** None has a phone-width case and
+  none was measured.
+  [Detail](backlog/dashboard.md#row-menus-in-plain-tables-are-unchecked-at-phone-width)
 
 ### Interface languages
 
@@ -4290,423 +4486,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
   and decides whether the product editor keeps both summaries.
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
-
-### A3. Printers from the dashboard
-
-**Built:**
-
-- Paper width and resolution per printer, with every document formatted to them — #367.
-- Add opens a prefilled naming dialog, printed instructions follow the user's language, and
-  development servers no longer advertise `waitron.local` — #380.
-- The calibration wizard, drawer attachment with its own audited test, receipt QR sizing and
-  centring, the Printers screen's status filter, one-click disable, setup-page links and the
-  print-agent list's filter — #689, #699, #704.
-- Office printers greyed out in the scan (a read-only IPP query on port 631 reporting A4 or US
-  letter) — #359.
-- Check a known address: the Add-printer dialog takes an IP and port and asks the approved agents
-  to try it — #335.
-- Print-agent setup lockdown — #732
-  ([design](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md),
-  [plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md)).
-- Bluetooth: the agent's detection, Pair and Forget (P2b, #877); Pair and Forget from the dashboard
-  (P2c, #884); later scans ask about devices an earlier one did not reach (A137, #894); Pair and add
-  in one step (A138, #899); Unpair reachable on a switched-on printer (A141, #902); a job the agent
-  cannot send fails with a reason (A139, #904); printing over RFCOMM channel 1 (A140, #909); Scan
-  for printers keeps going while Add a printer is open (C102, #953); the scan pass runs beside the
-  job pull (C117, #955); row layout, Unpair on one press and fading notices (C103, #957); a
-  succeeded Unpair switches the printer off (C109, #960) and ends its waiting jobs as
-  `printer.unpaired` (A163, #962).
-- A printed resend or reprint clears the printer's `printer.jobs_waiting` alert for the job it
-  copies — Printers-screen resend (A165, #972), the till's Reprint and receipt reprint (A167, #975).
-- Every printout's text is printed as pictures in Iosevka Term Bold; the character-set settings and
-  calibration step are gone; the wizard is width ruler, sample receipt, cash drawer (C107, #974).
-- Print test page in each printer's row menu (C108, #976).
-- The row menu column pinned to the table's edge on a phone: the Printers tab (A145, #935), every
-  `wt-data-table` (A155, #950), the adjustment reasons table (A162, #954).
-- Printer details use a breadcrumb and one bounded column of Status, Connection and Calibration.
-  Name, network connection and Active edit there; the calibration wizard opens at paper settings
-  (W96).
-
-**Owed at the box — nothing here has run on real hardware:**
-
-- **Photographs and timings of pictures on paper.** The owner's photographs of a receipt, a kitchen
-  ticket, the ruler page, a sample receipt and the test page (C108) on both printers are owed, and
-  so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How long a job of
-  pictures takes to print on the box is not measured"). Anything the timings or photographs show
-  wrong becomes a new item.
-- **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
-  reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
-  discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
-  have never produced paper either.
-- **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
-  whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
-  QR size is meant to count the code's blank border or only its dark squares.
-- **Repeat the 58mm physical receipt after the print-area fix.** The owner's wider printer clipped
-  the right edge of a 58mm receipt whose payload centred without an explicit print area; whether the
-  printer's own width setting also contributed was not tested. The corrected paper output has not
-  yet been printed. Since C107 the print area is the image's width — 360 or 384 dots on 58 mm paper,
-  512 or 576 on 80 mm.
-- **Nobody has yet typed a real printer's address into Check a known address.** The owner's home is
-  the case that motivated it: the box sits on 192.168.10.x and the HP LaserJet on 192.168.20.x,
-  which the port-9100 sweep cannot reach. The first things to try on the box: add the Epson at
-  `192.168.10.81:9100` (the sweep should also list it) and print to it; then type the HP's
-  `192.168.20.56:9100`, which should come back as an office printer.
-- **The setup-page link is unproven on the box.** The print agent builds it from
-  `WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
-  passes through), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`);
-  no review seat ran the deployed compose and nobody has yet followed the link from a dashboard on
-  the real box.
-- **Bluetooth at the box.** A first real pairing, and an Unpair, through the dashboard and the
-  agent, under the shipped AppArmor profile with bluetoothd's `autopair` plugin off — nobody has
-  yet paired or unpaired a real printer through the dashboard. `waitron.sh install` switches
-  `autopair` off with a systemd drop-in where it can (`deploy/README.md` says when it leaves
-  Bluetooth alone), and the operator then types the PIN, 0000 for a 0000 printer; that drop-in was
-  tried on a GitHub runner, where the Bluetooth service itself never ran, and has not run on the
-  owner's box. Also owed: whether a real Bluetooth service sends `Agent1.Release`, which the
-  profile does not allow and the CI stand-in never sends; what the box's real adapter reports as
-  paired; time a pairing through the dashboard (whether scanning while pairing slows a real pairing
-  is not measured — the agent keeps scanning through a pairing because skipping the scan would drop
-  every unpaired device from the list).
-- **Printing over RFCOMM from INSIDE the print-agent container (A140).** A real RFCOMM connection
-  and print from inside the container under the shipped profile — CI's runners cannot load
-  Bluetooth at all — and whether the printer gets every byte before the connection closes. The
-  owner printed on channel 1 from the host only. image-smoke runs the helper directly with its own
-  arguments, not through `RfcommTransport`, and only as far as creating the socket; and
-  `scripts/deploy-image-env.test.ts` reads the Dockerfile and `package.json` as text, so it does not
-  prove the bundle's default helper path resolves inside the image. The helper's 20 + 20 second
-  connect and send timeouts and the agent's 5-second grace (`apps/print-agent/src/rfcomm.ts`) were
-  not measured on the box.
-- **The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the
-  box is not confirmed.** It needs the fixed image on the box first: run
-  `docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
-  `docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
-  and where the printer falls among them; then open Add a printer repeatedly, record on which scan
-  the printer is first marked, and look for `bluetooth info failed` lines in
-  `docker compose logs print-agent`.
-
-**Open — printing:**
-
-- **Adding a language to the venue also means adding its printer captions, and a language written
-  outside the Latin letters means widening the font table.** The width ruler's captions are
-  exhaustive over the locale list (`CAPTIONS` in `apps/server/src/test-page.ts`), so a new locale
-  fails to compile until its captions exist. Printed letters come from a table holding
-  U+0020–U+007E, U+00A0–U+017F and the rest of Windows-1252's letters and signs
-  (`packages/printing/scripts/build-glyph-table.mjs`); anything else prints as `?` unless dropping
-  its accent leaves a letter the table holds (`prepareText`, `packages/printing/src/text.ts`). A
-  language needing Cyrillic or Greek needs the table regenerated with a wider range, if the font has
-  those letters (not checked).
-- **Left open by C107 (#974):**
-  - Whether a job of pictures still needs the print area (`GS L`/`GS W`) that receipts, category
-    pages and the test page send is not measured. The calibration ruler page sends a print area of
-    576 dots whatever the printer.
-  - At 203 dpi a line could hold 32 columns on 58 mm paper (384 ÷ 12) and 48 on 80 mm (576 ÷ 12);
-    it keeps 30 and 42.
-  - The 28-dot line cuts letters: by the generator's own report, 67 of its characters lose at
-    least one dot that was half inside the letter, most of them accented capitals losing the top
-    of the accent. Measured 2026-10-01 with a copy of the generator: a 30-dot line with the
-    baseline 24 dots down leaves 3 (ď, ĥ, ŉ), and 31 or 32 dots still leave those 3.
-  - The preview reads at most 4 MiB of a job and shows at most 2,048 blocks (one per printed
-    line, feed, cut or QR code, among others), so a job of more than about 2,040 lines is cut
-    short at any width. The deep-tree case in `apps/server/src/category-sales-page.test.ts`
-    printed about 14,500 lines on 58mm paper once rows carried their whole path (W73).
-  - What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
-    measured. The preview shrinks a picture wider than the job's line instead of cutting it, so on
-    the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every
-    printer.
-- **Follow-up (ruling C): the preview no longer shows the QR link as text** for a raster receipt.
-  A possible fix is to carry the link alongside the print job so the preview can still show it as
-  text.
-- **Deferred (ruling H): the receipt logs no warning when no legal QR dot size exists.** No logger is
-  reachable from `receipt-print.ts`, and in practice the fallback is unreachable today for any link
-  `validate.ts` accepts (`apps/server/src/qr-link-range.test.ts`).
-- **Building the QR raster runs inside the sale-recording transaction** (via `formatReceipt` in
-  `enqueueSaleReceipt`). The JavaScript QR encoder can throw on an oversized link, which would roll
-  the sale back — but every link `validate.ts` accepts is within QR capacity
-  (`qr-link-range.test.ts`), so this is unreachable for a real sale. If we ever want belt-and-braces
-  against §5, wrap the raster in a `try/catch` that falls back to the printer's built-in QR command
-  — at the cost of a QR whose size we no longer control. Left as an owner decision, not applied.
-- **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
-  no drawer sensor; the audit row is the request.
-- **Printer details follow the dashboard's own language, not the venue's** (ruling I) — a
-  recorded departure from the spec, which asked for the venue language.
-- **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
-  throwaway cases and not pinned: (1) when every dish a failed ticket carried for a station moves to
-  another bill, that bill's printed Reprint clears the table's problem, but the ticket's link to the
-  bill it was fired on is never covered, so the printer's alert keeps counting it. The table also
-  drops a problem once a Reprint would print nothing there (`readReprintTargets`), which the alert
-  does not. (2) A Printers-screen resend of a kitchen ticket carries no kitchen links, so when that
-  resend runs out of attempts, a later printed till Reprint does not clear it from the printer's
-  alert (the table clears).
-- _2026-10-01 (3c-3): a dish moved to another station leaves its ticket at the old station's
-  printer counted by that printer's stuck alert in the same way, because nothing reprints there._
-- **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
-  Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
-  `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
-  printed reprint's links brings back the failures it cleared, so a sweep must remove a bill's
-  kitchen print jobs all together or not at all. It must also keep or remove a resend chain
-  together: deleting a printed resend brings back the "in trouble" state of the job it copied (for
-  a resend of a till Reprint, also the original kitchen ticket's alert and the table's problem that
-  it cleared), and deleting a chain's first job while a resend still names it is refused by the
-  `resend_of` key (read, not run). A receipt copy now adds an append-only `receipt_reprints` row
-  with a required `print_job_id` key using `ON DELETE RESTRICT`
-  (`packages/db/src/schema/receipt-reprints.ts`); include that audit link when designing retention.
-  Whether a future replication drain can carry the audit row to a node without its print job is
-  unverified and needs a test when that drain is built.
-- **Printing A4 invoices on an office printer** (owner, 2026-09-14): foundation landed in #1399; transport and screens remain in A231q.
-  It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision. Remaining work
-  discovers and registers invoice printers, selects them by location and sends the rendered PDF
-  or raster through IPP, with the delivery and send-again screens listed under A231d.
-  _2026-10-08: A231p part 1 landed (#1399), including the shared document, PDF/raster renderers and page-printer schema. Discovery, registration and IPP delivery remain open in A231q; office printing is not yet complete._
-
-**Open — finding and adding printers:**
-
-- **Office-printer greying is proven on one office printer only.** The owner's HP Color LaserJet
-  MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
-  network. It has not run from the box's container, and no receipt printer that answers IPP has
-  been captured, so "A4 or letter means office printer" is a heuristic with one data point.
-- **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
-  `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
-  the box's container, where the lookup may fail outright; either way the printer stays addable.
-- **A typed address receives one HTTP request on port 631** after its connection check succeeds.
-  The 2026-09-12 address-check design allowed any unicast address (public, loopback, link-local)
-  because the check sent nothing; that reasoning no longer covers the follow-up query.
-- **One failed office-printer query can flip a marked printer back to addable** until the next query
-  30 seconds later, because the server keeps only each agent's latest report — unless another agent
-  reporting the same address has marked it. Accepted as the fail-open cost.
-- **No promise about how long a known-address check takes end to end.** The dialog polls and
-  reports a fresh result, but nothing bounds the round trip from pressing the button to an answer.
-- **Two review suggestions on #335 were deliberately not taken** and would be relitigated otherwise:
-  renaming the error code `printer.probe_busy` (kept under the domain-naming rule, per #335's
-  commit message), and deduplicating targets in the agent host (the issuing server already
-  normalises and deduplicates its bounded list of eight).
-- **While a discovery window is open, a device not reported within 45 seconds drops off the list**
-  until its next report; 45 seconds does not cover every scan pass (C102, #953).
-
-**Open — Bluetooth (read, not run, unless a line says otherwise):**
-
-- **A command queued behind a slow pair can run out of time.** The 120 seconds count from queueing
-  (`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
-  time (the background worker in `packages/print-agent/src/agent.ts`), and one pair can take the
-  agent up to about 90 seconds (`REGISTER_TIMEOUT_MS`, `PAIR_TIMEOUT_MS` and `EXIT_GRACE_MS`,
-  10, 75 and 5 seconds, in `apps/print-agent/src/bluetooth-command.ts`). A second command
-  waiting behind that pair can therefore expire on the server before it runs; its outcome is
-  then ignored and the screen says "No answer from the print agent — try again" whatever
-  actually happened.
-- **A Printers screen element taken out of the page and put back does not restart its background
-  status checks:** `disconnectedCallback` stops them and `connectedCallback` only reloads the lists
-  (`apps/dashboard/src/screens/printers-screen.ts`). Today nothing puts the same element back; it
-  matters only if the app starts keeping screen elements.
-- **A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both
-  languages' screens** (a wrong PIN would read "No se pudo emparejar: wrong PIN"). Most of what the
-  agent reports for a pair is a fixed phrase (`apps/print-agent/src/bluetooth-command.ts`). A
-  follow-up could translate the known phrases into dashboard wording in both languages and keep the
-  raw text as a detail; nothing here says what a given BlueZ error always means on a real printer.
-- **At phone width a Bluetooth address breaks mid-group** ("00:11:22:33:44:5" then "5"), because
-  of the width limit on the device details added on 2026-09-11.
-- **Left open by C109 (#960):** the printer details' Active switch can still switch a paired Bluetooth
-  printer off without unpairing it. Leaving the Printers screen mid-calibration asks the server to
-  switch the printer off; if that request fails nothing reports it and the printer stays on, and
-  closing the browser tab mid-wizard does not switch it off. Leaving the screen while a Save is in
-  flight and that save then fails, or in the moment between Enable switching the printer on and
-  the wizard opening, also leaves it on. While it is on during calibration, jobs already queued for
-  it can be handed out (since A163, jobs a succeeded Unpair ended no longer print; jobs kept in the
-  cases the next item lists, and a printer switched off with Disable, can still print after
-  Enable). Keeping the printer off until calibration is saved would need a calibration-only
-  print path for a switched-off printer, since `enqueuePrintJob` refuses one and `claimPrintJobs`
-  claims only switched-on printers' jobs.
-- **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
-  (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
-  switch it off with Disable, which the row then shows. The printer's waiting jobs are kept in that
-  case, after a server restart (the command store is held in memory), and for a printer unpaired
-  outside Waitron; Disable keeps them too.
-- **A Bluetooth printer no agent reports paired still waits with no reason on the job (A139's "not
-  covered")**, as a USB printer no agent sees does. With two agents, one that cannot print over
-  Bluetooth leaves a paired printer's jobs alone while another agent has reported, within the last
-  15 seconds (`DISCOVERED_TTL_MS`, `apps/server/src/print-api.ts`), that it can print to that
-  printer; that report is held only in the server's memory, so after a server restart, until the
-  other agent's first pull, the first agent still ends the job. A140 left this as it is: it needs
-  two agents, one of them older than A140.
-- **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
-  port is on another channel fails each job with the connection error.
-- **Follow-ups A140's review raised, not done (owner's call):**
-  - `BluetoothTransport` (`packages/print-agent/src/transport.ts`, with its export and tests) is
-    unused in production and still models a device-file path.
-  - `liveBtDevicePath`, the `btDevicePath` option and the try/catch in `visibleDevices`
-    (`apps/print-agent/src/linux-devices.ts`) can go; the `/dev/rfcomm…` fixtures in
-    `apps/print-agent/src/linux-devices.test.ts` model a shape production no longer has, and
-    changing them changes existing tests.
-  - A139's chain for an agent that cannot print to Bluetooth (`failUnprintableBluetoothJobs`, the
-    `bluetoothPrinting` wire field, the error code) has no shipped agent reporting `false` now: keep
-    it for an older agent, or delete it before go-live. The jobs list shows "—" in place of the
-    attempt count for a job ended with that code.
-  - The 10-second paired-listing reuse in `resolve()` (`PAIRED_REUSE_MS`,
-    `apps/print-agent/src/linux-devices.ts`) is a chosen window, not a measured one, and a printer
-    unpaired outside the agent resolves as attached for up to 10 seconds.
-
-**Open — screens:**
-
-- **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
-  1. **The Add-a-printer scan shows an empty box while it searches.** Say something like "No
-     printers found yet" while scanning, and something clearer if the scan ends with nothing found.
-  2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
-     width ruler" (nobody knows what it means — e.g. "Print width test"); the action button goes on
-     the right, on its own row; then a row of the two things the person enters (last number fully
-     visible on the ruler, the QR square's size); then a row of the two results (paper width and
-     print resolution). Resolution is never shown as a result today, yet the mismatch message
-     ("The ruler shows 384 dots, but this paper width and resolution print 360 dots…") talks about
-     it. **Open question for the task:** is the QR measurement needed at all, or does the ruler
-     alone settle what printing needs? Answer it from the code (does anything need the width in
-     millimetres rather than dots?) before redesigning.
-  3. **The sample receipt (calibration step 2).** Print it in the venue's default receipt language,
-     which follows the province chosen at setup (Catalan for the owner's venue), not always
-     Spanish. Drop the "Café, jamón, niño, pingüino · 5 €" line; test the language's accented
-     letters as ordered items instead (for Catalan: à è é í ï ò ó ú ü ç and l·l). Add horizontal
-     rules so the receipt reads in blocks: after the venue name and NIF, before the first item,
-     before the tax lines, and before the total. (The owner's photo showed TOTAL and Cambio printed a
-     line below their labels; that was the paper curling — nothing to fix.)
-  4. **Rename and move "Carried by one device at a time".** It means a portable printer (a waiter's
-     belt printer): one device holds it, and another device choosing it is asked to take it over
-     (`device.equipment_held`); off means a fixed printer any number of devices share. Name it
-     e.g. "Portable printer", with the explanation as its hint. It sits under calibration step 3's
-     heading "Does this printer have a cash drawer?", which is not what it is about — give it its
-     own heading or a wider one for the step. The same label shows on the printer details
-     (A405), and changes there too.
-
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room; after A404).** A modal means the printer page is no longer a sub-page, so the owner
-  dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
-  1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
-     Edit opens the name field off to the right, away from the title it changes; whether the
-     printer is active shows three times (a "Status" heading, "Status: Active" and an Active
-     toggle); times print raw ("2026-10-08 11:13"). "Calibrate printer" is hidden inside the
-     collapsed Calibration section — it is an ordinary action and is always visible with the
-     modal's other actions. A modal also fixes the print queue's link: clicking a printer name there
-     opens the details with an "All printers" link that goes back to the print queue; a modal
-     simply closes back to wherever it was opened.
-  2. **The connection line says the opposite of the truth for USB and Bluetooth printers.**
-     `printers.connection_roaming` ("Can roam between agents", `printers-screen.ts`) is shown for
-     them, but a USB or Bluetooth printer is tied to the one agent it is plugged into or paired
-     with; it is a network printer that any venue agent can reach. Say it is connected to one print
-     agent and name it (e.g. "Connected through: Waitron", from what "Last seen by" shows); fix the
-     Spanish ("Puede cambiar de agente") with it. Check whether anything besides the label treats
-     USB or Bluetooth printers as able to move between agents.
-  3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
-     printer off (C109, #960), and the only way back is adding it again as a new printer. Offer
-     "Pair again" (or similar) on the same printer record.
-  4. **Reprint on the print queue lets the person choose a different printer**, for when the
-     original is out of service. Offer active printers, the original chosen by default; check
-     whether a job laid out for one paper width needs laying out again for another. Drawer jobs
-     stay unresendable (CLAUDE.md §5).
-  5. **The printer details say where the printer is used, each with a link** (owner, 2026-10-08):
-     the device profiles that list it and for what (receipts, payment slips, cash drawer), the
-     preparation stations that print to it, and the departments those profiles belong to. A printer
-     belongs to a location, not a department (`printers.location_id`); departments share one through
-     `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
-
-- **A413 — the Devices screen and Add a device — DONE (#1436, 2026-10-08).**
-  The page keeps one heading Add a device action, including when empty, and adds localized search
-  and device-profile/status filters. The owner's 14:05 revision replaces the fading message with
-  a compact confirmation: its heading says the device has been added (or enabled), and its
-  description asks whether to add another. Close or Escape ends adding; the primary Add another
-  device action reopens the waiting dialog with a fresh QR read and "Waiting for more devices…".
-  The first wait says "Waiting for devices…". Both languages are covered.
-  This flow releases its pairing hold while confirming. The real-store probe observed two pending
-  asks become zero when the last hold was released, and remain two with another live hold. A
-  discarded ask must be made again after the window reopens; a kept ask remains available. The
-  reopening read refreshes the list, keeps a newer live snapshot, and applies the same replaced-ask
-  checks as the subscription. A settled Pair form with later delivered edits keeps its draft checks
-  and shows neither waiting nor the confirmation until it closes.
-  Signed-off squash `fde31b09bee9ee68bcfbede8e1fe7b520d3fb17c`; final head
-  `4e6c6992cbc398ec96e525bd29b41ae22855066a`. Completed Claude run-it retry: 165s; three low
-  findings addressed with failing checks before fixes. The earlier revised-flow dispatch returned
-  only pending prose and did not count as a completed review. Focused Chromium: 338 cases;
-  fiscal golden-record/immutability: 20 unchanged cases. Four revised-flow deletion controls failed
-  and the restored five cases passed; the hold assertion was strengthened after its first control
-  survived an earlier fixture release. Final EN/ES, both-theme, measured 390/1280px screenshots were
-  inspected. The normal hook passed in 131s with 5,406 root tests. CI 37779466693, licence 37779466249
-  and CodeQL 37779462439 passed on the final head; dashboard CI passed 9,651 cases with coverage
-  above its thresholds. The merge's own CI is checked separately in the campaign ledger.
-  Remaining limit: the native dialog's accessible name is tested, but actual screen-reader speech
-  is unverified. Unassigned Profile cells stay blank; the None profile filter selects them. No
-  cell-wording change was queued.
-
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; spec
-  approved; plan written; being queued).** A Square-style editor on the dashboard for each zone's
-  master plan (tables created in bulk, saved joins, Undo/Redo), and a till map whose job is status
-  and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
-  is edited freely and is copied into today's plan at the day's reset or on a button; everything
-  live points at today's plan; staff move, join, split and take off tables on today's plan but
-  never add or rename one (they keep spares in reserve); a table a party sits at waits and catches
-  up when its tab closes. Table names are copied as text when a party closes, and onto past orders
-  and bookings when a table is removed, so a table the master no longer has can really go. Five
-  slices, each its own pull request; only slice 5 (removing the old floor screen tabs, placement
-  routes and columns) needs a venue reset. [Spec](superpowers/specs/2026-10-08-floor-plan-design.md),
-  [plan](superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A366-6 rebuilds the Departments
-  and zones screen the editor opens from; A182 (canvases retired) and A414 touch the till's floor
-  screen that slice 3 replaces.
-
-- **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1 lands).**
-  1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
-     411 CSS px wide) on the handheld's Floor tab: the page's body padding is 24px a side
-     (`apps/till/index.html`), and the floor screen adds 16px a side inside it, leaving 331 of 411
-     px before the floor plan's own frame. Cut the body padding on narrow screens and stop screens
-     adding a second layer; check the Order tab and the other device screens too. The floor plan
-     itself is out of scope — the owner will redo it later.
-  2. **No demo bar on device screens.** A venue set up as a demo (or "prepare") shows the
-     Demo / Dashboard / Device / Email inbox bar on the till and handheld too
-     (`apps/till/src/till-app.ts`, `onboardingIntent`). Keep it in the dashboard only.
-  - **Watch, not a job yet:** on 2026-10-08 the phone's Chrome showed a white page for every box
-    address (`/`, `/dashboard`, the box's IP) while the laptop drew it. Read over USB debugging,
-    the page had loaded without errors and the join screen's element measured 679 px tall, while
-    the owner still saw white; quitting and reopening Chrome fixed it. A browser fault or something
-    of ours covering the page — not told apart. If it recurs, attach over USB before restarting
-    Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
-
-- **A419 — Valencian offered as a content language in Spain's pack (owner, 2026-10-08; open; campaign lane E).** The Content languages screen's "Add language" list shows Basque and Galician under
-  "Official languages" in a Catalan venue; the owner asks for Valencian there too. This reverses
-  the 2026-10-06 decision _"'Valenciano' is Catalan (`ca`) for now"_ (entry "Content languages per
-  region", A2), so the first step is the owner's choice of what Valencian IS in the data: its own
-  language code (BCP 47's variant tag gives `ca-ES-valencia`; not checked against what the
-  language list and the screens accept) or a second name for Catalan. That choice decides whether
-  the Valencian Community's required language and default (`VALENCIAN_COMMUNITY`, `ca-ES` for
-  both today, beside `officialLocales` in `packages/country-es/src/spain.ts`) move to it, and what a
-  venue already holding Catalan text sees. The receipt and whole-app translations into Valencian
-  stay with the parked C125 entry (A8).
-
-- **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
-  2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/payments-screen.ts`.
-  1. **Providers and Readers become two tabs**, laid out like Print agents and Printers. The screen
-     opens on Readers when the venue has at least one reader, and on Providers when it has none
-     (read as "added to Waitron", online or not — confirm with the owner if that matters).
-  2. **"Default for devices" becomes "In use by", listing device names.** The column today counts
-     only devices that picked the reader themselves (`device_card_readers`,
-     `apps/server/src/payments-api.ts`); a device left on "Use default" that gets the reader from
-     its profile (`device_profile_card_readers`) is not counted, and the header reads as if it were.
-     List every device that would take a card on this reader, both ways; a long list is shortened
-     ("Bar till, Terrace till +3").
-  3. **Disconnect asks the way other screens do, and checks first.** It shows "Tap again to
-     disconnect" (`payments.disconnect_confirm`), unlike the other screens' confirm steps (the
-     Devices screen's button, for one, turns into "Disable this device?"). The refusal "Disable
-     this provider's card readers before disconnecting it" (`payment.provider_in_use`) comes only
-     after confirming, at the top of the page, moving the page down. Check for active readers when
-     Disconnect is pressed, skip the confirm when it would be refused, and show the refusal as a
-     floating message beside the button, so nothing moves. The bucket copy's Turn off says "Tap
-     again to turn off" too (`stream.turn_off_confirm`,
-     `apps/dashboard/src/screens/stream-settings-panel.ts`); give it the same confirm (owner,
-     2026-10-08).
-  4. **One Disable instead of Disable plus "Unpair from SumUp".** Unpairing already switches the
-     reader off and can never be undone here (the unpair route sets `active: false`, and an
-     unpaired reader loses Enable, `canEnable`). Disable opens a confirm with an "Also unpair from
-     {provider}" tick box and its can't-be-undone warning, shown only where the provider can unpair
-     (`canUnpair`). A reader already disabled but still paired keeps an "Unpair from {provider}"
-     item, or it could never be unpaired.
-
-- **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
-  `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
-  not `wt-data-table`, so `pinned` does not reach them; `product-editor.ts` also contains both a
-  `<table>` and a row menu (found by grep, not read). None has a phone-width case and none was
-  measured.
-- Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
-  though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
 ### A4. Till, displays and devices
 
