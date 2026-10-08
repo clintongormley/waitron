@@ -696,6 +696,10 @@ export class DevicesScreen extends LitElement {
       this.deviceAddress = deviceAddress;
       const qr = await this.qrFor(deviceAddress);
       if (epoch === this.#addEpoch) this.qr = qr;
+      if (more) {
+        const requests = await this.api.joinRequests("device");
+        if (epoch === this.#addEpoch) this.pendingJoins = requests;
+      }
     } catch (error) {
       // A read's failure never replaces an action's message.
       if (epoch === this.#addEpoch && this.addError === null) this.addError = codeOf(error);

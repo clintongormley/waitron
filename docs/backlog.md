@@ -3977,8 +3977,9 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      Close the waiting dialog and show a compact confirmation: "[device name] has been added."
      and "Do you want to add another device?" Close ends adding; Add another device resumes
      waiting with "Waiting for more devices…". The first wait keeps "Waiting for devices…".
-     Both languages. Release this flow's pairing hold while the question shows. A second ask
-     already received stays pending and is offered when you choose Add another device.
+     Both languages. Release this flow's pairing hold while the question shows. Releasing the
+     last hold discards simultaneous pending asks: those devices ask again after Add another
+     device reopens the window. Asks kept live by another hold are offered after reopening.
   3. **The devices table has no search and no filters.** The shared `wt-data-table` offers both
      (`searchable`, which the content languages, modifiers and units screens turn on, and column
      filters); `devices-screen.ts` passes the filter labels but turns neither on. Filter at least by

@@ -3568,6 +3568,7 @@ describe("add a device", () => {
         expect(q(el, "[data-test=waiting-empty]")).toBeNull();
         expect(api.releasePairingHold).toHaveBeenCalled();
         const holds = vi.mocked(api.takePairingHold).mock.calls.length;
+        vi.mocked(api.joinRequests).mockResolvedValue([]);
         q(el, "[data-test=add-another-device]")!.click();
         await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
         await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalledTimes(holds + 1));
@@ -3667,11 +3668,32 @@ describe("add a device", () => {
     expect(d(el, "[data-test=pair-r2]")).not.toBeNull();
   });
 
-  it("keeps a simultaneous second ask pending while the confirmation is open", async () => {
+  it("refreshes simultaneous asks after the last hold released them", async () => {
     const api = stubApi();
     const el = await openAdd(api);
     await toSettings(el);
     await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    vi.mocked(api.releasePairingHold).mockImplementation(async () => {
+      vi.mocked(api.joinRequests).mockResolvedValue([]);
+    });
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+    expect(q(el, "[data-test=waiting-table]")).toBeNull();
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    q(el, "[data-test=add-another-device]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=device-qr]")).not.toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=waiting-empty]")).not.toBeNull());
+    expect(text(el, "[data-test=waiting-empty]")).toBe(t("devices.waiting_more"));
+    expect(d(el, "[data-test=pair-r2]")).toBeNull();
+  });
+
+  it("offers a simultaneous second ask that another hold kept live, only after Add another device", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    vi.mocked(api.joinRequests).mockResolvedValue([pending[1]!]);
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
     expect(q(el, "[data-test=waiting-table]")).toBeNull();
