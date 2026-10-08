@@ -936,14 +936,30 @@ ticket-vs-full-invoice by **separate numbering series** (art. 7.1.a), not a prin
   the design.
 
 > **Pointer, 2026-10-01 (C115).** AEAT's QR specification v0.5.0 (10/12/2025) §3 also requires the
-> text «QR tributario:» above the QR; see the C115 entry in `docs/backlog.md`.
+> text «QR tributario:» above the QR; see the C115 entry, below.
 >
 > **Pointer, 2026-10-02 (C123).** The same §3 places the QR at the start of the invoice; Waitron's
 > receipt and on-screen ticket print the caption, the QR and the legend first when a QR is printed,
-> after any practice warning. See the C115 entry in `docs/backlog.md`.
+> after any practice warning. See the C115 entry, below.
 >
 > **Pointer, 2026-10-02 (C123).** The caption and the legend are supplied by the Veri\*Factu fiscal
 > backend (`packages/fiscal-verifactu/src/backend.ts`); a receipt with no QR prints neither.
+>
+> **The C115 entry, moved here unedited from `docs/backlog.md` on 2026-10-08 (A430):**
+>
+> - **«QR tributario:» above the QR (C115, owner 2026-09-30) — DONE (#999).** Follow-ups:
+>   - **The caption, the QR and the VERI\*FACTU line open the invoice — DONE (C123, #1038).**
+>     AEAT's «Detalle de las especificaciones técnicas del código «QR» de la factura…», version
+>     0.5.0 of 10/12/2025, section 3, says «El código «QR» se situará al principio de la factura,
+>     antes de que empiece el contenido de ésta generado por el sistema informático de facturación,
+>     a menos que se justifique la existencia de algún obstáculo para ello, en cuyo caso, deberá
+>     quedar siempre bien visible y estar claramente separado y diferenciado –de forma que destaque–
+>     del resto de contenidos y otros posibles «QR», ocupando un lugar preeminente.»
+>   - Left as it is (owner, 2026-10-01: "leave it"): the same section asks for the caption and the
+>     VERI\*FACTU line in a readable typeface and size, equal to or larger than the rest of the
+>     invoice's data. On the till's screen (read from its styles, not measured) both take the ticket's
+>     ordinary size while the venue name and the TOTAL row are drawn larger; on the printed receipt
+>     every line of text is drawn at one size (read, not checked on paper).
 
 **Provenance caveat (§1).** art. 7.1, 7.2 and Orden arts. 20–21 were read as clean verbatim text from
 the BOE consolidated pages (high confidence). The RD 1007/2023 art. 6.5 / 15 / 16 wording came back
@@ -1172,7 +1188,7 @@ You can use these observations to frame the adviser questions; they do not settl
 | AEAT `FAQs-Desarrolladores.pdf` v1.3 (4 Dec 2025) | primary |
 | AEAT `Validaciones_Errores_Veri-Factu.pdf` v1.2.2 (changelog to 08/04/2026) | primary |
 | AEAT `Veri-Factu_Descripcion_SWeb.pdf` v1.0.3 | primary |
-| AEAT `DetalleEspecificacTecnCodigoQRfactura.pdf` v0.5.0 (10/12/2025), §3 | primary — extracted locally with `pdftotext -layout` 2026-10-01 (C115 in `docs/backlog.md`) |
+| AEAT `DetalleEspecificacTecnCodigoQRfactura.pdf` v0.5.0 (10/12/2025), §3 | primary — extracted locally with `pdftotext -layout` 2026-10-01 (C115; its entry is quoted at the end of §14's pointers) |
 | LGT art. 201 bis (introduced by Ley 11/2021) | primary |
 | LGT art. 29.2.j) (Ley 58/2003) — quoted in the developer FAQ, §8 above | primary |
 | BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 1, 2, 4, 6.5, 7 (7.1/7.2/7.5), 9, 11, 13, 14, 18 | primary — arts. 1, 4, 11, 13, 14 read verbatim from the BOE consolidated page 2026-09-12 (§15) |

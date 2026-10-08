@@ -345,6 +345,69 @@ just a green typecheck.
   path, for example an agent that asks again on its own after a refusal, so agents follow the
   device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-design.md#4-pairing-on-the-server).
 
+## One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still open
+
+- **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
+  open:**
+  - No test pins what the two removed addresses, `/manage/receipt` and `/manage/location-settings`,
+    open now; a reading of the router says the overview page, which nobody has run — #993 added
+    that test for `/manage/sections`.
+  - The paper-width dropdown names widths only, not printers, so two printers of one width at
+    different resolutions cannot be told apart (owner's call).
+  - The list of widths comes from the last preview, which the page asks for again only when the
+    receipt text changes or a width is chosen: a printer or till changed elsewhere does not update
+    it while the page is open (probed 2026-10-01 with a temporary browser test: invalidating
+    `printers` and `tills` sent no new preview and no new read, while invalidating
+    `tenant_receipts`, the control, sent one; 2026-10-04: `tills` is gone, A238). _(2026-10-05,
+    W111: it also asks again when the location's address changes, read through `locations`; not
+    re-probed for printers.)_
+
+## The Receipts preview redraws the whole receipt once per highlighted part
+
+- **The Receipts preview redraws the whole receipt once per highlighted part.** It finds each
+  part it highlights (a "mark") by drawing the receipt again without that part and comparing the
+  two (`apps/server/src/receipt-preview-api.ts`). W111 took the marks
+  from 2 to 6, so one preview can draw the receipt up to 7 times, and the screen asks for a
+  preview after each pause in typing. Cheaper: have `formatReceipt`
+  (`apps/server/src/receipt-ticket.ts`) record the byte range each part emits, so one draw yields
+  every mark. Not measured.
+
+## Left open by #1261's review, not acted on (2026-10-05)
+
+- **Left open by #1261's review, not acted on (2026-10-05):** (1) no database trigger protects
+  the logo image (the approved design adds no migration; the app-level `receipt` usage refuses a
+  library delete); (2) a configuration import does not validate the `tenant_receipts` JSON (the
+  print path reads it defensively instead); (3) the phone and email length limits (30 and 254)
+  are copied into the dashboard's Receipts screen and nothing keeps the copies in step with
+  `packages/layouts/src/validate.ts`; (4) a reviewer, reading only, believed that a
+  `tenant_receipts.receipt` value that is not valid JSON would make every sale fail when its
+  receipt is built — untested, and I believe it predates W111.
+
+## A change is refused while an open order at the location holds a line
+
+- **A change is refused while an open order at the location holds a line**
+  (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
+  `0064_line_locale_triggers_text_only`). The order-line language triggers now check a line's
+  names only when an update changes them or moves the line, so the till can still split such a
+  line, which copies its old-language names into a new line, or move it to another bill, and the
+  database refuses both once the language differs. Measured by the till's own routes
+  (`apps/server/src/location-settings-api.orders-open.test.ts`): placed orders, paid bills whose
+  party is still seated, a paid order with a dish no station took, and an open bill with no line
+  no longer block. After the change, the tests serve a seated party's paid dish, take back a
+  serve on one, send a paid sale's unsent dish and collect a placed order. If a language is
+  changed underneath an open bill by another road (the configuration import writes
+  `invoice_locales` directly), the bill's next split answers an unmapped 500
+  `server.internal`; the same test file pins it, changing the language by direct SQL.
+
+## A placed order collected after a language change is filed in the new language
+
+- A placed order collected after a language change is filed in the new language
+  (`sales.locale`) with its dish names as saved when its lines were added; when the new language
+  is not among the languages those names were saved in, its receipt prints the new language's
+  fixed words with a dish name in an old language (`lineName`'s fallback,
+  `apps/server/src/receipt-ticket.ts`; read in the code: the test checks what is filed, not a
+  printed receipt).
+
 ## Decisions and deliberate limits
 
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
@@ -366,3 +429,14 @@ just a green typecheck.
   (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
   manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
   is (owner, 2026-10-02).
+
+- **One receipt language per location (C113, owner 2026-09-30) — DONE (#1014).** A receipt prints
+  in ONE language, never two, with no choice when the original prints, and dish names print as they
+  were saved. The language is the first entry of the location's saved list
+  (`locations.invoice_locales`); **in Catalonia it is fixed to Catalan**
+  ([regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).
+
+- **A copy can be printed in another receipt language (C114) — DONE (#1022).** A copy is offered
+  in every receipt language the pack has, even in Catalonia: a product choice, which includes
+  Spanish, the customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
+  [regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).

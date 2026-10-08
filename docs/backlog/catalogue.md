@@ -327,6 +327,36 @@ That comparison does not establish which observer causes it or its effect on the
   venue already holding Catalan text sees. The receipt and whole-app translations into Valencian
   stay with the parked C125 entry (A8).
 
+## A customer-facing name with no text in the default language prints a blank goods line — OPEN (found 2026-10-01 by C122)
+
+- **A customer-facing name with no text in the default language prints a blank goods line — OPEN
+  (found 2026-10-01 by C122).** Under default Catalan, a customer name holding only Spanish printed
+  `1 u` and the price with no name on the receipt, and stored `{"ca-ES":""}` on the sale line
+  (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`, then `lineName` in
+  `apps/server/src/receipt-ticket.ts`). No save path writes such a row today (product and variant
+  saves refuse it), only a direct write. It shows under the default language in the Missing
+  translations list.
+
+## `joinCustomerPresentationText` passes the requested language where the default belongs — OPEN (found 2026-10-02 by A172, not measured)
+
+- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
+  (found 2026-10-02 by A172, not measured).** It calls `resolveSnapshotText(variant, locale,
+locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
+  `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
+  language alphabetically rather than the default. The receipt fills the variant's text per
+  receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
+  surface shows the difference is unknown; reproduce before fixing.
+
+## The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by C122; I believe this predates the branch)
+
+- **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
+  C122; I believe this predates the branch).** `listContentTranslationGaps`
+  (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
+  options lists, extras lists or a menu's sections, and keeps a variant whose product is deleted, so
+  a deleted product's partly translated name blocks a change of default while the Missing
+  translations list leaves it out. The case "a deleted product, which the default-change check
+  still counts" in `packages/catalogue/src/content-translation-report.test.ts` pins today's answer.
+
 ## Decisions and deliberate limits
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner

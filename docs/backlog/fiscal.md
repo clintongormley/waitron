@@ -605,6 +605,14 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
   compliance track widens those two sentences.
 
+## One original per invoice, structurally
+
+- **One original per invoice, structurally.** F2 requests to `POST /api/sales/:id/receipt` still
+  have no limit or idempotency; two calls produced three unmarked originals, and art. 14.1 says
+  exactly one. A231's branch now retains the existing original job for F1 requests, with a
+  no-printer-at-issuance path that queues it later; its F2 control still queues three originals.
+  **Remaining:** contain repeated F2 requests per sale, with the invoice number on the slip.
+
 ## Decisions and deliberate limits
 
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,

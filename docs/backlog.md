@@ -367,6 +367,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   action:** whoever next works the compliance track widens those two sentences.
   [Detail](backlog/fiscal.md#the-fiscal-record-is-built-from-total--vat_breakdown-is-a-false-narrow-enumeration-and-it-reproduces-itself)
 
+- **Overlap with A231d (invoices by email)** — left open by W111 (#1261, the receipt's top block —
+  logo, address, phone, email and slogan): its approved design adds a contact email and optional
+  phone to the location's settings; the venue-wide `phone` and `email` above already exist, so
+  whoever builds A231d decides whether to reuse them rather than add a second contact email.
+
+- **One original per invoice, structurally.** F2 requests to `POST /api/sales/:id/receipt` still
+  have no limit or idempotency; two calls produced three unmarked originals, and art. 14.1 says
+  exactly one. **Remaining:** contain repeated F2 requests per sale, with the invoice number on the
+  slip. [Detail](backlog/fiscal.md#one-original-per-invoice-structurally)
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -771,15 +781,62 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   under "Official languages" in a Catalan venue; the owner asks for Valencian there too.
   [Detail](backlog/catalogue.md#a419--valencian-offered-as-a-content-language-in-spains-pack)
 
+- **One writer still skips the required-language check (`content.language_required`) — OPEN.**
+  The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
+  copies the saved row as it is, unplanned. The demo seed
+  (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
+
+- **A "Translate all" service from Waitron Cloud — OPEN, unqueued (owner 2026-10-06 ~17:23).** A
+  paid subscriber service in Waitron Cloud (the separate service, not this repository) that
+  translates every missing customer-facing name in one go; this repository would only call it,
+  behind the subscription. A machine translation needs the venue's review before a diner sees it.
+
+- **A customer-facing name with no text in the default language prints a blank goods line — OPEN
+  (found 2026-10-01 by C122).** No save path writes such a row today (product and variant saves
+  refuse it), only a direct write. It shows under the default language in the Missing translations
+  list. [Detail](backlog/catalogue.md#a-customer-facing-name-with-no-text-in-the-default-language-prints-a-blank-goods-line--open-found-2026-10-01-by-c122)
+
+- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
+  (found 2026-10-02 by A172, not measured).** The receipt fills the variant's text per receipt
+  language before it gets there (`apps/server/src/working-order.ts`), so whether any surface shows
+  the difference is unknown; reproduce before fixing. [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
+
+- **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
+  C122; I believe this predates the branch).** `listContentTranslationGaps`
+  (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
+  options lists, extras lists or a menu's sections, and keeps a variant whose product is deleted, so
+  a deleted product's partly translated name blocks a change of default while the Missing
+  translations list leaves it out. [Detail](backlog/catalogue.md#the-default-change-check-counts-deleted-and-switched-off-things--open-noted-2026-10-01-by-c122-i-believe-this-predates-the-branch)
+
 ### Service periods, opening hours and departments
 
-_Formerly entries spread across the old sections, A261's venue-operations steps among them._
+_Formerly entries spread across the old sections, A261's venue-operations steps among them._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
 - **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
   way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
   disabled, and its routing exceptions and watcher zones stay gone (a profile's starting zone is
   kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
   it is disabled).
+
+- **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
+  fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
+  reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
+  working assumption, to confirm before go-live. Hours moved to A254.
+
+- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
+  APPROVED 2026-10-07; slice 1 plan approved and queued in campaign lane D (A366-1, then
+  A366-2 … A366-7, each planned then built without stopping for the owner)**. Opening hours and
+  the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
+  a department's day is time ranges each given a period, and the till sells only the current
+  period's menus. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service
+  zones spec; it folds in S11. [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+
+- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
+  implemented through A261.** The first department is named after the venue; the
+  four-value service style splits into separate settings, and a tab no longer needs a table; hours
+  come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
+  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
+  open, including advisor questions Q21, Q14, Q27 and Q22. [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
 
 ### The kitchen and preparation
 
@@ -1608,6 +1665,11 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   handled by the till.
   [Detail](backlog/till.md#the-counter-till-may-start-in-a-zone-its-service-zone-dropdown-does-not-list)
 
+- **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
+  styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another
+  receipt language): one of two tidy-ups its review raised and left, because each changes files
+  outside it.
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -1758,6 +1820,60 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
+- **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
+  open:** No test pins what the two removed addresses, `/manage/receipt` and
+  `/manage/location-settings`, open now. The paper-width dropdown names widths only, not printers,
+  so two printers of one width at different resolutions cannot be told apart (owner's call). The
+  list of widths comes from the last preview, which the page asks for again only when the receipt
+  text changes or a width is chosen. [Detail](backlog/printers.md#one-receipts-settings-page-with-a-live-preview-c116-989-c120-1000-c121-996--still-open)
+
+- **The Receipts preview redraws the whole receipt once per highlighted part** — left open by W111
+  (#1261, the receipt's top block). W111 took the marks from 2 to 6, so one preview can draw the
+  receipt up to 7 times, and the screen asks for a preview after each pause in typing. Not measured.
+  [Detail](backlog/printers.md#the-receipts-preview-redraws-the-whole-receipt-once-per-highlighted-part)
+
+- **Left open by #1261's review, not acted on (2026-10-05)** (W111, the receipt's top block): (1) no
+  database trigger protects the logo image (the approved design adds no migration; the app-level
+  `receipt` usage refuses a library delete); (2) a configuration import does not validate the
+  `tenant_receipts` JSON (the print path reads it defensively instead); …
+  [Detail](backlog/printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
+
+**Left open, for the owner, by C113 (#1014, one receipt language per location):**
+
+- **A change is refused while an open order at the location holds a line**
+  (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
+  `0064_line_locale_triggers_text_only`). If a language is changed underneath an open bill by
+  another road (the configuration import writes `invoice_locales` directly), the bill's next split
+  answers an unmapped 500 `server.internal`. [Detail](backlog/printers.md#a-change-is-refused-while-an-open-order-at-the-location-holds-a-line)
+
+- After a change, a paid counter sale with one dish a station took and one it did not is not
+  blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
+  did before the change, and leaves the order's lines unchanged. No till screen calls that
+  route.
+
+- A placed order collected after a language change is filed in the new language (`sales.locale`)
+  with its dish names as saved when its lines were added; when the new language is not among the
+  languages those names were saved in, its receipt prints the new language's fixed words with a
+  dish name in an old language. [Detail](backlog/printers.md#a-placed-order-collected-after-a-language-change-is-filed-in-the-new-language)
+
+- The refusal's count of blocking orders is not shown on the Receipts tab of Venue settings: `codeMessage` fills
+  in no values.
+
+- The provisioning command (`waitron-provision`) and the configuration import can still store
+  two languages, or one no pack offers; the first entry is what prints. Neither holds Catalonia
+  to Catalan: only the Receipts route and setup do.
+
+- `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
+  grep) and can be retired.
+
+- The till reads its fallback receipt language and the allergen sheet's language only when it
+  starts (again after a server switch or an enrolment), so a change reaches those after a
+  reload. The on-screen ticket follows each sale's own language.
+
+- The dev and demo seed's English mode stores `en-GB`, which prints the Spanish words beside
+  English dish names; the Receipts tab of Venue settings shows it as the saved language although it is not
+  offered.
+
 **Bluetooth (read, not run, unless a line says otherwise):**
 
 - **A command queued behind a slow pair can run out of time.** A second command waiting behind that
@@ -1839,6 +1955,10 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
 - **The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the
   box is not confirmed.** It needs the fixed image on the box first.
   [Detail](backlog/printers.md#the-owners-bluetooth-printer-was-listed-only-under-show-all-devices-a137--the-cause-on-the-box-is-not-confirmed)
+
+- Not yet checked on paper: the logo, and the centred block, on the owner's box (FYI in the
+  campaign's questions file). Local screenshots in `~/waitron-campaign/w111-shots/`.
+  Left open by W111 (#1261, the receipt's top block).
 
 - **For the owner:** a card taken on a connected machine that also prints a paper merchant slip
   opens no drawer; B30 covers only the machine Waitron does not talk to. Left open by service Task
@@ -1991,6 +2111,11 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
 - **The Stripe add-reader dialog (`packages/payments-stripe/src/dashboard/stripe-add-reader.ts`)
   shows "Reader ID" twice** — found during C47 part 2 and not fixed: a separate label carrying the
   help icon and then the input's own label, where `wt-input`'s `help` slot would do.
+
+- **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
+  cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
+  flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
+  `sale.empty_basket`.
 
 ### Users, sign-in and the dashboard shell
 
@@ -2288,9 +2413,14 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
   from code only; nobody has shown a real pointer can get there.
 
+- **Three older dashboard screens name languages with their own code rather than
+  `languageDisplayName` (`packages/shared`)** — left open by C114 (#1022, a copy printed in another
+  receipt language): one of two tidy-ups its review raised and left, because each changes files
+  outside it.
+
 ### Interface languages
 
-_Formerly entries spread across the old sections, C125 among them._
+_Formerly entries spread across the old sections, C125 among them._ Detail: [backlog/languages.md](backlog/languages.md).
 
 - **The recovery page's Spanish (#650) has not been read by a native speaker.** Left open by SQLite
   slice 2 Task 3a (#566, one process per venue folder; #573; #608).
@@ -2310,6 +2440,33 @@ _Formerly entries spread across the old sections, C125 among them._
   `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
   “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
   `apps/till/src/i18n/allergen-names.ts`) are not scanned.
+
+- **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
+  four (C125, owner 2026-10-02) — PARKED by the owner (2026-10-02: "save the full translations for
+  much later"); taken out of the campaign queues the same day.** Nothing was written: the
+  `docs/regional-languages` branch holds no commit and no draft.
+  [Detail](backlog/languages.md#catalan-valencian-galician-and-basque--the-receipts-words-checked-and-the-whole-app-in-all-four-c125-owner-2026-10-02--parked)
+
+**Left open, for the owner, by C113 (#1014, one receipt language per location):**
+
+- **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe», «Cobrado»)
+  stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still follow
+  `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`).
+  [Detail](backlog/languages.md#the-payment-slip-was-left-alone)
+
+- **The translations need a native or official check before go-live.** Apart from the Catalan
+  «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the table
+  was checked against a terminology source. [Detail](backlog/languages.md#the-translations-need-a-native-or-official-check-before-go-live)
+
+- The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
+  (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. The printed receipt is
+  formatted on the server and keeps the language's own pattern. [Detail](backlog/languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
+
+- The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to
+  its own line on 58 mm paper.
+
+- The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
+  «Café y tostada») in every language; only its fixed words change.
 
 ### Alerts, logging and diagnostics
 
@@ -5580,232 +5737,8 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
-### A8. Receipts
-
-- **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
-  open:**
-  - No test pins what the two removed addresses, `/manage/receipt` and `/manage/location-settings`,
-    open now; a reading of the router says the overview page, which nobody has run — #993 added
-    that test for `/manage/sections`.
-  - The paper-width dropdown names widths only, not printers, so two printers of one width at
-    different resolutions cannot be told apart (owner's call).
-  - The list of widths comes from the last preview, which the page asks for again only when the
-    receipt text changes or a width is chosen: a printer or till changed elsewhere does not update
-    it while the page is open (probed 2026-10-01 with a temporary browser test: invalidating
-    `printers` and `tills` sent no new preview and no new read, while invalidating
-    `tenant_receipts`, the control, sent one; 2026-10-04: `tills` is gone, A238). _(2026-10-05,
-    W111: it also asks again when the location's address changes, read through `locations`; not
-    re-probed for printers.)_
-- **The receipt's top block — logo, address, phone, email and slogan, centred — DONE (W111, #1261);
-  left open:**
-  - **Overlap with A231d (invoices by email):** its approved design adds a contact email and
-    optional phone to the location's settings; the venue-wide `phone` and `email` above already
-    exist, so whoever builds A231d decides whether to reuse them rather than add a second contact
-    email.
-  - **The Receipts preview redraws the whole receipt once per highlighted part.** It finds each
-    part it highlights (a "mark") by drawing the receipt again without that part and comparing the
-    two (`apps/server/src/receipt-preview-api.ts`). W111 took the marks
-    from 2 to 6, so one preview can draw the receipt up to 7 times, and the screen asks for a
-    preview after each pause in typing. Cheaper: have `formatReceipt`
-    (`apps/server/src/receipt-ticket.ts`) record the byte range each part emits, so one draw yields
-    every mark. Not measured.
-  - **Left open by #1261's review, not acted on (2026-10-05):** (1) no database trigger protects
-    the logo image (the approved design adds no migration; the app-level `receipt` usage refuses a
-    library delete); (2) a configuration import does not validate the `tenant_receipts` JSON (the
-    print path reads it defensively instead); (3) the phone and email length limits (30 and 254)
-    are copied into the dashboard's Receipts screen and nothing keeps the copies in step with
-    `packages/layouts/src/validate.ts`; (4) a reviewer, reading only, believed that a
-    `tenant_receipts.receipt` value that is not valid JSON would make every sale fail when its
-    receipt is built — untested, and I believe it predates W111.
-  - Not yet checked on paper: the logo, and the centred block, on the owner's box (FYI in the
-    campaign's questions file). Local screenshots in `~/waitron-campaign/w111-shots/`.
-- **«QR tributario:» above the QR (C115, owner 2026-09-30) — DONE (#999).** Follow-ups:
-  - **The caption, the QR and the VERI\*FACTU line open the invoice — DONE (C123, #1038).**
-    AEAT's «Detalle de las especificaciones técnicas del código «QR» de la factura…», version
-    0.5.0 of 10/12/2025, section 3, says «El código «QR» se situará al principio de la factura,
-    antes de que empiece el contenido de ésta generado por el sistema informático de facturación,
-    a menos que se justifique la existencia de algún obstáculo para ello, en cuyo caso, deberá
-    quedar siempre bien visible y estar claramente separado y diferenciado –de forma que destaque–
-    del resto de contenidos y otros posibles «QR», ocupando un lugar preeminente.»
-  - Left as it is (owner, 2026-10-01: "leave it"): the same section asks for the caption and the
-    VERI\*FACTU line in a readable typeface and size, equal to or larger than the rest of the
-    invoice's data. On the till's screen (read from its styles, not measured) both take the ticket's
-    ordinary size while the venue name and the TOTAL row are drawn larger; on the printed receipt
-    every line of text is drawn at one size (read, not checked on paper).
-- **One receipt language per location (C113, owner 2026-09-30) — DONE (#1014).** A receipt prints
-  in ONE language, never two, with no choice when the original prints, and dish names print as they
-  were saved. The language is the first entry of the location's saved list
-  (`locations.invoice_locales`); **in Catalonia it is fixed to Catalan**
-  ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia).
-  - **A copy can be printed in another receipt language (C114) — DONE (#1022).** A copy is offered
-    in every receipt language the pack has, even in Catalonia: a product choice, which includes
-    Spanish, the customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
-    [regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Two tidy-ups
-    #1022's review raised and left, because each changes files outside it: the till's four choice
-    dialogs (`apps/till/src/widgets/`) each carry their own radio-option styles, which could be one
-    shared set; and three older dashboard screens name languages with their own code rather than
-    `languageDisplayName` (`packages/shared`).
-  - **Open, for the owner:**
-    - **A change is refused while an open order at the location holds a line**
-      (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
-      `0064_line_locale_triggers_text_only`). The order-line language triggers now check a line's
-      names only when an update changes them or moves the line, so the till can still split such a
-      line, which copies its old-language names into a new line, or move it to another bill, and the
-      database refuses both once the language differs. Measured by the till's own routes
-      (`apps/server/src/location-settings-api.orders-open.test.ts`): placed orders, paid bills whose
-      party is still seated, a paid order with a dish no station took, and an open bill with no line
-      no longer block. After the change, the tests serve a seated party's paid dish, take back a
-      serve on one, send a paid sale's unsent dish and collect a placed order. If a language is
-      changed underneath an open bill by another road (the configuration import writes
-      `invoice_locales` directly), the bill's next split answers an unmapped 500
-      `server.internal`; the same test file pins it, changing the language by direct SQL.
-    - After a change, a paid counter sale with one dish a station took and one it did not is not
-      blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
-      did before the change, and leaves the order's lines unchanged. No till screen calls that
-      route.
-    - A placed order collected after a language change is filed in the new language
-      (`sales.locale`) with its dish names as saved when its lines were added; when the new language
-      is not among the languages those names were saved in, its receipt prints the new language's
-      fixed words with a dish name in an old language (`lineName`'s fallback,
-      `apps/server/src/receipt-ticket.ts`; read in the code: the test checks what is filed, not a
-      printed receipt).
-    - The refusal's count of blocking orders is not shown on the Receipts tab of Venue settings: `codeMessage` fills
-      in no values.
-    - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,
-      «Cobrado») stay Spanish (`apps/server/src/payment-slip.ts`), and its date and amounts still
-      follow `WAITRON_TILL_LOCALE` (`apps/server/src/payment-slip-print.ts`). It is not the
-      invoice, but art. 128-1.2.a also covers «els altres documents que hi facin referència o que
-      en derivin», so a Catalan venue's slip is arguably covered.
-    - **The translations need a native or official check before go-live.** Apart from the Catalan
-      «Factura» and «Propina», which the Consumer Code and the agency's pages use, no word in the
-      table was checked against a terminology source. The owner landed it as is on 2026-10-02
-      ("land, review words later"); the follow-up (C125, below) was then parked by the owner on
-      2026-10-02 ("save the full translations for much later").
-    - The provisioning command (`waitron-provision`) and the configuration import can still store
-      two languages, or one no pack offers; the first entry is what prints. Neither holds Catalonia
-      to Catalan: only the Receipts route and setup do.
-    - `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
-      grep) and can be retired.
-    - The till reads its fallback receipt language and the allergen sheet's language only when it
-      starts (again after a server switch or an enrolment), so a change reaches those after a
-      reload. The on-screen ticket follows each sale's own language.
-    - The dev and demo seed's English mode stores `en-GB`, which prints the Spanish words beside
-      English dish names; the Receipts tab of Venue settings shows it as the saved language although it is not
-      offered.
-    - The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish
-      way (`20,00 €`, `5 ago 2026`), while its words are Galician or Basque. Measured 2026-10-02:
-      Playwright's Chromium 153 resolved `gl-ES` and `eu-ES` number and date formats to `en-US`,
-      and Google Chrome 154 on macOS to `en-GB`, so the screen falls back to the registry's
-      `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot format. The printed receipt is
-      formatted on the server and keeps the language's own pattern.
-    - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to
-      its own line on 58 mm paper.
-    - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
-      «Café y tostada») in every language; only its fixed words change.
-- **One original per invoice, structurally.** F2 requests to `POST /api/sales/:id/receipt` still
-  have no limit or idempotency; two calls produced three unmarked originals, and art. 14.1 says
-  exactly one. A231's branch now retains the existing original job for F1 requests, with a
-  no-printer-at-issuance path that queues it later; its F2 control still queues three originals.
-  **Remaining:** contain repeated F2 requests per sale, with the invoice number on the slip.
-- **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
-  cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
-  flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
-  `sale.empty_basket`.
-- **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
-  four (C125, owner 2026-10-02) — PARKED by the owner (2026-10-02: "save the full translations for
-  much later"); taken out of the campaign queues the same day.** Asked for on C113's question
-  ("Land, review words later, and add full translations for catalán, valenciano, and gallego";
-  "Receipt + whole app"; Basque: "Treat it like the others"). Nothing was written: the
-  `docs/regional-languages` branch holds no commit and no draft. When it is picked up, the first
-  step is a spec and plan, ending with the owner's choices:
-  - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque checked against an
-    official or authoritative source (for example Termcat, the Acadèmia Valenciana de la Llengua,
-    the Real Academia Galega or Xunta terminology, Euskaltzaindia or Euskalterm), each with a
-    provenance row quoting the source; and Valencian as its own receipt language — which locations
-    may or must use it (provinces 03, 12 and 46), what the law requires there, with sources, and
-    which printed words differ from Catalan.
-  - **Whole app:** the dashboard, the till and setup offered in all four beside English and
-    Spanish — how strings are held today and every place that pins the list of interface
-    languages (language choosers, `Accept-Language` matching, tests); how translations are
-    produced and checked, and what shows when one is missing; whether Valencian is its own
-    interface language or a variant; and an order of work that keeps `main` green.
-
 ### A9. Product depth — after the primary works
 
-- **Product languages are hard-coded at setup** (owner, 2026-09-13) — **DONE (W109-6, #1320, Task 6 of
-  `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`).** A new venue starts with
-  the languages Waitron keeps enabled for its area plus English, the regional language the default
-  where one is kept (owner, 2026-10-06 ~17:23; entry "Content languages per region", A2); the
-  fixed `["es", "ca", "en"]` is gone from `packages/catalogue/src/provisioning.ts`.
-- **One writer still skips the required-language check (`content.language_required`) — OPEN.**
-  The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
-  copies the saved row as it is, unplanned. The demo seed
-  (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
-- **A "Translate all" service from Waitron Cloud — OPEN, unqueued (owner 2026-10-06 ~17:23).** A
-  paid subscriber service in Waitron Cloud (the separate service, not this repository) that
-  translates every missing customer-facing name in one go; this repository would only call it,
-  behind the subscription. A machine translation needs the venue's review before a diner sees it.
-- **A customer-facing name with no text in the default language prints a blank goods line — OPEN
-  (found 2026-10-01 by C122).** Under default Catalan, a customer name holding only Spanish printed
-  `1 u` and the price with no name on the receipt, and stored `{"ca-ES":""}` on the sale line
-  (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`, then `lineName` in
-  `apps/server/src/receipt-ticket.ts`). No save path writes such a row today (product and variant
-  saves refuse it), only a direct write. It shows under the default language in the Missing
-  translations list.
-- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
-  (found 2026-10-02 by A172, not measured).** It calls `resolveSnapshotText(variant, locale,
-locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
-  `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
-  language alphabetically rather than the default. The receipt fills the variant's text per
-  receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
-  surface shows the difference is unknown; reproduce before fixing.
-- **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
-  C122; I believe this predates the branch).** `listContentTranslationGaps`
-  (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
-  options lists, extras lists or a menu's sections, and keeps a variant whose product is deleted, so
-  a deleted product's partly translated name blocks a change of default while the Missing
-  translations list leaves it out. The case "a deleted product, which the default-change check
-  still counts" in `packages/catalogue/src/content-translation-report.test.ts` pins today's answer.
-- **Folder-driven routing to multiple printers/destinations** (owner, 2026-09-30): the
-  [approved routing design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)
-  replaces the former label-driven proposal. Prep stations claim folders, with ordered exceptions
-  and fallbacks. Slice 3a builds folder claims and ordered exceptions; opening hours and fallbacks
-  are slice 3b, and watcher copies are slice 3d. (2026-10-07: A261 step 4 replaced the claims and
-  ordered exceptions with the routing grid's cells, below.) Reporting attribution stays separate so one sale is
-  counted once.
-- **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
-  fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
-  reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
-  working assumption, to confirm before go-live. Hours moved to A254.
-- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; slice 1 plan approved and queued in campaign lane D (A366-1, then
-  A366-2 … A366-7, each planned then built without stopping for the owner)**
-  ([slice 1 plan](superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
-  written ahead: [slice 2 plan](superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
-  a name with one customer menu plus staff-only menus, a department's day is time ranges each given
-  a period, and the till sells only the current period's menus. Zones can be closed for part of
-  their department's time; prep stations lose their hours and fallbacks; routing cells can name
-  periods; a printer shared by stations prints one combined ticket; watchers become monitors on
-  device profiles; receipts move to departments with translated text.
-  [Spec](superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
-  the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
-  §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
-  Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
-  in two pull requests — monitors after slice 1, watcher printers retired after slice 4 — with its
-  open decisions for the owner at its top.
-  Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
-  in two pull requests — each department's receipt with translated subtitle and footer after
-  slice 1, the department page's Receipt tab after slice 6 — with its open decisions at its top.
-- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
-  implemented through A261.** The first department is named after the venue; the
-  four-value service style splits into separate settings, and a tab no longer needs a table; hours
-  come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
-  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
-  open, including advisor questions Q21, Q14, Q27 and Q22.
-  Its §4 day types and §5 placement are revised by A261. A261 step 2 names the sole department on
-  Departments and zones; other screens still await their own one-department survey. Tab billing
-  remains open; the shared calendar is built by A261 step 5 (below), and its public holidays by
-  step 6.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
   APPROVED; all eight steps implemented** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
