@@ -49,8 +49,7 @@ export interface S3ObjectStoreOptions {
  * set, it stays for the rest of the request. `requestTimeout` is not used because it stops counting
  * at the headers and only warns unless `throwOnRequestTimeout` is set.
  * Thirty seconds keeps the three attempts inside the stream's five-minute read deadline
- * (`READ_DEADLINE_MS`, `./supervisor.ts`). Receipts: docs/backlog.md, "the stream's other bucket
- * calls are bounded".
+ * (`READ_DEADLINE_MS`, `./supervisor.ts`). Receipts: #676.
  */
 const BUCKET_IDLE_MS = 30_000;
 

@@ -58,8 +58,7 @@ approved.
   - **A rebuild of a table another set's trigger BODY reads is still refused** on a box that has
     the trigger — core `0003` on `products`, recorded in
     [conventions-data.md](../developers/conventions-data.md) → _A migration set depends on another
-    through a foreign key, a trigger on its table, or a trigger body naming its table_, and in Track
-    A, the paragraph opening **Task 1 LANDED as #511**. The guard steps over it by applying
+    through a foreign key, a trigger on its table, or a trigger body naming its table_. The guard steps over it by applying
     everything up to `0003` in one go, so the next such rebuild fails the guard. Decide the fix.
   - **A real old database.** Every step here is built by this image's own migrator from today's
     change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the

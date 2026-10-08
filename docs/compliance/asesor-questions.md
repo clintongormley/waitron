@@ -1999,7 +1999,7 @@ corrections, is refused (`sale.correction_exceeds_total`).
 On 2026-09-29 the owner asked whether a correction should instead cancel the original and issue a
 new invoice for the right amount: a corrective invoice *by substitution*, `TipoRectificativa` "S".
 That is not decided, and it should be settled before the correction screen is designed
-([backlog](../backlog.md), the **Left open** note in the *Menus M7v landed* entry). Two things are
+([backlog](../backlog/fiscal.md), the entry *Nothing in the product can issue a corrective invoice (R5, factura rectificativa) for a VAT error on an issued simplified invoice*). Two things are
 already settled and not asked here. A void (*anulación*) is only for an invoice that should never
 have existed ([verifactu-findings.md](verifactu-findings.md) §7; Q25 asks about its VAT period).
 And tickets and full invoices need separate series (Q5).
