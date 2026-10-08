@@ -51,9 +51,33 @@ const printers = [
 ];
 
 const readers: ReaderRow[] = [
-  { id: "r1", provider: "acme", name: "Barra", active: true, canEnable: true, deviceCount: 0 },
-  { id: "r2", provider: "acme", name: "Terraza", active: true, canEnable: true, deviceCount: 0 },
-  { id: "r-off", provider: "acme", name: "Vieja", active: false, canEnable: true, deviceCount: 0 },
+  {
+    id: "r1",
+    provider: "acme",
+    name: "Barra",
+    active: true,
+    canEnable: true,
+    deviceCount: 0,
+    deviceNames: [],
+  },
+  {
+    id: "r2",
+    provider: "acme",
+    name: "Terraza",
+    active: true,
+    canEnable: true,
+    deviceCount: 0,
+    deviceNames: [],
+  },
+  {
+    id: "r-off",
+    provider: "acme",
+    name: "Vieja",
+    active: false,
+    canEnable: true,
+    deviceCount: 0,
+    deviceNames: [],
+  },
 ];
 const storedReaders: ProfileReaderList = { readerIds: ["r-off", "r1"], defaultReaderId: "r1" };
 

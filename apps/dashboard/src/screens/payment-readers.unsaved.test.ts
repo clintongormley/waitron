@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons, type WtDialog } from "@waitron/ui";
@@ -16,6 +17,7 @@ const reader: ReaderRow = {
   active: true,
   canEnable: true,
   deviceCount: 0,
+  deviceNames: [],
 };
 const available: AvailableReader[] = [
   { providerRef: "a1", name: "Counter", status: "available", model: "Solo", serial: "SN1" },
@@ -55,7 +57,11 @@ async function mount(overrides: Partial<DashboardApi> = {}, discovery = false) {
       listPaymentProviders: async () => [
         { providerId: "test", state: "connected", canUnpair: true },
       ],
-      listReaders: async () => [reader, { ...reader, id: "r2", name: "Bar" }],
+      listReaders: async () => [
+        reader,
+        { ...reader, id: "r2", name: "Bar" },
+        { ...reader, id: "disabled", active: false },
+      ],
       readerStatus: async () => ({ online: true, pairingStatus: "paired" }),
       availableReaders: async () => available,
       listStuckPayments: async () => [],
@@ -319,8 +325,10 @@ it("details and unpair confirmation remain exempt", async () => {
   const { app, screen } = await mount();
   q(screen, "[data-test=close-reader-editor]")!.click();
   await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
-  for (const mode of ["details", "unpair"]) {
-    await open(screen, "r1", mode);
+  for (const mode of ["details", "disable", "unpair"]) {
+    await chooseOption(q(screen, "wt-combobox[name=reader-status-filter]")!, "all");
+    await screen.updateComplete;
+    await open(screen, mode === "unpair" ? "disabled" : "r1", mode);
     expect(unload()).toBe(false);
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
@@ -455,7 +463,8 @@ it("unpair's submitted command retains its direct dismissal exemption", async ()
   let finish!: () => void;
   let removed = false;
   const { app, screen } = await mount({
-    listReaders: async () => (removed ? [] : [reader]),
+    listReaders: async () =>
+      removed ? [] : [reader, { ...reader, id: "disabled", active: false }],
     unpairReader: async () => {
       await new Promise<void>((resolve) => {
         finish = resolve;
@@ -465,7 +474,9 @@ it("unpair's submitted command retains its direct dismissal exemption", async ()
   });
   q(screen, "[data-test=close-reader-editor]")!.click();
   await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
-  await open(screen, "r1", "unpair");
+  await chooseOption(q(screen, "wt-combobox[name=reader-status-filter]")!, "all");
+  await screen.updateComplete;
+  await open(screen, "disabled", "unpair");
   q(screen, "[data-test=confirm-unpair]")!.click();
   await expect.poll(() => typeof finish).toBe("function");
   try {

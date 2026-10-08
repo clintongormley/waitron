@@ -23,6 +23,7 @@ import {
   cardReaders,
   DEMO_READER_ID,
   deviceCardReaders,
+  deviceProfileCardReaders,
   findPaymentByBillPayment,
   IN_PROGRESS_PAYMENT_STATES,
   payments,
@@ -515,10 +516,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/readers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // `deviceCount` comes from a separate aggregate: a `sql` scalar correlated to the `.from()`
-      // base binds to the subquery's table and answers wrongly (CLAUDE.md §3). `canEnable` is
-      // derived here, not as a `sql` predicate, which the engine would answer as 0/1.
-      const { readers, counts } = await gated(sessionId, async (tx) => ({
+      const { readers, assignments } = await gated(sessionId, async (tx) => ({
         readers: await tx
           .select({
             id: cardReaders.id,
@@ -530,20 +528,39 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .from(cardReaders)
           .where(ne(cardReaders.id, DEMO_READER_ID))
           .orderBy(cardReaders.name),
-        counts: await tx
+        assignments: await tx
           .select({
-            readerId: deviceCardReaders.readerId,
-            n: sql<number>`cast(count(*) as int)`,
+            name: devices.label,
+            chosenReaderId: deviceCardReaders.readerId,
+            defaultReaderId: deviceProfileCardReaders.readerId,
           })
-          .from(deviceCardReaders)
-          .groupBy(deviceCardReaders.readerId),
+          .from(devices)
+          .leftJoin(deviceCardReaders, eq(deviceCardReaders.deviceId, devices.id))
+          .leftJoin(
+            deviceProfileCardReaders,
+            and(
+              eq(deviceProfileCardReaders.deviceProfileId, devices.deviceProfileId),
+              eq(deviceProfileCardReaders.isDefault, true),
+            ),
+          )
+          .where(eq(devices.active, true))
+          .orderBy(devices.label, devices.id),
       }));
-      const countByReader = new Map(counts.map((r) => [r.readerId, r.n]));
+      const namesByReader = new Map<string, string[]>();
+      for (const assignment of assignments) {
+        // Configured use is separate from the portable reader's current holder.
+        const readerId = assignment.chosenReaderId ?? assignment.defaultReaderId;
+        if (readerId === null) continue;
+        const names = namesByReader.get(readerId) ?? [];
+        names.push(assignment.name);
+        namesByReader.set(readerId, names);
+      }
       return c.json(
         readers.map(({ unpairedAt, ...r }) => ({
           ...r,
           canEnable: unpairedAt === null,
-          deviceCount: countByReader.get(r.id) ?? 0,
+          deviceCount: namesByReader.get(r.id)?.length ?? 0,
+          deviceNames: namesByReader.get(r.id) ?? [],
         })),
       );
     }),

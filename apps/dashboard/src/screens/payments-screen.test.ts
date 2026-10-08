@@ -75,6 +75,7 @@ const READERS: ReaderRow[] = [
     active: true,
     canEnable: true,
     deviceCount: 2,
+    deviceNames: ["Bar till", "Terrace till"],
   },
 ];
 
@@ -204,12 +205,52 @@ function liveApi(overrides: Partial<DashboardApi> = {}): DashboardApi & { liveDa
 const q = (el: PaymentsScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 
+const disconnectNotice = (el: PaymentsScreen) =>
+  el
+    .shadowRoot!.querySelector("[data-test=disconnect-notice-acme]")
+    ?.shadowRoot?.querySelector("[role=alert] .message");
+
 // The readers data-table renders its cells (row menu, status span) inside its OWN shadow root, so
 // a cell selector reaches through the `<wt-data-table>` element the screen hosts.
 const qCell = (el: PaymentsScreen, selector: string) =>
   el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelector<HTMLElement>(selector);
 
 describe("payments-screen", () => {
+  it.each([
+    ["en", "In use by"],
+    ["es-ES", "En uso por"],
+  ])("shows configured device names, shortening a long list, in %s", async (locale, heading) => {
+    const readers = [
+      { ...READERS[0]!, id: "none", name: "Unused", deviceCount: 0, deviceNames: [] },
+      {
+        ...READERS[0]!,
+        id: "two",
+        name: "Two tills",
+        deviceCount: 2,
+        deviceNames: ["Bar till", "Terrace till"],
+      },
+      {
+        ...READERS[0]!,
+        id: "many",
+        name: "Many tills",
+        deviceCount: 5,
+        deviceNames: ["Bar till", "Terrace till", "Counter", "Garden", "Upstairs"],
+      },
+    ];
+    const { el } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue(readers) }));
+    setLocale(locale);
+    el.requestUpdate();
+    await flush(el);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.shadowRoot!.querySelector("thead")!.textContent).toContain(heading);
+    expect(qCell(el, "[data-test=reader-use-none]")!.textContent).toBe("");
+    expect(qCell(el, "[data-test=reader-use-two]")!.textContent).toBe("Bar till, Terrace till");
+    expect(qCell(el, "[data-test=reader-use-many]")!.textContent).toBe("Bar till, Terrace till +3");
+    expect(qCell(el, "[data-test=reader-use-many]")!.getAttribute("title")).toBe(
+      "Bar till, Terrace till, Counter, Garden, Upstairs",
+    );
+  });
+
   it("lists providers with their state badges", async () => {
     const { el, api } = await mount();
 
@@ -242,7 +283,7 @@ describe("payments-screen", () => {
   });
 
   it("disconnects a connected provider behind a two-tap confirm", async () => {
-    const { el, api } = await mount();
+    const { el, api } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([]) }));
 
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
@@ -262,7 +303,7 @@ describe("payments-screen", () => {
     const body = table.shadowRoot!.querySelector("tbody")!;
     expect(body.textContent).toContain("Front counter");
     expect(body.textContent).toContain("Acme Pay");
-    expect(body.textContent).toContain("2");
+    expect(body.textContent).toContain("Bar till, Terrace till");
     expect(api.readerStatus).toHaveBeenCalledWith("r-1");
     expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toContain("Online");
     expect(qCell(el, "[data-test=disable-r-1]")).not.toBeNull();
@@ -309,10 +350,13 @@ describe("payments-screen", () => {
     });
   });
 
-  it("disables a reader locally from its row menu and reloads", async () => {
+  it("confirms a local disable from its row menu and reloads", async () => {
     const { el, api } = await mount();
     vi.mocked(api.listReaders).mockClear();
     qCell(el, "[data-test=disable-r-1]")!.click();
+    await flush(el);
+    expect(api.disableReader).not.toHaveBeenCalled();
+    q(el, "[data-test=confirm-disable]")!.click();
     await flush(el);
     expect(api.disableReader).toHaveBeenCalledWith("r-1");
     expect(api.unpairReader).not.toHaveBeenCalled();
@@ -381,6 +425,8 @@ describe("payments-screen", () => {
       }),
     );
     qCell(el, "[data-test=disable-other]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-disable]")!.click();
     await flush(el);
     expect(qCell(el, "[data-test=reader-battery-r-1]")!.textContent).toBe("90%");
     if (outcome === "success") resolveOld({ online: false, batteryPercent: 10 });
@@ -495,6 +541,7 @@ describe("payments-screen", () => {
 
   it("surfaces a payment.provider_in_use rejection as its localized copy", async () => {
     const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue([]),
       disconnectPaymentProvider: vi.fn().mockRejectedValue({ code: "payment.provider_in_use" }),
     });
     const { el } = await mount(api);
@@ -504,12 +551,13 @@ describe("payments-screen", () => {
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
 
-    expect(q(el, "[role=alert]")?.textContent).toContain("Disable");
-    expect(q(el, "[role=alert]")?.textContent).not.toContain("payment.provider_in_use");
+    expect(disconnectNotice(el)?.textContent).toContain("Disable");
+    expect(disconnectNotice(el)?.textContent).not.toContain("payment.provider_in_use");
   });
 
   it("keeps a failed disconnect when a provider connect already in flight completes after it", async () => {
     const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue([]),
       disconnectPaymentProvider: vi.fn().mockRejectedValue({ code: "payment.provider_in_use" }),
     });
     const { el } = await mount(api);
@@ -520,14 +568,14 @@ describe("payments-screen", () => {
     await flush(el);
     q(el, "[data-test=disconnect-acme]")!.click();
     await vi.waitFor(() =>
-      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("payment.provider_in_use")),
+      expect(disconnectNotice(el)?.textContent).toBe(codeMessage("payment.provider_in_use")),
     );
 
     const reads = vi.mocked(api.listPaymentProviders).mock.calls.length;
     q(el, "[data-test=fake-connect-zeta]")!.click();
     await vi.waitFor(() => expect(api.listPaymentProviders).toHaveBeenCalledTimes(reads + 1));
     await flush(el);
-    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("payment.provider_in_use"));
+    expect(disconnectNotice(el)?.textContent).toBe(codeMessage("payment.provider_in_use"));
   });
 });
 
@@ -959,7 +1007,11 @@ describe("reader discovery and status", () => {
   });
 
   it("confirms unpair separately and hides it for providers without support", async () => {
-    const { el, api } = await mount();
+    const { el, api } = await mount(
+      stubApi({ listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }),
+    );
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(el);
     qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
     expect(api.unpairReader).not.toHaveBeenCalled();
@@ -970,8 +1022,11 @@ describe("reader discovery and status", () => {
     const other = await mount(
       stubApi({
         listPaymentProviders: vi.fn().mockResolvedValue([{ ...PROVIDERS[0], canUnpair: false }]),
+        listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]),
       }),
     );
+    await chooseOption(q(other.el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(other.el);
     expect(qCell(other.el, "[data-test=unpair-r-1]")).toBeNull();
   });
 });
@@ -1025,12 +1080,15 @@ describe("reader dialog request lifetime", () => {
   it("shows an unpair failure only in the confirmation's bottom message, with no alert of its own, and permits retry", async () => {
     const { el, api } = await mount(
       stubApi({
+        listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]),
         unpairReader: vi
           .fn()
           .mockRejectedValueOnce({ code: "server.internal" })
           .mockResolvedValue(undefined),
       }),
     );
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await flush(el);
     qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
     q(el, "[data-test=confirm-unpair]")!.click();
@@ -1106,7 +1164,7 @@ describe("payments-screen remaining edges", () => {
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Pairing…");
   });
 
-  it("sorts the readers by name, by provider display name and by default count", async () => {
+  it("sorts the readers by name, by provider display name and by configured device count", async () => {
     const panels = [fakePanel("zz", "test.acme.name"), fakePanel("aa", "test.zeta.name")];
     const readers: ReaderRow[] = [
       {
@@ -1116,8 +1174,38 @@ describe("payments-screen remaining edges", () => {
         active: true,
         canEnable: true,
         deviceCount: 10,
+        deviceNames: [
+          "Till 1",
+          "Till 2",
+          "Till 3",
+          "Till 4",
+          "Till 5",
+          "Till 6",
+          "Till 7",
+          "Till 8",
+          "Till 9",
+          "Till 10",
+        ],
       },
-      { id: "r-b", provider: "aa", name: "Bar", active: true, canEnable: true, deviceCount: 9 },
+      {
+        id: "r-b",
+        provider: "aa",
+        name: "Bar",
+        active: true,
+        canEnable: true,
+        deviceCount: 9,
+        deviceNames: [
+          "Till 1",
+          "Till 2",
+          "Till 3",
+          "Till 4",
+          "Till 5",
+          "Till 6",
+          "Till 7",
+          "Till 8",
+          "Till 9",
+        ],
+      },
     ];
     const { el } = await mount(
       stubApi({
@@ -1149,7 +1237,9 @@ describe("payments-screen remaining edges", () => {
     const { el, api } = await mount(
       stubApi({ disableReader: vi.fn().mockReturnValueOnce(pending) }),
     );
-    const disable = qCell(el, "[data-test=disable-r-1]")!;
+    qCell(el, "[data-test=disable-r-1]")!.click();
+    await flush(el);
+    const disable = q(el, "[data-test=confirm-disable]")!;
 
     disable.click();
     disable.click();
@@ -1652,6 +1742,7 @@ describe("the readers table at phone width", () => {
       active: true,
       canEnable: true,
       deviceCount: 0,
+      deviceNames: [],
     },
   ];
   it.each(["en-GB", "es-ES"])(
@@ -1749,7 +1840,7 @@ describe("the providers and readers once the server answers again", () => {
   });
 
   it("keeps an armed Disconnect armed through a background refresh", async () => {
-    const api = liveApi();
+    const api = liveApi({ listReaders: vi.fn().mockResolvedValue([]) });
     const { el } = await mount(api);
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
@@ -1773,6 +1864,7 @@ describe("the providers and readers once the server answers again", () => {
       PROVIDERS[1]!,
     ];
     const api = liveApi({
+      listReaders: vi.fn().mockResolvedValue([]),
       listPaymentProviders: vi
         .fn()
         .mockResolvedValueOnce(PROVIDERS)
@@ -1794,9 +1886,9 @@ describe("the providers and readers once the server answers again", () => {
     const api = liveApi({
       listReaders: vi
         .fn()
-        .mockResolvedValueOnce(READERS)
+        .mockResolvedValueOnce([{ ...READERS[0]!, provider: "other" }])
         .mockRejectedValueOnce(down)
-        .mockResolvedValue(READERS),
+        .mockResolvedValue([{ ...READERS[0]!, provider: "other" }]),
       disconnectPaymentProvider: vi.fn().mockRejectedValue(down),
     });
     const { el } = await mount(api);

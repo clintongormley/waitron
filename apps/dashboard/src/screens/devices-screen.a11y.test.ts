@@ -254,6 +254,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
         active: true,
         canEnable: true,
         deviceCount: 1,
+        deviceNames: ["Front till"],
       },
     ]),
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),

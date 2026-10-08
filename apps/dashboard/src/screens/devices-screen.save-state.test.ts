@@ -118,8 +118,17 @@ const readers: ReaderRow[] = [
     active: true,
     canEnable: true,
     deviceCount: 1,
+    deviceNames: ["Front till"],
   },
-  { id: "r2", provider: "acme", name: "Bar", active: true, canEnable: true, deviceCount: 0 },
+  {
+    id: "r2",
+    provider: "acme",
+    name: "Bar",
+    active: true,
+    canEnable: true,
+    deviceCount: 0,
+    deviceNames: [],
+  },
 ];
 
 const base: DeviceRow = {

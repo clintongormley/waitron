@@ -26,36 +26,6 @@ their full text.
   changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
   taken through a Stripe webhook.
 
-## A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable
-
-- **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
-  2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/payments-screen.ts`.
-  1. **Providers and Readers become two tabs**, laid out like Print agents and Printers. The screen
-     opens on Readers when the venue has at least one reader, and on Providers when it has none
-     (read as "added to Waitron", online or not — confirm with the owner if that matters).
-  2. **"Default for devices" becomes "In use by", listing device names.** The column today counts
-     only devices that picked the reader themselves (`device_card_readers`,
-     `apps/server/src/payments-api.ts`); a device left on "Use default" that gets the reader from
-     its profile (`device_profile_card_readers`) is not counted, and the header reads as if it were.
-     List every device that would take a card on this reader, both ways; a long list is shortened
-     ("Bar till, Terrace till +3").
-  3. **Disconnect asks the way other screens do, and checks first.** It shows "Tap again to
-     disconnect" (`payments.disconnect_confirm`), unlike the other screens' confirm steps (the
-     Devices screen's button, for one, turns into "Disable this device?"). The refusal "Disable
-     this provider's card readers before disconnecting it" (`payment.provider_in_use`) comes only
-     after confirming, at the top of the page, moving the page down. Check for active readers when
-     Disconnect is pressed, skip the confirm when it would be refused, and show the refusal as a
-     floating message beside the button, so nothing moves. The bucket copy's Turn off says "Tap
-     again to turn off" too (`stream.turn_off_confirm`,
-     `apps/dashboard/src/screens/stream-settings-panel.ts`); give it the same confirm (owner,
-     2026-10-08).
-  4. **One Disable instead of Disable plus "Unpair from SumUp".** Unpairing already switches the
-     reader off and can never be undone here (the unpair route sets `active: false`, and an
-     unpaired reader loses Enable, `canEnable`). Disable opens a confirm with an "Also unpair from
-     {provider}" tick box and its can't-be-undone warning, shown only where the provider can unpair
-     (`canUnpair`). A reader already disabled but still paired keeps an "Unpair from {provider}"
-     item, or it could never be unpaired.
-
 ## The card refund path records only after the provider call, with a fresh key each time
 
 - **The card refund path records only after the provider call, with a fresh key each time.**

@@ -8,6 +8,7 @@ import {
   draftScopeFor,
   leaveCoordinatorFor,
   saveActionState,
+  UrlStateController,
   type DataTableColumn,
   type WtDialog,
   type DraftScope,
@@ -21,6 +22,8 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-tabs.js";
+import "@waitron/ui/src/components/wt-toast.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
 import {
@@ -43,6 +46,7 @@ import type {
   StuckBillPaymentRow,
   StuckBillRefundRow,
 } from "../api/client.js";
+import { dashboardPath } from "../navigation.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -218,6 +222,16 @@ export class PaymentsScreen extends LitElement {
         display: flex;
         gap: var(--wt-space-2);
       }
+      .disconnect-action {
+        position: relative;
+      }
+      .disconnect-action wt-toast {
+        position: absolute;
+        inset-block-start: 100%;
+        inset-inline-end: 0;
+        width: min(300px, calc(100vw - 2 * var(--wt-space-4)));
+        z-index: 4;
+      }
       .panel-slot {
         margin-top: var(--wt-space-3);
       }
@@ -240,6 +254,14 @@ export class PaymentsScreen extends LitElement {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: var(--wt-space-2) var(--wt-space-4);
+      }
+      .unpair-choice {
+        display: flex;
+        align-items: baseline;
+        gap: var(--wt-space-2);
+      }
+      .unpair-choice input {
+        accent-color: var(--wt-color-primary);
       }
       dd {
         margin: 0;
@@ -314,6 +336,24 @@ export class PaymentsScreen extends LitElement {
 
   @state() private providers?: PaymentProviderRow[];
   @state() private readers?: ReaderRow[];
+  @state() private view: "providers" | "readers" | null = null;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "payments") return;
+      const view = this.#url.read("view");
+      this.view =
+        view === "providers" || view === "readers"
+          ? view
+          : this.readers === undefined
+            ? null
+            : this.readers.length > 0
+              ? "readers"
+              : "providers";
+      if (this.view) this.#url.write({ view: this.view }, true);
+    },
+    dashboardPath,
+  );
   @state() private holders = new Map<string, ReaderHolderRow>();
   /** The reader whose equipment label is open. */
   @state() private labelReader: ReaderRow | null = null;
@@ -325,6 +365,7 @@ export class PaymentsScreen extends LitElement {
   @state() private connectingId: string | null = null;
   @state() private addingId: string | null = null;
   @state() private armedDisconnectId: string | null = null;
+  @state() private refusedDisconnectId: string | null = null;
   @state() private discoveringId: string | null = null;
   @state() private available?: AvailableReader[];
   @state() private listingFailed = false;
@@ -332,7 +373,11 @@ export class PaymentsScreen extends LitElement {
   /** Discovered readers whose Add has been pressed; their names are checked from then on. */
   @state() private attemptedNames = new Set<string>();
   @state() private readerFilter = "active";
-  @state() private editor: { reader: ReaderRow; mode: "edit" | "details" | "unpair" } | null = null;
+  @state() private editor: {
+    reader: ReaderRow;
+    mode: "edit" | "details" | "disable" | "unpair";
+  } | null = null;
+  @state() private alsoUnpair = false;
   @state() private editName = "";
   @state() private editAttempted = false;
   @state() private dialogError: string | null = null;
@@ -510,7 +555,6 @@ export class PaymentsScreen extends LitElement {
     return key ? tRaw(key) : providerId;
   }
 
-  /** Disarms the two-tap Disconnect, since the armed row may no longer exist. */
   async #load(): Promise<void> {
     if (this.#readErrorShown) this.#showError(null);
     this.armedDisconnectId = null;
@@ -530,6 +574,11 @@ export class PaymentsScreen extends LitElement {
       this.#listQueries
         .watch("listReaders", [], (readers) => {
           this.readers = readers;
+          if (this.view === null) {
+            this.view = readers.length > 0 ? "readers" : "providers";
+            if (this.#url.read("dashboard") === "payments")
+              this.#url.write({ view: this.view }, true);
+          }
           // A status may ask the provider itself, so a background refresh asks again only when the
           // set of active readers changed.
           const ids = JSON.stringify(
@@ -606,11 +655,24 @@ export class PaymentsScreen extends LitElement {
     this.addingId = null;
   }
 
-  /** Disconnect deletes the stored credential, so it takes a second, confirming tap. */
   #onDisconnect(providerId: string): void {
+    if (this.busy) return;
+    this.refusedDisconnectId = null;
+    if (this.readers?.some((reader) => reader.provider === providerId && reader.active)) {
+      this.armedDisconnectId = null;
+      this.refusedDisconnectId = providerId;
+      return;
+    }
     if (this.armedDisconnectId === providerId) {
       this.armedDisconnectId = null;
-      void this.#mutate(() => this.api.disconnectPaymentProvider(providerId));
+      void this.#mutate(async () => {
+        try {
+          await this.api.disconnectPaymentProvider(providerId);
+        } catch (error) {
+          if (codeOf(error) !== "payment.provider_in_use") throw error;
+          this.refusedDisconnectId = providerId;
+        }
+      });
       return;
     }
     this.armedDisconnectId = providerId;
@@ -731,7 +793,11 @@ export class PaymentsScreen extends LitElement {
     }
   }
 
-  #openEditor(reader: ReaderRow, mode: "edit" | "details" | "unpair", event: Event): void {
+  #openEditor(
+    reader: ReaderRow,
+    mode: "edit" | "details" | "disable" | "unpair",
+    event: Event,
+  ): void {
     const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
     this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
     this.#editScope?.dispose();
@@ -739,6 +805,7 @@ export class PaymentsScreen extends LitElement {
     this.#readerOperation = undefined;
     this.busy = false;
     this.editor = { reader, mode };
+    this.alsoUnpair = false;
     this.editName = reader.name;
     if (mode === "edit") {
       const { coordinator, scope } = draftScopeFor(this, {
@@ -792,9 +859,17 @@ export class PaymentsScreen extends LitElement {
     this.busy = true;
     try {
       if (mode === "edit") await this.api.renameReader(reader.id, name);
+      else if (
+        mode === "disable" &&
+        !(
+          this.alsoUnpair &&
+          this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
+        )
+      )
+        await this.api.disableReader(reader.id);
       else await this.api.unpairReader(reader.id);
       if (!this.isConnected || this.editor !== editor) {
-        if (this.isConnected && mode === "unpair") await this.#load();
+        if (this.isConnected && mode !== "edit") await this.#load();
         return;
       }
       scope?.commit(name);
@@ -1432,16 +1507,30 @@ export class PaymentsScreen extends LitElement {
                     @click=${() => void this.#onAddReader(provider.providerId)}
                     >${t("payments.add_reader")}</wt-button
                   >
-                  <wt-button
-                    variant="ghost"
-                    data-test="disconnect-${provider.providerId}"
-                    @click=${() => this.#onDisconnect(provider.providerId)}
-                    >${
-                      this.armedDisconnectId === provider.providerId
-                        ? t("payments.disconnect_confirm")
-                        : t("payments.disconnect")
-                    }</wt-button
-                  >
+                  <span class="disconnect-action">
+                    <wt-button
+                      variant=${this.armedDisconnectId === provider.providerId ? "danger" : "ghost"}
+                      data-armed=${this.armedDisconnectId === provider.providerId ? "true" : nothing}
+                      ?disabled=${this.busy}
+                      data-test="disconnect-${provider.providerId}"
+                      @click=${() => this.#onDisconnect(provider.providerId)}
+                      >${
+                        this.armedDisconnectId === provider.providerId
+                          ? t("payments.disconnect_confirm")
+                          : t("payments.disconnect")
+                      }</wt-button
+                    >
+                    <wt-toast
+                      data-test="disconnect-notice-${provider.providerId}"
+                      tone="error"
+                      .open=${this.refusedDisconnectId === provider.providerId}
+                      .message=${codeMessage("payment.provider_in_use")}
+                      .closeLabel=${t("action.close")}
+                      @wt-close=${() => {
+                        this.refusedDisconnectId = null;
+                      }}
+                    ></wt-toast>
+                  </span>
                 `
               : html`<wt-button
                   variant="secondary"
@@ -1535,9 +1624,11 @@ export class PaymentsScreen extends LitElement {
       {
         key: "deviceCount",
         choosable: "shown",
-        label: t("payments.reader_col_default_count"),
-        align: "end",
-        cell: (reader) => String(reader.deviceCount),
+        label: t("payments.reader_col_in_use_by"),
+        cell: (reader) =>
+          html`<span data-test=${`reader-use-${reader.id}`} title=${reader.deviceNames.join(", ")}
+            >${reader.deviceNames.slice(0, 2).join(", ")}${reader.deviceNames.length > 2 ? ` +${reader.deviceNames.length - 2}` : ""}</span
+          >`,
         sortValue: (reader) => reader.deviceCount,
       },
       {
@@ -1580,13 +1671,15 @@ export class PaymentsScreen extends LitElement {
                     align="start"
                     data-test=${`${reader.active ? "disable" : "enable"}-${reader.id}`}
                     ?disabled=${this.busy}
-                    @click=${() => void this.#mutate(() => (reader.active ? this.api.disableReader(reader.id) : this.api.enableReader(reader.id)))}
+                    @click=${(event: Event) => (reader.active ? this.#openEditor(reader, "disable", event) : void this.#mutate(() => this.api.enableReader(reader.id)))}
                   >
                     ${t(reader.active ? "payments.disable" : "payments.enable")}</wt-button
                   >`
                 : nothing
             }
             ${
+              !reader.active &&
+              reader.canEnable &&
               this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
                 ? html` <wt-button
                     variant="secondary"
@@ -1714,7 +1807,9 @@ export class PaymentsScreen extends LitElement {
         ? t("payments.edit_reader")
         : mode === "unpair"
           ? unpair
-          : t("payments.details");
+          : mode === "disable"
+            ? t("payments.disable")
+            : t("payments.details");
     const status = this.statuses.get(reader.id);
     const details =
       status && status !== "error" && status !== "connection.timed_out"
@@ -1731,7 +1826,7 @@ export class PaymentsScreen extends LitElement {
     const save =
       mode === "edit"
         ? saveActionState(this.#editScope)
-        : { variant: "secondary" as const, unchanged: false };
+        : { variant: "danger" as const, unchanged: false };
     const bottom = [
       ...(this.dialogError ? [codeMessage(this.dialogError)] : []),
       ...(invalid ? [t("form.fix_fields")] : []),
@@ -1769,24 +1864,44 @@ export class PaymentsScreen extends LitElement {
                 this.#editScope?.changed();
               }}
             ></wt-input>`
-          : mode === "unpair"
-            ? html`<p>${t("payments.unpair_warning")}</p>`
-            : html`<p>${this.#statusText(reader)}</p>
-                <p data-test="reader-holder">
-                  ${t("payments.reader_holder")}:
-                  ${holderText(this.holders.get(reader.id)?.holder ?? null)}
-                </p>
+          : mode === "disable"
+            ? html`<p>${t("payments.disable_confirm")}</p>
                 ${
-                  details.length
-                    ? html`<dl class="reader-details">
-                        ${details.map(
-                          ([label, value]) =>
-                            html`<dt>${label}</dt>
-                              <dd>${value}</dd>`,
-                        )}
-                      </dl>`
-                    : html`<p>${t("payments.details_empty")}</p>`
+                  this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
+                    ? html`<label class="unpair-choice">
+                          <input
+                            type="checkbox"
+                            name="also-unpair"
+                            .checked=${this.alsoUnpair}
+                            ?disabled=${this.busy}
+                            @change=${(event: Event) => {
+                              if (!this.isConnected || this.editor !== editor || this.busy) return;
+                              this.alsoUnpair = (event.target as HTMLInputElement).checked;
+                            }}
+                          />
+                          ${t("payments.also_unpair").replace("{provider}", this.#providerName(reader.provider))}
+                        </label>
+                        <p>${t("payments.unpair_warning")}</p>`
+                    : nothing
                 }`
+            : mode === "unpair"
+              ? html`<p>${t("payments.unpair_warning")}</p>`
+              : html`<p>${this.#statusText(reader)}</p>
+                  <p data-test="reader-holder">
+                    ${t("payments.reader_holder")}:
+                    ${holderText(this.holders.get(reader.id)?.holder ?? null)}
+                  </p>
+                  ${
+                    details.length
+                      ? html`<dl class="reader-details">
+                          ${details.map(
+                            ([label, value]) =>
+                              html`<dt>${label}</dt>
+                                <dd>${value}</dd>`,
+                          )}
+                        </dl>`
+                      : html`<p>${t("payments.details_empty")}</p>`
+                  }`
       }
       <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
@@ -1801,11 +1916,11 @@ export class PaymentsScreen extends LitElement {
           mode === "details"
             ? nothing
             : html`<wt-button
-                data-test=${mode === "edit" ? "save-reader" : "confirm-unpair"}
+                data-test=${mode === "edit" ? "save-reader" : mode === "disable" ? "confirm-disable" : "confirm-unpair"}
                 variant=${save.variant}
                 ?disabled=${this.busy || invalid || save.unchanged}
                 @click=${() => void this.#saveEditor()}
-                >${mode === "edit" ? t("action.save") : unpair}</wt-button
+                >${mode === "edit" ? t("action.save") : mode === "disable" ? t("payments.disable") : unpair}</wt-button
               >`
         }
       </wt-form-actions>
@@ -1828,61 +1943,77 @@ export class PaymentsScreen extends LitElement {
           : nothing
       }
       ${this.#renderStuck()} ${this.#renderBillRecovery()}
-
-      <h2>${t("payments.providers_heading")}</h2>
-      ${
-        this.providers === undefined
-          ? nothing
-          : this.providers.length === 0
-            ? html`<p>${t("payments.no_providers")}</p>`
-            : html`<ul class="providers">
-                ${this.providers.map((provider) => this.#renderProvider(provider))}
-              </ul>`
-      }
-
-      <h2>${t("payments.readers_heading")}</h2>
-      <div class="reader-tools">
-        <wt-combobox
-          name="reader-status-filter"
-          label=${t("payments.reader_col_status")}
-          search="auto"
-          .options=${[
-            { value: "active", label: t("payments.filter_active") },
-            { value: "disabled", label: t("payments.filter_disabled") },
-            { value: "all", label: t("payments.filter_all") },
-          ]}
-          .value=${this.readerFilter}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.readerFilter = event.detail.value;
-          }}
-        ></wt-combobox>
-        <wt-button
-          variant="secondary"
-          data-test="refresh-readers"
-          ?disabled=${this.refreshing || this.busy}
-          @click=${() => void this.#loadStatuses(this.readers ?? [])}
-          >${t("payments.refresh")}</wt-button
-        >
-      </div>
-      <wt-data-table
-        noMatchesMessage=${tableNoMatches()}
-        aria-label=${t("payments.readers_heading")}
-        viewKey="waitron.payments.readers.table"
-        customiseColumnsLabel=${t("table.customise_columns")}
-        customiseLabel=${t("table.customise")}
-        restoreColumnsLabel=${t("table.restore_columns")}
-        doneLabel=${t("table.done")}
-        moveColumnLabel=${t("table.move_column")}
-        showColumnLabel=${t("table.show_column")}
-        hideColumnLabel=${t("table.hide_column")}
-        alwaysShownColumnLabel=${t("table.column_always_shown")}
-        lastShownColumnLabel=${t("table.column_last_shown")}
-        columnPositionLabel=${t("table.column_position")}
-        .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
-        .columns=${this.#readerColumns()}
-        .rowKey=${(reader: ReaderRow) => reader.id}
-        .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
-      ></wt-data-table>
+      <wt-tabs
+        label=${t("payments.title")}
+        .value=${this.view ?? "providers"}
+        .items=${[
+          { key: "providers", label: t("payments.providers_heading") },
+          { key: "readers", label: t("payments.readers_heading") },
+        ]}
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+          if (event.target !== event.currentTarget) return;
+          const view = event.detail.value;
+          if (view !== "providers" && view !== "readers") return;
+          this.view = view;
+          this.#url.write({ dashboard: "payments", view });
+        }}
+      >
+        <section slot="providers">
+          ${
+            this.providers === undefined
+              ? nothing
+              : this.providers.length === 0
+                ? html`<p>${t("payments.no_providers")}</p>`
+                : html`<ul class="providers">
+                    ${this.providers.map((provider) => this.#renderProvider(provider))}
+                  </ul>`
+          }
+        </section>
+        <section slot="readers">
+          <div class="reader-tools">
+            <wt-combobox
+              name="reader-status-filter"
+              label=${t("payments.reader_col_status")}
+              search="auto"
+              .options=${[
+                { value: "active", label: t("payments.filter_active") },
+                { value: "disabled", label: t("payments.filter_disabled") },
+                { value: "all", label: t("payments.filter_all") },
+              ]}
+              .value=${this.readerFilter}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                this.readerFilter = event.detail.value;
+              }}
+            ></wt-combobox>
+            <wt-button
+              variant="secondary"
+              data-test="refresh-readers"
+              ?disabled=${this.refreshing || this.busy}
+              @click=${() => void this.#loadStatuses(this.readers ?? [])}
+              >${t("payments.refresh")}</wt-button
+            >
+          </div>
+          <wt-data-table
+            noMatchesMessage=${tableNoMatches()}
+            aria-label=${t("payments.readers_heading")}
+            viewKey="waitron.payments.readers.table"
+            customiseColumnsLabel=${t("table.customise_columns")}
+            customiseLabel=${t("table.customise")}
+            restoreColumnsLabel=${t("table.restore_columns")}
+            doneLabel=${t("table.done")}
+            moveColumnLabel=${t("table.move_column")}
+            showColumnLabel=${t("table.show_column")}
+            hideColumnLabel=${t("table.hide_column")}
+            alwaysShownColumnLabel=${t("table.column_always_shown")}
+            lastShownColumnLabel=${t("table.column_last_shown")}
+            columnPositionLabel=${t("table.column_position")}
+            .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
+            .columns=${this.#readerColumns()}
+            .rowKey=${(reader: ReaderRow) => reader.id}
+            .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
+          ></wt-data-table>
+        </section>
+      </wt-tabs>
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderResolveDialog()}
       ${keyed(this.billAction, this.#renderBillDialog())}

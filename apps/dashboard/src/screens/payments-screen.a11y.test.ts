@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { registerCatalogue } from "@waitron/dashboard-kit";
 import type {
@@ -10,9 +11,11 @@ import type {
 } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
+import { setLocale } from "../i18n/t.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("en"));
 
 registerCatalogue({
   en: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
@@ -51,8 +54,17 @@ const READERS: ReaderRow[] = [
     active: true,
     canEnable: true,
     deviceCount: 2,
+    deviceNames: ["Bar till", "Terrace till"],
   },
-  { id: "r-2", provider: "acme", name: "Terrace", active: false, canEnable: true, deviceCount: 0 },
+  {
+    id: "r-2",
+    provider: "acme",
+    name: "Terrace",
+    active: false,
+    canEnable: true,
+    deviceCount: 0,
+    deviceNames: [],
+  },
 ];
 
 const STUCK: StuckPaymentRow[] = [
@@ -111,6 +123,30 @@ async function flush(el: PaymentsScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (theme) => {
+  it.each([
+    ["en", "providers"],
+    ["en", "readers"],
+    ["es-ES", "providers"],
+    ["es-ES", "readers"],
+  ])("renders the %s %s tab accessibly", async (locale, view) => {
+    setLocale(locale);
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      { api: stubApi(), panels: PANELS },
+      theme,
+    );
+    await flush(el);
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await tabs.updateComplete;
+    tabs.shadowRoot!.querySelector<HTMLElement>(`[data-key=${view}]`)!.click();
+    await flush(el);
+    await tabs.updateComplete;
+    expect(
+      tabs.shadowRoot!.querySelector<HTMLElement>("[role=tab][aria-selected=true]")?.dataset.key,
+    ).toBe(view);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the providers and readers accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
       "dashboard-payments-screen",
@@ -126,19 +162,30 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it.each(["discovery", "edit", "details", "unpair"])(
+  it.each(["discovery", "edit", "details", "disable", "unpair"])(
     "renders the %s dialog accessibly",
     async (mode) => {
       const { el, host } = await mountWidget<PaymentsScreen>(
         "dashboard-payments-screen",
         {
-          api: stubApi(),
+          api: stubApi(
+            mode === "unpair"
+              ? { listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }
+              : {},
+          ),
           request: vi.fn() as unknown as PaymentsScreen["request"],
           panels: PANELS,
         },
         theme,
       );
       await flush(el);
+      if (mode === "unpair") {
+        await chooseOption(
+          el.shadowRoot!.querySelector("wt-combobox[name=reader-status-filter]")!,
+          "disabled",
+        );
+        await flush(el);
+      }
       const root =
         mode === "discovery"
           ? el.shadowRoot!

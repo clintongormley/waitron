@@ -270,6 +270,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
               active: true,
               canEnable: true,
               deviceCount: 0,
+              deviceNames: [],
             },
             {
               id: "r2",
@@ -278,6 +279,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
               active: true,
               canEnable: true,
               deviceCount: 0,
+              deviceNames: [],
             },
           ]),
           getProfileReaders: vi

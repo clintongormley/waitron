@@ -21,6 +21,7 @@ import {
   cardReaderHolders,
   cardReaders,
   deviceProfileCardReaders,
+  deviceCardReaders,
   payments,
   type CardProviderContribution,
 } from "@waitron/payments";
@@ -663,6 +664,125 @@ describe("reader holders", () => {
 });
 
 describe("readers — lifecycle and screens", () => {
+  it("lists configured device names from choices and profile defaults, with choices taking precedence", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const first = randomUUID();
+    const second = randomUUID();
+    const unused = randomUUID();
+    await suite.db.insert(cardReaders).values([
+      { id: first, provider: "stripe", providerRef: nextRef(), name: "Default reader" },
+      { id: second, provider: "stripe", providerRef: nextRef(), name: "Chosen reader" },
+      { id: unused, provider: "stripe", providerRef: nextRef(), name: "Unused reader" },
+    ]);
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Shared tills", formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    await suite.db.insert(deviceProfileCardReaders).values([
+      { deviceProfileId: profile!.id, readerId: first, position: 0, isDefault: true },
+      { deviceProfileId: profile!.id, readerId: second, position: 1 },
+      { deviceProfileId: profile!.id, readerId: unused, position: 2 },
+    ]);
+    const rows = await suite.db
+      .insert(devices)
+      .values([
+        {
+          locationId: venue.locationId,
+          deviceProfileId: profile!.id,
+          label: "Terrace till",
+          tokenHash: "a",
+        },
+        {
+          locationId: venue.locationId,
+          deviceProfileId: profile!.id,
+          label: "Bar till",
+          tokenHash: "b",
+        },
+        {
+          locationId: venue.locationId,
+          deviceProfileId: profile!.id,
+          label: "Own choice",
+          tokenHash: "c",
+        },
+        {
+          locationId: venue.locationId,
+          deviceProfileId: profile!.id,
+          label: "Disabled till",
+          tokenHash: "d",
+          active: false,
+        },
+      ])
+      .returning({ id: devices.id, label: devices.label });
+    await suite.db.insert(deviceCardReaders).values({
+      deviceId: rows.find((row) => row.label === "Own choice")!.id,
+      readerId: second,
+    });
+    const response = await send(app, "GET", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+    });
+    expect(response.status).toBe(200);
+    const listed = (await response.json()) as {
+      id: string;
+      deviceCount: number;
+      deviceNames: string[];
+    }[];
+    expect(listed.find((row) => row.id === first)).toMatchObject({
+      deviceCount: 2,
+      deviceNames: ["Bar till", "Terrace till"],
+    });
+    expect(listed.find((row) => row.id === second)).toMatchObject({
+      deviceCount: 1,
+      deviceNames: ["Own choice"],
+    });
+    expect(listed.find((row) => row.id === unused)).toMatchObject({
+      deviceCount: 0,
+      deviceNames: [],
+    });
+  });
+
+  it("does not repeat a device whose explicit reader is also its profile default", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const readerId = randomUUID();
+    await suite.db
+      .insert(cardReaders)
+      .values({ id: readerId, provider: "stripe", providerRef: nextRef(), name: "One reader" });
+    const deviceId = await seedDevice(venue);
+    await suite.db.update(devices).set({ label: "Counter" }).where(eq(devices.id, deviceId));
+    await listOnProfile(deviceId, readerId);
+    await suite.db.update(deviceProfileCardReaders).set({ isDefault: true });
+    await suite.db.insert(deviceCardReaders).values({ deviceId, readerId });
+    const response = await send(app, "GET", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        id: readerId,
+        provider: "stripe",
+        name: "One reader",
+        active: true,
+        canEnable: true,
+        deviceCount: 1,
+        deviceNames: ["Counter"],
+      },
+    ]);
+  });
+
+  it("refuses the reader-name list without a manager's permission", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    for (const [cookie, status, code] of [
+      [undefined, 401, "management_session.required"],
+      [venue.staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(app, "GET", "/management-api/payments/readers", { cookie });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+  });
+
   it("refuses adding a reader for a provider that is not connected", async () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
@@ -1104,7 +1224,15 @@ describe("reader adoption and local management", () => {
     });
     expect(listings).toBe(0);
     expect(await (await send(app, "GET", `${base}/readers`, opts)).json()).toEqual([
-      { id, provider: "stripe", name: "Barra 1", active: false, canEnable: false, deviceCount: 0 },
+      {
+        id,
+        provider: "stripe",
+        name: "Barra 1",
+        active: false,
+        canEnable: false,
+        deviceCount: 0,
+        deviceNames: [],
+      },
     ]);
     paired = true;
     const adopted = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
@@ -1113,7 +1241,15 @@ describe("reader adoption and local management", () => {
     expect((await send(app, "POST", `${base}/readers/${id}/enable`, opts)).status).toBe(204);
     expect(listings).toBe(1);
     expect(await (await send(app, "GET", `${base}/readers`, opts)).json()).toEqual([
-      { id, provider: "stripe", name: "Counter", active: true, canEnable: true, deviceCount: 0 },
+      {
+        id,
+        provider: "stripe",
+        name: "Counter",
+        active: true,
+        canEnable: true,
+        deviceCount: 0,
+        deviceNames: [],
+      },
     ]);
   });
 

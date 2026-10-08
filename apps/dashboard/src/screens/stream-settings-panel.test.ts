@@ -1091,14 +1091,24 @@ describe("stream-settings-panel: once set up", () => {
     expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
   });
 
-  it("turns off only on a second, confirming tap", async () => {
-    const api = stubApi({}, ON);
-    const { el } = await mount(api);
-    await press(el, "turn-off");
-    expect(api.turnOffStream).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=turn-off]")).toBe(t("stream.turn_off_confirm"));
-    await press(el, "turn-off");
-    expect(api.turnOffStream).toHaveBeenCalledOnce();
+  it.each([
+    ["en", "Turn off this copy?"],
+    ["es-ES", "¿Desactivar esta copia?"],
+  ])("turns off only on a second, confirming tap (%s)", async (locale, wording) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const api = stubApi({}, ON);
+      const { el } = await mount(api);
+      await press(el, "turn-off");
+      expect(api.turnOffStream).not.toHaveBeenCalled();
+      expect(text(el, "[data-test=turn-off]")).toBe(wording);
+      expect(q(el, "[data-test=turn-off]")?.getAttribute("variant")).toBe("danger");
+      await press(el, "turn-off");
+      expect(api.turnOffStream).toHaveBeenCalledOnce();
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("forgets a first Turn off tap when the owner goes to change the bucket instead", async () => {

@@ -534,8 +534,6 @@ export class StreamSettingsPanel extends LitElement {
     }
   }
 
-  /** Turning off deletes the stored bucket settings, secret included, so it takes a second,
-   * confirming tap. */
   async #turnOff(): Promise<void> {
     if (this.busy) return;
     const confirmed = this.turnOffArmed;
@@ -691,7 +689,8 @@ export class StreamSettingsPanel extends LitElement {
                 >${t("stream.change")}</wt-button
               >
               <wt-button
-                variant="ghost"
+                variant=${this.turnOffArmed ? "danger" : "ghost"}
+                data-armed=${this.turnOffArmed ? "true" : nothing}
                 data-test="turn-off"
                 ?disabled=${this.busy}
                 @click=${() => void this.#turnOff()}
