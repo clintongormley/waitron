@@ -22,6 +22,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
@@ -443,6 +444,9 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private canvases: Canvas[] = [];
 
   @state() private printers: Printer[] = [];
+  @state() private printersState: "loading" | "ready" | "failed" = "loading";
+  /** Kept so opening the editor, which clears the screen's message, still says why no printer is listed. */
+  #printersError: unknown = undefined;
 
   @state() private stations: Station[] = [];
 
@@ -595,9 +599,16 @@ export class DeviceProfilesScreen extends LitElement {
         this.#queries.watch("listCanvases", [], (value) => {
           this.canvases = value;
         }),
-        this.#queries.watch("listPrinters", [], (value) => {
-          this.printers = value;
-        }),
+        this.#queries
+          .watch("listPrinters", [], (value) => {
+            this.printers = value;
+            this.printersState = "ready";
+          })
+          .catch((error: unknown) => {
+            this.printersState = "failed";
+            this.#printersError = error;
+            throw error;
+          }),
         this.#queries.watch("listStations", [], (value) => {
           this.stations = value;
         }),
@@ -614,6 +625,11 @@ export class DeviceProfilesScreen extends LitElement {
     } catch (error) {
       this.#showReadError(error);
     }
+  }
+
+  #clearErrorOnOpen(): void {
+    this.#showError(null);
+    if (this.printersState === "failed") this.#showReadError(this.#printersError);
   }
 
   #showError(code: string | null, fromRead = false): void {
@@ -914,7 +930,7 @@ export class DeviceProfilesScreen extends LitElement {
    * zones are read when the editor opens rather than kept live: the editor is the only reader. */
   #openCreate(): void {
     this.#clearDraft();
-    this.#showError(null);
+    this.#clearErrorOnOpen();
     this.mode = "editor";
     this.#registerDraft();
     const baseline = this.#draftValue();
@@ -945,7 +961,7 @@ export class DeviceProfilesScreen extends LitElement {
   /** Fetches the profile and its station and watcher lists fresh, rather than reusing rows a read
    * may not have delivered yet. */
   async #openEditor(id: string): Promise<void> {
-    this.#showError(null);
+    this.#clearErrorOnOpen();
     const opened = ++this.#opened;
     try {
       const [profile, kitchenLists, choices] = await Promise.all([
@@ -1667,7 +1683,12 @@ export class DeviceProfilesScreen extends LitElement {
       ></wt-combobox>`;
   }
 
-  #renderPrinterLists(errors: FieldErrors): TemplateResult {
+  #renderPrinterLists(errors: FieldErrors): TemplateResult | typeof nothing {
+    if (this.printersState === "failed") return nothing;
+    if (this.printersState === "loading")
+      return html`<p class="field" role="status" data-test="printers-loading">
+        <wt-spinner decorative size="sm"></wt-spinner> ${t("device_profiles.printers_loading")}
+      </p>`;
     const lists = PRINTER_LISTS.map((list) => ({ list, choices: this.#printerChoices(list.key) }));
     if (lists.every(({ choices }) => choices.length === 0))
       return html`<p class="field" data-test="no-printers">${t("device_profiles.no_printers")}</p>`;

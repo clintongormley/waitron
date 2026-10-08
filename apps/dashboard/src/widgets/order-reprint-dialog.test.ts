@@ -237,3 +237,134 @@ it("keeps Print blue while its copy is being sent, even if the printers vanish m
   finish();
   await vi.waitFor(() => expect(print.loading).toBe(false));
 });
+
+const texts = {
+  "en-GB": {
+    loading: "Loading printers…",
+    none: "There is no active printer to print on",
+    retry: "Try again",
+  },
+  "es-ES": {
+    loading: "Cargando impresoras…",
+    none: "No hay ninguna impresora activa",
+    retry: "Reintentar",
+  },
+} as const;
+const locales = Object.keys(texts) as (keyof typeof texts)[];
+
+const loadingLine = (el: OrderReprintDialog) =>
+  el.shadowRoot!.querySelector("[data-test=printers-loading]");
+const retryButton = (el: OrderReprintDialog) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=printers-retry]");
+
+it.each(locales)(
+  "says the printers are loading, not that there is none, while they load (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const api = {
+      getOrderPrinters: vi.fn().mockReturnValue(new Promise(() => undefined)),
+      liveData: new LiveData(),
+    } as unknown as DashboardApi;
+    const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+      api,
+      row,
+    });
+    await vi.waitFor(() => expect(api.getOrderPrinters).toHaveBeenCalled());
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).not.toContain(texts[locale].none);
+    expect(loadingLine(el)?.getAttribute("role")).toBe("status");
+    expect(loadingLine(el)?.textContent?.trim()).toBe(texts[locale].loading);
+    expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+    expect(printButton(el).variant).toBe("secondary");
+  },
+);
+
+it.each(locales)("lists the loaded printers with no message beside them (%s)", async (locale) => {
+  setLocale(locale);
+  const api = {
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
+  );
+  await el.updateComplete;
+  expect(loadingLine(el)).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain(texts[locale].none);
+  expect(printButton(el).getAttribute("disabled")).toBeNull();
+});
+
+it.each(locales)(
+  "says there is no active printer once an empty list arrives (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const api = {
+      getOrderPrinters: vi.fn().mockResolvedValue([]),
+      liveData: new LiveData(),
+    } as unknown as DashboardApi;
+    const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+      api,
+      row,
+    });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(texts[locale].none));
+    expect(loadingLine(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull();
+    expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+  },
+);
+
+it.each(locales)(
+  "shows a failed printer read as a load failure with a retry that reads again (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const getOrderPrinters = vi.fn().mockRejectedValue({ code: "connection.failed" });
+    const api = { getOrderPrinters, liveData: new LiveData() } as unknown as DashboardApi;
+    const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+      api,
+      row,
+    });
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent;
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
+    await vi.waitFor(() => expect(retryButton(el)?.textContent?.trim()).toBe(texts[locale].retry));
+    expect(el.shadowRoot!.textContent).not.toContain(texts[locale].none);
+    expect(loadingLine(el)).toBeNull();
+    expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+    getOrderPrinters.mockResolvedValue([{ id: "printer-1", name: "Barra" }]);
+    retryButton(el)!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
+    );
+    expect(getOrderPrinters).toHaveBeenCalledTimes(2);
+    await el.updateComplete;
+    expect(alert()).toBeUndefined();
+    expect(retryButton(el)).toBeNull();
+  },
+);
+
+it("keeps a refused print's message when a later printer read fails", async () => {
+  setLocale("en-GB");
+  const liveData = new LiveData();
+  const getOrderPrinters = vi
+    .fn()
+    .mockResolvedValueOnce([{ id: "printer-1", name: "Barra" }])
+    .mockRejectedValue({ code: "connection.failed" });
+  const reprintOrder = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
+  const api = { getOrderPrinters, reprintOrder, liveData } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row,
+  });
+  const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent;
+  await vi.waitFor(() => expect(printButton(el).getAttribute("disabled")).toBeNull());
+  printButton(el).click();
+  await vi.waitFor(() => expect(alert()).toBe(codeMessage("authorization.not_permitted")));
+  liveData.refresh();
+  await vi.waitFor(() => expect(getOrderPrinters).toHaveBeenCalledTimes(2));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(alert()).toBe(codeMessage("authorization.not_permitted"));
+});
