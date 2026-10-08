@@ -1,6 +1,6 @@
 # A420 part 2: fill missing translations in place
 
-**Proposed for owner approval, Lane E, 2026-10-08. Part 2 implementation awaits approval.**
+**Approved by the owner 2026-10-08, Lane E. Part 2 implementation follows part 1.**
 
 You should be able to fill missing customer-facing names for one content language without opening
 several editors. Part 1 supplies the language table and a temporary read-only report dialog with

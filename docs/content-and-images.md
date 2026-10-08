@@ -14,13 +14,13 @@ for its region, plus English. In Spain Waitron keeps Spanish enabled in every re
 can be set up today, and Catalan as well in Catalonia, the Valencian Community and the Balearic
 Islands, and Galician in Galicia; there that regional language is the default. Elsewhere in Spain
 Spanish is the default. A venue in another country starts with its country's language and English.
-To add another, open **Settings**, then **Content languages**, which lists your languages with the
-default first. Select **Add language**, choose the language and select **Add**; the list shows your
-country's official languages first, under **Official languages**, while any of them is not yet
-added. The added language's translation fields are then available throughout your content editors.
-To change the default, select **Set as default** on that language's row.
+To add another, open **Settings**, then **Content languages**, which shows your languages and
+their missing-name counts in a table, with the default first. Select **Add language**, then choose
+the language to add it. The choices show your country's official languages first, under
+**Official languages**, while any of them is not yet added. The added language's translation fields are then available throughout your content editors.
+To change the default, open that language's ⋮ menu and select **Make default**.
 
-A language Waitron keeps enabled for your region is marked **Required** and has no **Remove**, and
+A language Waitron keeps enabled for your region is marked **Required** and has no **Delete**, and
 if it is ever missing, your next save on this page adds it back. Where the region also asks for
 foreign languages, the page shows a notice while you have fewer than it asks for.
 
@@ -32,7 +32,7 @@ remain visible where the translation is still missing.
 
 Required fields need text in the default language. Other translations can wait. To change the
 default to English, first complete the required English translations and image names.
-If the change is refused, look under **Missing translations**, further down the same page: the
+If the change is refused, select **Edit translations** in English's ⋮ menu to open the report: the
 names marked **Partly translated** under English hold it up, and each has an **Open** link to the
 screen where it is edited. Image names are checked too but are not listed there, so check them in
 the **Image library**. Something you have deleted or switched off can also hold the change up
@@ -54,17 +54,19 @@ not the new default, it holds the change up too, and **Missing translations** li
 **Included menu folder**. This holds while the include shows its sections directly too; turn
 **Show as a folder** on to see the names.
 
-**Missing translations** lists, for each of your content languages, the customer-facing names that
-have no text in it. A language marked **Required** comes first, opens by itself when something is
-missing, and has a note saying how many names still need translating into it. A name filled in for
-some languages but not this one is marked **Partly translated**. Something with no customer-facing
+**Edit translations** opens a dialog containing **Missing translations** for your content
+languages. The language you chose opens; languages marked **Required** come first and have a note
+saying how many names still need translating into them. The report keeps its Kind and Why filters
+and links to each existing editor; direct text entry in this dialog is planned separately. A name
+filled in for some languages but not this one is marked **Partly translated**. Something with no customer-facing
 name at all is listed under your other languages as **No customer-facing name**, because there its
 staff name is shown instead; an extras list is the exception, because its own name never reaches a
 receipt. Disabled products, disabled lists and switched-off menus are not listed.
 
-Removing an additional language hides its ordinary translation fields but keeps the saved text.
+Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
+but keeps the saved text.
 Add the language again to resume using those translations. The default language's row has no
-**Remove**: choose another default first. A required language's row has none either.
+**Delete**: choose another default first. A required language's row has none either.
 
 Your receipt-language settings remain independent. A receipt prints in one language, chosen for
 each location on the **Receipts** tab of **Venue settings**, which fixes it to Catalan in

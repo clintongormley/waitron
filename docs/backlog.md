@@ -4101,7 +4101,7 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   stay with the parked C125 entry (A8).
 
 - **A420 — the Content languages screen becomes a table, with translations filled in a dialog
-  (owner, 2026-10-08; part 1 implemented on `feat/content-language-table`, review/CI pending; part 2 awaiting spec approval; campaign lane E).** `apps/dashboard/src/screens/content-languages-screen.ts`.
+  (owner, 2026-10-08; part 1 implemented on `feat/content-language-table`, review/CI pending; part 2 spec approved by the owner 2026-10-08; implementation pending; campaign lane E).** `apps/dashboard/src/screens/content-languages-screen.ts`.
   1. **One table, one row per content language**: the language, how complete its translations are,
      and a row menu (`key: "actions"`, `pinned: "end"`, CLAUDE.md §3). The menu holds **Make
      default** (was "Set as default"), **Delete** (was "Remove") and **Edit translations**. The
@@ -4120,8 +4120,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      screen with its own checks. Not yet looked into: whether one write path can take all of them,
      or the dialog needs one per kind. Spec first — this is the large half of the entry. The
      dialog holds staged input, so it takes a draft scope and a `*.unsaved.test.ts` (CLAUDE.md §3).
-     Proposed [part 2 spec](superpowers/specs/2026-10-08-a420-inline-translations.md): translation-only
-     commands for all nine kinds in one bounded, all-or-nothing save; owner approval still required.
+     Approved [part 2 spec](superpowers/specs/2026-10-08-a420-inline-translations.md): translation-only
+     commands for all nine kinds in one bounded, all-or-nothing save; approved by the owner 2026-10-08, implementation pending.
 
 - **A421 — the Card payments screen: tabs, who uses a reader, Disconnect, Disable (owner,
   2026-10-08; open; campaign lane E).** `apps/dashboard/src/screens/payments-screen.ts`.
@@ -5902,7 +5902,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
-- **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).** The
+- **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).**
   The original Content languages page's **Missing translations** section lists, per enabled
   language, what has no customer-facing name in it. A420 part 1 moves that report into a read-only
   dialog opened from the new table; review/CI and landing remain pending.

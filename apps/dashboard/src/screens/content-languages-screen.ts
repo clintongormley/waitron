@@ -173,6 +173,7 @@ export class ContentLanguagesScreen extends LitElement {
   @state() private loadFailed = false;
   @state() private adding = false;
   @state() private translating = false;
+  @state() private translationLanguage = "";
   @state() private busy = false;
   @state() private saveError = "";
   @state() private gaps: LanguageTranslationGaps[] | null = null;
@@ -432,11 +433,8 @@ export class ContentLanguagesScreen extends LitElement {
               variant="ghost"
               ?disabled=${this.busy}
               @click=${() => {
-                const disclosure = this.shadowRoot!.querySelector<
-                  HTMLElementTagNameMap["wt-disclosure"]
-                >(`[data-test=gaps-${code}]`);
+                this.translationLanguage = code;
                 this.translating = true;
-                if (disclosure) disclosure.open = true;
               }}
               >${t("content_languages.edit_translations")}</wt-button
             >
@@ -592,7 +590,7 @@ export class ContentLanguagesScreen extends LitElement {
               ? t("content_gaps.none")
               : t("content_gaps.count").replace("{count}", String(gaps.length))
           }
-          ?open=${required(language) && gaps.length > 0}
+          ?open=${this.translating ? language === this.translationLanguage : required(language) && gaps.length > 0}
           >${
             gaps.length === 0
               ? html`<p class="complete">

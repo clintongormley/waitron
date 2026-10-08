@@ -393,9 +393,9 @@ describe("content languages screen", () => {
   });
 
   it("says that removing a language keeps its translations, and nothing more", async () => {
-    expect(en["content_languages.preserve"]).toBe("Removing a language keeps its translations.");
+    expect(en["content_languages.preserve"]).toBe("Deleting a language keeps its translations.");
     expect(es["content_languages.preserve"]).toBe(
-      "Al quitar un idioma se conservan sus traducciones.",
+      "Al eliminar un idioma se conservan sus traducciones.",
     );
     const el = await mount(api());
     expect(q(el, "wt-card")!.textContent).toContain(t("content_languages.preserve"));
@@ -1487,4 +1487,68 @@ it("does not describe a language absent from the report as complete, and closes 
   modal.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await flush(el);
   expect(modal.open).toBe(false);
+});
+
+it("shows only the chosen language expanded when reopening the report for another row", async () => {
+  const el = await mount(
+    api({
+      getContentTranslationGaps: vi.fn().mockResolvedValue([
+        { language: "ca", gaps: [] },
+        { language: "en", gaps: [] },
+        { language: "de", gaps: [] },
+      ]),
+    }),
+  );
+  q(el, "[data-test=edit-translations-en]")!.click();
+  await flush(el);
+  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    "wt-modal[data-test=translations-dialog]",
+  )!;
+  const disclosure = (code: string) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+      `[data-test=gaps-${code}]`,
+    )!;
+  expect(disclosure("en").open).toBe(true);
+  modal.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await flush(el);
+  q(el, "[data-test=edit-translations-de]")!.click();
+  await flush(el);
+  expect(modal.open).toBe(true);
+  expect(disclosure("de").open).toBe(true);
+  expect(disclosure("en").open).toBe(false);
+});
+
+it("expands the language chosen while its translation report was still loading", async () => {
+  let loaded!: (report: LanguageTranslationGaps[]) => void;
+  const el = await mount(
+    api({
+      getContentTranslationGaps: vi.fn(
+        () =>
+          new Promise<LanguageTranslationGaps[]>((resolve) => {
+            loaded = resolve;
+          }),
+      ),
+    }),
+  );
+  q(el, "[data-test=edit-translations-de]")!.click();
+  await flush(el);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+      "wt-modal[data-test=translations-dialog]",
+    )!.open,
+  ).toBe(true);
+  loaded([
+    { language: "en", gaps: [] },
+    { language: "de", gaps: [] },
+  ]);
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>("[data-test=gaps-de]")
+        ?.open,
+    ).toBe(true),
+  );
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>("[data-test=gaps-en]")!
+      .open,
+  ).toBe(false);
 });
