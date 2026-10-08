@@ -1578,7 +1578,18 @@ narrow layout (a tree 440 px wide or less, `packages/ui/src/components/wt-data-t
 hides every row's square; only a category's name box keeps one while the category is being named.
 A category with no colour of its own used to show an empty outline even when the products under
 it showed an inherited colour; A423 (owner 2026-10-08) made it show the colour it inherits, marked
-as inherited (dashed outline, inset fill), as an inheriting product's square is.
+as inherited (dashed outline, inset fill), as an inheriting product's square is — LANDED as #1443
+(2026-10-08). A product or variant without a colour of its own now carries the same mark in the
+Products tree, and each inheriting square's accessible name says where the colour comes from (a
+category, or All products). The Menus editor's squares are unchanged. Left open: (a) while a
+category is being added or renamed, its name box square shows only a colour chosen for it, so an
+inheriting category's square turns into an empty outline while its name is typed — left as built,
+the owner may ask for the inherited colour there too; (b) three labels already on `main` fill
+`{…}` placeholders one after another, so a name holding `{from}`-style text or `$&` can garble
+them: the colour chooser's heading (`apps/dashboard/src/widgets/catalogue-browser.ts`), the
+order detail dialog's `fill`, and the "price per" unit text in `product-list.ts` — #1443 fixed
+its own two with `fillPlaceholders` (`apps/dashboard/src/widgets/product-media.ts`), and four
+screens keep a private `fill` of the same kind that could share it.
 
 **Held reorder drags scroll at the list edge (A334, 2026-10-08) — BUILT.**
 Products, shared reorder tables, preparation stations and the column chooser use
