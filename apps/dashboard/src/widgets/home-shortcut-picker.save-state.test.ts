@@ -135,3 +135,14 @@ it("after a partial failure keepChosen leaves only those chosen, with Add still 
   await press(el);
   expect(add.mock.calls[1]![0].detail.ids).toEqual(["p-lager", "p-lemonade"]);
 });
+
+it("after keepChosen, clearing the kept choices makes Add quiet and disabled again", async () => {
+  const { el } = await mount();
+  await choose(el, ["p-burger", "p-lager"]);
+  await press(el);
+  el.options = options.filter(({ value }) => value !== "p-burger");
+  el.keepChosen(["p-lager"]);
+  expect(await addState(el)).toEqual(ready);
+  await choose(el, []);
+  expect(await addState(el)).toEqual(quiet);
+});

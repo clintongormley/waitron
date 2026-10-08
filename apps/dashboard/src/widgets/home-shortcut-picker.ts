@@ -68,10 +68,10 @@ export class HomeShortcutPicker extends LitElement {
     this.#scope?.commit(this.#saved);
   }
 
-  /** After a partial failure: only `ids`, the ones not yet added, stay chosen, and still count. */
+  /** After a partial failure: only `ids`, the ones not yet added, stay chosen, and still count.
+   * The added ones are no longer offered, so the form is unchanged once nothing is chosen. */
   keepChosen(ids: readonly string[]): void {
-    const kept = new Set(ids);
-    this.#saved = sorted(this.chosen.filter((id) => !kept.has(id)));
+    this.#saved = [];
     this.chosen = [...ids];
     this.noneLeft = false;
     this.#scope?.commit(this.#saved);
