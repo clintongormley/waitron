@@ -614,7 +614,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   commands and atomic domain save are built locally, including cell/owner/configuration conflicts,
   equivalent retries and projected root/include defaults. The authenticated GET/PUT route and
   dashboard transport are built locally: actual-byte request limits, manager rechecks, live-query
-  dependencies and English/Spanish refusal wording. The staged dialog remains. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
+  dependencies and English/Spanish refusal wording. Task 5 adds the staged single-language
+  dialog locally: retained filters and editor links, 50-row pages, up to 100 drafts, explicit
+  default-language companions, field refusals and shared close protection. Focused browser and
+  model checks pass; live review, reconnect and late-reply protection, recorded-name consumer
+  checks and final branch review remain in Tasks 6–8. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
   no saved language configuration, the existing menu-root writer uses English while section and
   include writers use their supplied Spanish fallback; inline saves use the resolver's context.
   No inline translation route or editable dialog has landed. Exercise full-app Open navigation

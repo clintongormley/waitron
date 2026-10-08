@@ -1,0 +1,142 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { LitElement, html } from "lit";
+import { userEvent } from "vitest/browser";
+import { LeaveController } from "@waitron/ui";
+import type { DashboardApi, TranslationPage } from "../api/client.js";
+import { t, setLocale } from "../i18n/t.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import "./content-translations-dialog.js";
+
+const result: TranslationPage = {
+  language: "es",
+  config: { defaultLanguage: "en", languages: ["en", "es"] },
+  required: [],
+  next: null,
+  total: 1,
+  rows: [
+    {
+      kind: "product",
+      id: "dish",
+      name: "STAFF Soup",
+      reason: "partial",
+      selectedText: null,
+      defaultText: "Customer soup",
+      effectiveSelectedText: null,
+      effectiveDefaultText: "Customer soup",
+      defaultRequired: false,
+      eligible: true,
+      unavailableReason: null,
+      owners: { kind: "product", parentId: null },
+      expected: "baseline",
+    },
+  ],
+};
+class TranslationLeaveApp extends LitElement {
+  readonly leave = new LeaveController(this);
+  api = {
+    getContentTranslationTargets: vi.fn().mockResolvedValue(result),
+    saveContentTranslations: vi.fn().mockResolvedValue({ saved: result.rows }),
+  } as unknown as DashboardApi;
+  open = true;
+  closed = 0;
+  override render() {
+    return html`<dashboard-content-translations-dialog
+        .api=${this.api}
+        language="es"
+        .open=${this.open}
+        @translations-closed=${() => {
+          this.closed++;
+          this.open = false;
+          this.requestUpdate();
+        }}
+      ></dashboard-content-translations-dialog
+      >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("translation-leave-test-app", TranslationLeaveApp);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("es-ES");
+});
+async function mount() {
+  const { el: app } = await mountWidget<TranslationLeaveApp>("translation-leave-test-app", {});
+  const form = app.shadowRoot!.querySelector("dashboard-content-translations-dialog")!;
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  return { app, form };
+}
+const field = (form: HTMLElement) =>
+  form
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[name=translation-text-product-dish]",
+    )!;
+async function edit(
+  form: HTMLElementTagNameMap["dashboard-content-translations-dialog"],
+  value: string,
+) {
+  const input = field(form);
+  await input.updateComplete;
+  await userEvent.fill(input.shadowRoot!.querySelector("input")!, value);
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+}
+async function question(app: TranslationLeaveApp) {
+  const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(warning.open).toBe(true));
+  await warning.updateComplete;
+  return warning;
+}
+for (const route of ["close", "escape"] as const) {
+  it(`translation ${route} retains the draft through Keep and closes once after Discard`, async () => {
+    const { app, form } = await mount();
+    await edit(form, "Sopa del día");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    if (route === "close")
+      form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+    else await userEvent.keyboard("{Escape}");
+    const warning = await question(app);
+    expect(app.closed).toBe(0);
+    warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await vi.waitFor(() => expect(warning.open).toBe(false));
+    await closeReportsDelivered();
+    expect(field(form).value).toBe("Sopa del día");
+    expect(form.open).toBe(true);
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+    await question(app);
+    warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await vi.waitFor(() => expect(app.closed).toBe(1));
+    await closeReportsDelivered();
+    expect(app.closed).toBe(1);
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+  });
+}
+it("translation edit/revert compares normalized values and removes the unload warning", async () => {
+  const { app, form } = await mount();
+  await edit(form, "Sopa");
+  const changed = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(changed);
+  expect(changed.defaultPrevented).toBe(true);
+  await edit(form, "  ");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  const reverted = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(reverted);
+  expect(reverted.defaultPrevented).toBe(false);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+  await vi.waitFor(() => expect(app.closed).toBe(1));
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});
+it("translation success commits before its saved event and closes the native modal", async () => {
+  const { app, form } = await mount();
+  await edit(form, "Sopa");
+  const outcomes: boolean[] = [];
+  form.addEventListener("translations-saved", () => outcomes.push(app.leave.coordinator.isDirty()));
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await vi.waitFor(() => expect(outcomes).toEqual([false]));
+  expect(form.open).toBe(false);
+  await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  expect(
+    form.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open,
+  ).toBe(false);
+});

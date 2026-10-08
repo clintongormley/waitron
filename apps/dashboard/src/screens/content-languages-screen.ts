@@ -1,6 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   capitaliseFirst,
   resolveContentText,
@@ -21,60 +20,13 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
-import type {
-  DashboardApi,
-  LanguageTranslationGaps,
-  TranslationGap,
-  TranslationGapKind,
-  TranslationGapReason,
-} from "../api/client.js";
+import type { DashboardApi, LanguageTranslationGaps } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { leftToBrowser } from "../navigation.js";
 import "../widgets/add-content-language.js";
+import "../widgets/content-translations-dialog.js";
 import { receiptLanguageWarning } from "../widgets/receipt-language.js";
-
-const GAP_KINDS: readonly TranslationGapKind[] = [
-  "product",
-  "variant",
-  "option_list",
-  "option_label",
-  "extra_list",
-  "menu",
-  "section",
-  "included_menu",
-  "unit",
-];
-const GAP_REASONS: readonly TranslationGapReason[] = ["partial", "absent"];
-
-/** A variant, an option and a section are named after what holds them, as their editors show them. */
-function gapLabel(gap: TranslationGap): string {
-  return gap.parent && gap.kind !== "menu" ? `${gap.parent.name} › ${gap.name}` : gap.name;
-}
-
-/** No address opens one option, one section or one unit, so each links to the screen that holds it. */
-function gapHref(gap: TranslationGap): string {
-  const id = encodeURIComponent(gap.id);
-  const parent = encodeURIComponent(gap.parent?.id ?? "");
-  switch (gap.kind) {
-    case "product":
-    case "variant":
-      return `/manage/catalogue/product/${id}`;
-    case "option_list":
-      return `/manage/modifiers/view/options/list/${id}`;
-    case "option_label":
-      return `/manage/modifiers/view/options/list/${parent}`;
-    case "extra_list":
-      return `/manage/modifiers/view/extras/list/${id}`;
-    case "menu":
-    case "section":
-    case "included_menu":
-      return `/manage/menus/menu/${parent}/view/structure`;
-    case "unit":
-      return "/manage/units";
-  }
-}
 
 @customElement("dashboard-content-languages-screen")
 export class ContentLanguagesScreen extends LitElement {
@@ -138,32 +90,6 @@ export class ContentLanguagesScreen extends LitElement {
       .card-action.accent-danger::part(button):hover {
         border-color: var(--wt-color-danger);
         color: var(--wt-color-danger);
-      }
-      .gaps {
-        margin-top: var(--wt-space-6);
-      }
-      .gaps h2 {
-        margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-lg);
-      }
-      .gaps .warning {
-        margin-bottom: var(--wt-space-3);
-      }
-      .gaps .error {
-        color: var(--wt-color-danger);
-      }
-      .gaps wt-disclosure {
-        margin-top: var(--wt-space-2);
-      }
-      .complete {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(gap-link) {
-        display: inline-flex;
-        align-items: center;
-        min-height: var(--wt-tap-min);
-        color: var(--wt-color-primary);
       }
     `,
   ];
@@ -326,6 +252,17 @@ export class ContentLanguagesScreen extends LitElement {
           .rowKey=${(code: string) => code}
         ></wt-data-table>
         <p class="note">${t("content_languages.preserve")}</p>
+        ${
+          this.gapsFailed
+            ? html`<p role="alert" data-test="gaps-error">${t("content_gaps.load_error")}</p>
+                <wt-button
+                  data-test="gaps-retry"
+                  variant="secondary"
+                  @click=${() => void this.#loadGaps()}
+                  >${t("content_languages.retry")}</wt-button
+                >`
+            : nothing
+        }
         ${formMessage(this.saveError)}
         <div class="card-footer">
           <wt-button
@@ -384,7 +321,8 @@ export class ContentLanguagesScreen extends LitElement {
             ? t("content_gaps.loading")
             : report.gaps.length === 0
               ? t("content_gaps.none")
-              : t("content_gaps.count").replace("{count}", String(report.gaps.length));
+              : html`${t("content_gaps.count").replace("{count}", String(report.gaps.length))}
+                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${(report.gaps.length === 1 ? t("content_gaps.required_warning_one") : t("content_gaps.required_warning").replace("{count}", String(report.gaps.length))).replace("{language}", new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code)!)}</span>` : nothing}`;
         },
       },
       {
@@ -444,193 +382,6 @@ export class ContentLanguagesScreen extends LitElement {
     ];
   }
 
-  #gapColumnLists = new Map<string, { key: string; columns: DataTableColumn<TranslationGap>[] }>();
-
-  #gapColumns(
-    language: string,
-    gaps: readonly TranslationGap[],
-  ): DataTableColumn<TranslationGap>[] {
-    const kinds = GAP_KINDS.filter((kind) => gaps.some((gap) => gap.kind === kind));
-    const reasons = GAP_REASONS.filter((reason) => gaps.some((gap) => gap.reason === reason));
-    const key = JSON.stringify([currentLocale(), kinds, reasons]);
-    let held = this.#gapColumnLists.get(language);
-    if (held?.key !== key) {
-      held = { key, columns: this.#buildGapColumns(kinds, reasons) };
-      this.#gapColumnLists.set(language, held);
-    }
-    return held.columns;
-  }
-
-  #buildGapColumns(
-    kinds: readonly TranslationGapKind[],
-    reasons: readonly TranslationGapReason[],
-  ): DataTableColumn<TranslationGap>[] {
-    const kindText = (gap: TranslationGap) => t(`content_gaps.kind_${gap.kind}`);
-    const reasonText = (gap: TranslationGap) => t(`content_gaps.${gap.reason}`);
-    return [
-      {
-        key: "name",
-        label: t("content_gaps.name"),
-        searchValue: gapLabel,
-        sortValue: gapLabel,
-        cell: gapLabel,
-      },
-      {
-        key: "kind",
-        label: t("content_gaps.kind"),
-        choosable: "shown",
-        sortValue: kindText,
-        cell: kindText,
-        filter: {
-          label: t("content_gaps.kind"),
-          allLabel: t("content_gaps.kind_all"),
-          multiple: {
-            countLabel: (count) => t("content_gaps.kind_count").replace("{count}", String(count)),
-          },
-          value: (gap) => gap.kind,
-          options: kinds.map((kind) => ({ value: kind, label: t(`content_gaps.kind_${kind}`) })),
-        },
-      },
-      {
-        key: "reason",
-        label: t("content_gaps.reason"),
-        choosable: "shown",
-        sortValue: reasonText,
-        cell: reasonText,
-        filter: {
-          label: t("content_gaps.reason"),
-          allLabel: t("content_gaps.reason_all"),
-          value: (gap) => gap.reason,
-          options: reasons.map((reason) => ({ value: reason, label: t(`content_gaps.${reason}`) })),
-        },
-      },
-      // A real link rather than `rowClick`, so a row can be opened in a new tab.
-      {
-        key: "open",
-        label: t("content_gaps.open"),
-        pinned: "end",
-        cell: (gap) =>
-          html`<a
-            part="gap-link"
-            href=${gapHref(gap)}
-            aria-label=${t("content_gaps.open_named").replace("{name}", gapLabel(gap))}
-            @click=${(event: MouseEvent) => this.#openGap(event, gap)}
-            >${t("content_gaps.open")}</a
-          >`,
-      },
-    ];
-  }
-
-  /** A product opens in the dashboard's own catalogue screen; a held modifier key keeps the
-   * browser's own handling, such as opening a new tab. */
-  #openGap(event: MouseEvent, gap: TranslationGap): void {
-    if (gap.kind !== "product" && gap.kind !== "variant") return;
-    if (leftToBrowser(event)) return;
-    event.preventDefault();
-    this.dispatchEvent(
-      new CustomEvent("wt-edit-product", {
-        detail: { productId: gap.id },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  #renderGaps(config: ContentLanguages, rules: ContentLanguageRules) {
-    const locale = currentLocale();
-    const names = new Intl.DisplayNames([locale], { type: "language" });
-    const heading = (code: string) => capitaliseFirst(names.of(code)!, locale);
-    const collator = new Intl.Collator(locale);
-    const required = (code: string) => rules.required.includes(code);
-    const rank = (code: string) => (required(code) ? 0 : code === config.defaultLanguage ? 1 : 2);
-    const entries = (this.gaps ?? [])
-      .filter((entry) => config.languages.includes(entry.language))
-      .sort(
-        (a, b) =>
-          rank(a.language) - rank(b.language) ||
-          collator.compare(heading(a.language), heading(b.language)),
-      );
-    const warnings = entries.filter((entry) => required(entry.language) && entry.gaps.length > 0);
-    return html`<section class="gaps" data-test="missing-translations" aria-labelledby="gaps-title">
-      <h2 id="gaps-title">${t("content_gaps.title")}</h2>
-      <p class="help">${t("content_gaps.help")}</p>
-      ${warnings.map(
-        (entry) =>
-          html`<p class="warning" role="note" data-test=${`required-gaps-${entry.language}`}>
-            ${(entry.gaps.length === 1
-              ? t("content_gaps.required_warning_one")
-              : t("content_gaps.required_warning").replace("{count}", String(entry.gaps.length))
-            ).replace("{language}", names.of(entry.language)!)}
-          </p>`,
-      )}
-      ${
-        this.gapsFailed
-          ? html`<p class="error" role="alert" data-test="gaps-error">
-                ${t("content_gaps.load_error")}
-              </p>
-              <wt-button
-                data-test="gaps-retry"
-                variant="secondary"
-                @click=${() => void this.#loadGaps()}
-                >${t("content_languages.retry")}</wt-button
-              >`
-          : this.gaps === null
-            ? html`<p role="status" data-test="gaps-loading">${t("content_gaps.loading")}</p>`
-            : nothing
-      }
-      ${entries.map(({ language, gaps }) => {
-        const parts = [heading(language)];
-        if (language === config.defaultLanguage) parts.push(t("content_languages.default"));
-        if (required(language)) parts.push(t("content_languages.required"));
-        return html`<wt-disclosure
-          data-test=${`gaps-${language}`}
-          heading=${parts.join(" · ")}
-          summary=${
-            gaps.length === 0
-              ? t("content_gaps.none")
-              : t("content_gaps.count").replace("{count}", String(gaps.length))
-          }
-          ?open=${this.translating ? language === this.translationLanguage : required(language) && gaps.length > 0}
-          >${
-            gaps.length === 0
-              ? html`<p class="complete">
-                  ${t("content_gaps.complete").replace("{language}", names.of(language)!)}
-                </p>`
-              : html`<wt-data-table
-                  noMatchesMessage=${tableNoMatches()}
-                  filterSearchPlaceholder=${t("categories.combobox_search")}
-                  filterNoResultsLabel=${t("categories.combobox_no_results")}
-                  data-test=${`gaps-table-${language}`}
-                  aria-label=${t("content_gaps.table").replace("{language}", names.of(language)!)}
-                  searchable
-                  searchLabel=${t("content_gaps.search")}
-                  customiseColumnsLabel=${t("table.customise_columns")}
-                  customiseLabel=${t("table.customise")}
-                  restoreColumnsLabel=${t("table.restore_columns")}
-                  doneLabel=${t("table.done")}
-                  moveColumnLabel=${t("table.move_column")}
-                  showColumnLabel=${t("table.show_column")}
-                  hideColumnLabel=${t("table.hide_column")}
-                  alwaysShownColumnLabel=${t("table.column_always_shown")}
-                  lastShownColumnLabel=${t("table.column_last_shown")}
-                  columnPositionLabel=${t("table.column_position")}
-                  filtersLabel=${t("table.filters")}
-                  filteredColumnLabel=${t("table.filtered_column")}
-                  filtersClearAllLabel=${t("table.filters_clear_all")}
-                  filtersCloseLabel=${t("table.filters_close")}
-                  viewKey=${`waitron.content-languages.gaps.${language}`}
-                  sortKey="name"
-                  sortDirection="ascending"
-                  .rows=${gaps}
-                  .columns=${this.#gapColumns(language, gaps)}
-                  .rowKey=${(gap: TranslationGap) => `${gap.kind}:${gap.id}`}
-                ></wt-data-table>`
-          }</wt-disclosure
-        >`;
-      })}
-    </section>`;
-  }
-
   override render() {
     return html`<h1>${t("content_languages.title")}</h1>
       <p class="help">${t("content_languages.help")}</p>
@@ -645,28 +396,20 @@ export class ContentLanguagesScreen extends LitElement {
       ${
         this.config && this.rules
           ? html`${this.#renderConfig(this.config, this.rules)}
-              <wt-modal
-                data-test="translations-dialog"
-                size="wide"
+              <dashboard-content-translations-dialog
+                .api=${this.api}
                 .open=${this.translating}
-                heading=${t("content_languages.edit_translations")}
-                @wt-close=${(event: Event) => {
+                .language=${this.translationLanguage}
+                @translations-closed=${(event: Event) => {
                   event.stopPropagation();
                   this.translating = false;
                 }}
-              >
-                ${this.#renderGaps(this.config, this.rules)}
-                <wt-form-actions slot="footer">
-                  <wt-button
-                    slot="cancel"
-                    variant="secondary"
-                    @click=${() => {
-                      this.translating = false;
-                    }}
-                    >${t("action.close")}</wt-button
-                  >
-                </wt-form-actions>
-              </wt-modal>`
+                @translations-saved=${(event: Event) => {
+                  event.stopPropagation();
+                  this.translating = false;
+                  void this.#loadGaps();
+                }}
+              ></dashboard-content-translations-dialog>`
           : this.loadFailed
             ? nothing
             : html`<p role="status">${t("content_languages.loading")}</p>`

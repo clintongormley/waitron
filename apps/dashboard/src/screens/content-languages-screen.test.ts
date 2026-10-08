@@ -1,10 +1,10 @@
-import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
+import { LiveData } from "@waitron/dashboard-kit";
 import { capitaliseFirst, type ContentLanguageRules, type ContentLanguages } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
-import { chooseOption, chooseOptions, expectFiltersFirst } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, LanguageTranslationGaps, TranslationGap } from "../api/client.js";
+import type { DashboardApi, TranslationPage } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -22,6 +22,15 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
     getContentLanguageRules: vi.fn().mockResolvedValue(NO_RULES),
     updateContentLanguages: vi.fn().mockResolvedValue(undefined),
     getContentTranslationGaps: vi.fn().mockResolvedValue([]),
+    getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
+      language,
+      config: CONFIG,
+      required: [],
+      rows: [],
+      next: null,
+      total: 0,
+    })),
+    saveContentTranslations: vi.fn().mockResolvedValue({ saved: [] }),
     getReceiptLanguage: vi.fn().mockResolvedValue({
       language: "ca-ES",
       choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
@@ -749,453 +758,6 @@ describe("content languages screen", () => {
   });
 });
 
-describe("missing translations", () => {
-  const PAN: TranslationGap = {
-    kind: "product",
-    id: "prod-1",
-    name: "STAFF Pan",
-    reason: "partial",
-  };
-  const SPANISH_DEFAULT: ContentLanguages = {
-    defaultLanguage: "es",
-    languages: ["es", "ca", "en"],
-  };
-  const report = (byLanguage: Record<string, TranslationGap[]>): LanguageTranslationGaps[] =>
-    Object.entries(byLanguage).map(([language, gaps]) => ({ language, gaps }));
-
-  function gapsApi(
-    config: ContentLanguages,
-    rules: ContentLanguageRules,
-    gaps: LanguageTranslationGaps[] | (() => Promise<LanguageTranslationGaps[]>),
-  ) {
-    return api({
-      getContentLanguages: vi.fn().mockResolvedValue(config),
-      getContentLanguageRules: vi.fn().mockResolvedValue(rules),
-      getContentTranslationGaps:
-        typeof gaps === "function" ? vi.fn(gaps) : vi.fn().mockResolvedValue(gaps),
-    });
-  }
-
-  const disclosure = (el: ContentLanguagesScreen, code: string) =>
-    q(el, `[data-test=gaps-${code}]`) as
-      (HTMLElement & { heading: string; summary: string; open: boolean }) | null;
-  const disclosures = (el: ContentLanguagesScreen) =>
-    [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-disclosure")].map(
-      (each) => each.dataset.test,
-    );
-  const table = (el: ContentLanguagesScreen, code: string) =>
-    q(el, `[data-test=gaps-table-${code}]`) as
-      | (HTMLElement & {
-          rows: TranslationGap[];
-          columns: { key: string; filter?: { options: { value: string }[] } }[];
-          updateComplete: Promise<unknown>;
-        })
-      | null;
-  async function links(el: ContentLanguagesScreen, code: string) {
-    const found = table(el, code)!;
-    await found.updateComplete;
-    return [...found.shadowRoot!.querySelectorAll<HTMLAnchorElement>("tbody a")];
-  }
-  /** Whether the screen cancelled the click. The window listener then cancels it in any case, so a
-   * test never navigates the page it runs in. */
-  function clickPrevented(link: HTMLAnchorElement, held: MouseEventInit): boolean {
-    let prevented = false;
-    const guard = (event: Event) => {
-      prevented = event.defaultPrevented;
-      event.preventDefault();
-    };
-    window.addEventListener("click", guard);
-    try {
-      link.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...held }),
-      );
-    } finally {
-      window.removeEventListener("click", guard);
-    }
-    return prevented;
-  }
-  const warning = (el: ContentLanguagesScreen, code: string) =>
-    q(el, `[data-test=required-gaps-${code}]`);
-  const lower = (code: string) =>
-    new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code)!;
-
-  it("lists a product missing its Catalan name under Catalan, flagged as required, in a Barcelona venue whose default is Spanish", async () => {
-    const el = await mount(
-      gapsApi(
-        SPANISH_DEFAULT,
-        BARCELONA,
-        report({ es: [], ca: [PAN], en: [{ ...PAN, reason: "absent" }] }),
-      ),
-    );
-    expect(q(el, "[data-test=missing-translations] h2")!.textContent).toBe(t("content_gaps.title"));
-    const catalan = disclosure(el, "ca")!;
-    expect(catalan.open).toBe(true);
-    expect(catalan.heading).toBe(`${name("ca")} · ${t("content_languages.required")}`);
-    expect(catalan.summary).toBe(t("content_gaps.count").replace("{count}", "1"));
-    expect(warning(el, "ca")!.getAttribute("role")).toBe("note");
-    expect(warning(el, "ca")!.textContent!.trim()).toBe(
-      t("content_gaps.required_warning_one").replace("{language}", lower("ca")),
-    );
-    expect(table(el, "ca")!.rows).toEqual([PAN]);
-    const [link] = await links(el, "ca");
-    expect(link!.getAttribute("href")).toBe("/manage/catalogue/product/prod-1");
-    expect(link!.getAttribute("aria-label")).toBe(
-      t("content_gaps.open_named").replace("{name}", "STAFF Pan"),
-    );
-    expect(table(el, "ca")!.shadowRoot!.querySelector("tbody")!.textContent).toContain("STAFF Pan");
-    expect(table(el, "ca")!.shadowRoot!.querySelector("tbody")!.textContent).toContain(
-      t("content_gaps.partial"),
-    );
-  });
-
-  it("says the dashboard's one no-matches sentence when a search hides every missing name", async () => {
-    const el = await mount(
-      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
-    );
-    const found = table(el, "ca")!;
-    await found.updateComplete;
-    const box = found.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
-    box.value = "zzz-nothing";
-    box.dispatchEvent(new Event("input"));
-    await found.updateComplete;
-    expect(found.shadowRoot!.querySelector("tbody")).toBeNull();
-    expect(found.shadowRoot!.querySelector(".empty .message")!.textContent).toBe(tableNoMatches());
-  });
-
-  it("puts a missing-translations table's Filters before its search, beside the rows on a wide screen", async () => {
-    await expectFiltersFirst(async () => {
-      const el = await mount(
-        gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
-      );
-      q(el, "[data-test=edit-translations-ca]")!.click();
-      await flush(el);
-      await table(el, "ca")!.updateComplete;
-      return table(el, "ca")!;
-    }, cleanupWidgets);
-  });
-
-  it("orders the required languages first, then the default, then the rest, and says a language with nothing missing is complete", async () => {
-    const el = await mount(
-      gapsApi(
-        { defaultLanguage: "en", languages: ["en", "fr", "es", "ca"] },
-        BARCELONA,
-        report({ en: [], fr: [PAN], es: [], ca: [PAN] }),
-      ),
-    );
-    expect(disclosures(el)).toEqual(["gaps-ca", "gaps-es", "gaps-en", "gaps-fr"]);
-    const spanish = disclosure(el, "es")!;
-    expect(spanish.open).toBe(false);
-    expect(spanish.summary).toBe(t("content_gaps.none"));
-    expect(spanish.textContent!.trim()).toBe(
-      t("content_gaps.complete").replace("{language}", lower("es")),
-    );
-    expect(table(el, "es")).toBeNull();
-    expect(warning(el, "es")).toBeNull();
-    expect(disclosure(el, "en")!.heading).toBe(`${name("en")} · ${t("content_languages.default")}`);
-    expect(disclosure(el, "fr")!.heading).toBe(name("fr"));
-    expect(disclosure(el, "fr")!.open).toBe(false);
-    expect(warning(el, "fr")).toBeNull();
-  });
-
-  it("flags Spanish where it is required and the default is Catalan, since no save can leave Catalan out there", async () => {
-    const absent = { ...PAN, reason: "absent" as const };
-    const el = await mount(
-      gapsApi(
-        { defaultLanguage: "ca", languages: ["ca", "es", "en"] },
-        BARCELONA,
-        report({
-          ca: [],
-          es: [absent, { ...PAN, id: "prod-2", name: "STAFF Croqueta" }],
-          en: [absent],
-        }),
-      ),
-    );
-    expect(disclosure(el, "ca")!.heading).toBe(
-      `${name("ca")} · ${t("content_languages.default")} · ${t("content_languages.required")}`,
-    );
-    expect(disclosure(el, "es")!.open).toBe(true);
-    expect(disclosure(el, "es")!.summary).toBe(t("content_gaps.count").replace("{count}", "2"));
-    expect(warning(el, "es")!.textContent!.trim()).toBe(
-      t("content_gaps.required_warning").replace("{language}", lower("es")).replace("{count}", "2"),
-    );
-    expect(warning(el, "ca")).toBeNull();
-    expect(table(el, "es")!.shadowRoot!.querySelector("tbody")!.textContent).toContain(
-      t("content_gaps.absent"),
-    );
-  });
-
-  it("drops the row and the warning when the live data delivers a report without it", async () => {
-    const liveData = new LiveData();
-    const client = Object.assign(
-      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
-      { liveData },
-    );
-    const el = await mount(client);
-    expect(warning(el, "ca")).not.toBeNull();
-    vi.mocked(client.getContentTranslationGaps).mockResolvedValue(
-      report({ es: [], ca: [], en: [] }),
-    );
-    liveData.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(warning(el, "ca")).toBeNull());
-    expect(disclosure(el, "ca")!.summary).toBe(t("content_gaps.none"));
-    expect(table(el, "ca")).toBeNull();
-  });
-
-  it("shows a failed read of the list, with its own Try again, while the languages stay usable", async () => {
-    const client = gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] }));
-    vi.mocked(client.getContentTranslationGaps).mockRejectedValueOnce(new Error("offline"));
-    const el = await mount(client);
-    expect(q(el, "[data-test=gaps-error]")!.textContent!.trim()).toBe(t("content_gaps.load_error"));
-    expect(q(el, "[data-test=gaps-error]")!.getAttribute("role")).toBe("alert");
-    expect(shown(el)).toEqual(["Español", "Catalán", "Inglés"]);
-    expect(q(el, "[data-test=retry]")).toBeNull();
-    q(el, "[data-test=gaps-retry]")!.click();
-    await flush(el);
-    expect(q(el, "[data-test=gaps-error]")).toBeNull();
-    expect(table(el, "ca")!.rows).toEqual([PAN]);
-  });
-
-  it("reports a failed refresh of the list in the list alone, keeping the rows it last read", async () => {
-    const liveData = new LiveData();
-    const client = Object.assign(
-      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
-      { liveData },
-    );
-    const el = await mount(client);
-    vi.mocked(client.getContentTranslationGaps).mockRejectedValue(new Error("offline"));
-    liveData.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(q(el, "[data-test=gaps-error]")).not.toBeNull());
-    expect(q(el, "[data-test=retry]")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain(t("content_languages.load_error"));
-    expect(table(el, "ca")!.rows).toEqual([PAN]);
-  });
-
-  it("shows a loading status for the list once the languages are shown", async () => {
-    const el = await mount(gapsApi(SPANISH_DEFAULT, BARCELONA, () => new Promise(() => {})));
-    expect(q(el, "[data-test=gaps-loading]")!.textContent!.trim()).toBe(t("content_gaps.loading"));
-    expect(q(el, "[data-test=gaps-loading]")!.getAttribute("role")).toBe("status");
-    expect(shown(el)).toEqual(["Español", "Catalán", "Inglés"]);
-  });
-
-  it("links each kind to the screen that edits it, naming a variant, an option and a section with what holds it", async () => {
-    const menu = { id: "menu-1", name: "Lunch" };
-    const gaps: TranslationGap[] = [
-      PAN,
-      {
-        kind: "variant",
-        id: "var-1",
-        name: "STAFF Small",
-        reason: "partial",
-        parent: { id: "prod-1", name: "STAFF Pan" },
-      },
-      { kind: "option_list", id: "list-1", name: "STAFF Doneness", reason: "partial" },
-      {
-        kind: "option_label",
-        id: "label-1",
-        name: "STAFF Rare",
-        reason: "absent",
-        parent: { id: "list-1", name: "STAFF Doneness" },
-      },
-      { kind: "extra_list", id: "extras-1", name: "STAFF Sides", reason: "partial" },
-      { kind: "menu", id: "root-1", name: "Lunch", reason: "absent", parent: menu },
-      { kind: "section", id: "section-1", name: "STAFF Drinks", reason: "partial", parent: menu },
-      { kind: "unit", id: "unit-1", name: "ración", reason: "partial" },
-    ];
-    const el = await mount(
-      gapsApi(SPANISH_DEFAULT, NOTHING_REQUIRED, report({ es: [], ca: gaps, en: [] })),
-    );
-    disclosure(el, "ca")!.open = true;
-    await flush(el);
-    const found = await links(el, "ca");
-    const byName = Object.fromEntries(
-      found.map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]),
-    );
-    const open = (label: string) => t("content_gaps.open_named").replace("{name}", label);
-    expect(byName).toEqual({
-      [open("STAFF Pan")]: "/manage/catalogue/product/prod-1",
-      [open("STAFF Pan › STAFF Small")]: "/manage/catalogue/product/var-1",
-      [open("STAFF Doneness")]: "/manage/modifiers/view/options/list/list-1",
-      [open("STAFF Doneness › STAFF Rare")]: "/manage/modifiers/view/options/list/list-1",
-      [open("STAFF Sides")]: "/manage/modifiers/view/extras/list/extras-1",
-      [open("Lunch")]: "/manage/menus/menu/menu-1/view/structure",
-      [open("Lunch › STAFF Drinks")]: "/manage/menus/menu/menu-1/view/structure",
-      [open("ración")]: "/manage/units",
-    });
-    const filters = Object.fromEntries(
-      table(el, "ca")!
-        .columns.filter((column) => column.filter)
-        .map((column) => [column.key, column.filter!.options.map((option) => option.value)]),
-    );
-    expect(filters).toEqual({
-      kind: [
-        "product",
-        "variant",
-        "option_list",
-        "option_label",
-        "extra_list",
-        "menu",
-        "section",
-        "unit",
-      ],
-      reason: ["partial", "absent"],
-    });
-    const kind = table(el, "ca")!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      'wt-combobox[data-filter="kind"]',
-    )!;
-    expect([kind.searchPlaceholder, kind.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
-  });
-
-  it("narrows the gaps to any kind chosen, naming two kinds by their count, while Why stays a single choice", async () => {
-    const gaps: TranslationGap[] = [
-      PAN,
-      { kind: "extra_list", id: "extras-1", name: "STAFF Sides", reason: "partial" },
-      { kind: "unit", id: "unit-1", name: "ración", reason: "absent" },
-    ];
-    const el = await mount(
-      gapsApi(SPANISH_DEFAULT, NOTHING_REQUIRED, report({ es: [], ca: gaps, en: [] })),
-    );
-    disclosure(el, "ca")!.open = true;
-    await flush(el);
-    const filter = (key: string) =>
-      table(el, "ca")!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-        `wt-combobox[data-filter="${key}"]`,
-      )!;
-    expect([filter("kind").multiple, filter("reason").multiple]).toEqual([true, false]);
-    await chooseOptions(filter("kind"), ["product", "unit"]);
-    const names = (await links(el, "ca")).map((link) => link.getAttribute("aria-label"));
-    const open = (label: string) => t("content_gaps.open_named").replace("{name}", label);
-    expect(names.sort()).toEqual([open("STAFF Pan"), open("ración")].sort());
-    expect(filter("kind").shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
-      t("content_gaps.kind_count").replace("{count}", "2"),
-    );
-  });
-
-  it("names an included menu's folder by its kind and links it to the including menu's structure", async () => {
-    const folder: TranslationGap = {
-      kind: "included_menu",
-      id: "member-1",
-      name: "STAFF Drinks",
-      reason: "partial",
-      parent: { id: "menu-1", name: "Lunch" },
-    };
-    const el = await mount(
-      gapsApi(SPANISH_DEFAULT, NOTHING_REQUIRED, report({ es: [], ca: [folder], en: [] })),
-    );
-    disclosure(el, "ca")!.open = true;
-    await flush(el);
-    const [link] = await links(el, "ca");
-    expect(link!.getAttribute("href")).toBe("/manage/menus/menu/menu-1/view/structure");
-    expect(link!.getAttribute("aria-label")).toBe(
-      t("content_gaps.open_named").replace("{name}", "Lunch › STAFF Drinks"),
-    );
-    const kind = table(el, "ca")!.columns.find((column) => column.key === "kind")!;
-    expect(kind.filter!.options).toEqual([
-      { value: "included_menu", label: "Carpeta de carta incluida" },
-    ]);
-    expect(en["content_gaps.kind_included_menu"]).toBe("Included menu folder");
-  });
-
-  it("opens a product's editor inside the dashboard rather than reloading the page", async () => {
-    const el = await mount(
-      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
-    );
-    const asked: string[] = [];
-    el.addEventListener("wt-edit-product", (event) =>
-      asked.push((event as CustomEvent<{ productId: string }>).detail.productId),
-    );
-    const [link] = await links(el, "ca");
-    expect(clickPrevented(link!, {})).toBe(true);
-    expect(asked).toEqual(["prod-1"]);
-  });
-
-  it("opens a variant's own editor inside the dashboard, and leaves every other kind's link to the browser", async () => {
-    const variant: TranslationGap = {
-      kind: "variant",
-      id: "var-1",
-      name: "STAFF Small",
-      reason: "partial",
-      parent: { id: "prod-1", name: "STAFF Pan" },
-    };
-    const list: TranslationGap = {
-      kind: "option_list",
-      id: "list-1",
-      name: "STAFF Doneness",
-      reason: "partial",
-    };
-    const el = await mount(
-      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [variant, list], en: [] })),
-    );
-    const asked: string[] = [];
-    el.addEventListener("wt-edit-product", (event) =>
-      asked.push((event as CustomEvent<{ productId: string }>).detail.productId),
-    );
-    const byHref = Object.fromEntries(
-      (await links(el, "ca")).map((link) => [link.getAttribute("href"), link]),
-    );
-    expect(clickPrevented(byHref["/manage/catalogue/product/var-1"]!, {})).toBe(true);
-    expect(clickPrevented(byHref["/manage/modifiers/view/options/list/list-1"]!, {})).toBe(false);
-    expect(asked).toEqual(["var-1"]);
-  });
-
-  it("leaves a click with Ctrl or Cmd held to the browser, to open the editor in a new tab", async () => {
-    const el = await mount(
-      gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [PAN], en: [] })),
-    );
-    const asked: string[] = [];
-    el.addEventListener("wt-edit-product", () => asked.push("asked"));
-    const [link] = await links(el, "ca");
-    expect(clickPrevented(link!, { ctrlKey: true })).toBe(false);
-    expect(clickPrevented(link!, { metaKey: true })).toBe(false);
-    expect(asked).toEqual([]);
-  });
-
-  it.each([
-    ["en-GB", "en", "Every name has a translation in English."],
-    ["en-GB", "es", "Every name has a translation in Spanish."],
-    ["es-ES", "en", "Todos los nombres tienen una traducción en inglés."],
-    ["es-ES", "es", "Todos los nombres tienen una traducción en español."],
-  ])(
-    "writes the complete translation sentence in %s for %s",
-    async (locale, language, sentence) => {
-      setLocale(locale);
-      const el = await mount(
-        gapsApi(SPANISH_DEFAULT, BARCELONA, report({ es: [], ca: [], en: [] })),
-      );
-      expect(disclosure(el, language)!.textContent!.trim()).toBe(sentence);
-    },
-  );
-
-  it("names the section's text in each UI language", () => {
-    expect(en["content_gaps.title"]).toBe("Missing translations");
-    expect(es["content_gaps.title"]).toBe("Traducciones que faltan");
-    expect(en["content_gaps.count"]).toBe("{count} missing");
-    expect(es["content_gaps.count"]).toBe("{count} sin traducir");
-    expect(en["content_gaps.complete"]).toBe("Every name has a translation in {language}.");
-    expect(es["content_gaps.complete"]).toBe(
-      "Todos los nombres tienen una traducción en {language}.",
-    );
-  });
-
-  it("writes the required-language warning in English when the UI is in English", async () => {
-    setLocale("en-GB");
-    const el = await mount(
-      gapsApi(
-        SPANISH_DEFAULT,
-        BARCELONA,
-        report({ es: [], ca: [PAN, { ...PAN, id: "prod-2" }], en: [] }),
-      ),
-    );
-    expect(warning(el, "ca")!.textContent!.trim()).toBe(
-      "Catalan stays enabled for venues in this region, and 2 names are not translated into it yet.",
-    );
-    expect(disclosure(el, "ca")!.heading).toBe("Catalan · Required");
-    expect(disclosure(el, "ca")!.summary).toBe("2 missing");
-    expect(disclosure(el, "es")!.textContent!.trim()).toBe(
-      "Every name has a translation in Spanish.",
-    );
-  });
-});
-
 describe("receipt language warning", () => {
   const SPANISH_CATALAN: ContentLanguages = { defaultLanguage: "es", languages: ["es", "ca"] };
   const receiptIn = (language: string) =>
@@ -1278,103 +840,6 @@ describe("receipt language warning", () => {
   });
 });
 
-it("keeps gap column inputs on redraw and refreshes new kinds and language", async () => {
-  setLocale("en");
-  const client = api({
-    liveData: new LiveData(),
-    getContentTranslationGaps: vi
-      .fn()
-      .mockResolvedValue([
-        { language: "en", gaps: [{ id: "p", kind: "product", name: "Dish", reason: "absent" }] },
-      ]),
-  });
-  const el = await mount(client);
-  const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-    "wt-data-table[data-test=gaps-table-en]",
-  )!;
-  await table.updateComplete;
-  const columns = table.columns;
-  el.requestUpdate();
-  await el.updateComplete;
-  await table.updateComplete;
-  expect(table.columns).toBe(columns);
-  vi.mocked(client.getContentTranslationGaps).mockResolvedValue([
-    {
-      language: "en",
-      gaps: [
-        { id: "p", kind: "product", name: "Dish", reason: "absent" },
-        { id: "p2", kind: "product", name: "Bread", reason: "partial" },
-      ],
-    },
-  ]);
-  client.liveData.refresh();
-  await vi.waitFor(() => expect(table.rows).toHaveLength(2));
-  await table.updateComplete;
-  expect(
-    table.columns
-      .find((column) => column.key === "kind")!
-      .filter!.options.map(({ value }) => value),
-  ).toEqual(["product"]);
-  expect(
-    table.columns
-      .find((column) => column.key === "reason")!
-      .filter!.options.map(({ value }) => value),
-  ).toEqual(["partial", "absent"]);
-  vi.mocked(client.getContentTranslationGaps).mockResolvedValue([
-    {
-      language: "en",
-      gaps: [
-        { id: "p", kind: "product", name: "Dish", reason: "absent" },
-        { id: "p2", kind: "product", name: "Bread", reason: "partial" },
-        { id: "u", kind: "unit", name: "Each", reason: "partial" },
-      ],
-    },
-  ]);
-  client.liveData.refresh();
-  await vi.waitFor(() => expect(table.rows).toHaveLength(3));
-  await table.updateComplete;
-  expect(
-    table.columns
-      .find((column) => column.key === "kind")!
-      .filter!.options.map(({ value }) => value),
-  ).toEqual(["product", "unit"]);
-  setLocale("es");
-  el.requestUpdate();
-  await el.updateComplete;
-  await table.updateComplete;
-  expect(table.columns[0]!.label).toBe("Nombre");
-});
-
-it("keeps separate gap columns for languages with different missing choices", async () => {
-  const el = await mount(
-    api({
-      getContentTranslationGaps: vi.fn().mockResolvedValue([
-        { language: "en", gaps: [{ id: "p", kind: "product", name: "Dish", reason: "absent" }] },
-        { language: "de", gaps: [{ id: "u", kind: "unit", name: "Each", reason: "partial" }] },
-      ]),
-    }),
-  );
-  const tables = [
-    ...el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-data-table"]>(
-      "wt-data-table[data-test^=gaps-table-]",
-    ),
-  ];
-  expect(tables).toHaveLength(2);
-  await Promise.all(tables.map((table) => table.updateComplete));
-  const columns = tables.map((table) => table.columns);
-  el.requestUpdate();
-  await el.updateComplete;
-  await Promise.all(tables.map((table) => table.updateComplete));
-  tables.forEach((table, index) => expect(table.columns).toBe(columns[index]));
-  expect(
-    tables.map((table) =>
-      table.columns
-        .find((column) => column.key === "kind")!
-        .filter!.options.map(({ value }) => value),
-    ),
-  ).toEqual([["unit"], ["product"]]);
-});
-
 describe("A420 content language table", () => {
   it("shows one row per language with completeness and a pinned menu", async () => {
     setLocale("en-GB");
@@ -1412,40 +877,6 @@ describe("A420 content language table", () => {
   });
 });
 
-it("opens the existing translation report from a row menu, keeping it off the page until asked", async () => {
-  const el = await mount(
-    api({
-      getContentTranslationGaps: vi.fn().mockResolvedValue([
-        { language: "ca", gaps: [] },
-        { language: "de", gaps: [] },
-        {
-          language: "en",
-          gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
-        },
-      ]),
-    }),
-  );
-  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-    "wt-modal[data-test=translations-dialog]",
-  );
-  expect(modal).not.toBeNull();
-  expect(modal!.open).toBe(false);
-  expect(
-    el.shadowRoot!.querySelector("[data-test=missing-translations]")!.closest("wt-modal"),
-  ).toBe(modal);
-  q(el, "[data-test=edit-translations-en]")!.click();
-  await flush(el);
-  expect(modal!.open).toBe(true);
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>("[data-test=gaps-en]")!
-      .open,
-  ).toBe(true);
-  expect(el.shadowRoot!.querySelector("[data-test=gaps-table-en]")).not.toBeNull();
-  modal!.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-  await flush(el);
-  expect(modal!.open).toBe(false);
-});
-
 it("shows completeness only from a successful report and refreshes the language rows live", async () => {
   const liveData = new LiveData();
   const client = api({
@@ -1473,82 +904,146 @@ it("shows completeness only from a successful report and refreshes the language 
   await vi.waitFor(() => expect(completeness()).toBe(t("content_gaps.none")));
 });
 
-it("does not describe a language absent from the report as complete, and closes the report with its Close button", async () => {
+const translations = (el: ContentLanguagesScreen) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-content-translations-dialog"]>(
+    "dashboard-content-translations-dialog",
+  )!;
+const translationModal = (el: ContentLanguagesScreen) =>
+  translations(el).shadowRoot!.querySelector("wt-modal")!;
+
+it("opens only the clicked language's staged editor, keeping it closed until asked", async () => {
+  const client = api();
+  const el = await mount(client);
+  expect(translations(el).open).toBe(false);
+  expect(client.getContentTranslationTargets).not.toHaveBeenCalled();
+  q(el, "[data-test=edit-translations-en]")!.click();
+  await flush(el);
+  await vi.waitFor(() =>
+    expect(client.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith("en", {}),
+  );
+  expect(translations(el).open).toBe(true);
+  expect(translations(el).language).toBe("en");
+  expect(translationModal(el).heading).toContain(name("en"));
+  translationModal(el).dispatchEvent(
+    new CustomEvent("wt-close", { bubbles: true, composed: true }),
+  );
+  await flush(el);
+  expect(translations(el).open).toBe(false);
+});
+
+it("keeps missing-report completeness unknown and closes a complete selected-language editor", async () => {
   const el = await mount(api());
   expect(rows(el)[0]!.querySelector("td:nth-child(2)")!.textContent!.trim()).toBe(
     t("content_gaps.loading"),
   );
   q(el, "[data-test=edit-translations-ca]")!.click();
   await flush(el);
-  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-    "wt-modal[data-test=translations-dialog]",
-  )!;
-  expect(modal.open).toBe(true);
-  modal.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
-  await flush(el);
-  expect(modal.open).toBe(false);
+  expect(translations(el).open).toBe(true);
+  translations(el).shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+  await vi.waitFor(() => expect(translations(el).open).toBe(false));
 });
 
-it("shows only the chosen language expanded when reopening the report for another row", async () => {
-  const el = await mount(
-    api({
-      getContentTranslationGaps: vi.fn().mockResolvedValue([
-        { language: "ca", gaps: [] },
-        { language: "en", gaps: [] },
-        { language: "de", gaps: [] },
-      ]),
-    }),
-  );
+it("reopens for another language without keeping the preceding language's fields", async () => {
+  const client = api();
+  const el = await mount(client);
   q(el, "[data-test=edit-translations-en]")!.click();
   await flush(el);
-  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-    "wt-modal[data-test=translations-dialog]",
-  )!;
-  const disclosure = (code: string) =>
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-      `[data-test=gaps-${code}]`,
-    )!;
-  expect(disclosure("en").open).toBe(true);
-  modal.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
-  await flush(el);
+  translations(el).shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+  await vi.waitFor(() => expect(translations(el).open).toBe(false));
   q(el, "[data-test=edit-translations-de]")!.click();
   await flush(el);
-  expect(modal.open).toBe(true);
-  expect(disclosure("de").open).toBe(true);
-  expect(disclosure("en").open).toBe(false);
+  expect(translations(el).language).toBe("de");
+  expect(translationModal(el).heading).toContain(name("de"));
+  expect(client.getContentTranslationTargets).toHaveBeenNthCalledWith(2, "de", {});
 });
 
-it("expands the language chosen while its translation report was still loading", async () => {
-  let loaded!: (report: LanguageTranslationGaps[]) => void;
-  const el = await mount(
-    api({
-      getContentTranslationGaps: vi.fn(
-        () =>
-          new Promise<LanguageTranslationGaps[]>((resolve) => {
-            loaded = resolve;
-          }),
-      ),
-    }),
-  );
+it("opens the chosen language's target read while completeness is still loading", async () => {
+  const el = await mount(api({ getContentTranslationGaps: vi.fn(() => new Promise(() => {})) }));
   q(el, "[data-test=edit-translations-de]")!.click();
   await flush(el);
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-      "wt-modal[data-test=translations-dialog]",
-    )!.open,
-  ).toBe(true);
-  loaded([
-    { language: "en", gaps: [] },
-    { language: "de", gaps: [] },
-  ]);
-  await vi.waitFor(() =>
-    expect(
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>("[data-test=gaps-de]")
-        ?.open,
-    ).toBe(true),
+  expect(translations(el).open).toBe(true);
+  expect(translations(el).language).toBe("de");
+  expect(translationModal(el).heading).toContain(name("de"));
+});
+
+it.each(["es-ES", "en-GB"])(
+  "keeps regional required-name warnings and clears only the recovered report's error in %s",
+  async (locale) => {
+    setLocale(locale);
+    const liveData = new LiveData();
+    const client = api({
+      liveData,
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "ca", "en"] }),
+      getContentLanguageRules: vi.fn().mockResolvedValue(BARCELONA),
+      getContentTranslationGaps: vi.fn().mockResolvedValue([
+        { language: "es", gaps: [] },
+        {
+          language: "ca",
+          gaps: [{ kind: "product", id: "prod-1", name: "STAFF Pan", reason: "partial" }],
+        },
+        { language: "en", gaps: [] },
+      ]),
+    });
+    const el = await mount(client);
+    const warning = () => q(el, "[data-test=required-gaps-ca]");
+    expect(warning()!.getAttribute("role")).toBe("note");
+    expect(warning()!.textContent!.trim()).toBe(
+      t("content_gaps.required_warning_one").replace(
+        "{language}",
+        new Intl.DisplayNames([locale], { type: "language" }).of("ca")!,
+      ),
+    );
+    vi.mocked(client.getContentTranslationGaps).mockRejectedValueOnce(new Error("offline"));
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=gaps-error]")).not.toBeNull());
+    expect(q(el, "[data-test=retry]")).toBeNull();
+    expect(warning()).toBeNull();
+    vi.mocked(client.getContentTranslationGaps).mockResolvedValue([
+      { language: "es", gaps: [] },
+      { language: "ca", gaps: [] },
+      { language: "en", gaps: [] },
+    ]);
+    q(el, "[data-test=gaps-retry]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=gaps-error]")).toBeNull();
+    expect(warning()).toBeNull();
+    expect(rowOf(el, "ca").querySelector("td:nth-child(2)")!.textContent!.trim()).toBe(
+      t("content_gaps.none"),
+    );
+  },
+);
+
+it("reports the initial completeness failure without blocking languages or selected targets", async () => {
+  const client = api({
+    getContentTranslationGaps: vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue([{ language: "ca", gaps: [] }]),
+  });
+  const el = await mount(client);
+  expect(q(el, "[data-test=gaps-error]")).not.toBeNull();
+  expect(shown(el)).toEqual(["Catalán", "Alemán", "Inglés"]);
+  q(el, "[data-test=edit-translations-ca]")!.click();
+  await flush(el);
+  expect(translations(el).open).toBe(true);
+  q(el, "[data-test=gaps-retry]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=gaps-error]")).toBeNull();
+});
+
+it("closes a saved editor before the report refresh fails, keeping the failure on the screen", async () => {
+  const client = api();
+  const el = await mount(client);
+  q(el, "[data-test=edit-translations-ca]")!.click();
+  await flush(el);
+  vi.mocked(client.getContentTranslationGaps).mockRejectedValue(new Error("offline"));
+  translations(el).open = false;
+  translations(el).dispatchEvent(
+    new CustomEvent("translations-saved", { detail: { saved: [] }, bubbles: true, composed: true }),
   );
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>("[data-test=gaps-en]")!
-      .open,
-  ).toBe(false);
+  await vi.waitFor(() => expect(q(el, "[data-test=gaps-error]")).not.toBeNull());
+  expect(translations(el).open).toBe(false);
+  expect(translationModal(el).open).toBe(false);
 });

@@ -115,10 +115,10 @@ unrelated names and other aggregate fields are excluded.
 
 **Interfaces:** Widget properties `api: DashboardApi`, `language: string`, `open: boolean`; events `translations-closed`, `translations-saved` with `{saved: TranslationTarget[]}`. Model `TranslationDrafts`: `edit(ref: TranslationRef, field: "text" | "defaultText", text: string): void`, `submission(): TranslationBatch`, `validate(): FieldFault[]`, `review(latest: TranslationTarget[], choices: Map<string, "keep" | "replace" | "discard">): void`; `FieldFault = {target: TranslationRef; field: "text" | "defaultText"; message: string}`.
 
-- [ ] Write `explicit companion`, `hidden drafts save together`, `empty revert`, `limits and hidden invalid focus`: selected language only, blank companion only for a non-default selection lacking effective default text, no staff copy, whitespace cancellation, companion-only invalidity, untouched omissions, 50-row pages, 100/101 draft boundary, byte limits and Show edited/count. Assert Kind multi-select, Why single-select, context search and retryable field refusals.
-- [ ] RED: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-model.test.ts src/widgets/content-translations-dialog.test.ts src/screens/content-languages-screen.test.ts`.
-- [ ] Scan selected-language pages sequentially with passive reads, assembling the opening ordered rows before enabling edits. Apply filters before slicing 50 visible rows; drafts are keyed by kind/id outside that slice. Use `wt-modal`, field primitives, semantic names/language tags/required markers, `part` styling/tokens and bottom form message. At draft capacity keep other rows readable. Explain shared-definition versus membership-override scope, and retain editor links through the leave gate. Wire `draftScopeFor`, `saveActionState` and shared close protection now; commit/close on successful PUT before refresh. Replace the temporary dialog; retain gap-GET completeness.
-- [ ] GREEN: repeat RED command; `git commit -s -m "feat: stage inline translation drafts across filters and pages"`.
+- [x] Write `explicit companion`, `hidden drafts save together`, `empty revert`, `limits and hidden invalid focus`: selected language only, blank companion only for a non-default selection lacking effective default text, no staff copy, whitespace cancellation, companion-only invalidity, untouched omissions, 50-row pages, 100/101 draft boundary, byte limits and Show edited/count. Assert Kind multi-select, Why single-select, context search and retryable field refusals.
+- [x] RED: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-model.test.ts src/widgets/content-translations-dialog.test.ts src/screens/content-languages-screen.test.ts`.
+- [x] Scan selected-language pages sequentially with passive reads, assembling the opening ordered rows before enabling edits. Apply filters before slicing 50 visible rows; drafts are keyed by kind/id outside that slice. Use `wt-modal`, field primitives, semantic names/language tags/required markers, `part` styling/tokens and bottom form message. At draft capacity keep other rows readable. Explain shared-definition versus membership-override scope, and retain editor links through the leave gate. Wire `draftScopeFor`, `saveActionState` and shared close protection now; commit/close on successful PUT before refresh. Replace the temporary dialog; retain gap-GET completeness.
+- [x] GREEN: repeat RED command; `git commit -s -m "feat: stage inline translation drafts across filters and pages"`.
 
 ## Task 6: Live review, leave protection and reply generations
 
@@ -188,3 +188,13 @@ unchanged report/language3, root102 and unedited fiscal20 cases passed. Scoped t
 passed. Restricted route coverage is 100/100/100/100 (55 statements, 30 branches, 12 functions,
 51 lines), not package or CI coverage. Three installed removals failed their assertions;
 restored route53 passed. No existing behavioral assertion changed; no visible UI changed.
+
+Task 5 checkpoint (2026-10-08): staged dialog/model and screen integration built locally.
+The focused model/dialog/unsaved/screen run passed 91 cases. The 390px field-bounds
+check first failed with an input beyond the table edge, then passed after combining each
+row's name and fields in a responsive cell. Default-companion, name-byte and close-guard
+removals failed in an installed independent candidate; restored suites passed 91 cases.
+Task 6 still supplies `review`, complete live/leave/reconnect/reply handling; Task 7
+still supplies recorded-name consumer checks and built-app visual acceptance. Task 5
+uses shared close protection now and covers its basic Close/Escape/Keep/Discard path.
+Receipts are local to lane E under `receipts/a420-part2/task5-*`.
