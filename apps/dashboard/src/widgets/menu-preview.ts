@@ -730,7 +730,7 @@ export class MenuPreviewPanel extends LitElement {
     const menu = { menu: this.menuName };
     return html`<div class="actions">
       <wt-button
-        variant="primary"
+        variant=${this.publishing || this.preview.clashes.length === 0 ? "primary" : "secondary"}
         data-test="publish"
         .loading=${this.publishing}
         .disabled=${this.preview.clashes.length > 0}

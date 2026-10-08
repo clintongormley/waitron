@@ -172,6 +172,34 @@ describe("service-status-screen", () => {
     },
   );
 
+  it.each(["light", "dark"] as const)(
+    "draws Disable quiet like the unchanged Save on a status that is already disabled, and red on an active one (%s theme)",
+    async (theme) => {
+      const statuses = [TWO_SEED[0]!, { ...TWO_SEED[1]!, active: false }];
+      const { el } = await mountWidget<ServiceStatusScreen>(
+        "dashboard-service-status-screen",
+        { api: stubApi({}, statuses) },
+        theme,
+      );
+      await flush(el);
+      const button = (test: string) =>
+        q(el, `[data-test=${test}]`) as HTMLElementTagNameMap["wt-button"];
+      const fill = (host: Element) =>
+        getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+      const inactive = button("deactivate-s2");
+      const active = button("deactivate-s1");
+      const save = button("save-s2");
+      await Promise.all([inactive.updateComplete, active.updateComplete, save.updateComplete]);
+      expect(save.variant).toBe("secondary");
+      expect(inactive.hasAttribute("disabled")).toBe(true);
+      expect(inactive.variant).toBe("secondary");
+      expect(fill(inactive)).toBe(fill(save));
+      expect(active.hasAttribute("disabled")).toBe(false);
+      expect(active.variant).toBe("danger");
+      expect(fill(active)).not.toBe(fill(save));
+    },
+  );
+
   it("disables a row", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {

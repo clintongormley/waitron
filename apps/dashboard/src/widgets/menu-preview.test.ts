@@ -1176,3 +1176,58 @@ it("makes overflowing pane regions keyboard reachable without scrolling the publ
     await page.viewport(414, 850);
   }
 });
+
+const CLASH: MenuPreview["clashes"][number] = {
+  productId: "p-burger",
+  variantId: null,
+  field: "price",
+  candidates: [
+    { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
+    {
+      place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+      value: "14.00" as never,
+      source: { kind: "own" },
+    },
+  ],
+};
+
+it.each(["light", "dark"] as const)(
+  "draws Publish quiet like a disabled secondary button while the menu has clashes, and blue without them (%s theme)",
+  async (theme) => {
+    const clashing = { ...preview([]), clashes: [CLASH] };
+    const { el, host } = await mountWidget<MenuPreviewPanel>(
+      "dashboard-menu-preview",
+      { menuName: "Lunch Menu", status: changedStatus, preview: clashing },
+      theme,
+    );
+    const quiet = document.createElement("wt-button");
+    quiet.variant = "secondary";
+    quiet.disabled = true;
+    quiet.textContent = "Quiet";
+    host.append(quiet);
+    await quiet.updateComplete;
+    const fill = (button: Element) =>
+      getComputedStyle(button.shadowRoot!.querySelector("button")!).backgroundColor;
+    const publish = () => q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
+    await publish().updateComplete;
+    expect(publish().disabled).toBe(true);
+    expect(publish().variant).toBe("secondary");
+    expect(fill(publish())).toBe(fill(quiet));
+    el.preview = preview([]);
+    await el.updateComplete;
+    await publish().updateComplete;
+    expect(publish().disabled).toBe(false);
+    expect(publish().variant).toBe("primary");
+    expect(fill(publish())).not.toBe(fill(quiet));
+  },
+);
+
+it("keeps Publish blue while its own publish is being sent, even if a clash arrives meanwhile", async () => {
+  const el = await mount({ publishing: true });
+  const publish = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
+  expect(publish.variant).toBe("primary");
+  el.preview = { ...preview([]), clashes: [CLASH] };
+  await el.updateComplete;
+  expect(publish.disabled).toBe(true);
+  expect(publish.variant).toBe("primary");
+});

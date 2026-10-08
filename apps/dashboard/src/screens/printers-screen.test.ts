@@ -3305,6 +3305,32 @@ describe("printers-screen", () => {
     await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   });
 
+  it.each(["light", "dark"] as const)(
+    "draws Disable quiet like Edit on a printer that is already disabled, and red on an active one (%s theme)",
+    async (theme) => {
+      const { el } = await mountWidget<PrintersScreen>(
+        "dashboard-printers-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      await filterPrinters(el, "all");
+      const button = (test: string) =>
+        q(el, `[data-test=${test}]`) as HTMLElementTagNameMap["wt-button"];
+      const fill = (host: Element) =>
+        getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+      const inactive = button("deactivate-printer-p2");
+      const active = button("deactivate-printer-p1");
+      const editFill = fill(button("edit-printer-p2"));
+      expect(inactive.hasAttribute("disabled")).toBe(true);
+      expect(inactive.variant).toBe("secondary");
+      expect(fill(inactive)).toBe(editFill);
+      expect(active.hasAttribute("disabled")).toBe(false);
+      expect(active.variant).toBe("danger");
+      expect(fill(active)).not.toBe(editFill);
+    },
+  );
+
   it("shows an error banner when a deactivate is rejected", async () => {
     const api = stubApi({
       deactivatePrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),

@@ -1578,6 +1578,54 @@ describe.each([
   });
 });
 
+it.each(["light", "dark"] as const)(
+  "draws a modifier's Remove quiet like its Edit while a window opened from the editor is open, and red once it closes (%s theme)",
+  async (theme) => {
+    const { el } = await mountWidget<ProductEditor>(
+      "dashboard-product-editor",
+      {
+        open: true,
+        value: twoAttached,
+        locales: ["en"],
+        units: [unit],
+        taxChoices: reduced,
+        extraLists,
+        optionLists,
+        childOpen: true,
+      },
+      theme,
+    );
+    const row = attachedRow(el, "extras:sauces");
+    const button = (test: string) =>
+      row.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`)!;
+    const fill = (host: Element) =>
+      getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+    const remove = button("remove-modifier-extras:sauces");
+    const edit = button("edit-modifier-extras:sauces");
+    await Promise.all([remove.updateComplete, edit.updateComplete]);
+    expect(remove.disabled).toBe(true);
+    expect(remove.variant).toBe("secondary");
+    expect(fill(remove)).toBe(fill(edit));
+    el.childOpen = false;
+    await el.updateComplete;
+    await remove.updateComplete;
+    expect(remove.disabled).toBe(false);
+    expect(remove.variant).toBe("danger");
+    expect(fill(remove)).not.toBe(fill(edit));
+  },
+);
+
+it("keeps a modifier's Remove red while the editor's own save is being sent", async () => {
+  const { el } = await mountTwoAttached();
+  el.busy = true;
+  await el.updateComplete;
+  const remove = attachedRow(el, "extras:sauces").querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="remove-modifier-extras:sauces"]',
+  )!;
+  expect(remove.disabled).toBe(true);
+  expect(remove.variant).toBe("danger");
+});
+
 it("still reorders attached rows from the drag handle's keyboard, asking for no editor", async () => {
   const { el, edits } = await mountTwoAttached();
   attachedRow(el, "options:cooked")
