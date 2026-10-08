@@ -2,6 +2,19 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "keep_open.line_until": "{period} · until {time}",
+  "keep_open.line_extended": "{period} · kept open until {time}",
+  "keep_open.button": "Keep {period} open later",
+  "keep_open.heading": "Keep {period} open later today",
+  "keep_open.ends": "{period} ends at {time} today.",
+  "keep_open.ended": "{period} ended at {time}.",
+  "keep_open.until": "Until",
+  "keep_open.end_of_day": "End of the day ({time})",
+  "keep_open.delays": "{next} will start at {time} instead of {scheduled}.",
+  "keep_open.drops": "{next} will not run today.",
+  "keep_open.save": "Keep open",
+  "keep_open.stop": "End the extension",
+
   "station_today.open": "Open",
   "station_today.closed_by_hand": "Closed for today. New dishes go to {station}.",
   "station_today.opened_by_hand": "Opened for today.",
@@ -1134,6 +1147,19 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "keep_open.line_until": "{period} · hasta las {time}",
+  "keep_open.line_extended": "{period} · horario ampliado hasta las {time}",
+  "keep_open.button": "Ampliar el horario de {period}",
+  "keep_open.heading": "Ampliar hoy el horario de {period}",
+  "keep_open.ends": "Hoy {period} termina a las {time}.",
+  "keep_open.ended": "{period} terminó a las {time}.",
+  "keep_open.until": "Hasta",
+  "keep_open.end_of_day": "Fin del día ({time})",
+  "keep_open.delays": "{next} empezará a las {time} en lugar de a las {scheduled}.",
+  "keep_open.drops": "Hoy no habrá {next}.",
+  "keep_open.save": "Ampliar",
+  "keep_open.stop": "Quitar la ampliación",
+
   "station_today.open": "Abierta",
   "station_today.closed_by_hand": "Cerrada por hoy. Los platos nuevos van a {station}.",
   "station_today.opened_by_hand": "Abierta por hoy.",

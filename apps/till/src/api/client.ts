@@ -1166,6 +1166,21 @@ export interface StationDestination {
   name: string;
   isDefault: boolean;
 }
+export interface KeepOpenPeriod {
+  id: string;
+  name: string;
+  endsAt: string;
+  running: boolean;
+  extendedUntil: string | null;
+  choices: readonly string[];
+  next: { name: string; startsAt: string } | null;
+}
+export interface PeriodExtensionWrite {
+  periodId: string;
+  until: string | null;
+  override?: { personId: string; pin: string };
+}
+
 export interface StationTodayWrite {
   state: "open" | "closed";
   sendsToStationId?: string;
@@ -2506,6 +2521,18 @@ export class TillApi {
   ): Promise<void> {
     return this.#request(
       `/api/device/stations/${encodeURIComponent(stationId)}/today`,
+      "PUT",
+      body,
+    );
+  }
+
+  keepOpen(zoneId: string): Promise<{ period: KeepOpenPeriod | null }> {
+    return this.#request(`/api/service-zones/${encodeURIComponent(zoneId)}/keep-open`, "GET");
+  }
+
+  keepPeriodOpen(zoneId: string, body: PeriodExtensionWrite): Promise<void> {
+    return this.#request(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/period-extension`,
       "PUT",
       body,
     );

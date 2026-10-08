@@ -3,6 +3,14 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "period_extension.invalid": {
+    en: "Choose a later time, in 15-minute steps, before the end of the day.",
+    es: "Elige una hora posterior, en pasos de 15 minutos, antes del final del día.",
+  },
+  "period_extension.not_allowed": {
+    en: "Only the period running now, or the last one today, can be kept open.",
+    es: "Solo se puede ampliar el periodo en curso o el último de hoy.",
+  },
   "station.destination_invalid": {
     en: "That station cannot take the work now. Choose another.",
     es: "Esa estación no puede recibir el trabajo ahora. Elige otra.",
