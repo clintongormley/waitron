@@ -711,7 +711,7 @@ export class ModifiersScreen extends LitElement {
             >${t("action.cancel")}</wt-button
           ><wt-button
             data-test="confirm-delete"
-            variant="danger"
+            variant=${this.dependants ? "danger" : "secondary"}
             .disabled=${this.busy || !this.dependants}
             @click=${() => void this.#delete()}
             >${t("action.delete")}</wt-button

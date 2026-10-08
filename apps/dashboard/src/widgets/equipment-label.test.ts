@@ -115,6 +115,37 @@ describe("dashboard-equipment-label", () => {
     view.dispatchEvent(new Event("afterprint"));
   });
 
+  it.each(["light", "dark"] as const)(
+    "draws Print quiet like Close while the QR is being made, then blue (%s theme)",
+    async (theme) => {
+      let made!: (qr: string) => void;
+      const { el } = await mountWidget<EquipmentLabel>(
+        "dashboard-equipment-label",
+        {
+          kind: "printer",
+          itemId: ID,
+          name: "Mano de sala",
+          drawQr: () => new Promise<string>((resolve) => (made = resolve)),
+        },
+        theme,
+      );
+      const button = (test: string) =>
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${test}]`)!;
+      const fill = (host: Element) =>
+        getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+      const print = button("print-equipment-label");
+      const closeFill = fill(button("close-equipment-label"));
+      await print.updateComplete;
+      expect(print.getAttribute("disabled")).not.toBeNull();
+      expect(print.variant).toBe("secondary");
+      expect(fill(print)).toBe(closeFill);
+      made(PIXEL);
+      await vi.waitFor(() => expect(print.getAttribute("disabled")).toBeNull());
+      expect(print.variant).toBe("primary");
+      expect(fill(print)).not.toBe(closeFill);
+    },
+  );
+
   it("closes, and says so", async () => {
     const { el } = await mount("reader");
     const closed = vi.fn();

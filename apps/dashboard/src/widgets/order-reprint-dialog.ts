@@ -124,7 +124,7 @@ export class OrderReprintDialog extends LitElement {
       >
       <wt-button
         slot="footer"
-        variant="primary"
+        variant=${printers.length === 0 ? "secondary" : "primary"}
         data-test="print"
         ?disabled=${printers.length === 0}
         ?loading=${this.printing}

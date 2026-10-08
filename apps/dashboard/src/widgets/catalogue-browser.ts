@@ -976,7 +976,7 @@ export class CatalogueBrowser extends LitElement {
                             ? nothing
                             : html`<wt-button
                                 data-test="delete"
-                                variant="danger"
+                                variant=${!this.selected.length || this.summaryLoading ? "secondary" : "danger"}
                                 .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
                                 @click=${() => void this.#openDelete()}
                                 >${this.#deleteLabel(selection)}</wt-button

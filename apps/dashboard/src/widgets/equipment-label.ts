@@ -151,7 +151,7 @@ export class EquipmentLabel extends LitElement {
           >${t("action.close")}</wt-button
         >
         <wt-button
-          variant="primary"
+          variant=${this.qr === "" ? "secondary" : "primary"}
           data-test="print-equipment-label"
           ?disabled=${this.qr === ""}
           @click=${() => this.print({ qr: this.qr, code, name: this.name })}

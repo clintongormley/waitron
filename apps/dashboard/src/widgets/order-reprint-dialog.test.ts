@@ -133,3 +133,72 @@ it("keeps a print's connection failure when the printer list recovers", async ()
   );
   expect(alert()).toBe(codeMessage("connection.failed"));
 });
+
+const printButton = (el: OrderReprintDialog) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=print]")!;
+const buttonFill = (host: Element) =>
+  getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+
+it.each(["light", "dark"] as const)(
+  "draws Print quiet like Cancel while the printers load, then blue once there is one (%s theme)",
+  async (theme) => {
+    let arrive!: (printers: { id: string; name: string }[]) => void;
+    const api = {
+      getOrderPrinters: vi.fn().mockReturnValue(new Promise((resolve) => (arrive = resolve))),
+      liveData: new LiveData(),
+    } as unknown as DashboardApi;
+    const { el } = await mountWidget<OrderReprintDialog>(
+      "dashboard-order-reprint-dialog",
+      { api, row },
+      theme,
+    );
+    const print = printButton(el);
+    const cancelFill = buttonFill(
+      el.shadowRoot!.querySelector("wt-button[slot=footer]:not([data-test=print])")!,
+    );
+    await print.updateComplete;
+    expect(print.getAttribute("disabled")).not.toBeNull();
+    expect(print.variant).toBe("secondary");
+    expect(buttonFill(print)).toBe(cancelFill);
+    arrive([{ id: "printer-1", name: "Barra" }]);
+    await vi.waitFor(() => expect(print.getAttribute("disabled")).toBeNull());
+    expect(print.variant).toBe("primary");
+    expect(buttonFill(print)).not.toBe(cancelFill);
+  },
+);
+
+it("keeps Print quiet when there is no printer to send to", async () => {
+  const api = {
+    getOrderPrinters: vi.fn().mockResolvedValue([]),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row,
+  });
+  await vi.waitFor(() => expect(api.getOrderPrinters).toHaveBeenCalled());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  const print = printButton(el);
+  await print.updateComplete;
+  expect(print.getAttribute("disabled")).not.toBeNull();
+  expect(print.variant).toBe("secondary");
+});
+
+it("keeps Print blue while the copy it sent is in progress", async () => {
+  const api = {
+    getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+    reprintOrder: vi.fn().mockReturnValue(new Promise(() => {})),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row,
+  });
+  const print = printButton(el);
+  await vi.waitFor(() => expect(print.getAttribute("disabled")).toBeNull());
+  print.click();
+  await vi.waitFor(() => expect(print.loading).toBe(true));
+  expect(api.reprintOrder).toHaveBeenCalled();
+  expect(print.variant).toBe("primary");
+});

@@ -630,6 +630,56 @@ describe("backup-screen", () => {
     expect(api.rotateBackupKey).toHaveBeenCalledWith({ recoveryKey: "MINTED-KEY-abcdef012345" });
   });
 
+  it.each(["light", "dark"] as const)(
+    "draws Rotate quiet like Show current key while it waits for the tick and the old key, then blue (%s theme)",
+    async (theme) => {
+      const api = stubApi({}, ENABLED);
+      const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api }, theme);
+      await flush(el);
+      const button = (test: string) =>
+        q(el, `[data-test=${test}]`) as HTMLElementTagNameMap["wt-button"];
+      const fill = (host: Element) =>
+        getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+      const quietFill = fill(button("show-old-key"));
+      const expectQuiet = () => {
+        expect(button("rotate-confirm").hasAttribute("disabled")).toBe(true);
+        expect(button("rotate-confirm").variant).toBe("secondary");
+        expect(fill(button("rotate-confirm"))).toBe(quietFill);
+      };
+      expectQuiet();
+      tickCheckbox(el, "[data-test=saved-it]");
+      await el.updateComplete;
+      await button("rotate-confirm").updateComplete;
+      expectQuiet();
+      button("show-old-key").click();
+      await flush(el);
+      await button("rotate-confirm").updateComplete;
+      expect(button("rotate-confirm").hasAttribute("disabled")).toBe(false);
+      expect(button("rotate-confirm").variant).toBe("primary");
+      expect(fill(button("rotate-confirm"))).not.toBe(quietFill);
+    },
+  );
+
+  it("keeps Rotate blue while the rotation it sent is in progress", async () => {
+    const api = stubApi(
+      { rotateBackupKey: vi.fn().mockReturnValue(new Promise(() => {})) },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    const rotate = q(el, "[data-test=rotate-confirm]") as HTMLElementTagNameMap["wt-button"];
+    rotate.click();
+    await vi.waitFor(() => expect(api.rotateBackupKey).toHaveBeenCalled());
+    await el.updateComplete;
+    await rotate.updateComplete;
+    expect(rotate.hasAttribute("disabled")).toBe(true);
+    expect(rotate.variant).toBe("primary");
+  });
+
   it("lets an enabled box change its destination through applyBackup, reusing the current key", async () => {
     const rotatedEnabled: BackupStatusView = {
       ...ENABLED,

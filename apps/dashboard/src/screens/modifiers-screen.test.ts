@@ -2060,3 +2060,69 @@ it.each([
     }, cleanupWidgets);
   },
 );
+
+describe("the delete dialog's Delete, and the editor's Save", () => {
+  const fill = (host: Element) =>
+    getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+  const button = (root: ParentNode, selector: string) =>
+    root.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
+
+  it.each(["light", "dark"])(
+    "draws Delete quiet like Cancel while what uses the list loads, then red (%s theme)",
+    async (theme) => {
+      let arrive!: (value: ExtraListDependants) => void;
+      const el = await mount(
+        api({
+          getExtraListDependants: vi
+            .fn()
+            .mockReturnValue(new Promise<ExtraListDependants>((resolve) => (arrive = resolve))),
+        }),
+      );
+      el.parentElement!.setAttribute("data-theme", theme);
+      await clickInTable(el, "extra-lists", "delete-extra-e1");
+      const dialog = deleteDialog(el);
+      const confirm = confirmDelete(el);
+      await confirm.updateComplete;
+      const cancelFill = fill(button(dialog, 'wt-button[slot="cancel"]'));
+      expect(confirm.getAttribute("disabled")).not.toBeNull();
+      expect(confirm.variant).toBe("secondary");
+      expect(fill(confirm)).toBe(cancelFill);
+      arrive(noExtraDependants);
+      await vi.waitFor(() => expect(confirm.getAttribute("disabled")).toBeNull());
+      expect(confirm.variant).toBe("danger");
+      expect(fill(confirm)).not.toBe(cancelFill);
+    },
+  );
+
+  it("keeps Delete red while the delete it sent is in progress", async () => {
+    const client = api({ deleteExtraList: vi.fn().mockReturnValue(new Promise<void>(() => {})) });
+    const el = await mount(client);
+    await clickInTable(el, "extra-lists", "delete-extra-e1");
+    const confirm = confirmDelete(el);
+    await vi.waitFor(() => expect(confirm.getAttribute("disabled")).toBeNull());
+    confirm.click();
+    await vi.waitFor(() => expect(client.deleteExtraList).toHaveBeenCalled());
+    await el.updateComplete;
+    await confirm.updateComplete;
+    expect(confirm.getAttribute("disabled")).not.toBeNull();
+    expect(confirm.variant).toBe("danger");
+  });
+
+  it("still opens a list's editor with Save quiet, and turns it blue once something changes", async () => {
+    const el = await mount();
+    await clickInTable(el, "extra-lists", "edit-extra-e1");
+    const form = extraForm(el);
+    await form.updateComplete;
+    const save = button(form.shadowRoot!, '[data-test="save"]');
+    expect(save.disabled).toBe(true);
+    expect(save.variant).toBe("secondary");
+    form
+      .shadowRoot!.querySelector('[name="name"]')!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "Rolls" }, bubbles: true, composed: true }),
+      );
+    await form.updateComplete;
+    expect(save.disabled).toBe(false);
+    expect(save.variant).toBe("primary");
+  });
+});
