@@ -27,8 +27,8 @@ import {
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
-// case reading mutation.yml and one token-permissions case reading every .yml file in
-// .github/workflows/. A transcription tests this file's copy of a workflow rather than the
+// case reading mutation.yml, and a token-permissions case and an apt case reading every .yml file
+// in .github/workflows/. A transcription tests this file's copy of a workflow rather than the
 // workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
 // each shard's filters are handed to the real `pnpm ls` and the answer is read back.
@@ -1427,6 +1427,70 @@ function jobsWithoutPermissions(text) {
 }
 
 /**
+ * Each step under a `steps:` key, with its `name:` and the first line or `|`/`>` block of its
+ * `run:`, shell comments cut.
+ */
+function workflowSteps(text) {
+  const workflowLines = text.split("\n");
+  const indentOf = (line) => line.search(/\S/);
+  const isContent = (line) => line.trim() !== "" && !/^\s*#/.test(line);
+  const steps = [];
+  workflowLines.forEach((line, index) => {
+    if (!/^\s*steps:\s*(#.*)?$/.test(line)) return;
+    const first = workflowLines.slice(index + 1).find(isContent);
+    if (first === undefined || !/^\s*- /.test(first)) return;
+    const dash = indentOf(first);
+    let step;
+    let blockIndent;
+    for (let at = index + 1; at < workflowLines.length; at += 1) {
+      const current = workflowLines[at];
+      if (blockIndent !== undefined) {
+        if (!isContent(current) || indentOf(current) > blockIndent) {
+          step.run.push(current);
+          continue;
+        }
+        blockIndent = undefined;
+      }
+      if (!isContent(current)) continue;
+      const indent = indentOf(current);
+      if (indent < dash || (indent === dash && !/^\s*- /.test(current))) break;
+      if (indent === dash) {
+        const keyIndent = dash + 1 + current.slice(dash + 1).search(/\S/);
+        step = { line: at + 1, name: undefined, run: [], keyIndent };
+        steps.push(step);
+      } else if (indent !== step.keyIndent) continue;
+      const [, key, value] = /^([\w-]+):\s*(.*)$/.exec(current.slice(step.keyIndent)) ?? [];
+      if (key === "name") step.name = value.trim();
+      if (key !== "run") continue;
+      if (/^[|>][-+\d]*\s*(#.*)?$/.test(value)) blockIndent = step.keyIndent;
+      else step.run.push(value);
+    }
+  });
+  return steps.map(({ line, name, run }) => ({
+    step: name ?? `the step at line ${line}`,
+    command: run
+      .filter((runLine) => !/^\s*#/.test(runLine))
+      .map((runLine) => runLine.replace(/\s#.*$/, ""))
+      .join("\n"),
+  }));
+}
+
+/** The steps whose `run:` command installs with apt, and whether it updates the package list first. */
+function aptInstallSteps(text) {
+  const apt = (word) => new RegExp(`\\bapt(?:-get)?(?:\\s+(?:-[oc]\\s+\\S+|-\\S+))*\\s+${word}\\b`);
+  return workflowSteps(text).flatMap(({ step, command }) => {
+    const install = apt("install").exec(command);
+    if (install === null) return [];
+    return [{ step, updatesFirst: apt("update").test(command.slice(0, install.index)) }];
+  });
+}
+
+const workflowsDir = join(repoRoot, ".github", "workflows");
+const workflowFiles = readdirSync(workflowsDir)
+  .filter((name) => /\.ya?ml$/.test(name))
+  .sort();
+
+/**
  * Every job runs under a `permissions:` block of its own or its workflow's, never the repository's
  * default token permissions. It reads each workflow as TEXT, by indent: a job is any two-space key
  * after the `jobs:` line, and only a `permissions:` key at four-space indent covers it. So a job
@@ -1434,11 +1498,6 @@ function jobsWithoutPermissions(text) {
  * `permissions:` value, `write-all` included, counts as covering every job.
  */
 describe("the workflows' token permissions", () => {
-  const workflowsDir = join(repoRoot, ".github", "workflows");
-  const workflowFiles = readdirSync(workflowsDir)
-    .filter((name) => /\.ya?ml$/.test(name))
-    .sort();
-
   it("reads a top-level block as covering every job, and a job's own block as covering it", () => {
     const shape = (top) =>
       `name: x\n${top}on: push\njobs:\n  a:\n    permissions:\n      contents: read\n    runs-on: x\n  b:\n    runs-on: x\n    steps:\n      - run: echo permissions:\n`;
@@ -1481,6 +1540,149 @@ describe("the workflows' token permissions", () => {
     expect(
       uncovered,
       "give the workflow a top-level `permissions:` block (contents: read), or the job its own",
+    ).toEqual([]);
+  });
+});
+
+/**
+ * A step that runs `apt install` or `apt-get install` runs `apt update` or `apt-get update` earlier
+ * in its own `run:` command: the runner's baked-in package list can name a file the archive no
+ * longer serves. It reads each workflow as TEXT, by indent: a step is a `- ` item under a `steps:`
+ * key, its command is the first line of its own `run:` value or the indented block under a
+ * `run: |` or `run: >`, and a shell comment is cut from a full-line `#` or a whitespace-led ` #`
+ * to the end of the line, inside quotes too. An install it does not read passes, among them one
+ * after a quoted ` #` on its line, on the second line of a `run:` value that is neither `|` nor
+ * `>`, after an option whose value is a separate word (`-t noble-backports`), in a step written in
+ * flow style (`- {run: …}`), in a composite or Docker action, in a script the step calls, in a
+ * command built from a variable, and in one a tool runs itself (`playwright install --with-deps`).
+ * Any `apt update` or `apt-get update` text before the install counts, whether or not it runs.
+ */
+describe("the workflows' apt installs", () => {
+  const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
+
+  it("reports an install with no update before it", () => {
+    const text = workflow(
+      "      - name: deps\n        run: |\n          sudo apt-get install -y bluez\n",
+    );
+    expect(aptInstallSteps(text)).toEqual([{ step: "deps", updatesFirst: false }]);
+  });
+
+  it("does not count an update in an earlier step", () => {
+    const text = workflow(
+      "      - name: refresh\n        run: |\n          sudo apt-get update\n" +
+        "      - name: deps\n        run: sudo apt-get install -y bluez\n",
+    );
+    expect(aptInstallSteps(text)).toEqual([{ step: "deps", updatesFirst: false }]);
+  });
+
+  it.each([
+    [
+      "a later line",
+      "run: |\n          sudo apt-get install -y bluez\n          sudo apt-get update",
+    ],
+    ["later on the same line", "run: sudo apt-get install -y bluez && sudo apt-get update"],
+  ])("does not count an update on %s than the install", (_where, run) => {
+    const text = workflow(`      - name: deps\n        ${run}\n`);
+    expect(aptInstallSteps(text)).toEqual([{ step: "deps", updatesFirst: false }]);
+  });
+
+  it.each([
+    [
+      "the step's name",
+      "- name: apt-get update\n        run: sudo apt-get install -y bluez",
+      "apt-get update",
+    ],
+    [
+      "an env value",
+      "- name: deps\n        env:\n          NOTE: apt-get update\n        run: sudo apt-get install -y bluez",
+      "deps",
+    ],
+    [
+      "a with value",
+      "- name: deps\n        with:\n          note: apt-get update\n        run: sudo apt-get install -y bluez",
+      "deps",
+    ],
+    [
+      "a trailing shell comment",
+      "- name: deps\n        run: |\n          echo noop # apt-get update\n          sudo apt-get install -y bluez",
+      "deps",
+    ],
+  ])("does not count an update named in %s", (_where, step, name) => {
+    expect(aptInstallSteps(workflow(`      ${step}\n`))).toEqual([
+      { step: name, updatesFirst: false },
+    ]);
+  });
+
+  it.each([
+    [
+      "a one-line step",
+      "      - run: sudo apt-get update && sudo apt-get install -y bluez\n",
+      "the step at line 6",
+    ],
+    [
+      "an inline run",
+      "      - name: deps\n        run: sudo apt-get update && sudo apt-get install -y bluez\n",
+      "deps",
+    ],
+    [
+      "one line of a block",
+      "      - name: deps\n        run: |\n          sudo apt-get update && sudo apt-get install -y bluez\n",
+      "deps",
+    ],
+    [
+      "a folded block",
+      "      - name: deps\n        run: >\n          sudo apt-get update &&\n          sudo apt-get install -y bluez\n",
+      "deps",
+    ],
+    [
+      "an option before the word",
+      "      - name: deps\n        run: |\n          sudo apt-get -qq update\n          sudo apt-get -qq install -y bluez\n",
+      "deps",
+    ],
+    [
+      "plain apt",
+      "      - name: deps\n        run: sudo apt update && sudo apt install -y bluez\n",
+      "deps",
+    ],
+  ])("passes an update before the install in %s", (_shape, steps, name) => {
+    expect(aptInstallSteps(workflow(steps))).toEqual([{ step: name, updatesFirst: true }]);
+  });
+
+  it.each([
+    ["apt-get -y install bluez"],
+    ["apt-get -o Acquire::Retries=3 install -y bluez"],
+    ["apt -y install bluez"],
+  ])("reports %j with no update", (command) => {
+    const text = workflow(`      - name: deps\n        run: sudo ${command}\n`);
+    expect(aptInstallSteps(text)).toEqual([{ step: "deps", updatesFirst: false }]);
+  });
+
+  it.each([
+    [
+      "a commented-out line",
+      "run: |\n          # sudo apt-get install -y bluez\n          echo ok",
+    ],
+    ["a trailing shell comment", "run: echo ok # sudo apt-get install -y bluez"],
+    [
+      "a with value",
+      "uses: some/action@v1\n        with:\n          script: sudo apt-get install -y bluez",
+    ],
+  ])("ignores an install in %s", (_where, body) => {
+    expect(aptInstallSteps(workflow(`      - name: deps\n        ${body}\n`))).toEqual([]);
+  });
+
+  it("refresh apt's package list in the same step before every apt install", () => {
+    const steps = workflowFiles.flatMap((name) =>
+      aptInstallSteps(readFileSync(join(workflowsDir, name), "utf8")).map((found) => ({
+        ...found,
+        name,
+      })),
+    );
+    expect(steps.length, "expected image-smoke's apt install to still be here").toBeGreaterThan(0);
+    expect(
+      steps.filter((found) => !found.updatesFirst).map((found) => `${found.name}: ${found.step}`),
+      "run `sudo apt-get update` earlier in the same step's `run:` than its `apt-get install`: " +
+        "the runner's baked-in package list can name a file the archive no longer serves",
     ).toEqual([]);
   });
 });
