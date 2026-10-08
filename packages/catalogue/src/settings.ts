@@ -9,12 +9,14 @@ import "./errors.js";
 import type { CatalogueSettings } from "./settings-types.js";
 export type { CatalogueSettings } from "./settings-types.js";
 
+const SETTINGS_COLUMNS = {
+  defaultProductVatClass: catalogueSettings.defaultProductVatClass,
+  defaultColor: catalogueSettings.defaultColor,
+};
+
 export async function readCatalogueSettings(tx: Transaction): Promise<CatalogueSettings> {
   const [row] = await tx
-    .select({
-      defaultProductVatClass: catalogueSettings.defaultProductVatClass,
-      defaultColor: catalogueSettings.defaultColor,
-    })
+    .select(SETTINGS_COLUMNS)
     .from(catalogueSettings)
     .where(eq(catalogueSettings.id, 1));
   return row ?? { defaultProductVatClass: "general", defaultColor: null };
@@ -28,10 +30,7 @@ async function upsertSettings(
     .insert(catalogueSettings)
     .values(values)
     .onConflictDoUpdate({ target: catalogueSettings.id, set: values })
-    .returning({
-      defaultProductVatClass: catalogueSettings.defaultProductVatClass,
-      defaultColor: catalogueSettings.defaultColor,
-    });
+    .returning(SETTINGS_COLUMNS);
   return row!;
 }
 
