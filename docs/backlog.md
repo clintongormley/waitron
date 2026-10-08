@@ -5278,8 +5278,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       clears — a returning category or No category row has none.
     - **Done by A371 (owner answer, 2026-10-07): a routing preview lists an extra that stops or
       starts following its dish.** A cell that names a station, even the default one, sends an
-      extra there (the owner kept that rule). The preview now also works out, for every dish and
-      every extra it offers, where the extra is made before and after the change, through
+      extra there (the owner kept that rule). The preview now also works out, for each extra a dish
+      offers when the change can reach the dish or the extra (A373 narrowed this), where the extra
+      is made before and after the change, through
       `chooseExtraMaker`, and lists the extra when that place changes, naming its
       dish ("Cheese — with Burger"); the grid then asks before saving. An extra that follows its
       dish both before and after lists nothing. A dish offers an extra when the catalogue attaches
@@ -5296,9 +5297,11 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       `packages/venue-service/src/dashboard/routing-grid-model.ts`). An inactive product's cells
       stay out of sight until it is active again, as before.
     - **Done by A373: a routing preview works out only what the change can move.** It works out
-      only the products under the changed row, in the changed zone (every zone for an Every zone
-      cell), and only the extras whose dish or own row is under it (`changeReach`,
-      `packages/venue-service/src/routing.ts`); what it reads and what it reports are unchanged.
+      the before and after choice only for the products under the changed row, in the changed zone
+      (every zone for an Every zone cell), and only for the extras whose dish or own row is under
+      it (`changeReach`, `packages/venue-service/src/routing.ts`); a dish outside that reach which
+      offers such an extra has its unchanged choice worked out once in each zone where it offers
+      one, and used for both before and after. What it reads and what it reports are unchanged.
     - **Done by A374 (#1403; owner answer "refuse, and say which choice and why", 2026-10-07): a
       configuration import refuses a routing cell on a zone in a switched-off department.**
       `validateRoutingConfiguration` (`packages/venue-service/src/configuration-transfer.ts`)
