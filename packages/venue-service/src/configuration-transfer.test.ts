@@ -835,39 +835,6 @@ describe("validateHolidayConfiguration", () => {
   });
 });
 
-describe("the department menu rows of a bundle", () => {
-  const ZONE = "z-barra";
-  const tables = (departmentId: string): Tables => ({
-    zone_service_policies: [{ zone_id: ZONE, department_id: RESTAURANT }],
-    department_menus: [
-      { department_id: RESTAURANT, menu_id: "m-bebidas", display_order: 0 },
-      { department_id: DELI, menu_id: "m-bebidas", display_order: 0 },
-    ],
-    zone_all_day_menus: [{ zone_id: ZONE, department_id: departmentId, menu_id: "m-bebidas" }],
-  });
-
-  it("are transferred after the departments and zone policies their keys name", () => {
-    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(
-      names.slice(names.indexOf("zone_sale_policies"), names.indexOf("zone_sale_policies") + 4),
-    ).toEqual([
-      "zone_sale_policies",
-      "department_menus",
-      "department_all_day_menus",
-      "zone_all_day_menus",
-    ]);
-  });
-
-  it("refuse a zone's all-day menu filed under a department other than the zone's", () => {
-    const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
-    expect(() => validate(tables(RESTAURANT))).not.toThrow();
-    expect(() => validate(tables(DELI))).toThrowError(refusal("zone_all_day_menus.department_id"));
-    const noPolicy = tables(RESTAURANT);
-    noPolicy.zone_service_policies = [];
-    expect(() => validate(noPolicy)).toThrowError(refusal("zone_all_day_menus.department_id"));
-  });
-});
-
 describe("the menu timetable rows of a bundle", () => {
   const BARRA = "z-barra";
   const MANANAS = "11111111-1111-4111-8111-111111111111";
@@ -904,12 +871,6 @@ describe("the menu timetable rows of a bundle", () => {
       special_dates: [dateRow(CHRISTMAS, "2026-12-25")],
       zone_service_policies: [{ zone_id: BARRA, department_id: RESTAURANT }],
       catalogues: [{ id: "m-desayunos" }, { id: "m-copas" }, { id: "m-cafe" }, { id: "m-deli" }],
-      department_menus: [
-        { department_id: RESTAURANT, menu_id: "m-desayunos" },
-        { department_id: RESTAURANT, menu_id: "m-copas" },
-        { department_id: RESTAURANT, menu_id: "m-cafe" },
-        { department_id: DELI, menu_id: "m-deli" },
-      ],
       menu_periods: [
         {
           id: MANANAS,
@@ -964,7 +925,7 @@ describe("the menu timetable rows of a bundle", () => {
       "menu_day_timetables",
       "menu_slots",
     ]);
-    expect(at).toBeGreaterThan(names.indexOf("zone_all_day_menus"));
+    expect(at).toBeGreaterThan(names.indexOf("zone_sale_policies"));
   });
 
   it("accept rows a writer could have written, and a bundle with none", () => {

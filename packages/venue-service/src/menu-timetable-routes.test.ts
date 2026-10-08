@@ -28,7 +28,6 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { setDepartmentAllDayMenu, setDepartmentMenus } from "./department-menus.js";
 import { saveSpecialDate } from "./hours.js";
 import { readOpeningHoursModel, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot, OpeningHoursModel } from "./menu-timetable-types.js";
@@ -93,9 +92,6 @@ async function routed() {
     const almuerzo = await menu("Almuerzo");
     const cafe = await menu("Café");
     const deliParaLlevar = await menu("Deli para llevar");
-    await setDepartmentMenus(tx, cfg, restaurant, [desayunos, almuerzo, cafe]);
-    await setDepartmentAllDayMenu(tx, cfg, restaurant, almuerzo);
-    await setDepartmentMenus(tx, cfg, deli, [deliParaLlevar]);
     const mananas = (
       await saveMenuPeriod(tx, cfg, restaurant, {
         name: "Mañanas",

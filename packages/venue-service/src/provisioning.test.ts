@@ -172,12 +172,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await db.execute(sql`
       update locations set catalogue_id = ${menus[0]!.id} where id = ${locationId}`);
     await db.execute(sql`
-      insert into department_menus (department_id, menu_id, display_order)
-      select department_id, ${menus[1]!.id}, 1
-      from zone_service_policies`);
-    await db.execute(sql`
-      insert into department_all_day_menus (department_id, menu_id)
-      select department_id, ${menus[1]!.id}
+      insert into menu_periods (id, department_id, name, menu_id)
+      select ${randomUUID()}, department_id, 'Authored', ${menus[1]!.id}
       from zone_service_policies`);
     await db.execute(sql`
       update zone_service_policies
@@ -190,15 +186,15 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       select count(*) as count from floor_zones`);
     const policies = await db.execute<{ service_mode: string | null }>(sql`
       select service_mode from zone_service_policies`);
-    const allDay = await db.execute<{ menu_id: string }>(sql`
-      select menu_id from department_all_day_menus`);
+    const periods = await db.execute<{ menu_id: string }>(sql`
+      select menu_id from menu_periods`);
     expect(departments.rows[0]!.count).toBe(1);
     expect(zones.rows[0]!.count).toBe(1);
     expect(policies.rows).toEqual([{ service_mode: "ticket_then_pay" }]);
-    expect(allDay.rows).toEqual([{ menu_id: menus[1]!.id }]);
+    expect(periods.rows).toEqual([{ menu_id: menus[1]!.id }]);
   });
 
-  it("seeds the location's Open period and keeps the transitional member order on a re-run", async () => {
+  it("seeds the location's Open period and preserves authored name, colour and staff order on a re-run", async () => {
     await seedTenant(db);
     const [menu] = await db
       .insert(catalogues)
@@ -218,29 +214,37 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const listed = async () =>
       (
-        await db.execute<{
-          menu_id: string;
-          display_order: number;
-          period_menu: string | null;
-        }>(sql`
-          select m.menu_id, m.display_order, a.menu_id as period_menu
-          from department_menus m
-          join departments d on d.id = m.department_id
-          join menu_periods a on a.department_id = m.department_id
-          where d.location_id = ${locationId}`)
+        await db.execute(sql`
+      select p.id, p.menu_id, p.name, p.colour
+      from menu_periods p join departments d on d.id = p.department_id
+      where d.location_id = ${locationId}`)
       ).rows;
-
     await runSeed();
-    expect(await listed()).toEqual([
-      { menu_id: menu!.id, display_order: 0, period_menu: menu!.id },
+    const original = await listed();
+    expect(original).toEqual([
+      { id: expect.any(String), menu_id: menu!.id, name: "Open", colour: "red" },
     ]);
+    const periodId = original[0]!.id as string;
     await db.execute(
-      sql`update department_menus set display_order = 5 where menu_id = ${menu!.id}`,
+      sql`update menu_periods set name = 'Authored hours', colour = 'blue' where id = ${periodId}`,
     );
+    const [staff] = await db
+      .insert(catalogues)
+      .values({ name: "Staff" })
+      .returning({ id: catalogues.id });
+    await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id, display_order)
+      select id, department_id, ${staff!.id}, 5 from menu_periods where id = ${periodId}`);
     await runSeed();
     expect(await listed()).toEqual([
-      { menu_id: menu!.id, display_order: 5, period_menu: menu!.id },
+      { id: periodId, menu_id: menu!.id, name: "Authored hours", colour: "blue" },
     ]);
+    expect(
+      (
+        await db.execute(
+          sql`select period_id, menu_id, display_order from menu_period_staff_menus where period_id = ${periodId}`,
+        )
+      ).rows,
+    ).toEqual([{ period_id: periodId, menu_id: staff!.id, display_order: 5 }]);
   });
 
   it("seeds the service settings row with changes to sent items allowed, and keeps a later choice", async () => {

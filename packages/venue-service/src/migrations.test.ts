@@ -33,10 +33,7 @@ beforeAll(() => {
 const TABLES = [
   "departments",
   "zone_service_policies",
-  "department_menus",
   "menu_period_staff_menus",
-  "department_all_day_menus",
-  "zone_all_day_menus",
   "device_profile_service_access",
   "device_profile_zones",
   "device_profile_stations",
@@ -171,26 +168,11 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(zone_id) -> floor_zones(id)",
         ],
       },
-      department_menus: {
-        primaryKey: ["department_id", "menu_id"],
-        foreignKeys: ["(department_id) -> departments(id)", "(menu_id) -> catalogues(id)"],
-      },
       menu_period_staff_menus: {
         primaryKey: ["period_id", "menu_id"],
         foreignKeys: [
           "(menu_id) -> catalogues(id)",
           "(period_id, department_id) -> menu_periods(id, department_id) on delete cascade",
-        ],
-      },
-      department_all_day_menus: {
-        primaryKey: ["department_id"],
-        foreignKeys: ["(department_id, menu_id) -> department_menus(department_id, menu_id)"],
-      },
-      zone_all_day_menus: {
-        primaryKey: ["zone_id"],
-        foreignKeys: [
-          "(department_id, menu_id) -> department_menus(department_id, menu_id)",
-          "(zone_id) -> floor_zones(id)",
         ],
       },
       device_profile_service_access: {
@@ -280,7 +262,6 @@ describe("the venue-service migration set carries no tenant column", () => {
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
     expect(columns("station_day_states_day_key")).toEqual(["station_id", "business_day"]);
     expect(defs["station_day_states_day_key"]?.unique).toBe(true);
-    expect(columns("department_menus_order_idx")).toEqual(["department_id", "display_order"]);
     expect(columns("kitchen_notices_open_idx")).toEqual(["station_id", "created_at"]);
     expect(predicate("kitchen_notices_open_idx")).toBe(
       `"kitchen_notices"."acknowledged_at" is null`,
@@ -369,9 +350,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   it("stores a full business day and ordinary quarter-hour ranges", async () => {
     const v = await venue();
     const periodId = randomUUID();
-    // Establish the period before testing slots on the current and replacement schema.
-    await db.execute(sql`insert into department_menus (department_id, menu_id)
-      values (${v.departmentId}, ${v.menuId})`);
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Open', ${v.menuId})`);
     const timetableId = randomUUID();
@@ -400,9 +378,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   it("refuses either endpoint between quarter-hours", async () => {
     const v = await venue();
     const periodId = randomUUID();
-    // Establish the period before testing slots on the current and replacement schema.
-    await db.execute(sql`insert into department_menus (department_id, menu_id)
-      values (${v.departmentId}, ${v.menuId})`);
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Open', ${v.menuId})`);
     const timetableId = randomUUID();
@@ -428,8 +403,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await venue();
     const periodId = randomUUID();
     const staff = await db.transaction((tx) => createCatalogue(tx, { name: "Staff drinks" }));
-    await db.execute(sql`insert into department_menus (department_id, menu_id)
-      values (${v.departmentId}, ${v.menuId})`);
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
     await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id)
@@ -457,8 +430,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const other = await venue();
     const periodId = randomUUID();
     const missing = "00000000-0000-4000-8000-00000000dead";
-    await db.execute(sql`insert into department_menus (department_id, menu_id)
-      values (${v.departmentId}, ${v.menuId})`);
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
     await refusal(
@@ -502,46 +473,20 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       "zone_service_policies_department_fk",
     );
     await refusal(
-      sql`insert into department_menus (department_id, menu_id) values (${missing}, ${v.menuId})`,
-      "department_menus_department_fk",
+      sql`insert into menu_periods (id, department_id, name, menu_id)
+        values (${randomUUID()}, ${missing}, 'Lunch', ${v.menuId})`,
+      "menu_periods_department_fk",
     );
     await refusal(
-      sql`insert into department_menus (department_id, menu_id)
-        values (${v.departmentId}, ${missing})`,
-      "department_menus_menu_fk",
+      sql`insert into menu_periods (id, department_id, name, menu_id)
+        values (${randomUUID()}, ${v.departmentId}, 'Lunch', ${missing})`,
+      "menu_periods_menu_fk",
     );
     await refusal(
       sql`insert into order_service_contexts
           (working_order_id, location_id, zone_id, department_id, service_mode)
         values (${missing}, ${v.locationId}, ${v.zoneId}, ${v.departmentId}, 'prepay')`,
       "order_service_contexts_order_fk",
-    );
-  });
-
-  it("refuses an all-day menu the department's list does not hold", async () => {
-    const v = await venue();
-    await refusal(
-      sql`insert into department_all_day_menus (department_id, menu_id)
-        values (${v.departmentId}, ${v.menuId})`,
-      "department_all_day_menus_member_fk",
-    );
-    await refusal(
-      sql`insert into zone_all_day_menus (zone_id, department_id, menu_id)
-        values (${v.zoneId}, ${v.departmentId}, ${v.menuId})`,
-      "zone_all_day_menus_member_fk",
-    );
-    await db.execute(sql`
-      insert into department_menus (department_id, menu_id) values (${v.departmentId}, ${v.menuId})`);
-    await db.execute(sql`
-      insert into department_all_day_menus (department_id, menu_id)
-      values (${v.departmentId}, ${v.menuId})`);
-    await db.execute(sql`
-      insert into zone_all_day_menus (zone_id, department_id, menu_id)
-      values (${v.zoneId}, ${v.departmentId}, ${v.menuId})`);
-    await refusal(
-      sql`insert into zone_all_day_menus (zone_id, department_id, menu_id)
-        values (${"00000000-0000-4000-8000-00000000dead"}, ${v.departmentId}, ${v.menuId})`,
-      "zone_all_day_menus_zone_fk",
     );
   });
 });

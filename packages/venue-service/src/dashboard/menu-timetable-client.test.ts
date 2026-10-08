@@ -58,13 +58,9 @@ describe("MenuTimetableApi.watchTimetable", () => {
     const detach = api.watchTimetable(apply, vi.fn(), vi.fn());
     await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(model));
     expect(QUERY_DEPENDENCIES["menu-timetable"]).toEqual([
-      "department_menus",
-      "department_all_day_menus",
-      "zone_all_day_menus",
       "menu_periods",
       "menu_day_timetables",
       "menu_slots",
-      "zone_period_menus",
       "special_dates",
       "departments",
       "floor_zones",
