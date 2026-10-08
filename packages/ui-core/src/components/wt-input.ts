@@ -51,6 +51,7 @@ export class WtInput extends LitElement {
   @property() autocomplete = "";
   @property() placeholder = "";
   @property({ type: Number }) maxlength?: number;
+  @property({ type: Number }) step?: number;
   @property() error = "";
   /** Shown as the placeholder unless one is given, and kept as the input's description because a
    * placeholder disappears once the field holds a value. */
@@ -115,6 +116,7 @@ export class WtInput extends LitElement {
             autocomplete=${this.autocomplete || nothing}
             placeholder=${this.placeholder || this.hint}
             maxlength=${this.maxlength ?? nothing}
+            step=${this.step ?? nothing}
             aria-label=${this.hideLabel && this.label ? this.label : nothing}
             ?required=${this.required}
             ?disabled=${this.disabled}

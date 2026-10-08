@@ -2,6 +2,13 @@ import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
   "opening.title": "Opening hours",
+  "opening.range_heading": "Time range",
+  "opening.new_period": "New period…",
+  "opening.start_required": "Enter a start time.",
+  "opening.end_required": "Enter an end time.",
+  "opening.valid_time": "Enter a valid time.",
+  "opening.time_step": "Choose a time in 15-minute steps.",
+  "opening.range_order": "Choose an end after the start within this business day.",
   "opening.load_error": "Opening hours could not be loaded. It will be tried again.",
   "opening.delete_confirm": "Delete {name}?",
   "opening.tab.periods": "Periods",
@@ -727,6 +734,13 @@ const en = {
 
 const es: Record<keyof typeof en, string> = {
   "opening.title": "Horario de apertura",
+  "opening.range_heading": "Franja horaria",
+  "opening.new_period": "Nuevo periodo…",
+  "opening.start_required": "Indica una hora de inicio.",
+  "opening.end_required": "Indica una hora de fin.",
+  "opening.valid_time": "Indica una hora válida.",
+  "opening.time_step": "Elige una hora en intervalos de 15 minutos.",
+  "opening.range_order": "Elige un final posterior al inicio dentro de este día de servicio.",
   "opening.load_error": "No se ha podido cargar el horario de apertura. Se volverá a intentar.",
   "opening.delete_confirm": "¿Eliminar {name}?",
   "opening.tab.periods": "Periodos",

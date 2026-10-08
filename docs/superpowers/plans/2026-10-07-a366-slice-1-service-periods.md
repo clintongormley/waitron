@@ -774,6 +774,20 @@ phone width; commit `feat(venue-service): edit a department's week of periods (A
 
 ---
 
+**Checkpoint 2026-10-08 — range dialog prerequisite.** `range-dialog` stages one time range
+locally, with required quarter-hour time fields, the department's periods and a New period action.
+It checks business-day ordering and overlap against the other ranges of that day. Save emits
+`range-save` with `{ input }`; existing blocks also offer `range-delete`. Both close the editor;
+the parent must stage that change and retain its own dirty scope until its server write succeeds.
+New period emits `range-new-period` with the current input and leaves the editor open;
+`choosePeriod(id)` selects the created period after the parent has updated the period list.
+The parent still needs to wire this to the period dialog, hold the range dialog busy while that
+child is open, and check the opening's identity before accepting a late creation response.
+The range dialog has quiet unchanged Save, field and bottom validation, native Save/Enter,
+Cancel/discard protection and reconnect checks. `wt-input` now forwards an optional numeric
+`step`, tested through the native time control with 900 seconds. Week/date grids, day-copy actions,
+staged parent saves and the nested period flow remain unimplemented; keep Task 13 unchecked.
+
 ### Task 14: Opening hours — Day tab, and the Departments page
 
 **Files:** modify `opening-hours-screen.ts`, `dashboard/venue-operations-screen.ts`
