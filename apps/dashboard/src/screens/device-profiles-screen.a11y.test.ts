@@ -121,6 +121,23 @@ async function flush(el: DeviceProfilesScreen): Promise<void> {
   await el.updateComplete;
 }
 
+/** One edit in the editor, so its Save has a change to send. */
+async function rename(el: DeviceProfilesScreen, name: string): Promise<void> {
+  el.shadowRoot!.querySelector("[data-test=profile-name]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: name }, bubbles: true, composed: true }),
+  );
+  await flush(el);
+}
+
+/** Save's look and whether it can be pressed, on the host and its inner button. */
+async function saveState(el: DeviceProfilesScreen) {
+  const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=profile-save]",
+  )!;
+  await button.updateComplete;
+  return [button.variant, button.disabled, button.shadowRoot!.querySelector("button")!.disabled];
+}
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme)", (theme) => {
@@ -150,6 +167,25 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     // Both printer lists, with order buttons and a switched-off printer still listed.
     expect(el.shadowRoot!.querySelector("[data-test=receipt-printers-up-pr1]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=payment-slip-printers-pr-old]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the editor with Save quiet, and then with a change, accessibly", async () => {
+    const { el, host } = await mountWidget<DeviceProfilesScreen>(
+      "dashboard-device-profiles-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
+    );
+    await flush(el);
+    expect(await saveState(el)).toEqual(["secondary", true, true]);
+    await expectNoA11yViolations(host);
+    await rename(el, "Barra");
+    expect(await saveState(el)).toEqual(["primary", false, false]);
     await expectNoA11yViolations(host);
   });
 
@@ -206,6 +242,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       );
       expect(el.shadowRoot!.querySelector("[data-test=cash-drawer-printers-pr2]")).not.toBeNull();
       await expectNoA11yViolations(host);
+      await rename(el, "Barra");
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
       await flush(el);

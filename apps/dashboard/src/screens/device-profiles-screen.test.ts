@@ -149,6 +149,19 @@ function toggle(el: DeviceProfilesScreen, testId: string, checked: boolean) {
   );
 }
 
+/** One edit, so Save has a change to send. */
+function rename(el: DeviceProfilesScreen, name = "Renamed") {
+  change(el, "profile-name", name);
+}
+
+async function expectSaveQuiet(el: DeviceProfilesScreen) {
+  await el.updateComplete;
+  const button = el.shadowRoot!.querySelector<HTMLElement & { variant: string; disabled: boolean }>(
+    "[data-test=profile-save]",
+  )!;
+  expect([button.variant, button.disabled]).toEqual(["secondary", true]);
+}
+
 function selectCanvas(el: DeviceProfilesScreen, value: string) {
   void chooseOption(el.shadowRoot!.querySelector("[data-test=profile-canvas]")!, value);
 }
@@ -410,6 +423,8 @@ describe("device-profiles-screen editor form", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
     change(el, "profile-name", "   ");
+    // A name of spaces alone is no change; another edit makes the form one Save can press.
+    toggle(el, "cap-take-cash", true);
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
@@ -451,11 +466,12 @@ describe("device-profiles-screen editor form", () => {
     await flush(el);
     const formFactor = el.shadowRoot!.querySelector<Combobox>("[data-test=profile-form-factor]")!;
     expect(formFactor.value).toBe("kds");
+    rename(el, "Kitchen counter");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledWith(
       "p1",
-      "Front counter",
+      "Kitchen counter",
       "c1",
       [],
       "kds",
@@ -536,11 +552,12 @@ describe("device-profiles-screen editor form", () => {
     await flush(el);
     // No timeout input for a kitchen display.
     expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).toBeNull();
+    rename(el, "Kitchen counter");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledWith(
       "p1",
-      "Front counter",
+      "Kitchen counter",
       "c1",
       [],
       "kds",
@@ -1020,6 +1037,8 @@ describe("device-profiles-screen printer lists", () => {
     expect(slip.map((s) => s.dataset.printerId)).toEqual(["pr4", "pr3", "pr1", "pr2"]);
     expect(slip[0]!.label).toBe("Vieja (Deshabilitada)");
     expect(switches(el, "receipt-printers").map((s) => s.dataset.printerId)).not.toContain("pr4");
+    await expectSaveQuiet(el);
+    rename(el);
     await save(el);
     expect(savedLists(api)).toEqual({
       receiptPrinterIds: ["pr2", "pr1"],
@@ -1037,6 +1056,8 @@ describe("device-profiles-screen printer lists", () => {
       "pr1",
       "pr3",
     ]);
+    await expectSaveQuiet(el);
+    rename(el);
     await save(el);
     expect(savedLists(api)).toEqual({
       receiptPrinterIds: ["pr-new", "pr2"],
@@ -1255,6 +1276,8 @@ describe("device-profiles-screen station and watcher lists", () => {
 
   it("sends no lists when they are unchanged", async () => {
     const { api, el } = await editKitchen();
+    await expectSaveQuiet(el);
+    rename(el);
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]).toHaveLength(7);
   });
@@ -1408,6 +1431,8 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     await flush(el);
     toggle(el, "profile-zone-z1", false);
     await flush(el);
+    // Toggling the zone back leaves the draft as opened; the name edit gives Save a change.
+    rename(el);
     await save(el);
     expect(api.updateDeviceProfile).not.toHaveBeenCalled();
     expect(text(el, "profile-zones-error")).toBe(t("device_profiles.err_zones_required"));
@@ -1761,6 +1786,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
         params: { field: "startingZoneId", reason: "unavailable" },
       }),
     });
+    rename(el);
     await save(el);
     expect(q(el, "profile-starting-zone")!.error).toBe(t("device_profiles.err_starting_zone"));
     await chooseOption(q(el, "profile-starting-zone")!, "z2");
@@ -1773,6 +1799,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const { el } = await openEdit(profiles[0]!, {
       updateDeviceProfile: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     });
+    rename(el);
     await save(el);
     expect(bottom(el)).toBe(codeMessage("connection.failed"));
   });
@@ -2059,6 +2086,8 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
 
   it("sends no default or drawer list a save leaves alone", async () => {
     const { api, el } = await editListed();
+    await expectSaveQuiet(el);
+    rename(el);
     await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
     const extras = savedExtras(api) ?? {};
@@ -2113,6 +2142,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
         params: { reason: "default_not_listed", field: "receiptPrinterDefaultId" },
       }),
     });
+    rename(el);
     await save(el);
     expect(field(el, "receipt-printers-default").error).toBe(
       t("device_profiles.err_default_not_listed"),
@@ -2127,6 +2157,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
         params: { reason: "no_cash_drawer", field: "cashDrawerPrinterIds" },
       }),
     });
+    rename(el);
     await save(el);
     expect(
       el.shadowRoot!.querySelector("[data-test=cash-drawer-printers-error]")?.textContent?.trim(),
@@ -2165,7 +2196,9 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     );
     cleanupWidgets();
     const unchanged = await editListed();
+    rename(unchanged.el);
     await save(unchanged.el);
+    expect(unchanged.api.updateDeviceProfile).toHaveBeenCalledTimes(1);
     expect(unchanged.api.setProfileReaders).not.toHaveBeenCalled();
   });
 
@@ -2189,6 +2222,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     });
     expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    rename(el);
     await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.setProfileReaders).not.toHaveBeenCalled();
@@ -2217,6 +2251,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
         .fn()
         .mockRejectedValue({ code: "device_profile.invalid", params: {} }),
     });
+    rename(el);
     await save(el);
     expect(bottom(el)).toBe(codeMessage("device_profile.invalid"));
     for (const test of [
@@ -2234,6 +2269,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     });
     expect(el.shadowRoot!.querySelector("[data-test=profile-readers]")).toBeNull();
     expect(el.shadowRoot!.textContent).toContain(codeMessage("connection.failed"));
+    rename(el);
     await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.setProfileReaders).not.toHaveBeenCalled();

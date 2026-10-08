@@ -7,7 +7,8 @@ import {
   baseStyles,
   formMessage,
   formMessageStyles,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
@@ -539,8 +540,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   #registerDraft(): void {
     this.#draftScope?.dispose();
-    this.#leave = leaveCoordinatorFor(this);
-    this.#draftScope = this.#leave?.register<ProfileDraft>({
+    const { coordinator, scope } = draftScopeFor<ProfileDraft>(this, {
       id: this,
       current: () => this.#draftValue(),
       snapshot: (value) => structuredClone(value),
@@ -562,6 +562,15 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftExceptions = value.exceptions.map((entry) => ({ ...entry }));
         this.draftStartingScreen = value.startingScreen;
       },
+    });
+    this.#leave = coordinator;
+    this.#draftScope = scope;
+  }
+
+  /** One Save covers the profile and, once they have loaded, its card readers. */
+  #saveState() {
+    return saveActionState({
+      isDirty: () => Boolean(this.#draftScope?.isDirty() || this.#readerScope?.isDirty()),
     });
   }
 
@@ -999,7 +1008,7 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftReaders = list;
       this.readerState = "ready";
       this.#readerScope?.dispose();
-      this.#readerScope = this.#leave?.register<ProfileReaderList>({
+      this.#readerScope = draftScopeFor<ProfileReaderList>(this, {
         id: {},
         parent: this,
         current: () => this.draftReaders,
@@ -1008,7 +1017,7 @@ export class DeviceProfilesScreen extends LitElement {
         restore: (value) => {
           this.draftReaders = value;
         },
-      });
+      }).scope;
     } catch (error) {
       if (opened !== this.#opened) return;
       if (codeOf(error) === "authorization.not_permitted") this.readerState = "hidden";
@@ -1239,7 +1248,7 @@ export class DeviceProfilesScreen extends LitElement {
       this.mode = "list";
       this.#showError(null);
     };
-    if (this.#draftScope) await this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
+    if (this.#leave) await this.#leave.request({ scopes: [this], reason: "cancel", proceed });
     else proceed();
   }
 
@@ -1285,7 +1294,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** The server accepts `""` as a name, so an empty name is refused here. */
   async #save(): Promise<void> {
-    if (this.saving) return;
+    if (this.saving || this.#saveState().unchanged) return;
     this.attempted = true;
     this.fieldRefusal = null;
     this.#showError(null);
@@ -2061,6 +2070,7 @@ export class DeviceProfilesScreen extends LitElement {
     const ordering = this.#ordering();
     const marked = FIELDS.some((field) => errors[field]);
     const ownMarked = Object.keys(this.#ownErrors()).length > 0;
+    const save = this.#saveState();
     const message = bottomMessage(
       this.errorKey === null ? null : codeMessage(this.errorKey),
       marked ? t("form.fix_fields") : null,
@@ -2136,9 +2146,9 @@ export class DeviceProfilesScreen extends LitElement {
             >${t("device_profiles.cancel")}</wt-button
           >
           <wt-button
-            variant="primary"
+            variant=${save.variant}
             data-test="profile-save"
-            ?disabled=${this.saving || ownMarked}
+            ?disabled=${save.unchanged || this.saving || ownMarked}
             @click=${() => void this.#save()}
             >${t("device_profiles.save")}</wt-button
           >
