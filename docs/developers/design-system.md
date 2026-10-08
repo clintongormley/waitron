@@ -1570,6 +1570,13 @@ These forms follow the rule so far; the others are being brought under it batch 
 and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;
+- batch 2a: the "VAT class for new products" default on Venue settings; the recipe editor and the
+  ingredient form; the unit form, new and existing; the options list and its option window; the
+  extras list; Add to menus after a product is created; a section's Add products; a menu's
+  Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's Move and
+  Delete dialog and the image picker act on what is selected rather than save a draft, so they keep
+  their own rules; the reason for each is in
+  [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
 - batch 3a: the floor plan's table rows and Add table; the service-status rows and Create; the
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your

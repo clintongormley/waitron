@@ -1558,7 +1558,7 @@ receipt was recorded; do not treat its complete main run as green.
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
 venue-service forms and the till's profile dialog) in #1418; batch 5 (the till) in #1414; batch 6 audited with no
-stored-setting editors; batch 7 unreserved forms audited; batches 2 and 4b OPEN.** The owner:
+stored-setting editors; batch 7 unreserved forms audited; batch 2a built, pull request pending; batches 2b and 4b OPEN.** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
@@ -1577,10 +1577,46 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   no defect found. In the same mount, the first screen frame after `closeSaved` (what the
   Products screen calls once a save succeeds) already has the product editor closed, so its Save
   is not seen turning quiet as the dialog goes.
-- **Batch 2 — OPEN.** The dashboard's catalogue and menus forms. Done after batch 3 because #1392
-  (lane A) changed two of its files. The venue settings page's "VAT class for new products" Save
-  (`dashboard-catalogue-settings-panel`) is one of them: on 2026-10-08 it still opened blue and
-  pressable with nothing changed.
+- **Batch 2a — BUILT, pull request pending (A331-2a, 2026-10-08).** The catalogue and menus forms
+  that lane D's menus Preview work does not touch: the "VAT class for new products" default on
+  Venue settings, the recipe editor and the ingredient form, the unit form (new and existing), the
+  options list and its option window, the extras list, Add to menus after a product is created, a
+  section's Add products, and a menu's Schedule and Change time on its Preview tab (list:
+  [design-system.md](developers/design-system.md) → Forms). None of them opens already savable.
+  Rulings for the owner to confirm:
+  - the Units screen's Change unit (in the "unit in use" dialog), the Products browser's Move and
+    Delete dialog and the image picker are not saves, so they are not gated. Change unit already
+    stays disabled until products and a new unit are chosen; Move already stays disabled until a
+    destination is chosen, and keeps its blue look while it is disabled; Delete is pressed with its
+    default choice of what happens to the contents; the image picker acts the moment an image is
+    chosen or removed. Gating Change unit or Move would change only how they look;
+  - when the server refuses an options list's save because of one option, opening that option's
+    window afterwards shows the refusal with the window's Save quiet until something in the window
+    changes (the list hands the refusal to the window, `option-list-form.ts`). A refusal still
+    never disables Save once something has changed;
+  - on the autumn clock-change day, a scheduled menu version can no longer be moved between the two
+    copies of a repeated local time (the two 02:30s) from the Change time form. The form opens on
+    the stored date and time, so an untouched press now does nothing, where it used to bring up the
+    server's "which 02:30" choice. After a real edit to a repeated time the choice still appears.
+    For the owner: does moving between the two 02:30s need its own way in?
+
+  Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form
+  unchanged and after one edit; the catalogue default also after a save; the extras list, the
+  options list with its option window, and the catalogue default also at 390px, dark, Spanish);
+  screenshots in `~/waitron-campaign-b/a331-2a-shots/`. The recipe editor, the ingredient form, Add
+  to menus (including after one place refused the product) and Schedule and Change time were
+  looked at mounted with test data instead: the recipe screen that holds the first two is reached
+  from nowhere in the dashboard, Add to menus only opens after creating a product, and no demo menu
+  had unpublished changes to schedule. Every form opened quiet and disabled and turned blue on the
+  first edit, and the unit form, the option window, the options and extras lists and Add products
+  went quiet again when the edit was undone: no defect found. The look changed the demo venue's
+  "VAT class for new products" and set it back to Reduced, and switched the demo owner's language
+  to English and back to Spanish; it saved nothing else.
+- **Batch 2b — OPEN, waits for lane D's menus Preview work (`feat/preview-a349-a350-a351-a352`) to
+  land.** The menus screen's own forms (`menus-screen.ts`), the section and menu details form and the
+  include dialog. Only the menus screen opens the last two, so gating them changes
+  `menus-screen.test.ts`, which lane D's branch also changes. Their design is in the plan's Task
+  2a.7.
 - **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
   floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
   flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
