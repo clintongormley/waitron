@@ -1545,7 +1545,8 @@ written per screen:
   `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
   return a form taken out of the page takes a new scope while detached, and once put back it does
   not ask before discarding. The till's party name, invoice recipient, extras picker and station
-  dialogs do this; with the return deleted, a reconnect case in each one's `*.unsaved.test.ts`
+  dialogs and the venue-service watcher form do this, each also asking for an update when it is put
+  back (Lit runs none on reconnect); with the return deleted, a reconnect case in each one's `*.unsaved.test.ts`
   fails. The dashboard forms that take their scope in `willUpdate` (person edit and new person,
   product editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether
   they show the fault is untested;
@@ -1587,6 +1588,13 @@ and nothing guards it across screens:
   in, seat, send — and keeps its own rules; the list, with the reason for each, is in
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
   The till's forms that track no unsaved changes wait for Batch 7's follow-up audit.
+- batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
+  confirmations, and the holiday area saves on choice); the watcher form, New and Edit; and the
+  till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
+  the one form that writes its own comparison (`chosen !== activeProfileId`) instead of a draft
+  scope: a scope registered with the till's coordinator would join the unsaved-changes question the
+  app asks before every switch. See
+  [the Batch 4c table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4c--the-venue-service-forms-nobody-else-is-changing-and-the-tills-profile-dialog-lane-c-a331-4c).
 
 These open already savable:
 
