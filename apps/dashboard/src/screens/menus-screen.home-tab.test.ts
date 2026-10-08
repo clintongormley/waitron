@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   cleanupWidgets,
   documentProduct,
@@ -24,6 +24,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
@@ -347,6 +348,49 @@ async function toMenu(el: MenusScreen, path: string, name: string): Promise<void
 
 const homeError = (el: MenusScreen) => text(q(el, '[data-test="home-error"]'));
 
+type Picker = HTMLElementTagNameMap["dashboard-home-shortcut-picker"];
+
+function addWindow(el: MenusScreen): HTMLElementTagNameMap["wt-modal"] {
+  return q<HTMLElementTagNameMap["wt-modal"]>(el, 'wt-modal[data-test="add-shortcut"]')!;
+}
+
+function picker(el: MenusScreen): Picker {
+  return addWindow(el).querySelector<Picker>("dashboard-home-shortcut-picker")!;
+}
+
+function combobox(el: MenusScreen): HTMLElementTagNameMap["wt-combobox"] {
+  return picker(el).shadowRoot!.querySelector("wt-combobox")!;
+}
+
+/** Opens the add window from the preview's add tile of `kind`. */
+async function openAdd(el: MenusScreen, kind: "product" | "section"): Promise<Picker> {
+  await preview(el)!.updateComplete;
+  inPreview(el, `add-${kind}`)!.click();
+  await vi.waitFor(() => expect(addWindow(el).open).toBe(true));
+  await vi.waitFor(() => expect(picker(el)).not.toBeNull());
+  await picker(el).updateComplete;
+  return picker(el);
+}
+
+async function choose(el: MenusScreen, ids: string[]): Promise<void> {
+  await chooseOptions(combobox(el), ids);
+  await picker(el).updateComplete;
+}
+
+function pressAdd(el: MenusScreen): void {
+  picker(el).shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+}
+
+async function bottomMessage(el: MenusScreen): Promise<string> {
+  const actions =
+    picker(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      "wt-form-actions",
+    )!;
+  return text((await formMessageOf(actions)) ?? null);
+}
+
+const productRef = (productId: string): MemberRef => ({ kind: "product", productId });
+
 describe("the Home page tab's shortcuts", () => {
   it("hands the preview the home's shortcuts to edit", async () => {
     const el = await mountHome();
@@ -495,16 +539,9 @@ describe("the Home page tab's shortcuts", () => {
     const el = await mountHome(client);
     const reads = client.getMenuHome.mock.calls.length;
     emit(preview(el)!, "wt-shortcut-move", { memberId: "t-chips", to: 0 });
-    inPreview(el, "add-product")!.click();
-    const modal = () =>
-      q<HTMLElementTagNameMap["wt-modal"]>(el, 'wt-modal[data-test="add-shortcut"]')!;
-    await vi.waitFor(() => expect(modal().open).toBe(true));
-    await chooseOption(
-      modal().querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-        'wt-combobox[name="shortcut-product"]',
-      )!,
-      "p-lager",
-    );
+    await openAdd(el, "product");
+    await choose(el, ["p-lager"]);
+    pressAdd(el);
     moved.resolve([
       productMember("t-chips", 0, "p-chips"),
       productMember("t-burger", 1, "p-burger"),
@@ -519,11 +556,11 @@ describe("the Home page tab's shortcuts", () => {
 
   it("opens the add window of the kind the preview's add tile names", async () => {
     const el = await mountHome();
-    const modal = () =>
-      q<HTMLElementTagNameMap["wt-modal"]>(el, 'wt-modal[data-test="add-shortcut"]')!;
     emit(preview(el)!, "wt-shortcut-add", { kind: "section" });
-    await vi.waitFor(() => expect(modal().open).toBe(true));
-    expect(modal().querySelector('wt-combobox[name="shortcut-section"]')).not.toBeNull();
+    await vi.waitFor(() => expect(addWindow(el).open).toBe(true));
+    expect(addWindow(el).heading).toBe(t("home.add_sections"));
+    expect(picker(el).kind).toBe("section");
+    expect(combobox(el).getAttribute("name")).toBe("shortcut-sections");
   });
 
   it("drops a refused move quietly once the person has gone to another menu", async () => {
@@ -614,5 +651,195 @@ describe("the Home page tab's shortcuts", () => {
       expect(previewBox.bottom).toBeLessThanOrEqual(settingsBox.top);
       expect(Math.abs(previewBox.left - settingsBox.left)).toBeLessThan(1);
     });
+  });
+});
+
+describe("adding shortcuts on the Home page tab", () => {
+  /** Lunch's home holding only the Drinks section, so Burger, Lager and Lemonade are all offered. */
+  const drinksOnly = () => homeWith("t-drinks");
+
+  it("offers only what the menu reaches and is not already a shortcut", async () => {
+    const el = await mountHome();
+    // Burger and Drinks are shortcuts; Chips is on no list of Lunch's.
+    expect((await openAdd(el, "product")).options.map(({ value }) => value)).toEqual([
+      "p-lager",
+      "p-lemonade",
+    ]);
+    expect(addWindow(el).heading).toBe(t("home.add_products"));
+    picker(el).querySelector<HTMLElement>('[data-test="add-shortcut-cancel"]')!.click();
+    await vi.waitFor(() => expect(addWindow(el).open).toBe(false));
+    expect((await openAdd(el, "section")).options).toEqual([]);
+  });
+
+  it("adds three products in the order chosen inside one write, closes the window, then reads the home", async () => {
+    const first = deferred<SectionMember>();
+    const openAtRead: boolean[] = [];
+    const client = api({ getMenuHome: vi.fn().mockResolvedValueOnce(drinksOnly()) });
+    client.addHomeShortcut.mockImplementationOnce(() => first.promise);
+    const el = await mountHome(client);
+    client.getMenuHome.mockImplementation(async () => {
+      openAtRead.push(addWindow(el).open);
+      return homeWith("t-drinks", "t-burger");
+    });
+    await openAdd(el, "product");
+    await choose(el, ["p-lemonade", "p-burger", "p-lager"]);
+    pressAdd(el);
+    await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalledTimes(1));
+    // A move made while the adds are out waits behind all three and their read.
+    emit(preview(el)!, "wt-shortcut-move", { memberId: "t-drinks", to: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.addHomeShortcut).toHaveBeenCalledTimes(1);
+    expect(client.moveHomeShortcut).not.toHaveBeenCalled();
+    first.resolve(productMember("t-lemonade", 1, "p-lemonade"));
+    await vi.waitFor(() => expect(client.moveHomeShortcut).toHaveBeenCalled());
+    expect(client.addHomeShortcut.mock.calls).toEqual([
+      ["menu-lunch", productRef("p-lemonade")],
+      ["menu-lunch", productRef("p-burger")],
+      ["menu-lunch", productRef("p-lager")],
+    ]);
+    expect(writeCalls(client)).toEqual([
+      "addHomeShortcut",
+      "addHomeShortcut",
+      "addHomeShortcut",
+      "moveHomeShortcut",
+    ]);
+    const lastAdd = Math.max(...client.addHomeShortcut.mock.invocationCallOrder);
+    expect(client.moveHomeShortcut.mock.invocationCallOrder[0]).toBeGreaterThan(lastAdd);
+    expect(addWindow(el).open).toBe(false);
+    // The home is read only once the window has closed (a second read follows the move).
+    expect(openAtRead[0]).toBe(false);
+  });
+
+  it("keeps the window open after a refusal of the second, with the second and third still chosen and the refused one named under the field", async () => {
+    const client = api({ getMenuHome: vi.fn().mockResolvedValue(drinksOnly()) });
+    client.addHomeShortcut
+      .mockResolvedValueOnce(productMember("t-lemonade", 1, "p-lemonade"))
+      .mockRejectedValueOnce({ code: "menu.shortcut_unreachable" });
+    const el = await mountHome(client);
+    await openAdd(el, "product");
+    await choose(el, ["p-lemonade", "p-burger", "p-lager"]);
+    const reads = client.getMenuHome.mock.calls.length;
+    pressAdd(el);
+    await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));
+    await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.addHomeShortcut).toHaveBeenCalledTimes(2);
+    expect(addWindow(el).open).toBe(true);
+    await picker(el).updateComplete;
+    await combobox(el).updateComplete;
+    expect(combobox(el).values).toEqual(["p-burger", "p-lager"]);
+    expect(combobox(el).error).toBe(
+      t("home.add_refused")
+        .replace("{name}", "Burger")
+        .replace("{reason}", codeMessage("menu.shortcut_unreachable")),
+    );
+    expect(await bottomMessage(el)).toBe(t("form.fix_fields"));
+    expect(homeError(el)).toBe("");
+    // Lemonade was added, so the home is read again for it.
+    expect(client.getMenuHome.mock.calls.length).toBe(reads + 1);
+  });
+
+  it("puts a refusal that names no shortcut at the bottom and keeps every choice", async () => {
+    const client = api({
+      getMenuHome: vi.fn().mockResolvedValue(drinksOnly()),
+      addHomeShortcut: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const el = await mountHome(client);
+    await openAdd(el, "product");
+    await choose(el, ["p-lager", "p-burger"]);
+    const reads = client.getMenuHome.mock.calls.length;
+    pressAdd(el);
+    await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));
+    await picker(el).updateComplete;
+    await combobox(el).updateComplete;
+    expect(addWindow(el).open).toBe(true);
+    expect(combobox(el).values).toEqual(["p-lager", "p-burger"]);
+    expect(combobox(el).error).toBe("");
+    expect(await bottomMessage(el)).toBe(codeMessage("server.internal"));
+    expect(client.getMenuHome.mock.calls.length).toBe(reads);
+  });
+
+  it("stops adding once the person has gone to another menu", async () => {
+    const first = deferred<SectionMember>();
+    const client = api({ getMenuHome: vi.fn().mockResolvedValue(drinksOnly()) });
+    client.addHomeShortcut.mockImplementationOnce(() => first.promise);
+    const el = await mountHome(client);
+    await openAdd(el, "product");
+    await choose(el, ["p-lemonade", "p-burger", "p-lager"]);
+    pressAdd(el);
+    await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalledTimes(1));
+    await toMenu(el, "/manage/menus/menu/menu-dinner/view/home", "Dinner Menu");
+    const lunchReads = () =>
+      client.getMenuHome.mock.calls.filter(([id]) => id === "menu-lunch").length;
+    const before = lunchReads();
+    first.resolve(productMember("t-lemonade", 1, "p-lemonade"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(client.addHomeShortcut).toHaveBeenCalledTimes(1);
+    expect(lunchReads()).toBe(before);
+    await vi.waitFor(() => expect(preview(el)?.busy).toBe(false));
+  });
+
+  describe("focus after an add", () => {
+    const focused = (el: MenusScreen) =>
+      el.shadowRoot!.activeElement === preview(el)
+        ? (preview(el)!.shadowRoot!.activeElement?.getAttribute("data-test") ?? null)
+        : null;
+
+    it.each([
+      { kind: "product" as const, ids: ["p-lager", "p-lemonade"], tile: "add-product" },
+      { kind: "section" as const, ids: ["s-drinks"], tile: "add-section" },
+    ])(
+      "goes back to the $tile tile once the home has been read again",
+      async ({ kind, ids, tile }) => {
+        const reread = deferred<MenuHome>();
+        const client = api({ getMenuHome: vi.fn().mockResolvedValueOnce(homeWith("t-burger")) });
+        const el = await mountHome(client);
+        client.getMenuHome.mockImplementationOnce(() => reread.promise);
+        await openAdd(el, kind);
+        await choose(el, ids);
+        pressAdd(el);
+        await vi.waitFor(() => expect(addWindow(el).open).toBe(false));
+        await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalledTimes(ids.length));
+        expect(client.addHomeShortcut.mock.calls.map(([, ref]) => ref)).toEqual(
+          ids.map((id) =>
+            kind === "product" ? productRef(id) : { kind: "section", sectionId: id },
+          ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(preview(el)!.busy).toBe(true);
+        expect(focused(el)).not.toBe(tile);
+        reread.resolve(homeWith("t-burger", "t-drinks"));
+        await vi.waitFor(() => expect(focused(el)).toBe(tile));
+      },
+    );
+  });
+
+  it("reads the home no more than once per add plus once, with the live feed reporting each add", async () => {
+    const live = new LiveData();
+    const client = api({
+      liveData: live,
+      getMenuHome: vi.fn().mockResolvedValue(drinksOnly()),
+    });
+    client.addHomeShortcut.mockImplementation(async (_menu: string, ref: MemberRef) => {
+      queueMicrotask(() => live.invalidate([{ type: "section_members" }]));
+      return productMember(`t-${(ref as { productId: string }).productId}`, 1, "p-x");
+    });
+    const el = await mountHome(client);
+    const homeReads = client.getMenuHome.mock.calls.length;
+    const previewReads = client.getMenuPreview.mock.calls.length;
+    await openAdd(el, "product");
+    await choose(el, ["p-lemonade", "p-burger", "p-lager"]);
+    pressAdd(el);
+    await vi.waitFor(() => expect(addWindow(el).open).toBe(false));
+    await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const counted = {
+      home: client.getMenuHome.mock.calls.length - homeReads,
+      preview: client.getMenuPreview.mock.calls.length - previewReads,
+    };
+    expect(counted.home).toBeLessThanOrEqual(4);
+    expect(counted.preview).toBeLessThanOrEqual(4);
+    expect(counted.home).toBeGreaterThanOrEqual(1);
   });
 });

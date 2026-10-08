@@ -14,6 +14,7 @@ import {
 } from "../widgets/test-helpers.js";
 import {
   chooseOption,
+  chooseOptions,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -6851,7 +6852,7 @@ describe("publishing", () => {
 
 describe("the Device Home Page row", () => {
   type Picker = HTMLElement & {
-    value: string;
+    values: string[];
     error: string;
     required: boolean;
     disabled: boolean;
@@ -6867,14 +6868,32 @@ describe("the Device Home Page row", () => {
     return el;
   }
 
+  function shortcutPicker(
+    el: MenusScreen,
+  ): HTMLElementTagNameMap["dashboard-home-shortcut-picker"] {
+    return inModal(el, "add-shortcut", "dashboard-home-shortcut-picker");
+  }
+
+  /** The list inside the add window's picker. */
   function picker(el: MenusScreen, kind: "product" | "section"): Picker {
-    return inModal<Picker>(el, "add-shortcut", `wt-combobox[name="shortcut-${kind}"]`);
+    return shortcutPicker(el).shadowRoot!.querySelector<Picker>(
+      `wt-combobox[name="shortcut-${kind}s"]`,
+    )!;
   }
 
   async function openPicker(el: MenusScreen, kind: "product" | "section"): Promise<Picker> {
     await rowAction(el, "home", `add-${kind}-shortcut`);
     await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(true));
+    await shortcutPicker(el).updateComplete;
     return picker(el, kind);
+  }
+
+  /** Chooses `ids` in the open add window and presses its Add. */
+  async function chooseAndAdd(el: MenusScreen, ids: string[]): Promise<void> {
+    const choice = shortcutPicker(el).shadowRoot!.querySelector("wt-combobox")!;
+    await chooseOptions(choice, ids);
+    await shortcutPicker(el).updateComplete;
+    shortcutPicker(el).shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
   }
 
   const shortcutOrder = (el: MenusScreen) =>
@@ -6911,7 +6930,7 @@ describe("the Device Home Page row", () => {
       const el = await mountRow();
       // Burger is already a shortcut, Chips is in no list on Lunch, and Old soup is inactive.
       const products = await openPicker(el, "product");
-      expect(modal(el, "add-shortcut").heading).toBe(t("home.add_product"));
+      expect(modal(el, "add-shortcut").heading).toBe(t("home.add_products"));
       expect(products.required).toBe(true);
       expect(products.options).toEqual([
         { value: "p-lager", label: "Drinks › Lager" },
@@ -6921,7 +6940,7 @@ describe("the Device Home Page row", () => {
       await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(false));
       // Drinks is already a shortcut; Desserts is on no menu.
       const sections = await openPicker(el, "section");
-      expect(modal(el, "add-shortcut").heading).toBe(t("home.add_section"));
+      expect(modal(el, "add-shortcut").heading).toBe(t("home.add_sections"));
       expect(sections.required).toBe(true);
       expect(sections.options).toEqual([
         { value: "s-beer", label: "Drinks › Beer" },
@@ -6964,17 +6983,19 @@ describe("the Device Home Page row", () => {
     },
   );
 
-  it("adds the chosen target at once and closes, reading the home again", async () => {
+  it("adds the chosen targets with Add and closes, reading the home again", async () => {
     const client = api();
     const el = await mountRow(client);
-    await chooseOption(await openPicker(el, "product"), "p-lager");
+    await openPicker(el, "product");
+    await chooseAndAdd(el, ["p-lager"]);
     await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(false));
     expect(client.addHomeShortcut).toHaveBeenCalledExactlyOnceWith("menu-lunch", {
       kind: "product",
       productId: "p-lager",
     });
     await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledTimes(2));
-    await chooseOption(await openPicker(el, "section"), "s-fav");
+    await openPicker(el, "section");
+    await chooseAndAdd(el, ["s-fav"]);
     await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(false));
     expect(client.addHomeShortcut).toHaveBeenLastCalledWith("menu-lunch", {
       kind: "section",
@@ -6991,7 +7012,8 @@ describe("the Device Home Page row", () => {
     });
     const el = await mountRow(client);
     expect(rowOf(el, "home/t-burger")).toBeNull();
-    await chooseOption(await openPicker(el, "product"), "p-burger");
+    await openPicker(el, "product");
+    await chooseAndAdd(el, ["p-burger"]);
     await vi.waitFor(() => expect(rowOf(el, "home/t-burger")).not.toBeNull());
     expect(rowOf(el, "home")!.getAttribute("aria-expanded")).toBe("true");
   });
@@ -7006,13 +7028,21 @@ describe("the Device Home Page row", () => {
       const client = api({ addHomeShortcut: vi.fn().mockRejectedValue({ code }) });
       const el = await mountRow(client);
       const choice = await openPicker(el, "product");
-      await chooseOption(choice, "p-lager");
+      await chooseAndAdd(el, ["p-lager"]);
+      await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalled());
       await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+      await shortcutPicker(el).updateComplete;
       await choice.updateComplete;
       expect(modal(el, "add-shortcut").open).toBe(true);
-      expect(choice.value).toBe("p-lager");
-      expect(choice.error).toBe(field ? codeMessage(code) : "");
-      expect(await bottom(el, "add-shortcut")).toBe(
+      expect(choice.values).toEqual(["p-lager"]);
+      expect(choice.error).toBe(
+        field
+          ? t("home.add_refused")
+              .replace("{name}", "Drinks › Lager")
+              .replace("{reason}", codeMessage(code))
+          : "",
+      );
+      expect(await bottomIn(shortcutPicker(el).shadowRoot as unknown as Element)).toBe(
         field ? t("form.fix_fields") : codeMessage(code),
       );
       expect(q(el, '[data-test="member-error"]')).toBeNull();
@@ -7203,7 +7233,8 @@ describe("the Device Home Page row", () => {
     });
     const el = await mountRow(client);
     emit(structure(el), "wt-shortcut-move", { memberId: "t-chips", to: 0 });
-    await chooseOption(await openPicker(el, "product"), "p-lager");
+    await openPicker(el, "product");
+    await chooseAndAdd(el, ["p-lager"]);
     moved.resolve([
       productMember("t-chips", 0, "p-chips"),
       productMember("t-burger", 1, "p-burger"),
@@ -7232,16 +7263,18 @@ describe("the Device Home Page row", () => {
     expect(q(el, '[data-test="home-row-error"]')).toBeNull();
   });
 
-  it("sends one add, and none for an empty choice, when the picker reports another choice while an add is out", async () => {
+  it("sends one add, and none for an empty choice, when the picker asks for another add while one is out", async () => {
     const added = deferred<SectionMember>();
     const client = api({ addHomeShortcut: vi.fn(() => added.promise) });
     const el = await mountRow(client);
-    const choice = await openPicker(el, "product");
-    emit(choice, "wt-change", { value: "" });
+    await openPicker(el, "product");
+    await chooseAndAdd(el, []);
+    emit(shortcutPicker(el), "wt-shortcuts-add", { kind: "product", ids: [] });
     await el.updateComplete;
     expect(client.addHomeShortcut).not.toHaveBeenCalled();
-    await chooseOption(choice, "p-lager");
-    emit(choice, "wt-change", { value: "p-lemonade" });
+    await chooseAndAdd(el, ["p-lager"]);
+    await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalled());
+    emit(shortcutPicker(el), "wt-shortcuts-add", { kind: "product", ids: ["p-lemonade"] });
     await el.updateComplete;
     added.resolve(productMember("t-new", 3, "p-lager"));
     await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(false));
@@ -7257,7 +7290,8 @@ describe("the Device Home Page row", () => {
     const added = deferred<SectionMember>();
     const client = api({ addHomeShortcut: vi.fn(() => added.promise) });
     const el = await mountRow(client);
-    await chooseOption(await openPicker(el, "product"), "p-lager");
+    await openPicker(el, "product");
+    await chooseAndAdd(el, ["p-lager"]);
     await vi.waitFor(() => expect(client.addHomeShortcut).toHaveBeenCalled());
     await chooseTab(el, "prices");
     const reads = client.getMenuHome.mock.calls.length;
