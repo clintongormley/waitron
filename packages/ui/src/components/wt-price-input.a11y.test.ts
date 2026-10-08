@@ -58,6 +58,24 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
+  test("overriding beside inherited", async () => {
+    await mountThemed(
+      '<wt-price-input label="Set price" name="set" value="2.50" overriding hide-label fixed-unit locale="en-GB"></wt-price-input>' +
+        '<wt-price-input label="Inherited price" name="inherited" placeholder="3.00" hide-label fixed-unit locale="en-GB"></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+    const root = host.querySelector("wt-price-input[overriding]")!.shadowRoot!;
+    const fill = getComputedStyle(root.querySelector(".field")!).backgroundColor;
+    expect(
+      contrastRatio(getComputedStyle(root.querySelector("input")!).color, fill),
+    ).toBeGreaterThanOrEqual(4.5);
+    const bar = getComputedStyle(root.querySelector(".field")!, "::before");
+    expect(bar.content).toBe('""');
+    expect(bar.backgroundColor.startsWith("rgb(")).toBe(true);
+    expect(contrastRatio(bar.backgroundColor, fill)).toBeGreaterThanOrEqual(3);
+  });
+
   test("hidden label, fixed unit", async () => {
     await mountThemed(
       '<wt-price-input label="Price" name="price" unit="kg" fixed-unit hide-label value="9.90"></wt-price-input>',
