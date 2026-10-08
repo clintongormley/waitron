@@ -2595,4 +2595,51 @@ describe("the printer lists while the venue's printers are not read", () => {
     expect(bottom(el)).toBeNull();
     expect(noPrinters(el)).toBeNull();
   });
+
+  it("keeps a later failed printer read on screen when the editor opens", async () => {
+    const liveData = new LiveData();
+    const listPrinters = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockRejectedValue({ code: "connection.failed" });
+    const el = await mount(stubApi({ listPrinters, liveData } as Partial<DashboardApi>));
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+    expect(bottom(el)).toBe(codeMessage("connection.failed"));
+    expect(noPrinters(el)).not.toBeNull();
+  });
+
+  it("shows a read failure a refused delete was covering once the editor opens", async () => {
+    const liveData = new LiveData();
+    const listPrinters = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockRejectedValue({ code: "connection.failed" });
+    const el = await mount(
+      stubApi({
+        listPrinters,
+        liveData,
+        deleteDeviceProfile: vi.fn().mockRejectedValue({ code: "device_profile.not_found" }),
+      } as Partial<DashboardApi>),
+    );
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("device_profile.not_found")));
+    liveData.refresh();
+    await vi.waitFor(() => expect(listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(alert()).toBe(codeMessage("device_profile.not_found"));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(bottom(el)).toBe(codeMessage("connection.failed"));
+  });
 });

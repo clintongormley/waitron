@@ -431,8 +431,12 @@ export class DeviceProfilesScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => this.#showReadError(error),
+    (error) => {
+      this.#standingReadError = { error };
+      this.#showReadError(error);
+    },
     () => {
+      this.#standingReadError = null;
       if (this.#readErrorShown) this.#showError(null);
     },
   );
@@ -445,8 +449,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private printers: Printer[] = [];
   @state() private printersState: "loading" | "ready" | "failed" = "loading";
-  /** Kept so opening the editor, which clears the screen's message, still says why no printer is listed. */
-  #printersError: unknown = undefined;
 
   @state() private stations: Station[] = [];
 
@@ -461,6 +463,9 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
+  /** The live reads' latest failure until they recover. Opening the editor clears the screen's
+   * message, and this is put back so the form still says why its lists may be stale or empty. */
+  #standingReadError: { error: unknown } | null = null;
 
   @state() private editingId: string | null = null;
   @state() private draftName = "";
@@ -606,7 +611,6 @@ export class DeviceProfilesScreen extends LitElement {
           })
           .catch((error: unknown) => {
             this.printersState = "failed";
-            this.#printersError = error;
             throw error;
           }),
         this.#queries.watch("listStations", [], (value) => {
@@ -629,7 +633,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   #clearErrorOnOpen(): void {
     this.#showError(null);
-    if (this.printersState === "failed") this.#showReadError(this.#printersError);
+    if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
   }
 
   #showError(code: string | null, fromRead = false): void {

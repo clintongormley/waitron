@@ -31,10 +31,14 @@ export class OrderReprintDialog extends LitElement {
   @state() private error: string | null = null;
   /** Whether `error` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
+  /** The printer list is this dialog's only query, so every failure and recovery reported here is its own. */
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => this.#showReadError(error),
+    (error) => {
+      this.printersFailed = true;
+      this.#showReadError(error);
+    },
     () => {
       if (this.#readErrorShown) this.#showError(null);
     },
@@ -60,28 +64,34 @@ export class OrderReprintDialog extends LitElement {
     else this.#watchPrinters();
   }
 
+  /** An empty list is dropped so a fresh read says it is loading rather than that there is no
+   * printer; a non-empty one stays usable until the read answers. */
   #watchPrinters(): void {
+    if (this.printers?.length === 0) this.printers = null;
     this.printersFailed = false;
+    if (this.#readErrorShown) this.#showError(null);
     void this.#queries
       .watch("getOrderPrinters", [], (printers) => {
         this.printers = printers;
+        this.printersFailed = false;
         if (!printers.some((printer) => printer.id === this.printerId))
           this.printerId = printers[0]?.id ?? "";
       })
-      .catch(() => {
-        this.printersFailed = true;
-      });
+      .catch(() => undefined);
   }
 
+  /** After a failed read, a list an earlier read delivered stays usable: a printer gone since then
+   * is refused by the print itself, under the chooser. */
   #renderPrinters() {
     const printers = this.printers;
-    if (printers === null)
-      return this.printersFailed
-        ? nothing
-        : html`<p role="status" data-test="printers-loading">
-            <wt-spinner decorative size="sm"></wt-spinner> ${t("orders.reprint.loading")}
-          </p>`;
-    if (printers.length === 0) return html`<p>${t("orders.reprint.no_printers")}</p>`;
+    if (printers === null || printers.length === 0) {
+      if (this.printersFailed) return nothing;
+      if (printers === null)
+        return html`<p role="status" data-test="printers-loading">
+          <wt-spinner decorative size="sm"></wt-spinner> ${t("orders.reprint.loading")}
+        </p>`;
+      return html`<p>${t("orders.reprint.no_printers")}</p>`;
+    }
     return html`<wt-combobox
       name="printerId"
       search="auto"
@@ -133,7 +143,7 @@ export class OrderReprintDialog extends LitElement {
       ${this.sentTo === null ? nothing : html`<p role="status">${t("orders.reprint.sent").replace("{printer}", this.sentTo)}</p>`}
       ${this.error === null ? nothing : html`<p role="alert">${this.error}</p>`}
       ${
-        this.printers === null && this.printersFailed
+        this.printersFailed
           ? html`<wt-button
               variant="secondary"
               data-test="printers-retry"
