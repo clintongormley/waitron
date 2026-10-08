@@ -275,6 +275,12 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       expect(current).toBeTruthy();
       await expectNoA11yViolations(sidebar);
 
+      await userEvent.keyboard("{Tab}");
+      header.focus();
+      expect(header.matches(":focus-visible")).toBe(true);
+      expect(getComputedStyle(header.querySelector(".chevron")!).opacity).toBe("1");
+      await expectNoA11yViolations(sidebar);
+
       for (const target of [header, current]) {
         await userEvent.hover(target);
         expect(target.matches(":hover")).toBe(true);

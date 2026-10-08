@@ -1972,13 +1972,13 @@ describe("dashboard-app", () => {
     );
   });
 
-  it("draws a larger group chevron", async () => {
+  it("draws a group chevron between its old 14px and larger 18px sizes", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     const chevron = el.shadowRoot!.querySelector<HTMLElement>("button.nav-group .chevron")!;
-    expect(chevron.getBoundingClientRect().width).toBeGreaterThanOrEqual(18);
+    expect(chevron.getBoundingClientRect().width).toBe(16);
   });
 
   it("expands and collapses a nav group's items from its header toggle", async () => {
@@ -2002,6 +2002,163 @@ describe("dashboard-app", () => {
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(panel.hidden).toBe(true);
   });
+
+  it("keeps only the last opened nav group expanded", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
+    const team = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-team]")!;
+    menu.click();
+    await flush(el);
+    team.click();
+    await flush(el);
+    expect(team.getAttribute("aria-expanded")).toBe("true");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    expect(navItem(el, "catalogue")!.checkVisibility()).toBe(false);
+
+    navItem(el, "catalogue")!.click();
+    await flush(el);
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+    expect(team.getAttribute("aria-expanded")).toBe("false");
+    expect([
+      ...el.shadowRoot!.querySelectorAll('button.nav-group[aria-expanded="true"]'),
+    ]).toHaveLength(1);
+  });
+
+  it("preserves a lower header's position when opening it closes the group above", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 300);
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+      host.style.height = "300px";
+      await flush(el);
+      const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
+      const team = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-team]")!;
+      const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+      // Browser scroll anchoring can mask a missing application correction.
+      sidebar.style.overflowAnchor = "none";
+      menu.click();
+      await flush(el);
+      sidebar.scrollTop =
+        team.getBoundingClientRect().top - sidebar.getBoundingClientRect().top - 48;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const before = team.getBoundingClientRect().top;
+      expect(before).toBeGreaterThan(sidebar.getBoundingClientRect().top);
+      expect(before).toBeLessThan(sidebar.getBoundingClientRect().bottom);
+      team.click();
+      await flush(el);
+      expect(menu.getAttribute("aria-expanded")).toBe("false");
+      expect(team.getAttribute("aria-expanded")).toBe("true");
+      expect(team.getBoundingClientRect().top).toBeCloseTo(before, 0);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("aligns nav header text with its pages and reserves a trailing first-line chevron", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+      await flush(el);
+      const header = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
+      header.click();
+      await flush(el);
+      const textRect = (node: HTMLElement) => {
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        let text: Node | null;
+        while ((text = walker.nextNode())) {
+          if (!text.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(text);
+          return range.getClientRects()[0]!;
+        }
+        throw new Error("Missing navigation text");
+      };
+      const text = textRect(header);
+      const item = textRect(navItem(el, "catalogue")!);
+      const chevron = header.querySelector<HTMLElement>(".chevron")!;
+      const arrow = chevron.getBoundingClientRect();
+      expect(text.left).toBeCloseTo(item.left, 0);
+      expect(arrow.left).toBeGreaterThan(text.right);
+      expect(arrow.right).toBeCloseTo(header.getBoundingClientRect().right - 12, 0);
+      expect(
+        Math.abs(arrow.top + arrow.height / 2 - (text.top + text.height / 2)),
+      ).toBeLessThanOrEqual(1);
+      expect(getComputedStyle(chevron).opacity).toBe("0");
+      await userEvent.hover(header);
+      expect(getComputedStyle(chevron).opacity).toBe("1");
+      expect(textRect(header).left).toBe(text.left);
+      await commands.parkPointer();
+      header.blur();
+      await userEvent.keyboard("{Tab}");
+      header.focus();
+      expect(header.matches(":focus-visible")).toBe(true);
+      expect(getComputedStyle(chevron).opacity).toBe("1");
+      el.style.setProperty("--dashboard-sidebar-width", "18ch");
+      await el.updateComplete;
+      const wrappedText = textRect(header);
+      const wrappedArrow = chevron.getBoundingClientRect();
+      expect(
+        Math.abs(
+          wrappedArrow.top + wrappedArrow.height / 2 - (wrappedText.top + wrappedText.height / 2),
+        ),
+      ).toBeLessThanOrEqual(1);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "fits nav group labels on one line and paints the sidebar edge (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      try {
+        await page.viewport(1280, 800);
+        const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+          api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, locale }) }),
+        });
+        await flush(el);
+        const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
+        const probe = document.createElement("div");
+        probe.style.boxShadow = "var(--wt-shadow-1)";
+        sidebar.append(probe);
+        expect(getComputedStyle(sidebar).boxShadow).toBe(getComputedStyle(probe).boxShadow);
+        probe.remove();
+        expect(sidebar.getBoundingClientRect().width).toBeGreaterThan(200);
+        expect(matchMedia("(pointer: fine)").matches).toBe(true);
+        for (const header of el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")) {
+          expect(header.getBoundingClientRect().height).toBe(32);
+          const label = header.querySelector<HTMLElement>(".nav-group-label")!;
+          expect(label.getBoundingClientRect().height).toBe(18);
+          const icon = header.querySelector<HTMLElement>(".group-icon");
+          if (icon)
+            expect(icon.getBoundingClientRect().right).toBeLessThan(
+              label.getBoundingClientRect().left,
+            );
+          const panel = el.shadowRoot!.getElementById(header.getAttribute("aria-controls")!)!;
+          const item = panel.querySelector<HTMLElement>(".nav-item")!;
+          header.click();
+          await flush(el);
+          expect(label.getBoundingClientRect().left).toBeCloseTo(
+            item.getBoundingClientRect().left + 15,
+            0,
+          );
+        }
+        expect(navItem(el, "overview")!.getBoundingClientRect().height).toBe(32);
+        await page.viewport(390, 844);
+        await vi.waitFor(() => expect(sidebar.hasAttribute("inert")).toBe(true));
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+        await flush(el);
+        expect(sidebar.getBoundingClientRect().width).toBeLessThan(390 * 0.85 + 1);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
 
   it("starts with every headed nav group collapsed", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -2136,8 +2293,6 @@ describe("dashboard-app", () => {
     navItem(el, "catalogue")!.click();
     await flush(el);
     expect(location.pathname).toBe("/manage/catalogue");
-    header.click();
-    await flush(el);
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(panel.hidden).toBe(true);
 
@@ -2153,6 +2308,9 @@ describe("dashboard-app", () => {
     expect(header.getAttribute("aria-expanded")).toBe("true");
     expect(panel.hidden).toBe(false);
     expect(navItem(el, "staff")!.checkVisibility()).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector('[data-test="nav-group-menu"]')!.getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
   it("starts with a module page's group expanded when that page is opened", async () => {
@@ -2172,14 +2330,13 @@ describe("dashboard-app", () => {
     // leaves content above and below to absorb the shrink.
     const width = window.innerWidth,
       height = window.innerHeight;
-    await page.viewport(1200, 550);
+    await page.viewport(1200, 300);
     try {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
       });
       await flush(el);
-      for (const group of el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group"))
-        group.click();
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!.click();
       await flush(el);
       const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
       const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-team"]')!;
