@@ -1536,7 +1536,7 @@ form's own checks disable the action; an error that comes back from a request ne
   focus lands on the field;
 - reopening or resetting a form starts it again: no messages; a form that saves (below) has its
   action quiet and disabled until something changes (enabled at once if it opens already savable),
-  and any other form has it enabled.
+  and any other form has it enabled unless it waits for a choice, a selection or a load (below).
 
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
@@ -1593,14 +1593,15 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   destination or for the folder summary, or after the summary failed, and its own variant once it
   can act; while it is working (`loading`) it keeps its own variant (owner, 2026-10-08, A409).
   Change unit and the image picker are `secondary` throughout. The owner made this the rule for the
-  whole dashboard (2026-10-08, A416): a button that is not a save is drawn `secondary` while it
-  waits for a choice, a selection or a load, and its own variant once it can act, keeping its own
-  variant while its own action is being sent. A416 brought these under it: the Products browser's
-  toolbar Delete, the options/extras Delete confirmation, Print on an equipment label and on a
-  reprint, the profile window's Edit, and the backup key's Change the key. Not covered: a button
-  disabled only while a request is being sent, an action blocked by its own field checks, and the
-  sign-in screens. The options screen's Add and Edit were left `primary`: they are disabled only
-  while the languages are unread, and neither is on screen then. Nothing guards it across screens.
+  dashboard and the till (2026-10-08, A416; the till's two buttons are A417): a button that is not a
+  save is drawn `secondary` while it waits for a choice, a selection or a load, and its own variant
+  once it can act, keeping its own variant while its own action is being sent. A416 brought these
+  under it: the Products browser's toolbar Delete (Disable when only products are selected); on the
+  Modifiers screen, the Delete confirmation, Add extras list, Add options list and the Used by
+  window's Edit; Print on an equipment label; Print a copy on Reprint the receipt; the profile
+  window's Edit; and the backup key's Change the key. Not covered: a button disabled only while a
+  request is being sent, an action blocked by its own field checks, and the sign-in screens. Nothing
+  guards it across screens.
 
 These forms follow the rule so far; the others are being brought under it batch by batch
 ([backlog](../backlog.md) A331, [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),

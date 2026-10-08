@@ -1655,9 +1655,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     while disabled and waiting — the Products browser's toolbar Delete, the options/extras Delete
     confirmation, Add and Edit on the options screen until languages load, Print on an equipment
     label and on a reprint, and two on the till. Owner, 2026-10-08: "b", draw them all quiet the
-    same way. A416 did the dashboard ones, except Add and Edit on the options screen: neither can be
-    seen until the languages have loaded, so neither was changed. The two till buttons are A417
-    (lane A);
+    same way. A416 did the dashboard ones, and also the profile window's Edit and the backup key's
+    Change the key. The two till buttons are A417 (lane A);
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
     window with Save active, and pressing it untouched gives the option back to the list, which
