@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, TranslationPage, TranslationTarget } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -549,4 +550,378 @@ describe("staged translation dialog", () => {
     expect(native.value).toBe("  CrXoqueta  ");
     expect(native.selectionStart).toBe(5);
   });
+});
+
+describe("translation live review", () => {
+  it("holds arrivals and dirty concurrent fills until an explicit keep decision", async () => {
+    const one = target("one", { defaultRequired: false });
+    let rows = [one];
+    const current = { ...one, selectedText: "Their name", expected: "current" };
+    const liveData = new LiveData();
+    const read = vi.fn(async (_language: string, query: { targets?: unknown[] }) =>
+      result(query.targets ? [current] : rows),
+    );
+    const { el, api } = await mount(rows, { liveData, getContentTranslationTargets: read });
+    await edit(el, "one", "My draft");
+    const input = field(el, "one").shadowRoot!.querySelector("input")!;
+    await userEvent.click(input);
+    rows = [target("arrival", { defaultRequired: false })];
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=arrivals]")?.textContent).toContain("1"));
+    expect(field(el, "arrival")).toBeNull();
+    expect(field(el, "one").value).toBe("My draft");
+    expect(field(el, "one").shadowRoot!.activeElement).toBe(input);
+    expect(q(el, "[data-test=changed-product-one]")).not.toBeNull();
+    await click(el, "save");
+    expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    await click(el, "review");
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("Their name"),
+    );
+    expect(q(el, "[data-test=review-product-one]")!.textContent).toContain("My draft");
+    await click(el, "keep-product-one");
+    expect(field(el, "arrival")).not.toBeNull();
+    expect(field(el, "one").value).toBe("My draft");
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [{ kind: "product", id: "one", expected: "current", text: "My draft" }],
+    });
+  });
+  it.each(["replace", "discard"])(
+    "requires explicit %s before clearing an edited concurrent fill",
+    async (choice) => {
+      const one = target("one", { defaultRequired: false });
+      let current = one;
+      const read = vi.fn(async () => result([current]));
+      const { el, api } = await mount([one], { getContentTranslationTargets: read });
+      await edit(el, "one", "My draft");
+      current = { ...one, selectedText: "Their name", expected: "current" };
+      await click(el, "review");
+      await vi.waitFor(() => expect(q(el, "[data-test=review-product-one]")).not.toBeNull());
+      expect(field(el, "one").value).toBe("My draft");
+      await click(el, `${choice}-product-one`);
+      expect(field(el, "one").value).toBe("Their name");
+      await click(el, "save");
+      expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    },
+  );
+  it("assembles page-two departures and arrivals atomically and abandons a changing configuration", async () => {
+    const first = Array.from({ length: 50 }, (_, n) =>
+      target(String(n), { defaultRequired: false }),
+    );
+    let phase = 0;
+    let finish!: (page: TranslationPage) => void;
+    const liveData = new LiveData();
+    const read = vi.fn(
+      async (_language: string, query: { after?: string; targets?: unknown[] }) => {
+        if (query.targets)
+          return result([
+            target("last", {
+              defaultRequired: false,
+              eligible: false,
+              unavailableReason: "missing",
+            }),
+          ]);
+        if (!query.after) return result(first, "second");
+        if (phase === 0) return result([target("last", { defaultRequired: false })]);
+        return await new Promise<TranslationPage>((resolve) => {
+          finish = resolve;
+        });
+      },
+    );
+    const { el } = await mount(first, { liveData, getContentTranslationTargets: read });
+    await click(el, "next");
+    await edit(el, "last", "My last");
+    phase = 1;
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(read.mock.calls.filter(([, q]) => q.after).length).toBe(2));
+    expect(field(el, "last").value).toBe("My last");
+    expect(q(el, "[data-test=arrivals]")).toBeNull();
+    finish({
+      ...result([target("arrival", { defaultRequired: false })]),
+      config: { languages: ["en", "es"], defaultLanguage: "es" },
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=read-error]")).not.toBeNull());
+    expect(field(el, "last").value).toBe("My last");
+    expect(q(el, "[data-test=changed-product-last]")).toBeNull();
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(read.mock.calls.filter(([, q]) => q.after).length).toBe(3));
+    finish(result([target("arrival", { defaultRequired: false })]));
+    await vi.waitFor(() => expect(q(el, "[data-test=arrivals]")?.textContent).toContain("1"));
+    expect(field(el, "last").value).toBe("My last");
+    expect(q(el, "[data-test=changed-product-last]")).not.toBeNull();
+    expect(q(el, "[data-test=unavailable-product-last]")).not.toBeNull();
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  });
+  it("ignores old PUT success after close and reopen", async () => {
+    let finish!: (response: { saved: TranslationTarget[] }) => void;
+    const save = vi.fn(
+      () =>
+        new Promise<{ saved: TranslationTarget[] }>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { el } = await mount([target("one", { defaultRequired: false })], {
+      saveContentTranslations: save,
+    });
+    const saved = vi.fn();
+    el.addEventListener("translations-saved", saved);
+    await edit(el, "one", "Old draft");
+    await click(el, "save");
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+    await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
+    await edit(el, "one", "New draft");
+    finish({ saved: [] });
+    await vi.waitFor(() => expect(field(el, "one").value).toBe("New draft"));
+    expect(saved).not.toHaveBeenCalled();
+    expect(el.open).toBe(true);
+  });
+});
+
+it("reconnect abandons an old PUT while keeping edited text retryable", async () => {
+  let finish!: (value: { saved: TranslationTarget[] }) => void;
+  const save = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<{ saved: TranslationTarget[] }>((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValue({ saved: [] });
+  const { el, host } = await mount([target("one", { defaultRequired: false })], {
+    saveContentTranslations: save,
+  });
+  await edit(el, "one", "Draft");
+  await click(el, "save");
+  el.remove();
+  host.append(el);
+  await el.updateComplete;
+  await vi.waitFor(() => expect(field(el, "one").disabled).toBe(false));
+  finish({ saved: [] });
+  await vi.waitFor(() => expect(el.open).toBe(true));
+  expect(field(el, "one").value).toBe("Draft");
+  await click(el, "save");
+  await vi.waitFor(() => expect(el.open).toBe(false));
+  expect(save).toHaveBeenCalledTimes(2);
+});
+it("retained reference review is split into reads of at most 50 without dropping filled drafts", async () => {
+  const rows = Array.from({ length: 51 }, (_, n) => target(String(n), { defaultRequired: false }));
+  let filled = false;
+  const read = vi.fn(
+    async (_language: string, query: { after?: string; targets?: { id: string }[] }) => {
+      if (query.targets)
+        return result(
+          query.targets.map(({ id }) => ({
+            ...rows[Number(id)]!,
+            selectedText: "Their name",
+            expected: `latest-${id}`,
+          })),
+        );
+      return filled
+        ? result([])
+        : query.after
+          ? result(rows.slice(50))
+          : result(rows.slice(0, 50), "second");
+    },
+  );
+  const { el } = await mount(rows, { getContentTranslationTargets: read });
+  for (let n = 0; n < 50; n++)
+    field(el, String(n)).dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: `Draft ${n}` },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await el.updateComplete;
+  await click(el, "next");
+  await edit(el, "50", "Draft 50");
+  filled = true;
+  await click(el, "review");
+  await vi.waitFor(() => expect(q(el, "[data-test=review-product-50]")).not.toBeNull());
+  const queries = read.mock.calls.filter(([, q]) => q.targets).map(([, q]) => q.targets!);
+  expect(queries.map((q) => q.length)).toEqual([50, 1]);
+  expect(queries.flat().map((q) => q.id)).toEqual(rows.map((row) => row.id));
+  expect(field(el, "50").value).toBe("Draft 50");
+});
+it("a late opening GET and late review GET cannot overwrite a reopened draft", async () => {
+  let finish!: (page: TranslationPage) => void;
+  const read = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<TranslationPage>((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValue(result([target("one", { defaultRequired: false })]));
+  const api = { getContentTranslationTargets: read } as unknown as DashboardApi;
+  const { el } = await mountWidget<ContentTranslationsDialog>(
+    "dashboard-content-translations-dialog",
+    { open: true, language: "es", api },
+  );
+  await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
+  await edit(el, "one", "New draft");
+  finish(result([target("old")]));
+  await vi.waitFor(() => expect(q(el, "[data-test=loading]")).toBeNull());
+  expect(field(el, "old")).toBeNull();
+  expect(field(el, "one").value).toBe("New draft");
+  read.mockImplementationOnce(
+    () =>
+      new Promise<TranslationPage>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await click(el, "review");
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
+  await edit(el, "one", "Newest draft");
+  finish(result([target("old")]));
+  await vi.waitFor(() => expect(q(el, "[data-test=loading]")).toBeNull());
+  expect(field(el, "old")).toBeNull();
+  expect(field(el, "one").value).toBe("Newest draft");
+});
+it("live read recovery preserves an action refusal and a retry sends the same draft", async () => {
+  let failure = false;
+  const liveData = new LiveData();
+  const read = vi.fn(async () => {
+    if (failure) throw Error("offline");
+    return result([target("one", { defaultRequired: false })]);
+  });
+  const save = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "content.translation_stale" })
+    .mockResolvedValue({ saved: [] });
+  const { el } = await mount([], {
+    liveData,
+    getContentTranslationTargets: read,
+    saveContentTranslations: save,
+  });
+  await edit(el, "one", "Draft");
+  await click(el, "save");
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error).toBe(
+      codeMessage("content.translation_stale"),
+    ),
+  );
+  failure = true;
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(q(el, "[data-test=read-error]")).not.toBeNull());
+  failure = false;
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(q(el, "[data-test=read-error]")).toBeNull());
+  expect(q<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error).toBe(
+    codeMessage("content.translation_stale"),
+  );
+  expect(field(el, "one").value).toBe("Draft");
+  await click(el, "save");
+  await vi.waitFor(() => expect(el.open).toBe(false));
+  expect(save.mock.calls).toEqual([
+    ["es", { edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Draft" }] }],
+    ["es", { edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Draft" }] }],
+  ]);
+});
+
+it("a newer live snapshot wins over a delayed explicit review without changing the draft", async () => {
+  const one = target("one", { defaultRequired: false });
+  let current = one;
+  let finish!: (page: TranslationPage) => void;
+  const liveData = new LiveData();
+  const read = vi.fn(async () => result([current]));
+  const { el } = await mount([one], { liveData, getContentTranslationTargets: read });
+  await edit(el, "one", "My draft");
+  read.mockImplementationOnce(
+    () =>
+      new Promise<TranslationPage>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await click(el, "review");
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+  current = { ...one, selectedText: "New live", expected: "new-live" };
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(q(el, "[data-test=changed-product-one]")).not.toBeNull());
+  finish(result([{ ...one, selectedText: "Old review", expected: "old-review" }]));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
+  );
+  await click(el, "review");
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("New live"),
+  );
+  expect(q(el, "[data-test=review-product-one]")!.textContent).not.toContain("Old review");
+  expect(field(el, "one").value).toBe("My draft");
+});
+
+it("an obsolete review refusal cannot replace a recovered live read or release a newer review", async () => {
+  const one = target("one", { defaultRequired: false });
+  const liveData = new LiveData();
+  let refuse!: (error: Error) => void;
+  let finish!: (value: TranslationPage) => void;
+  const read = vi.fn(async () => result([one]));
+  const { el } = await mount([one], { liveData, getContentTranslationTargets: read });
+  await edit(el, "one", "Draft");
+  read.mockImplementationOnce(
+    () =>
+      new Promise<TranslationPage>((_resolve, reject) => {
+        refuse = reject;
+      }),
+  );
+  await click(el, "review");
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+  liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(4));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
+  );
+  read.mockImplementationOnce(
+    () =>
+      new Promise<TranslationPage>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await click(el, "review");
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(5));
+  refuse(Error("old failure"));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(q(el, "[data-test=read-error]")).toBeNull();
+  expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(true);
+  finish(result([one]));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
+  );
+});
+
+it("Review latest reveals a hidden conflict with its old, current and draft text", async () => {
+  const one = target("one", { defaultRequired: false });
+  let current = one;
+  const read = vi.fn(async () => result([current]));
+  const { el } = await mount([one], { getContentTranslationTargets: read });
+  await edit(el, "one", "My draft");
+  q(el, '[name="search"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "hidden" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.updateComplete;
+  expect(field(el, "one")).toBeNull();
+  current = { ...one, selectedText: "Their name", expected: "latest" };
+  await click(el, "review");
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("Their name"),
+  );
+  expect(field(el, "one").value).toBe("My draft");
 });

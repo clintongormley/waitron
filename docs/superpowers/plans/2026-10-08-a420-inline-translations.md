@@ -124,10 +124,35 @@ unrelated names and other aggregate fields are excluded.
 
 **Files:** Dialog/model/tests, new `.unsaved.test.ts`; screen integration tests.
 
-- [ ] Write real Chromium cases for edit/revert; Cancel/native close/Escape, navigation/editor links, locale, voluntary logout and unload; Keep/Discard; dirty-before-disconnect/reconnect; late GET/PUT/review replies after reopen. Live arrivals count without insertion; clean departures may leave, dirty departures retain text/focus/unavailable state. Review latest must show old/current/draft and require explicit keep draft/replace with latest/discard edit before accepting a baseline. Fetch retained references in groups of 50 so filled/deleted rows remain reviewable. Complete every passive refresh by scanning all gap pages under one opening generation and snapshot revision, then apply the assembled latest set atomically. Compare enabled/default/required configuration by values on every page; if it changes during the scan, abandon that scan and expose a retryable read failure without touching drafts. A late page never partially replaces rows. Include an arrival/departure on page two and a mid-scan configuration change in the browser cases.
-- [ ] RED: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.unsaved.test.ts src/widgets/content-translations-dialog.test.ts`.
-- [ ] Compare normalized submissions to the opening baseline; guard unchanged/busy/invalid saves. Dispose/recreate scope on connection changes without rebasing edited text. Fence reads/actions/review with opening generation plus snapshot revision; newer live data wins over an older explicit read. Watchers assign snapshots only. Separate read/action errors. Keep Task 5's write-success-before-refresh ordering; refresh failures remain load failures. Security teardown invalidates pending decisions/replies.
-- [ ] GREEN: repeat RED command; assert repeated save sends once, network/stale refusal retains draft and remains retryable, and save-success/refresh-failure closes exactly once. `git commit -s -m "feat: protect translation drafts through live review and reconnect"`.
+- [x] Write real Chromium cases for edit/revert; Cancel/native close/Escape, navigation/editor links, locale, voluntary logout and unload; Keep/Discard; dirty-before-disconnect/reconnect; late GET/PUT/review replies after reopen. Live arrivals count without insertion; clean departures may leave, dirty departures retain text/focus/unavailable state. Review latest must show old/current/draft and require explicit keep draft/replace with latest/discard edit before accepting a baseline. Fetch retained references in groups of 50 so filled/deleted rows remain reviewable. Complete every passive refresh by scanning all gap pages under one opening generation and snapshot revision, then apply the assembled latest set atomically. Compare enabled/default/required configuration by values on every page; if it changes during the scan, abandon that scan and expose a retryable read failure without touching drafts. A late page never partially replaces rows. Include an arrival/departure on page two and a mid-scan configuration change in the browser cases.
+- [x] RED: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.unsaved.test.ts src/widgets/content-translations-dialog.test.ts`.
+- [x] Compare normalized submissions to the opening baseline; guard unchanged/busy/invalid saves. Dispose/recreate scope on connection changes without rebasing edited text. Fence reads/actions/review with opening generation plus snapshot revision; newer live data wins over an older explicit read. Watchers assign snapshots only. Separate read/action errors. Keep Task 5's write-success-before-refresh ordering; refresh failures remain load failures. Security teardown invalidates pending decisions/replies.
+- [x] GREEN: repeat RED command; assert repeated save sends once, network/stale refusal retains draft and remains retryable, and save-success/refresh-failure closes exactly once. `git commit -s -m "feat: protect translation drafts through live review and reconnect"`.
+
+Task 6 checkpoint, 2026-10-08: real Chromium focused model/dialog/unsaved/screen run
+passes 120 cases; three additional real application navigation/locale/logout cases pass
+with Keep and Discard. The real PUT/failed-report-refresh case closes once before the
+load failure. Full scans retain drafts, fetch edited references in groups of 50 and
+reject a mid-scan configuration change. Arrivals stay outside the opening order until
+review; dirty missing/filled rows retain text, while Keep cannot adopt a replacement
+owner. A changed default clears the old companion only after explicit review, requiring
+a new companion instead of moving text between languages. An omitted retained reference
+is marked for review until a fresh scan resolves it.
+
+Observed failing controls: missing snapshot/review (6), missing live/review UI (4),
+abandoned PUT busy state (1), changed-default/returning-arrival cases (2), omitted
+reference (1), stale review error (1), missing unavailable marker/obsolete companion (2)
+and hidden review (1). Native-close selector, shell official-language fixture and logout
+helper corrections were test setup errors; they are not production-defect receipts.
+Installed disposable deletions of reply generation, dirty retention, reconnect baseline
+and review-error revision each fail an assertion; restored focused run passes. The
+1280/390 EN/ES light/dark matrix passes axe and field/button bounds; 64 dialog captures
+include the review choices scrolled into view. Focused root guards (77), unchanged fiscal
+pair (20), dashboard types/lint/build and formatting pass. Lit development, experimental
+WebCrypto and bundle-size warnings remain in logs. No package coverage or CI claim.
+
+Task 7 still owes shared-name/publication/recorded-sale consumers, its complete installed
+control set and opening the built application. Task 8 owns the branch review/push/CI/land.
 
 ## Task 7: Consumer evidence, deletion controls and visual acceptance
 

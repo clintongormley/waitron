@@ -617,8 +617,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   dependencies and English/Spanish refusal wording. Task 5 adds the staged single-language
   dialog locally: retained filters and editor links, 50-row pages, up to 100 drafts, explicit
   default-language companions, field refusals and shared close protection. Focused browser and
-  model checks pass; live review, reconnect and late-reply protection, recorded-name consumer
-  checks and final branch review remain in Tasks 6–8. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
+  model checks pass. Task 6 adds passive whole-scan snapshots, retained-reference review,
+  explicit old/current/draft choices, unsaved application leave paths and protection against
+  replies from earlier openings or scans. Reconnect retains the original draft baseline.
+  Recorded-name/publication consumer checks, opening the built application and final branch
+  review remain in Tasks 7–8. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
   no saved language configuration, the existing menu-root writer uses English while section and
   include writers use their supplied Spanish fallback; inline saves use the resolver's context.
   No inline translation route or editable dialog has landed. Exercise full-app Open navigation

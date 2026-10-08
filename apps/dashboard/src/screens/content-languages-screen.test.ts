@@ -1047,3 +1047,54 @@ it("closes a saved editor before the report refresh fails, keeping the failure o
   expect(translations(el).open).toBe(false);
   expect(translationModal(el).open).toBe(false);
 });
+
+it("a real translation PUT closes once before a failing report refresh", async () => {
+  const row = {
+    kind: "product",
+    id: "dish",
+    name: "STAFF Soup",
+    reason: "absent",
+    selectedText: null,
+    defaultText: null,
+    effectiveSelectedText: null,
+    effectiveDefaultText: null,
+    defaultRequired: true,
+    eligible: true,
+    unavailableReason: null,
+    owners: { kind: "product", parentId: null },
+    expected: "baseline",
+  };
+  const client = api({
+    getContentTranslationTargets: vi.fn().mockResolvedValue({
+      language: "ca",
+      config: CONFIG,
+      required: [],
+      rows: [row],
+      total: 1,
+      next: null,
+    }),
+  });
+  const el = await mount(client);
+  q(el, "[data-test=edit-translations-ca]")!.click();
+  await flush(el);
+  const form = translations(el);
+  const table = form.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table
+    .shadowRoot!.querySelector("[name=translation-text-product-dish]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Sopa" }, bubbles: true, composed: true }),
+    );
+  await form.updateComplete;
+  vi.mocked(client.getContentTranslationGaps).mockRejectedValue(new Error("offline"));
+  const outcomes: boolean[] = [];
+  form.addEventListener("translations-saved", () => outcomes.push(form.open));
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=gaps-error]")).not.toBeNull());
+  expect(outcomes).toEqual([false]);
+  expect(form.open).toBe(false);
+  expect(translationModal(el).open).toBe(false);
+  expect(client.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("ca", {
+    edits: [{ kind: "product", id: "dish", expected: "baseline", text: "Sopa" }],
+  });
+});

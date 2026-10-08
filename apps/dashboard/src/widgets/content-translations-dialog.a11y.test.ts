@@ -54,6 +54,7 @@ describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)
           "refused",
           "conflict",
           "unavailable",
+          "review",
         ] as const) {
           cleanupWidgets();
           const api = {
@@ -101,7 +102,7 @@ describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)
           await el.updateComplete;
           const table = el.shadowRoot!.querySelector("wt-data-table");
           await table?.updateComplete;
-          if (["invalid", "refused", "conflict"].includes(state)) {
+          if (["invalid", "refused", "conflict", "review"].includes(state)) {
             const input = table!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
               '[name="translation-text-product-one"]',
             )!;
@@ -127,17 +128,44 @@ describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)
               await el.updateComplete;
               await table!.updateComplete;
             }
-            el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
-            await vi.waitFor(() =>
-              expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
-            );
-            await vi.waitFor(() =>
-              expect(
-                el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-                  "[data-test=close]",
-                )!.disabled,
-              ).toBe(false),
-            );
+            if (state === "review") {
+              vi.mocked(api.getContentTranslationTargets).mockImplementation(
+                async (_language, query) =>
+                  result(
+                    query.targets
+                      ? [
+                          {
+                            ...row,
+                            selectedText: "Current long name",
+                            defaultText: "Current default",
+                            effectiveSelectedText: "Current long name",
+                            effectiveDefaultText: "Current default",
+                            defaultRequired: false,
+                            expected: "current",
+                          },
+                        ]
+                      : [],
+                  ),
+              );
+              el.shadowRoot!.querySelector<HTMLElement>("[data-test=review]")!.click();
+              await vi.waitFor(() =>
+                expect(
+                  table!.shadowRoot!.querySelector("[data-test=review-product-one]"),
+                ).not.toBeNull(),
+              );
+            } else {
+              el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+              await vi.waitFor(() =>
+                expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
+              );
+              await vi.waitFor(() =>
+                expect(
+                  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+                    "[data-test=close]",
+                  )!.disabled,
+                ).toBe(false),
+              );
+            }
           }
           const modal = el.shadowRoot!.querySelector("wt-modal")!;
           await modal.updateComplete;
@@ -151,10 +179,20 @@ describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)
             expect(field.getBoundingClientRect().left).toBeGreaterThanOrEqual(bodyBounds.left);
             expect(field.getBoundingClientRect().right).toBeLessThanOrEqual(bodyBounds.right);
           }
+          if (state === "review") {
+            const review = table!.shadowRoot!.querySelector<HTMLElement>(
+              "[data-test=review-product-one]",
+            )!;
+            review.scrollIntoView({ block: "center" });
+            for (const button of review.querySelectorAll("wt-button")) {
+              expect(button.getBoundingClientRect().left).toBeGreaterThanOrEqual(bodyBounds.left);
+              expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(bodyBounds.right);
+            }
+          }
           await expectNoA11yViolations(host);
           await page.screenshot({
             element: native,
-            path: `__screenshots__/look/a420-task5-${locale}-${theme}-${width}-${state}.png`,
+            path: `__screenshots__/look/a420-task6-${locale}-${theme}-${width}-${state}.png`,
           });
         }
       }

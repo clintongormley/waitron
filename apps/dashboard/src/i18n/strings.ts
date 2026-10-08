@@ -438,6 +438,16 @@ export const en = {
   "content_gaps.kind_included_menu": "Included menu folder",
   "content_gaps.kind_unit": "Unit",
   "translations.save": "Save changes",
+  "translations.changed": "This name changed. Review the latest version before saving.",
+  "translations.review": "Review this changed name before saving.",
+  "translations.review_latest": "Review latest",
+  "translations.arrivals": "{count} new items to review",
+  "translations.old": "When opened",
+  "translations.current": "Current",
+  "translations.draft": "Your draft",
+  "translations.keep": "Keep draft",
+  "translations.replace": "Use current name",
+  "translations.discard": "Discard edit",
   "translations.help":
     "Fill the names for this language. Save changes saves every edited row together; menus are published separately.",
   "translations.reasons":
@@ -2912,6 +2922,16 @@ export const es: Record<StringKey, string> = {
   "content_gaps.kind_included_menu": "Carpeta de carta incluida",
   "content_gaps.kind_unit": "Unidad",
   "translations.save": "Guardar cambios",
+  "translations.changed": "Este nombre ha cambiado. Revisa la última versión antes de guardar.",
+  "translations.review": "Revisa este nombre modificado antes de guardar.",
+  "translations.review_latest": "Revisar última versión",
+  "translations.arrivals": "{count} nuevos elementos para revisar",
+  "translations.old": "Al abrir",
+  "translations.current": "Actual",
+  "translations.draft": "Tu borrador",
+  "translations.keep": "Conservar borrador",
+  "translations.replace": "Usar nombre actual",
+  "translations.discard": "Descartar cambio",
   "translations.help":
     "Rellena los nombres de este idioma. Guardar cambios guarda todas las filas editadas juntas; las cartas se publican por separado.",
   "translations.reasons":
