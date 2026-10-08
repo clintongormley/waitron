@@ -300,6 +300,23 @@ the passive-session and backup-screen regressions
 (`apps/dashboard/src/screens/backup-screen.test.ts`, "the status watcher's key requests and read
 alerts").
 
+## A one-off reload beside a live subscription keeps the newer snapshot
+
+A413's Add another device read could finish after the live join feed delivered a newer ask and
+replace it with its older result. The explicit read also skipped the replacement check that closes
+Pair when the same device asks again. Both paths now call `#applyJoins`; an explicit read records
+the snapshot version before it starts and applies its result only while that version is current.
+A successful pairing advances the version too, so the older read cannot reinsert its settled ask.
+
+On 2026-10-08, these real Chromium cases failed before the fix and passed afterward:
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/devices-screen.test.ts -t
+'newer live join|replacement returned'`. The first holds the reopening read, delivers "Latest ask"
+through `LiveData.refresh()`, then resolves the older read with an empty list. The second opens
+Pair while the explicit read is pending, then returns the same id with a later `createdAt` and
+checks that Pair closed without denying the replacement. Removing the version comparison failed
+the first case; removing the shared replacement check failed the second. The tests cover the
+Devices join list, not every screen's mixture of explicit and observed reads.
+
 ## A background API client does not make POST requests passive
 
 The request primitive marks only GETs as passive. Automatic renewal of a pairing hold uses an

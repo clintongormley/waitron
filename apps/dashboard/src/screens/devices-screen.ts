@@ -434,6 +434,7 @@ export class DevicesScreen extends LitElement {
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
   #pairSettled = false;
   #pairEpoch = 0;
+  #joinVersion = 0;
   #pairLeave?: LeaveCoordinator;
   #pairScope?: DraftScope<Parameters<DashboardApi["acceptDeviceJoinRequest"]>[1]>;
   readonly #beforePairClose = async (reason: LeaveReason): Promise<boolean> =>
@@ -623,8 +624,7 @@ export class DevicesScreen extends LitElement {
           this.pairing = value;
         }),
         this.#queries.watch("joinRequests", ["device"], (value) => {
-          this.pendingJoins = value;
-          this.#closeReplacedPair(value);
+          this.#applyJoins(value);
         }),
       ]);
     } catch (error) {
@@ -697,8 +697,10 @@ export class DevicesScreen extends LitElement {
       const qr = await this.qrFor(deviceAddress);
       if (epoch === this.#addEpoch) this.qr = qr;
       if (more) {
+        const version = this.#joinVersion;
         const requests = await this.api.joinRequests("device");
-        if (epoch === this.#addEpoch) this.pendingJoins = requests;
+        // A live snapshot or successful pairing supersedes this reopening read.
+        if (epoch === this.#addEpoch && version === this.#joinVersion) this.#applyJoins(requests);
       }
     } catch (error) {
       // A read's failure never replaces an action's message.
@@ -751,6 +753,12 @@ export class DevicesScreen extends LitElement {
         if (code !== "join_request.not_found" && this.addingDevice && addEpoch === this.#addEpoch)
           this.addError = code;
       });
+  }
+
+  #applyJoins(rows: JoinRequestRow[]): void {
+    this.#joinVersion++;
+    this.pendingJoins = rows;
+    this.#closeReplacedPair(rows);
   }
 
   /**
@@ -857,6 +865,7 @@ export class DevicesScreen extends LitElement {
         return;
       }
       this.#pairSettled = true;
+      this.#joinVersion++;
       this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
       await this.#finishPair(epoch, "security");
       this.addError = code;
@@ -1600,6 +1609,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #renderWaiting(): TemplateResult | typeof nothing {
+    if (this.added !== null) return nothing;
     if (this.pendingJoins.length === 0)
       return this.holdStatus === "lapsed" || this.holdStatus === "failed"
         ? nothing
@@ -1659,7 +1669,8 @@ export class DevicesScreen extends LitElement {
     return html`<wt-modal
       size="compact"
       data-test="joined-modal"
-      heading=${t("devices.add_title")}
+      heading=${t(this.added.enabled ? "devices.enabled" : "devices.added").replace("{name}", this.added.name)}
+      description=${t("devices.add_another_question")}
       .open=${true}
       .opener=${this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]")}
       @wt-close=${(event: Event) => {
@@ -1667,10 +1678,6 @@ export class DevicesScreen extends LitElement {
         if (epoch === this.#addEpoch && this.added !== null) this.#endAdding();
       }}
     >
-      <p data-test="added-device">
-        ${t(this.added.enabled ? "devices.enabled" : "devices.added").replace("{name}", this.added.name)}
-      </p>
-      <p data-test="add-another-question">${t("devices.add_another_question")}</p>
       <wt-form-actions slot="footer">
         <wt-button
           slot="cancel"

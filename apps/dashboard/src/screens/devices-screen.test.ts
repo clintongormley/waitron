@@ -3557,16 +3557,18 @@ describe("add a device", () => {
         await vi.waitFor(() => expect(d(el, "[data-test=pair-r1]")).not.toBeNull());
         await toSettings(el);
         await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+        const releases = vi.mocked(api.releasePairingHold).mock.calls.length;
         q(el, "[data-test=pair-submit]")!.click();
         await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
-        expect(text(el, "[data-test=added-device]")).toBe(added);
-        expect(text(el, "[data-test=add-another-question]")).toBe(question);
+        await expect.element(page.getByRole("dialog", { name: added, exact: true })).toBeVisible();
+        expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(added);
+        expect(q(el, "[data-test=joined-modal]")?.getAttribute("description")).toBe(question);
         expect(text(el, "[data-test=joined-close]")).toBe(close);
         expect(text(el, "[data-test=add-another-device]")).toBe(another);
         expect(q(el, "[data-test=add-another-device]")!.getAttribute("variant")).toBe("primary");
         expect(q(el, "[data-test=add-device-modal]")).toBeNull();
         expect(q(el, "[data-test=waiting-empty]")).toBeNull();
-        expect(api.releasePairingHold).toHaveBeenCalled();
+        expect(api.releasePairingHold).toHaveBeenCalledTimes(releases + 1);
         const holds = vi.mocked(api.takePairingHold).mock.calls.length;
         vi.mocked(api.joinRequests).mockResolvedValue([]);
         q(el, "[data-test=add-another-device]")!.click();
@@ -3668,6 +3670,62 @@ describe("add a device", () => {
     expect(d(el, "[data-test=pair-r2]")).not.toBeNull();
   });
 
+  it("keeps a newer live join snapshot when the reopening read finishes later", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+    let resolve!: (rows: JoinRequestRow[]) => void;
+    vi.mocked(api.joinRequests)
+      .mockImplementationOnce(
+        () =>
+          new Promise<JoinRequestRow[]>((yes) => {
+            resolve = yes;
+          }),
+      )
+      .mockResolvedValue([{ ...pending[1]!, label: "Latest ask" }]);
+    q(el, "[data-test=add-another-device]")!.click();
+    await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
+    api.liveData.refresh();
+    try {
+      await vi.waitFor(() =>
+        expect(d(el, "[data-test=waiting-row-r2]")?.textContent?.trim()).toBe("Latest ask"),
+      );
+    } finally {
+      resolve([]);
+    }
+    await flush(el);
+    expect(d(el, "[data-test=waiting-row-r2]")?.textContent?.trim()).toBe("Latest ask");
+  });
+
+  it("a replacement returned by the reopening read closes the old Pair without denying the replacement", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
+    let resolve!: (rows: JoinRequestRow[]) => void;
+    vi.mocked(api.joinRequests).mockImplementationOnce(
+      () =>
+        new Promise<JoinRequestRow[]>((yes) => {
+          resolve = yes;
+        }),
+    );
+    q(el, "[data-test=add-another-device]")!.click();
+    await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
+    try {
+      await openPair(el, "r2");
+    } finally {
+      resolve([{ ...pending[1]!, createdAt: "2026-09-08T10:06:00.000Z" }]);
+    }
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    expect(text(el, "[data-test=asked-again]")).toContain("Pantalla pase");
+  });
+
   it("refreshes simultaneous asks after the last hold released them", async () => {
     const api = stubApi();
     const el = await openAdd(api);
@@ -3726,7 +3784,7 @@ describe("add a device", () => {
       profileId: "dp3",
       stationId: "s1",
     });
-    expect(text(el, "[data-test=added-device]")).toBe(
+    expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
       t("devices.added").replace("{name}", "Barra 2"),
     );
     expect(q(el, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -4051,7 +4109,7 @@ describe("add a device", () => {
 
     answer({ deviceId: "d9", name: "Barra 1", formFactor: "till" });
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(text(el, "[data-test=added-device]")).toBe(
+    expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
       t("devices.added").replace("{name}", "Barra 1"),
     );
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
@@ -4471,7 +4529,9 @@ describe("add a device", () => {
             formFactor: "kds",
           });
           q(el, "[data-test=pair-submit]")!.click();
-          await vi.waitFor(() => expect(text(el, "[data-test=added-device]")).toBe(enabled));
+          await vi.waitFor(() =>
+            expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(enabled),
+          );
           cleanupWidgets();
         }
       } finally {
@@ -4532,7 +4592,7 @@ describe("add a device", () => {
         profileId: "dp3",
         stationId: "s1",
       });
-      expect(text(el, "[data-test=added-device]")).toBe(
+      expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
         t("devices.enabled").replace("{name}", "Pase revocado"),
       );
       expect(api.denyJoinRequest).not.toHaveBeenCalled();

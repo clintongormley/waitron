@@ -263,6 +263,10 @@ called weaker than its name, the topic file lists what it does not see.
   failed clears only a read's message, and a read's failure does not replace an action's**. Nothing
   guards it across screens. See
   [dashboard-live-updates.md](docs/developers/dashboard-live-updates.md).
+- **A one-off reload beside a live subscription keeps a snapshot delivered after the reload began,
+  and both paths apply the same replacement checks.** Cost: A413's reopening read hid a newer ask
+  and left its replaced Pair dialog open. Covered in `apps/dashboard/src/screens/devices-screen.test.ts`;
+  the receipt is in [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** A rejected subscription closes
