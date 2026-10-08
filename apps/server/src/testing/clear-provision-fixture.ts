@@ -7,6 +7,11 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
     for (const table of [
       "local_holidays",
       "holiday_geographies",
+      "zone_period_menus",
+      "menu_slots",
+      "menu_day_timetables",
+      "menu_period_staff_menus",
+      "menu_periods",
       // The hours tables' keys to departments and stations have no delete rule, so they go first.
       "special_date_hours_periods",
       "special_date_hours",

@@ -1,3 +1,4 @@
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { seedStationWeek } from "@waitron/venue-service/testing/station-week.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -242,14 +243,16 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       values (${departmentId}, ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
       await tx.execute(sql`
       insert into zone_sale_policies (zone_id) values (${zoneId})`);
-      await tx.execute(sql`
-      insert into department_menus (department_id, menu_id, display_order)
-      values
-        (${departmentId}, ${cat.id}, 0),
-        (${departmentId}, ${premium.id}, 1)`);
-      await tx.execute(sql`
-      insert into zone_all_day_menus (zone_id, department_id, menu_id)
-      values (${zoneId}, ${departmentId}, ${cat.id})`);
+      await offerMenuThroughZone(tx, { locationId: brandLocationId(locationId) }, zoneId, cat.id, {
+        makeDefault: true,
+      });
+      await offerMenuThroughZone(
+        tx,
+        { locationId: brandLocationId(locationId) },
+        zoneId,
+        premium.id,
+        { displayOrder: 1 },
+      );
       await publishWorkingMenu(tx, cat.id);
       await publishWorkingMenu(tx, premium.id);
       return {
@@ -1079,7 +1082,7 @@ describe("openTab service context", () => {
   });
 
   it("routes the same product to the station configured for each table zone", async () => {
-    const { cfg, zoneId, premiumCafeOfferId, cafeId, catalogueId } = await setupVenue();
+    const { cfg, zoneId, premiumCafeOfferId, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const department = await tx.execute<{ id: string }>(sql`
         update departments set default_service_mode = 'table_tab'
@@ -1088,13 +1091,9 @@ describe("openTab service context", () => {
       const downstairsZone = await tx.execute<{ id: string }>(sql`
         insert into floor_zones (id, location_id, name, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${nowIso()}) returning id`);
-      // The venue's one department already lists both menus, so the zone serves them as it joins.
       await tx.execute(sql`
         insert into zone_service_policies (location_id, zone_id, department_id)
         values (${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id})`);
-      await tx.execute(sql`
-        insert into zone_all_day_menus (zone_id, department_id, menu_id)
-        values (${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id}, ${catalogueId})`);
       const upstairsBar = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairsBar = await createStation(tx, cfg, { name: "Downstairs bar" });
       const product = await tx.execute<{ category_id: string }>(sql`
