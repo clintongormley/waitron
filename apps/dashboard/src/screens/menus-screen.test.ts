@@ -3762,6 +3762,87 @@ describe("the Structure tree", () => {
     });
   });
 
+  describe("the search box", () => {
+    beforeEach(() => {
+      const before = currentLocale();
+      setLocale("en");
+      onTestFinished(() => setLocale(before));
+    });
+
+    type Input = HTMLElementTagNameMap["wt-input"];
+    const searchBox = (el: MenusScreen) => q<Input>(el, 'wt-input[name="structure-search"]')!;
+    const shownKeys = (el: MenusScreen) =>
+      allInStructure(el, "tbody tr[data-row-key]").map((tr) => tr.dataset.rowKey!);
+
+    async function typeSearch(el: MenusScreen, value: string): Promise<void> {
+      emit(searchBox(el), "wt-change", { value });
+      await settleStructure(el);
+    }
+
+    it("is a labelled search field in the tree's toolbar, and finds a product inside a closed section", async () => {
+      const el = await mountLunch();
+      const box = searchBox(el);
+      expect(box.getAttribute("type")).toBe("search");
+      expect(box.getAttribute("label")).toBe("Search this menu");
+      expect(box.getAttribute("slot")).toBe("toolbar-search");
+      expect(box.assignedSlot).not.toBeNull();
+      expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(shownKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+
+      await typeSearch(el, "Lemonade");
+      expect(structure(el).search).toBe("Lemonade");
+      expect(box.value).toBe("Lemonade");
+      expect(shownKeys(el)).toEqual([
+        "m-drinks",
+        "m-drinks/m-lemonade",
+        "m-fav",
+        "m-fav/m-fav-lemonade",
+        "m-fav/m-fav-drinks",
+        "m-fav/m-fav-drinks/m-lemonade",
+      ]);
+    });
+
+    it("names the search box in Spanish", async () => {
+      setLocale("es");
+      const el = await mountLunch();
+      expect(searchBox(el).getAttribute("label")).toBe("Buscar en esta carta");
+    });
+
+    it("keeps the search through a refresh after a write, and through Done on Reorder", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      await typeSearch(el, "Lemonade");
+      await rowAction(el, "m-drinks/m-lemonade", "remove");
+      await vi.waitFor(() =>
+        expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith(
+          "s-drinks",
+          "m-lemonade",
+        ),
+      );
+      await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      await settleStructure(el);
+      expect(searchBox(el).value).toBe("Lemonade");
+      expect(structure(el).search).toBe("Lemonade");
+      expect(shownKeys(el)).not.toContain("m-burger");
+
+      await pressReorder(el);
+      q(el, '[data-test="reorder-done"]')!.click();
+      await settleStructure(el);
+      expect(structure(el).reordering).toBe(false);
+      expect(searchBox(el).value).toBe("Lemonade");
+      expect(structure(el).search).toBe("Lemonade");
+    });
+
+    it("clears the search when another menu is opened", async () => {
+      const el = await mountLunch();
+      await typeSearch(el, "Lemonade");
+      await visit(el, DINNER_PATH, "Dinner Menu");
+      await settleStructure(el);
+      expect(structure(el).search).toBe("");
+      expect(searchBox(el)?.value ?? "").toBe("");
+    });
+  });
+
   describe("an included menu", () => {
     async function mountWithWines(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       const client = includeClient({

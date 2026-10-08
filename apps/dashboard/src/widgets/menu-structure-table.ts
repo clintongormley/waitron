@@ -180,6 +180,8 @@ export class MenuStructureTable extends LitElement {
   /** Whether rows carry grips and can be moved. On by default, so a mount that wants a tree
    * without them passes `.reordering=${false}`. */
   @property({ type: Boolean, reflect: true }) reordering = true;
+  /** The search box's text; while it lasts, the table holds every section above a match open. */
+  @property() search = "";
 
   #rowByKey = new Map<string, Row>();
   #productById = new Map<string, Product>();
@@ -303,6 +305,12 @@ export class MenuStructureTable extends LitElement {
 
   #siblingRows(row: Row): Row[] {
     return [...this.#rowByKey.values()].filter((other) => other.parentKey === row.parentKey);
+  }
+
+  /** While a search or filter hides rows, a grip moves only past the siblings the person can see. */
+  #shownSiblingRows(row: Row): Row[] {
+    const root = this.#table()!.shadowRoot!;
+    return this.#siblingRows(row).filter((sibling) => shownRow(root, sibling.key) !== null);
   }
 
   #siblings(row: Row): string[] {
@@ -456,15 +464,16 @@ export class MenuStructureTable extends LitElement {
     if (delta === 0 || this.busy) return;
     // Without this the arrow scrolls the page, carrying the row out from under the grip.
     event.preventDefault();
-    const siblings = this.#siblings(row);
-    const to = siblings.indexOf(row.node.memberId) + delta;
-    if (to < 0 || to >= siblings.length) return;
-    this.#move(row, to);
+    const shown = this.#shownSiblingRows(row);
+    const at = shown.indexOf(row) + delta;
+    const target = shown[at];
+    if (target === undefined) return;
+    this.#move(row, this.#siblings(row).indexOf(target.node.memberId));
     this.#refocus = row.key;
     this.announcement = t("action.reordered")
       .replace("{item}", row.name)
-      .replace("{index}", String(to + 1))
-      .replace("{total}", String(siblings.length));
+      .replace("{index}", String(at + 1))
+      .replace("{total}", String(shown.length));
   }
 
   #ownedSection(row: Row): boolean {
@@ -745,7 +754,12 @@ export class MenuStructureTable extends LitElement {
 
   #columns(): DataTableColumn<Row>[] {
     return [
-      { key: "name", label: t("members.name"), cell: (row) => this.#nameCell(row) },
+      {
+        key: "name",
+        label: t("members.name"),
+        cell: (row) => this.#nameCell(row),
+        searchValue: (row) => row.name,
+      },
       {
         key: "kind",
         label: t("members.kind"),
@@ -767,6 +781,22 @@ export class MenuStructureTable extends LitElement {
             >${t(product.available ? "menus.available_yes" : "menus.available_no")}</span
           >`;
         },
+        filter: {
+          label: t("editor.available"),
+          allLabel: t("menus.filter_available_all"),
+          // A section or an included menu answers no option: the table keeps it only on the way
+          // to a product that matches.
+          value: (row) => {
+            if (row.node.ref.kind !== "product") return [];
+            const product = this.#productById.get(row.node.ref.productId);
+            if (product === undefined) return [];
+            return product.available ? "yes" : "no";
+          },
+          options: [
+            { value: "yes", label: t("menus.available_yes") },
+            { value: "no", label: t("menus.available_no") },
+          ],
+        },
       },
       {
         key: "actions",
@@ -786,6 +816,14 @@ export class MenuStructureTable extends LitElement {
         aria-label=${t("menus.tree_heading")}
         emptyMessage=${t("menus.structure_empty")}
         noMatchesMessage=${tableNoMatches()}
+        filterSearchPlaceholder=${t("categories.combobox_search")}
+        filterNoResultsLabel=${t("categories.combobox_no_results")}
+        filtersLabel=${t("table.filters")}
+        filteredColumnLabel=${t("table.filtered_column")}
+        filtersClearAllLabel=${t("table.filters_clear_all")}
+        filtersCloseLabel=${t("table.filters_close")}
+        searchOpensPath
+        .searchTerm=${this.search}
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
@@ -800,7 +838,8 @@ export class MenuStructureTable extends LitElement {
         .rowKey=${(row: Row) => row.key}
         .rowParent=${(row: Row) => row.parentKey}
         @wt-expand-change=${this.#expandChange}
-        ><slot name="toolbar-start" slot="toolbar-start"></slot>${
+        ><slot name="toolbar-start" slot="toolbar-start"></slot
+        ><slot name="toolbar-search" slot="toolbar-search"></slot>${
           empty
             ? html`<div slot="empty-action" class="empty-adds">
                 ${this.#adds([], "empty", "center")}

@@ -1,6 +1,7 @@
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-input.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
@@ -137,6 +138,38 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     }
     await expectNoA11yViolations(host);
   });
+
+  it.each(["a match", "no match"])(
+    "renders accessibly with a search typed in its slotted box, finding %s",
+    async (found) => {
+      const term = found === "a match" ? "lager" : "zzz";
+      const { el, host } = await mountWidget<MenuStructureTable>(
+        "dashboard-menu-structure-table",
+        { nodes, products, menuName: "Lunch Menu", search: term },
+        theme,
+      );
+      const box = document.createElement("wt-input");
+      box.slot = "toolbar-search";
+      box.setAttribute("name", "structure-search");
+      box.setAttribute("type", "search");
+      box.setAttribute("label", t("menus.search_structure"));
+      box.value = term;
+      el.append(box);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      for (let round = 0; round < 3; round++) {
+        await el.updateComplete;
+        await table.updateComplete;
+        await box.updateComplete;
+      }
+      expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
+      const keys = [
+        ...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr[data-row-key]"),
+      ].map((tr) => tr.dataset.rowKey);
+      if (found === "a match") expect(keys).toContain("m-drinks/m-beer/m-lager-2");
+      else expect(keys).toEqual([]);
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders accessibly with a product row's menu open on Edit product, and Yes and No in Available", async () => {
     const { el, host } = await mountWidget<MenuStructureTable>(

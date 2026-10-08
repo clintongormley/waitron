@@ -567,6 +567,7 @@ export class MenusScreen extends LitElement {
   @state() private busy = false;
   /** Whether the Structure tree shows its grips; each menu opens with it off. */
   @state() private structureReordering = false;
+  @state() private structureSearch = "";
   @state() private memberError: string | null = null;
   @state() private view: Tab = TABS[0];
 
@@ -1167,6 +1168,7 @@ export class MenusScreen extends LitElement {
     this.statusResetRequired = false;
     this.path = [];
     this.structureReordering = false;
+    this.structureSearch = "";
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
@@ -2247,6 +2249,7 @@ export class MenusScreen extends LitElement {
         .current=${this.path}
         .busy=${this.busy}
         .reordering=${this.structureReordering}
+        .search=${this.structureSearch}
         menuName=${this.#menuName()}
         @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
           event.stopPropagation();
@@ -2313,6 +2316,17 @@ export class MenusScreen extends LitElement {
           <wt-icon name="grip"></wt-icon
           ><span class="icon-tooltip" aria-hidden="true">${t("menus.reorder")}</span>
         </button>
+        <wt-input
+          slot="toolbar-search"
+          name="structure-search"
+          type="search"
+          label=${t("menus.search_structure")}
+          .value=${this.structureSearch}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.structureSearch = event.detail.value;
+          }}
+        ></wt-input>
         ${
           this.structureReordering
             ? html`<wt-button
