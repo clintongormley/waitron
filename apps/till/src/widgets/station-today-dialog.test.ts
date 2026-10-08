@@ -39,14 +39,16 @@ it("offers the default first, shows retained-dishes guidance and sends the chose
   el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
   expect(heard).toEqual([{ sendsToStationId: "bar" }]);
 });
-it("replaces a vanished selection with the default and keeps the refusal beside the field and above the buttons", async () => {
+it("replaces a vanished selection with the default and keeps the field refusal with a correction above the buttons", async () => {
   const el = await mount({ selected: "bar", refusal: "station.destination_invalid" });
   el.destinations = [destinations[0]!];
   await el.updateComplete;
   const field = el.shadowRoot!.querySelector("wt-combobox")!;
   expect(field.value).toBe("pass");
   expect(field.error).toBe("That station cannot take the work now. Choose another.");
-  expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(field.error);
+  expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+    "Correct the highlighted fields to continue.",
+  );
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-submit]")!.disabled,
   ).toBe(false);
