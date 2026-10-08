@@ -91,8 +91,6 @@ describe("database change feed", () => {
     expect(changes()).toEqual([{ resources: [{ type: "keyless" }] }]);
   });
 
-  // `ResourceIdentity.id` is a string, and the dashboard's live connection drops a whole batch
-  // holding an id that is not one.
   it("names an integer id, and an integer related column, as text on insert, update and delete", () => {
     suite.db.run(sql.raw(`insert into live_probe_counted values (1, 7)`));
     suite.db.run(sql.raw(`update live_probe_counted set parent_id = 8 where id = 1`));

@@ -62,7 +62,9 @@ function identitySql(row: "new" | "old", type: string, hasId: boolean): string {
 function resourcesSql(row: "new" | "old", source: ChangeSource, hasId: boolean): string {
   const related = (source.related ?? []).map((relation) => {
     const column = plainName("column", relation.column);
-    const object = `json_object('type', ${quoteLiteral(relation.type)}, 'id', cast(${row}."${column}" as text))`;
+    const object =
+      `json_object('type', ${quoteLiteral(relation.type)}, ` +
+      `'id', cast(${row}."${column}" as text))`;
     return ` || case when ${row}."${column}" is not null then ',' || ${object} else '' end`;
   });
   return `json('[' || ${identitySql(row, source.type, hasId)}${related.join("")} || ']')`;

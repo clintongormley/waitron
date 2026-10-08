@@ -19,8 +19,6 @@ it("announces each saved default colour to live subscribers, so open screens rep
     expect(afterFirst).toBeGreaterThan(0);
     await withTransaction(fx.db, (tx) => saveCatalogueDefaultColor(tx, "#256bb1"));
     expect(announced.length).toBeGreaterThan(afterFirst);
-    // The row's id is an integer column; the dashboard's live connection drops a batch whose id is
-    // not a string.
     for (const identity of announced)
       expect(identity).toEqual({ type: "catalogue_settings", id: "1" });
   } finally {
