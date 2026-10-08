@@ -1697,7 +1697,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
 - **Batch 4b — OPEN.** The venue-service screens other branches are changing: hours, the menu
   timetable and venue operations (after `feat/service-periods-slice-1`). Preparation stations were
   held for `fix/drag-edge-scroll`, which landed as #1416; they are covered by batch 4d below.
-- **Batch 4d — DONE (A331-4d, 2026-10-08).** Preparation stations' New/Rename, station printer
+- **Batch 4d — LANDED in #1426 (A331-4d, 2026-10-08).** Preparation stations' New/Rename, station printer
   choices, watcher Rename/follows/zones/pass/printer choices, and Settings rest/fallback/minutes
   use the shared Save state. An untouched fallback stays open without a confirmation or write;
   changing it keeps the two-press confirmation. Routing and station service operations remain
@@ -1705,6 +1705,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   remain until corrected and return if a field breaks again. Retained Add/Rename drafts keep their
   saved baseline through reconnect. The delegated watcher form was already covered by batch 4c.
   [Batch 4d's scope and checks](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4d--prep-stations-lane-e-a331-4d).
+  The review left detached `readOnly` changes and a retained table's scroll/sort unverified;
+  no defect was reproduced for either. Before changing screen caching, exercise those transitions.
+  The validation-message finding was reproduced and fixed before landing.
 - **Batch 4c — LANDED in #1418 (A331-4c, 2026-10-08).** The local holiday Add and Edit and the watcher form
   (New and Edit) in `packages/venue-service`, and the till's profile dialog, whose Switch now waits
   until another profile is chosen — this closes the profile-dialog point left open by batch 5. A

@@ -1822,8 +1822,13 @@ Settings fallback **is** a normal Save: retain its two presses and reset confirm
   browser fixture for each saved value; this avoids changing shared demo printer/station settings.
   Any dev stack needed uses `wa-wt demo waitron-feat-save-follows-changes-prep-stations`. Run golden huella and immutability
   unedited: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
-- [ ] **Finish implementation.** Update A331 backlog and Forms' implemented-form list; signed-off
+- [x] **Finish implementation.** Update A331 backlog and Forms' implemented-form list; signed-off
   commits, announce readiness for `finish-branch`. Use one Claude whole-branch run-it review after
   its initial rebase in an installed throwaway candidate checkout; read completed findings and fix
   them. Push through the normal hook once; require current-head CI, including selected package
   coverage. Preserve other appendices on rebase. Land only with owner authorization.
+
+Execution receipt, 2026-10-08: landed in #1426 as `46e8688f3bff5c3dfac00f4d205b9470d51b6f7c`.
+Focused browser checks ran 738 tests; the current-head CI venue-service coverage job ran 2,829.
+The Claude run-it validation-message finding and the dirty-before-reconnect case each failed added
+behavioral tests before their fixes. Changed test checks and review limits are recorded in the PR.
