@@ -226,7 +226,8 @@ export class MenuStructureTable extends LitElement {
         text-decoration: underline;
       }
       wt-data-table::part(read-only),
-      wt-data-table::part(kind) {
+      wt-data-table::part(kind),
+      wt-data-table::part(available) {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(note) {

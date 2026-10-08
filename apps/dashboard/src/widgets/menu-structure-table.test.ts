@@ -2123,6 +2123,16 @@ describe("a product row's Available and Edit product", () => {
       expect(availableOf(el, key), key).toBe("");
   });
 
+  it("draws Available in the muted colour of the Type word beside it", async () => {
+    const el = await mount();
+    el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    const burger = row(el, "m-burger")!;
+    const kind = burger.querySelector('[data-test="kind"]')!;
+    const available = burger.querySelector('[data-test="available"]')!;
+    expect(getComputedStyle(kind).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(available).color).toBe(getComputedStyle(kind).color);
+  });
+
   it("shows Available on an included menu's product rows, which keep having no menu", async () => {
     const el = await mount({ nodes: [...lunchNodes(), wines()] });
     await toggle(el, "included-wine");
