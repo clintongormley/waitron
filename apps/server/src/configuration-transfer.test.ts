@@ -107,7 +107,7 @@ import {
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
-  resolveOpeningDateHours,
+  readHoursModel,
   saveHolidayArea,
   saveLocalHoliday,
   saveSpecialDate,
@@ -4023,8 +4023,8 @@ describe("opening hours in a configuration transfer", () => {
     const importedPase = { kind: "station" as const, id: imported.stations.get("Pase")! };
     const read = await withTransaction(targetSuite.db, async (tx) => ({
       week: await readWeekHours(tx, imported.cfg, importedPase),
-      eve: await resolveOpeningDateHours(tx, imported.cfg, importedPase, "2026-12-31"),
-      tuesday: await resolveOpeningDateHours(tx, imported.cfg, importedPase, "2026-10-06"),
+      eve: await readHoursModel(tx, imported.cfg, "2026-12-31", "2026-12-31", AT),
+      tuesday: await readHoursModel(tx, imported.cfg, "2026-10-06", "2026-10-06", AT),
       // 23:00 in Madrid on New Year's Eve, and noon on an ordinary Tuesday.
       states: [
         await stationStates(tx, imported.cfg, new Date("2026-12-31T22:00:00Z")),
@@ -4032,11 +4032,21 @@ describe("opening hours in a configuration transfer", () => {
       ],
     }));
     expect(read.week.map((day) => day.cell)).toEqual(Array(7).fill(CLOSED));
-    for (const resolved of [read.eve, read.tuesday])
-      expect(resolved).toMatchObject({
-        source: "default_station",
-        cell: { mode: "always_open", periods: [] },
+    for (const model of [read.eve, read.tuesday]) {
+      expect(model.subjects.find((subject) => subject.id === importedPase.id)).toMatchObject({
+        kind: "station",
+        isDefault: true,
       });
+      expect(
+        model.week
+          .find((entry) => entry.subject.id === importedPase.id)!
+          .days.map((day) => day.cell),
+      ).toEqual(Array(7).fill(CLOSED));
+    }
+    expect(read.eve.specialCells).toEqual([
+      { specialDateId: expect.any(String), cells: [{ subject: importedPase, cell: CLOSED }] },
+    ]);
+    expect(read.tuesday.days[0]!.specialDate).toBeNull();
     for (const states of read.states)
       expect(states.get(importedPase.id)).toMatchObject({ isDefault: true, open: true });
   });

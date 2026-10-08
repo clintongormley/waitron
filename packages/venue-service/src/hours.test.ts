@@ -27,7 +27,6 @@ import {
   readWeekHours,
   renameSpecialDate,
   replaceWeekHours,
-  resolveOpeningDateHours,
   saveSpecialDate,
   type HolidayReader,
   type SpecialDateParticipant,
@@ -37,6 +36,7 @@ import {
   duplicateHolidayNamedSpecialDates as installedDuplicateHolidayNamedSpecialDates,
   readHolidayFacts as installedReadHolidayFacts,
 } from "./holidays.js";
+import { stationStates } from "./routing-store.js";
 import * as packageIndex from "./index.js";
 import { readCalendarDays as packageReadCalendarDays } from "./index.js";
 import {
@@ -813,20 +813,20 @@ describe("special dates", () => {
       ),
     ).rejects.toMatchObject({ code: "station.always_open", params: { stationId: f.bar.id } });
     expect(await barRows()).toEqual(before);
-    expect(await resolve(f, f.bar, "2026-10-09")).toEqual({
+    expect(await dateSnapshot(f, f.bar, "2026-10-09")).toMatchObject({
       subject: f.bar,
       openingDate: "2026-10-09",
       specialDateId: date.id,
-      source: "default_station",
-      cell: { mode: "always_open", periods: [] },
+      state: { open: true, isDefault: true },
     });
 
     await withTransaction(db, (tx) =>
       tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, f.bar.id)),
     );
-    expect(await resolve(f, f.bar, "2026-10-09")).toMatchObject({
-      source: "special",
-      cell: { mode: "periods", periods: [evening] },
+    expect(await dateSnapshot(f, f.bar, "2026-10-09")).toMatchObject({
+      closeWholeVenue: false,
+      specialCell: { mode: "periods", periods: [evening] },
+      state: { open: false, isDefault: false },
     });
   });
 });
@@ -1126,8 +1126,26 @@ it("refuses a week clashing with yesterday's special tail and leaves every row a
   );
 });
 
-const resolve = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
-  withTransaction(db, (tx) => resolveOpeningDateHours(tx, f.cfg, subject, date));
+const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
+  withTransaction(db, async (tx) => {
+    const model = await readHoursModel(tx, f.cfg, date, date, AT);
+    const day = model.days[0]!;
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    const standard = model.week.find((entry) => entry.subject.id === subject.id)!;
+    const specialCell = model.specialCells
+      .find((entry) => entry.specialDateId === day.specialDate?.id)
+      ?.cells.find((entry) => entry.subject.id === subject.id)?.cell;
+    const states = await stationStates(tx, f.cfg, new Date(`${date}T10:00:00Z`));
+    return {
+      subject: standard.subject,
+      openingDate: day.date,
+      specialDateId: day.specialDate?.id ?? null,
+      closeWholeVenue: day.specialDate?.closeWholeVenue ?? false,
+      standardCell: standard.days.find((entry) => entry.weekday === weekday)!.cell,
+      specialCell,
+      state: states.get(subject.id)!,
+    };
+  });
 
 const tone = (f: Fixture, date: LocalDate) =>
   withTransaction(db, async (tx) => (await readCalendarDays(tx, f.cfg, date, date))[0]!.tone);
@@ -1318,7 +1336,7 @@ describe("a station that stops being the default", () => {
   });
 });
 
-describe("one subject's hours on one opening date", () => {
+describe("the station hours model on one date", () => {
   it("reads an inherited cell as the standard week, Closed as Closed, and periods for that subject only", async () => {
     const f = await fixture();
     const restaurantMonday = period("09:00", "17:00");
@@ -1340,26 +1358,30 @@ describe("one subject's hours on one opening date", () => {
       }),
     );
 
-    expect(await resolve(f, f.restaurant, "2026-10-12")).toEqual({
+    expect(await dateSnapshot(f, f.restaurant, "2026-10-12")).toMatchObject({
       subject: f.restaurant,
       openingDate: "2026-10-12",
       specialDateId: monday.id,
-      source: "standard",
-      cell: { mode: "periods", periods: [restaurantMonday] },
+      specialCell: undefined,
+      closeWholeVenue: false,
+      standardCell: { mode: "periods", periods: [restaurantMonday] },
+      state: { open: true, isDefault: false },
     });
-    expect(await resolve(f, f.deli, "2026-10-12")).toEqual({
+    expect(await dateSnapshot(f, f.deli, "2026-10-12")).toMatchObject({
       subject: f.deli,
       openingDate: "2026-10-12",
       specialDateId: monday.id,
-      source: "special",
-      cell: { mode: "closed", periods: [] },
+      closeWholeVenue: false,
+      specialCell: { mode: "closed", periods: [] },
+      state: { open: false, isDefault: false },
     });
-    expect(await resolve(f, f.bar, "2026-10-12")).toEqual({
+    expect(await dateSnapshot(f, f.bar, "2026-10-12")).toMatchObject({
       subject: f.bar,
       openingDate: "2026-10-12",
       specialDateId: monday.id,
-      source: "special",
-      cell: { mode: "periods", periods: [lunch] },
+      closeWholeVenue: false,
+      specialCell: { mode: "periods", periods: [lunch] },
+      state: { open: true, isDefault: false },
     });
     const rows = await dateRows(monday.id);
     expect(
@@ -1373,20 +1395,24 @@ describe("one subject's hours on one opening date", () => {
     expect(rows.periods.map((row) => row.id)).toEqual([lunch.id]);
 
     // The next Monday is ordinary: the deli's standard Monday is untouched.
-    expect(await resolve(f, f.deli, "2026-10-19")).toEqual({
+    expect(await dateSnapshot(f, f.deli, "2026-10-19")).toMatchObject({
       subject: f.deli,
       openingDate: "2026-10-19",
       specialDateId: null,
-      source: "standard",
-      cell: { mode: "periods", periods: [deliMonday] },
+      specialCell: undefined,
+      closeWholeVenue: false,
+      standardCell: { mode: "periods", periods: [deliMonday] },
+      state: { open: true, isDefault: false },
     });
-    expect((await resolve(f, f.bar, "2026-10-19")).cell).toEqual({ mode: "not_set", periods: [] });
-    expect(await resolve(f, f.kitchen, "2026-10-19")).toEqual({
+    expect((await dateSnapshot(f, f.bar, "2026-10-19")).standardCell).toEqual({
+      mode: "not_set",
+      periods: [],
+    });
+    expect(await dateSnapshot(f, f.kitchen, "2026-10-19")).toMatchObject({
       subject: f.kitchen,
       openingDate: "2026-10-19",
       specialDateId: null,
-      source: "default_station",
-      cell: { mode: "always_open", periods: [] },
+      state: { open: true, isDefault: true },
     });
   });
 
@@ -1400,26 +1426,32 @@ describe("one subject's hours on one opening date", () => {
       specialInput({ date: "2026-10-13", name: "Moved", colour: "blue", cells: [closedDeli] }),
     );
     expect(moved.id).toBe(first.id);
-    expect(await resolve(f, f.deli, "2026-10-13")).toMatchObject({
+    expect(await dateSnapshot(f, f.deli, "2026-10-13")).toMatchObject({
       specialDateId: first.id,
-      source: "special",
-      cell: { mode: "closed", periods: [] },
+      closeWholeVenue: false,
+      specialCell: { mode: "closed", periods: [] },
+      state: { open: false, isDefault: false },
     });
-    expect(await resolve(f, f.deli, "2026-10-09")).toMatchObject({
+    expect(await dateSnapshot(f, f.deli, "2026-10-09")).toMatchObject({
       specialDateId: null,
-      source: "standard",
+      specialCell: undefined,
+      closeWholeVenue: false,
+      standardCell: { mode: "not_set", periods: [] },
+      state: { open: true, isDefault: false },
     });
   });
 
   it("refuses a subject from another venue, and a date that does not exist", async () => {
     const f = await fixture();
-    await expect(resolve(f, f.otherDepartment, "2026-10-12")).rejects.toMatchObject({
+    await expect(read(f, f.otherDepartment)).rejects.toMatchObject({
       code: "hours.invalid",
       params: { field: "subject" },
     });
-    await expect(resolve(f, f.deli, "2026-02-30")).rejects.toMatchObject({
+    await expect(
+      withTransaction(db, (tx) => readHoursModel(tx, f.cfg, "2026-02-30", "2026-02-30", AT)),
+    ).rejects.toMatchObject({
       code: "hours.invalid",
-      params: { field: "openingDate" },
+      params: { field: "from" },
     });
     await expect(tone(f, "2026-02-30")).rejects.toMatchObject({
       code: "hours.invalid",
@@ -1441,36 +1473,39 @@ describe("closing the whole venue on a date", () => {
     const added = await addSubjects(f);
 
     for (const subject of [f.restaurant, f.deli, f.bar, added.terrace, added.grill])
-      expect(await resolve(f, subject, "2026-10-09")).toEqual({
+      expect(await dateSnapshot(f, subject, "2026-10-09")).toMatchObject({
         subject,
         openingDate: "2026-10-09",
         specialDateId: friday.id,
-        source: "whole_venue",
-        cell: { mode: "closed", periods: [] },
+        closeWholeVenue: true,
+        state: { open: false, isDefault: false },
       });
-    expect(await resolve(f, f.kitchen, "2026-10-09")).toEqual({
+    expect(await dateSnapshot(f, f.kitchen, "2026-10-09")).toMatchObject({
       subject: f.kitchen,
       openingDate: "2026-10-09",
       specialDateId: friday.id,
-      source: "default_station",
-      cell: { mode: "always_open", periods: [] },
+      state: { open: true, isDefault: true },
     });
 
     // The cells the closure hides are kept, and reopening the date shows them again.
     const kept = await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, friday.id));
     expect(kept.cells).toEqual([...cells].sort((a, b) => (a.subject.id < b.subject.id ? -1 : 1)));
     await saveDate(f, friday.id, specialInput({ closeWholeVenue: false, cells: kept.cells }));
-    expect(await resolve(f, f.deli, "2026-10-09")).toMatchObject({
-      source: "special",
-      cell: { mode: "periods", periods: [evening] },
+    expect(await dateSnapshot(f, f.deli, "2026-10-09")).toMatchObject({
+      closeWholeVenue: false,
+      specialCell: { mode: "periods", periods: [evening] },
+      state: { open: false, isDefault: false },
     });
-    expect(await resolve(f, f.bar, "2026-10-09")).toMatchObject({
-      source: "special",
-      cell: { mode: "all_day", periods: [] },
+    expect(await dateSnapshot(f, f.bar, "2026-10-09")).toMatchObject({
+      closeWholeVenue: false,
+      specialCell: { mode: "all_day", periods: [] },
+      state: { open: true, isDefault: false },
     });
-    expect(await resolve(f, added.terrace, "2026-10-09")).toMatchObject({
-      source: "standard",
-      cell: { mode: "not_set", periods: [] },
+    expect(await dateSnapshot(f, added.terrace, "2026-10-09")).toMatchObject({
+      specialCell: undefined,
+      closeWholeVenue: false,
+      standardCell: { mode: "not_set", periods: [] },
+      state: { isDefault: false },
     });
   });
 });
@@ -1627,13 +1662,15 @@ describe("holiday facts beside the calendar", () => {
       holidays: [FACTS[0], FACTS[1]],
       tone: "standard",
     });
-    const hours = await resolve(f, f.restaurant, "2026-10-14");
-    expect([hours.source, hours.specialDateId, hours.cell.mode]).toEqual([
-      "standard",
+    const hours = await dateSnapshot(f, f.restaurant, "2026-10-14");
+    expect([hours.specialCell, hours.specialDateId, hours.standardCell.mode]).toEqual([
+      undefined,
       null,
       "periods",
     ]);
-    expect(hours.cell.periods.map((p) => [p.opensAt, p.closesAt])).toEqual([["12:00", "16:00"]]);
+    expect(hours.standardCell.periods.map((p) => [p.opensAt, p.closesAt])).toEqual([
+      ["12:00", "16:00"],
+    ]);
   });
 
   it("keeps a date's facts as they are while a special date there is added, renamed and deleted", async () => {
@@ -1793,7 +1830,10 @@ describe("duplicating a special date", () => {
       date: "2026-10-16",
       cells,
     });
-    expect(await resolve(f, f.bar, "2026-10-16")).toMatchObject({ source: "whole_venue" });
+    expect(await dateSnapshot(f, f.bar, "2026-10-16")).toMatchObject({
+      closeWholeVenue: true,
+      state: { open: false, isDefault: false },
+    });
   });
 
   it("leaves an inherited cell inheriting, so a Monday copied to a Sunday reads Sunday's week", async () => {
@@ -1812,12 +1852,14 @@ describe("duplicating a special date", () => {
       }),
     );
     const [copy] = await duplicate(f, monday.id, ["2026-10-18"]);
-    expect(await resolve(f, f.restaurant, "2026-10-18")).toEqual({
+    expect(await dateSnapshot(f, f.restaurant, "2026-10-18")).toMatchObject({
       subject: f.restaurant,
       openingDate: "2026-10-18",
       specialDateId: copy!.id,
-      source: "standard",
-      cell: { mode: "periods", periods: [sunday] },
+      specialCell: undefined,
+      closeWholeVenue: false,
+      standardCell: { mode: "periods", periods: [sunday] },
+      state: { isDefault: false },
     });
     expect((await dateRows(copy!.id)).cells.map((cell) => cell.stationId)).toEqual([f.deli.id]);
   });
@@ -1993,12 +2035,11 @@ describe("duplicating a special date", () => {
       });
       expect(bar!.cell.periods[0]!.id).not.toBe(evening.id);
       expect(read.cells.find(({ subject }) => subject.id === f.deli.id)?.cell).toEqual(closed);
-      expect(await resolve(f, f.bar, copy.date)).toEqual({
+      expect(await dateSnapshot(f, f.bar, copy.date)).toMatchObject({
         subject: f.bar,
         openingDate: copy.date,
         specialDateId: copy.id,
-        source: "default_station",
-        cell: { mode: "always_open", periods: [] },
+        state: { open: true, isDefault: true },
       });
     }
   });
@@ -2105,14 +2146,19 @@ describe("deleting a special date", () => {
           .where(inArray(specialDateHoursPeriods.cellId, cellIds)),
       ),
     ).toEqual([]);
-    expect(await resolve(f, f.restaurant, "2026-10-09")).toEqual({
+    expect(await dateSnapshot(f, f.restaurant, "2026-10-09")).toMatchObject({
       subject: f.restaurant,
       openingDate: "2026-10-09",
       specialDateId: null,
-      source: "standard",
-      cell: { mode: "periods", periods: [friday] },
+      specialCell: undefined,
+      closeWholeVenue: false,
+      standardCell: { mode: "periods", periods: [friday] },
+      state: { isDefault: false },
     });
-    expect((await resolve(f, f.bar, "2026-10-09")).cell).toEqual({ mode: "not_set", periods: [] });
+    expect((await dateSnapshot(f, f.bar, "2026-10-09")).standardCell).toEqual({
+      mode: "not_set",
+      periods: [],
+    });
     await expect(remove(f, date.id)).rejects.toMatchObject({
       code: "special_date.not_found",
       params: { specialDateId: date.id },
@@ -2581,10 +2627,12 @@ describe("Hours with the holiday store", () => {
       tone: "standard",
     });
     expect([days[0]!.holidays, days[2]!.holidays]).toEqual([[], []]);
-    expect(await resolve(f, f.restaurant, "2026-12-25")).toMatchObject({
-      source: "standard",
+    expect(await dateSnapshot(f, f.restaurant, "2026-12-25")).toMatchObject({
+      specialCell: undefined,
+      closeWholeVenue: false,
       specialDateId: null,
-      cell: { mode: "periods", periods: [{ opensAt: "12:00", closesAt: "16:00" }] },
+      standardCell: { mode: "periods", periods: [{ opensAt: "12:00", closesAt: "16:00" }] },
+      state: { isDefault: false },
     });
   });
 
@@ -2914,8 +2962,10 @@ describe("Hours on a real Spanish public holiday", () => {
       },
     ]);
     for (const subject of [f.restaurant, f.bar, f.kitchen]) {
-      const holiday = await resolve(f, subject, HOLIDAY);
-      expect({ ...holiday, openingDate: ORDINARY }).toEqual(await resolve(f, subject, ORDINARY));
+      const holiday = await dateSnapshot(f, subject, HOLIDAY);
+      expect({ ...holiday, openingDate: ORDINARY }).toEqual(
+        await dateSnapshot(f, subject, ORDINARY),
+      );
     }
     expect(await schedule(f, ORDINARY, HOLIDAY)).toEqual({
       weekSet: true,
@@ -2936,11 +2986,12 @@ describe("Hours on a real Spanish public holiday", () => {
       }),
     );
     expect((await schedule(f, ORDINARY, HOLIDAY)).dates).toEqual(new Map([[HOLIDAY, []]]));
-    expect(await resolve(f, f.bar, HOLIDAY)).toMatchObject({
-      source: "special",
+    expect(await dateSnapshot(f, f.bar, HOLIDAY)).toMatchObject({
       specialDateId: saved.id,
-      cell: { mode: "closed", periods: [] },
+      closeWholeVenue: false,
+      specialCell: { mode: "closed", periods: [] },
+      state: { open: false, isDefault: false },
     });
-    expect((await resolve(f, f.bar, ORDINARY)).source).toBe("standard");
+    expect((await dateSnapshot(f, f.bar, ORDINARY)).specialCell).toBeUndefined();
   });
 });
