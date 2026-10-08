@@ -6962,7 +6962,7 @@ approved.
   retried; guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts` fail on
   one with no outer timeout. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
   bounded".
-  **Open points (queued as A429, campaign lane A, 2026-10-08):** (1) the Dockerfile's `bounded()` does not retry an
+  **Open points (queued as A431, campaign lane A, 2026-10-08):** (1) the Dockerfile's `bounded()` does not retry an
   `apt-get update` that cannot connect, because apt prints "Failed to fetch" and still exits 0
   (measured in the A422 probes; apt's own `Acquire::Retries=3` still applies);
   `APT::Update::Error-Mode=any` would make it fail and be retried, at the cost of failing on any one
