@@ -136,8 +136,15 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
       theme,
     );
     if (state === "invalid") {
+      el.shadowRoot!.querySelector('[name="kitchen-name"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "XTR" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!.error,
+      ).not.toBe("");
     }
     const names = el.shadowRoot!.querySelector<
       HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
@@ -180,6 +187,10 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
       },
       theme,
     );
+    el.shadowRoot!.querySelector('[name="kitchen-name"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "XTR" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-test="item-0-portion-fixed"]')).not.toBeNull();

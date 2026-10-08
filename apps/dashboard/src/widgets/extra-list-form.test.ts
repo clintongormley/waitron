@@ -175,6 +175,12 @@ async function bottomOf(el: ExtraListForm): Promise<string> {
 const saveOf = (el: ExtraListForm): HTMLElementTagNameMap["wt-button"] =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
 
+/** Save as a form opened and left untouched draws it: quiet and disabled. */
+function expectSaveQuiet(el: ExtraListForm): void {
+  expect(saveOf(el).disabled).toBe(true);
+  expect(saveOf(el).variant).toBe("secondary");
+}
+
 const errorOf = (el: ExtraListForm, name: string): string =>
   field<HTMLElementTagNameMap["wt-input"]>(el, name).error;
 
@@ -384,6 +390,7 @@ it("refuses the same product offered twice, beside the second row and in the bot
   const { el, host } = await mount({ value: baconTwice });
   const submitted = record(host);
 
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
 
   expect(submitted).toEqual([]);
@@ -434,7 +441,7 @@ it("refuses a price the product-price rule does not accept", async () => {
   expect(submitted[0]!.items[0]!.price).toBe("1.50");
 });
 
-it("puts a rejected field's message beside the input the server named, leaving Save working", async () => {
+it("puts a rejected field's message beside the input the server named, with Save working once anything changes", async () => {
   const { el } = await mount({
     value: addons,
     fieldErrors: {
@@ -444,6 +451,17 @@ it("puts a rejected field's message beside the input the server named, leaving S
     },
   });
 
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "kitchen-name").error).toBe(
+    "Too long for the kitchen.",
+  );
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-max-quantity").error).toBe(
+    "Too many of those.",
+  );
+  expect(text(el, "item-0-product-error")).toBe("That product was deleted.");
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expectSaveQuiet(el);
+
+  await type(el, "name", "Extras");
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "kitchen-name").error).toBe(
     "Too long for the kitchen.",
   );
@@ -705,6 +723,7 @@ it("paints its own error text with the danger token and keeps the row controls t
 
   el.value = baconTwice;
   await el.updateComplete;
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   const duplicate = el.shadowRoot!.querySelector<HTMLElement>(
     '[data-test="item-1-product-error"]',
@@ -785,13 +804,21 @@ it.each([
   ["an item field with no cell", "items.0.id"],
   ["an item the form does not hold", "items.7.price"],
   ["a list field with no input", "items"],
-])("shows a refusal naming %s under the items table", async (_what, path) => {
-  const { el } = await mount({ value: addons, fieldErrors: { [path]: "Something is wrong." } });
+])(
+  "shows a refusal naming %s under the items table, with Save working once anything changes",
+  async (_what, path) => {
+    const { el } = await mount({ value: addons, fieldErrors: { [path]: "Something is wrong." } });
 
-  expect(text(el, "items-error")).toBe("Something is wrong.");
-  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).disabled).toBe(false);
-});
+    expect(text(el, "items-error")).toBe("Something is wrong.");
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expectSaveQuiet(el);
+
+    await type(el, "kitchen-name", "XTR");
+    expect(text(el, "items-error")).toBe("Something is wrong.");
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(saveOf(el).disabled).toBe(false);
+  },
+);
 
 it("moves a rejected item's message under the items table once that item is removed", async () => {
   const { el } = await mount({ value: addons, fieldErrors: { "items.1.price": "Too cheap." } });
@@ -806,7 +833,7 @@ it("moves a rejected item's message under the items table once that item is remo
 });
 
 it("submits a blank minimum as 0, the contract's own default", async () => {
-  const { el, host } = await mount({ value: addons });
+  const { el, host } = await mount({ value: { ...addons, minPicks: 1 } });
   const submitted = record(host);
 
   await type(el, "min-picks", "  ");
@@ -1052,6 +1079,8 @@ it("falls every blank language back to the default language's name on the closed
     ],
     hints: ["", "Make it yours"],
   });
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted[0]!.customerName).toEqual({ en: "Make it yours" });
 
@@ -1065,7 +1094,7 @@ it("falls every blank language back to the default language's name on the closed
   });
 });
 
-it("reads customer-facing names stored under regional codes into the fields, their hints and the closed line, and saves them back untouched", async () => {
+it("reads customer-facing names stored under regional codes into the fields, their hints and the closed line, and saves them back as stored when another field changes", async () => {
   const stored = { "en-GB": "Make it yours", "es-ES": "Añádele algo" };
   const { el, host } = await mount({ value: { ...addons, customerName: stored } });
   const submitted = record(host);
@@ -1082,6 +1111,8 @@ it("reads customer-facing names stored under regional codes into the fields, the
     ],
     hints: ["", ""],
   });
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted[0]!.customerName).toEqual(stored);
 });
@@ -1120,6 +1151,8 @@ it("never falls a blank default language back to another language's name on the 
     ],
     hints: ["Add-ons", ""],
   });
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted[0]!.customerName).toEqual({ es: "Añádele algo" });
 });
@@ -1308,11 +1341,13 @@ it.each([
   },
 );
 
-it("shows a saved minimum of 0 as the empty box, and saves it back as 0", async () => {
+it("shows a saved minimum of 0 as the empty box, and saves it back as 0 when another field changes", async () => {
   const { el, host } = await mount({ value: { ...addons, minPicks: 0 } });
   const submitted = record(host);
   const min = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "min-picks");
   expect(min.value).toBe("");
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted).toHaveLength(1);
   expect(submitted[0]!.minPicks).toBe(0);
@@ -1341,6 +1376,8 @@ it("clears a minimum of 1 with its − button, and saves the list with a minimum
 it("saves an empty minimum with a maximum of 1", async () => {
   const { el, host } = await mount({ value: { ...addons, minPicks: 0, maxPicks: 1 } });
   const submitted = record(host);
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted).toHaveLength(1);
   expect([submitted[0]!.minPicks, submitted[0]!.maxPicks]).toEqual([0, 1]);
@@ -2160,9 +2197,10 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
+it("keeps a field's refusal until that field changes, with Save working once anything changes", async () => {
   const { el } = await mount({ value: addons, fieldErrors: { "items.1.price": "Too cheap." } });
-  expect(saveOf(el).disabled).toBe(false);
+  expect(errorOf(el, "item-1-price")).toBe("Too cheap.");
+  expectSaveQuiet(el);
 
   await type(el, "item-0-price", "0.90");
   expect(errorOf(el, "item-1-price")).toBe("Too cheap.");
@@ -2191,9 +2229,11 @@ it("clears a translated name's refusal only when that language's value changes",
 
 it("clears a refusal about the items as a whole once the items change", async () => {
   const { el } = await mount({ value: addons, fieldErrors: { items: "Something is wrong." } });
-  expect(saveOf(el).disabled).toBe(false);
+  expect(text(el, "items-error")).toBe("Something is wrong.");
+  expectSaveQuiet(el);
 
-  await toggle(el, "item-0-preselected", true);
+  // The stored item is preselected, so switching it off is the change.
+  await toggle(el, "item-0-preselected", false);
 
   expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
@@ -2210,12 +2250,16 @@ it("focuses the field a refusal names when the refusal arrives, opening its fold
   expect(customer.shadowRoot!.activeElement).toBe(customer.shadowRoot!.querySelector("input"));
 });
 
-it("keeps a refusal naming no field in the bottom message alone, leaving Save working until it is submitted again", async () => {
+it("keeps a refusal naming no field in the bottom message alone, leaving Save working once anything changes until it is submitted again", async () => {
   const { el, host } = await mount({ value: addons, fieldErrors: { _form: "Not found." } });
   const submitted = record(host);
 
   expect(await bottomOf(el)).toBe("Not found.");
   expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
+  expectSaveQuiet(el);
+
+  await type(el, "kitchen-name", "XTR");
+  expect(await bottomOf(el)).toBe("Not found.");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 
   await click(el, "save");
@@ -2223,9 +2267,11 @@ it("keeps a refusal naming no field in the bottom message alone, leaving Save wo
   expect(await bottomOf(el)).toBe("");
 });
 
-it("starts again when reopened: no messages and Save working", async () => {
+it("starts again when reopened: no messages, Save quiet, and working after an edit", async () => {
   const { el } = await mount();
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
+  expect(errorOf(el, "name")).toBe(t("extras.name_required"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 
   el.open = false;
@@ -2236,6 +2282,11 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(errorOf(el, "name")).toBe("");
   expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
   expect(await bottomOf(el)).toBe("");
+  expectSaveQuiet(el);
+
+  await type(el, "kitchen-name", "XTR");
+  expect(errorOf(el, "name")).toBe("");
+  expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
@@ -2339,7 +2390,7 @@ const wineOnList: ExtraList = {
   ],
 };
 
-it("marks a listed product that has an Active variant on its row before any save, in English and Spanish", async () => {
+it("marks a listed product that has an Active variant on its row before any save, in English and Spanish, without holding Save once anything changes", async () => {
   const expected = {
     en: "Has variants, so it can't be an extra. Remove it from this list.",
     es: "Tiene variantes, así que no puede ser un extra. Quítalo de esta lista.",
@@ -2350,6 +2401,12 @@ it("marks a listed product that has an Active variant on its row before any save
       const { el } = await mount({ value: wineOnList, products: withVariants });
       expect(text(el, "item-0-product-error"), locale).toBe(expected[locale]);
       expect(el.shadowRoot!.querySelector('[data-test="item-1-product-error"]')).toBeNull();
+      expect(await bottomOf(el), locale).toBe("");
+      expect(saveOf(el).hasAttribute("disabled"), locale).toBe(true);
+      expect(saveOf(el).variant, locale).toBe("secondary");
+
+      await type(el, "kitchen-name", "XTR");
+      expect(text(el, "item-0-product-error"), locale).toBe(expected[locale]);
       expect(await bottomOf(el), locale).toBe("");
       expect(saveOf(el).hasAttribute("disabled"), locale).toBe(false);
     } finally {
@@ -2371,6 +2428,7 @@ it("refuses to save a list holding a product with an Active variant, and saves o
   const { el, host } = await mount({ value: wineOnList, products: withVariants });
   const submitted = record(host);
 
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
 
   expect(submitted).toEqual([]);
@@ -2438,7 +2496,7 @@ it("heads Portion and Price as two columns, Portion first, even when every item 
   expect(portionCell(el, 0).querySelector("wt-price-input")).toBeNull();
 });
 
-it("shows a saved unit-sold item's portion as a plain 1, and saves one unit", async () => {
+it("shows a saved unit-sold item's portion as a plain 1, and saves one unit when another field changes", async () => {
   const { el, host } = await mount({
     value: { ...addons, items: addons.items.map((item) => ({ ...item, portion: "1.000" })) },
     products: [eachBacon, eachEgg],
@@ -2452,6 +2510,8 @@ it("shows a saved unit-sold item's portion as a plain 1, and saves one unit", as
     "0.80",
   );
 
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted).toHaveLength(1);
   expect(submitted[0]!.items.map((item) => item.portion)).toEqual([undefined, undefined]);
@@ -2468,6 +2528,8 @@ it("neither multiplies the inherited price by a stale saved portion nor sends it
   expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").placeholder).toBe(
     "0.80",
   );
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted).toHaveLength(1);
   expect("portion" in submitted[0]!.items[0]!).toBe(false);
@@ -2540,6 +2602,8 @@ it("holds a mixed list's two kinds of row apart", async () => {
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion").value).toBe("250.000");
   expect(portionCell(el, 1).textContent!.trim()).toBe("1");
   expect(field(el, "item-1-portion")).toBeNull();
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted[0]!.items.map((item) => item.portion)).toEqual(["250.000", undefined]);
   expect(submitted[0]!.items[0]!.price).toBe("2.00");
@@ -2606,6 +2670,8 @@ it("shows the same Portion cells before a save and after the list is reopened wi
   expect(field(el, "item-0-portion")).toBeNull();
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-portion").value).toBe("250.000");
 
+  expectSaveQuiet(el);
+  await type(el, "kitchen-name", "XTR");
   await click(el, "save");
   expect(submitted).toHaveLength(2);
   const resent = submitted[1]!.items;
