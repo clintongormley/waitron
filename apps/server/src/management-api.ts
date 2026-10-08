@@ -2,6 +2,8 @@
 import "./errors.js";
 // The registry of `printer.not_found`, which `requireListedPrinters` throws.
 import "@waitron/printing";
+// The registry of `product.not_found`, which `requireProductId` throws.
+import "@waitron/catalogue";
 import {
   getKitchenTimingDefaults,
   setKitchenTimingDefaults,
@@ -314,6 +316,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.watcher_in_use": 409,
   "printer.not_found": 404,
   "catalogue.not_found": 404,
+  "product.not_found": 404,
 };
 
 const run = createErrorBoundary(STATUS, "management.failed");
@@ -377,6 +380,11 @@ function parseWatcherBody(body: unknown): WatcherInput {
     runsPass: value.runsPass as boolean,
     displayOrder: parseDisplayOrder(value.displayOrder),
   };
+}
+
+function requireProductId(id: string): string {
+  if (!isUuid(id)) throw new AppError("product.not_found", { productId: id });
+  return id;
 }
 
 function requireCourseId(id: string): string {
@@ -2220,12 +2228,12 @@ export function mountManagementApi(
     }),
   );
 
-  // `null` clears the product's course. A malformed `:id` is handled as in `registerStationRoute`.
+  // `null` clears the product's course.
   app.put("/management-api/products/:id/course", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
+      const id = requireProductId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const id = c.req.param("id");
       const body = await readJsonBody<{ courseId?: unknown }>(c);
       if (typeof body.courseId !== "string" && body.courseId !== null) {
         throw new AppError("management.request_invalid", { field: "courseId" });
@@ -2234,10 +2242,7 @@ export function mountManagementApi(
       if (courseId !== null && !isUuid(courseId)) {
         throw new AppError("course.not_found", { courseId });
       }
-      await withVenueAuth(deps, sessionId, async (tx) => {
-        if (!isUuid(id)) return;
-        await setProductCourse(tx, cfg, id, courseId);
-      });
+      await withVenueAuth(deps, sessionId, (tx) => setProductCourse(tx, cfg, id, courseId));
       return c.body(null, 204);
     }),
   );

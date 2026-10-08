@@ -289,6 +289,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Raised by the op's `decimalToCents`, not by this file's screens.
   "shared.decimal_overflow": 400,
   "catalogue.not_found": 404,
+  "location.not_found": 404,
   "category.not_found": 404,
   "category.invalid": 400,
   "category.parent_cycle": 409,
@@ -347,6 +348,12 @@ const runFolder = createErrorBoundary(
   { ...STATUS, "category.parent_cycle": 409 },
   "catalogue.failed",
 );
+// A product create names its catalogue in the body: an id in the body that names nothing is a 400
+// (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong").
+const runCreateProduct = createErrorBoundary(
+  { ...STATUS, "catalogue.not_found": 400 },
+  "catalogue.failed",
+);
 // The single-size route names its size in the path, so an unknown one is a 404; the whole-list
 // PUT names sizes in its body, and an unknown one there stays a 400.
 const runSize = createErrorBoundary(
@@ -402,7 +409,7 @@ function parseMenuVariants(value: unknown): MenuVariant[] {
   });
 }
 
-/** A SHAPE screen only; whether the id names a catalogue is {@link assertCatalogueVisible}'s job. */
+/** A SHAPE screen only; the location-menu writes check that the id names a catalogue. */
 async function requireCatalogueIdBody(c: Context): Promise<string> {
   const body = await readJsonBody<{ catalogueId?: unknown }>(c);
   if (typeof body.catalogueId !== "string") {
@@ -411,10 +418,7 @@ async function requireCatalogueIdBody(c: Context): Promise<string> {
   return requireUuidParam(body.catalogueId, "CatalogueId");
 }
 
-/**
- * The foreign keys on `catalogues(id)` also refuse an absent id; this check is what turns that into a
- * clean `catalogue.not_found` naming the id.
- */
+/** A read filtered by an absent catalogue would answer an empty list rather than name it. */
 async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
   if (!(await catalogueExists(tx, catalogueId))) {
     throw new AppError("catalogue.not_found", { catalogueId });
@@ -1195,10 +1199,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = await requireCatalogueIdBody(c);
-      await gated(c, sessionId, async (tx) => {
-        await assertCatalogueVisible(tx, catalogueId);
-        await addCatalogueToLocation(tx, locationId, catalogueId);
-      });
+      await gated(c, sessionId, (tx) => addCatalogueToLocation(tx, locationId, catalogueId));
       return c.body(null, 204);
     }),
   );
@@ -1218,10 +1219,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = await requireCatalogueIdBody(c);
-      await gated(c, sessionId, async (tx) => {
-        await assertCatalogueVisible(tx, catalogueId);
-        await setLocationDefaultCatalogue(tx, locationId, catalogueId);
-      });
+      await gated(c, sessionId, (tx) => setLocationDefaultCatalogue(tx, locationId, catalogueId));
       return c.body(null, 204);
     }),
   );
@@ -1358,7 +1356,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
-      const rows = await gated(c, sessionId, (tx) => listProducts(tx, catalogueId));
+      const rows = await gated(c, sessionId, async (tx) => {
+        await assertCatalogueVisible(tx, catalogueId);
+        return listProducts(tx, catalogueId);
+      });
       return c.json(rows);
     }),
   );
@@ -1426,7 +1427,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.post("/management-api/products", (c) =>
-    run(c, log, async () => {
+    runCreateProduct(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // `allergens` is left to `createProduct`, which throws the authoritative `allergen.*` codes.
       const body = await readJsonBody<{
