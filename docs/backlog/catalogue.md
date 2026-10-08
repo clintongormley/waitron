@@ -368,6 +368,112 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   (es-ES to es-MX), which the design rules out. Adding content translations does not translate
   Waitron's interface.
 
+## Product folders, menus that include menus, and prep station routing: partly built (design approved 2026-09-30)
+
+**Product folders, menus that include menus, and prep station routing: partly built
+(design approved 2026-09-30).** The
+[design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
+1, 2, 3a, 3b ([#1024](https://github.com/clintongormley/waitron/pull/1024)), 3c-1, 3c-2 (PF6,
+[#1046](https://github.com/clintongormley/waitron/pull/1046)) and 3c-3 (PF7,
+[#1068](https://github.com/clintongormley/waitron/pull/1068)) have landed. **Owner decision
+(2026-10-01):** deleting only empty folders
+stays immediate, including any routing rules attached to them; a confirmation is shown when the
+selected folders contain products or subfolders. **Reversed 2026-10-06 (owner, A279):** a folder
+holding only routing rules gets the confirmation, saying how many rules go with it; a folder with
+nothing at all is still deleted at once. Each dev venue needs `wa-wt reset demo
+<worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
+sections and their placements disappear and per-menu extras are retired. Reload tills running the
+older build before using the new published document. Status and remaining work:
+
+- **Deleting or moving a folder does not show which products change station** (slice 3a, approved
+  R6). The delete dialog counts the routing cells removed but lists no products whose
+  destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that
+  preview before extending these operations during service.
+- **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
+  uses `ON DELETE CASCADE`
+  (`packages/venue-service/src/schema/routing.ts`); follow CLAUDE.md §3's rebuild rule and add a
+  populated-upgrade check before another categories rebuild.
+- **The Spanish menu preview's selected Preview tab showed clipped at 390 px** after programmatic
+  selection, in a render on 2026-10-01; clicking it scrolled it into view. A base-build render was
+  not run, so when it began is not established (geometry and screenshot:
+  `~/waitron-campaign-e/receipts/finish-render-20261001/render-report.md`). Check restored selection
+  visibility before changing the shared tab component.
+
+## Sales classification and the menus plan — what they left open
+
+**Sales classification and the menus plan — what they left open.** Both plans are complete (the
+[menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) (§11 wins
+over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) and
+[plan](../superpowers/plans/2026-09-25-menus-categories-home-layouts.md); the
+[classification design](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)
+and [plan](../superpowers/plans/2026-09-25-sales-classification.md)). Several entries are overtaken by
+the 2026-09-30 folders design; what remains:
+
+- **Classification.** `Product.categoryId` and `primaryCategoryId` always hold the same value, and
+  `?descendants=1` on a category's products has no dashboard caller. A line's classification is
+  recorded when it is added (M7v), so `sale_classification.invalid` refuses adding a line; whether
+  the till's message for that refusal on the add paths is right is not checked. The demo seed
+  (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale`
+  directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`,
+  `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts`
+  file sales without the issuance pass, so seeded demo lines carry no product id, classification or
+  gross, and the Sales screen's category report shows every seeded line under Not recorded.
+- **The category sales report (#738).** `wt-button` disables only its inner `<button>`, so a
+  scripted click on the host still reaches a click handler; the Sales screen's print handler checks
+  for itself, other screens relying on `?disabled` alone have not been checked. The spec (§6)
+  wanted the category analysis printable with the daily close, but no daily-close print exists.
+- **Photo-holding tables are named by hand in several places in `packages/media`** (the triggers,
+  `listImageUsages`, `countUsages`, the live-query dependencies, the `before` lists in
+  `module.ts`, the `ImageUsage` unions), and only a comment keeps `countUsages` and
+  `listImageUsages` in step; one list those derive from, checked against the triggers, would make
+  the next such table one edit.
+- **`sections_owner_menu_fk` has no delete rule**, so deleting a menu that owns a section will be
+  refused until one is chosen; nothing deletes a menu today. Media's triggers name `sections`, so a
+  later rebuild of that table meets the trap `docs/developers/conventions-data.md` records.
+- **A product reached through a section offers no extras list** (noted at #659, and already so
+  before it, checked at `002b79f69`).
+- **The Menus screen (#664).** Which section is being edited is not in the address, only the menu
+  and the tab. Opening "Add to menus" sends one `getMenuStructure` request per menu, each reading
+  the whole section graph (`readMenuStructure`, `packages/catalogue/src/menu-structure.ts`); one
+  server read returning every menu's structure would make it one. A refused change's message sits
+  under the menu's heading, above the tabs, so on a phone the tree sits between it and the list it
+  names; if someone else exactly undoes a move while it is saving, the move's answer is shown over
+  their change until the menu is next read; and no accessibility test covers that message.
+- **The Price overrides tab (named Prices until W89; #670, #680).** The owner decided 2026-09-26
+  that removing a product's last placement needs no warning before it clears the menu price and
+  variant settings. Open: the main-category filter offers every category, not only those on the
+  menu; the product editor's help lines are paragraphs beside their inputs, not linked to them (a
+  `hint` shows only as the placeholder since C104, so moving them there would hide them whenever
+  the field holds a value); a variant row is announced by its name alone; and,
+  from reading only, a Columns panel wider than a very narrow screen would not shrink to fit, and is
+  not re-placed on resize.
+- **Publishing (#677).** After a publish the editor's heading shows the browser's clock until the
+  next read; the status
+  and preview reads build every menu's frozen copy inside `withTransaction`, the venue's write lock
+  — about 21 ms median for 4 menus and 300 dishes on a dev laptop, not measured on the box; at
+  phone width the list keeps a fixed room for the row menu, and a status sort falls back to a name
+  sort. The configuration import (`apps/server/src/configuration-transfer.ts`, inside
+  provisioning's `beforeCommit`) deletes every `catalogues` row, so a provisioning or demo-seed
+  path that publishes a menu BEFORE the import runs fails the import's commit on the append-only
+  `menu_versions` → `catalogues` key. `apps/dashboard/src/widgets/variant-form.test.ts` failed once
+  in a local dashboard coverage run; which of its tests failed was not recorded. The one
+  intermittent failure in that file whose cause is known, the Escape test, is fixed (A220f, #1075; see the
+  flaky-test entry); whether it was this one is not known.
+- **Home page shortcuts (Task 8, #722; rewritten 2026-10-06 for W93, which replaced named layouts
+  and the profile's choice with one Device Home Page per menu).** The add-shortcut picker offers
+  active products only, so a shortcut to a product switched off since shows no marker in the
+  Structure tree and, once removed, cannot be added again until the product is switched back on.
+
+## Copying some of a section's products into another section is not built
+
+**Copying some of a section's products into another section is not built** (found by the menus
+plan's closing sweep, 2026-09-27). The menus spec §2 asks to select all, almost all or some of a
+section's products and add them to another section, creating it in the same flow if needed, with
+the selection telling the section's own members apart from products reached through a nested
+section. What landed is duplicating a section and §10.2's Add products flow. Since slice 2 any such
+follow-up belongs in the owning menu editor. **Next action:** the owner decides whether §10.2's
+flow replaces §2's copy.
+
 ## Decisions and deliberate limits
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner

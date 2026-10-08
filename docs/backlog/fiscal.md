@@ -621,6 +621,32 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   expiry alert. Separate from getting the certificate onto a promoted standby (_Afterwards_). Fiscal:
   the owner lands it.
 
+## VAT at line add (M7v, A68)
+
+- **VAT at line add (M7v, A68).** Asesor Q26 (the rate on the day of issue) is open. Owner rulings
+  at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
+  box holding order lines is reset rather than given data-migration code; and every invoice path
+  reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
+  copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
+  a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
+
+## Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT error on an issued simplified invoice
+
+- **Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT
+  error on an issued simplified invoice.** `recordCorrection` exists
+  (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5),
+  but no route calls it: its only callers under `apps/` are three scripts in
+  `apps/server/scripts/` (`daily-close-demo.ts`, `modelo-303-demo.ts`, `settle-invoice-first.ts`)
+  and tests. _(2026-10-02, C126: the whole-order cancel route now calls it, for a credit of the
+  whole invoice only; no route issues a correction for part of one.)_ The owner also needs a way to
+  correct an issued invoice when a customer spots an error after payment, regardless of the future
+  Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
+  designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
+  VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
+  should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
+  today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
+  asesor Q31 (2026-09-30), not decided.
+
 ## Decisions and deliberate limits
 
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,

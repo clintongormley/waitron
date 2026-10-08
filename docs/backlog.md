@@ -386,6 +386,17 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   replace surface and an expiry alert. Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#installing-or-renewing-the-aeat-certificate-after-setup)
 
+- **VAT at line add (M7v, A68).** — left open by the menus plan. Asesor Q26 (the rate on the day of
+  issue) is open. The till computes a basket VAT split (`vatBreakdown`,
+  `apps/till/src/state/working-order.ts`) that no screen shows.
+  [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
+
+- **Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT
+  error on an issued simplified invoice.** — left open by the menus plan. The owner also needs a way
+  to correct an issued invoice when a customer spots an error after payment, regardless of the
+  future Tabs · Bill choice (2026-10-04, A261 step 2 decision).
+  [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -824,6 +835,23 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
   [Detail](backlog/catalogue.md#language-resolution-follow-ons)
 
+- **Product folders, menus that include menus, and prep station routing: partly built (design
+  approved 2026-09-30).** The
+  [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. The
+  delete dialog counts the routing cells removed but lists no products whose destination changes,
+  and **Move to…** changes folder ancestry without a routing preview.
+  [Detail](backlog/catalogue.md#product-folders-menus-that-include-menus-and-prep-station-routing-partly-built-design-approved-2026-09-30)
+
+- **Sales classification and the menus plan — what they left open.** `Product.categoryId` and
+  `primaryCategoryId` always hold the same value, and `?descendants=1` on a category's products has
+  no dashboard caller.
+  [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
+
+- **Copying some of a section's products into another section is not built** (found by the menus
+  plan's closing sweep, 2026-09-27). What landed is duplicating a section and §10.2's Add products
+  flow. **Next action:** the owner decides whether §10.2's flow replaces §2's copy.
+  [Detail](backlog/catalogue.md#copying-some-of-a-sections-products-into-another-section-is-not-built)
+
 ### Service periods, opening hours and departments
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
@@ -893,6 +921,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the area names "Arán" and "Lleida, fuera del territorio de Arán" are Spanish data labels shown
   untranslated in English; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-public-holidays-reviews)
+
+- **Opening or closing a station from the till** (S11, owner, 2026-10-01). Add a core till route
+  calling a new `VENUE_SERVICE` seat method, so staff can open or close the station from the till.
+  Take a manager's PIN as the cash drawer route does (`POST /api/drawer/open`,
+  `apps/server/src/till-api.ts`).
 
 ### The kitchen and preparation
 
@@ -1053,6 +1086,61 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere; part of A9._ De
   to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
   a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
+
+- **Avoid repeat watcher configuration reads during a table move — OPEN (3d).** — left open by the
+  product folders work. `readSentWork`, `enqueueMovedSlips`, and `printCorrectionSlips` each read
+  watcher printers in the move flow. Measure the query count on a moved order with a watcher
+  printer, then pass one read through the transaction if it repeats unchanged configuration.
+
+- **Show one watcher in a canvas card — OPEN (3d, P15).** — left open by the product folders work.
+  The ordinary embedded pass card still shows All stations; a watcher-bound device opens its own
+  board.
+
+- **Alert when a watcher's screens go dark — OPEN (3d, P17).** — left open by the product folders
+  work. The existing dark-screen alert is station scoped, while a watcher can follow several
+  stations.
+
+- **Move an enrolled kitchen screen between stations and watchers without joining again — OPEN (3d,
+  P18).** — left open by the product folders work. Its binding is selected at joining; changing that
+  binding needs a separate action.
+
+- **Keep watcher Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
+  product folders work. `watcher_item_marks` cascades from `ticket_items`, so a rebuild empties
+  those marks.
+
+- **Keep the two watcher filtering rules together — OPEN (3d).** — left open by the product folders
+  work. The server's `watcherSees` and Prep Stations' `watchersSeeing` each have a hand-copied test
+  table. Neither test detects a change to the other rule.
+
+- **Three follow-ups 3c-1 left:** — left open by the product folders work. the kitchen screen's
+  column view has no per-order card, so it does not show the rest of the order…
+  [Detail](backlog/kitchen.md#three-follow-ups-3c-1-left)
+
+- **A till-session station view can bump a dish another station now has.** — left open by the
+  product folders work. The till-session `POST /api/ticket-items/:id/advance` route does not check
+  the item's station (`apps/server/src/till-api.ts`); the device route does
+  (`apps/server/src/device-api.ts`) and refuses `device.forbidden_station`.
+  [Detail](backlog/kitchen.md#a-till-session-station-view-can-bump-a-dish-another-station-now-has)
+
+- **A following extra has different names on paper and on screen.** — left open by the product
+  folders work. Decide which name the following extra should show, then make the surfaces agree.
+  [Detail](backlog/kitchen.md#a-following-extra-has-different-names-on-paper-and-on-screen)
+
+- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper may
+  never mark dishes ready on its screen. Improve how the alert distinguishes a kitchen using paper
+  and how the dev chooser records check-ins.
+  [Detail](backlog/kitchen.md#the-dark-screen-alert-can-be-wrong)
+
+- **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).** —
+  left open by the menus plan. The counter's prep-queue card shows no notices and does not refresh.
+  [Detail](backlog/kitchen.md#changing-sent-lines-and-the-kitchen-screen-task-7c-710-and-the-kitchen-fixes-after-it)
+
+- **Each is decided by the unit's identity, with one known gap.** — left open by the menus plan.
+  While a line is still open, deleting the stored unit seeded as `each` it was sold in makes its
+  queue row, any notice recorded after, its printed ticket, the expo board and the ticket's
+  merge-or-split check read it as not Each, because `readLinesSoldInEach` looks the seed key up on
+  the live unit row…
+  [Detail](backlog/kitchen.md#each-is-decided-by-the-units-identity-with-one-known-gap)
 
 ### The till, devices and table service
 
@@ -1831,6 +1919,61 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
   recurring, a calendar grid, deposits.
 
+- **Show how many dishes are being made on the table plan — OPEN (3d, W16).** — left open by the
+  product folders work. The plan has no such count; adding one needs another value from
+  `listTablesWithState`.
+
+- **Refresh the floor without a staff action — OPEN (3d, W16).** — left open by the product folders
+  work. `till-floor-screen.ts` reads on events handled by `till-app.ts`'s `floor-refresh`, not on a
+  timer. Polling would read `listTablesWithState` every few seconds on every till; choose the
+  interval and cost first.
+
+- **Current orders hides kitchen progress for an extra made at another station** (P6). — left open
+  by the product folders work. The till's Current orders read attaches extras under each dish but
+  reads kitchen state only from the dish's record (`readCurrentOrders`,
+  `apps/server/src/order-groups.ts`). Show the extra's own progress.
+
+- **Move to station on a paid counter order.** — left open by the product folders work. The move
+  route accepts an order that is paid but not yet handed over (`apps/server/src/station-move.ts`).
+  Add the button to B16's "Paid, not handed over" list ([Task
+  16](superpowers/plans/2026-09-26-service-ordering-and-billing.md)).
+
+- **The till's menu reads (Task 7, #719).** — left open by the menus plan. The basket comparison
+  does not notice a publish that adds a required options list to a dish in the basket, or lowers a
+  list's picks limit, so the till takes the new version silently and the server then refuses
+  `options.label_required` (or `extras.limit_exceeded`): staff see a refusal where the dialog should
+  have asked. [Detail](backlog/till.md#the-tills-menu-reads-task-7-719)
+
+- **Every remembered round is marked again against the open table's menu**, so opening a table in
+  another service zone can mark another table's round wrongly or clear its mark. Remember each
+  round's zone, or keep rounds on the app, one per order.
+  [Detail](backlog/till.md#every-remembered-round-is-marked-again-against-the-open-tables-menu)
+
+- **The till's home page (Task 9, #729).** — left open by the menus plan. Search matches the staff
+  name only, not a customer name or a section's name.
+  [Detail](backlog/till.md#the-tills-home-page-task-9-729)
+
+- **The till says "Not found" (menus spec §9) only when a newly read version drops the section it
+  has open.** A shortcut whose target a newly read version lacks simply disappears, with no notice.
+  **Next action:** the owner confirms this meets §9, or asks for a notice when a shortcut
+  disappears.
+  [Detail](backlog/till.md#the-till-says-not-found-menus-spec-9-only-when-a-newly-read-version-drops-the-section-it-has-open)
+
+- **One stale-answer window remains OPEN** — left open by #912's review (secret checks and the write
+  lock): the two join-status readers answer from a hash read just before the key is derived, so a
+  request denied or revoked in that window can get one stale `pending` or `approved`.
+  [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
+
+- **A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
+  Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
+  `packages/db/src/party-table-labels.ts`), so after a join a MOVED slip's "from" can name the other
+  table; recording each ticket's printed table would fix it.
+  [Detail](backlog/till.md#a-joined-tab-of-no-party-can-have-kitchen-slips-naming-a-table-its-ticket-did-not-print)
+
+- **The owner decided a split check gets no Void; the server now allows one.** **Next action:** the
+  owner decides whether that still covers the no-Void decision.
+  [Detail](backlog/till.md#the-owner-decided-a-split-check-gets-no-void-the-server-now-allows-one)
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -2131,6 +2274,14 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   window instead. **Next action:** find a path, for example an agent that asks again on its own
   after a refusal, so agents follow the device rule.
   [Detail](backlog/printers.md#a-print-agent-cannot-be-discarded-when-the-join-window-shuts-a269-owner-2026-10-04--open)
+
+- **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
+  folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
+  until the venue reset that permits the rebuild.
+
+- **Clear a failed watcher copy without printing or resending — OPEN (3d, P9).** — left open by the
+  product folders work. A Reprint does not clear its failed job because watcher copies have no
+  station or bill link.
 
 ### Payments and card readers
 
@@ -2593,6 +2744,30 @@ _Formerly A7, and Track A's dashboard part; part of A9._ Detail: [backlog/dashbo
   by A261 step 5 (Hours). Found in #1298's review; I believe it predates the branch (not checked
   with `git blame`).
 
+- **`wt-data-table` searches a column's sort value when it has no search value**, so a number
+  column matches typed digits unless it opts out; changing that default needs a check of every
+  table that searches prices or counts.
+
+- **Two blocking derivations remain OPEN** — left open by W1 (#1117), secret checks and the write
+  lock. `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting
+  a token or setting a PIN or password stops the event loop; and `deriveKey`
+  (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync` too…
+  [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
+
+- **`verifySecretAsync` could be renamed `verifySecret` (optional)** — left open by #912's review
+  (secret checks and the write lock).
+  [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
+
+- **A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by
+  W1).** **Next action:** refuse a non-text PIN as `pin.invalid`, with a failing case first.
+  [Detail](backlog/dashboard.md#a-till-sign-in-whose-pin-is-not-text-answers-500-not-pininvalid--open-found-2026-10-03-by-w1)
+
+- **A burst of till PIN sign-ins derives a key for every attempt — OPEN (found 2026-10-03 by W1).**
+  `POST /api/session` (`apps/server/src/till-api.ts`) checks its throttle before any failure is
+  recorded, so attempts sent at once all pass it. **Next action:** give the till sign-in the same
+  turn-taking (`inTurn`, `apps/server/src/attempt-turns.ts`) or an in-flight refusal.
+  [Detail](backlog/dashboard.md#a-burst-of-till-pin-sign-ins-derives-a-key-for-every-attempt--open-found-2026-10-03-by-w1)
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
@@ -2665,6 +2840,11 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 - **Logging Slice 2 — one-touch bug report**, then Slice 3 triage and forwarding, with the Slice 1
   hardening (client-trail key allowlist, `maskPath` PII, the setup app). Detail under
   [Logging, diagnostics & one-touch bug report](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
+
+- **The Alerts table makes long station warnings hard to read on a phone.** — left open by the
+  product folders work. Give the alert text more room at phone width while keeping its handling
+  action reachable.
+  [Detail](backlog/alerts.md#the-alerts-table-makes-long-station-warnings-hard-to-read-on-a-phone)
 
 ### Working time and staff
 
@@ -3903,6 +4083,10 @@ _Formerly B8, parts of B9, and Track C's correctness items; part of A9._ Detail:
   the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
   (`apps/dashboard/src/dashboard-app.ts`); Servers (`mirror.create`) is the first to use it.
 
+- **No route raises `menu_item.variant_not_allowed`**: `addProductToMenu` is its only thrower and
+  the demo seed its only caller outside tests. The code and its 400 in
+  `apps/server/src/catalogue-api.ts` are left for whoever next prunes unraised codes.
+
 ### Data protection and legal compliance
 
 _Formerly entries spread across the old sections._
@@ -3914,343 +4098,6 @@ _Formerly _Later and parked_._
 ---
 
 ## Track A — UI and application
-
-What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, `packages/ui`,
-`packages/layouts`, `packages/identity`, the dashboard-, till- and setup-facing routes in
-`apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. The numbers name areas;
-the current ranking is _What to work on next_. The small items at the end of each area live in
-Track C.
-
-**Built in the catalogue, menus and dashboard areas below** (one line each; the PR holds the detail):
-
-- Product folders, slice 1 (#968); menus that include menus, slice 2 (#993); prep-station rules
-  and the Prep Stations screen, slice 3a (#1004); folders with no routing rule flagged on Products,
-  PF3b (#1009); a station's ticket shows the rest of the order, and dishes made at the till, slice
-  3c-1 (#1013).
-- Sales classification, Tasks 1–3 (#645, #648, #738); the category report at time of sale
-  ignores catalogue edits (lane A's W10, #1110). The menus plan, Tasks 1–9 (#651, #654, #659,
-  #664, #670, #680, #677, #683, #696, #710, #719, #722, #729), with M6c (#705), M7b2 (#702), M7b3
-  (#713, since retired) and M7v (#720); a line keeps its frozen VAT class and the rate is looked up
-  by the day of issue, A68 (#726).
-- Extras and Options replaced modifiers (#412, #436, #445, #449, #452, #456, #462, #465, #469,
-  #471, #476, #478, #480); variants as products (#511, #517, #528, #532, #537, #539, #545, #551,
-  #556); a sale needs a zone (lane B's B4, #571).
-- The Products overhaul: categories (#340, #353, #362, #383), units (#342, #350, #375, #382), the
-  product editor (#345, #379, #387), the modifier screens (#352, #370, #377, #385).
-- Content languages and the image library (#339, #344); photos shrunk on upload (#543); a photo
-  has a name and nothing else, A157 (#980); the photo search matches a word as it is typed, A156
-  (#983).
-- The kitchen screen and ticket: a notice carries its line's unit (A71, #725); Each is left out of
-  queue rows, notices, tickets and the expo board (A78 #797, A109 #805, A114 #811, C33 #819); the
-  out-of-date banner (A72 #727, A79 #798).
-- The owner's dashboard fixes of 2026-10-01: Options rows open their editor (A168, #995); Add
-  actions sit on the tab row (A174, #1001); body text 14px in the system font (A179, #988); a
-  dragged row follows the pointer (A180, #994 and #1003); pickers leave out products already held
-  (A181 #990, A183 #997); form fields in the filled style, drawn by the shared field components
-  (A178: #1010, #1012, #1015, #1016, #1017, #1019). The Extras and Options editor fixes, A64–A67
-  (#714, #716, #717, #718).
-- Secret checks derive the key off the event loop (A126 #900, A125 #912, A146 #941); the PIN,
-  manager-login and profile checks derive their key before the write lock is taken (W1, #1117); a product save reads the language setting once (A149, #943); `wt-tabs` sends
-  `wt-tab-change` (A150, #937); undeclared token reads and the Cloud services typography and dates (C69 #865, C75 #867, C76 #879,
-  C85 #896).
-
-**Product folders, menus that include menus, and prep station routing: partly built
-(design approved 2026-09-30).** The
-[design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
-1, 2, 3a, 3b ([#1024](https://github.com/clintongormley/waitron/pull/1024)), 3c-1, 3c-2 (PF6,
-[#1046](https://github.com/clintongormley/waitron/pull/1046)) and 3c-3 (PF7,
-[#1068](https://github.com/clintongormley/waitron/pull/1068)) have landed. **Owner decision
-(2026-10-01):** deleting only empty folders
-stays immediate, including any routing rules attached to them; a confirmation is shown when the
-selected folders contain products or subfolders. **Reversed 2026-10-06 (owner, A279):** a folder
-holding only routing rules gets the confirmation, saying how many rules go with it; a folder with
-nothing at all is still deleted at once. Each dev venue needs `wa-wt reset demo
-<worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
-sections and their placements disappear and per-menu extras are retired. Reload tills running the
-older build before using the new published document. Status and remaining work:
-
-- **3d watchers — LANDED (#1088).**
-- **Show how many dishes are being made on the table plan — OPEN (3d, W16).** The plan has no such
-  count; adding one needs another value from `listTablesWithState`.
-- **Refresh the floor without a staff action — OPEN (3d, W16).** `till-floor-screen.ts` reads on
-  events handled by `till-app.ts`'s `floor-refresh`, not on a timer. Polling would read
-  `listTablesWithState` every few seconds on every till; choose the interval and cost first.
-- **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** Printing no longer reads the
-  column. Dropping it rebuilds `printers`, so leave it until the venue reset that permits the rebuild.
-- **Clear a failed watcher copy without printing or resending — OPEN (3d, P9).** A Reprint does not
-  clear its failed job because watcher copies have no station or bill link.
-- **Avoid repeat watcher configuration reads during a table move — OPEN (3d).**
-  `readSentWork`, `enqueueMovedSlips`, and `printCorrectionSlips` each read watcher printers in the
-  move flow. Measure the query count on a moved order with a watcher printer, then pass one read
-  through the transaction if it repeats unchanged configuration.
-- **Show one watcher in a canvas card — OPEN (3d, P15).** The ordinary embedded pass card still
-  shows All stations; a watcher-bound device opens its own board.
-- **Alert when a watcher's screens go dark — OPEN (3d, P17).** The existing dark-screen alert is
-  station scoped, while a watcher can follow several stations.
-- **Move an enrolled kitchen screen between stations and watchers without joining again — OPEN
-  (3d, P18).** Its binding is selected at joining; changing that binding needs a separate action.
-- **Keep watcher Done marks through a `ticket_items` rebuild — OPEN (3d).**
-  `watcher_item_marks` cascades from `ticket_items`, so a rebuild empties those marks.
-- **Keep the two watcher filtering rules together — OPEN (3d).** The server's `watcherSees` and
-  Prep Stations' `watchersSeeing` each have a hand-copied test table. Neither test detects a change
-  to the other rule.
-- After approval the owner ruled that a dish made at the till is never held and the till lists
-  what to make ("Make now").
-- **Three follow-ups 3c-1 left:** the kitchen screen's column view has no per-order card, so it
-  does not show the rest of the order (a station that needs that context uses the card view);
-  units added to a discounted pay-first dish held in a group get a held kitchen record of their own
-  while the dish has none — observed on `main`, its history not checked, and whether it is wanted
-  remains open; and a device's made-here stations do not travel in configuration export, because
-  devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
-  from an export sets them again on the Devices screen.
-- **Current orders hides kitchen progress for an extra made at another station** (P6). The till's
-  Current orders read attaches extras under each dish but reads kitchen state only from the dish's
-  record (`readCurrentOrders`, `apps/server/src/order-groups.ts`). Show the extra's own progress.
-- **Move to station on a paid counter order.** The move route accepts an order that is paid but not
-  yet handed over (`apps/server/src/station-move.ts`). Add the button to B16's "Paid, not handed
-  over" list ([Task 16](superpowers/plans/2026-09-26-service-ordering-and-billing.md)).
-- **The Alerts table makes long station warnings hard to read on a phone.** A 390 px mounted
-  dashboard fixture for `route.released_at_closed_station` showed only the start of its warning at
-  first; its 340 px table viewport had 906 px of scrollable content, and a 566 px horizontal pan
-  reached the remaining text. Give the alert text more room at phone width while keeping its
-  handling action reachable.
-- **A till-session station view can bump a dish another station now has.** The till-session
-  `POST /api/ticket-items/:id/advance` route does not check the item's station
-  (`apps/server/src/till-api.ts`); the device route does (`apps/server/src/device-api.ts`) and refuses
-  `device.forbidden_station`. Until its next 15-second poll, a till's station view can still show a
-  moved dish and advance it at its new station. The route predates PF7; moves make this more likely.
-- **A following extra has different names on paper and on screen.** Its `+` line prints the frozen
-  staff name (`buildTicketItems`, `apps/server/src/kitchen-print.ts`), while the kitchen screen and
-  pass read its frozen customer `descriptions` (`readQueueSubItems`,
-  `apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
-  both surfaces. Decide which name the following extra should show, then make the surfaces agree.
-- **Done (lane C's W27, #1140) — the till navigation fits a 390 px screen** (PF6 Task 9's wide
-  screenshot).
-- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
-  may never mark dishes ready on its screen. With that screen switched off, each send can raise
-  the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
-  opened through the dev stack's device chooser never records a check-in: the override returns
-  before the cookie path updates `lastSeenAt` (`apps/server/src/device-session.ts:176-186`).
-  Improve how the alert distinguishes a kitchen using paper and how the dev chooser records check-ins.
-- **Opening or closing a station from the till** (S11, owner, 2026-10-01). Add a core till route
-  calling a new `VENUE_SERVICE` seat method, so staff can open or close the station from the till.
-  Take a manager's PIN as the cash drawer route does (`POST /api/drawer/open`,
-  `apps/server/src/till-api.ts`).
-- **Deleting or moving a folder does not show which products change station** (slice 3a, approved
-  R6). The delete dialog counts the routing cells removed but lists no products whose
-  destination changes, and **Move to…** changes folder ancestry without a routing preview. Add that
-  preview before extending these operations during service.
-- **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
-  uses `ON DELETE CASCADE`
-  (`packages/venue-service/src/schema/routing.ts`); follow CLAUDE.md §3's rebuild rule and add a
-  populated-upgrade check before another categories rebuild.
-- **The Spanish menu preview's selected Preview tab showed clipped at 390 px** after programmatic
-  selection, in a render on 2026-10-01; clicking it scrolled it into view. A base-build render was
-  not run, so when it began is not established (geometry and screenshot:
-  `~/waitron-campaign-e/receipts/finish-render-20261001/render-report.md`). Check restored selection
-  visibility before changing the shared tab component.
-
-**Sales classification and the menus plan — what they left open.** Both plans are complete (the
-[menus design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) (§11 wins
-over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) and
-[plan](superpowers/plans/2026-09-25-menus-categories-home-layouts.md); the
-[classification design](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)
-and [plan](superpowers/plans/2026-09-25-sales-classification.md)). Several entries are overtaken by
-the 2026-09-30 folders design; what remains:
-
-- **Classification.** `Product.categoryId` and `primaryCategoryId` always hold the same value, and
-  `?descendants=1` on a category's products has no dashboard caller. A line's classification is
-  recorded when it is added (M7v), so `sale_classification.invalid` refuses adding a line; whether
-  the till's message for that refusal on the add paths is right is not checked. The demo seed
-  (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale`
-  directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`,
-  `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts`
-  file sales without the issuance pass, so seeded demo lines carry no product id, classification or
-  gross, and the Sales screen's category report shows every seeded line under Not recorded.
-- **The category sales report (#738).** `wt-button` disables only its inner `<button>`, so a
-  scripted click on the host still reaches a click handler; the Sales screen's print handler checks
-  for itself, other screens relying on `?disabled` alone have not been checked. The spec (§6)
-  wanted the category analysis printable with the daily close, but no daily-close print exists.
-- **Photo-holding tables are named by hand in several places in `packages/media`** (the triggers,
-  `listImageUsages`, `countUsages`, the live-query dependencies, the `before` lists in
-  `module.ts`, the `ImageUsage` unions), and only a comment keeps `countUsages` and
-  `listImageUsages` in step; one list those derive from, checked against the triggers, would make
-  the next such table one edit.
-- **`sections_owner_menu_fk` has no delete rule**, so deleting a menu that owns a section will be
-  refused until one is chosen; nothing deletes a menu today. Media's triggers name `sections`, so a
-  later rebuild of that table meets the trap `docs/developers/conventions-data.md` records.
-- **A product reached through a section offers no extras list** (noted at #659, and already so
-  before it, checked at `002b79f69`).
-- **`wt-data-table` searches a column's sort value when it has no search value**, so a number
-  column matches typed digits unless it opts out; changing that default needs a check of every
-  table that searches prices or counts.
-- **No route raises `menu_item.variant_not_allowed`**: `addProductToMenu` is its only thrower and
-  the demo seed its only caller outside tests. The code and its 400 in
-  `apps/server/src/catalogue-api.ts` are left for whoever next prunes unraised codes.
-- **The Menus screen (#664).** Which section is being edited is not in the address, only the menu
-  and the tab. Opening "Add to menus" sends one `getMenuStructure` request per menu, each reading
-  the whole section graph (`readMenuStructure`, `packages/catalogue/src/menu-structure.ts`); one
-  server read returning every menu's structure would make it one. A refused change's message sits
-  under the menu's heading, above the tabs, so on a phone the tree sits between it and the list it
-  names; if someone else exactly undoes a move while it is saving, the move's answer is shown over
-  their change until the menu is next read; and no accessibility test covers that message.
-- **The Price overrides tab (named Prices until W89; #670, #680).** The owner decided 2026-09-26
-  that removing a product's last placement needs no warning before it clears the menu price and
-  variant settings. Open: the main-category filter offers every category, not only those on the
-  menu; the product editor's help lines are paragraphs beside their inputs, not linked to them (a
-  `hint` shows only as the placeholder since C104, so moving them there would hide them whenever
-  the field holds a value); a variant row is announced by its name alone; and,
-  from reading only, a Columns panel wider than a very narrow screen would not shrink to fit, and is
-  not re-placed on resize.
-- **Publishing (#677).** After a publish the editor's heading shows the browser's clock until the
-  next read; the status
-  and preview reads build every menu's frozen copy inside `withTransaction`, the venue's write lock
-  — about 21 ms median for 4 menus and 300 dishes on a dev laptop, not measured on the box; at
-  phone width the list keeps a fixed room for the row menu, and a status sort falls back to a name
-  sort. The configuration import (`apps/server/src/configuration-transfer.ts`, inside
-  provisioning's `beforeCommit`) deletes every `catalogues` row, so a provisioning or demo-seed
-  path that publishes a menu BEFORE the import runs fails the import's commit on the append-only
-  `menu_versions` → `catalogues` key. `apps/dashboard/src/widgets/variant-form.test.ts` failed once
-  in a local dashboard coverage run; which of its tests failed was not recorded. The one
-  intermittent failure in that file whose cause is known, the Escape test, is fixed (A220f, #1075; see the
-  flaky-test entry); whether it was this one is not known.
-- **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).**
-  The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
-  general request timeout (only the kitchen refresh and menu-state reads are bounded, at 25 seconds,
-  and a table's round sends and offer reloads, at 150 seconds). A refusal that lands after the tab
-  is paid, or after a server switch, shows the ordinary unnamed message. The kitchen screen's list
-  of stations is read only when the screen opens, so after that read fails the out-of-date banner
-  stays, counting, until the screen is opened again; long outages are counted in minutes, never
-  hours.
-- **Each is decided by the unit's identity, with one known gap.** While a line is still open,
-  deleting the stored unit seeded as `each` it was sold in makes its queue row, any notice recorded
-  after, its printed ticket, the expo board and the ticket's merge-or-split check read it as not
-  Each, because `readLinesSoldInEach` looks the seed key up on the live unit row; the unit a product
-  with no stored unit reads as cannot be deleted, so only such a stored unit is affected. A line with
-  no recorded context but a unit recorded on it prints that unit, so its entries print as sold.
-  **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
-  (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
-  (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
-- **VAT at line add (M7v, A68).** Asesor Q26 (the rate on the day of issue) is open. Owner rulings
-  at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
-  box holding order lines is reset rather than given data-migration code; and every invoice path
-  reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
-  copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
-  a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
-- **Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT
-  error on an issued simplified invoice.** `recordCorrection` exists
-  (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5),
-  but no route calls it: its only callers under `apps/` are three scripts in
-  `apps/server/scripts/` (`daily-close-demo.ts`, `modelo-303-demo.ts`, `settle-invoice-first.ts`)
-  and tests. _(2026-10-02, C126: the whole-order cancel route now calls it, for a credit of the
-  whole invoice only; no route issues a correction for part of one.)_ The owner also needs a way to
-  correct an issued invoice when a customer spots an error after payment, regardless of the future
-  Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
-  designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
-  VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
-  should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
-  today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
-  asesor Q31 (2026-09-30), not decided.
-- **The till's menu reads (Task 7, #719).** Every `/api/menu-state` poll waits its turn in the
-  write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
-  inside `withTransaction`; reading outside a transaction would skip the queue but give
-  `menuState`'s queries no single consistent view, and there is no read-only transaction
-  (`packages/db/src/tenancy.ts`). A
-  till learns of a change only by polling, because the dashboard's live-update route accepts the
-  management cookie only; a till-session branch there would let the server tell tills (plan D11), a
-  later refinement. The basket comparison does not notice a publish that adds a required options
-  list to a dish in the basket, or lowers a list's picks limit, so the till takes the new version
-  silently and the server then refuses `options.label_required` (or `extras.limit_exceeded`): staff
-  see a refusal where the dialog should have asked.
-- **Every remembered round is marked again against the open table's menu**, so opening a table in
-  another service zone can mark another table's round wrongly or clear its mark. Read, not run:
-  `#markedRounds` in `apps/till/src/till-app.ts` holds every store refused sold out or after a menu
-  change, drafts included, and `#markRounds` marks each against the open table's offers; whether a
-  store from an earlier table is ever shown again was not checked. Remember each round's zone, or
-  keep rounds on the app, one per order.
-- **Home page shortcuts (Task 8, #722; rewritten 2026-10-06 for W93, which replaced named layouts
-  and the profile's choice with one Device Home Page per menu).** The add-shortcut picker offers
-  active products only, so a shortcut to a product switched off since shows no marker in the
-  Structure tree and, once removed, cannot be added again until the product is switched back on.
-- **The till's home page (Task 9, #729).** Search matches the staff name only, not a customer name
-  or a section's name. Every `/api/menu-state` read from an enrolled device reads the device, once
-  per zone the till holds at each poll; the token's scrypt check (21.1 ms, measured once on a Mac)
-  runs off the lock, once per device until its token changes, the server restarts or the device
-  falls out of the 256 the server remembers.
-
-**Copying some of a section's products into another section is not built** (found by the menus
-plan's closing sweep, 2026-09-27). The menus spec §2 asks to select all, almost all or some of a
-section's products and add them to another section, creating it in the same flow if needed, with
-the selection telling the section's own members apart from products reached through a nested
-section. What landed is duplicating a section and §10.2's Add products flow. Since slice 2 any such
-follow-up belongs in the owning menu editor. **Next action:** the owner decides whether §10.2's
-flow replaces §2's copy.
-
-**The till says "Not found" (menus spec §9) only when a newly read version drops the section it has
-open.** §9 asks that a tap on a home tile whose target is no longer in the version the device should
-be showing say the item was not found and reload the home screen. As built, the till puts a newly
-read version on screen as soon as it has read it (pinned by "a device behind the live version (§9)"
-in `apps/till/src/till-app-menu-refresh.test.ts`). Before then — up to one 15-second poll, longer on
-the counter while a sale, hold or place is in flight or the review dialog is open, and longer again
-when a reload fails — a tap acts on the version it holds, and the basket refresh lists the product
-as "no longer on this menu". A shortcut whose target a newly read version lacks simply disappears,
-with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
-shortcut disappears.
-
-**Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117);
-two blocking derivations and one stale-answer window remain OPEN.** Nothing makes a NEW route
-derive its key before the transaction opens or take turns (`docs/developers/conventions-data.md`).
-**Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN or
-password stops the event loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync`
-too, reached when the server encrypts or decrypts a configuration bundle, decrypts a restore archive
-or a sealed node state, or encrypts a recovery bundle. Left by #912's review: the two join-status
-readers answer from a hash read just before the key is derived, so a request denied or revoked in
-that window can get one stale `pending` or `approved` (both routes return only `{ status }` and issue
-no credential; the till and print-agent clients were not traced); and `verifySecretAsync` could be
-renamed `verifySecret` (optional).
-
-**A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by W1).**
-`POST /api/session` (`mountTillApi`, `apps/server/src/till-api.ts`) with a PIN that is a number,
-`null`, missing or an object answers 500 `server.internal`; measured the same before and after W1.
-**Next action:** refuse a non-text PIN as `pin.invalid`, with a failing case first. (The payments
-attestation refuses one after its throttle check and counts it as a wrong PIN,
-`apps/server/src/payments-api.ts`.)
-
-**A burst of till PIN sign-ins derives a key for every attempt — OPEN (found 2026-10-03 by W1).**
-`POST /api/session` (`apps/server/src/till-api.ts`) checks its throttle before any failure is
-recorded, so attempts sent at once all pass it. Measured 2026-10-03: 8 wrong attempts at once gave 8
-derivations and eight 401s, on main and on W1's branch alike; manager password sign-in gave 1
-derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a second attempt in
-flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
-`apps/server/src/attempt-turns.ts`) or an in-flight refusal.
-
-**A section a diet filter empties keeps its place on the till (A297, #1317, owner 2026-10-06) — DONE.**
-**Decided (owner, 2026-10-06):** such a section stays, faded and not openable, in the structure, as
-a shortcut and inside an open section; if it is the section that is open, the till still says "Not
-found" and shows home. A section left with nothing because every product in it was Inactive when
-the menu was published or is published as not sold separately still leaves the structure, and a
-shortcut to it draws an empty slot (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`). A section
-whose products are all sold out keeps its place, and its tile is not greyed; the products inside it
-are.
-
-**A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
-Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
-`packages/db/src/party-table-labels.ts`), so after a join a MOVED slip's "from" can name the other
-table; recording each ticket's printed table would fix it. A party's bill names all its tables
-instead. Since table actions Task 13 the join and move-tab routes are deleted and
-`dining_tables.tab_id` is dropped, so a bill reaches a table only through its party or, for a
-counter order, `delivery_table_id`; whether a tab of no party can still reach a join is not
-established.
-
-**The owner decided a split check gets no Void; the server now allows one.** Since table-actions
-Task 2 (#825) the cancel path checks `assertPartyBillOpen` (today in `applyAdjustment`,
-`apps/server/src/adjustments-apply.ts`, which replaced `voidTabLine` in B11a), which lets through
-an open bill that belongs to a party whether or not a table points at it, and a split check carries
-its party. **Decided (owner, 2026-09-26):** a check
-gets no Void; a change of mind between "Create bill" and paying was covered by the till merging the
-check back. Since table actions Task 10 the till no longer merges it back on its own; a change of
-mind is undone by Merge bills on the party's table screen, by hand. **Next action:** the owner
-decides whether that still covers the no-Void decision.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That

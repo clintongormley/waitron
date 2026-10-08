@@ -51,3 +51,11 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
   - **Where the freeze reports are (#608).** One JSON file per process the watchdog kills, in
     `<logDir>/crash-reports/` — on a box `/var/lib/waitron/logs/crash-reports/` on the persistent
     `logs` volume, outside the venue database. Nothing reads or deletes them yet.
+
+## The Alerts table makes long station warnings hard to read on a phone
+
+- **The Alerts table makes long station warnings hard to read on a phone.** A 390 px mounted
+  dashboard fixture for `route.released_at_closed_station` showed only the start of its warning at
+  first; its 340 px table viewport had 906 px of scrollable content, and a 566 px horizontal pan
+  reached the remaining text. Give the alert text more room at phone width while keeping its
+  handling action reachable.

@@ -1071,6 +1071,73 @@ Left open by W100 (#1332), the [equipment plan](../superpowers/plans/2026-10-04-
   Venue settings › Tables are still needed after that — the owner expects they may not be, and if
   they stay, they sit beside a table's state as labels rather than being states. From A261 §10.
 
+## The till's menu reads (Task 7, #719)
+
+- **The till's menu reads (Task 7, #719).** Every `/api/menu-state` poll waits its turn in the
+  write queue, because the route and `requireSession` (`apps/server/src/till-session.ts`) read
+  inside `withTransaction`; reading outside a transaction would skip the queue but give
+  `menuState`'s queries no single consistent view, and there is no read-only transaction
+  (`packages/db/src/tenancy.ts`). A
+  till learns of a change only by polling, because the dashboard's live-update route accepts the
+  management cookie only; a till-session branch there would let the server tell tills (plan D11), a
+  later refinement. The basket comparison does not notice a publish that adds a required options
+  list to a dish in the basket, or lowers a list's picks limit, so the till takes the new version
+  silently and the server then refuses `options.label_required` (or `extras.limit_exceeded`): staff
+  see a refusal where the dialog should have asked.
+
+## Every remembered round is marked again against the open table's menu
+
+- **Every remembered round is marked again against the open table's menu**, so opening a table in
+  another service zone can mark another table's round wrongly or clear its mark. Read, not run:
+  `#markedRounds` in `apps/till/src/till-app.ts` holds every store refused sold out or after a menu
+  change, drafts included, and `#markRounds` marks each against the open table's offers; whether a
+  store from an earlier table is ever shown again was not checked. Remember each round's zone, or
+  keep rounds on the app, one per order.
+
+## The till's home page (Task 9, #729)
+
+- **The till's home page (Task 9, #729).** Search matches the staff name only, not a customer name
+  or a section's name. Every `/api/menu-state` read from an enrolled device reads the device, once
+  per zone the till holds at each poll; the token's scrypt check (21.1 ms, measured once on a Mac)
+  runs off the lock, once per device until its token changes, the server restarts or the device
+  falls out of the 256 the server remembers.
+
+## The till says "Not found" (menus spec §9) only when a newly read version drops the section it has open
+
+**The till says "Not found" (menus spec §9) only when a newly read version drops the section it has
+open.** §9 asks that a tap on a home tile whose target is no longer in the version the device should
+be showing say the item was not found and reload the home screen. As built, the till puts a newly
+read version on screen as soon as it has read it (pinned by "a device behind the live version (§9)"
+in `apps/till/src/till-app-menu-refresh.test.ts`). Before then — up to one 15-second poll, longer on
+the counter while a sale, hold or place is in flight or the review dialog is open, and longer again
+when a reload fails — a tap acts on the version it holds, and the basket refresh lists the product
+as "no longer on this menu". A shortcut whose target a newly read version lacks simply disappears,
+with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
+shortcut disappears.
+
+## A joined tab of no party can have kitchen slips naming a table its ticket did not print
+
+**A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
+Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
+`packages/db/src/party-table-labels.ts`), so after a join a MOVED slip's "from" can name the other
+table; recording each ticket's printed table would fix it. A party's bill names all its tables
+instead. Since table actions Task 13 the join and move-tab routes are deleted and
+`dining_tables.tab_id` is dropped, so a bill reaches a table only through its party or, for a
+counter order, `delivery_table_id`; whether a tab of no party can still reach a join is not
+established.
+
+## The owner decided a split check gets no Void; the server now allows one
+
+**The owner decided a split check gets no Void; the server now allows one.** Since table-actions
+Task 2 (#825) the cancel path checks `assertPartyBillOpen` (today in `applyAdjustment`,
+`apps/server/src/adjustments-apply.ts`, which replaced `voidTabLine` in B11a), which lets through
+an open bill that belongs to a party whether or not a table points at it, and a split check carries
+its party. **Decided (owner, 2026-09-26):** a check
+gets no Void; a change of mind between "Create bill" and paying was covered by the till merging the
+check back. Since table actions Task 10 the till no longer merges it back on its own; a change of
+mind is undone by Merge bills on the party's table screen, by hand. **Next action:** the owner
+decides whether that still covers the no-Void decision.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
@@ -1173,3 +1240,12 @@ layout during service, screen plugins and Bizum.
   reloading the page loses them. Removing a sending direction prevents new requests and leaves
   existing pending intent actionable; it does not revoke requests already sent. Party-linked bills
   are refused before queuing, and again at acceptance, rather than moving shared table/group links.
+
+**A section a diet filter empties keeps its place on the till (A297, #1317, owner 2026-10-06) — DONE.**
+**Decided (owner, 2026-10-06):** such a section stays, faded and not openable, in the structure, as
+a shortcut and inside an open section; if it is the section that is open, the till still says "Not
+found" and shows home. A section left with nothing because every product in it was Inactive when
+the menu was published or is published as not sold separately still leaves the structure, and a
+shortcut to it draws an empty slot (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`). A section
+whose products are all sold out keeps its place, and its tile is not greyed; the products inside it
+are.

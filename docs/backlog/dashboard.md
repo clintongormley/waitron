@@ -449,6 +449,39 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   Confirm with owner: an existing malformed number now blocks an otherwise-unrelated edit, because
   both forms re-validate the telephone field on every submit.
 
+## Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117); two blocking derivations and one stale-answer window remain OPEN
+
+**Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117);
+two blocking derivations and one stale-answer window remain OPEN.** Nothing makes a NEW route
+derive its key before the transaction opens or take turns (`docs/developers/conventions-data.md`).
+**Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN or
+password stops the event loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync`
+too, reached when the server encrypts or decrypts a configuration bundle, decrypts a restore archive
+or a sealed node state, or encrypts a recovery bundle. Left by #912's review: the two join-status
+readers answer from a hash read just before the key is derived, so a request denied or revoked in
+that window can get one stale `pending` or `approved` (both routes return only `{ status }` and issue
+no credential; the till and print-agent clients were not traced); and `verifySecretAsync` could be
+renamed `verifySecret` (optional).
+
+## A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by W1)
+
+**A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by W1).**
+`POST /api/session` (`mountTillApi`, `apps/server/src/till-api.ts`) with a PIN that is a number,
+`null`, missing or an object answers 500 `server.internal`; measured the same before and after W1.
+**Next action:** refuse a non-text PIN as `pin.invalid`, with a failing case first. (The payments
+attestation refuses one after its throttle check and counts it as a wrong PIN,
+`apps/server/src/payments-api.ts`.)
+
+## A burst of till PIN sign-ins derives a key for every attempt — OPEN (found 2026-10-03 by W1)
+
+**A burst of till PIN sign-ins derives a key for every attempt — OPEN (found 2026-10-03 by W1).**
+`POST /api/session` (`apps/server/src/till-api.ts`) checks its throttle before any failure is
+recorded, so attempts sent at once all pass it. Measured 2026-10-03: 8 wrong attempts at once gave 8
+derivations and eight 401s, on main and on W1's branch alike; manager password sign-in gave 1
+derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a second attempt in
+flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
+`apps/server/src/attempt-turns.ts`) or an in-flight refusal.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'

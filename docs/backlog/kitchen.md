@@ -124,3 +124,66 @@ enums, but a user-definable kitchen-status list does not exist.
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
   may set it. Releasing an ALREADY-held group stays with whoever the venue's `fire_control` setting
   names — the waiter asks the kitchen or pass when that is not the waiter.
+
+## Three follow-ups 3c-1 left
+
+- **Three follow-ups 3c-1 left:** the kitchen screen's column view has no per-order card, so it
+  does not show the rest of the order (a station that needs that context uses the card view);
+  units added to a discounted pay-first dish held in a group get a held kitchen record of their own
+  while the dish has none — observed on `main`, its history not checked, and whether it is wanted
+  remains open; and a device's made-here stations do not travel in configuration export, because
+  devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
+  from an export sets them again on the Devices screen.
+
+## A till-session station view can bump a dish another station now has
+
+- **A till-session station view can bump a dish another station now has.** The till-session
+  `POST /api/ticket-items/:id/advance` route does not check the item's station
+  (`apps/server/src/till-api.ts`); the device route does (`apps/server/src/device-api.ts`) and refuses
+  `device.forbidden_station`. Until its next 15-second poll, a till's station view can still show a
+  moved dish and advance it at its new station. The route predates PF7; moves make this more likely.
+
+## A following extra has different names on paper and on screen
+
+- **A following extra has different names on paper and on screen.** Its `+` line prints the frozen
+  staff name (`buildTicketItems`, `apps/server/src/kitchen-print.ts`), while the kitchen screen and
+  pass read its frozen customer `descriptions` (`readQueueSubItems`,
+  `apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
+  both surfaces. Decide which name the following extra should show, then make the surfaces agree.
+
+## The dark-screen alert can be wrong
+
+- **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
+  may never mark dishes ready on its screen. With that screen switched off, each send can raise
+  the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
+  opened through the dev stack's device chooser never records a check-in: the override returns
+  before the cookie path updates `lastSeenAt` (`apps/server/src/device-session.ts:176-186`).
+  Improve how the alert distinguishes a kitchen using paper and how the dev chooser records check-ins.
+
+## Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it)
+
+- **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).**
+  The counter's prep-queue card shows no notices and does not refresh. The till's API client has no
+  general request timeout (only the kitchen refresh and menu-state reads are bounded, at 25 seconds,
+  and a table's round sends and offer reloads, at 150 seconds). A refusal that lands after the tab
+  is paid, or after a server switch, shows the ordinary unnamed message. The kitchen screen's list
+  of stations is read only when the screen opens, so after that read fails the out-of-date banner
+  stays, counting, until the screen is opened again; long outages are counted in minutes, never
+  hours.
+
+## Each is decided by the unit's identity, with one known gap
+
+- **Each is decided by the unit's identity, with one known gap.** While a line is still open,
+  deleting the stored unit seeded as `each` it was sold in makes its queue row, any notice recorded
+  after, its printed ticket, the expo board and the ticket's merge-or-split check read it as not
+  Each, because `readLinesSoldInEach` looks the seed key up on the live unit row; the unit a product
+  with no stored unit reads as cannot be deleted, so only such a stored unit is affected. A line with
+  no recorded context but a unit recorded on it prints that unit, so its entries print as sold.
+  **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
+  (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
+  (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
+
+## Decisions and deliberate limits
+
+- After approval the owner ruled that a dish made at the till is never held and the till lists
+  what to make ("Make now").
