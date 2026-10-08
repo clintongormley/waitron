@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type {
   DashboardApi,
   DeviceProfile,
@@ -334,6 +334,99 @@ describe("the device profile editor's Save", () => {
     expect(q(el, "editor-form")).not.toBeNull();
     noComplaint(el);
   });
+
+  it.each(["en", "es"] as const)(
+    "shows a profile's missing active zone on open in %s and holds Save until repaired",
+    async (locale) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const profile = { ...till, allowedZoneIds: ["z4"], startingZoneId: "z4" };
+        const { el, api } = await openEdit(
+          "p1",
+          stubApi({
+            getDeviceProfile: vi.fn().mockResolvedValue(profile),
+          }),
+        );
+        const zoneError = () => q(el, "profile-zones-error")?.textContent?.trim();
+        const bottom = () => el.shadowRoot!.querySelector(".form-message")?.textContent?.trim();
+        expect(zoneError()).toBe(t("device_profiles.err_zones_required"));
+        expect(bottom()).toBe(t("form.fix_fields"));
+        expect(await state(el)).toEqual(quiet);
+        await press(el);
+        expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+        await change(el, "profile-reader-r2", true);
+        expect(await state(el)).toEqual(blocked);
+        q(el, "profile-save")!.click();
+        await settle(el);
+        expect(api.setProfileReaders).not.toHaveBeenCalled();
+        await change(el, "profile-reader-r2", false);
+        expect(await state(el)).toEqual(quiet);
+        expect(zoneError()).toBe(t("device_profiles.err_zones_required"));
+        await typeName(el, "Front counter 2");
+        expect(await state(el)).toEqual(blocked);
+        q(el, "profile-save")!.click();
+        await settle(el);
+        expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+        await change(el, "profile-zone-z1", true);
+        expect(zoneError()).toBeUndefined();
+        expect(bottom() ?? "").toBe("");
+        expect(value(el, "profile-starting-zone")).toBe("z1");
+        expect(await state(el)).toEqual(ready);
+        await press(el);
+        expect(api.updateDeviceProfile).toHaveBeenCalledWith(...tillSent("Front counter 2"), {
+          departmentId: "d1",
+          allowedZoneIds: ["z1"],
+          startingZoneId: "z1",
+        });
+        await vi.waitFor(() => expect(q(el, "editor-form")).toBeNull());
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it("marks zones when an every-zone profile's department has no active zone left", async () => {
+    const { el } = await openEdit(
+      "p1",
+      stubApi({
+        getDeviceProfile: vi.fn().mockResolvedValue({
+          ...till,
+          allowedZoneIds: null,
+          startingZoneId: "z1",
+        }),
+        getProfileScopeChoices: vi.fn().mockResolvedValue({
+          ...scopeChoices,
+          zones: scopeChoices.zones.map((zone) =>
+            zone.departmentId === "d1" ? { ...zone, active: false } : zone,
+          ),
+        }),
+      }),
+    );
+    expect(q(el, "profile-zones-error")?.textContent?.trim()).toBe(
+      t("device_profiles.err_zones_required"),
+    );
+    expect(await state(el)).toEqual(quiet);
+    await change(el, "profile-department", "d2");
+    expect(q(el, "profile-zones-error")).toBeNull();
+    expect(value(el, "profile-starting-zone")).toBe("z5");
+    expect(await state(el)).toEqual(ready);
+  });
+
+  it.each(["en", "es"] as const)(
+    "keeps a profile with an active zone quiet and unmarked in %s",
+    async (locale) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await openEdit();
+        expect(await state(el)).toEqual(quiet);
+        noComplaint(el);
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
 
   it("opens a kitchen profile holding a switched-off station quiet, and a press sends nothing", async () => {
     const { el, api } = await openEdit("p2");

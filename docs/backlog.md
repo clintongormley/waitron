@@ -1685,10 +1685,12 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   attest). Seen and not changed, because this batch does not touch them: the canvas Create and
   Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow to show "A331 look
   canvas (copy)" whole; the printer name dialog is titled "Add a printer" when its button says
-  Enable. Also for the owner to confirm (rulings named in #1415): the Bluetooth Pair dialog and the
-  bill attestation are gated like a save (both open with every required field empty); a device
-  profile whose only zone was since switched off opens quiet, so its "zones required" message shows
-  after the next real change rather than on an untouched press. The look left a switched-off printer
+  Enable. The owner confirmed #1415's Bluetooth Pair dialog and bill attestation rulings: both
+  are gated like a save and open with every required field empty. **A396 — IN PROGRESS**
+  (`fix/profile-zone-off-shows-on-open`): the owner reversed the disabled-zone ruling on 2026-10-08.
+  A device profile with no active allowed zone shows its field errors and bottom correction
+  message on open. Save stays quiet while unchanged, and a name or reader edit cannot save until
+  an active zone is chosen. Focused Chromium validation, accessibility, review and CI pending. The look left a switched-off printer
   named "A331 look Epson" (the owner's Epson at 192.168.10.81) in the shared demo venue.
 - **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
   booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
