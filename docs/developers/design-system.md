@@ -1552,8 +1552,11 @@ copies its ranges to selected weekdays or clears them locally. A range dialog st
 times and period; New period opens the period editor above it, then returns to the same range.
 Save on the week waits while a child chooser is open. A server refusal that names a day sits in
 that day's header, with the form's generic message immediately above Save; the refusal leaves
-Save available for retry. A venue viewer gets the grid without day menus or Save. The special-date
-and Day consumers are still being built in A366 slice 1.
+Save available for retry. A venue viewer gets the grid without day menus or Save. A special date
+uses one column and stages Closed all day or Follow the normal week before Save. These choices
+compare the override's presence as well as its ranges, so choosing Closed on an inherited empty
+weekday still enables Save. Changing the date or returning to the normal week asks before
+discarding a staged draft. The Day consumer is still being built in A366 slice 1.
 
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn

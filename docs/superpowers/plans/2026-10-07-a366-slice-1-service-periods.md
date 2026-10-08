@@ -806,6 +806,24 @@ special-date switch/picker, closed-day `[]`, follow-week DELETE and date-column 
 flow are still Task 13 work. Task 14's Day consumer and Task 12's legacy assertion migration
 also remain; keep both Task 12 and Task 13 unchecked.
 
+**Checkpoint 2026-10-08, 17:05: special-date consumer.** This supersedes the previous
+checkpoint's missing date switch and save flow. The Week tab now selects the normal week or a
+special date, with a Station hours link for adding dates. One date column uses the shared range
+editor. Closed all day stages an empty override; Follow the normal week stages a DELETE. The
+save comparison includes whether the date follows the week, because an inherited empty weekday
+and an explicitly closed date both have no ranges. Both actions wait for the parent's Save.
+
+The date uses the same draft scope and saved baseline as the week. EN/ES Keep/Discard and
+before/after reconnect cases pass; hidden weekdays and departed selectors are ignored. A refused
+slots field is marked at the date header with a distinct bottom message and an enabled retry.
+Four safeguards removed in an installed disposable candidate fail their selected assertions;
+restoring the candidate passes the date suites. The shared week editor's restricted coverage is
+99.22 statements, 95.08 branches, 100 functions and 100 lines, measured by 78 focused tests.
+This is not a package-wide coverage result. Final 390/1280-width captures include the date grid,
+Save, refusal, inherited/closed states, viewer and empty picker in both languages and themes.
+The legacy week/date/slot assertions still require migration and a complete acceptance audit;
+keep Task 13 unchecked. Task 14's Day consumer and Tasks 12/15 also remain.
+
 ### Task 14: Opening hours — Day tab, and the Departments page
 
 **Files:** modify `opening-hours-screen.ts`, `dashboard/venue-operations-screen.ts`

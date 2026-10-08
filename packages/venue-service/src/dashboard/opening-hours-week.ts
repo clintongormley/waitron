@@ -10,7 +10,8 @@ import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./servi
 import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import { t } from "./strings.js";
-import { format } from "./hours-view.js";
+import { format, formatDate } from "./hours-view.js";
+import { weekdayOf } from "../hours-rules.js";
 import "./service-grid.js";
 import "./range-dialog.js";
 import "./period-editor.js";
@@ -22,6 +23,11 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 type Department = OpeningHoursModel["departments"][number];
 type RangeOpening = { weekday: number; index?: number; input: ServiceRange };
 type PeriodOpening = { range: RangeOpening };
+type Draft = { days: MenuWeekDay[]; following: boolean };
+const copyDraft = (draft: Draft): Draft => ({
+  days: copyWeek(draft.days),
+  following: draft.following,
+});
 const copyWeek = (week: readonly MenuWeekDay[]): MenuWeekDay[] =>
   week.map((day) => ({ weekday: day.weekday, slots: day.slots.map((slot) => ({ ...slot })) }));
 const sameWeek = (a: readonly MenuWeekDay[], b: readonly MenuWeekDay[]) =>
@@ -67,6 +73,12 @@ export class OpeningHoursWeek extends LitElement {
       wt-form-actions {
         margin-block-start: var(--wt-space-4);
       }
+      .date-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        margin-block: var(--wt-space-3);
+      }
       .copy-days {
         display: grid;
         gap: var(--wt-space-3);
@@ -87,6 +99,8 @@ export class OpeningHoursWeek extends LitElement {
   @property({ attribute: false }) department!: Department;
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property() dayCutover = "06:00";
+  @property({ attribute: false }) specialDate?: OpeningHoursModel["specialDates"][number];
+  @state() private following = false;
   @property({ type: Boolean }) readOnly = false;
   @state() private draft: MenuWeekDay[] = [];
   @state() private opening?: RangeOpening;
@@ -97,8 +111,8 @@ export class OpeningHoursWeek extends LitElement {
   @state() private creating = false;
   @state() private error = "";
   @state() private errorDay?: number;
-  private scope?: DraftScope<MenuWeekDay[]>;
-  private baseline: MenuWeekDay[] = [];
+  private scope?: DraftScope<Draft>;
+  private baseline: Draft = { days: [], following: false };
   private source?: Department;
   private generation = {};
   override connectedCallback() {
@@ -113,15 +127,15 @@ export class OpeningHoursWeek extends LitElement {
   }
   protected override willUpdate() {
     if (!this.source) {
-      this.draft = weekOf(this.department);
-      this.baseline = copyWeek(this.draft);
+      this.seedDraft();
+      this.baseline = copyDraft(this.snapshot());
       this.source = this.department;
     }
     if (this.source !== this.department) {
       if (!saveActionState(this.scope).unchanged && this.scope) this.source = this.department;
       else if (!this.saving) {
-        this.draft = weekOf(this.department);
-        this.baseline = copyWeek(this.draft);
+        this.seedDraft();
+        this.baseline = copyDraft(this.snapshot());
         this.scope?.commit(this.baseline);
         this.source = this.department;
       }
@@ -129,16 +143,46 @@ export class OpeningHoursWeek extends LitElement {
     if (this.isConnected && !this.scope) {
       const { scope } = draftScopeFor(this, {
         id: this,
-        current: () => this.draft,
-        snapshot: copyWeek,
-        equal: sameWeek,
+        current: () => this.snapshot(),
+        snapshot: copyDraft,
+        equal: (a, b) => a.following === b.following && sameWeek(a.days, b.days),
         restore: (value) => {
-          this.draft = copyWeek(value);
+          this.draft = copyWeek(value.days);
+          this.following = value.following;
         },
       });
       this.scope = scope;
       scope.commit(this.baseline);
     }
+  }
+  private snapshot(): Draft {
+    return { days: this.draft, following: this.following };
+  }
+  private seedDraft() {
+    this.draft = weekOf(this.department);
+    const special = this.specialDate;
+    if (!special) {
+      this.following = false;
+      return;
+    }
+    const own = this.department.dates.find((date) => date.specialDateId === special.id);
+    this.following = !own;
+    if (own) this.draft[weekdayOf(special.date)]!.slots = own.slots.map((slot) => ({ ...slot }));
+  }
+  private displayedDays() {
+    return this.specialDate ? [weekdayOf(this.specialDate.date)] : displayOrder;
+  }
+  private dayLabel(weekday: number) {
+    return this.specialDate
+      ? `${formatDate(this.specialDate.date)} · ${this.specialDate.name}`
+      : dayName(weekday);
+  }
+  private followWeek() {
+    if (!this.editable() || this.opening || !this.specialDate) return;
+    const weekday = weekdayOf(this.specialDate.date);
+    this.stage(weekday, weekOf(this.department)[weekday]!.slots);
+    this.following = true;
+    this.scope?.changed();
   }
   private periods() {
     return [
@@ -153,6 +197,7 @@ export class OpeningHoursWeek extends LitElement {
     this.draft = this.draft.map((day) =>
       day.weekday === weekday ? { weekday, slots: slots.map((slot) => ({ ...slot })) } : day,
     );
+    if (this.specialDate) this.following = false;
     this.error = "";
     this.errorDay = undefined;
     this.scope?.changed();
@@ -161,6 +206,7 @@ export class OpeningHoursWeek extends LitElement {
     event.stopPropagation();
     if (!this.editable() || this.opening || this.copying) return;
     const weekday = Number(event.detail.columnKey);
+    if (!this.displayedDays().includes(weekday)) return;
     const day = this.draft.find((day) => day.weekday === weekday);
     if (!day) return;
     if ("index" in event.detail) {
@@ -177,6 +223,7 @@ export class OpeningHoursWeek extends LitElement {
     event.stopPropagation();
     if (!this.editable() || this.opening || this.copying) return;
     const { columnKey, index, startsAt, endsAt } = event.detail;
+    if (!this.displayedDays().includes(Number(columnKey))) return;
     const day = this.draft.find((day) => day.weekday === Number(columnKey));
     if (!day?.slots[index]) return;
     this.stage(
@@ -221,28 +268,40 @@ export class OpeningHoursWeek extends LitElement {
   private async save() {
     if (!this.editable() || this.opening || this.copying || saveActionState(this.scope).unchanged)
       return;
-    const input = copyWeek(this.draft),
+    const submitted = copyDraft(this.snapshot()),
+      input = submitted.days,
       generation = this.generation;
     this.saving = true;
     this.error = "";
     this.errorDay = undefined;
     try {
-      await this.api.saveWeek(this.department.id, input);
+      if (this.specialDate) {
+        if (submitted.following)
+          await this.api.clearDateMenus(this.specialDate.id, this.department.id);
+        else
+          await this.api.saveDateMenus(
+            this.specialDate.id,
+            this.department.id,
+            input[weekdayOf(this.specialDate.date)]!.slots,
+          );
+      } else await this.api.saveWeek(this.department.id, input);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       this.error = t("menu.save_error");
       const field = (error as { params?: { field?: unknown } })?.params?.field;
       if (codeOf(error) === "menu_timetable.invalid" && typeof field === "string") {
         const match = /^days\.(\d+)(?:\.|$)/.exec(field);
-        if (match) this.errorDay = input[Number(match[1])]?.weekday;
+        if (this.specialDate && /^(?:slots(?:\.|$)|date$)/.test(field))
+          this.errorDay = weekdayOf(this.specialDate.date);
+        else if (match) this.errorDay = input[Number(match[1])]?.weekday;
       }
       return;
     } finally {
       this.saving = false;
     }
     if (generation === this.generation && this.isConnected) {
-      this.baseline = copyWeek(input);
-      this.scope?.commit(input);
+      this.baseline = copyDraft(submitted);
+      this.scope?.commit(submitted);
       this.api.rereadWatches();
     }
   }
@@ -304,9 +363,37 @@ export class OpeningHoursWeek extends LitElement {
       period = this.periodOpening,
       copying = this.copying,
       state = saveActionState(this.scope);
-    return html`<service-grid
+    return html`${
+        this.specialDate
+          ? html`<p data-test="date-status">
+                ${this.following ? t("opening.follow_week") : this.draft[weekdayOf(this.specialDate.date)]?.slots.length ? nothing : t("opening.close_date")}
+              </p>
+              ${
+                this.readOnly
+                  ? nothing
+                  : html`<div class="date-actions">
+                      <wt-button
+                        variant="secondary"
+                        data-test="close-date"
+                        ?disabled=${this.saving || !!opening}
+                        @click=${() => {
+                          if (this.editable() && !this.opening)
+                            this.stage(weekdayOf(this.specialDate!.date), []);
+                        }}
+                        >${t("opening.close_date")}</wt-button
+                      ><wt-button
+                        variant="secondary"
+                        data-test="follow-week"
+                        ?disabled=${this.saving || !!opening}
+                        @click=${() => this.followWeek()}
+                        >${t("opening.follow_week")}</wt-button
+                      >
+                    </div>`
+              }`
+          : nothing
+      }<service-grid
         .dayCutover=${this.dayCutover}
-        .columns=${displayOrder.map((weekday) => ({ key: String(weekday), label: dayName(weekday), slots: this.draft[weekday]?.slots ?? [], periods: this.periods(), editable: !this.readOnly && !this.saving && !this.opening && !this.copying }))}
+        .columns=${this.displayedDays().map((weekday) => ({ key: String(weekday), label: this.dayLabel(weekday), slots: this.draft[weekday]?.slots ?? [], periods: this.periods(), editable: !this.readOnly && !this.saving && !this.opening && !this.copying }))}
         @grid-range-select=${this.openRange}
         @grid-block-open=${this.openRange}
         @grid-block-change=${this.resize}
@@ -314,33 +401,39 @@ export class OpeningHoursWeek extends LitElement {
         ${
           this.readOnly
             ? nothing
-            : displayOrder.map(
+            : this.displayedDays().map(
                 (weekday) =>
                   html`<div slot=${`header-${weekday}`}>
-                    <wt-row-actions label=${format("menu.row_actions", { name: dayName(weekday) })}>
-                      <wt-button
-                        variant="secondary"
-                        data-test="copy-day"
-                        data-day=${weekday}
-                        ?disabled=${this.saving || !!this.opening || !!copying}
-                        @click=${() => {
-                          if (this.editable() && !this.opening && !this.copying)
-                            this.copying = { weekday, days: [] };
-                        }}
-                        >${t("opening.copy_day")}</wt-button
-                      >
-                      <wt-button
-                        variant="secondary"
-                        data-test="clear-day"
-                        data-day=${weekday}
-                        ?disabled=${this.saving || !!this.opening || !!copying}
-                        @click=${() => {
-                          if (this.editable() && !this.opening && !this.copying)
-                            this.stage(weekday, []);
-                        }}
-                        >${t("opening.clear_day")}</wt-button
-                      > </wt-row-actions
-                    >${this.errorDay === weekday ? html`<p class="day-errors" data-day-error=${weekday}>${dayName(weekday)}: ${t("opening.check_day")}</p>` : nothing}
+                    ${
+                      this.specialDate
+                        ? nothing
+                        : html`<wt-row-actions
+                            label=${format("menu.row_actions", { name: dayName(weekday) })}
+                          >
+                            <wt-button
+                              variant="secondary"
+                              data-test="copy-day"
+                              data-day=${weekday}
+                              ?disabled=${this.saving || !!this.opening || !!copying}
+                              @click=${() => {
+                                if (this.editable() && !this.opening && !this.copying)
+                                  this.copying = { weekday, days: [] };
+                              }}
+                              >${t("opening.copy_day")}</wt-button
+                            >
+                            <wt-button
+                              variant="secondary"
+                              data-test="clear-day"
+                              data-day=${weekday}
+                              ?disabled=${this.saving || !!this.opening || !!copying}
+                              @click=${() => {
+                                if (this.editable() && !this.opening && !this.copying)
+                                  this.stage(weekday, []);
+                              }}
+                              >${t("opening.clear_day")}</wt-button
+                            >
+                          </wt-row-actions>`
+                    }${this.errorDay === weekday ? html`<p class="day-errors" data-day-error=${weekday}>${this.dayLabel(weekday)}: ${t("opening.check_day")}</p>` : nothing}
                   </div>`,
               )
         }</service-grid

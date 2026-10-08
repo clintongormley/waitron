@@ -2,6 +2,11 @@ import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
   "opening.title": "Opening hours",
+  "opening.week_mode": "Schedule",
+  "opening.special_date": "Special date",
+  "opening.add_special_dates": "Add special dates in Station hours",
+  "opening.close_date": "Closed all day",
+  "opening.follow_week": "Follow the normal week",
   "opening.copy_day": "Copy this day to…",
   "opening.clear_day": "Clear",
   "opening.copy": "Copy",
@@ -738,6 +743,11 @@ const en = {
 
 const es: Record<keyof typeof en, string> = {
   "opening.title": "Horario de apertura",
+  "opening.week_mode": "Horario",
+  "opening.special_date": "Fecha especial",
+  "opening.add_special_dates": "Añadir fechas especiales en Horario de estaciones",
+  "opening.close_date": "Cerrado todo el día",
+  "opening.follow_week": "Seguir la semana normal",
   "opening.copy_day": "Copiar este día a…",
   "opening.clear_day": "Borrar",
   "opening.copy": "Copiar",

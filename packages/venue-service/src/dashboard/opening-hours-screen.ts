@@ -2,7 +2,12 @@ import { LitElement, css, html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { codeOf } from "@waitron/dashboard-kit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, UrlStateController, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  leaveCoordinatorFor,
+  UrlStateController,
+  type DataTableColumn,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -40,6 +45,9 @@ export class OpeningHoursScreen extends LitElement {
         max-width: var(--wt-form-max-width);
         margin-block: var(--wt-space-4);
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       .toolbar {
         display: flex;
         justify-content: flex-end;
@@ -59,12 +67,15 @@ export class OpeningHoursScreen extends LitElement {
   @state() private model?: OpeningHoursModel;
   @state() private departmentId = "";
   @state() private view: View = "week";
+  @state() private weekMode = "week";
+  @state() private specialDateId = "";
   @state() private readError = "";
   @state() private editor?: Editor;
   @state() private deleting?: Deletion;
   @state() private deleteError = "";
   @state() private busy = false;
   private detach?: () => void;
+  private generation = {};
   private readonly url = new UrlStateController(this, () => this.followUrl(), {
     basePath: "/manage",
     primary: "dashboard",
@@ -93,6 +104,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   override disconnectedCallback() {
     this.detach?.();
+    this.generation = {};
     super.disconnectedCallback();
   }
   private department() {
@@ -102,6 +114,75 @@ export class OpeningHoursScreen extends LitElement {
       departments.find((d) => d.active) ??
       departments[0]
     );
+  }
+  private async chooseWeek(value: string, date = false) {
+    const generation = this.generation;
+    const proceed = () => {
+      if (!this.isConnected || generation !== this.generation || this.view !== "week") return;
+      if (date) this.specialDateId = value;
+      else this.weekMode = value;
+    };
+    const coordinator = leaveCoordinatorFor(this);
+    if (coordinator) await coordinator.request({ scopes: "all", reason: "navigation", proceed });
+    else proceed();
+  }
+  private selectedSpecialDate() {
+    const dates = this.model?.specialDates ?? [];
+    return dates.find((date) => date.id === this.specialDateId) ?? dates[0];
+  }
+  private weekChooser() {
+    const dates = this.model!.specialDates;
+    const special = this.selectedSpecialDate();
+    return html`<div class="chooser">
+      <wt-combobox
+        name="weekMode"
+        label=${t("opening.week_mode")}
+        search="never"
+        .value=${this.weekMode}
+        .options=${[
+          { value: "week", label: t("menu.normal_week") },
+          { value: "date", label: t("opening.special_date") },
+        ]}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          if (
+            !this.isConnected ||
+            event.currentTarget !== this.shadowRoot?.querySelector("[name=weekMode]")
+          )
+            return;
+          (event.currentTarget as HTMLElementTagNameMap["wt-combobox"]).value = this.weekMode;
+          if (event.detail.value === "week" || event.detail.value === "date")
+            void this.chooseWeek(event.detail.value);
+        }}
+      ></wt-combobox>
+      ${
+        this.weekMode === "date"
+          ? html`<wt-combobox
+                name="specialDateId"
+                label=${t("opening.special_date")}
+                search="never"
+                .value=${special?.id ?? ""}
+                .options=${dates.map((date) => ({ value: date.id, label: `${formatDate(date.date)} · ${date.name}` }))}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (
+                    !this.isConnected ||
+                    event.currentTarget !== this.shadowRoot?.querySelector("[name=specialDateId]")
+                  )
+                    return;
+                  (event.currentTarget as HTMLElementTagNameMap["wt-combobox"]).value =
+                    special?.id ?? "";
+                  if (dates.some((date) => date.id === event.detail.value))
+                    void this.chooseWeek(event.detail.value, true);
+                }}
+              ></wt-combobox>
+              <a data-test="station-hours-link" href="/manage/hours"
+                >${t("opening.add_special_dates")}</a
+              >
+              ${dates.length ? nothing : html`<p>${t("menu.no_dates")}</p>`}`
+          : nothing
+      }
+    </div>`;
   }
   private menuLabel(id: string) {
     const menu = this.model!.menus.find((m) => m.id === id);
@@ -256,6 +337,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   override render() {
     const department = this.department();
+    const special = this.weekMode === "date" ? this.selectedSpecialDate() : undefined;
     const editor = this.editor;
     const deleting = this.deleting;
     const currentDelete = () => this.isConnected && this.deleting === deleting && !this.busy;
@@ -302,7 +384,8 @@ export class OpeningHoursScreen extends LitElement {
                 }}
               >
                 <div slot="week">
-                  ${this.view === "week" && department ? keyed(department.id, html`<opening-hours-week .api=${this.api} .department=${department} .menus=${this.model!.menus} .dayCutover=${this.model!.dayCutover} .readOnly=${this.readOnly}></opening-hours-week>`) : nothing}
+                  ${this.view === "week" ? this.weekChooser() : nothing}
+                  ${this.view === "week" && department && (this.weekMode === "week" || special) ? keyed(`${department.id}:${this.weekMode}:${special?.id ?? ""}`, html`<opening-hours-week .api=${this.api} .department=${department} .menus=${this.model!.menus} .dayCutover=${this.model!.dayCutover} .specialDate=${special} .readOnly=${this.readOnly}></opening-hours-week>`) : nothing}
                 </div>
                 <div slot="periods">
                   ${this.view === "periods" && department ? this.periods(department) : nothing}
