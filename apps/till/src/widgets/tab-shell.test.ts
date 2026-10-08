@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import type { LitElement } from "lit";
 import type { TabDef } from "../layout.js";
 import { chooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./tab-shell.js";
@@ -134,17 +135,24 @@ describe("till-tab-shell", () => {
   });
 
   it("places the language chooser in the bar, just before the operator's name", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "floor",
-      operatorName: "Ana",
-      loadLocales: async () => [{ code: "es-ES", label: "Español" }],
-    });
-    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
-    expect(chooser).not.toBeNull();
-    expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
-    expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
-    expect(chooser.getAttribute("active")).toBe(currentLocale());
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(1280, 844);
+    try {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+        tabs,
+        activeTabKey: "floor",
+        operatorName: "Ana",
+        loadLocales: async () => [{ code: "es-ES", label: "Español" }],
+      });
+      const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+      expect(chooser).not.toBeNull();
+      expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
+      expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
+      expect(chooser.getAttribute("active")).toBe(currentLocale());
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 
   it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
@@ -301,23 +309,36 @@ describe("till-tab-shell", () => {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         expect(window.innerWidth).toBe(390);
         const header = el.shadowRoot!.querySelector("header")!;
+        const menu = header.querySelector('wt-row-actions[data-test="more-menu"]')!;
+        menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+        await vi.waitFor(() =>
+          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+        );
         const controls = [
           ...header.querySelectorAll<HTMLElement>(
-            ".brand, .tab, wt-button, wt-language-chooser, .operator",
+            "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
         expect(controls.length).toBe(10 + shellTabs.length);
+        // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
-          .map((c) => ({ c: c.className || c.localName, r: c.getBoundingClientRect() }))
-          .filter(({ r }) => r.left < 0 || r.right > 390)
+          .map((c) => {
+            if (c.classList.contains("tab"))
+              c.scrollIntoView({ inline: "nearest", block: "nearest" });
+            const r = c.getBoundingClientRect();
+            return { c: c.className || c.localName, r };
+          })
+          .filter(({ r }) => r.width === 0 || r.left < 0 || r.right > 390)
           .map(({ c }) => c);
         expect(offScreen).toEqual([]);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
-        // Laid out in rows, not squeezed into narrow columns beside the brand.
+        // The bar is one row: every tab level with the first.
         const top = (selector: string): number =>
           header.querySelector(selector)!.getBoundingClientRect().top;
-        expect(top(".tab:nth-child(2)")).toBe(top(".tab:first-child"));
-        expect(top(".station")).toBe(top(".find-bill"));
+        for (const tab of header.querySelectorAll(".tab")) {
+          expect(tab.getBoundingClientRect().top).toBe(top(".tab:first-child"));
+        }
+        expect(top(".station")).toBeGreaterThan(top(".find-bill"));
       } finally {
         await page.viewport(width, height);
         setLocale(before);
@@ -375,4 +396,351 @@ it("translates standard tabs on a language switch and retains custom titles", as
   } finally {
     setLocale(original);
   }
+});
+
+describe("till-tab-shell at phone width", () => {
+  const threeTabs: TabDef[] = [...tabs, { key: "order", title: "Order", columns: 12, cards: [] }];
+
+  const full: Partial<TillTabShell> = {
+    tabs: threeTabs,
+    activeTabKey: "counter",
+    operatorName: "Ana Fernández",
+    affordances: ["find-bill", "station", "expo", "schedule"],
+    transferAvailable: true,
+    transferCount: 2,
+    canSwitchProfile: true,
+    loadLocales: async () => [
+      { code: "en-GB", label: "English" },
+      { code: "es-ES", label: "Español" },
+    ],
+  };
+
+  // Menu order: each button's selector and the event it emits.
+  const menuActions = [
+    ["[data-open-transfers]", "open-transfers"],
+    [".find-bill", "find-bill"],
+    [".station", "show-station"],
+    [".expo", "show-expo"],
+    [".schedule", "show-schedule"],
+    [".profile", "open-profile"],
+    [".equipment", "open-equipment"],
+    [".allergens", "open-allergens"],
+    [".logout", "logout"],
+  ] as const;
+
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  async function atViewport(width: number, run: () => Promise<void>, height = 844): Promise<void> {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, height);
+    await frame();
+    try {
+      await run();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  }
+
+  const menuOf = (el: TillTabShell) =>
+    el.shadowRoot!.querySelector('header wt-row-actions[data-test="more-menu"]');
+  const triggerOf = (el: TillTabShell) =>
+    menuOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+
+  function deepActive(): Element | null {
+    let active = document.activeElement;
+    while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    return active;
+  }
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "keeps the header to one row at most 64 px tall in %s",
+    async (locale) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        await atViewport(390, async () => {
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          await frame();
+          const header = el.shadowRoot!.querySelector("header")!.getBoundingClientRect();
+          expect(header.height).toBeLessThanOrEqual(64);
+          const visible = [
+            ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+              "header .brand, header .tab, header wt-language-chooser, header wt-row-actions, header .session > *",
+            ),
+          ]
+            .map((c) => c.getBoundingClientRect())
+            .filter((r) => r.width > 0 && r.height > 0);
+          expect(visible.length).toBe(threeTabs.length + 2);
+          for (const r of visible) {
+            expect(r.top).toBeGreaterThanOrEqual(header.top);
+            expect(r.bottom).toBeLessThanOrEqual(header.bottom);
+          }
+        });
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
+
+  it("puts every action button, the operator's name and the transfer count in one menu, by touch", async () => {
+    await atViewport(390, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const menu = menuOf(el)!;
+      expect(menu).not.toBeNull();
+      expect(menu.getAttribute("icon")).toBe("kebab");
+      expect(menu.shadowRoot!.querySelector("wt-icon")!.getAttribute("size")).toBe("lg");
+      expect(menu.getAttribute("align")).toBe("end");
+      expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
+      const order = [...menu.children]
+        .filter((c) => c.slot !== "badge")
+        .map(
+          (c) =>
+            (c.getAttribute("data-test") ??
+              (c.hasAttribute("data-open-transfers") ? "data-open-transfers" : c.className)) ||
+            c.localName,
+        );
+      expect(order).toEqual([
+        "department-transfers",
+        "data-open-transfers",
+        "find-bill",
+        "station",
+        "expo",
+        "schedule",
+        "profile",
+        "equipment",
+        "allergens",
+        "operator",
+        "logout",
+      ]);
+      expect(menu.querySelector(".operator")!.textContent).toContain("Ana Fernández");
+      expect(menu.querySelector('[data-test="department-transfers"]')!.textContent).toContain(
+        t("department_transfer.open").replace("{count}", "2"),
+      );
+      for (const button of menu.querySelectorAll("wt-button")) {
+        expect(button.getAttribute("variant")).toBe("ghost");
+        expect(button.getAttribute("align")).toBe("start");
+      }
+
+      const fired: string[] = [];
+      for (const [, type] of menuActions) el.addEventListener(type, () => fired.push(type));
+      for (const [selector] of menuActions) {
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        await userEvent.click(menu.querySelector<HTMLElement>(selector)!);
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("false"));
+      }
+      expect(fired).toEqual(menuActions.map(([, type]) => type));
+
+      const keys: string[] = [];
+      el.addEventListener("tab-select", (e) =>
+        keys.push((e as CustomEvent<{ key: string }>).detail.key),
+      );
+      for (const tab of el.shadowRoot!.querySelectorAll<HTMLElement>(".tab")) {
+        await userEvent.click(tab);
+      }
+      expect(keys).toEqual(["counter", "floor", "order"]);
+    });
+  });
+
+  it("reaches every action by keyboard", async () => {
+    await atViewport(390, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const fired: string[] = [];
+      for (const [, type] of menuActions) el.addEventListener(type, () => fired.push(type));
+      const tabsEls = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
+      for (const [index, [selector]] of menuActions.entries()) {
+        tabsEls[tabsEls.length - 1]!.focus();
+        await userEvent.tab(); // the language chooser
+        await userEvent.tab();
+        expect(deepActive()).toBe(triggerOf(el));
+        await userEvent.keyboard("{Enter}");
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        for (let step = 0; step <= index; step += 1) await userEvent.tab();
+        const target = menuOf(el)!.querySelector<HTMLElement>(selector)!;
+        expect(target.contains(deepActive()) || target.shadowRoot!.contains(deepActive())).toBe(
+          true,
+        );
+        await userEvent.keyboard("{Enter}");
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("false"));
+      }
+      expect(fired).toEqual(menuActions.map(([, type]) => type));
+    });
+  });
+
+  it("badges the menu with the pending transfers and says so in its name", async () => {
+    const original = currentLocale();
+    setLocale("en-GB");
+    try {
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const badge = menuOf(el)!.querySelector<HTMLElement>('wt-count-badge[slot="badge"]')!;
+        expect(badge.getAttribute("tone")).toBe("warning");
+        expect(badge.shadowRoot!.textContent).toContain("2");
+        expect(triggerOf(el).getAttribute("aria-label")).toBe(
+          "More, 2 department transfers pending",
+        );
+
+        el.transferCount = 1;
+        await el.updateComplete;
+        await (menuOf(el) as LitElement).updateComplete;
+        expect(
+          menuOf(el)!.querySelector('wt-count-badge[slot="badge"]')!.shadowRoot!.textContent,
+        ).toContain("1");
+        expect(triggerOf(el).getAttribute("aria-label")).toBe(
+          "More, 1 department transfer pending",
+        );
+
+        for (const transferCount of [0, undefined]) {
+          el.transferCount = transferCount;
+          await el.updateComplete;
+          await (menuOf(el) as LitElement).updateComplete;
+          expect(menuOf(el)!.querySelector("wt-count-badge")).toBeNull();
+          expect(triggerOf(el).getAttribute("aria-label")).toBe("More");
+        }
+      });
+    } finally {
+      setLocale(original);
+    }
+  });
+
+  it("names the menu in Spanish", async () => {
+    const original = currentLocale();
+    setLocale("es-ES");
+    try {
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await (menuOf(el) as LitElement).updateComplete;
+        expect(triggerOf(el).getAttribute("aria-label")).toBe(
+          "Más, traspasos entre departamentos pendientes: 2",
+        );
+        el.transferCount = 1;
+        await el.updateComplete;
+        await (menuOf(el) as LitElement).updateComplete;
+        expect(triggerOf(el).getAttribute("aria-label")).toBe(
+          "Más, traspasos entre departamentos pendientes: 1",
+        );
+        el.transferCount = 0;
+        await el.updateComplete;
+        await (menuOf(el) as LitElement).updateComplete;
+        expect(triggerOf(el).getAttribute("aria-label")).toBe("Más");
+      });
+    } finally {
+      setLocale(original);
+    }
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "keeps the open menu on a short landscape screen and scrolls it to Log out, in %s",
+    async (locale) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        await atViewport(
+          600,
+          async () => {
+            const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+            await userEvent.click(triggerOf(el));
+            await vi.waitFor(() =>
+              expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"),
+            );
+            const popup = menuOf(el)!
+              .shadowRoot!.querySelector<HTMLElement>("[popover]")!
+              .getBoundingClientRect();
+            expect(popup.top).toBeGreaterThanOrEqual(0);
+            expect(popup.bottom).toBeLessThanOrEqual(window.innerHeight);
+
+            const logout = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
+            logout.scrollIntoView({ block: "nearest" });
+            const box = logout.getBoundingClientRect();
+            expect(box.top).toBeGreaterThanOrEqual(popup.top);
+            expect(box.bottom).toBeLessThanOrEqual(popup.bottom);
+            expect(
+              el.shadowRoot!.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+            ).toBe(logout);
+            let loggedOut = 0;
+            el.addEventListener("logout", () => (loggedOut += 1));
+            await userEvent.click(logout);
+            expect(loggedOut).toBe(1);
+          },
+          390,
+        );
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
+
+  it("announces the transfer count while the menu is closed, from one status region outside it", async () => {
+    await atViewport(390, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const statuses = () => [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="status"]')];
+      expect(statuses()).toHaveLength(1);
+      const status = statuses()[0]!;
+      expect(menuOf(el)!.contains(status)).toBe(false);
+      expect(status.checkVisibility()).toBe(true);
+      expect(status.textContent).toContain(t("department_transfer.open").replace("{count}", "2"));
+      expect(
+        menuOf(el)!.querySelector('[data-test="department-transfers"]')!.hasAttribute("role"),
+      ).toBe(false);
+
+      el.transferCount = 3;
+      await el.updateComplete;
+      expect(statuses()).toEqual([status]);
+      expect(status.textContent).toContain(t("department_transfer.open").replace("{count}", "3"));
+
+      el.transferCount = undefined;
+      await el.updateComplete;
+      expect(statuses()).toEqual([status]);
+      expect(status.textContent!.trim()).toBe("");
+    });
+  });
+
+  it("leaves the wide header as it was: brand, and every button straight in the session row", async () => {
+    await atViewport(1280, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+      expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
+      const session = el.shadowRoot!.querySelector("header .session")!;
+      expect(
+        [...session.children].map(
+          (c) =>
+            (c.getAttribute("data-test") ??
+              (c.hasAttribute("data-open-transfers") ? "data-open-transfers" : c.className)) ||
+            c.localName,
+        ),
+      ).toEqual([
+        "department-transfers",
+        "data-open-transfers",
+        "find-bill",
+        "station",
+        "expo",
+        "schedule",
+        "profile",
+        "equipment",
+        "allergens",
+        "wt-language-chooser",
+        "operator",
+        "logout",
+      ]);
+      for (const button of session.querySelectorAll(":scope > wt-button")) {
+        expect(button.getAttribute("variant")).toBe("secondary");
+      }
+    });
+  });
+
+  it("switches layout as the screen narrows and widens, keeping the one language chooser", async () => {
+    await atViewport(390, async () => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
+      expect(menuOf(el)).not.toBeNull();
+      await page.viewport(1280, 844);
+      await vi.waitFor(() => expect(menuOf(el)).toBeNull());
+      expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
+      await page.viewport(390, 844);
+      await vi.waitFor(() => expect(menuOf(el)).not.toBeNull());
+      expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
+    });
+  });
 });

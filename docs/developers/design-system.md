@@ -2999,8 +2999,9 @@ static assets keep their own responses; setup continues to use its existing root
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each
 app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
 header, after the logo; in the dashboard's banner, before the alerts bell and the account menu, and
-there on its own when nobody is signed in; in the till's tab-shell bar, before the operator's name,
-as in the counter screen's own header (which it draws only when not embedded in the shell, and the
+there on its own when nobody is signed in; in the till's tab-shell bar, before the operator's name
+— on a phone, before the More menu that holds the name, Log out and the bar's action buttons — as
+in the counter screen's own header (which it draws only when not embedded in the shell, and the
 app always embeds it). A till screen with no top bar — the sign-in and join screens, and the
 kitchen display, whose shell draws no bar — holds it at the top right on its own, above the
 content. At 40rem wide or less the trigger shows the language's short code instead of its full
