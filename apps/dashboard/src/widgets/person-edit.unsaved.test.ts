@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type { PersonSummary } from "../api/client.js";
+import type { PersonEditDetails, PersonSummary } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
@@ -275,5 +275,18 @@ it("Edit staff reopened after a put-back edit was discarded opens quiet with the
   await edit(form, "telephone", "+44 20");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await edit(form, "telephone", "");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("Edit staff put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  const submitted: PersonEditDetails[] = [];
+  form.addEventListener("save-person", (e) => submitted.push((e as CustomEvent).detail));
+  await edit(form, "email", "submitted@example.com");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  expect(submitted).toHaveLength(1);
+  await edit(form, "email", "newer@example.com");
+  expect(form.closeSaved(submitted[0]!)).toBe(false);
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "email", "submitted@example.com");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });

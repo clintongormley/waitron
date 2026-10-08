@@ -231,3 +231,16 @@ it("Add staff reopened after a put-back entry was saved opens quiet and empty", 
   await edit(form, "first-names", "");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+it("Add staff put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  await edit(form, "first-names", "Ada");
+  await edit(form, "last-names", "Lovelace");
+  await edit(form, "email", "submitted@example.com");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  expect(app.submitted).toHaveLength(1);
+  await edit(form, "email", "newer@example.com");
+  expect(form.closeSaved(app.submitted[0] as Parameters<typeof form.closeSaved>[0])).toBe(false);
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "email", "submitted@example.com");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
