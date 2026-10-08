@@ -1538,6 +1538,16 @@ Chromium cases cover both edges and the exact move reported on release, leaving 
 release, cancellation, Escape, disconnect and a fitting list. The lifecycle cases track real
 animation-frame requests and cancellation, including the absence of a pending frame at the end.
 
+**Main image smoke cannot fetch BlueZ (2026-10-08) — OPEN.**
+The [image smoke job after A334b](https://github.com/clintongormley/waitron/actions/runs/37741153470/job/113192086434)
+failed before either image build: `apt-get install` could not fetch
+`bluez_5.72-0ubuntu5.5_amd64.deb`, receiving HTTP 404 from `security.ubuntu.com`, and exited 100.
+The install is in `.github/workflows/image-smoke.yml:60`. Investigate package-index freshness
+and repository availability, then queue the workflow repair separately. No retry or repair was
+applied in A334b, whose merge changed only the menu tree, its tests and documentation.
+The remaining jobs on merge `cdb1722b6622ba7be77cfa0dcfc924bb2716b55e` were still running when this
+receipt was recorded; do not treat its complete main run as green.
+
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
 venue-service forms and the till's profile dialog) in #1418; batch 5 (the till) in #1414; batch 6 audited with no
