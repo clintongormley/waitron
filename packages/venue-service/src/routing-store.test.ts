@@ -59,7 +59,7 @@ import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.j
 import { configureZone, createDepartment, listZoneOffers } from "./operations.js";
 import { routingCells } from "./schema/routing.js";
 import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
-import { setStationFallback, setStationToday } from "./station-times.js";
+import { closeStationForToday, setStationFallback, setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/station-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { saveSpecialDate } from "./hours.js";
@@ -848,6 +848,95 @@ describe("the browser's selection rules", () => {
 });
 
 describe("resolveMakers", () => {
+  it("reads today's chosen destination into routing and both station snapshots", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const at = new Date("2026-10-02T18:00:00Z");
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await setCategoryCell(tx, f.cfg, f.drinks, station(f.terraceBar));
+      await closeStationForToday(tx, f.cfg, f.terraceBar, f.bar, at);
+      const expected = {
+        open: false,
+        active: true,
+        isDefault: false,
+        name: "Terrace Bar",
+        byHand: "closed",
+        sendsTo: f.bar,
+        why: "closed_by_hand",
+      };
+      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toEqual(expected);
+      const resolver = await routingAt(tx, f.cfg, at);
+      expect((await resolver.stations()).get(f.terraceBar)).toEqual(expected);
+      expect((await resolver.makers(null, [f.mojito])).get(f.mojito)).toEqual({
+        kind: "made",
+        route: station(f.bar),
+      });
+      expect(
+        (await routingModel(tx, f.cfg, at)).stationTimes.find(
+          (row) => row.stationId === f.terraceBar,
+        )?.closedSendsTo,
+      ).toBe(f.bar);
+      const tomorrow = new Date("2026-10-03T18:00:00Z");
+      expect((await stationStates(tx, f.cfg, tomorrow)).get(f.terraceBar)).toEqual({
+        open: true,
+        active: true,
+        isDefault: false,
+        name: "Terrace Bar",
+        byHand: null,
+        sendsTo: null,
+        why: "open",
+      });
+      expect((await resolveMakers(tx, f.cfg, null, [f.mojito], tomorrow)).get(f.mojito)).toEqual({
+        kind: "made",
+        route: station(f.terraceBar),
+      });
+    }));
+
+  it("folds scheduled open reasons and preserves manual and switched-off reasons", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const at = new Date("2026-10-02T18:00:00Z");
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid" })
+        .where(eq(locations.id, f.cfg.locationId));
+      await seedStationWeek(tx, f.cfg, f.terraceBar, [
+        { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
+      ]);
+      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
+        open: true,
+        why: "open",
+        byHand: null,
+        sendsTo: null,
+      });
+      await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
+      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
+        open: true,
+        why: "opened_by_hand",
+        byHand: "open",
+        sendsTo: null,
+      });
+      await tx
+        .update(locations)
+        .set({ timeZone: "Mars/Base" })
+        .where(eq(locations.id, f.cfg.locationId));
+      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
+        open: true,
+        why: "open",
+        byHand: null,
+        sendsTo: null,
+      });
+      expect((await stationStates(tx, f.cfg, at)).get(f.switchedOff)).toMatchObject({
+        open: false,
+        why: "switched_off",
+        byHand: null,
+        sendsTo: null,
+      });
+    }));
+
   it("sends a closed station's work to its fallback, and an open one's to itself", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -946,18 +1035,32 @@ describe("resolveMakers", () => {
         { weekday: 5, opensAt: "19:00", closesAt: "21:00" },
       ]);
       const states = await stationStates(tx, f.cfg, new Date("2026-10-02T20:00:00Z"));
-      expect(states.get(f.bar)).toEqual({ open: true, isDefault: true, active: true, name: "Bar" });
+      expect(states.get(f.bar)).toEqual({
+        open: true,
+        isDefault: true,
+        active: true,
+        name: "Bar",
+        byHand: null,
+        sendsTo: null,
+        why: "default",
+      });
       expect(states.get(f.terraceBar)).toEqual({
         open: false,
         isDefault: false,
         active: true,
         name: "Terrace Bar",
+        byHand: null,
+        sendsTo: null,
+        why: "out_of_hours",
       });
       expect(states.get(f.switchedOff)).toEqual({
         open: false,
         isDefault: false,
         active: false,
         name: "Off",
+        byHand: null,
+        sendsTo: null,
+        why: "switched_off",
       });
     }));
   it("keeps the database read count constant as a batch grows", async () =>
@@ -2529,6 +2632,9 @@ describe("routingAt", () => {
         active: true,
         isDefault: false,
         name: "Terrace Bar",
+        byHand: null,
+        sendsTo: null,
+        why: "open",
       });
       expect((await resolver.stations()).get(f.switchedOff)).toMatchObject({ active: false });
       expect((await resolver.stations()).get(f.bar)).toMatchObject({ isDefault: true });

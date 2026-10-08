@@ -25,6 +25,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import {
   clearRoutingCell,
+  closeStationForToday,
   listStationNotices,
   setStationToday,
   setStationFallback,
@@ -717,6 +718,49 @@ describe("release", () => {
     );
     expect(item).toMatchObject({ stationId: bar, firedAt: at.toISOString() });
   });
+
+  it.each([false, true])(
+    "releases work after today's close towards Bar (hand-placed: %s)",
+    async (byHand) => {
+      const at = new Date("2026-10-02T18:45:00.000Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(at);
+      try {
+        await inTx(venue, async (tx) => {
+          await setStationToday(tx, venue.cfg, grill, null, at);
+          await routeProductTo(tx, venue.cfg, venue.productId("Burger"), grill);
+        });
+        const group = await heldBurger();
+        if (byHand)
+          await inTx(venue, (tx) =>
+            tx
+              .update(workingOrderLines)
+              .set({ makeAtStationId: grill })
+              .where(eq(workingOrderLines.id, group.lineId)),
+          );
+        const [before] = await inTx(venue, (tx) =>
+          tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+        );
+        expect(before).toMatchObject({ stationId: grill, stationChosenAt: null, firedAt: null });
+        await inTx(venue, (tx) => closeStationForToday(tx, venue.cfg, grill, bar, at));
+        await fireHeldBurger(group);
+        const [after] = await inTx(venue, (tx) =>
+          tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+        );
+        expect(after).toMatchObject({ stationId: byHand ? grill : bar, firedAt: at.toISOString() });
+        const alerts = await inTx(venue, (tx) =>
+          tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+        );
+        expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+        await inTx(venue, async (tx) => {
+          await setStationToday(tx, venue.cfg, grill, null, at);
+          await routeProductTo(tx, venue.cfg, venue.productId("Burger"), bar);
+        });
+      }
+    },
+  );
 
   it("keeps held work at an open station after the rules change", async () => {
     const group = await heldDish("Vino");

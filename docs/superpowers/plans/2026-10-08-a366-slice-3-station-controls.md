@@ -640,7 +640,7 @@ passed a station closed by hand with a recorded destination and ends with no sta
 the default station if one is active (decision 9). `closedSendsTo` follows the same walk, so the
 dashboard's status sentence (`routing-store.ts:837`, M) names the chosen destination.
 
-- [ ] **Step 1: Failing tests:** in `routing.test.ts` — Grill closed by hand → Bar routes a Grill
+- [x] **Step 1: Failing tests:** in `routing.test.ts` — Grill closed by hand → Bar routes a Grill
   dish to Bar although Grill's fallback is Pastry; Grill → Bar with Bar out of hours follows Bar's
   fallback; Grill → Bar with Bar switched off and no fallback lands at the default station, not
   `noReplacement`; Grill closed by hand with no destination still follows Pastry (today's rule).
@@ -652,12 +652,12 @@ dashboard's status sentence (`routing-store.ts:837`, M) names the chosen destina
   incident is raised (pinning today's behaviour, which this slice keeps). (Fails today: the walk
   reads only `fallbackId`, `routing.ts:257`; the hand-placed case is expected to pass at once and
   is there so a later change to it is seen.)
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/routing.test.ts src/routing-store.test.ts` and `pnpm --filter @waitron/server exec vitest run src/station-move.test.ts`.
-- [ ] **Step 3: Implement**, and add the three `StationTodayState` fields (`byHand`, `sendsTo`, `why`) wherever a test stub builds a `stationStates`
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/routing.test.ts src/routing-store.test.ts` and `pnpm --filter @waitron/server exec vitest run src/station-move.test.ts`.
+- [x] **Step 3: Implement**, and add the three `StationTodayState` fields (`byHand`, `sendsTo`, `why`) wherever a test stub builds a `stationStates`
   value (`grep -rn "stationStates" apps packages`).
-- [ ] **Step 4: Run; see them pass;** the venue-service node project and the server package;
+- [x] **Step 4: Run; see them pass;** the venue-service node project and the server package;
   typecheck `@waitron/module`, `@waitron/venue-service`, `@waitron/server`.
-- [ ] **Step 5: Commit** — `feat(venue-service): a station closed for today sends its work where it was told (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): a station closed for today sends its work where it was told (A366)`.
 
 ---
 

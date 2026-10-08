@@ -315,14 +315,23 @@ export type ExtraMakerOutcome =
       readonly why: "no_rule" | "no_preparation" | "no_replacement" | "same_station";
     };
 
+export interface StationTodayState {
+  readonly open: boolean;
+  readonly isDefault: boolean;
+  readonly active: boolean;
+  readonly name: string;
+  readonly byHand: "open" | "closed" | null;
+  readonly sendsTo: string | null;
+  readonly why:
+    "default" | "open" | "opened_by_hand" | "closed_by_hand" | "out_of_hours" | "switched_off";
+}
+
 /** Rules and venue moment loaded once at `at`. Both questions use that snapshot and the
  *  transaction it was opened on. Use the resolver only inside that transaction. */
 export interface MakerResolver {
   readonly at: Date;
   /** Station states from this resolver's rules and moment, including switched-off stations. */
-  stations(): Promise<
-    ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
-  >;
+  stations(): Promise<ReadonlyMap<string, StationTodayState>>;
   /** Answers for an order in `zoneId` (null: no service zone). An unknown zone throws
    *  `service_zone.not_found` before an unknown product throws `route.subject_not_found`.
    *  Keys preserve the first caller spelling of each product id. */
@@ -497,9 +506,7 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     at: Date,
-  ): Promise<
-    ReadonlyMap<string, { open: boolean; isDefault: boolean; active: boolean; name: string }>
-  >;
+  ): Promise<ReadonlyMap<string, StationTodayState>>;
   /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
   describeMakers(
     tx: Transaction,

@@ -54,6 +54,7 @@ export interface StationTiming {
   readonly fallbackId: string | null;
   readonly hours: readonly WeeklyInterval[];
   readonly today: "open" | "closed" | null;
+  readonly todaySendsTo?: string | null;
   /** The standard week has hours set; when absent, any `hours` at all mean it has. */
   readonly weekSet?: boolean;
   /** Special-date hours by calendar date, `[]` for Closed; a date not listed uses the week. */
@@ -246,6 +247,7 @@ function walkFallbacks(
   start: string | null,
   moment: RoutingMoment | null,
   seen: Set<string>,
+  usedTodayDestination = false,
 ) {
   const steps: FallbackStep[] = [];
   let current = start;
@@ -254,9 +256,17 @@ function walkFallbacks(
     const status = stationStatus(rules, current, moment);
     if (status.open) return { stationId: current, steps };
     steps.push({ stationId: current, why: status.why });
-    current = rules.timing.get(current)?.fallbackId ?? null;
+    const timing = rules.timing.get(current);
+    const todayDestination = status.why === "closed_by_hand" ? timing?.todaySendsTo : null;
+    if (todayDestination != null) usedTodayDestination = true;
+    current = todayDestination ?? timing?.fallbackId ?? null;
   }
-  return { stationId: null, steps };
+  const defaultId = rules.defaultStationId;
+  const stationId =
+    usedTodayDestination && defaultId !== null && rules.activeStationIds.has(defaultId)
+      ? defaultId
+      : null;
+  return { stationId, steps };
 }
 
 export function followFallbacks(
@@ -273,11 +283,15 @@ export function closedSendsTo(
   moment: RoutingMoment | null,
 ): string | null {
   if (stationId === rules.defaultStationId) return stationId;
+  const timing = rules.timing.get(stationId);
+  const todayDestination =
+    stationStatus(rules, stationId, moment).why === "closed_by_hand" ? timing?.todaySendsTo : null;
   return walkFallbacks(
     rules,
-    rules.timing.get(stationId)?.fallbackId ?? null,
+    todayDestination ?? timing?.fallbackId ?? null,
     moment,
     new Set([stationId]),
+    todayDestination != null,
   ).stationId;
 }
 
