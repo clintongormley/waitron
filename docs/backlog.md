@@ -169,6 +169,95 @@ under _Afterwards_. Everything else ranks beneath these.
 
 ---
 
+## Open work, by area
+
+Every open entry is moving here, one area at a time, from the old track sections below (A430,
+[plan](superpowers/plans/2026-10-08-a430-backlog-open-work-only.md)). Until that is finished, an
+area's open work may still be in the old sections. A long entry keeps its first lines here and its
+whole text in the area's detail file under `docs/backlog/`.
+
+### Fiscal records, invoices and the asesor
+
+_Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal items._
+
+### The setup wizard, onboarding and the demo venue
+
+_Formerly A2 and B1._
+
+### Menus and the catalogue
+
+_Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2._
+
+### Service periods, opening hours and departments
+
+_Formerly entries spread across the old sections, A261's venue-operations steps among them._
+
+### The kitchen and preparation
+
+_Formerly Track A's kitchen part, and kitchen entries elsewhere._
+
+### The till, devices and table service
+
+_Formerly A4._
+
+### Printers, the print agent and receipts
+
+_Formerly A3, A8 and B6._
+
+### Payments and card readers
+
+_Formerly A6, and Track C's payments items._
+
+### Users, sign-in and the dashboard shell
+
+_Formerly A7, and Track A's dashboard part._
+
+### Interface languages
+
+_Formerly entries spread across the old sections, C125 among them._
+
+### Alerts, logging and diagnostics
+
+_Formerly A5, and the logging part of A9._
+
+### Working time and staff
+
+_Formerly A10._
+
+### Purchasing, recipes, stock and reports
+
+_Formerly entries spread across the old sections._
+
+### The box: backups, upgrades and recovery
+
+_Formerly B2, B3, B4, B5 and B7._
+
+### Replication, failover and the cloud
+
+_Formerly _Afterwards_ and _Cloud connection integration_._
+
+### CI, tests and developer tooling
+
+_Formerly B9, and Track C's development-stack and house-rules items._
+
+### Dependency upgrades
+
+_Formerly parts of B9 and Track C._
+
+### Modules, data and code health
+
+_Formerly B8, and Track C's correctness items._
+
+### Data protection and legal compliance
+
+_Formerly entries spread across the old sections._
+
+### Later and parked
+
+_Formerly _Later and parked_._
+
+---
+
 ## Track A — UI and application
 
 What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, `packages/ui`,
