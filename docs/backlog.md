@@ -620,8 +620,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   model checks pass. Task 6 adds passive whole-scan snapshots, retained-reference review,
   explicit old/current/draft choices, unsaved application leave paths and protection against
   replies from earlier openings or scans. Reconnect retains the original draft baseline.
-  Recorded-name/publication consumer checks, opening the built application and final branch
-  review remain in Tasks 7–8. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
+  Task 7 adds all-nine-kind working-menu/publication consumer checks and a real sale followed
+  by an authenticated translation save and reprint. Stored sale/fiscal/series/publication rows
+  remain equal in that fixture. The built dashboard opens and saves against controlled HTTP
+  fixtures in English/Spanish, both themes and 390/1280 widths. Final branch review, the normal
+  push hook, current-head CI and authorised locked landing remain in Task 8. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
   no saved language configuration, the existing menu-root writer uses English while section and
   include writers use their supplied Spanish fallback; inline saves use the resolver's context.
   No inline translation route or editable dialog has landed. Exercise full-app Open navigation

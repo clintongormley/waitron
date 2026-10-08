@@ -167,11 +167,37 @@ earlier 120-case receipt remains the measurement of the first checkpoint.
 
 **Files:** Extend `packages/catalogue/src/menu-publication.test.ts`, `product-presentation.test.ts`, `option-snapshot-labels.test.ts`; `apps/server/src/till-api.receipt.test.ts`; new dialog `.a11y.test.ts`; update `docs/developers/products.md` and A420 entry in `docs/backlog.md` when stale.
 
-- [ ] Add `inline changes preserve publication and recorded names` in consumer suites. Record a sale first, save translations through the real route, then read back sale descriptions, fiscal record bytes/hash/sequence and invoice counter unchanged. Preview sees edited shared names; already-published version stays identical until explicit publish. Preserve three distinct names in fixtures.
-- [ ] Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-publication.test.ts src/product-presentation.test.ts src/option-snapshot-labels.test.ts`; `pnpm --filter @waitron/server exec vitest run src/till-api.receipt.test.ts -t 'inline changes|filed identity'`.
-- [ ] In an installed disposable candidate, delete unchanged-save, ownership, stale comparison, generation and draft protection one at a time. For ownership/stale deletion run Task 3's RED command; for unchanged/generation/draft deletion run Task 6's RED command. Require behavioral failure, then restore and rerun for green, including legitimate-success controls. Restore each deletion before the next. Never swap working-tree files or weaken tests/guards.
-- [ ] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.a11y.test.ts src/screens/content-languages-screen.a11y.test.ts`. Inspect EN/ES × light/dark × measured `window.innerWidth` 390/1280, keyboard/caret, long names and loading/empty/invalid/conflict states. Save screenshots under sibling `__screenshots__/`; run axe per state/theme and inspect the images. Check browser memory headroom. Build via `pnpm --filter @waitron/dashboard build` and open the resulting UI. Stop only recorded owned process ids.
-- [ ] `git commit -s -m "test: verify inline translation consumers and draft protections"`. Checkpoint: ready to run finish-branch.
+- [x] Add `inline changes preserve publication and recorded names` in consumer suites. Record a sale first, save translations through the real route, then read back sale descriptions, fiscal record bytes/hash/sequence and invoice counter unchanged. Preview sees edited shared names; already-published version stays identical until explicit publish. Preserve three distinct names in fixtures.
+- [x] Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-publication.test.ts src/product-presentation.test.ts src/option-snapshot-labels.test.ts`; `pnpm --filter @waitron/server exec vitest run src/till-api.receipt.test.ts -t 'inline changes|filed identity'`.
+- [x] In an installed disposable candidate, delete unchanged-save, ownership, stale comparison, generation and draft protection one at a time. For ownership/stale deletion run Task 3's RED command; for unchanged/generation/draft deletion run Task 6's RED command. Require behavioral failure, then restore and rerun for green, including legitimate-success controls. Restore each deletion before the next. Never swap working-tree files or weaken tests/guards.
+- [x] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.a11y.test.ts src/screens/content-languages-screen.a11y.test.ts`. Inspect EN/ES × light/dark × measured `window.innerWidth` 390/1280, keyboard/caret, long names and loading/empty/invalid/conflict states. Save screenshots under sibling `__screenshots__/`; run axe per state/theme and inspect the images. Check browser memory headroom. Build via `pnpm --filter @waitron/dashboard build` and open the resulting UI. Stop only recorded owned process ids.
+- [x] `git commit -s -m "test: verify inline translation consumers and draft protections"`. Checkpoint: ready to run finish-branch.
+
+Task 7 checkpoint, 2026-10-08: the real-store consumer fixture translates all nine kinds,
+checks customer/staff/kitchen renderers and both working menus, compares published rows before
+explicit publication, then checks that the other menu's publication remains unchanged. A real
+filed-sale fixture saves through the authenticated route, retains complete raw sale/line/fiscal/
+series/publication rows and reprints the original customer text. Catalogue consumers pass 131;
+the selected receipt cases pass 2; route cases pass 53. Installed removals of unchanged-save,
+ownership, stale comparison, reply generation and dirty retention each fail assertions. Removing
+the selected-language write fails each new consumer case; restoring it passes. The final installed
+candidate passes catalogue 242, dashboard 121 and selected receipt 2; source bytes match and the
+candidate is removed. No production code changed in Task 7.
+
+The unchanged fiscal pair passes 20; focused root guards pass 138. Types, touched ESLint,
+format and dashboard build pass. The EN/ES light/dark matrix at measured 390/1280 passes
+36 axe cases; 64 dialog state captures were inspected. The production dashboard build opens,
+edits with keyboard/caret preserved and saves in all eight locale/theme/width combinations
+against controlled HTTP fixtures. This is a built-client check, separate from the real route
+and database acceptance. Fixture corrections were the synthetic Each id, macOS Home key,
+retained closed element and an explicit missing-field assertion. Experimental WebCrypto,
+Lit development, one test-port fallback and build chunk-size warnings remain in the logs.
+
+Ruling: product-presentation and option-snapshot-label consumers share the new real-store menu
+fixture instead of receiving separate databases in their pure suites. Existing assertions in
+those suites remain and run alongside it. Cost if wrong: another consumer path may be untested;
+the recorded product path is independently exercised by the real receipt case.
+Task 8 remains the one Claude review, normal hook, current-head CI and authorised locked landing.
 
 ### Existing assertion inventory
 

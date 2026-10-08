@@ -45,10 +45,25 @@ import { saveCatalogueDefaultColor } from "./settings.js";
 import { moveCatalogueItems } from "./catalogue-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
-import { createUnit, updateUnit } from "./units.js";
+import { createUnit, updateUnit, assignProductUnit } from "./units.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
+import { writeContentLanguages } from "./content-languages.js";
+import { resolveTranslationTargets } from "./content-translation-targets.js";
+import { saveContentTranslations } from "./content-translations.js";
+import {
+  customerPresentationText,
+  joinCustomerPresentationText,
+  staffPresentationName,
+  kitchenPresentationName,
+} from "./product-presentation.js";
+import {
+  customerOptionSnapshotLabels,
+  optionSnapshotLabels,
+  staffOptionSnapshotLabels,
+} from "./option-snapshot-labels.js";
+import { NO_ICE } from "../test/menus-fixture.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
 import { sectionMembers, sections } from "./schema/sections.js";
@@ -97,6 +112,166 @@ async function sectionMemberOf(listId: string, sectionId: string) {
 }
 
 describe("preview live snapshot", () => {
+  it("inline changes preserve publication and recorded names across shared consumers", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+    );
+    await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "each", fr: "unité" }, abbreviation: { en: "ea", fr: "u" }, precision: 0 },
+        "en",
+      );
+      await assignProductUnit(tx, f.lemonade, unit.id);
+    });
+    const offerId = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+    const frozen = structuredClone((await app((tx) => previewMenu(tx, f.lunch))).document);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    const beforeVersions = await versionRows();
+    const beforePublications = await fx.db.select().from(menuPublications);
+    const includeId = await sectionMemberOf(f.lunchRoot, f.drinks);
+    const refs = [
+      { kind: "product" as const, id: f.lemonade },
+      { kind: "variant" as const, id: f.large },
+      { kind: "option_list" as const, id: f.iceList },
+      { kind: "option_label" as const, id: NO_ICE },
+      { kind: "extra_list" as const, id: f.extrasList },
+      { kind: "menu" as const, id: f.drinks },
+      { kind: "section" as const, id: f.beer },
+      { kind: "included_menu" as const, id: includeId },
+      { kind: "unit" as const, id: frozen.offers[offerId]!.unit.id },
+    ];
+    const texts = [
+      "Limonada para clientes",
+      "Vaso grande",
+      "Hielo para clientes",
+      "Sin hielo",
+      "Añade algo",
+      "Bebidas para clientes",
+      "Cervezas para clientes",
+      "Bebidas del almuerzo",
+      "unidad",
+    ];
+    const context = { fallbackLanguage: "en", required: [] };
+    const targets = await app((tx) => resolveTranslationTargets(tx, "es", refs, context));
+    await app((tx) =>
+      saveContentTranslations(
+        tx,
+        "es",
+        {
+          edits: targets.targets.map((entry, i) => ({
+            ...refs[i]!,
+            expected: entry.target.expected,
+            text: texts[i]!,
+          })),
+        },
+        context,
+      ),
+    );
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    const offer = preview.document.offers[offerId]!;
+    expect(offer.customerName).toEqual({ en: "Lemonade for guests", es: "Limonada para clientes" });
+    expect(offer.variants[0]!.customerName).toEqual({ en: "A big glass", es: "Vaso grande" });
+    expect(offer.unit).toMatchObject({
+      name: { en: "each", fr: "unité", es: "unidad" },
+      abbreviation: { en: "ea", fr: "u" },
+      precision: 0,
+      hardwareUnit: null,
+    });
+    expect(offer.unitPrice).toBe("2.80");
+    expect(offer.vatClass).toBe("reduced");
+    expect(offer.name).toBe("Lemonade");
+    expect(offer.kitchenName).toBe("LEMONADE");
+    const presentation = {
+      ...offer,
+      variantName: offer.variants[0]!.name,
+      variantCustomerName: offer.variants[0]!.customerName,
+      variantKitchenName: offer.variants[0]!.kitchenName,
+    };
+    const names = customerPresentationText(presentation, "en");
+    expect(
+      joinCustomerPresentationText(names.product, names.variant, presentation.variantName),
+    ).toEqual({
+      en: "Lemonade for guests (A big glass)",
+      es: "Limonada para clientes (Vaso grande)",
+    });
+    expect(staffPresentationName(presentation)).toBe("Lemonade (Large)");
+    expect(kitchenPresentationName(presentation)).toBe("LEMONADE (LRG)");
+    const options = offer.offeredModifiers.find((list) => list.kind === "options")!;
+    expect(options.kind).toBe("options");
+    if (options.kind !== "options") throw new Error("missing options fixture");
+    const label = options.labels.find((label) => label.id === NO_ICE)!;
+    const snapshot = [
+      {
+        listName: { en: options.name },
+        listCustomerName: options.customerName,
+        listKitchenName: options.kitchenName,
+        labelName: { en: label.name },
+        labelCustomerName: label.customerName,
+        labelKitchenName: label.kitchenName,
+      },
+    ];
+    expect(customerOptionSnapshotLabels(snapshot, "es-ES")).toEqual([
+      "Hielo para clientes: Sin hielo",
+    ]);
+    expect(staffOptionSnapshotLabels(snapshot)).toEqual(["Ice: No ice"]);
+    expect(optionSnapshotLabels(snapshot)).toEqual(["ICE: NO"]);
+    const extras = offer.offeredModifiers.find((list) => list.kind === "extras")!;
+    expect(extras.customerName).toEqual({ en: "Add something", es: "Añade algo" });
+    const folder = preview.document.root.members.find((member) => member.kind === "section")!;
+    expect(folder).toMatchObject({
+      names: { en: "Something to drink", es: "Bebidas del almuerzo" },
+      members: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "section",
+          names: { en: "On tap", es: "Cervezas para clientes" },
+        }),
+      ]),
+    });
+    const dinner = await app((tx) => previewMenu(tx, f.dinner));
+    expect(
+      Object.values(dinner.document.offers).find((o) => o.productId === f.lemonade)!.customerName,
+    ).toEqual(offer.customerName);
+    expect(dinner.document.root.members[0]).toMatchObject({
+      names: { en: "Something to drink", es: "Bebidas para clientes" },
+    });
+    expect(await versionRows()).toEqual(beforeVersions);
+    expect(await fx.db.select().from(menuPublications)).toEqual(beforePublications);
+    expect(preview.live!.document).toEqual(frozen);
+    const recorded = frozen.offers[offerId]!;
+    expect(recorded.customerName).toEqual({ en: "Lemonade for guests" });
+    expect(recorded.variants[0]!.customerName).toEqual({ en: "A big glass" });
+    const recordedOptions = recorded.offeredModifiers.find((list) => list.kind === "options")!;
+    if (recordedOptions.kind !== "options") throw new Error("missing recorded options");
+    const recordedLabel = recordedOptions.labels.find((label) => label.id === NO_ICE)!;
+    expect(
+      customerOptionSnapshotLabels(
+        [
+          {
+            listName: { en: recordedOptions.name },
+            listCustomerName: recordedOptions.customerName,
+            listKitchenName: recordedOptions.kitchenName,
+            labelName: { en: recordedLabel.name },
+            labelCustomerName: recordedLabel.customerName,
+            labelKitchenName: recordedLabel.kitchenName,
+          },
+        ],
+        "es-ES",
+      ),
+    ).toEqual(["Ice?: Neat"]);
+    expect(recorded.unit.name).toEqual({ en: "each", fr: "unité" });
+    await publish(f.lunch);
+    expect((await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document).toEqual(
+      preview.document,
+    );
+    expect((await versionRows()).filter((row) => row.number === 1)).toEqual(beforeVersions);
+    expect((await app((tx) => readLiveDocuments(tx, [f.dinner]))).get(f.dinner)!.document).toEqual(
+      beforeVersions.find((row) => row.menuId === f.dinner)!.document,
+    );
+  });
+
   it("has no live snapshot before the first publication", async () => {
     const f = await menusFixture(fx.db);
     const preview = await app((tx) => previewMenu(tx, f.lunch));

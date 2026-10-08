@@ -18,6 +18,7 @@ import {
   tenants,
   workingOrders,
   tenantReceipts,
+  products,
   withTransaction,
 } from "@waitron/db";
 import {
@@ -27,11 +28,20 @@ import {
   addProductToMenu,
   createProduct,
   listAvailableProducts,
+  updateProduct,
+  writeContentLanguages,
+  previewMenu,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/identity";
+import {
+  createPinThrottle,
+  hashPassword,
+  hashPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { createPrinter, enqueuePrintJob, textGrid, updatePrinter } from "@waitron/printing";
@@ -56,6 +66,9 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { mountCatalogueApi } from "./catalogue-api.js";
+import type { TranslationPage } from "@waitron/catalogue/src/content-translation-types.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
@@ -1010,6 +1023,102 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
 });
 
 describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () => {
+  it("inline changes preserve publication and recorded names after a filed sale", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
+      await updateProduct(tx, each.id, {
+        name: "Staff water",
+        kitchenName: "KITCHEN WATER",
+        customerName: { es: "Agua para clientes" },
+      });
+      await publishWorkingMenu(tx, each.catalogueId);
+    });
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "never", printerId });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    mountCatalogueApi(
+      app,
+      { db: suite.db, venueLocale: "es-ES", contentLanguageRules: { required: [], official: [] } },
+      noopLog,
+    );
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const retained = () => ({
+      sales: suite.db.all(sql`select * from sales order by id`),
+      lines: suite.db.all(sql`select * from sale_lines order by id`),
+      fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
+      headers: suite.db.all(sql`select * from sale_receipt_headers order by sale_id`),
+      series: suite.db.all(sql`select * from invoice_series order by id`),
+      versions: suite.db.all(sql`select * from menu_versions order by id`),
+      publications: suite.db.all(sql`select * from menu_publications order by menu_id`),
+    });
+    const before = retained();
+    expect(before.fiscal).toHaveLength(1);
+    expect(before.lines).toHaveLength(1);
+    expect((await suite.db.select().from(saleLines))[0]).toMatchObject({
+      name: "Staff water",
+      kitchenName: "KITCHEN WATER",
+      descriptions: { "es-ES": "Agua para clientes" },
+    });
+    const managerCookie = await withTransaction(suite.db, async (tx) => {
+      const [manager] = await tx
+        .insert(persons)
+        .values({ displayName: "Translation manager", role: "manager" })
+        .returning();
+      const session = await startManagementSession(tx, { personId: manager!.id });
+      return `${MANAGEMENT_COOKIE}=${session.token}`;
+    });
+    const path = "/management-api/content-translations/es";
+    const read = await app.request(`${path}?target=product:${each.id}`, {
+      headers: { cookie: managerCookie },
+    });
+    expect(read.status).toBe(200);
+    const target = ((await read.json()) as TranslationPage).rows[0]!;
+    const response = await app.request(path, {
+      method: "PUT",
+      headers: { cookie: managerCookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        edits: [
+          {
+            kind: "product",
+            id: each.id,
+            expected: target.expected,
+            text: "Agua recién traducida",
+          },
+        ],
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(
+      (await suite.db.select().from(products).where(eq(products.id, each.id)))[0],
+    ).toMatchObject({
+      name: "Staff water",
+      kitchenName: "KITCHEN WATER",
+      customerName: { es: "Agua recién traducida" },
+    });
+    const preview = await withTransaction(suite.db, (tx) => previewMenu(tx, each.catalogueId));
+    expect(preview.document.offers[each.menuItemId]!.customerName).toEqual({
+      es: "Agua recién traducida",
+    });
+    expect(preview.live!.document.offers[each.menuItemId]!.customerName).toEqual({
+      es: "Agua para clientes",
+    });
+    expect(retained()).toEqual(before);
+    const reprint = await app.request(`/api/sales/${orderId}/reprint`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(reprint.status).toBe(200);
+    const printed = decodeTicket(new Uint8Array((await printJobsFor(cfg))[0]!.payload));
+    expect(printed).toContain("Agua para clientes");
+    expect(printed).not.toContain("Agua recién traducida");
+    expect(printed).not.toContain("Staff water");
+    expect(printed).not.toContain("KITCHEN WATER");
+    expect(retained()).toEqual(before);
+  });
+
   it("keeps the filed identity and trading snapshot on reprint after venue corrections", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await suite.db.execute(

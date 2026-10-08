@@ -569,6 +569,7 @@ describe("translation live review", () => {
     liveData.invalidate([{ type: "products" }]);
     await vi.waitFor(() => expect(q(el, "[data-test=arrivals]")?.textContent).toContain("1"));
     expect(field(el, "arrival")).toBeNull();
+    expect(field(el, "one")).not.toBeNull();
     expect(field(el, "one").value).toBe("My draft");
     expect(field(el, "one").shadowRoot!.activeElement).toBe(input);
     expect(q(el, "[data-test=changed-product-one]")).not.toBeNull();
