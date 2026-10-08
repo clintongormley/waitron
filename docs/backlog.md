@@ -3997,7 +3997,10 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      this provider's card readers before disconnecting it" (`payment.provider_in_use`) comes only
      after confirming, at the top of the page, moving the page down. Check for active readers when
      Disconnect is pressed, skip the confirm when it would be refused, and show the refusal as a
-     floating message beside the button, so nothing moves.
+     floating message beside the button, so nothing moves. The bucket copy's Turn off says "Tap
+     again to turn off" too (`stream.turn_off_confirm`,
+     `apps/dashboard/src/screens/stream-settings-panel.ts`); give it the same confirm (owner,
+     2026-10-08).
   4. **One Disable instead of Disable plus "Unpair from SumUp".** Unpairing already switches the
      reader off and can never be undone here (the unpair route sets `active: false`, and an
      unpaired reader loses Enable, `canEnable`). Disable opens a confirm with an "Also unpair from
