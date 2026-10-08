@@ -47,9 +47,10 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "departments",
     "zone_service_policies",
-    "department_menus",
-    "department_all_day_menus",
-    "zone_all_day_menus",
+    "menu_periods",
+    "menu_period_staff_menus",
+    "menu_day_timetables",
+    "menu_slots",
     "routing_cells",
     "service_settings",
     "catalogues",
@@ -62,5 +63,18 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "sections",
     "section_members",
     "menu_items",
+  ]);
+});
+
+it("refreshes Opening hours from its periods, ranges, dates and menu names", () => {
+  expect(QUERY_DEPENDENCIES["opening-hours"]).toEqual([
+    "menu_periods",
+    "menu_period_staff_menus",
+    "menu_day_timetables",
+    "menu_slots",
+    "special_dates",
+    "departments",
+    "catalogues",
+    "locations",
   ]);
 });
