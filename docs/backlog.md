@@ -1638,7 +1638,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   Run on the branch on 2026-10-08 (a throwaway case: edit, remove, re-add): the edit was still in
   the field, Save was quiet, and Cancel closed the form without asking; main was not run. Related
   to, but not the same as, the watcher form's point in batch 4c, where the edit was replaced when
-  the form was put back (fixed on `fix/forms-reconnect-keep-asking`). It matters only if the menus screen ever moves an open form.
+  the form was put back (fixed in #1429). It matters only if the menus screen ever moves an open
+  form.
 - **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
   floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
   flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
@@ -1730,8 +1731,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   may be replaced by the stored watcher without a question (its `disconnectedCallback` forgets the
   draft's identity, so the next `willUpdate` starts it again); the till dialogs keep such an edit.
   The reviewer believes main behaved the same before #1418, which nobody ran either. It matters only
-  if the prep stations screen ever moves the open form. DONE on branch
-  `fix/forms-reconnect-keep-asking` (2026-10-08): the edit-first case failed on main (the edit was
+  if the prep stations screen ever moves the open form. DONE in #1429 (2026-10-08): the edit-first case failed on main (the edit was
   replaced) and passes with the fix; the form now keeps the record it opened and the value it last
   saved across removal.
 - **Batch 5 — LANDED in #1414 (A331-5).** The till's five forms that save an edit: the party name dialog,
@@ -1752,7 +1752,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   #1414's review: (1) the till's profile dialog — done in batch 4c; (2) the four batch 5 dialogs had to stop registering their draft while out of the page, or a
   reattached dialog stopped asking before discarding; design-system.md → Forms named seven
   dashboard forms that still registered that way, untested for the same fault. DONE for six of
-  them on branch `fix/forms-reconnect-keep-asking` (2026-10-08): the staff edit and new person,
+  them in #1429 (2026-10-08): the staff edit and new person,
   variant, purchase and shift forms and the bookings form. Each one failed both cases on main (an
   edit made after the form is put back, and one made before it was taken out) and passes with the
   fix; the purchase and shift forms and the bookings form also replaced an edit made before
