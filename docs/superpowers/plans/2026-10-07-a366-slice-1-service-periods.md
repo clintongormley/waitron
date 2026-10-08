@@ -635,6 +635,9 @@ hours" / "Horario de estaciones"; the URL's `department` parameter goes.
 Timetable refusals keep their department names in a separate `HoursModel.departments` list of
 `{ id, name }`, from the opening-model snapshot used for the calendar. These names do not create
 editable columns; `subjects` and all hour cells remain stations only.
+The rewritten Hours editors follow A331 (owner, 2026-10-08): `draftScopeFor`,
+`saveActionState` and an unchanged-submit early return, with retained baselines and reconnect
+cases in `hours-screen.unsaved.test.ts`. Clear/Delete remain confirmations.
 
 - [ ] Steps: failing tests per behaviour; watch them fail; implement; pass; commit
 `feat(venue-service): the Hours screen keeps stations only (A366)`.

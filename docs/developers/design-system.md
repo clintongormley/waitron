@@ -1643,6 +1643,10 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
+- A366 slice 1: Station hours' weekday and Configure editors, special-date Add/Edit and Duplicate.
+  Clear hours and Delete stay confirmations. The weekday and special-date editors retain an edit
+  made before removal and ask before discarding an edit made after reconnect; their cases are in
+  `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); the watcher form, New and Edit; and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is

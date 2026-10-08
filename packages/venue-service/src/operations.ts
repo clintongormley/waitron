@@ -728,10 +728,6 @@ async function zoneMenuIdsByZone(tx: Transaction, cfg: VenueScope): Promise<Map<
   return byZone;
 }
 
-/**
- * Each zone's active menus that have a live version, in its department's order, with that
- * version's document: what `listZoneOffers` serves the zone from, without the live fields put back.
- */
 export async function liveDocumentsByZone(
   tx: Transaction,
   cfg: VenueScope,

@@ -7,7 +7,8 @@ import {
   focusFirstInvalid,
   submitOnEnter,
   UrlStateController,
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type LeaveCoordinator,
   type DraftScope,
   type LeaveReason,
@@ -378,7 +379,7 @@ export class HoursScreen extends LitElement {
       this.#acceptEditor(editor, returnTo);
     };
     const scope = this.#activeScope();
-    if (!scope) proceed();
+    if (!scope || !this.#leave) proceed();
     else void this.#leave!.request({ scopes: [scope.id], reason: "navigation", proceed });
   }
 
@@ -412,11 +413,10 @@ export class HoursScreen extends LitElement {
     const generation = this.#generation;
     this.#editorBeforeClose = (reason) => this.#beforeClose(reason, generation);
     const editor = this.editor;
-    if (!editor || this.#weekScope) return;
+    if (!this.isConnected || !editor || this.#weekScope) return;
     if (editor.kind === "cell" || editor.kind === "configure") {
-      this.#leave = leaveCoordinatorFor(this);
       let registering = true;
-      this.#weekScope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: {},
         parent: this,
         current: () =>
@@ -451,8 +451,10 @@ export class HoursScreen extends LitElement {
           else if (this.editor?.kind === "configure") this.editor = { ...this.editor, drafts };
         },
       });
+      this.#leave = coordinator;
+      this.#weekScope = scope;
       registering = false;
-      this.#weekScope?.changed();
+      scope.changed();
     }
   }
 
@@ -462,8 +464,7 @@ export class HoursScreen extends LitElement {
 
   #registerDateScope(): void {
     const editor = this.editor;
-    if (!editor || this.#activeScope()) return;
-    this.#leave = leaveCoordinatorFor(this);
+    if (!this.isConnected || !editor || this.#activeScope()) return;
     let registering = true;
     if (editor.kind === "date") {
       const payload = (draft: DateDraft) => ({
@@ -483,7 +484,7 @@ export class HoursScreen extends LitElement {
             })),
           })),
       });
-      this.#dateScope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: {},
         parent: this,
         current: () =>
@@ -494,8 +495,10 @@ export class HoursScreen extends LitElement {
           if (this.editor?.kind === "date") this.editor = { ...this.editor, draft };
         },
       });
+      this.#leave = coordinator;
+      this.#dateScope = scope;
     } else if (editor.kind === "duplicate") {
-      this.#duplicateScope = this.#leave?.register({
+      const { coordinator, scope } = draftScopeFor(this, {
         id: {},
         parent: this,
         current: () =>
@@ -508,6 +511,8 @@ export class HoursScreen extends LitElement {
           if (this.editor?.kind === "duplicate") this.editor = { ...this.editor, dates };
         },
       });
+      this.#leave = coordinator;
+      this.#duplicateScope = scope;
     }
     registering = false;
     this.#activeScope()?.changed();
@@ -536,7 +541,7 @@ export class HoursScreen extends LitElement {
   async #beforeClose(reason: LeaveReason, generation: number): Promise<boolean> {
     if (!this.isConnected || generation !== this.#generation || this.busy) return false;
     const scope = this.#activeScope();
-    if (!scope) return true;
+    if (!scope || !this.#leave) return true;
     return (
       (await this.#leave!.request({ scopes: [scope.id], reason, proceed: () => {} })) ===
       "proceeded"
@@ -697,8 +702,13 @@ export class HoursScreen extends LitElement {
     }
   }
 
+  #saveState() {
+    return saveActionState(this.#activeScope());
+  }
+
   #submit(): void {
     const editor = this.editor!;
+    if (this.busy || (this.#activeScope() && this.#saveState().unchanged)) return;
     this.attempted = true;
     this.refused = {};
     this.bottomRefusal = "";
@@ -1293,6 +1303,8 @@ export class HoursScreen extends LitElement {
     const errors = { ...this.refused, ...own };
     const content = this.#content(editor, errors);
     const marked = Object.keys(errors).length > 0;
+    const save = this.#saveState();
+    const tracked = this.#activeScope() !== undefined;
     const generation = this.#generation;
     return keyed(
       this.#generation,
@@ -1339,8 +1351,8 @@ export class HoursScreen extends LitElement {
           >
           <wt-button
             data-test="save-editor"
-            variant=${content.danger ? "danger" : "primary"}
-            ?disabled=${this.busy || Object.keys(own).length > 0}
+            variant=${content.danger ? "danger" : tracked ? save.variant : "primary"}
+            ?disabled=${this.busy || Object.keys(own).length > 0 || (tracked && save.unchanged)}
             @click=${() => {
               if (this.isConnected && generation === this.#generation) this.#submit();
             }}
