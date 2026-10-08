@@ -409,4 +409,83 @@ describe("mountRecipeApi", () => {
       error: { code: "management.request_invalid", params: { field: "ingredientIds" } },
     });
   });
+
+  describe("unknown ids", () => {
+    const unknownProductId = "00000000-0000-4000-8000-000000000001";
+    const unknownIngredientId = "00000000-0000-4000-8000-000000000002";
+    const ingredientIdsInvalid = {
+      error: { code: "management.request_invalid", params: { field: "ingredientIds" } },
+    };
+    const productMissing = {
+      error: { code: "product.not_found", params: { productId: unknownProductId } },
+    };
+
+    it("answers 404 product.not_found to a recipe read of an unknown product", async () => {
+      const res = await send(
+        mountApp(),
+        "GET",
+        `/management-api/products/${unknownProductId}/recipe`,
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual(productMissing);
+    });
+
+    it("answers 404 product.not_found to an empty recipe for an unknown product", async () => {
+      const res = await send(
+        mountApp(),
+        "PUT",
+        `/management-api/products/${unknownProductId}/recipe`,
+        {
+          body: { ingredientIds: [] },
+        },
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual(productMissing);
+    });
+
+    it("answers 404 product.not_found to a real ingredient on an unknown product", async () => {
+      const app = mountApp();
+      const id = await createIngredient(app, "aceite");
+      const res = await send(app, "PUT", `/management-api/products/${unknownProductId}/recipe`, {
+        body: { ingredientIds: [id] },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual(productMissing);
+    });
+
+    it("answers 400 { field: ingredientIds } to an unknown ingredient on a real product", async () => {
+      const app = mountApp();
+      const id = await createIngredient(app, "ajo");
+      const res = await send(app, "PUT", `/management-api/products/${productId}/recipe`, {
+        body: { ingredientIds: [id, unknownIngredientId] },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(ingredientIdsInvalid);
+    });
+
+    it("answers 400 { field: ingredientIds } to the same ingredient twice", async () => {
+      const app = mountApp();
+      const id = await createIngredient(app, "sal");
+      const res = await send(app, "PUT", `/management-api/products/${productId}/recipe`, {
+        body: { ingredientIds: [id, id] },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(ingredientIdsInvalid);
+    });
+
+    it("answers 404 ingredient.not_found to a PATCH of an unknown ingredient", async () => {
+      const res = await send(
+        mountApp(),
+        "PATCH",
+        `/management-api/ingredients/${unknownIngredientId}`,
+        {
+          body: { name: "x" },
+        },
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: { code: "ingredient.not_found", params: { ingredientId: unknownIngredientId } },
+      });
+    });
+  });
 });

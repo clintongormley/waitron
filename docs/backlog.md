@@ -7766,7 +7766,7 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A _Small_ item that
 turns out to need a design moves to its track.
 
-**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 LANDED as #1441 (a workforce request whose body names an unknown person or location answers 400, not 500); A394-2 to A394-22 OPEN.** Read, not
+**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 LANDED as #1441 (a workforce request whose body names an unknown person or location answers 400, not 500); A394-2 DONE 2026-10-08 (a recipe or ingredient route naming an unknown product or ingredient answers 404, and an unknown or repeated ingredient in a recipe 400, not 200, 204 or 500); A394-3 to A394-22 OPEN.** Read, not
 run: of 49 boundaries, 96 status rows break the rule (`docs/developers/conventions-data.md`); 17 defects
 answer 500 or success for a missing id (A394-1 to -6 first); 16 owner questions; A394-8 settles A374's.
 The follow-ups and the rows: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
