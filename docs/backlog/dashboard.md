@@ -578,11 +578,12 @@ there is no copy to keep in step.
 
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
-**A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
+**A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
 venue-service forms and the till's profile dialog) in #1418; batch 5 (the till) in #1414; batch 6 audited with no
 stored-setting editors; batch 7 unreserved forms audited; batch 2a landed as #1422; batch 2b
-(the menus screen) landed as #1424; batch 4b OPEN.** The owner:
+(the menus screen) landed as #1424; batch 4d (preparation stations) in #1426;
+batch 7b's re-run inventories done; batch 4b (Departments and zones) built. One re-check after A366
+slice 7 stays open, below.** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
@@ -744,9 +745,17 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
   and SumUp Connect/Pair/Try again remain provider operations;
   [classification and call paths](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
-- **Batch 4b — OPEN.** The venue-service screens other branches are changing: hours, the menu
-  timetable and venue operations (after `feat/service-periods-slice-1`). Preparation stations were
-  held for `fix/drag-edge-scroll`, which landed as #1416; they are covered by batch 4d below.
+- **Batch 4b — Departments and zones.** Audited after A366 slice 1 (#1460): Station hours and the
+  Opening hours forms already follow the rule, and the menu timetable screen is gone. Departments
+  and zones did not: its editor window (Add and Edit department, Add zone, Configure zone,
+  Transfers) and its three inline name editors now open quiet and turn blue on the first edit; the
+  inline Save and Cancel became `wt-button`s. Looked at on 2026-10-08 with the screen mounted with
+  test data (English light 1280px; Spanish dark 390px with long names), screenshots in
+  `~/waitron-campaign-b/a331-4b-shots/`: no defect found. Left open: the inline editors put Save
+  before Cancel, the editor window puts Cancel first (as on `main`).
+- **Re-check the venue-service screens once after A366 slice 7.** Each A366 slice builds the rule
+  into the forms it creates or rewrites (owner, 2026-10-08); after slice 7 lands, run batch 4b's
+  audit once more over `packages/venue-service/src/dashboard/` and gate any form a slice missed.
 - **Batch 4d — LANDED in #1426 (A331-4d, 2026-10-08).** Preparation stations' New/Rename, station printer
   choices, watcher Rename/follows/zones/pass/printer choices, and Settings rest/fallback/minutes
   use the shared Save state. An untouched fallback stays open without a confirmation or write;

@@ -1675,7 +1675,13 @@ and nothing guards it across screens:
 - A366 slice 1: Station hours' weekday and Configure editors, special-date Add/Edit and Duplicate.
   Clear hours and Delete stay confirmations. The weekday and special-date editors retain an edit
   made before removal and ask before discarding an edit made after reconnect; their cases are in
-  `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`;
+  `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`. Opening hours' normal week,
+  a day, the period editor and the date range dialog follow it too;
+- batch 4b, Departments and zones: the editor window's Add department, Edit department, Add zone,
+  Configure zone and Transfers, and the inline department name, zone name and trading name editors,
+  whose Save and Cancel are `wt-button`s. The Disable confirmation has no draft and stays `danger`;
+  the tree's switches and choices write at once. See
+  [the Batch 4b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4b--the-venue-service-screens-slice-1-rewrote-lane-b-a331-4b);
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); the watcher form, New and Edit; and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
