@@ -419,16 +419,17 @@ describe("seedDemoRestaurant", () => {
         labels: JSON.parse(row.labels) as string[],
       }));
       const { rows: cocktailRouteRows } = await tx.execute<{
+        category: string;
         zone_name: string;
         station_name: string;
       }>(sql`
-        select z.name as zone_name, s.name as station_name
+        select c.name as category, z.name as zone_name, s.name as station_name
         from routing_cells r
         join categories c on c.id = r.category_id
         join floor_zones z on z.id = r.zone_id
         join kitchen_stations s on s.id = r.station_id
-        where c.name = 'Cocktails'
-        order by z.name`);
+        where c.name in ('Cocktails', 'Wine and beer', 'Soft drinks', 'Coffee')
+        order by c.name, z.name`);
       const { rows: cocktailCells } = await tx.execute<{ station_name: string }>(sql`
         select s.name as station_name from routing_cells r
         join categories c on c.id = r.category_id and r.zone_id is null
@@ -554,7 +555,10 @@ describe("seedDemoRestaurant", () => {
     expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
     expect(read.cocktailCells).toEqual([{ station_name: "Downstairs bar" }]);
     expect(read.cocktailRoutes).toEqual([
-      { zone_name: "Upstairs bar", station_name: "Upstairs bar" },
+      { category: "Cocktails", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
+      { category: "Coffee", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
+      { category: "Soft drinks", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
+      { category: "Wine and beer", zone_name: "Upstairs bar", station_name: "Upstairs bar" },
     ]);
 
     // The cooking list as it is STORED, behind the `offeredModifiers` read above.
