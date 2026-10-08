@@ -1381,6 +1381,8 @@ not the request; I read it as a clash and count it as fitting.
 
 ## A394-1 — tasks (lane C, 2026-10-08)
 
+Landed as #1441.
+
 Re-read on `main` at `dd7490505` before writing: the four inserts still take the body ids unchecked
 (`packages/workforce/src/clocking.ts` `createRosterVersion`, `addShift`, `updateShift`;
 `packages/workforce/src/shift-swaps.ts` `requestSwap`), and `management.request_invalid` is already
