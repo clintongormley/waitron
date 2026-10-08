@@ -4184,6 +4184,249 @@ describe("the Structure tree", () => {
       );
     });
 
+    /** Lemonade's place in Drinks is shown twice: at the top level and inside Favourites. */
+    async function tickLemonadeInBothPlaces(el: MenusScreen): Promise<void> {
+      await toggleRow(el, "m-drinks");
+      await toggleRow(el, "m-fav");
+      await toggleRow(el, "m-fav/m-fav-drinks");
+      await pressSelect(el);
+      await tick(el, "m-drinks/m-lemonade");
+      await tick(el, "m-fav/m-fav-drinks/m-lemonade");
+    }
+
+    it("removes a member ticked in two places once, counting the ticks in the bar and the member in the confirm", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      await tickLemonadeInBothPlaces(el);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
+      await openRemove(el);
+      const dialog = modal(el, "remove-selected");
+      expect(dialog.getAttribute("heading")).toBe("Remove 1 item from its section?");
+      expect(
+        [...dialog.querySelectorAll('[data-test="remove-selected-items"] li')].map(text),
+      ).toEqual(["Lemonade, from Drinks"]);
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "s-drinks", memberId: "m-lemonade" },
+        ]),
+      );
+    });
+
+    it("moves a member ticked in two places once", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      await tickLemonadeInBothPlaces(el);
+      q(el, '[data-test="selection-move"]')!.click();
+      await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
+      await el.updateComplete;
+      expect(modal(el, "move-selected").getAttribute("heading")).toBe("Move 1 item");
+      await chooseOption(
+        inModal<HTMLElementTagNameMap["wt-combobox"]>(
+          el,
+          "move-selected",
+          'wt-combobox[name="destination"]',
+        ),
+        "root-lunch",
+      );
+      await el.updateComplete;
+      inModal(el, "move-selected", '[data-test="move-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("root-lunch", [
+          { listId: "s-drinks", memberId: "m-lemonade" },
+        ]),
+      );
+    });
+
+    it("leaves selected rows out of a request while one of their sections is moved, wherever it is shown", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      await toggleRow(el, "m-fav");
+      await toggleRow(el, "m-fav/m-fav-drinks");
+      await pressSelect(el);
+      await tick(el, "m-drinks");
+      await tick(el, "m-fav/m-fav-drinks/m-lemonade");
+      q(el, '[data-test="selection-move"]')!.click();
+      await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
+      await el.updateComplete;
+      expect(modal(el, "move-selected").getAttribute("heading")).toBe("Move 1 item");
+      const destination = inModal<HTMLElementTagNameMap["wt-combobox"]>(
+        el,
+        "move-selected",
+        'wt-combobox[name="destination"]',
+      );
+      await chooseOption(destination, "s-fav");
+      await el.updateComplete;
+      inModal(el, "move-selected", '[data-test="move-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("s-fav", [
+          { listId: "root-lunch", memberId: "m-drinks" },
+        ]),
+      );
+    });
+
+    it("ticks only the matching rows when everything is selected during a search, and moves only those", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      emit(q(el, 'wt-input[name="structure-search"]')!, "wt-change", { value: "Lemonade" });
+      await settleStructure(el);
+      await pressSelect(el);
+      inStructure(el, '[data-test="select-all"]')!.click();
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual([
+        "m-drinks/m-lemonade",
+        "m-fav/m-fav-lemonade",
+        "m-fav/m-fav-drinks/m-lemonade",
+      ]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("3 selected");
+      q(el, '[data-test="selection-move"]')!.click();
+      await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
+      await el.updateComplete;
+      expect(modal(el, "move-selected").getAttribute("heading")).toBe("Move 2 items");
+      await chooseOption(
+        inModal<HTMLElementTagNameMap["wt-combobox"]>(
+          el,
+          "move-selected",
+          'wt-combobox[name="destination"]',
+        ),
+        "root-lunch",
+      );
+      await el.updateComplete;
+      inModal(el, "move-selected", '[data-test="move-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("root-lunch", [
+          { listId: "s-drinks", memberId: "m-lemonade" },
+          { listId: "s-fav", memberId: "m-fav-lemonade" },
+        ]),
+      );
+    });
+
+    it("trims the open Remove confirm when a live update takes a row away, and closes it once none is left", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      await toggleRow(el, "m-fav");
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await tick(el, "m-fav/m-fav-lemonade");
+      await openRemove(el);
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
+        "Remove 2 items from their sections?",
+      );
+
+      const [, drinks, favourites] = lunchNodes();
+      client.getMenuStructure.mockResolvedValue(lunchWith([drinks!, favourites!]));
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() =>
+        expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
+          "Remove 1 item from its section?",
+        ),
+      );
+      expect(
+        [
+          ...modal(el, "remove-selected").querySelectorAll(
+            '[data-test="remove-selected-items"] li',
+          ),
+        ].map(text),
+      ).toEqual(["Lemonade, from Favourites"]);
+
+      client.getMenuStructure.mockResolvedValue(
+        lunchWith([drinks!, { ...favourites!, children: [drinksNode("m-fav-drinks")] }]),
+      );
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() => expect(modal(el, "remove-selected").open).toBe(false));
+      expect(client.removeSectionMembers).not.toHaveBeenCalled();
+    });
+
+    it("clears the chosen Move destination when a live update takes it away, and closes the dialog once nothing is left to move", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      q(el, '[data-test="selection-move"]')!.click();
+      await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
+      await el.updateComplete;
+      const destination = () =>
+        inModal<HTMLElementTagNameMap["wt-combobox"]>(
+          el,
+          "move-selected",
+          'wt-combobox[name="destination"]',
+        );
+      const save = () =>
+        inModal<HTMLElementTagNameMap["wt-button"]>(
+          el,
+          "move-selected",
+          '[data-test="move-selected-save"]',
+        );
+      await chooseOption(destination(), "s-fav");
+      await el.updateComplete;
+      expect(save().disabled).toBe(false);
+
+      const [burger, drinks] = lunchNodes();
+      client.getMenuStructure.mockResolvedValue(lunchWith([burger!, drinks!]));
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() => expect(destination().value).toBe(""));
+      await el.updateComplete;
+      expect(modal(el, "move-selected").open).toBe(true);
+      expect(save().disabled).toBe(true);
+      expect(save().variant).toBe("secondary");
+
+      client.getMenuStructure.mockResolvedValue(lunchWith([drinks!]));
+      live.invalidate([{ type: "section_members" }]);
+      await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(false));
+      expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
+    });
+
+    it("holds Select and Done while a write is out", async () => {
+      const removing = deferred<void>();
+      const client = api({ removeSectionMember: vi.fn(() => removing.promise) });
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      const done = () => q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-done"]')!;
+      await rowAction(el, "m-burger", "remove");
+      await vi.waitFor(() => expect(client.removeSectionMember).toHaveBeenCalledOnce());
+      await el.updateComplete;
+      expect(selectToggle(el).disabled).toBe(true);
+      expect(done().disabled).toBe(true);
+      selectToggle(el).click();
+      done().click();
+      await settleStructure(el);
+      expect(structure(el).selecting).toBe(true);
+
+      removing.resolve();
+      await vi.waitFor(() => expect(selectToggle(el).disabled).toBe(false));
+      await el.updateComplete;
+      expect(done().disabled).toBe(false);
+    });
+
+    it("clears the search when the menu empties", async () => {
+      let removed = false;
+      const client = api({
+        getMenuStructure: vi.fn(async () =>
+          lunchWith(removed ? [] : [productNode("m-burger", "p-burger")]),
+        ),
+        removeSectionMember: vi.fn(async () => {
+          removed = true;
+        }),
+      });
+      const el = await mountLunch(client);
+      await vi.waitFor(() => expect(rowOf(el, "m-burger")).not.toBeNull());
+      emit(q(el, 'wt-input[name="structure-search"]')!, "wt-change", { value: "Burger" });
+      await settleStructure(el);
+      await rowAction(el, "m-burger", "remove");
+      await vi.waitFor(() =>
+        expect(
+          structure(el).shadowRoot!.querySelector('[data-test="new-section-empty"]'),
+        ).not.toBeNull(),
+      );
+      await settleStructure(el);
+      expect(structure(el).search).toBe("");
+      expect(
+        q<HTMLElementTagNameMap["wt-input"]>(el, 'wt-input[name="structure-search"]')!.value,
+      ).toBe("");
+    });
+
     describe("Move to section", () => {
       const moveButton = (el: MenusScreen) =>
         q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!;

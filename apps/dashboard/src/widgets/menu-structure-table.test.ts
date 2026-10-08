@@ -842,7 +842,7 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
   },
 );
 
-it("puts a real grip on every top-level row, the included menu's too, and starts their names at one offset", async () => {
+it("puts a real grip on every top-level row, the included menu's too, and starts each name after the arrow and media slots", async () => {
   const el = await mountDeep();
   const offsets = ["m-burger", "m-drinks", "m-fav", "included-wine"].map((key) => {
     const tr = row(el, key)!;
@@ -850,8 +850,12 @@ it("puts a real grip on every top-level row, the included menu's too, and starts
     expect(tr.querySelector('[part~="grip-space"]'), key).toBeNull();
     return pieces(el, key).name.left - tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
   });
-  expect(offsets[0]).toBeGreaterThan(0);
-  for (const offset of offsets) expect(offset).toBeCloseTo(offsets[0]!, 0);
+  const tokens = getComputedStyle(el);
+  const tap = parseFloat(tokens.getPropertyValue("--wt-tap-min"));
+  const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
+  expect(tap).toBeGreaterThan(0);
+  // The control column precedes the name cell; the arrow and media slot stay inside it.
+  for (const offset of offsets) expect(offset).toBeCloseTo(2 * tap + gap, 0);
 });
 
 // The name and any note under it (an included menu's "read only here") are centred as one.
@@ -2411,6 +2415,74 @@ describe("search and the Available filter", () => {
     await search(el, "");
     expect(shown(el)).toEqual(["m-burger", "m-fav", "m-drinks"]);
   });
+
+  it("sends the full list's index when a hidden sibling sits before the shown ones", async () => {
+    const el = await mount();
+    const moves = listen(el, "wt-member-move");
+    // Drinks and Favourites match; Burger, first in the list, is hidden.
+    await search(el, "i");
+    expect(shown(el).filter((key) => !key.includes("/"))).toEqual(["m-drinks", "m-fav"]);
+    await press(el, "m-fav", "ArrowUp");
+    expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 1 }]);
+  });
+});
+
+describe("Select mode while a search or filter hides rows", () => {
+  const boxKeys = (el: MenuStructureTable) =>
+    all<HTMLInputElement>(el, 'input[type="checkbox"][data-test^="select-"]')
+      .map((box) => box.dataset.test!)
+      .filter((test) => test !== "select-all")
+      .map((test) => test.slice("select-".length));
+
+  async function selectAll(el: MenuStructureTable): Promise<unknown[]> {
+    const changes = listen(el, "wt-selection-change");
+    item(el, "select-all").click();
+    await settle(el);
+    return changes;
+  }
+
+  it("gives a section kept only on the way to a match no box, so select all ticks only the matches", async () => {
+    const el = await mount({ selecting: true, search: "Lemonade" });
+    expect(boxKeys(el)).toEqual([
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    expect(await selectAll(el)).toEqual([
+      {
+        selected: ["m-drinks/m-lemonade", "m-fav/m-fav-lemonade", "m-fav/m-fav-drinks/m-lemonade"],
+      },
+    ]);
+  });
+
+  it("keeps a box on a section whose own name matches", async () => {
+    const el = await mount({ selecting: true, search: "drinks" });
+    expect(boxKeys(el)).toContain("m-drinks");
+    expect(boxKeys(el)).toContain("m-fav/m-fav-drinks");
+    expect(boxKeys(el)).not.toContain("m-fav");
+    el.search = "";
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  });
+
+  it("gives no section or included menu a box while the Available filter is on", async () => {
+    const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
+    const el = await mount({
+      selecting: true,
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((each) => (each.id === "p-lemonade" ? lemonade : each)),
+    });
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "no");
+    await settle(el);
+    expect(boxKeys(el)).toEqual([
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "");
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav", "included-wine"]);
+  });
 });
 
 describe("Select mode", () => {
@@ -2436,8 +2508,17 @@ describe("Select mode", () => {
       "select-m-fav",
       "select-included-wine",
     ]);
-    expect(item(el, "select-m-drinks/m-lager").getAttribute("aria-label")).toBe("Lager");
-    expect(item(el, "select-included-wine").getAttribute("aria-label")).toBe(menuLabel("Wines"));
+    const inList = (name: string, list: string) =>
+      t("menus.selection_label").replace("{name}", name).replace("{list}", list);
+    expect(item(el, "select-m-drinks/m-lager").getAttribute("aria-label")).toBe(
+      inList("Lager", "Drinks"),
+    );
+    expect(item(el, "select-m-burger").getAttribute("aria-label")).toBe(
+      inList("Burger", "Lunch Menu"),
+    );
+    expect(item(el, "select-included-wine").getAttribute("aria-label")).toBe(
+      inList(menuLabel("Wines"), "Lunch Menu"),
+    );
     // Rows inside an included menu are edited only from that menu's own page.
     expect(shown(el)).toContain("included-wine/wine-lager");
     expect(inTable(el, '[data-test="select-included-wine/wine-lager"]')).toBeNull();

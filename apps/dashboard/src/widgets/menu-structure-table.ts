@@ -207,6 +207,8 @@ export class MenuStructureTable extends LitElement {
   #target: string | undefined = undefined;
   #pointer = { x: 0, y: 0 };
   @state() private ghost: DragGhost | null = null;
+  /** Whether a column filter is narrowing the rows, as the table last reported. */
+  @state() private filtering = false;
 
   override disconnectedCallback(): void {
     if (this.#drag) this.#finishDrag();
@@ -479,6 +481,21 @@ export class MenuStructureTable extends LitElement {
       .replace("{index}", String(at + 1))
       .replace("{total}", String(shown.length));
   }
+
+  /** While a search or filter narrows the rows, a section the table keeps only on the way to a
+   * match would carry everything the search hides when acted on, so only one that matches itself
+   * takes a box. No section answers the Available filter, so none matches while it is on. */
+  #rowSelectable(row: Row): boolean {
+    if (row.readOnly) return false;
+    if (row.node.ref.kind !== "section") return true;
+    if (this.filtering) return false;
+    const term = this.search.trim().toLocaleLowerCase();
+    return term === "" || row.name.toLocaleLowerCase().includes(term);
+  }
+
+  readonly #filterChange = (event: CustomEvent<{ filters: Record<string, string | string[]> }>) => {
+    this.filtering = Object.values(event.detail.filters).some((value) => value.length > 0);
+  };
 
   #ownedSection(row: Row): boolean {
     return row.node.ref.kind === "section" && !row.readOnly && !row.node.includedMenuId;
@@ -843,13 +860,15 @@ export class MenuStructureTable extends LitElement {
         .rowParent=${(row: Row) => row.parentKey}
         .selectable=${this.selecting}
         .selected=${this.selected}
-        .rowSelectable=${(row: Row) => !row.readOnly}
-        .selectionLabel=${(row: Row) => row.name}
+        .rowSelectable=${(row: Row) => this.#rowSelectable(row)}
+        .selectionLabel=${(row: Row) =>
+          t("menus.selection_label").replace("{name}", row.name).replace("{list}", row.holder)}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
           event.stopPropagation();
           this.#send("wt-selection-change", { selected: event.detail.selected });
         }}
         @wt-expand-change=${this.#expandChange}
+        @wt-filter-change=${this.#filterChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
         ><slot name="toolbar-search" slot="toolbar-search"></slot>${
           empty

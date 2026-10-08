@@ -219,11 +219,6 @@ function ownedKeys(nodes: readonly MenuStructureNode[], parent = ""): string[] {
   });
 }
 
-/** A selected row whose ancestor is also selected goes with that ancestor. */
-function outermost(keys: readonly string[]): string[] {
-  return keys.filter((key) => !keys.some((other) => key.startsWith(`${other}/`)));
-}
-
 /** Every section the menu owns, once each, by the path to its first row, in tree order. */
 function ownedSections(
   nodes: readonly MenuStructureNode[],
@@ -850,6 +845,7 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
+    if (changed.has("structure")) this.#keepSelectionDrawn();
     this.#trackMoveDraft();
     if (changed.has("structure") || changed.has("path")) {
       this.#resolvePath();
@@ -858,16 +854,6 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       const reached = reachable(this.structure?.nodes ?? []);
       this.#onMenu = reached.products;
-      // An empty menu's table draws no toolbar, so nothing could turn the mode off.
-      if (this.structure?.nodes.length === 0) {
-        this.structureReordering = false;
-        this.structureSelecting = false;
-      }
-      const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
-      const kept = this.structureSelecting
-        ? this.structureSelected.filter((key) => owned.has(key))
-        : [];
-      if (kept.length !== this.structureSelected.length) this.structureSelected = kept;
     }
     if (changed.has("structure") || changed.has("addingProducts")) {
       const target = this.addingProducts;
@@ -2429,7 +2415,9 @@ export class MenusScreen extends LitElement {
           data-test="select"
           aria-label=${t("folders.select")}
           aria-pressed=${String(this.structureSelecting)}
+          ?disabled=${this.busy}
           @click=${() => {
+            if (this.busy) return;
             this.structureSelected = [];
             this.structureSelecting = !this.structureSelecting;
           }}
@@ -2496,7 +2484,7 @@ export class MenusScreen extends LitElement {
           if (count === 0 || this.busy) return;
           this.moveSelectedError = "";
           this.moveDestination = "";
-          this.movingSelected = this.#inTreeOrder(outermost(this.structureSelected));
+          this.movingSelected = this.#sentKeys(this.#inTreeOrder(this.structureSelected));
         }}
         >${t("menus.move_selected")}</wt-button
       >
@@ -2507,14 +2495,17 @@ export class MenusScreen extends LitElement {
         @click=${() => {
           if (!removable || this.busy) return;
           this.removeSelectedError = "";
-          this.removingSelected = outermost(this.structureSelected);
+          this.removingSelected = this.#sentKeys(this.structureSelected);
         }}
         >${t("menus.remove_selected")}</wt-button
       >
       <wt-button
         data-test="selection-done"
         variant="secondary"
-        @click=${() => void this.#leaveSelecting()}
+        .disabled=${this.busy}
+        @click=${() => {
+          if (!this.busy) void this.#leaveSelecting();
+        }}
         >${t("action.done")}</wt-button
       >
       ${
@@ -2525,6 +2516,58 @@ export class MenusScreen extends LitElement {
           : nothing
       }
     </div>`;
+  }
+
+  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows still drawn. */
+  #keepSelectionDrawn(): void {
+    // An empty menu's table draws no toolbar, so nothing could turn a mode off or clear the search.
+    if (this.structure?.nodes.length === 0) {
+      this.structureReordering = false;
+      this.structureSelecting = false;
+      this.structureSearch = "";
+    }
+    const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
+    const kept = this.structureSelecting
+      ? this.structureSelected.filter((key) => owned.has(key))
+      : [];
+    if (kept.length !== this.structureSelected.length) this.structureSelected = kept;
+    const trim = (keys: string[] | null): string[] | null => {
+      const left = keys?.filter((key) => owned.has(key)) ?? [];
+      if (left.length === keys?.length) return keys;
+      return left.length > 0 ? left : null;
+    };
+    this.removingSelected = trim(this.removingSelected);
+    this.movingSelected = trim(this.movingSelected);
+    if (
+      this.movingSelected !== null &&
+      !this.#moveDestinations(this.movingSelected).some(
+        ({ value }) => value === this.moveDestination,
+      )
+    )
+      this.moveDestination = "";
+  }
+
+  /** The selected rows a bulk change sends. A row inside a selected section travels with it, in
+   * every place that section is shown, and a member shown in two places is sent once: the server
+   * refuses a request naming one member twice. */
+  #sentKeys(selected: readonly string[]): string[] {
+    const sections = new Set(
+      selected.flatMap((key) => {
+        const node = nodeAt(this.structure, key.split("/"));
+        return node?.ref.kind === "section" && !node.includedMenuId ? [node.ref.sectionId] : [];
+      }),
+    );
+    const members = new Set<string>();
+    return selected.filter((key) => {
+      const path = key.split("/");
+      const above = trailOf(this.structure, path.slice(0, -1));
+      if (above.some(({ ref }) => ref.kind === "section" && sections.has(ref.sectionId)))
+        return false;
+      const member = JSON.stringify([this.#targetAt(path.slice(0, -1)).listId, path.at(-1)]);
+      if (members.has(member)) return false;
+      members.add(member);
+      return true;
+    });
   }
 
   /** Each selected row as the list holding it and its member id, with the names the confirm shows. */

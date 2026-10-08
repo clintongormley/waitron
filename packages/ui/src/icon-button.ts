@@ -25,6 +25,11 @@ export const iconButtonStyles = css`
     cursor: pointer;
   }
 
+  .icon-button:disabled {
+    cursor: default;
+    opacity: var(--wt-opacity-disabled);
+  }
+
   .icon-button:focus-visible {
     outline: var(--wt-focus-ring);
     outline-offset: var(--wt-focus-offset);
