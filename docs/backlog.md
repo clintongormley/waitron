@@ -7377,6 +7377,11 @@ every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `med
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A _Small_ item that
 turns out to need a design moves to its track.
 
+**A394 — refusal statuses by one rule — AUDIT DONE 2026-10-08; A394-1 to A394-22 OPEN.** Read, not
+run: of 49 boundaries, 96 status rows break the rule (`docs/developers/conventions-data.md`); 17 defects
+answer 500 or success for a missing id (A394-1 to -6 first); 16 owner questions; A394-8 settles A374's.
+The follow-ups and the rows: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+
 **Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed — OPEN (found 2026-10-03 by #1139's
 review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
 `docs/developers/conventions-data.md`, and checked their line numbers against 0.45.3. Still naming

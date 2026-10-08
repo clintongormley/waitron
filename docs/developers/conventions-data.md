@@ -34,6 +34,22 @@ reserved for facts about the process itself (`apps/server/src/errors.ts`). Every
 code imports its registry (`import "./errors.js"`); reachability is guarded once, in the root
 project (§4).
 
+## A refusal's HTTP status says what was wrong, by one rule for every API
+
+The owner's rule (2026-10-08): the thing the request's path points at is missing → 404; something
+the body (a form, a bundle, an import) refers to is missing or unusable → 400; a clash with stored
+data → 409; a file or copy that cannot be opened → 422. So one code can rightly answer 404 on one
+route and 400 on another: `service_zone.not_found` for `GET /api/service-zones/:zoneId/offers`,
+and for a zone a body names. A boundary (`createErrorBoundary`,
+`packages/server-kit/src/error-boundary.ts`) answers the status its table gives a code, and 400
+for a code its table leaves out; a route that needs another status for one code gets a second
+boundary over a spread of the table, as `runSize` in `apps/server/src/catalogue-api.ts` does.
+On 2026-10-08 `git grep -E 'status (===|!==) ?[0-9]{3}'` over the client trees found three
+status reads: the till's 403 check (`department-transfer-monitor.ts`), the setup app's 404 read as
+"already set up" (`setup-app.ts`) and the menus screen's `!== 200`; refusals are told apart by
+code. Nothing guards the rule. The routes that broke it on that date, and the follow-ups that fix
+them: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+
 ## A recorded incident code needs an area claim and English and Spanish alert wording
 
 An incident whose code no module claims (`alerts.events` on its module descriptor, matched by the
