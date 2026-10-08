@@ -13,10 +13,10 @@ commits=""
 changed_paths=""
 # Main's commits leave the sign-off range only when origin/main is fresh from the remote: a local
 # ref can name commits the remote never had. stdin is the pushed refs, so the fetch must not read it.
-signed_main=""
+fetched_main=""
 if node scripts/run-with-deadline.mjs "${WAITRON_PRE_PUSH_FETCH_SECONDS:-20}" -- \
   git fetch -q --no-tags origin '+refs/heads/main:refs/remotes/origin/main' </dev/null; then
-  signed_main=$(git rev-parse --verify -q 'origin/main^{commit}' 2>/dev/null) || signed_main=""
+  fetched_main=$(git rev-parse --verify -q 'origin/main^{commit}' 2>/dev/null) || fetched_main=""
 else
   echo "pre-push: could not refresh origin/main — every commit in the push range is sign-off-checked"
 fi
@@ -42,8 +42,8 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
   fi
 
   # A rebase brings main's commits into this range; they are not this push's to sign.
-  if [ -n "$signed_main" ]; then
-    range_commits=$(git rev-list "$base..$local_sha" "^$signed_main" 2>/dev/null) || {
+  if [ -n "$fetched_main" ]; then
+    range_commits=$(git rev-list "$base..$local_sha" "^$fetched_main" 2>/dev/null) || {
       range_unknown=1
       continue
     }
