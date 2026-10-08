@@ -106,3 +106,21 @@ enums, but a user-definable kitchen-status list does not exist.
   releases its unsaved-changes registration as soon as the save succeeds, before the refresh
   that follows has settled. A routing cell now keeps its registration until that refresh
   settles. Not changed in A261-4.
+
+## KDS corrections deferred from #191
+
+- **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
+  status — the ticket must travel with the line, not re-fire (`moveTabLines`, which dropped it, was
+  deleted by service plan Task 13; whether this still holds for the paths that move lines now is not
+  checked); hold-on-send without courses plus a venue disable setting; FP-1's empty-named
+  child-modifier row; device-scoped fire/collect routes. Then the low-priority KDS list under
+  [KDS operations](../backlog/kitchen.md#kds-operations--low-priority-a9).
+
+## Mark a new dish as urgent
+
+- **Mark a new dish as urgent** (owner, 2026-09-27). A waiter can already send a new dish straight
+  to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
+  a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today. Not
+  designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
+  may set it. Releasing an ALREADY-held group stays with whoever the venue's `fire_control` setting
+  names — the waiter asks the kitchen or pass when that is not the waiter.

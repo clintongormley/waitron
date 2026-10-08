@@ -142,7 +142,7 @@ whole text in the area's detail file under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-_Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal items._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
+_Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
 - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
   matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
@@ -381,6 +381,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   open by the reviews of A261 step 5 (Hours, #1298); the file is a frozen record of the old grants
   and was not edited.
 
+- **Installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
+  (`apps/server/src/setup-api.ts`), and nothing watches when it expires. Needs a view, renew and
+  replace surface and an expiry alert. Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#installing-or-renewing-the-aeat-certificate-after-setup)
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -567,7 +572,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
-_Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
+_Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
 - **A420 part 2 — fill missing translations in place (lane E, pending).** The owner approved
   [the spec](superpowers/specs/2026-10-08-a420-inline-translations.md) on 2026-10-08: one selected
@@ -812,9 +817,16 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   a deleted product's partly translated name blocks a change of default while the Missing
   translations list leaves it out. [Detail](backlog/catalogue.md#the-default-change-check-counts-deleted-and-switched-off-things--open-noted-2026-10-01-by-c122-i-believe-this-predates-the-branch)
 
+- **Menu draft/published state** and time-of-day / seasonal scheduling.
+
+- **Language resolution follow-ons** — there is still no single shared rule: the receipt's
+  `lineName` (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
+  (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
+  [Detail](backlog/catalogue.md#language-resolution-follow-ons)
+
 ### Service periods, opening hours and departments
 
-_Formerly entries spread across the old sections, A261's venue-operations steps among them._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
+_Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
 - **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
   way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
@@ -884,7 +896,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 ### The kitchen and preparation
 
-_Formerly Track A's kitchen part, and kitchen entries elsewhere._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
+_Formerly Track A's kitchen part, and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
 - **The dashboard's read-only Prep stations screen still shows only its Stations tab, so a view-only
   manager does not see the watcher list there** — left open by W110b (#1278) and A285 (#1308): `GET /management-api/watchers`
@@ -1025,9 +1037,26 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere._ Detail: [backl
   back, the message still names the zone; and only a returning zone or product has a test that the
   message clears — a returning category or No category row has none.
 
+- **Counter/walk-up kitchen fire** — the #193 follow-up, the next piece of menu work.
+
+- **KDS corrections deferred from #191** — owner, 2026-09-01. A moved dish must keep its kitchen
+  status — the ticket must travel with the line, not re-fire. Then the low-priority KDS list under
+  [KDS operations](backlog/kitchen.md#kds-operations--low-priority-a9).
+  [Detail](backlog/kitchen.md#kds-corrections-deferred-from-191)
+
+- **Order-timing and modifier follow-ons**: delivery-order floor flash, idle-floor escalation,
+  station-kind threshold defaults, an unbumped-since-fire metric; on-screen modifier `×N`, the shared
+  `#allergens` render, the KDS-versus-till unreviewed-dish call, post-fire note edit
+  (needs a re-fire endpoint), the TS-4 partial-transfer modifier-split guard.
+
+- **Mark a new dish as urgent** — owner, 2026-09-27. A waiter can already send a new dish straight
+  to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
+  a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today.
+  [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
+
 ### The till, devices and table service
 
-_Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
+_Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
   find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
@@ -1748,9 +1777,63 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   (#1274), outside that zone item; a separate follow-up should identify each label key and force
   another-key clash.
 
+- **Unresolved observation from W101 verification** — left open by W101 (#1351). Two full local
+  `@waitron/till test:coverage` runs logged an unhandled rejection in `#holdIdentity` while
+  `#switchProfile` was reading identity. The triggering test and cause are unverified; isolate the
+  profile-switch case and its identity response before choosing a fix.
+  [Detail](backlog/till.md#unresolved-observation-from-w101-verification)
+
+- **A card payment stuck `attempting` holds its device's profile switch** until a manager resolves
+  it on Payments. Left open by W97 (#1311). The till only says to switch once it finishes; point
+  it at the Payments screen.
+  [Detail](backlog/till.md#a-card-payment-stuck-attempting-holds-its-devices-profile-switch)
+
+- **The till's Profile button shows whenever the device has more than one approved profile**, read
+  at boot: neither approvals added later nor the signed-in person's admission hide or show it
+  until the dialog reads `/api/device/me` again. Left open by W97 (#1311).
+  [Detail](backlog/till.md#the-tills-profile-button-shows-whenever-the-device-has-more-than-one-approved-profile)
+
+- **The profile editor reads people and the venue's departments and zones**, so it needs
+  `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
+  last today. Left open by W97 (#1311).
+  [Detail](backlog/till.md#the-profile-editor-reads-people-and-the-venues-departments-and-zones)
+
+- **`apps/dashboard/src/screens/device-profiles-screen.ts` is over 1,600 lines**; "Where it
+  serves" and "Who can sign in" could become widgets of their own. Left open by W97 (#1311).
+
+- **Owner questions, each with the default built (answer when convenient)** — left open by W100
+  (#1332). Removed: staff can no longer switch a device's printing off. Not shown: whether
+  equipment is disconnected.
+  [Detail](backlog/till.md#owner-questions-each-with-the-default-built-answer-when-convenient)
+
+- **If the till's last 15-second check said a reader was busy and that payment has since
+  finished**, picking it skips "Take it?" and the server refuses it as held, so staff pick again.
+  Left open by W100 (#1332), found by reading, not run.
+
+- **If a profile switch succeeds but its reply is lost**, a check sent before the switch can
+  briefly show the old profile's reader until the next check. Left open by W100 (#1332), found by
+  reading, not run.
+
+- **The till's equipment poll and menu poll are near copies and could share one class** (left out
+  of #1332 as too large). Left open by W100 (#1332).
+
+- **Table states and signals (A267)** — OPEN, needs a design session (owner, 2026-10-03). From
+  A261 §10. [Detail](backlog/till.md#table-states-and-signals-a267)
+
+- **Handheld shared-table updates** — still queued: automatic table-content refresh while two
+  waiters work on the same table. W101 supplies transfer-specific updates. Spec the wider
+  subscription model when it matters.
+
+- **Device profile follow-ons**: the aggregated device-profile bundle (till, station, hardware, area,
+  order routing, printer target on the profile); the visual theme editor. The canvas-editor
+  follow-ons that stood here, and a canvas-driven table-order screen, gave way to A4's A182.
+
+- **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
+  recurring, a calendar grid, deposits.
+
 ### Printers, the print agent and receipts
 
-_Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
+_Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
 - **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the log do. [Detail](backlog/printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
 
@@ -2051,7 +2134,7 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
 
 ### Payments and card readers
 
-_Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backlog/payments.md).
+_Formerly A6, and Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
   the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
@@ -2195,9 +2278,18 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
   flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
   `sale.empty_basket`.
 
+- **The practice-mode simulator writes no `attempting` row**, so a switch during a practice card
+  payment is never refused (read, not run). Left open by W97 (#1311), beside the owner's decision
+  on in-flight writes ([till decisions](backlog/till.md#decisions-and-deliberate-limits)).
+
+- **If the till never receives a bill reader payment's `device.profile_changed` answer**, its
+  automatic resend under the same id gets the failed payment back and tells staff the card was
+  declined: no card was charged, but the reason shown is wrong; the next tap starts a fresh
+  payment (read, not run). Left open by W97 (#1311).
+
 ### Users, sign-in and the dashboard shell
 
-_Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
+_Formerly A7, and Track A's dashboard part; part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **`date-utils.test.ts` has a test titled as guarding "against a vacuous pass"** — found by #612
   while pruning comments. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing
@@ -2503,7 +2595,7 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
 
 ### Interface languages
 
-_Formerly entries spread across the old sections, C125 among them._ Detail: [backlog/languages.md](backlog/languages.md).
+_Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
 - **The recovery page's Spanish (#650) has not been read by a native speaker.** Left open by SQLite
   slice 2 Task 3a (#566, one process per venue folder; #573; #608).
@@ -2570,9 +2662,13 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   and `expected`, so a new money slot under another name is unseen.** Left open by C43 (money in
   the dashboard shows its currency sign, #830).
 
+- **Logging Slice 2 — one-touch bug report**, then Slice 3 triage and forwarding, with the Slice 1
+  hardening (client-trail key allowlist, `maskPath` PII, the setup app). Detail under
+  [Logging, diagnostics & one-touch bug report](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
+
 ### Working time and staff
 
-_Formerly A10._ Detail: [backlog/workforce.md](backlog/workforce.md).
+_Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
 - **A shift that runs past midnight (22:00–02:00) is refused as `shift.invalid`** — left open by W22
   (#1134), found by #1134's review. And an edit keeps the shift's stored offsets, so moving a shift
@@ -2580,6 +2676,11 @@ _Formerly A10._ Detail: [backlog/workforce.md](backlog/workforce.md).
   next day when it is not after the start, and derive each offset from the venue's time zone for the
   date.
   [Detail](backlog/workforce.md#a-shift-that-runs-past-midnight-22000200-is-refused-as-shiftinvalid)
+
+- **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
+  hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and
+  scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
+  numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
 
 ### Purchasing, recipes, stock and reports
 
@@ -3121,7 +3222,7 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-_Formerly B9, and Track C's development-stack and house-rules items._ Detail: [backlog/ci.md](backlog/ci.md).
+_Formerly B9, and Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
   `wa-wt reset demo <name>` rebuilds it as the demo business, tax ID `B00000000` (W108). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
@@ -3405,6 +3506,16 @@ _Formerly B9, and Track C's development-stack and house-rules items._ Detail: [b
   folders, so nothing checks that venue-service's dashboard code stays free of server imports** —
   left open by the reviews of A261 step 5 (Hours, #1298).
 
+- **Task 2's review found no test that fails when `device_profile_admission_roles` or
+  `device_profile_admission_persons` is left out of
+  `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run); both tables' keys into
+  `device_profiles` cascade on delete (identity `0007_profile_admission.sql`). Left open by W97
+  (#1311).
+
+- **The payments test "refreshes only active reader statuses" failed once locally beside another
+  coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
+  (#1332).
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -3513,7 +3624,7 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 ### Modules, data and code health
 
-_Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/architecture.md](backlog/architecture.md).
+_Formerly B8, parts of B9, and Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
@@ -3781,6 +3892,16 @@ _Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/ar
   answer the same code 409** — left open by A393 (#1425) (`packages/venue-service/src/routes.ts`,
   `apps/server/src/management-api.ts`), which A394's audit covers too.
   [Detail](backlog/architecture.md#the-configuration-import-answers-zonedepartment_inactive-400-while-the-dashboards-saves-answer-the-same-code-409)
+
+- **`listOrders`'s `orderIn` filter (`apps/server/src/orders-list.ts`) is applied to `r.id`**,
+  which for a sale row of the union is the sale's id, not its order's: today's only caller
+  asks for collectable rows, so nothing reaches it, but a caller without `collectable: true`
+  would get every sale row unfiltered. Left open by W97 (#1311).
+
+- **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
+  dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
+  the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
+  (`apps/dashboard/src/dashboard-app.ts`); Servers (`mirror.create`) is the first to use it.
 
 ### Data protection and legal compliance
 
@@ -5838,280 +5959,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
   and decides whether the product editor keeps both summaries.
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
-
-### A9. Product depth — after the primary works
-
-- **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
-  access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
-  action flags); equipment LANDED except NFC (W100, #1332); transfers DONE (W101).
-  Transfers have request storage, directional
-  settings, withdrawal, manager settings routes and editor, usable receiving-profile choices,
-  configuration export/import and the acceptance/decline service. The editor protects staged desk and
-  destination choices and reports field refusals. Authenticated till writes now request, withdraw,
-  accept and decline through the generic service contract. The route cases include the two-device
-  acceptance race and an issued, placed tab whose fiscal rows, line contexts and queued kitchen work
-  are read back unchanged. Authenticated reads now provide usable destinations, source status,
-  the designated desk's durable pending queue/count and transfer-specific current tab/kitchen
-  detail without granting ordinary cross-department browsing. The server now streams authenticated
-  reload signals for committed transfer changes to tills, rechecks access on signals and heartbeats,
-  and leaves device sightings unchanged. Signals carry no request or tab identity; durable reads
-  remain the queue authority. The till client now provides the transfer reads/writes and consumes
-  authenticated reload frames. Its transfer monitor reloads on reconnect, polls durable reads,
-  separates notification dismissal from the pending queue and forgets its source selection at
-  session end. A department-wide sent-history read now discovers accepted tabs after they leave
-  the source list, including after a fresh login; the monitor can follow this history without a
-  selected tab. Settlement, abandonment, merging and reassignment now withdraw pending requests
-  in the writer's transaction; resolved transfer history stays recorded. The server cases exercise
-  cash, bill and integrated-card settlement, capture recovery, cancellation, party closure, merging
-  and reassignment, including rollback and invoice preservation on retries. Closing a party
-  withdraws requests for its retained unpaid invoices too, and a closed party refuses new requests.
-  The monitor now follows the till's authenticated operator, profile and server lifetimes,
-  discovers department-wide sender history and stops on logout, detachment or replacement.
-  The receiving desk's pending count updates from durable reads; another profile has no count,
-  and an unanswered first read is not shown as zero. A transfer-access refusal clears the monitor
-  without logging out an otherwise signed-in operator. Till notifications now show incoming requests
-  and resolved sender statuses; dismissal leaves the durable queue and history intact. A read-only
-  transfer dialog lists pending requests and sender history, and opens the current ordered items and
-  outstanding kitchen work. Receiving actions now require a chosen destination zone and optional
-  table for acceptance, or a reason for decline, and submit the displayed tab revision. Their drafts
-  use the shared leave confirmation; field refusals retain input and allow a valid retry. Table-choice
-  reads time out after 25 seconds and can be cancelled or retried. A successful receiving write
-  clears the editor and reloads the durable queue. Closing or replacing a detail read aborts it and
-  ignores late replies; a resolved request or lost receiving access clears its displayed detail.
-  Sender controls now request the selected tab through a permitted destination choice and withdraw
-  a pending request. Destination drafts use the shared leave confirmation; successful requests keep
-  their pending result visible while the durable history reloads. A request is offered only while
-  the selected tab surface is showing, including a retrieved named counter tab. Transfer notices,
-  queue rows and sender history now identify the tab and source/destination departments; current
-  work names its recorded station even when switched off. Accepted source tabs leave the ordinary
-  selected-tab surface or matching counter basket, while a different basket stays intact. A resolved
-  receiving request or accepted source request refreshes floor, held and waiting lists. A departed
-  API client cannot install its list reply, and an outstanding retrieval cannot reopen the tab
-  after its transfer is accepted. Department-wide reads retain every pending request and the
-  newest 100 resolved requests; the open tab also reads its older history. A delayed history read
-  cannot announce the previously selected tab after selection changes. Current responsibility is read
-  separately from historical acceptance, so restarting the monitor does not retire a tab that has
-  returned to its source. Unsent counter edits and standalone table drafts are retained as read-only
-  local copies for explicit review and dismissal, rather than silently lost or resubmitted. These
-  copies remain in browser memory across sign-out; reloading the page loses them. Removing a sending
-  direction prevents new requests and leaves existing pending intent actionable; it does not revoke
-  requests already sent. Party-linked bills are refused before
-  queuing, and again at acceptance, rather than moving shared table/group links.**
-  **Unresolved observation from W101 verification:** two full local `@waitron/till test:coverage`
-  runs logged an unhandled rejection in `#holdIdentity` while `#switchProfile` was reading identity:
-  `Cannot read properties of null (reading 'approvedProfiles')`. Both completed with every test
-  passing; the second met coverage. Receipts: `~/waitron-campaign-d/receipts/w101/till-full-coverage.log`
-  and `till-full-coverage2.log`. The triggering test and cause are unverified; isolate the profile-switch
-  case and its identity response before choosing a fix. Transfer-focused runs did not log this rejection.
-  Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
-  equipment choices. Devices switch among approved profiles and select equipment and
-  station/watcher bindings; drawers are independent of receipt
-  printers. Portable equipment supports scan takeover and confirmed dropdown takeover, with busy
-  payment terminals protected. Tab transfers require acceptance at a shared departmental receiving
-  profile; existing preparation and pickup instructions stay unchanged. Menu work is A204 above.
-  [Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md);
-  [profile access and switching plan](superpowers/plans/2026-10-04-device-profile-access-and-switching.md);
-  [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md);
-  [departmental transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md).
-  §10 names the A238/A254/A261 decisions the approved design revises. A261 step 2 keeps its
-  existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them
-  (W97 retired the device-default-zone control, 2026-10-06; W98, #1331, retires the zone-menu
-  control).
-  - **W97 delivers** (the profile access and switching plan, Tasks 1–8): each ordering profile has
-    one department, its zones or all of them, and a starting zone, and the server refuses a zone,
-    order, table, party or bill outside them; who may sign in on a profile, by role with per-person
-    exceptions, decides the sign-in list, PIN login and a switch; a device's approved profiles,
-    which a signed-in person switches between on the till (refused during a card payment or with
-    an unsaved order); profile actions (take orders, cash, the two card kinds, prepare, hand over,
-    print, drawer) checked at the till routes beside the person's permissions, except those the
-    route map in `apps/server/src/till-api.profile-actions.test.ts` lists as unchecked by decision,
-    separate from the screens shown, and a starting screen; a kitchen display's station and watcher lists, from which
-    the manager picks each device's one; all of it in the profile editor and the Devices dialog.
-    The per-device default zone and its Departments and zones control are gone. Rules:
-    [conventions-ui.md](developers/conventions-ui.md), "A device's profile and the signed-in person
-    must both allow what the device does".
-  - **Handed on.** The [department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md)
-    replaces A261 step 2's Task 8 (zone-by-zone menus, the interim path) on
-    W98 (#1331, landed 2026-10-07): a menu is offered to
-    a department by its own list, and `zone_menus` and the per-zone menu editor are gone. The [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
-    must define portable assignment, Use default, busy-terminal protection and a drawer
-    independent of receipt printers before it removes today's printer choice, which a switch keeps
-    while the new profile lists the printer and otherwise replaces with the first usable one — done
-    by W100 (2026-10-07): a switch now puts a choice the new profile does not list on Use default. The
-    [transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md) consumes W97's
-    admission check and department scope.
-  - **Left open by W97** (each found in its review, none fixed on the branch):
-    - A card payment stuck `attempting` holds its device's profile switch until a manager resolves
-      it on Payments; an `initiated` one has no production writer today, and once hosted payments
-      are wired a missed `checkout.session.expired` webhook would hold it for good
-      (`assertNoPaymentInProgress`, `apps/server/src/device.ts`). The till only says to switch
-      once it finishes; point it at the Payments screen.
-    - The till's Profile button shows whenever the device has more than one approved profile, read
-      at boot: neither approvals added later nor the signed-in person's admission hide or show it
-      until the dialog reads `/api/device/me` again. Approvals stored on a disabled device come
-      back when it is enabled again through a join (unchecked whether that is wanted).
-    - `listOrders`'s `orderIn` filter (`apps/server/src/orders-list.ts`) is applied to `r.id`,
-      which for a sale row of the union is the sale's id, not its order's: today's only caller
-      asks for collectable rows, so nothing reaches it, but a caller without `collectable: true`
-      would get every sale row unfiltered.
-    - The profile editor reads people and the venue's departments and zones, so it needs
-      `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
-      last today. Edit and Duplicate fail with a read error when the departments and zones read
-      fails, and its lists do not update while the editor is open.
-    - `apps/dashboard/src/screens/device-profiles-screen.ts` is over 1,600 lines; "Where it
-      serves" and "Who can sign in" could become widgets of their own.
-    - Task 2's review found no test that fails when `device_profile_admission_roles` or
-      `device_profile_admission_persons` is left out of
-      `apps/server/src/testing/clear-provision-fixture.ts` (read, not run); both tables' keys into
-      `device_profiles` cascade on delete (identity `0007_profile_admission.sql`).
-    - **A profile switch or a zone move that commits while a till write is in flight does not stop
-      that write** (found by the finish-branch run-it review, 2026-10-06; for the owner, not fixed
-      on the branch). (i) A till write route checks the profile's action before its write
-      transaction opens (most routes before reading the body, too), so the request writes under the old profile's
-      actions: with a delayed request body, a switch to a profile without `take-orders` still
-      saved the order, answered 200. Checking outside the write transaction predates W97 for the
-      older checks: on `main`, `assertTakesCash` and `assertDeviceCapability` also run before the
-      route's write transaction, and on `POST /api/pay` before the body read. (ii) The routes whose
-      work runs in a helper that opens its own transaction call `gateZones`
-      (`apps/server/src/zone-access.ts`) before that transaction — chosen in Task 4 to avoid a
-      second turn in the write queue — so a zone moved to another department in between is still
-      written: with a delayed order-update body, a zone moved to Deli still answered 200. **Owner
-      decision (2026-10-06 ~23:50): accepted, not to be fixed** — a write already reaching the
-      server when the switch or move commits is treated as having arrived first, so the checks stay
-      outside the write transaction. A307 (#1319) checked what a zone move or profile switch decides from
-      the state present when it commits. A zone move (`configureZone`,
-      `packages/venue-service/src/operations.ts`) decides nothing from it. Ending the sessions a new
-      profile does not admit, every one on a kitchen screen (A298), holds: the PIN sign-in re-checks
-      the device and the person's admission inside its own transaction, and
-      `apps/server/src/join-e2e.test.ts` pins a sign-in overtaken by a move and by the till's own
-      switch. The refusal while a card payment is in progress did not hold: a payment could start
-      after the switch committed. Now the provider's write of the `attempting` row refuses
-      `device.profile_changed`, charging nothing, when the device is no longer on the profile the
-      request was checked under (`insertAttempting`, `packages/payments/src/store.ts`; SumUp and
-      Stripe terminal only). A bill reader payment refused this way is marked failed at once
-      (`takeReaderBillPayment`, `apps/server/src/bill-payments.ts`), so its amount is not held, and
-      the till's next confirm sends a new request id, which the server checks under the device's
-      new profile. Still open: the practice-mode simulator writes no `attempting` row, so a switch
-      during a practice card payment is never refused (read, not run). And if the till never
-      receives a bill reader payment's `device.profile_changed` answer, its automatic resend under
-      the same id gets the failed payment back and tells staff the card was declined: no card was
-      charged, but the reason shown is wrong; the next tap starts a fresh payment (read, not run).
-  - **W100 delivers** (the [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md),
-    Tasks 1–4, #1332, 2026-10-07). "Equipment" here means a device's receipt printer, its
-    payment-slip printer (the printer for the card slip), its card reader and its cash drawer.
-    - Each profile lists the printers, card readers and cash drawers its devices may use, with a
-      default for each role. A device is on "Use default" until someone picks an item from the
-      list. When a device joins or switches profile, a choice the profile no longer lists goes back
-      to Use default, and the device takes any portable item it uses that nobody else holds.
-    - A printer marked portable, and every card reader, is held by one device at a time. A till
-      takes an item another device holds by scanning its label, or by choosing it from the list
-      and confirming; a manager on the dashboard cannot take a held item. A signed-in till checks
-      its equipment every 15 seconds (`apps/till/src/state/equipment-poll.ts`) and tells staff
-      when another device has taken one of theirs. Disabling a device releases what it holds and
-      keeps its choices; enabling it again takes them back if they are still free.
-    - A card payment starts only on a reader the device holds (`reader.not_held`) and not while
-      another device has a payment in progress on it (`reader.payment_in_progress`, which also
-      refuses taking the reader over).
-    - The cash drawer is chosen on its own, from the profile's drawer list, not from the receipt
-      printer.
-    - The dashboard prints a QR label for a printer or card reader; the till's camera scanner reads
-      it (decoded in JavaScript with the `jsqr` package). The profile editor sets the lists and
-      defaults; the Devices table shows each device's four items, and its edit dialog names the
-      device carrying a portable item; the till has an Equipment dialog with a list for each item
-      and, on a device with a camera, a Scan button for the printers and the card reader.
-    - **Removed: staff can no longer switch a device's printing off.** The till's "No printer"
-      choice is gone and the dashboard's empty choice now means Use default, so a device is without
-      a printer, reader or drawer only when its profile's default is None (owner question Q1
-      below).
-    - **Not shown: whether equipment is disconnected.** The till says an item is switched off when
-      a printer is disabled or a reader is disabled or unpaired; nothing stores whether a printer or
-      reader is online (Q7).
-    - **Still pending: NFC** — tapping a phone on an NFC sticker to pick a reader (plan Task 5),
-      W102 — not queued; it waits for a real NFC handheld (Chrome for Android) and a tag to
-      probe on, since a simulated NFC test cannot show hardware support (owner 2026-10-08).
-    - Owner questions, each with the default built (answer when convenient):
-      - Q1. A device cannot override its profile's default with "none" — owner question, default
-        built.
-      - Q2. A card reader is never shared by several devices at once; every reader has one holder —
-        owner question, default built.
-      - Q3. A payment stuck "attempting" (started, outcome unknown) after a crash keeps its reader
-        busy until the sweep or a manager resolves it — owner question, default built.
-      - Q4. QR labels are decoded with the `jsqr` package, not the browser's own decoder — owner
-        question, default built.
-      - Q5. Card readers have no location, which does not matter while a venue has one location —
-        owner question, default built.
-      - Q6. "One payment in progress per reader" is not a database rule: the checks stop another
-        device, not the holding device starting two payments at once — owner question, default
-        built.
-      - Q7. Disconnected equipment is not shown (above) — owner question, default built.
-      - Also as built: a till's equipment list (`GET /api/device/equipment`) needs only a joined
-        device, not a signed-in person, so a locked till can see who holds an item on another
-        device (staff names are already public through `/api/staff`).
-    - Left open at the land (found by reading, not run): if the till's last 15-second check said a
-      reader was busy and that payment has since finished, picking it skips "Take it?" and the
-      server refuses it as held, so staff pick again; and if a profile switch succeeds but its reply
-      is lost, a check sent before the switch can briefly show the old profile's reader until the
-      next check. The till's equipment poll and menu poll are near copies and could share one class
-      (left out of #1332 as too large). The payments test "refreshes only active reader statuses"
-      failed once locally beside another coverage run, then passed five times alone and in CI; not
-      investigated.
-- **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
-  states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
-  booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
-  which customers can trigger (asking for the bill or calling a waiter from a QR code), whether
-  marking a table reserved by hand becomes a built-in action, and whether the hand-set labels on
-  Venue settings › Tables are still needed after that — the owner expects they may not be, and if
-  they stay, they sit beside a table's state as labels rather than being states. From A261 §10.
-- **Counter/walk-up kitchen fire** — the #193 follow-up, the next piece of menu work.
-- **Menu draft/published state** and time-of-day / seasonal scheduling.
-- **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
-  status — the ticket must travel with the line, not re-fire (`moveTabLines`, which dropped it, was
-  deleted by service plan Task 13; whether this still holds for the paths that move lines now is not
-  checked); hold-on-send without courses plus a venue disable setting; FP-1's empty-named
-  child-modifier row; device-scoped fire/collect routes. Then the low-priority KDS list under
-  [KDS operations](backlog/kitchen.md#kds-operations--low-priority-a9).
-- **Order-timing and modifier follow-ons**: delivery-order floor flash, idle-floor escalation,
-  station-kind threshold defaults, an unbumped-since-fire metric; on-screen modifier `×N`, the shared
-  `#allergens` render, the KDS-versus-till unreviewed-dish call, post-fire note edit
-  (needs a re-fire endpoint), the TS-4 partial-transfer modifier-split guard.
-- **Mark a new dish as urgent** (owner, 2026-09-27). A waiter can already send a new dish straight
-  to the kitchen ("cook this now, don't hold it") under every release setting; the owner would like
-  a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today. Not
-  designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
-  may set it. Releasing an ALREADY-held group stays with whoever the venue's `fire_control` setting
-  names — the waiter asks the kitchen or pass when that is not the waiter.
-- **Handheld shared-table updates** — still queued: automatic table-content refresh while two
-  waiters work on the same table. W101 supplies transfer-specific updates. Spec the wider
-  subscription model when it matters.
-- **Device profile follow-ons**: the aggregated device-profile bundle (till, station, hardware, area,
-  order routing, printer target on the profile); the visual theme editor. The canvas-editor
-  follow-ons that stood here, and a canvas-driven table-order screen, gave way to A4's A182.
-- **Language resolution follow-ons**
-  ([original design](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
-  there is still no single shared rule: the receipt's `lineName`
-  (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
-  (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
-  Read in the code and not run: `resolveContentText` moves to another region of the same language
-  (es-ES to es-MX), which the design rules out. Adding content translations does not translate
-  Waitron's interface.
-- **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
-  recurring, a calendar grid, deposits.
-- **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
-  hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and
-  scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
-  numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
-- **Logging Slice 2 — one-touch bug report**, then Slice 3 triage and forwarding, with the Slice 1
-  hardening (client-trail key allowlist, `maskPath` PII, the setup app). Detail under
-  [Logging, diagnostics & one-touch bug report](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
-- **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
-  dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
-  the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
-  (`apps/dashboard/src/dashboard-app.ts`); Servers (`mirror.create`) is the first to use it.
-- **Installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
-  (`apps/server/src/setup-api.ts`), and nothing watches when it expires: `cert-expiry.ts` reads the
-  box's own HTTPS certificate, not the AEAT one. Needs a view, renew and replace surface and an
-  expiry alert. Separate from getting the certificate onto a promoted standby (_Afterwards_). Fiscal:
-  the owner lands it.
 
 ### A10. Clocking in and out — the working-time record
 

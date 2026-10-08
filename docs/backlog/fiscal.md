@@ -613,6 +613,14 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   no-printer-at-issuance path that queues it later; its F2 control still queues three originals.
   **Remaining:** contain repeated F2 requests per sale, with the invoice number on the slip.
 
+## Installing or renewing the AEAT certificate after setup
+
+- **Installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
+  (`apps/server/src/setup-api.ts`), and nothing watches when it expires: `cert-expiry.ts` reads the
+  box's own HTTPS certificate, not the AEAT one. Needs a view, renew and replace surface and an
+  expiry alert. Separate from getting the certificate onto a promoted standby (_Afterwards_). Fiscal:
+  the owner lands it.
+
 ## Decisions and deliberate limits
 
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,

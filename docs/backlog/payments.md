@@ -143,10 +143,16 @@ their full text.
   WASM. Also here: restoring `stripe_on_device` (Tap-to-Pay). Redsys and
   bank terminals are parked; Bizum research is under _Later and parked_.
   _2026-10-07: the printed QR sticker and the dropdown landed with W100 (#1332;
-  see "Devices, profiles and departmental transfers" below). One difference from the decision
+  its open points are in [till.md](till.md#owner-questions-each-with-the-default-built-answer-when-convenient)).
+  One difference from the decision
   above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
   the dropdown moves it to the waiter's device. NFC (W102, not queued: it needs a real NFC handheld and tag to probe — owner 2026-10-08) and
   Tap-to-Pay are still open._
+- **Still pending: NFC** — tapping a phone on an NFC sticker to pick a reader (plan Task 5),
+  W102 — not queued; it waits for a real NFC handheld (Chrome for Android) and a tag to
+  probe on, since a simulated NFC test cannot show hardware support (owner 2026-10-08). Left open
+  by W100 (#1332); the plan is the
+  [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
 
 ## A guest paying from their own phone
 

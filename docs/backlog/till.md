@@ -992,6 +992,85 @@ arriving, but open periods are told apart only by their start time, to the milli
   **Next action:** find whether a `table_tab` zone can be the counter default or a profile's
   starting zone; if it can, decide whether that is refused where it is set or handled by the till.
 
+## Unresolved observation from W101 verification
+
+Left open by W101 (#1351).
+
+**Unresolved observation from W101 verification:** two full local `@waitron/till test:coverage`
+runs logged an unhandled rejection in `#holdIdentity` while `#switchProfile` was reading identity:
+`Cannot read properties of null (reading 'approvedProfiles')`. Both completed with every test
+passing; the second met coverage. Receipts: `~/waitron-campaign-d/receipts/w101/till-full-coverage.log`
+and `till-full-coverage2.log`. The triggering test and cause are unverified; isolate the profile-switch
+case and its identity response before choosing a fix. Transfer-focused runs did not log this rejection.
+
+## A card payment stuck `attempting` holds its device's profile switch
+
+Left open by W97 (#1311), found in its review and not fixed on the branch:
+
+- A card payment stuck `attempting` holds its device's profile switch until a manager resolves
+  it on Payments; an `initiated` one has no production writer today, and once hosted payments
+  are wired a missed `checkout.session.expired` webhook would hold it for good
+  (`assertNoPaymentInProgress`, `apps/server/src/device.ts`). The till only says to switch
+  once it finishes; point it at the Payments screen.
+
+## The till's Profile button shows whenever the device has more than one approved profile
+
+Left open by W97 (#1311), found in its review and not fixed on the branch:
+
+- The till's Profile button shows whenever the device has more than one approved profile, read
+  at boot: neither approvals added later nor the signed-in person's admission hide or show it
+  until the dialog reads `/api/device/me` again. Approvals stored on a disabled device come
+  back when it is enabled again through a join (unchecked whether that is wanted).
+
+## The profile editor reads people and the venue's departments and zones
+
+Left open by W97 (#1311), found in its review and not fixed on the branch:
+
+- The profile editor reads people and the venue's departments and zones, so it needs
+  `person.manage` and `venue_service.manage` beside `layout.configure`; no role holds only the
+  last today. Edit and Duplicate fail with a read error when the departments and zones read
+  fails, and its lists do not update while the editor is open.
+
+## Owner questions, each with the default built (answer when convenient)
+
+Left open by W100 (#1332), the [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md):
+
+- **Removed: staff can no longer switch a device's printing off.** The till's "No printer"
+  choice is gone and the dashboard's empty choice now means Use default, so a device is without
+  a printer, reader or drawer only when its profile's default is None (owner question Q1
+  below).
+- **Not shown: whether equipment is disconnected.** The till says an item is switched off when
+  a printer is disabled or a reader is disabled or unpaired; nothing stores whether a printer or
+  reader is online (Q7).
+- Owner questions, each with the default built (answer when convenient):
+  - Q1. A device cannot override its profile's default with "none" — owner question, default
+    built.
+  - Q2. A card reader is never shared by several devices at once; every reader has one holder —
+    owner question, default built.
+  - Q3. A payment stuck "attempting" (started, outcome unknown) after a crash keeps its reader
+    busy until the sweep or a manager resolves it — owner question, default built.
+  - Q4. QR labels are decoded with the `jsqr` package, not the browser's own decoder — owner
+    question, default built.
+  - Q5. Card readers have no location, which does not matter while a venue has one location —
+    owner question, default built.
+  - Q6. "One payment in progress per reader" is not a database rule: the checks stop another
+    device, not the holding device starting two payments at once — owner question, default
+    built.
+  - Q7. Disconnected equipment is not shown (above) — owner question, default built.
+  - Also as built: a till's equipment list (`GET /api/device/equipment`) needs only a joined
+    device, not a signed-in person, so a locked till can see who holds an item on another
+    device (staff names are already public through `/api/staff`).
+
+## Table states and signals (A267)
+
+- **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
+  states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
+  booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
+  which customers can trigger (asking for the bill or calling a waiter from a QR code), whether
+  marking a table reserved by hand becomes a built-in action, and whether the hand-set labels on
+  Venue settings › Tables are still needed after that — the owner expects they may not be, and if
+  they stay, they sit beside a table's state as labels rather than being states. From A261 §10.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
@@ -1058,3 +1137,39 @@ layout during service, screen plugins and Bizum.
   2026-09-21: a picker seeded with 5 of one product on a list whose `maxPicks` is 2 renders a count
   of 5 and a disabled Add). The real-world shape is a parked line whose list had its cap reduced
   under it.
+
+- **A profile switch or a zone move that commits while a till write is in flight does not stop
+  that write** (found by the finish-branch run-it review, 2026-10-06; for the owner, not fixed
+  on the branch). (i) A till write route checks the profile's action before its write
+  transaction opens (most routes before reading the body, too), so the request writes under the old profile's
+  actions: with a delayed request body, a switch to a profile without `take-orders` still
+  saved the order, answered 200. Checking outside the write transaction predates W97 for the
+  older checks: on `main`, `assertTakesCash` and `assertDeviceCapability` also run before the
+  route's write transaction, and on `POST /api/pay` before the body read. (ii) The routes whose
+  work runs in a helper that opens its own transaction call `gateZones`
+  (`apps/server/src/zone-access.ts`) before that transaction — chosen in Task 4 to avoid a
+  second turn in the write queue — so a zone moved to another department in between is still
+  written: with a delayed order-update body, a zone moved to Deli still answered 200. **Owner
+  decision (2026-10-06 ~23:50): accepted, not to be fixed** — a write already reaching the
+  server when the switch or move commits is treated as having arrived first, so the checks stay
+  outside the write transaction. A307 (#1319) checked what a zone move or profile switch decides from
+  the state present when it commits. A zone move (`configureZone`,
+  `packages/venue-service/src/operations.ts`) decides nothing from it. Ending the sessions a new
+  profile does not admit, every one on a kitchen screen (A298), holds: the PIN sign-in re-checks
+  the device and the person's admission inside its own transaction, and
+  `apps/server/src/join-e2e.test.ts` pins a sign-in overtaken by a move and by the till's own
+  switch. The refusal while a card payment is in progress did not hold: a payment could start
+  after the switch committed. Now the provider's write of the `attempting` row refuses
+  `device.profile_changed`, charging nothing, when the device is no longer on the profile the
+  request was checked under (`insertAttempting`, `packages/payments/src/store.ts`; SumUp and
+  Stripe terminal only). A bill reader payment refused this way is marked failed at once
+  (`takeReaderBillPayment`, `apps/server/src/bill-payments.ts`), so its amount is not held, and
+  the till's next confirm sends a new request id, which the server checks under the device's
+  new profile.
+
+- **As built by W101 (departmental tab transfers, #1351):** Unsent counter edits and standalone
+  table drafts are retained as read-only local copies for explicit review and dismissal, rather
+  than silently lost or resubmitted. These copies remain in browser memory across sign-out;
+  reloading the page loses them. Removing a sending direction prevents new requests and leaves
+  existing pending intent actionable; it does not revoke requests already sent. Party-linked bills
+  are refused before queuing, and again at acceptance, rather than moving shared table/group links.

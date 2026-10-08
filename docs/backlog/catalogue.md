@@ -357,6 +357,17 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   translations list leaves it out. The case "a deleted product, which the default-change check
   still counts" in `packages/catalogue/src/content-translation-report.test.ts` pins today's answer.
 
+## Language resolution follow-ons
+
+- **Language resolution follow-ons**
+  ([original design](../superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
+  there is still no single shared rule: the receipt's `lineName`
+  (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
+  (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
+  Read in the code and not run: `resolveContentText` moves to another region of the same language
+  (es-ES to es-MX), which the design rules out. Adding content translations does not translate
+  Waitron's interface.
+
 ## Decisions and deliberate limits
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner

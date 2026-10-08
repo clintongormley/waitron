@@ -114,8 +114,9 @@ The 2026 data was checked against the archived annex by a test, not by reading:
 What is not verified:
 
 - **Legal or payroll effect.** The data says which days the 2026 resolution lists. Whether a venue
-  owes a holiday premium, or must close, is a question for the labour advisor and for A9's wage
-  rules, not something this data answers.
+  owes a holiday premium, or must close, is a question for the labour advisor and for the wage
+  rules of "Wages / labour cost (SP16)" in [the backlog](../backlog.md), not something this data
+  answers.
 - **Local holidays.** They are whatever the venue entered.
 - **2027.** It is not shipped. On 2026-10-06 the BOE daily summaries from 2026-08-01 to 2026-10-06
   held no "fiestas laborales" resolution for 2027, so a 2027 read reports `missing_year`. Andalucía
