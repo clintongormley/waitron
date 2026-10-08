@@ -2527,6 +2527,19 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ### W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+**Update, 2026-10-08: paused and not queued.** The owner paused the remaining W41s tasks on
+2026-10-06 ("pause the other w41 tasks for now, continue with the non-w41 tasks") and on 2026-10-08
+took them off the campaign queues; take them from here when they are un-paused. Left: W41s-1b
+(AEAT preproduction probe: records sent after a conflict), W41s-4 (atomic allocation activation),
+W41s-5 (transactional active-series selection), W41s-6 (recovery pack and offline administrator
+flow), W41s-7 (conditional automatic conflict recovery), W41s-8 (corrective records and held-case
+resolution), W41s-9 (fiscal filing and missing-history screen), W41s-10a (reconciliation and device
+evidence), W41s-10b (signed stream witnesses and fencing), W41s-11 (complete offline exercise and
+operator procedure) and W41s-C (cloud registry handoff), each a task of the revised plan below.
+W41s-3d (a chain held by repeated same-code refusals sends its first held record once an hour) is
+built and reviewed on draft PR [#1309](https://github.com/clintongormley/waitron/pull/1309), branch
+`feat/w41s-brake-hourly-probe`, kept as it was; it needs a rebase before landing.
+
 **Update, 2026-10-04:** the owner requires prevention before conflict recovery, including an
 old-backup restore on new hardware with no internet. The
 [revised design](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
