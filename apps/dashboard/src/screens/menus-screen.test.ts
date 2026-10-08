@@ -7339,19 +7339,19 @@ describe("the Home page tab", () => {
 
   it("chooses Handheld or Till, each with its own controls", async () => {
     const home = menuHome();
-    home.handheld = { columns: 4, tiles: "thumbnails", order: "home_first" };
+    home.handheld = { columns: 3, tiles: "thumbnails", order: "home_first" };
     home.till = { columns: 9, tiles: "colours", order: "menu_first" };
     const el = await mountHome(api({ getMenuHome: vi.fn().mockResolvedValue(home) }));
     expect(radio(el, "home-device", "handheld").checked).toBe(true);
     expect(radio(el, "home-device", "till").checked).toBe(false);
-    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([2, 6, 4]);
+    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([2, 3, 3]);
     expect(slider(el).label).toBe(t("home.columns"));
     expect(radio(el, "home-tiles", "thumbnails").checked).toBe(true);
     expect(radio(el, "home-order", "home_first").checked).toBe(true);
     await vi.waitFor(() => expect(preview(el)).not.toBeNull());
     expect(preview(el)!.device).toBe("handheld");
     await choose(el, "home-device", "till");
-    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([6, 10, 9]);
+    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([4, 10, 9]);
     expect(radio(el, "home-tiles", "colours").checked).toBe(true);
     expect(radio(el, "home-order", "menu_first").checked).toBe(true);
     expect(preview(el)!.device).toBe("till");
@@ -7363,7 +7363,9 @@ describe("the Home page tab", () => {
       const before = currentLocale();
       setLocale(locale);
       onTestFinished(() => setLocale(before));
-      const client = api();
+      const home = menuHome();
+      home.handheld = { ...home.handheld, columns: 2 };
+      const client = api({ getMenuHome: vi.fn().mockResolvedValue(home) });
       const el = await mountHome(client);
       const note = () => slider(el).nextElementSibling as HTMLElement;
       expect(note().dataset.test).toBe("columns-note");
@@ -7372,10 +7374,10 @@ describe("the Home page tab", () => {
       await preview(el)!.updateComplete;
       const frame = () => preview(el)!.shadowRoot!.querySelector<HTMLElement>(".frame")!;
       const phone = frame().getBoundingClientRect().width;
-      await slide(el, 6);
+      await slide(el, 3);
       await vi.waitFor(() =>
         expect(client.setHomeDisplay).toHaveBeenCalledWith("menu-lunch", "handheld", {
-          columns: 6,
+          columns: 3,
         }),
       );
       await preview(el)!.updateComplete;
@@ -7392,11 +7394,11 @@ describe("the Home page tab", () => {
     const el = await mountHome(client);
     client.setHomeDisplay.mockImplementationOnce(() => out.promise);
     const saved = menuHome();
-    saved.handheld = { ...saved.handheld, columns: 5 };
+    saved.handheld = { ...saved.handheld, columns: 2 };
     client.getMenuHome.mockResolvedValue(saved);
-    await slide(el, 5);
+    await slide(el, 2);
     expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "handheld", {
-      columns: 5,
+      columns: 2,
     });
     await slider(el).updateComplete;
     expect(slider(el).disabled).toBe(true);
@@ -7407,7 +7409,7 @@ describe("the Home page tab", () => {
       expect(radio(el, name!, value!).disabled, name).toBe(true);
     out.resolve();
     await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
-    expect(slider(el).value).toBe(5);
+    expect(slider(el).value).toBe(2);
     await choose(el, "home-tiles", "thumbnails");
     await vi.waitFor(() =>
       expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "handheld", {
@@ -7455,7 +7457,7 @@ describe("the Home page tab", () => {
       code: "menu.home_display_invalid",
       params: { device: "handheld", field: "columns" },
     });
-    await slide(el, 6);
+    await slide(el, 2);
     await vi.waitFor(() => expect(slider(el).error).toBe(codeMessage("menu.home_display_invalid")));
     expect(q(el, '[data-test="home-error"]')).toBeNull();
 
@@ -7481,7 +7483,7 @@ describe("the Home page tab", () => {
     // A refusal naming the other device is not about a control on screen.
     const late = deferred<void>();
     client.setHomeDisplay.mockImplementationOnce(() => late.promise);
-    await slide(el, 4);
+    await slide(el, 2);
     await choose(el, "home-device", "till");
     late.reject({
       code: "menu.home_display_invalid",
@@ -7555,12 +7557,12 @@ describe("the Home page tab", () => {
     const client = api();
     const el = await mountHome(client);
     client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await slide(el, 5);
+    await slide(el, 2);
     await slider(el).updateComplete;
     const shadow = slider(el).shadowRoot!;
-    expect(slider(el).value).toBe(5);
-    expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("5");
-    expect(text(shadow.querySelector('[part="value"]'))).toBe("5");
+    expect(slider(el).value).toBe(2);
+    expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("2");
+    expect(text(shadow.querySelector('[part="value"]'))).toBe("2");
     out.reject({ code: "server.internal" });
     await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
     await slider(el).updateComplete;
@@ -7576,7 +7578,7 @@ describe("the Home page tab", () => {
         code: "menu.home_display_invalid",
         params: { device: "handheld", field },
       });
-    await slide(el, 6);
+    await slide(el, 2);
     await vi.waitFor(() => expect(slider(el).error).not.toBe(""));
     await choose(el, "home-tiles", "thumbnails");
     await vi.waitFor(() => expect(q(el, '[data-test="home-tiles-error"]')).not.toBeNull());
@@ -7596,7 +7598,7 @@ describe("the Home page tab", () => {
       code: "menu.home_display_invalid",
       params: { device: "handheld", field: "columns" },
     });
-    await slide(el, 6);
+    await slide(el, 2);
     await vi.waitFor(() => expect(slider(el).error).toBe(codeMessage("menu.home_display_invalid")));
     await slider(el).updateComplete;
     expect(slider(el).value).toBe(3);
@@ -7691,7 +7693,7 @@ describe("the Home page tab", () => {
   it("never shows another menu's home after the person has gone to it", async () => {
     const lunchRead = deferred<MenuHome>();
     const dinner = emptyHome();
-    dinner.handheld = { ...dinner.handheld, columns: 5 };
+    dinner.handheld = { ...dinner.handheld, columns: 2 };
     const client = api({
       getMenuHome: vi.fn((id: string) =>
         id === "menu-lunch" ? lunchRead.promise : Promise.resolve(dinner),
@@ -7701,25 +7703,28 @@ describe("the Home page tab", () => {
     history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledWith("menu-dinner"));
-    await vi.waitFor(() => expect(slider(el)?.value).toBe(5));
+    await vi.waitFor(() => expect(slider(el)?.value).toBe(2));
     lunchRead.resolve(menuHome());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(slider(el).value).toBe(5);
+    expect(slider(el).value).toBe(2);
   });
 
-  /** Goes from Lunch's Home page tab to Dinner's, whose Handheld shows five columns. */
   async function goToDinnerHome(el: MenusScreen, client: Api): Promise<void> {
     history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/home");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledWith("menu-dinner"));
-    await vi.waitFor(() => expect(slider(el)?.value).toBe(5));
+    await vi.waitFor(() => expect(slider(el)?.value).toBe(2));
   }
 
-  function dinnerAtFive(): Api {
+  function dinnerAtTwo(lunchColumns = 3): Api {
     const dinner = emptyHome();
-    dinner.handheld = { ...dinner.handheld, columns: 5 };
+    dinner.handheld = { ...dinner.handheld, columns: 2 };
     return api({
-      getMenuHome: vi.fn(async (id: string) => (id === "menu-lunch" ? menuHome() : dinner)),
+      getMenuHome: vi.fn(async (id: string) =>
+        id === "menu-lunch"
+          ? { ...menuHome(), handheld: { ...menuHome().handheld, columns: lunchColumns } }
+          : dinner,
+      ),
     });
   }
 
@@ -7728,19 +7733,19 @@ describe("the Home page tab", () => {
     const client = api();
     const el = await mountHome(client);
     client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await slide(el, 5);
-    emit(slider(el), "wt-change", { value: 6 });
+    await slide(el, 2);
+    emit(slider(el), "wt-change", { value: 3 });
     await el.updateComplete;
     out.resolve();
     await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
     expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "handheld", {
-      columns: 5,
+      columns: 2,
     });
   });
 
   it("drops a refused setting quietly once the person has gone to another menu", async () => {
     const out = deferred<void>();
-    const client = dinnerAtFive();
+    const client = dinnerAtTwo();
     const el = await mountHome(client);
     client.setHomeDisplay.mockImplementationOnce(() => out.promise);
     await choose(el, "home-order", "menu_first");
@@ -7758,10 +7763,10 @@ describe("the Home page tab", () => {
 
   it("keeps a setting saved after the person went to another menu off that menu's controls, and reads only that menu's home", async () => {
     const out = deferred<void>();
-    const client = dinnerAtFive();
+    const client = dinnerAtTwo(2);
     const el = await mountHome(client);
     client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await slide(el, 6);
+    await slide(el, 3);
     await goToDinnerHome(el, client);
     const lunchReads = () =>
       client.getMenuHome.mock.calls.filter(([id]) => id === "menu-lunch").length;
@@ -7770,10 +7775,10 @@ describe("the Home page tab", () => {
     await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
     await new Promise((resolve) => setTimeout(resolve, 20));
     await slider(el).updateComplete;
-    expect(slider(el).value).toBe(5);
+    expect(slider(el).value).toBe(2);
     expect(lunchReads()).toBe(before);
     expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "handheld", {
-      columns: 6,
+      columns: 3,
     });
   });
 
@@ -8790,7 +8795,7 @@ describe("one menu read after an edit", () => {
               ...home,
               shortcuts: home.shortcuts.filter(({ memberId }) => memberId !== "t-burger"),
             };
-          else home = { ...home, handheld: { ...home.handheld, columns: 5 } };
+          else home = { ...home, handheld: { ...home.handheld, columns: 2 } };
           if (notification === "before") {
             client.liveData.invalidate([
               { type: view === "structure" ? "section_members" : "menu_details" },
@@ -8850,7 +8855,7 @@ describe("one menu read after an edit", () => {
         const slider = q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')!;
         await slider.updateComplete;
         const input = slider.shadowRoot!.querySelector<HTMLInputElement>('input[type="range"]')!;
-        input.value = "5";
+        input.value = "2";
         input.dispatchEvent(new Event("change", { bubbles: true }));
       }
       await vi.waitFor(() => expect(writes).toHaveLength(1));
@@ -8869,7 +8874,7 @@ describe("one menu read after an edit", () => {
         } else
           expect(
             q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')!.value,
-          ).toBe(5);
+          ).toBe(2);
       });
       await new Promise((resolve) => setTimeout(resolve, 200));
       const menuReads = reads.filter((path) =>
@@ -8883,7 +8888,7 @@ describe("one menu read after an edit", () => {
             }
           : {
               path: "/management-api/catalogues/menu-lunch/home-display",
-              body: { device: "handheld", columns: 5 },
+              body: { device: "handheld", columns: 2 },
             },
       );
       expect(menuReads, JSON.stringify(menuReads)).toHaveLength(1);

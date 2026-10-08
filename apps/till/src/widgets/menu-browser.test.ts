@@ -612,17 +612,16 @@ describe("till-menu-browser", () => {
 
     it("clamps the columns on a narrow screen, keeping the reading order", async () => {
       const handheld = await mount({
-        menu: display("handheld", { columns: 6 }),
+        menu: display("handheld", { columns: 3 }),
         handheld: true,
       });
       await widen(handheld.host, 1280);
       const structureGrid = (el: TillMenuBrowser) =>
         root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
-      expect(tracks(structureGrid(handheld.el))).toBe(6);
+      expect(tracks(structureGrid(handheld.el))).toBe(3);
       const wide = readingOrder(handheld.el, "structure");
       const wideShortcuts = readingOrder(handheld.el, "shortcuts");
-      await widen(handheld.host, 300);
-      // 300 px holds two 104 px minimums and the 12 px gap between them, not three.
+      await widen(handheld.host, 150);
       expect(tracks(structureGrid(handheld.el))).toBe(2);
       expect(readingOrder(handheld.el, "structure")).toEqual(wide);
       expect(readingOrder(handheld.el, "shortcuts")).toEqual(wideShortcuts);

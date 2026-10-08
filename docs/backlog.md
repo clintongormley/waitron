@@ -2704,6 +2704,8 @@ controls and preview, and the till's home at a phone's width and on the counter 
 use "carta".
 Left open:
 
+- **A339 — DONE (2026-10-08).** Handheld Home page settings offer 2–3 columns and till settings 4–10, retaining defaults 3 and 6. Menu-controlled handheld tiles use a 66 px minimum and the dashboard preview uses a 16 px side inset; a canvas card with its own count keeps its 104 px minimum. Chromium cases cover phone tracks, tap targets, long names, decoded thumbnails, short-word wrapping and both themes. Real phone/preview/tablet captures were inspected in EN/ES and both themes. Existing save, refusal, menu-switch, publication and transfer-boundary assertions use distinct in-range values.
+- **A339 test-fixture follow-up:** `apps/dashboard/src/api/menu-read-controller.test.ts` and `live-queries.test.ts` still use handheld five/six in fake snapshots, including three distinct snapshots in the invalidation cases. These files were outside the branch and left unchanged. Replace those with valid, distinguishable snapshots using columns plus another display field, preserving every revision, read-count and late-answer assertion; do not collapse three distinct observations into two.
 - The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
   the menu shares the screen with the order: from 720 px wide the table order screen gives it three
   fifths (`apps/till/src/screens/till-table-order-screen.ts`), and on the demo counter at 1280 px

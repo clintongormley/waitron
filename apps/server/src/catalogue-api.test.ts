@@ -5208,6 +5208,34 @@ describe("mountCatalogueApi — Device Home Page", () => {
   const handheld = { columns: 3, tiles: "colours", order: "home_first" };
   const till = { columns: 6, tiles: "colours", order: "home_first" };
 
+  it.each([
+    { device: "handheld", min: 2, max: 3 },
+    { device: "till", min: 4, max: 10 },
+  ] as const)(
+    "saves both $device column endpoints and refuses adjacent values without changing the saved display",
+    async ({ device, min, max }) => {
+      const app = mountApp();
+      const menuId = await createCatalogueVia(app, `Columns ${crypto.randomUUID()}`);
+      for (const columns of [min, max]) {
+        expect(
+          (await send(app, "PATCH", displayOf(menuId), { body: { device, columns } })).status,
+        ).toBe(204);
+        expect(
+          (await json<Home>(await send(app, "GET", homeOf(menuId)), 200))[device].columns,
+        ).toBe(columns);
+      }
+      const before = await json<Home>(await send(app, "GET", homeOf(menuId)), 200);
+      for (const columns of [min - 1, max + 1]) {
+        const refused = await send(app, "PATCH", displayOf(menuId), { body: { device, columns } });
+        expect(refused.status).toBe(400);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "menu.home_display_invalid", params: { device, field: "columns" } },
+        });
+        expect(await json<Home>(await send(app, "GET", homeOf(menuId)), 200)).toEqual(before);
+      }
+    },
+  );
+
   async function menuWithTargets(app: Hono) {
     const menuId = await createCatalogueVia(app, `Home ${crypto.randomUUID()}`);
     const soupName = `Soup ${crypto.randomUUID()}`;
@@ -5753,14 +5781,14 @@ describe("shared menu reads", () => {
     expect(
       (
         await send(app, "PATCH", `${path}/home-display`, {
-          body: { device: "handheld", columns: 5 },
+          body: { device: "handheld", columns: 2 },
         })
       ).status,
     ).toBe(204);
     const response = await send(app, "GET", `${path}/read?part=home&part=status`);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      home: { status: 200, body: { handheld: { columns: 5 } } },
+      home: { status: 200, body: { handheld: { columns: 2 } } },
       status: { status: 200, body: { state: "unpublished", clashes: 0 } },
     });
   });
@@ -5864,7 +5892,7 @@ it("marks shared snapshots with the catalogue write revision they include", asyn
   const old = await before.json();
   expect(old.revision).toEqual({ epoch: expect.any(String), sequence: expect.any(Number) });
   const write = await send(app, "PATCH", `${path}/home-display`, {
-    body: { device: "handheld", columns: 5 },
+    body: { device: "handheld", columns: 2 },
   });
   expect(write.status).toBe(204);
   const committed = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
@@ -5873,7 +5901,7 @@ it("marks shared snapshots with the catalogue write revision they include", asyn
   const after = await send(app, "GET", `${path}/read?part=home`);
   expect(await after.json()).toMatchObject({
     revision: committed,
-    home: { status: 200, body: { handheld: { columns: 5 } } },
+    home: { status: 200, body: { handheld: { columns: 2 } } },
   });
   const refused = await send(app, "PATCH", `${path}/home-display`, {
     body: { device: "handheld", columns: 0 },
@@ -5897,7 +5925,7 @@ it("keeps a shared snapshot's revision with its data when a write commits before
     if (intervene) {
       intervene = false;
       const write = await send(app, "PATCH", `${path}/home-display`, {
-        body: { device: "handheld", columns: 5 },
+        body: { device: "handheld", columns: 2 },
       });
       expect(write.status).toBe(204);
       savedRevision = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
@@ -5918,7 +5946,7 @@ it("keeps a shared snapshot's revision with its data when a write commits before
     const after = await send(app, "GET", `${path}/read?part=home`);
     expect(await after.json()).toMatchObject({
       revision: savedRevision,
-      home: { status: 200, body: { handheld: { columns: 5 } } },
+      home: { status: 200, body: { handheld: { columns: 2 } } },
     });
   } finally {
     boundary.mockRestore();

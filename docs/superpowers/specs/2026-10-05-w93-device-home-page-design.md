@@ -95,6 +95,8 @@ nothing stores "handheld" or "till".
    removed-layout notices (`apps/till/src/state/home-layout-notices.ts` and its wiring and strings).
    A device's kind — handheld or till, from its profile's form factor as today — picks which of
    the two display settings it uses. A kitchen screen shows no menu.
+> **2026-10-07, A339 supersedes Decision 4’s ranges:** Handheld offers 2–3 columns (default 3); Till offers 4–10 (default 6). Values outside those ranges are refused. Reset a pre-live venue holding an older handheld value above 3.
+
 4. **Two display settings per menu, stored with the draft.** `menu_details` gains six columns, each
    `NOT NULL` with a default and no CHECK (a CHECK makes drizzle rebuild the table; the values are
    validated in code, as a colour is): `handheld_columns` (default 3, 2–6), `handheld_tiles`
@@ -156,6 +158,8 @@ nothing stores "handheld" or "till".
    each can be removed and moved by drag or keyboard within that list, as other members move. A
    missing shortcut shows its name marked missing, with Remove only. The shortcut rows do not
    expand into their targets.
+> **2026-10-07, A339 supersedes Decision 10’s column clamping:** You can choose two or three handheld columns, and 360px and 390px phones show that choice. The home grid and dashboard preview use a smaller handheld tile minimum while keeping the till minimum. The historical 2026-10-06 measurement below describes the previous layout.
+
 10. **Home page tab:** a Handheld/Till choice, then that device's three controls — a column slider,
     Colours/Thumbnails, and "Device Home Page first"/"Menu first" — each saved as it changes, and
     below them a preview of that device's presentation of the draft. The preview draws the document

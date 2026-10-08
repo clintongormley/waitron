@@ -22,16 +22,16 @@ describe("display settings", () => {
       handheld: { columns: 3, tiles: "colours", order: "home_first" },
       till: { columns: 6, tiles: "colours", order: "home_first" },
     });
-    expect(HOME_COLUMN_RANGE).toEqual({ handheld: { min: 2, max: 6 }, till: { min: 6, max: 10 } });
+    expect(HOME_COLUMN_RANGE).toEqual({ handheld: { min: 2, max: 3 }, till: { min: 4, max: 10 } });
   });
   it.each([
     ["handheld", 2, null],
-    ["handheld", 6, null],
+    ["handheld", 3, null],
     ["handheld", 1, "columns"],
-    ["handheld", 7, "columns"],
-    ["till", 6, null],
+    ["handheld", 4, "columns"],
+    ["till", 4, null],
     ["till", 10, null],
-    ["till", 5, "columns"],
+    ["till", 3, "columns"],
     ["till", 11, "columns"],
     ["till", 6.5, "columns"],
     ["till", "8", "columns"],

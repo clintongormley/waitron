@@ -268,8 +268,12 @@ has no visible heading, only an accessible name. Between the two sits a divider:
 block's name ("Full menu" or "Shortcuts") in `--wt-font-size-sm` and `--wt-color-text-muted`,
 between two 1px `--wt-color-border` lines, as that block's heading. A block with nothing to show is
 not drawn, and then there is no divider. Every grid has up to the menu's column count of tracks,
-fewer where a tile would be narrower than twice `--wt-tap-min` plus `--wt-space-4`
-(`HOME_GRID_COLUMNS`), so a narrow screen shows fewer columns in the same reading order. In Colours
+fewer where a tile would be narrower than its minimum (`HOME_GRID_COLUMNS`). Handheld tiles use
+`--wt-tap-min * 1.5` when they follow the menu’s column setting; till tiles and canvas cards
+with their own column count keep twice `--wt-tap-min` plus `--wt-space-4`. Handheld settings
+offer 2–3 columns and till settings 4–10. The handheld grid and its preview show three columns at
+360px and 390px. The handheld preview uses `--wt-space-4` side insets to fit inside the dashboard's
+own phone-width padding; narrower grids keep the same reading order. In Colours
 mode a tile is painted as above. In Thumbnails mode a tile with an image shows it above its name,
 4:3 with `--wt-radius-sm` corners, and is not painted; a tile with no image is painted as in
 Colours mode, or neutral. A section tile always has a second line under its name — "Section", or
