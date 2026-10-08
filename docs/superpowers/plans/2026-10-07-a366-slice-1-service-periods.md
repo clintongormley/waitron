@@ -709,6 +709,18 @@ refusal lands under its field; the unsaved dialog asks; axe in both themes); wat
 implement; pass; look in both themes and at phone width; commit
 `feat(venue-service): Opening hours screen with periods (A366)`.
 
+**Checkpoint 2026-10-08 — client and period editor.** `OpeningHoursApi` reads the opening-hours
+model passively and writes periods, normal weeks and dated placements through the existing routes.
+`period-editor` holds its own compact modal and emits `period-save` with `{ periodId, input }`;
+`commitSubmitted(input)` records a successful write and returns whether the draft now matches it.
+Its shared draft scope gates Save and discard, preserving the opened or saved baseline across
+reconnect. Active menu choices include their included menus; the customer choice is omitted from
+staff-only choices. Field refusals, required checks, native Save/Enter, departed controls, reconnect
+and both-theme accessibility have focused tests. No existing test assertions change in this
+substep. The screen shell, period table and write/refresh handling, registration/navigation and
+retirement of the old UI and its retained checks are still owed by this task. Leave its checkbox
+unchecked until those steps and their full verification run are complete.
+
 ---
 
 ### Task 13: Opening hours — Week tab

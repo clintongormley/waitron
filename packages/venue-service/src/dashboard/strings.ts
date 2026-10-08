@@ -1,6 +1,9 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "opening.menu_includes": "{name} · includes {menus}",
+  "opening.staff_menus": "Staff-only menus",
+  "opening.active_menus_required": "Choose active menus.",
   "service.grid": "Service periods",
   "service.adjust_range": "Adjust {name} range",
   "prep.tickets.printer_count": "{count} printers",
@@ -717,6 +720,9 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "opening.menu_includes": "{name} · incluye {menus}",
+  "opening.staff_menus": "Cartas solo para el personal",
+  "opening.active_menus_required": "Elige cartas activas.",
   "service.grid": "Periodos de servicio",
   "service.adjust_range": "Ajustar el intervalo de {name}",
   "prep.tickets.printer_count": "{count} impresoras",
