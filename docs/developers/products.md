@@ -303,33 +303,45 @@ or on its Price overrides tab.
 
 That colour is worked out in order. It is the product's own colour (`products.color`) if it has
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
-nearest category above it that does (`category_details.color`). Otherwise it has none, and each
+nearest category above it that does (`category_details.color`). Otherwise it is the venue's
+default colour (`catalogue_settings.default_color`); with no default it has none, and each
 screen draws its usual neutral look. The rule lives in one place, `effectiveColor` and
 `categoryColor` in `packages/catalogue/src/color-inheritance.ts`, which the server and the
 dashboard both call. So colouring a category colours every product under it, at any depth, that
-has no colour of its own and no coloured category nearer to it.
+has no colour of its own and no coloured category nearer to it, and the default colours every
+product with no colour of its own and no coloured category above it, a product in no category
+included.
 
 You set a product's own colour in the product editor, which has a colour chooser after Name;
 its first choice, "Use category colour", shows the colour the product would take from its category
 (following a category you change in the editor before saving), or says "Its category has no
-colour." Choosing it saves no colour of the product's own. A colour is
-lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string included, as
-`product.invalid` with `field: "color"`. A configuration import refuses the whole
-bundle when a product's, a category's or a menu section's colour is anything else, as
-`setup.request_invalid` with `field` set to `products.color`, `category_details.color` or
-`sections.color` (`validateCatalogueConfiguration`,
+colour." When no category above the product has a colour and the venue has a default, that choice
+reads "Use default colour" and shows the default (`renderColor`,
+`apps/dashboard/src/widgets/product-editor.ts`). Choosing it saves no colour of the product's own.
+A colour is lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string
+included, as `product.invalid` with `field: "color"`; a default colour is refused as
+`category.invalid` with `field: "color"` (`saveCatalogueDefaultColor`,
+`packages/catalogue/src/settings.ts`). A configuration import refuses the whole
+bundle when a product's, a category's or a menu section's colour, or the default, is anything else,
+as `setup.request_invalid` with `field` set to `products.color`, `category_details.color`,
+`sections.color` or `catalogue_settings.default_color` (`validateCatalogueConfiguration`,
 `packages/catalogue/src/configuration-transfer.ts`). A category's colour is set from the colour
 square before its name in the Products tree, or from the one in the box that names or renames it
-([product-categories.md](product-categories.md)).
+([product-categories.md](product-categories.md)). The default is set from the square before
+All products, the tree's first row, whose chooser is headed "Colour of All products"; at phone
+width the tree hides that square, as it hides the categories'.
 
 **A colour reaches a till only when a menu is published.** Publishing records each offer's colour
 in the menu's version, as it does the photo and description (`freezeOffer`,
-`packages/catalogue/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
+`packages/catalogue/src/menu-document.ts`). Changing a category's colour or the venue's default
+colour, or moving an uncoloured
 category under a coloured one, whether through `updateCategory` or the Products tree's Move
 (`moveCatalogueItems`), makes a published menu read as changed when it holds a product whose worked-out
 colour this changes (one with no colour of its own and no coloured category nearer to it), and the
 menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
-publish (the "a category's colour" cases in `packages/catalogue/src/menu-publication.test.ts`). A
+publish (the "a category's colour" cases in `packages/catalogue/src/menu-publication.test.ts`). The
+dashboard's Products tree, product editor and a menu's Structure tab draw the stored default, not
+a published version's. A
 product's own colour goes into the next version's offer in the same way
 (`packages/catalogue/src/menu-document.test.ts`), though no test reads a menu's status after one. A live version in an
 earlier document format is not sold from: [product-categories.md](product-categories.md).
