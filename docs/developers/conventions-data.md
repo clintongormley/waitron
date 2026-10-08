@@ -1881,8 +1881,8 @@ is an outbox, never inline.
 What a till DOES need is the one node accepting sales. INTENDED: the on-site box when the internet
 is down, a promoted cloud when the box is dead (which needs the internet), box-down AND
 internet-down together being no failover — the MVP's accepted case. TODAY there is none of it: a
-venue has ONE node and no failover at all until slice 3 (2026-09-19, `docs/backlog.md` →
-_Replication, membership & failover — residuals_). The till follows the primary and never chooses
+venue has ONE node and no failover at all until slice 3 (2026-09-19,
+[Replication, membership & failover — residuals](../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)). The till follows the primary and never chooses
 (till reroute, #244 to #265); only the primary sells.
 
 **Provisioning and boot**

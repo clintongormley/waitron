@@ -253,6 +253,122 @@ Open:
   produces one. Once starts have failed repeatedly the recovery page shows the generic text (code
   `unknown`), not `restore.membership_invalid`. Whether to give it a curated code is open.
 
+## Replication, membership & failover — residuals (Afterwards)
+
+**Slices 3 and 4 rebuild failover**
+([the topology design](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)). **Until
+slice 3 a venue has ONE node and no failover at all.** The "MVP for go-live" requirement of two boxes
+plus cloud failover is met by slices 3–5, not before, and it is accepted for exactly as long as
+Waitron is pre-production. What stayed: `packages/membership` whole (documents, signing,
+canonicalisation, verification, trust), node enrolment and its rate limiting
+(`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
+`ledger` / `state` / `local` classification — which no longer chooses a database file: every table
+is in `venue.db` (#548). Read the residuals below as requirements for what failover is
+rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
+identity from JOIN and promotion never mints a chain.
+
+**Owner decision 2026-09-24 — a cut-off primary keeps streaming, into its own copy.** Raised by #590
+(slice 2 Task 6), whose `StreamHost` streams on any node whose role is primary, while the Cloud
+snapshot worker also requires the node not be fenced (`cloudPrimary`, `apps/server/src/boot.ts`).
+Invoices a primary has recorded and chained but not yet sent to AEAT exist only in its database, and
+Litestream copies the whole file page by page — it cannot pick out the fiscal tables — so the way to
+carry them across is to keep streaming everything and extract the fiscal records afterwards, from a
+restore of that node's copy, on the promoted side. So when slice 3 builds fencing and promotion: a
+fenced primary does NOT stop streaming; it streams into its OWN generation and never writes over the
+live one, and the tail shipper files what that copy holds that the promoted side lacks. Watch for the
+rule #590's review described — a node refuses itself once the bucket's pointer names another
+generation — which, if it stops a fenced node's stream the moment the promoted node claims the
+pointer, would cut off exactly the tail this decision is meant to keep. Invoices already sent to AEAT
+stay recoverable from AEAT either way.
+
+**Owner decision 2026-09-26 (A45's first point) — a standby checks a promotion against the
+primary's key, built in slice 3.** A restored membership document's signature is checked only at
+the start that finishes a restore (#678); A53 added a check that it can be read and is shaped as a
+document on every restored start not finishing an adoption. Promotion, `retireSelf` and the standby chart append
+(`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
+sign over the held document without checking it, because a mirror's stored keys name only itself,
+so a document its primary genuinely signed fails the check there (measured, see Task 9a's #678
+entry). The owner chose to leave those paths unchecked now and, as part of the failover work: a
+standby stores the primary's key when it joins, and promotion, `retireSelf` and the standby chart
+append check the held document against it. Not built; until then those paths stay unchecked.
+
+Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
+that slice 3 has to restore:
+
+- **`retireSelf` and `rejoinAsSecondary` lost their drain confirmations.** Both used to prove, before
+  an irreversible step, that every row this node originated had reached the carrier.
+  `node.retire_carrier_changed`, `node.retire_carrier_attached`, `node.retire_not_drained`,
+  `rejoin.carrier_attached` and `rejoin.not_drained` were deleted with it. What survives is
+  membership-only: `retire_not_fenced`, `retire_no_carrier` (now a direct `servingPrimaryNodeId`
+  check), `retire_superseded`, `rejoin.not_fenced` and `rejoin.no_carrier`. So a fenced node can now
+  self-evict, and a returned box can now be wiped, without any proof its tail was carried forward.
+- **`rejoin --accept-loss` waives nothing today.** The flag and its `rejoin.accept_loss` warning are
+  kept so the operator's acknowledgement survives the switch, but the drain confirmation it used to
+  waive is gone.
+- **Adopt copies no data, and an adopted mirror can no longer leave adoption-pending.** Adopt stamps
+  the mirror's identity and config and writes the finish-adoption latch; the initial copy that used
+  to bring the venue's rows went with the subscription. `runFinishAdoption` tries to establish the
+  reserved identity on every boot, and that attempt cannot succeed, because the standby's own `nodes`
+  row references a `locations` row the mirror does not have and nothing supplies. **Operator-visible
+  consequence:** a box that adopts stays in adoption-pending boot for good — `/api/box/status` keeps
+  answering `adoption: pending`, no mirror session or node-scoped read path is ever mounted, and each
+  boot logs `adoption.establish_failed`. The full account is in
+  `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header; whatever replaces the initial copy
+  in slice 3 has to close this.
+
+- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
+  wizard's copy was made honest rather than the option removed — `apps/setup`'s role, connect and done
+  screens say plainly that joining does not work in this version and that the box ends up holding
+  none of the restaurant's data, with no till and no dashboard. But the option is still there and the
+  flow still runs, so an operator can still spend a box on it. Removing or disabling it until slice 3
+  lands the replacement is a product call, not a wording one. Whoever takes it should decide for
+  `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
+
+- **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
+  box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.
+- **The membership chart fills up, and not every entry can be cleared.** It APPENDS, every
+  wipe-and-re-adopt mints a fresh nodeId, and `MAX_NODES = 8` (`packages/membership/src/verify.ts`)
+  caps it. A full chart is refused at the mint (`membership.chart_too_large`) and at the join
+  (`mirror.membership_full`), and an admin can clear a REMOVED (`evicted`) machine to free its place,
+  from the Servers screen (A63). What stays open: only an `evicted` entry can be cleared, and A61's
+  Remove refuses a standby only when the primary's own database holds a `nodes` row for it
+  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). The only writers of a `nodes` row
+  found are provisioning (`packages/provisioning/src/venue-apply.ts`, the row of the box being set
+  up) and `insertReservedNodeTx`, which a standby runs on its OWN database
+  (`apps/server/src/reserved-identity.ts`). So today a remote standby's old entry (a
+  wiped-and-re-adopted box's previous id, for one) reads as never-joined even if it finished, and
+  can be removed and then cleared. Once adoption can finish (`finish-adoption.ts`) and that check
+  can see a finished standby, nothing will free such an entry. A `sell-only` former primary keeps
+  its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
+  Re-admission must retire, not add.
+- **Chart hygiene:** a post-setup change to `WAITRON_ADVERTISED_ORIGIN` is never re-published, and a
+  node that promotes while absent from the chart appends itself address-less, which `routableServers`
+  drops.
+- **Resume-at-restore marker** — a persisted wiped-state marker to tell a wiped-mid-restore box from
+  a never-provisioned one.
+- **Worker-lifecycle manager** (promote Slice 3) — in-process promotion without the restart; the
+  node-role collapse decides.
+- **Power-loss durability and the selling gate.** `writeFileAtomic` does NOT fsync while the
+  point-of-no-return is a database commit, so a power cut between the env write and the commit could
+  reboot a box `mode=primary` still carrying the primary's series. Fsync the env write or resolve the
+  series at boot — and selling must gate on REBOOT COMPLETION.
+- **Getting the AEAT certificate onto a promoted standby needs a new design.** The
+  [2026-09-07 design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) landed as #279
+  and was reverted by #281, and the replication it was rebuilt against was itself removed on
+  2026-09-19 — so the design and its plan describe a mechanism that no longer exists. Redesign it with
+  slice 3. Installing or renewing the certificate on the primary does not wait for this (A9).
+- **Still owed after the cert-distribution rebuild:** the restore-onto-cloud re-encrypt; a dashboard
+  promote UI; an a11y test for the break-glass panel.
+- **Carry-ins, accepted or to be stated in a threat model:** the primary burns an installation number
+  per bundle fetch; provision and adopt are assumed mutually exclusive per box; `establishNodeIdentity`
+  must run once per node before any document is signed; on the first boot after returning, a node runs as its
+  stale-held-doc primary until the reconciliation restarts it; restart-based fencing leaves a one-tick
+  window for one more fiscal pass on the superseded chain.
+- **Split-brain** — the promoted node's side while partitioned spans selling, the fiscal chain,
+  payments (`resolvePending`) and printing — **examine in detail, not scoped to printing** (owner,
+  2026-08-26).
+- **Till UX for the timed-out card case** — retry, alternative tender, or wait.
+
 ## Decisions and deliberate limits
 
 From the Cloud connection integration (2026-09-24): Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS

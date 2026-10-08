@@ -23,6 +23,28 @@ their full text.
   `widgets/test-helpers.ts` has no accessibility suite that fails without it; and `connection-screen.ts`'s `connection-continue` event is not named `wt-*`
   and carries no `detail`.
 
+## Setup wizard — the constraints A2's rework left behind (A2)
+
+What constrains the next change to the wizard:
+
+- **Detection must PROMOTE the match, not pre-open it in a full list.** The matched guide is
+  lifted out with the rest behind one closed disclosure.
+- **The demo tax ID is fixed and must never reach Prepare or Live.** Since W108 it is the country
+  pack's demo value (`CountryPack.demo`; Spain's, `B00000000`, in `packages/country-es/src/spain.ts`),
+  which passes Spain's own check as a company's: it is safe only because a demo box files nothing.
+  Prepare and Live start with an empty tax ID and legal name, and leaving Demo for either clears both
+  from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`). The location name is not on that list,
+  so a Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live. There
+  the location-name field starts filled in but takes its hint, which the filled value hides, and no
+  "?", because `#field` (`apps/setup/src/screens/venue-screen.ts`) chooses the "?" by Demo mode alone.
+- **Default both series codes to values that survive a cold restore.** A cold restore appends
+  `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
+  default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
+  (rectificativa). Nothing in the dashboard can change or add a series today.
+- **`operation_description` is a Veri\*Factu field, not a country fact.** It defaults from the fiscal
+  contribution and is editable after setup on the dashboard's Venue settings **Receipts** tab (its location
+  section), applying to records filed from then on and leaving already-filed records alone.
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it

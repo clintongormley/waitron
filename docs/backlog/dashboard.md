@@ -76,6 +76,27 @@ keys #426 dropped could be declared again — `sessions` to `persons`, and
 `tills` went with that table in A238, and `sessions.device_id` holds one to `devices`). Doing so would
 change what deleting a person does.
 
+## Roles the admin can edit (A7)
+
+A person's role is one of four values (`personRole` in `packages/identity/src/schema/persons.ts`).
+The seam is already right: no call site gates on a role string — every one asks for a PERMISSION and
+one map turns a role into its set (`packages/identity/src/permissions.ts`) — and a session reads the
+role from the database on each request, so an edited role takes effect at once. Roles and their
+permissions become rows the admin owns, per tenant, with the four seeded as defaults; no compatibility
+code.
+
+The design turns on the **ladder**: a module contributes a permission by naming only the lowest role
+that should hold it (`grantedFrom`, on `ModulePermission` in `packages/module/src/module.ts`) and identity spreads it
+upward. A custom role has no position, so either every custom role declares where it sits, or the
+module contract names a permission group instead. Pick one before writing schema;
+`packages/composition/src/role-parity.ts` proves at compile time that the contract's roles and
+identity's are one list, and whatever replaces the union keeps an equivalent tie. Then: who may edit
+a role (`person.admin` plus nobody mints or widens beyond what they hold, and a venue is never left
+with nobody who can administer roles); a role in use (deleting or narrowing one changes live
+sessions on their next request); storage (a table in identity's own migration set with a
+classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
+`roleName`, `apps/dashboard/src/i18n/domain.ts:135`, custom ones will not be).
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'

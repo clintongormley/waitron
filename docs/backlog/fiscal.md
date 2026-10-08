@@ -88,3 +88,13 @@ their full text.
     `test/write-path-fixtures.ts:37-44` for `steadyClock`. The receipt is now at
     `test/fixtures.ts:285-289` and `steadyClock` at `test/write-path-fixtures.ts:27-39`. Correct
     them only in a change allowed to touch that file.
+
+## Reporting — the fiscal remainder (parked)
+
+Two pre-filing caveats a human must clear before the first
+LIVE 303 filing: validate the DR303 file once against the real AEAT "por fichero" uploader (we
+omit página 2, régimen simplificado); and an asesor must confirm the **prorrata** treatment
+(`computeInputVat` scales only the cuota by `deductible_proportion`). Deferred build slices:
+rectificativas de facturas recibidas (casilla 40/41, needs a `corrects_purchase_invoice_id`
+self-FK); bienes-de-inversión regularización (43); the prorrata rule (44, asesor-driven);
+intra-community and import boxes (32–39); a libro-registro / Pre303 export.

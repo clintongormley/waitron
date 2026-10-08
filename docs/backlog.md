@@ -204,6 +204,17 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   `(supplier_tax_id, supplier_invoice_number)` is unique forever — per-year versus forever is the
   asesor's.
 
+- **Reporting — the fiscal remainder (parked)** — left open by the modelo 303 work (#76, #91, #98,
+  #1106). Two pre-filing caveats a human must clear before the first LIVE 303 filing: validate the
+  DR303 file once against the real AEAT "por fichero" uploader (we omit página 2, régimen
+  simplificado); and an asesor must confirm the **prorrata** treatment (`computeInputVat` scales only
+  the cuota by `deductible_proportion`). [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
+
+- **Modelo 303's deferred build slices (parked):** rectificativas de facturas recibidas (casilla
+  40/41, needs a `corrects_purchase_invoice_id` self-FK); bienes-de-inversión regularización (43);
+  the prorrata rule (44, asesor-driven); intra-community and import boxes (32–39); a libro-registro /
+  Pre303 export. [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -233,6 +244,23 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
   peers are stopped" confirmation again.** Left open by SQLite slice 2 Task 9c (#646, "Restore from
   my bucket" in the setup wizard).
+
+- **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
+  user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
+  the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
+  are still to measure. [Detail](backlog/box.md#box-image-constraints-b3)
+
+- **A Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live**
+  (whether this is wanted is not recorded; it sits among the wizard's constraints). The location
+  name is not on the list leaving Demo clears (`#onPatch`, `apps/setup/src/setup-app.ts`). There the
+  location-name field starts filled in but takes its hint, which the filled value hides, and no "?",
+  because `#field` (`apps/setup/src/screens/venue-screen.ts`) chooses the "?" by Demo mode alone.
+  [Detail](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2)
+
+- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** But
+  the option is still there and the flow still runs, so an operator can still spend a box on it.
+  Removing or disabling it until slice 3 lands the replacement is a product call, not a wording one.
+  [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 ### Menus and the catalogue
 
@@ -300,7 +328,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 ### The kitchen and preparation
 
-_Formerly Track A's kitchen part, and kitchen entries elsewhere._
+_Formerly Track A's kitchen part, and kitchen entries elsewhere._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
 - **The dashboard's read-only Prep stations screen still shows only its Stations tab, so a view-only
   manager does not see the watcher list there** — left open by W110b (#1278) and A285 (#1308): `GET /management-api/watchers`
@@ -315,6 +343,13 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere._
 
 - KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
   `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
+
+- **KDS operations — low priority (A9)** — Gaps: a routing read-back / audit view (the station
+  selects are set-only — the most useful to close); no station `type`/`kind`; single-target only (no
+  fan-out, no per-modifier or per-time rules). Table and service statuses have full CRUD; kitchen
+  statuses are partial — `bump_mode` and `fire_control` are configurable fixed enums, but a
+  user-definable kitchen-status list does not exist.
+  [Detail](backlog/kitchen.md#kds-operations--low-priority-a9)
 
 ### The till, devices and table service
 
@@ -413,6 +448,8 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   shows `place.error`. The gain if built is that a re-tap after a lost response returns the invoice
   already issued instead of an error.
   [Detail](backlog/till.md#a-re-sent-place-on-an-already-placed-order-answers-409-rather-than-replaying-the-original-result--leave-it-or-build-the-replay)
+
+- **Till UX for the timed-out card case** — retry, alternative tender, or wait. [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 ### Printers, the print agent and receipts
 
@@ -603,6 +640,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
   neither captured nor excluded — the curated list went stale on `modules.json` already.
+  [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
+
+- **Backup & restore — carry-forwards (B2)** — left open by the restore hook (SP-3d, #248) and the
+  dashboard wizard (#295). Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend`
+  key path-traversal guard landed with BR-3's manifest-driven `get(key)`; a working-backup boot
+  success-path integration test; scope the flat `resolvers` map by module when a second `nonDbState`
+  module lands; a `packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails
+  safe under GCM auth today); generalise archive entry routing off declared source ids when a second
+  non-DB source lands. [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
 
 - **When a nightly report job exists, the backup slot should fire after it** — left open by the "backups off or stale" reminder (#371).
 
@@ -616,7 +662,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **B3. The bootable USB installer** — Runs `waitron.sh install` unattended. Open questions it owns: whether the stick carries the images so
   install needs no internet; unattended updates for a box we did not sell; AP-mode WiFi onboarding. Box
-  image constraints under _Detail → Box image_. Not started.
+  image constraints under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). Not started.
+
+- **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
+
+- **Kiosk options, none built:** Chromium in the box image, now the owner's lean for every box (B3,
+  2026-09-29), and, later, Fully Kiosk resale for dedicated tablets. Four traps to establish when the
+  image is built (the crash-restore dialog, Chromium's separate certificate store, screen blanking,
+  BIOS power-loss behaviour) in
+  [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
+  §5. [Detail](backlog/box.md#box-image-constraints-b3)
 
 - **The box the customer buys probably doubles as a till, so the image ships a screen and a browser** — owner, 2026-09-29. A lean, not yet a decision. **Open:** whether the box's own screen enrols as a till like any other device or is treated differently because it is local, and what address it opens the till at. [Detail](backlog/box.md#the-box-the-customer-buys-probably-doubles-as-a-till-so-the-image-ships-a-screen-and-a-browser)
 
@@ -942,10 +997,17 @@ the tree. What remains, largest first:
 
 - **Richer daily close** — one close run by the primary across all tills.
 
-- The residuals under _Detail → Replication_: re-admission, the membership chart filling up, chart
-  hygiene, the resume-at-restore marker, power-loss durability and the selling gate,
-  restore-onto-cloud re-encrypt, mirror fidelity, split-brain on the promoted side, the till UX for
-  a timed-out card.
+- **Replication, membership & failover — residuals** — **Until slice 3 a venue has ONE node and no
+  failover at all.** Read the residuals as requirements for what failover is rebuilt INTO, not as
+  descriptions of code that exists today. Open: a cut-off primary keeps streaming, into its own copy
+  (owner, 2026-09-24); a standby checks a promotion against the primary's key (owner, 2026-09-26);
+  `retireSelf` and `rejoinAsSecondary` lost their drain confirmations; `rejoin --accept-loss` waives
+  nothing today; an adopted mirror can no longer leave adoption-pending; re-admission, the
+  membership chart filling up, chart hygiene, the resume-at-restore marker, the worker-lifecycle
+  manager, power-loss durability and the selling gate, getting the AEAT certificate onto a promoted
+  standby, restore-onto-cloud re-encrypt, the carry-ins, mirror fidelity, split-brain on the
+  promoted side, the till UX for a timed-out card.
+  [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 - **A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted
   changes in `packages/sync`) was designed on the application outbox that #280 deleted, and the
@@ -5222,7 +5284,8 @@ tutorial is reopened (the Demo bar, A246, W36, is the obvious place); whether it
 well as the dashboard; and how each required lesson's check is read without slowing the dashboard.
 It comes after the Demo bar (A246, W36) and A238, whose device and profile model it teaches.
 
-The original walkthrough is retained under _Detail → Setup wizard_.
+What A2's rework left as constraints on the next change to the wizard is under
+[Setup wizard — the constraints A2's rework left behind](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2).
 
 ### A3. Printers from the dashboard
 
@@ -7121,7 +7184,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   till copy's own permission — two permissions for one kind of print is a merge candidate.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, restated 2026-09-28: "especially because I want roles to be definable by the
-  customer"; design not written). Detail under _Detail → Roles_: the ladder question decides the
+  customer"; design not written). Detail under
+  [Roles the admin can edit](backlog/dashboard.md#roles-the-admin-can-edit-a7): the ladder question decides the
   schema. The dashboard's role lists (the add-person and edit-person forms and the Staff screen's
   role filter) sort by the displayed name in the current language (`rolesByName`,
   `apps/dashboard/src/i18n/domain.ts`), so a custom role's name would take its place among them; the
@@ -7892,7 +7956,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   deleted by service plan Task 13; whether this still holds for the paths that move lines now is not
   checked); hold-on-send without courses plus a venue disable setting; FP-1's empty-named
   child-modifier row; device-scoped fire/collect routes. Then the low-priority KDS list under
-  _Detail → KDS_.
+  [KDS operations](backlog/kitchen.md#kds-operations--low-priority-a9).
 - **Order-timing and modifier follow-ons**: delivery-order floor flash, idle-floor escalation,
   station-kind threshold defaults, an unbumped-since-fire metric; on-screen modifier `×N`, the shared
   `#allergens` render, the KDS-versus-till unreviewed-dish call, post-fire note edit
@@ -7924,8 +7988,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
   numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
 - **Logging Slice 2 — one-touch bug report**, then Slice 3 triage and forwarding, with the Slice 1
-  hardening (client-trail key allowlist, `maskPath` PII, the setup app). Detail under _Detail →
-  Logging_.
+  hardening (client-trail key allowlist, `maskPath` PII, the setup app). Detail under
+  [Logging, diagnostics & one-touch bug report](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
   the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
@@ -8088,280 +8152,6 @@ a Bizum tap before designing any UX.
 
 ---
 
-## Detail
-
-The long form for tracked items, so the tracks above stay readable.
-
-### Setup wizard — the constraints A2's rework left behind (A2)
-
-**Final setup screen (A324) — DONE.** Dashboard comes first, followed by Till and Email inbox,
-with a short description under each link. The inbox description covers locally captured account
-mail. One status sentence changes from restarting to ready; the reload button is gone. The
-mirror-join screen and the existing restart polling rules are unchanged.
-
-Live A2 work is under _A2_ in Track A. What constrains the next change to the wizard:
-
-- **Detection must PROMOTE the match, not pre-open it in a full list.** The matched guide is
-  lifted out with the rest behind one closed disclosure.
-- **The demo tax ID is fixed and must never reach Prepare or Live.** Since W108 it is the country
-  pack's demo value (`CountryPack.demo`; Spain's, `B00000000`, in `packages/country-es/src/spain.ts`),
-  which passes Spain's own check as a company's: it is safe only because a demo box files nothing.
-  Prepare and Live start with an empty tax ID and legal name, and leaving Demo for either clears both
-  from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`). The location name is not on that list,
-  so a Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live. There
-  the location-name field starts filled in but takes its hint, which the filled value hides, and no
-  "?", because `#field` (`apps/setup/src/screens/venue-screen.ts`) chooses the "?" by Demo mode alone.
-- **Default both series codes to values that survive a cold restore.** A cold restore appends
-  `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
-  default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
-  (rectificativa). Nothing in the dashboard can change or add a series today.
-- **`operation_description` is a Veri\*Factu field, not a country fact.** It defaults from the fiscal
-  contribution and is editable after setup on the dashboard's Venue settings **Receipts** tab (its location
-  section), applying to records filed from then on and leaving already-filed records alone.
-
-### Roles the admin can edit (A7)
-
-A person's role is one of four values (`personRole` in `packages/identity/src/schema/persons.ts`).
-The seam is already right: no call site gates on a role string — every one asks for a PERMISSION and
-one map turns a role into its set (`packages/identity/src/permissions.ts`) — and a session reads the
-role from the database on each request, so an edited role takes effect at once. Roles and their
-permissions become rows the admin owns, per tenant, with the four seeded as defaults; no compatibility
-code.
-
-The design turns on the **ladder**: a module contributes a permission by naming only the lowest role
-that should hold it (`grantedFrom`, on `ModulePermission` in `packages/module/src/module.ts`) and identity spreads it
-upward. A custom role has no position, so either every custom role declares where it sits, or the
-module contract names a permission group instead. Pick one before writing schema;
-`packages/composition/src/role-parity.ts` proves at compile time that the contract's roles and
-identity's are one list, and whatever replaces the union keeps an equivalent tie. Then: who may edit
-a role (`person.admin` plus nobody mints or widens beyond what they hold, and a venue is never left
-with nobody who can administer roles); a role in use (deleting or narrowing one changes live
-sessions on their next request); storage (a table in identity's own migration set with a
-classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
-`roleName`, `apps/dashboard/src/i18n/domain.ts:135`, custom ones will not be).
-
-### Incidents — the producers, and why the surface is separate from A1 (A5)
-
-The `incidents` table is written by several producers: the fiscal drain when AEAT rejects a record,
-the payments reconciler on drift, the Stripe device provider, the card provider pool, and — since A1 —
-the chain-append seam when a record's totals disagree with its own VAT lines. #368 added the reader
-(`listOpenIncidents`, `packages/core/src/incidents.ts`) and the dashboard bell and Alerts surface that
-displays them. It is one surface serving every producer.
-
-### Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)
-
-[Design](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md). Eventual vendor destination
-is GitHub issues; for now a bundle only needs to be copy-pastable.
-
-- **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
-  module's set), a capture endpoint that FREEZES a self-contained bundle (client trail `snapshot()` +
-  `LogReader.byRequestIds()` + environment), a `wt-report-dialog` and "Report a problem" trigger in
-  the till and dashboard chrome, and a GitHub-ready markdown serialiser.
-- **Slice 3 — triage and forwarding.** A dashboard _Problem reports_ screen and automated GitHub-issue
-  creation (through Waitron Cloud — see below).
-- **Hardening carried out of Slice 1, for Slice 2:** a key-name allowlist on the client trail's
-  redaction (it filters by value TYPE only, so a secret string under any key passes) and scrub
-  `message`/`stack` from rejected Errors; `maskPath` masks UUID and all-numeric segments only — mask
-  slugs and emails too; route the dashboard's boot-probe-fail, post-login and logout transitions
-  through the nav trail; roll the trail and report button out to `apps/setup`.
-- **Owner decisions 2026-09-24 — crash and freeze reports, and where reports go.** These extend
-  Slices 2 and 3 and replace one part of Slice 3; design them together before building:
-  - **Reports go to Waitron Cloud, which files the GitHub issue.** The box holds no GitHub
-    credential (this replaces Slice 3's stored token in `@waitron/credentials`). The box sends
-    through its signed-in Cloud client (`apps/server/src/cloud-client.ts`, #582); Cloud (the
-    separate `waitron-cloud` repository, being built) files the issue and groups reports with the
-    same stack into one issue with a count. Open: what a venue not connected to Cloud is offered.
-  - **The repository is public**, so the public issue carries only the stack, the Waitron version and
-    the error code. The venue's identity and anything a person typed stay private in Cloud, linked
-    from the issue.
-  - **Automatic reports as well as the manual button.** A crash that reaches the recovery page, an
-    unexpected server error, and a frozen process stopped by its watchdog (A18d writes one JSON
-    report file per event on a persistent volume, outside the venue database) each become a
-    pending report. After the box is back up, a signed-in manager is offered it on the dashboard —
-    never on the unauthenticated recovery page — with an optional description of what they were
-    doing, and a setting to send them automatically. The owner's aim: the more bugs reported, the
-    better.
-  - **Where the freeze reports are (#608).** One JSON file per process the watchdog kills, in
-    `<logDir>/crash-reports/` — on a box `/var/lib/waitron/logs/crash-reports/` on the persistent
-    `logs` volume, outside the venue database. Nothing reads or deletes them yet.
-
-### KDS operations — low priority (A9)
-
-Order routing is built (item→station, station→printer, receipt→printer). Gaps: a routing read-back /
-audit view (the station selects are set-only — the most useful to close); no station `type`/`kind`;
-single-target only (no fan-out, no per-modifier or per-time rules). Table and service statuses have
-full CRUD; kitchen statuses are partial — `bump_mode` and `fire_control` are configurable fixed
-enums, but a user-definable kitchen-status list does not exist.
-
-### Backup & restore — carry-forwards (B2)
-
-The restore hook is SP-3d (#248); the wizard is #295. Built: the storage abstraction, fan-out and
-AES-256-GCM artifact encryption; the single encrypted archive and the module `backup` contribution;
-the restore consumer; a filing node's restore minting a fresh chain and disjoint series; the
-dashboard wizard. The image ships with backups OFF, deliberately.
-
-Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
-`modules.json`; the replacement's private `cloud-recovery.json`, `cloud-replacement.json` and
-`cloud-connection.json` stay outside that named capture set and the captured ciphertext archive.
-The exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
-`logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery
-bundle. Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend` key path-traversal
-guard landed with BR-3's manifest-driven `get(key)`; a working-backup boot success-path integration
-test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a
-`packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails safe under GCM auth
-today); generalise archive entry routing off declared source ids when a second non-DB source lands.
-
-### Box image constraints (B3)
-
-- **A setup box's `/health` returns 503 by design** (no duty loop); a liveness probe must gate on
-  `/setup-api/status` (200), or it restart-loops an unprovisioned box.
-- **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
-  user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
-  the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
-  are still to measure.
-- **The box image carries the WireGuard link.**
-- **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
-  authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
-- Kiosk options, none built: Chromium in the box image, now the owner's lean for every box (B3,
-  2026-09-29), and, later, Fully Kiosk resale for dedicated tablets. Cloud-managed device enrolment is tracked in the
-  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md). The counter till
-  boots into the app with no operating-system login — automatic console login, one full-screen
-  browser, and the till's own PIN as the boundary. Four traps to establish when the image is built
-  (the crash-restore dialog, Chromium's separate certificate store, screen blanking, BIOS power-loss
-  behaviour) in
-  [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
-  §5.
-
-### Replication, membership & failover — residuals (Afterwards)
-
-**Slices 3 and 4 rebuild failover**
-([the topology design](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)). **Until
-slice 3 a venue has ONE node and no failover at all.** The "MVP for go-live" requirement of two boxes
-plus cloud failover is met by slices 3–5, not before, and it is accepted for exactly as long as
-Waitron is pre-production. What stayed: `packages/membership` whole (documents, signing,
-canonicalisation, verification, trust), node enrolment and its rate limiting
-(`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
-`ledger` / `state` / `local` classification — which no longer chooses a database file: every table
-is in `venue.db` (#548). Read the residuals below as requirements for what failover is
-rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
-identity from JOIN and promotion never mints a chain.
-
-**Owner decision 2026-09-24 — a cut-off primary keeps streaming, into its own copy.** Raised by #590
-(slice 2 Task 6), whose `StreamHost` streams on any node whose role is primary, while the Cloud
-snapshot worker also requires the node not be fenced (`cloudPrimary`, `apps/server/src/boot.ts`).
-Invoices a primary has recorded and chained but not yet sent to AEAT exist only in its database, and
-Litestream copies the whole file page by page — it cannot pick out the fiscal tables — so the way to
-carry them across is to keep streaming everything and extract the fiscal records afterwards, from a
-restore of that node's copy, on the promoted side. So when slice 3 builds fencing and promotion: a
-fenced primary does NOT stop streaming; it streams into its OWN generation and never writes over the
-live one, and the tail shipper files what that copy holds that the promoted side lacks. Watch for the
-rule #590's review described — a node refuses itself once the bucket's pointer names another
-generation — which, if it stops a fenced node's stream the moment the promoted node claims the
-pointer, would cut off exactly the tail this decision is meant to keep. Invoices already sent to AEAT
-stay recoverable from AEAT either way.
-
-**Owner decision 2026-09-26 (A45's first point) — a standby checks a promotion against the
-primary's key, built in slice 3.** A restored membership document's signature is checked only at
-the start that finishes a restore (#678); A53 added a check that it can be read and is shaped as a
-document on every restored start not finishing an adoption. Promotion, `retireSelf` and the standby chart append
-(`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
-sign over the held document without checking it, because a mirror's stored keys name only itself,
-so a document its primary genuinely signed fails the check there (measured, see Task 9a's #678
-entry). The owner chose to leave those paths unchecked now and, as part of the failover work: a
-standby stores the primary's key when it joins, and promotion, `retireSelf` and the standby chart
-append check the held document against it. Not built; until then those paths stay unchecked.
-
-Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
-that slice 3 has to restore:
-
-- **`retireSelf` and `rejoinAsSecondary` lost their drain confirmations.** Both used to prove, before
-  an irreversible step, that every row this node originated had reached the carrier.
-  `node.retire_carrier_changed`, `node.retire_carrier_attached`, `node.retire_not_drained`,
-  `rejoin.carrier_attached` and `rejoin.not_drained` were deleted with it. What survives is
-  membership-only: `retire_not_fenced`, `retire_no_carrier` (now a direct `servingPrimaryNodeId`
-  check), `retire_superseded`, `rejoin.not_fenced` and `rejoin.no_carrier`. So a fenced node can now
-  self-evict, and a returned box can now be wiped, without any proof its tail was carried forward.
-- **`rejoin --accept-loss` waives nothing today.** The flag and its `rejoin.accept_loss` warning are
-  kept so the operator's acknowledgement survives the switch, but the drain confirmation it used to
-  waive is gone.
-- **Adopt copies no data, and an adopted mirror can no longer leave adoption-pending.** Adopt stamps
-  the mirror's identity and config and writes the finish-adoption latch; the initial copy that used
-  to bring the venue's rows went with the subscription. `runFinishAdoption` tries to establish the
-  reserved identity on every boot, and that attempt cannot succeed, because the standby's own `nodes`
-  row references a `locations` row the mirror does not have and nothing supplies. **Operator-visible
-  consequence:** a box that adopts stays in adoption-pending boot for good — `/api/box/status` keeps
-  answering `adoption: pending`, no mirror session or node-scoped read path is ever mounted, and each
-  boot logs `adoption.establish_failed`. The full account is in
-  `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header; whatever replaces the initial copy
-  in slice 3 has to close this.
-
-- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard's copy was made honest rather than the option removed — `apps/setup`'s role, connect and done
-  screens say plainly that joining does not work in this version and that the box ends up holding
-  none of the restaurant's data, with no till and no dashboard. But the option is still there and the
-  flow still runs, so an operator can still spend a box on it. Removing or disabling it until slice 3
-  lands the replacement is a product call, not a wording one. Whoever takes it should decide for
-  `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
-
-- **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
-  box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.
-- **The membership chart fills up, and not every entry can be cleared.** It APPENDS, every
-  wipe-and-re-adopt mints a fresh nodeId, and `MAX_NODES = 8` (`packages/membership/src/verify.ts`)
-  caps it. A full chart is refused at the mint (`membership.chart_too_large`) and at the join
-  (`mirror.membership_full`), and an admin can clear a REMOVED (`evicted`) machine to free its place,
-  from the Servers screen (A63). What stays open: only an `evicted` entry can be cleared, and A61's
-  Remove refuses a standby only when the primary's own database holds a `nodes` row for it
-  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). The only writers of a `nodes` row
-  found are provisioning (`packages/provisioning/src/venue-apply.ts`, the row of the box being set
-  up) and `insertReservedNodeTx`, which a standby runs on its OWN database
-  (`apps/server/src/reserved-identity.ts`). So today a remote standby's old entry (a
-  wiped-and-re-adopted box's previous id, for one) reads as never-joined even if it finished, and
-  can be removed and then cleared. Once adoption can finish (`finish-adoption.ts`) and that check
-  can see a finished standby, nothing will free such an entry. A `sell-only` former primary keeps
-  its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
-  Re-admission must retire, not add.
-- **Chart hygiene:** a post-setup change to `WAITRON_ADVERTISED_ORIGIN` is never re-published, and a
-  node that promotes while absent from the chart appends itself address-less, which `routableServers`
-  drops.
-- **Resume-at-restore marker** — a persisted wiped-state marker to tell a wiped-mid-restore box from
-  a never-provisioned one.
-- **Worker-lifecycle manager** (promote Slice 3) — in-process promotion without the restart; the
-  node-role collapse decides.
-- **Power-loss durability and the selling gate.** `writeFileAtomic` does NOT fsync while the
-  point-of-no-return is a database commit, so a power cut between the env write and the commit could
-  reboot a box `mode=primary` still carrying the primary's series. Fsync the env write or resolve the
-  series at boot — and selling must gate on REBOOT COMPLETION.
-- **Getting the AEAT certificate onto a promoted standby needs a new design.** The
-  [2026-09-07 design](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) landed as #279
-  and was reverted by #281, and the replication it was rebuilt against was itself removed on
-  2026-09-19 — so the design and its plan describe a mechanism that no longer exists. Redesign it with
-  slice 3. Installing or renewing the certificate on the primary does not wait for this (A9).
-- **Still owed after the cert-distribution rebuild:** the restore-onto-cloud re-encrypt; a dashboard
-  promote UI; an a11y test for the break-glass panel.
-- **Carry-ins, accepted or to be stated in a threat model:** the primary burns an installation number
-  per bundle fetch; provision and adopt are assumed mutually exclusive per box; `establishNodeIdentity`
-  must run once per node before any document is signed; on the first boot after returning, a node runs as its
-  stale-held-doc primary until the reconciliation restarts it; restart-based fencing leaves a one-tick
-  window for one more fiscal pass on the superseded chain.
-- **Split-brain** — the promoted node's side while partitioned spans selling, the fiscal chain,
-  payments (`resolvePending`) and printing — **examine in detail, not scoped to printing** (owner,
-  2026-08-26).
-- **Till UX for the timed-out card case** — retry, alternative tender, or wait.
-
-### Reporting — the fiscal remainder (parked)
-
-Built: the VAT summary and the sales side of modelo 303 (#76), the purchases side, the form's boxes
-and the DR303 file (#91), and its download route, `GET /management-api/reports/modelo-303`, with
-monthly and quarterly periods (#98); and the dashboard's VAT return screen (#1106). Two pre-filing caveats a human must clear before the first
-LIVE 303 filing: validate the DR303 file once against the real AEAT "por fichero" uploader (we
-omit página 2, régimen simplificado); and an asesor must confirm the **prorrata** treatment
-(`computeInputVat` scales only the cuota by `deductible_proportion`). Deferred build slices:
-rectificativas de facturas recibidas (casilla 40/41, needs a `corrects_purchase_invoice_id`
-self-FK); bienes-de-inversión regularización (43); the prorrata rule (44, asesor-driven);
-intra-community and import boxes (32–39); a libro-registro / Pre303 export.
-
----
-
 ## The advisor gap — not a build track
 
 **No fiscal advisor is engaged**, and [compliance/who-to-ask.md](compliance/who-to-ask.md) says every
@@ -8432,7 +8222,7 @@ while it holds decisions still open.
 | [Every device enrolled, fail closed](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)                                                                                    | partly built; deferred                                                                                                                                                     | A4                                                                        |
 | [Language fallback](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)                                                                                                     | partly built                                                                                                                                                               | A9                                                                        |
 | [Native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md)                                                                                                                | reference; nothing committed                                                                                                                                               | the go-native decision                                                    |
-| [Logging and diagnostics](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md)                                                                                                  | Slice 1 built (#192)                                                                                                                                                       | A9, _Detail → Logging_                                                    |
+| [Logging and diagnostics](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md)                                                                                                  | Slice 1 built (#192)                                                                                                                                                       | A9, _Alerts, logging and diagnostics_                                     |
 | [Fiscal certificate distribution](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) and its plan                                                                                   | reverted (#281); describes a removed mechanism                                                                                                                             | _Afterwards_                                                              |
 | [Handheld app store and kiosk](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md)                                                                                             | reference; its own-phones decision reversed 2026-09-18                                                                                                                     | —                                                                         |
 | [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)                                                                                          | discussion record; not started                                                                                                                                             | B3                                                                        |
@@ -8462,7 +8252,3 @@ Update it in the change that makes it stale (CLAUDE.md §7). In particular:
 - When a question is closed on primary source, say so and stop calling it blocked.
 - Delete finished items. If an entry is growing proof-of-work (test counts, grep receipts, "proven by
   deletion", what a review seat caught), that belongs in the PR thread, not here.
-
-
-**Setup Import button hover contrast (found during W69, 2026-10-06) — DONE (A306, #1336)**, with the
-dark modal danger-button entry: primary and danger buttons no longer dip in opacity on hover.

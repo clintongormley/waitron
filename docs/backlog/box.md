@@ -378,6 +378,42 @@ and #723).**
   (`packages/stream/src/bucket-error-names.ts`) was checked against Amazon's reference only, not
   against the names versitygw gives its errors.
 
+## Backup & restore — carry-forwards (B2)
+
+The image ships with backups OFF, deliberately.
+
+Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
+`modules.json`; the replacement's private `cloud-recovery.json`, `cloud-replacement.json` and
+`cloud-connection.json` stay outside that named capture set and the captured ciphertext archive.
+The exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
+`logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery
+bundle. Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend` key path-traversal
+guard landed with BR-3's manifest-driven `get(key)`; a working-backup boot success-path integration
+test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a
+`packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails safe under GCM auth
+today); generalise archive entry routing off declared source ids when a second non-DB source lands.
+
+## Box image constraints (B3)
+
+- **A setup box's `/health` returns 503 by design** (no duty loop); a liveness probe must gate on
+  `/setup-api/status` (200), or it restart-loops an unprovisioned box.
+- **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
+  user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
+  the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
+  are still to measure.
+- **The box image carries the WireGuard link.**
+- **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
+  authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
+- Kiosk options, none built: Chromium in the box image, now the owner's lean for every box (B3,
+  2026-09-29), and, later, Fully Kiosk resale for dedicated tablets. Cloud-managed device enrolment is tracked in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md). The counter till
+  boots into the app with no operating-system login — automatic console login, one full-screen
+  browser, and the till's own PIN as the boundary. Four traps to establish when the image is built
+  (the crash-restore dialog, Chromium's separate certificate store, screen blanking, BIOS power-loss
+  behaviour) in
+  [2026-09-18-handheld-and-till-hardware-decisions.md](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
+  §5.
+
 ## Decisions and deliberate limits
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
