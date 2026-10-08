@@ -27,6 +27,7 @@ import { conjunctionList } from "../i18n/list.js";
 import { localizedName } from "../i18n/localized.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
+import { leftToBrowser } from "../navigation.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
@@ -922,7 +923,19 @@ export class MenuPreviewPanel extends LitElement {
       </ul>
       <a
         data-test="clash-prices"
-        href=${`/manage/menus/menu/${encodeURIComponent(this.preview!.document.menuId)}/view/prices`}
+        @click=${(event: MouseEvent) => {
+          if (leftToBrowser(event)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          this.dispatchEvent(
+            new CustomEvent("wt-preview-clashes", {
+              detail: {},
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }}
+        href=${`/manage/menus/menu/${encodeURIComponent(this.preview!.document.menuId)}/view/prices/filter/clashes`}
         >${t("menu_prices.show_clashes")}</a
       >
     </section>`;

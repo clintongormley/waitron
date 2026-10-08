@@ -9001,3 +9001,129 @@ for (const succeeds of [true, false]) {
     }
   });
 }
+
+it.each(["link", "keyboard", "address", "retry"])(
+  "A349 opens Clashes from the Preview %s despite remembered All prices",
+  async (entry) => {
+    const before = currentLocale();
+    setLocale("en");
+    try {
+      const rows = lunchPrices();
+      const lager = rows.find((row) => row.productId === "p-lager")!;
+      lager.combined = {
+        ...lager.combined,
+        price: {
+          state: "clash",
+          candidates: [
+            { value: "2.80", place: { kind: "own_sections" }, source: { kind: "product" } },
+            {
+              value: "3.00",
+              place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+              source: { kind: "own" },
+            },
+          ],
+        } as MenuPriceRow["combined"]["price"],
+      };
+      const value = lunchPreview();
+      value.document = { ...value.document, menuId: "menu-lunch" };
+      value.clashes = [
+        {
+          productId: "p-lager",
+          variantId: null,
+          field: "price",
+          candidates: lager.combined.price.state === "clash" ? lager.combined.price.candidates : [],
+        },
+      ] as MenuPreview["clashes"];
+      const client = api({
+        getMenuPrices: vi.fn(async () => rows),
+        getMenuPreview: vi.fn(async () => value),
+      });
+      const el = await mountPrices(client);
+      const priceTable = () =>
+        prices(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+          "wt-data-table",
+        )!;
+      await priceTable().updateComplete;
+      priceTable().chooseFilter("override", []);
+      await priceTable().updateComplete;
+      expect(priceTable().filterValues("override")).toEqual([]);
+      await chooseTab(el, "preview");
+      await vi.waitFor(() =>
+        expect(
+          q(el, "dashboard-menu-preview")?.shadowRoot?.querySelector('[data-test="clash-prices"]'),
+        ).not.toBeNull(),
+      );
+      const link = q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector<HTMLAnchorElement>(
+        '[data-test="clash-prices"]',
+      )!;
+      expect(link.getAttribute("href")).toBe(`${PRICES_PATH}/filter/clashes`);
+      const pending = deferred<MenuPriceRow[]>();
+      client.getMenuPrices.mockImplementation(() => pending.promise);
+      if (entry !== "address") {
+        link.addEventListener("click", (event) => event.preventDefault());
+        if (entry === "keyboard") {
+          link.focus();
+          await userEvent.keyboard("{Enter}");
+        } else await userEvent.click(link);
+      } else {
+        history.pushState(null, "", link.href);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+      await vi.waitFor(() => expect(prices(el).loading).toBe(true));
+      if (entry === "retry") {
+        pending.reject(new Error("down"));
+        await vi.waitFor(() => expect(prices(el).failed).toBe(true));
+        client.getMenuPrices.mockResolvedValue(rows);
+        await click(el, "prices-retry");
+      } else pending.resolve(rows);
+      await vi.waitFor(() =>
+        expect(
+          priceTable().filterValues("override"),
+          JSON.stringify({
+            url: location.pathname,
+            clashesFor: prices(el).clashesFor,
+            loading: prices(el).loading,
+            failed: prices(el).failed,
+            rows: prices(el).rows.length,
+          }),
+        ).toEqual(["clash"]),
+      );
+      expect(
+        [...priceTable().shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
+          row.getAttribute("data-row-key"),
+        ),
+      ).toEqual(["mi-lager"]);
+      priceTable().chooseFilter("override", []);
+      await priceTable().updateComplete;
+      history.replaceState(null, "", location.href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await el.updateComplete;
+      expect(priceTable().filterValues("override")).toEqual([]);
+      await chooseTab(el, "structure");
+      await chooseTab(el, "prices");
+      await vi.waitFor(() => expect(prices(el).loading).toBe(false));
+      expect(location.pathname).toBe(PRICES_PATH);
+      expect(priceTable().filterValues("override")).toEqual([]);
+    } finally {
+      setLocale(before);
+    }
+  },
+);
+
+it.each([
+  ["/manage/menus/filter/clashes", "/manage/menus"],
+  ["/manage/menus/menu/menu-lunch/view/structure/filter/clashes", LUNCH_PATH],
+  ["/manage/menus/menu/menu-lunch/view/prices/filter/unknown", PRICES_PATH],
+])(
+  "A349 removes a price-filter request that does not name a Prices destination: %s",
+  async (path, wanted) => {
+    await mount(api(), path);
+    expect(location.pathname).toBe(wanted);
+  },
+);
+
+it("A349 removes the explicit price-filter destination when returning to the menu list", async () => {
+  const el = await mount(api(), `${PRICES_PATH}/filter/clashes`);
+  await click(el, "back");
+  expect(location.pathname).toBe("/manage/menus");
+});

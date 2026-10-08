@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { decimal } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, documentProduct, menuDocument, mountWidget } from "./test-helpers.js";
@@ -122,3 +122,33 @@ it.each([
   });
   expect(text(el.shadowRoot!.querySelector('[data-test="only-this-menu"]'))).toBe(words);
 });
+
+it.each(["ctrlKey", "metaKey", "shiftKey", "altKey"])(
+  "leaves the Preview Clashes link's %s click to the browser",
+  async (modifier) => {
+    const p = preview();
+    p.clashes = [{ productId: "lager", variantId: null, field: "price", candidates: [] }];
+    const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview: p });
+    const heard = vi.fn();
+    el.addEventListener("wt-preview-clashes", heard);
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>('[data-test="clash-prices"]')!;
+    let prevented = true;
+    link.addEventListener("click", (event) => {
+      prevented = event.defaultPrevented;
+      event.preventDefault();
+    });
+    link.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        [modifier]: true,
+      }),
+    );
+    expect(prevented).toBe(false);
+    expect(heard).not.toHaveBeenCalled();
+    expect(link.getAttribute("href")).toBe(
+      "/manage/menus/menu/menu-lunch/view/prices/filter/clashes",
+    );
+  },
+);

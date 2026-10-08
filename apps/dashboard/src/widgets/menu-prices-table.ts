@@ -309,6 +309,8 @@ export class MenuPricesTable extends LitElement {
   ];
 
   @property({ attribute: false }) rows: MenuPriceRow[] = [];
+  @property() clashesFor = "";
+  #appliedClashesFor = "";
   @property({ type: Boolean }) loading = false;
   @property({ type: Boolean }) failed = false;
   @property({ attribute: false }) sections: SectionDetails[] = [];
@@ -376,6 +378,7 @@ export class MenuPricesTable extends LitElement {
   >();
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (!this.clashesFor) this.#appliedClashesFor = "";
     if (changed.has("sections"))
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     if (changed.has("categories")) this.#readCategories();
@@ -582,8 +585,20 @@ export class MenuPricesTable extends LitElement {
   protected override updated(changed: PropertyValues): void {
     const table = this.#table();
     const reshaped = RESHAPES.some((name) => changed.has(name));
+    // Only the update carrying loaded rows may consume a navigation request.
+    const clashesFor = !this.loading && !this.failed ? this.clashesFor : "";
+    const rows = this.rows;
     if (table !== null)
       void table.updateComplete.then(() => {
+        if (
+          clashesFor &&
+          clashesFor === this.clashesFor &&
+          rows === this.rows &&
+          clashesFor !== this.#appliedClashesFor
+        ) {
+          this.#appliedClashesFor = clashesFor;
+          table.chooseFilter("override", ["clash"]);
+        }
         this.#readFilter();
         if (reshaped) this.#fitActions();
         else if (this.#ranges.join("\n") !== this.#measuredRanges) this.#fitRanges();

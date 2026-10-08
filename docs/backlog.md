@@ -2930,9 +2930,11 @@ body to be hidden after 1050 ms. Reproduce and fix its cause before claiming the
 
 Follow-up Preview bundle (A349/A350/A351/A352/A383/A384) in progress: the first A349
 step removes the repeated Live section, names and links includers beside Publish, shows clashes
-as a red sentence with their prices, and uses Unpublished changes as its heading. The explicit
-Clashes-filter destination, frozen Structure-style tree, grouped View links, Hide/Show all,
-Spanish conflicto wording and failed-refresh count still await the bundle's remaining steps.
+as a red sentence with their prices, and uses Unpublished changes as its heading. Its Clashes
+link now opens Price overrides with that filter selected once, after the rows load, even when
+All prices was remembered; subsequent choices are retained. The frozen Structure-style tree,
+grouped View links, Hide/Show all, Spanish conflicto wording and failed-refresh count still await
+the bundle's remaining steps.
 The bundle has not landed.
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 [implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
@@ -3127,6 +3129,13 @@ On 2026-10-05 A261-3 also observed this message while running
 src/widgets/catalogue-browser.test.ts`: both the transition candidate and the previous
 `c41ed54910fece4add9f1475bf18034992545e99` commit in a frozen-installed disposable checkout
 reported 164 passing tests and logged the message. Its cause on that path has not been established.
+On 2026-10-08 A349's six Preview, price-table and navigation suites also logged the message:
+397 tests passed on its candidate; the same command at the preceding checkpoint
+`43c54024eea8149e789163fdac46f3239300365c` in a frozen-installed disposable checkout passed
+390 tests and logged it too. The command selected `src/widgets/menu-preview.test.ts`,
+`menu-preview-top.test.ts`, `menu-preview-navigation.test.ts`, `menu-preview.a11y.test.ts`,
+`menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
+That comparison does not establish which observer causes it or its effect on the rendered screen.
 
 **Products: the Move dialog's destination categories — DONE (W82, #1210; a tree since W82a, #1229;
 paths joined with " › " in W82b, #1232, and W82c, #1262).** Two sibling categories with the same

@@ -2895,6 +2895,10 @@ words on the Price overrides tab itself. A click with a modifier key is left to 
 that does this today. Guards: `apps/dashboard/src/screens/menus-screen.heading.test.ts` and
 `menus-screen.heading.a11y.test.ts` beside it.
 
+The Preview clash link opens Price overrides with Clashes selected, including in a new tab.
+That explicit destination overrides a remembered price filter once after the rows load. Later
+filter choices stay in place through refreshes; an ordinary tab change keeps the remembered choice.
+
 A menu's Preview shows frozen customer content beside unpublished changes. Choose a content
 language independently of the dashboard language, or select Internal names for staff inspection.
 Keep the live version in the editor header rather than repeating it in Preview. Show price clashes

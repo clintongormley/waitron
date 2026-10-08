@@ -4308,6 +4308,35 @@ describe("the clash message and the Clashes filter", () => {
     );
   });
 
+  it("A349 applies a navigation request once and preserves a later choice through live row refreshes", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)], clashesFor: "lunch" });
+    await vi.waitFor(() => expect(priceFilter(el)).toBe("clash"));
+    await choose(el, "override", "");
+    await load(el, [burger, clashRow(lager)]);
+    expect(priceFilter(el)).toBe("");
+    expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+    el.clashesFor = "dinner";
+    await el.updateComplete;
+    await vi.waitFor(() => expect(priceFilter(el)).toBe("clash"));
+    await choose(el, "override", "");
+    el.clashesFor = "";
+    await el.updateComplete;
+    el.clashesFor = "dinner";
+    await el.updateComplete;
+    await vi.waitFor(() => expect(priceFilter(el)).toBe("clash"));
+  });
+
+  it("A349 consumes a navigation request when loaded prices no longer clash", async () => {
+    const el = await mount({ rows: [burger, lager], clashesFor: "lunch" });
+    await el.updateComplete;
+    expect(priceFilter(el)).toBe("");
+    await choose(el, "override", "not_overridden");
+    await choose(el, "override", "");
+    await load(el, [burger, clashRow(lager)]);
+    expect(priceFilter(el)).toBe("");
+    expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+  });
+
   it("offers Show clashes on a return to the tab whose remembered filter is All prices", async () => {
     const first = await mount({ rows: [burger, clashRow(lager)] });
     await choose(first, "override", "");
