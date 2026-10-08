@@ -74,11 +74,16 @@ instead of three, and for configuration pages that are only about configuration.
 | Normal week | A department's seven days. |
 | Named day | A date with a name: a public holiday, or one of the venue's own days. It may have its own hours. |
 | Prep station | Where a dish is made. It has no hours to set. |
-| Kitchen display | A screen on a kitchen or pass wall that runs one working screen, with buttons: a station screen (start, ready, done) or a pass screen (Fire, Ready, Away, Done). Or it runs a monitor. |
-| Monitor | A view-only screen with no buttons, such as a wall screen showing the pass queue. Today: the pass monitor. |
+| Kitchen display | A device whose profile is a kitchen display's: a screen on a kitchen or pass wall, with nobody signed in. It runs exactly one kitchen screen: a station screen, a pass screen (whose Fire, Ready and Away appear only with the profile's "Run the pass") or a monitor. |
+| Kitchen screen | What a device profile offers and a device chooses: a station screen, a pass screen or a pass monitor. |
+| Working screen | A kitchen screen with buttons: a station screen or a pass screen. Any device can run one. |
+| Station screen | A working screen showing some prep stations' queues, with buttons to start, ready and finish dishes. |
+| Pass screen | A working screen showing the pass queue for some stations and zones, with Done on each dish; with the profile's "Run the pass", also Fire, Ready and Away. |
+| Monitor | A view-only kitchen screen with no buttons, such as a wall screen showing the pass queue. The pass monitor is the first; kitchen displays only. |
 
-_(2026-10-08: "Kitchen display" added and "Monitor" narrowed to view-only screens, from the owner's
-answers to the slice 5 plan; the earlier entry called every kitchen screen a monitor. See §9.4.)_
+_(2026-10-08: "Monitor" narrowed to view-only screens and the kitchen screen entries added, from the
+owner's answers to the slice 5 plan; the earlier entry called every kitchen screen a monitor. See
+§9.4.)_
 
 A terrace that closes earlier than the bar is a **zone**, not a department: as a department its
 tabs could only reach the bar's till by transfer, its staff would be walled off, and its periods
@@ -271,13 +276,14 @@ show:
 with nobody signed in: the device is the one acting. A till's or handheld's choice narrows its
 Station and Pass screens, and the person signed in acts. Done marks belong to the device, with the
 person when someone is signed in. A kitchen display may later allow a sign-in that lapses only
-after a long idle time (owner, 2026-10-08; in the backlog).
+after a long idle time (owner, 2026-10-08; backlog A436).
 
 A **device** picks its profile, then its kitchen screen, then its stations and zones within what
-the profile allows. Narrowing a profile is allowed: its devices narrow with it, the dashboard says
-which devices changed, and a device shows "This station is no longer available: Deli" where the
-removed one was. Today a device binds exactly one station or watcher. Floor plan and sales monitors
-are later work.
+the profile allows. Narrowing a profile is allowed: each device using it loses what was removed
+and remembers what it lost, the dashboard says which devices changed, and the device shows "This
+station is no longer available: Deli" in that station's place until someone chooses its stations
+again; adding the station back to the profile does not bring it back to the device. Today a device
+binds exactly one station or watcher. Floor plan and sales monitors are later work.
 
 ## 10. Live controls
 
