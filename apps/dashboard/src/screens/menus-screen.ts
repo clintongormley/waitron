@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
@@ -104,15 +104,13 @@ type ListLayout = "narrow" | "middle" | "wide";
 /** Sorted by status, the menus needing a publish come first. */
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
-/** The state in one line, for the editor's heading. */
-function statusLine(
-  status: MenuStatus,
-  drawLabel: (label: string) => string | TemplateResult = (label) => label,
-) {
-  const { label, live } = statusWords(status);
-  return live === null
-    ? drawLabel(label)
-    : html`${drawLabel(label)} · ${live.version} · <span class="time">${live.time}</span>`;
+/** The live version and when it went live; a menu never published says so instead. */
+function liveWords(status: MenuStatus) {
+  const { label, live } = statusWords(
+    status.state === "current" ? { ...status, state: "changed" } : status,
+  );
+  if (live === null) return label;
+  return html`${live.version} · <span class="time">${live.time}</span>`;
 }
 
 function tabAddress(menuId: string, tab: Tab): string {
@@ -310,21 +308,33 @@ export class MenusScreen extends LitElement {
         margin-inline-start: auto;
       }
       .heading {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-4);
       }
       .heading nav {
         display: flex;
         align-items: center;
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-1);
+      }
+      .heading .sep {
+        color: var(--wt-color-primary-text);
+      }
+      .title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--wt-space-2);
+        min-width: 0;
       }
       .heading h1 {
         margin: 0;
         min-width: 0;
         overflow-wrap: anywhere;
+      }
+      .live {
+        color: var(--wt-color-text-muted);
+      }
+      .live .time {
+        white-space: nowrap;
       }
       .heading a {
         display: inline-flex;
@@ -439,8 +449,7 @@ export class MenusScreen extends LitElement {
         text-align: start;
       }
       wt-data-table::part(note),
-      wt-data-table::part(muted),
-      .status-line {
+      wt-data-table::part(muted) {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(note) {
@@ -449,9 +458,6 @@ export class MenusScreen extends LitElement {
       }
       .status-line {
         margin: calc(var(--wt-space-3) * -1) 0 var(--wt-space-4);
-      }
-      .status-line .time {
-        white-space: nowrap;
       }
       .status-line .clashes {
         color: var(--wt-color-danger);
@@ -2651,49 +2657,43 @@ export class MenusScreen extends LitElement {
     </wt-modal>`;
   }
 
-  /** On the tab where a state is settled it stays plain words, since a link would only open that
-   * tab again. */
-  #renderStatusLine(menuId: string) {
+  #renderLiveWords() {
     const words = this.statusError
       ? this.statusResetRequired
         ? codeMessage("menu.reset_required")
         : t("menus.status_error")
       : this.status === null
         ? t("menus.status_loading")
-        : this.status.state === "changed" && this.view !== "preview"
-          ? statusLine(
-              this.status,
-              (label) =>
-                html`<a
-                  data-test="status-changes"
-                  href=${tabAddress(menuId, "preview")}
-                  @click=${(event: MouseEvent) => this.#openTab(event, menuId, "preview")}
-                  >${label}</a
-                >`,
-            )
-          : statusLine(this.status);
+        : liveWords(this.status);
+    return html`<span class="live" data-test="menu-status">(${words})</span>`;
+  }
+
+  #hasUnpublishedChanges(): boolean {
+    return !this.statusError && this.status?.state === "changed";
+  }
+
+  /** On the Prices tab the clash words stay plain words, since a link would only open it again. */
+  #renderClashes(menuId: string) {
     const clashes =
       this.statusError || (this.view === "preview" && this.previewError)
         ? 0
         : (this.status?.clashes ?? 0);
+    if (!clashes) return nothing;
     const waits =
       clashes === 1
         ? t("menus.publish_waits_clash")
         : t("menus.publish_waits_clashes").replace("{count}", String(clashes));
-    return html`<p class="status-line" data-test="menu-status">
-      ${words}${
-        !clashes
-          ? nothing
-          : this.view === "prices"
-            ? html` · <span class="clashes" data-test="status-clashes">${waits}</span>`
-            : html` ·
-                <a
-                  class="clashes"
-                  data-test="status-clashes"
-                  href=${tabAddress(menuId, "prices")}
-                  @click=${(event: MouseEvent) => this.#openTab(event, menuId, "prices")}
-                  >${waits}</a
-                >`
+    return html`<p class="status-line" data-test="menu-clashes">
+      ${
+        this.view === "prices"
+          ? html`<span class="clashes" data-test="status-clashes">${waits}</span>`
+          : html`<a
+              class="clashes"
+              data-test="status-clashes"
+              href=${tabAddress(menuId, "prices")}
+              @click=${(event: MouseEvent) => this.#openTab(event, menuId, "prices")}
+              >${waits}</a
+            >`
       }
     </p>`;
   }
@@ -2912,9 +2912,12 @@ export class MenusScreen extends LitElement {
             >${t("menus.title")}</a
           ><span class="sep" aria-hidden="true">›</span>
         </nav>
-        <h1>${name || t("menus.title")}</h1>
+        <div class="title">
+          <h1>${name || t("menus.title")}</h1>
+          ${this.#renderLiveWords()}
+        </div>
       </div>
-      ${this.#renderStatusLine(menuId)} ${this.#renderLoadState()} ${this.#renderMemberError()}
+      ${this.#renderClashes(menuId)} ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
       <wt-tabs
         data-test="menu-tabs"
@@ -2924,7 +2927,11 @@ export class MenusScreen extends LitElement {
           { key: "structure", label: t("menus.tab_structure") },
           { key: "prices", label: t("menus.tab_prices") },
           { key: "home", label: t("menus.tab_home") },
-          { key: "preview", label: t("menus.tab_preview") },
+          {
+            key: "preview",
+            label: t("menus.tab_preview"),
+            marked: this.#hasUnpublishedChanges() ? t("menus.tab_preview_unpublished") : undefined,
+          },
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
           this.showPriceClashes = false;

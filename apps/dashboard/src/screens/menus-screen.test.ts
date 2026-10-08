@@ -6080,7 +6080,7 @@ describe("publishing", () => {
       LUNCH_PATH,
     );
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe("Could not be checked"),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
     );
     cleanupWidgets();
 
@@ -6089,7 +6089,7 @@ describe("publishing", () => {
       PREVIEW_PATH,
     );
     await vi.waitFor(() =>
-      expect(text(q(onPreview, '[data-test="menu-status"]'))).toBe("Could not be checked"),
+      expect(text(q(onPreview, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
     );
     await vi.waitFor(() => expect(inPanel(onPreview, "live")).toBeNull());
   });
@@ -6097,7 +6097,7 @@ describe("publishing", () => {
   it("keeps the state it read on another tab when the preview cannot be read", async () => {
     const client = api({ getMenuPreview: vi.fn().mockRejectedValue(new Error("offline")) });
     const el = await mountLunch(client);
-    const shown = `Unpublished changes · Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`;
+    const shown = `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`;
     await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown));
     await chooseTab(el, "preview");
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
@@ -6141,7 +6141,7 @@ describe("publishing", () => {
     });
     const el = await mount(client, PREVIEW_PATH);
     expect(q(el, '[data-test="load-error"]')).not.toBeNull();
-    const shown = `Unpublished changes · Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`;
+    const shown = `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`;
     await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown));
     const previews = client.getMenuPreview.mock.calls.length;
     await click(el, "retry");
@@ -6239,7 +6239,7 @@ describe("publishing", () => {
     await inTable(el, "open-menu-lunch");
     await vi.waitFor(() =>
       expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-        `Unpublished changes · Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
+        `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
       ),
     );
     expect(client.getMenuStatus).toHaveBeenCalledWith("menu-lunch");
@@ -6316,7 +6316,7 @@ describe("publishing", () => {
     await vi.waitFor(() => expect(client.getMenuPreview.mock.calls.length).toBe(previews + 1));
     await vi.waitFor(() =>
       expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-        `Unpublished changes · Live: version 3 · ${formatIsoMinute(PUBLISHED_AT)}`,
+        `(Live: version 3 · ${formatIsoMinute(PUBLISHED_AT)})`,
       ),
     );
     expect(inPanel(el, "live")).toBeNull();
@@ -6328,12 +6328,12 @@ describe("publishing", () => {
     await vi.waitFor(() => expect(client.getMenuStatus.mock.calls.length).toBe(statusReads + 1));
     await el.updateComplete;
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-      `Unpublished changes · Live: version 3 · ${formatIsoMinute(PUBLISHED_AT)}`,
+      `(Live: version 3 · ${formatIsoMinute(PUBLISHED_AT)})`,
     );
     held.resolve(statuses()["menu-lunch"]!);
     await vi.waitFor(() =>
       expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-        `Unpublished changes · Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
+        `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
       ),
     );
     live.invalidate([{ type: "menu_publications" }]);
@@ -6345,7 +6345,7 @@ describe("publishing", () => {
     const direct = await mountPreview(opened);
     await vi.waitFor(() =>
       expect(text(q(direct, '[data-test="menu-status"]'))).toBe(
-        `Unpublished changes · Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
+        `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
       ),
     );
     expect(opened.getMenuStatus).not.toHaveBeenCalled();
@@ -6381,7 +6381,7 @@ describe("publishing", () => {
     expect(client.getMenuStatus).not.toHaveBeenCalled();
     expect(inPanel(el, "publish")).toBeNull();
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-      `Published · Version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")}`,
+      `(Live: version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")})`,
     );
   });
 
@@ -6402,7 +6402,7 @@ describe("publishing", () => {
     );
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-      `Published · Version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")}`,
+      `(Live: version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")})`,
     );
     expect(inPanel(el, "live")).toBeNull();
     cleanupWidgets();
@@ -6415,7 +6415,7 @@ describe("publishing", () => {
     await publish(kept);
     await vi.waitFor(() => expect(inPanel(kept, "preview-error")).not.toBeNull());
     expect(text(q(kept, '[data-test="menu-status"]'))).toBe(
-      `Published · Version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
+      `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
     );
   });
 
@@ -8133,7 +8133,7 @@ describe("after the server comes back", () => {
     const el = await mount(client, LUNCH_PATH);
     await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(t("menus.status_error")),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(${t("menus.status_error")})`),
     );
 
     answer();
@@ -8142,7 +8142,7 @@ describe("after the server comes back", () => {
     await vi.waitFor(() => expect(structure(el)).not.toBeNull());
     expect(q(el, '[data-test="structure-error"]')).toBeNull();
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(t("menus.status_error")),
+      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(`(${t("menus.status_error")})`),
     );
   });
 
@@ -8166,14 +8166,14 @@ describe("after the server comes back", () => {
     const answer = failing(client, "getMenuPreview");
     const el = await mount(client, PREVIEW_PATH);
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(t("menus.status_error")),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(${t("menus.status_error")})`),
     );
 
     answer();
     live.refresh();
 
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(t("menus.status_error")),
+      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(`(${t("menus.status_error")})`),
     );
     const preview = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(
       el,
@@ -8322,7 +8322,9 @@ it.each(["en", "es-ES"])(
       }),
       LUNCH_PATH,
     );
-    await vi.waitFor(() => expect(text(q(selected, '[data-test="menu-status"]'))).toBe(expected));
+    await vi.waitFor(() =>
+      expect(text(q(selected, '[data-test="menu-status"]'))).toBe(`(${expected})`),
+    );
   },
 );
 

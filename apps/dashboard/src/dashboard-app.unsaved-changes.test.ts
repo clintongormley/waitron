@@ -869,7 +869,15 @@ it.each([
         listLibraryProducts: async () => [],
         listProducts: async () => [],
         listCategories: async () => [],
-        getMenuStatuses: async () => ({ "menu-one": { state: "unpublished", clashes: 0 } }),
+        getMenuStatuses: async () => ({
+          "menu-one": {
+            state: "changed",
+            clashes: 0,
+            version: 1,
+            publishedAt: "2026-10-06T10:00:00Z",
+            hash: "menu-hash",
+          },
+        }),
         getMenuStatus: async () => ({
           state: "changed",
           clashes: 0,
@@ -977,16 +985,27 @@ it.each([
       const table = prep.shadowRoot!.querySelector("wt-data-table")!;
       await expect.poll(() => table.shadowRoot!.querySelector(`a[href="${path}"]`)).not.toBeNull();
       link = table.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${path}"]`)!;
-    } else if (use.kind === "included-menu" || use.kind === "menu-preview") {
+    } else if (use.kind === "included-menu") {
       await navigationGuardFor(window)!.write("/manage/menus/menu/menu-one/view/structure");
       await expect
         .poll(() => m.app.shadowRoot!.querySelector("dashboard-menus-screen"))
         .not.toBeNull();
       const menus = m.app.shadowRoot!.querySelector("dashboard-menus-screen")!;
-      const selector =
-        use.kind === "included-menu" ? "[data-test=included-by] a" : "[data-test=status-changes]";
+      const selector = "[data-test=included-by] a";
       await expect.poll(() => menus.shadowRoot!.querySelector(selector)).not.toBeNull();
       link = menus.shadowRoot!.querySelector<HTMLAnchorElement>(selector)!;
+    } else if (use.kind === "menu-preview") {
+      await navigationGuardFor(window)!.write("/manage/menus");
+      await expect
+        .poll(() => m.app.shadowRoot!.querySelector("dashboard-menus-screen"))
+        .not.toBeNull();
+      const menus = m.app.shadowRoot!.querySelector("dashboard-menus-screen")!;
+      const changes = () =>
+        menus
+          .shadowRoot!.querySelector("wt-data-table")
+          ?.shadowRoot?.querySelector<HTMLAnchorElement>("[data-test=changes-menu-one]");
+      await expect.poll(changes).toBeTruthy();
+      link = changes()!;
     } else {
       await navigationGuardFor(window)!.write("/manage/images");
       await expect
@@ -1023,7 +1042,7 @@ it.each([
     click();
     await expect.poll(() => m.question.open).toBe(true);
     expect(location.pathname).toBe(
-      use.kind === "included-menu" || use.kind === "menu-preview"
+      use.kind === "included-menu"
         ? "/manage/profile/view/structure"
         : use.kind === "routing-device" || use.kind === "routing-watcher"
           ? "/manage/profile/view/tickets"

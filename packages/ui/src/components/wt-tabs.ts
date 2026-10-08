@@ -7,6 +7,9 @@ import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 export interface TabItem {
   key: string;
   label: string;
+  /** Draws the tab in the primary colour with a "*" after its label; the text is what the star
+   * means, and the tab is named "label, text". */
+  marked?: string;
 }
 
 @customElement("wt-tabs")
@@ -62,6 +65,9 @@ export class WtTabs extends LitElement {
         color: var(--wt-color-text);
         border-bottom-color: var(--wt-color-primary);
         font-weight: var(--wt-font-weight-bold);
+      }
+      button.marked {
+        color: var(--wt-color-primary-text);
       }
       button:hover {
         background: var(--wt-color-surface);
@@ -184,6 +190,8 @@ export class WtTabs extends LitElement {
               html`<button
                 type="button"
                 role="tab"
+                class=${item.marked ? "marked" : ""}
+                aria-label=${item.marked ? `${item.label}, ${item.marked}` : nothing}
                 data-key=${item.key}
                 id=${`${this.#id}-tab-${index}`}
                 aria-selected=${item.key === this.#selected}
@@ -192,7 +200,9 @@ export class WtTabs extends LitElement {
                 @click=${(event: MouseEvent) => this.#select(event, item.key)}
                 @keydown=${(event: KeyboardEvent) => this.#keydown(event, index)}
               >
-                ${item.label}
+                ${item.label}${
+                  item.marked ? html`<span class="mark" aria-hidden="true">*</span>` : nothing
+                }
               </button>`,
           )}
         </div>
