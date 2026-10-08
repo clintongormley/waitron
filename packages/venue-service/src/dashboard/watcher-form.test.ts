@@ -37,6 +37,8 @@ it("explains all three required fields after an invalid save and keeps Save disa
   expect(q(form, '[data-test="zones"]')?.textContent).toContain("Service zones *");
   expect(q(form, '[name="everyStation"]')?.parentElement?.textContent).toContain("Every station");
   expect(q(form, '[name="everyZone"]')?.parentElement?.textContent).toContain("Every service zone");
+  change(form, '[name="runsPass"]', { checked: true });
+  await form.updateComplete;
   q(form, '[data-test="save-watcher"]')!.click();
   await form.updateComplete;
   expect(q(form, '[data-field-error="name"]')?.textContent).toContain("required");
