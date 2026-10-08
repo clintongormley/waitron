@@ -128,8 +128,28 @@ describe("till-basket: a stored counter order", () => {
     const el = await mount(store);
     expect(all(el, "[data-make-at]")).toBe(0);
     el.makeAtStations = [
-      { id: "bar", name: "Bar", displayOrder: 1, isDefault: false, active: true, open: true },
-      { id: "grill", name: "Grill", displayOrder: 2, isDefault: true, active: true, open: true },
+      {
+        id: "bar",
+        name: "Bar",
+        displayOrder: 1,
+        isDefault: false,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "open" as const,
+      },
+      {
+        id: "grill",
+        name: "Grill",
+        displayOrder: 2,
+        isDefault: true,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default" as const,
+      },
     ];
     await el.updateComplete;
     expect(within(el, 0, "data-make-at")).toBeNull();

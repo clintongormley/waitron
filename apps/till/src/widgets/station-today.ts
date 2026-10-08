@@ -1,0 +1,235 @@
+import { LitElement, css, html, nothing } from "lit";
+import type { PropertyValues } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
+import type {
+  TillApi,
+  Station,
+  StationDestination,
+  StationTodayWrite,
+  StaffMember,
+} from "../api/client.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import "./station-today-dialog.js";
+import "./supervisor-override-dialog.js";
+import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
+
+@customElement("till-station-today")
+export class TillStationToday extends LitElement {
+  static override styles = [
+    baseStyles,
+    css`
+      .line {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+      }
+      p {
+        margin: 0;
+      }
+      .refusal {
+        color: var(--wt-color-danger);
+      }
+    `,
+  ];
+  @property({ attribute: false }) api?: TillApi;
+  @property({ attribute: false }) station?: Omit<Station, "displayOrder">;
+  @property({ attribute: false }) stations: readonly Pick<Station, "id" | "name">[] = [];
+  @property({ type: Boolean }) deviceMode = false;
+  @state() private busy = false;
+  @state() private destinations: StationDestination[] | null = null;
+  @state() private refusal: string | null = null;
+  @state() private authorizers: StaffMember[] | null = null;
+  @state() private pinError: string | null = null;
+  #intent?: StationTodayWrite;
+  #generation = 0;
+  override disconnectedCallback(): void {
+    this.#reset();
+    super.disconnectedCallback();
+  }
+  override willUpdate(changed: PropertyValues): void {
+    if (
+      changed.has("station") &&
+      (changed.get("station") as Station | undefined)?.id !== this.station?.id
+    )
+      this.#reset();
+  }
+  #reset(): void {
+    this.#generation++;
+    this.busy = false;
+    this.destinations = null;
+    this.authorizers = null;
+    this.#intent = undefined;
+    this.refusal = null;
+    this.pinError = null;
+  }
+  #current(generation: number, id: string): boolean {
+    return this.isConnected && generation === this.#generation && this.station?.id === id;
+  }
+  #code(error: unknown): string {
+    return typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string"
+      ? error.code
+      : "network.error";
+  }
+  async #act(): Promise<void> {
+    const station = this.station;
+    if (
+      !this.isConnected ||
+      !this.api ||
+      !station ||
+      !station.active ||
+      station.isDefault ||
+      this.busy ||
+      this.destinations ||
+      this.authorizers
+    )
+      return;
+    if (!station.open) {
+      await this.#write({ state: "open" });
+      return;
+    }
+    const generation = ++this.#generation;
+    const id = station.id;
+    this.busy = true;
+    this.refusal = null;
+    try {
+      const answer = await this.api.stationToday(id);
+      if (this.#current(generation, id)) this.destinations = answer.destinations;
+    } catch (error) {
+      if (this.#current(generation, id)) this.refusal = this.#code(error);
+    } finally {
+      if (this.#current(generation, id)) this.busy = false;
+    }
+  }
+  async #write(intent: StationTodayWrite, override?: OverrideConfirmDetail): Promise<void> {
+    if (!this.isConnected || !this.api || !this.station || this.busy) return;
+    const generation = ++this.#generation;
+    const id = this.station.id;
+    this.#intent = intent;
+    this.busy = true;
+    this.refusal = null;
+    this.pinError = null;
+    try {
+      await this.api.setStationToday(id, override ? { ...intent, override } : intent);
+      if (!this.#current(generation, id)) return;
+      this.shadowRoot!.querySelector("till-station-today-dialog")?.commit();
+      this.#reset();
+      this.dispatchEvent(
+        new CustomEvent("station-today-changed", {
+          detail: { stationId: id },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      if (!this.#current(generation, id)) return;
+      const code = this.#code(error);
+      if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled")) {
+        this.pinError = code;
+      } else if (code === "authorization.not_permitted") {
+        try {
+          const people = await this.api.serviceDayAuthorizers();
+          if (this.#current(generation, id)) this.authorizers = people;
+        } catch (readError) {
+          if (this.#current(generation, id)) this.refusal = this.#code(readError);
+        }
+      } else {
+        this.authorizers = null;
+        this.refusal = code;
+        if (code === "station.destination_invalid" && this.destinations !== null) {
+          try {
+            const answer = await this.api.stationToday(id);
+            if (this.#current(generation, id)) this.destinations = answer.destinations;
+          } catch {
+            /* Keep the write refusal when the refresh also fails. */
+          }
+        }
+      }
+    } finally {
+      if (this.#current(generation, id)) this.busy = false;
+    }
+  }
+  #line(): string {
+    const s = this.station!;
+    if (!s.active) return t("station_today.switched_off");
+    if (s.isDefault) return t("station_today.default");
+    if (s.open)
+      return t(s.byHand === "open" ? "station_today.opened_by_hand" : "station_today.open");
+    const destination = this.stations.find((d) => d.id === s.sendsTo)?.name;
+    const key =
+      s.byHand === "closed" && destination
+        ? "station_today.closed_by_hand"
+        : destination
+          ? "station_today.out_of_hours"
+          : "station_today.out_of_hours_nowhere";
+    return t(key).replace("{station}", () => destination ?? "");
+  }
+  override render() {
+    const station = this.station;
+    if (!station) return nothing;
+    return html`<div class="line">
+        <p data-status>${this.#line()}</p>
+        ${
+          station.active && !station.isDefault
+            ? html`<wt-button
+                data-action
+                variant=${this.destinations !== null || this.authorizers !== null ? "secondary" : "primary"}
+                ?disabled=${this.busy || this.destinations !== null || this.authorizers !== null}
+                @click=${() => this.#act()}
+                >${t(station.open ? "station_today.close" : "station_today.open_action")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
+      ${this.refusal && this.destinations === null ? html`<p class="refusal" role="alert">${codeMessage(this.refusal)}</p>` : nothing}
+      ${
+        this.destinations !== null
+          ? html`<till-station-today-dialog
+              .stationName=${station.name}
+              .destinations=${this.destinations}
+              .busy=${this.busy || this.authorizers !== null}
+              .refusal=${this.refusal}
+              @close=${(e: Event) => {
+                e.stopPropagation();
+                this.#reset();
+              }}
+              @station-today-confirm=${(e: CustomEvent<{ sendsToStationId: string }>) => {
+                e.stopPropagation();
+                void this.#write({ state: "closed", sendsToStationId: e.detail.sendsToStationId });
+              }}
+            ></till-station-today-dialog>`
+          : nothing
+      }
+      ${
+        this.authorizers !== null
+          ? html`<till-supervisor-override-dialog
+              .authorizers=${this.authorizers}
+              .approverRole=${"manager"}
+              .error=${this.pinError}
+              @override-cancel=${(e: Event) => {
+                e.stopPropagation();
+                if (!this.busy) {
+                  this.authorizers = null;
+                  this.pinError = null;
+                }
+              }}
+              @override-confirm=${(e: CustomEvent<OverrideConfirmDetail>) => {
+                e.stopPropagation();
+                if (this.#intent) void this.#write(this.#intent, e.detail);
+              }}
+            ></till-supervisor-override-dialog>`
+          : nothing
+      }`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "till-station-today": TillStationToday;
+  }
+}

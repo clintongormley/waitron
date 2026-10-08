@@ -64,8 +64,28 @@ const cafe = product("cafe", "Café solo", "1.50");
 const croquetasDish = product("croquetas", "Croquetas", "7.80");
 // Two stations, so each line offers Make at… as it does on a venue with a kitchen and a bar.
 const stations: Station[] = [
-  { id: "bar", name: "Bar", displayOrder: 0, isDefault: true, active: true, open: true },
-  { id: "grill", name: "Grill", displayOrder: 1, isDefault: false, active: true, open: true },
+  {
+    id: "bar",
+    name: "Bar",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "default" as const,
+  },
+  {
+    id: "grill",
+    name: "Grill",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "open" as const,
+  },
 ];
 const menus: TillZoneMenu[] = servedMenus(
   [{ id: "drinks", name: "Drinks", isDefault: true, versionId: "drinks-v1" }],

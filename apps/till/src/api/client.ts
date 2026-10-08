@@ -1156,6 +1156,20 @@ export interface Station {
   isDefault: boolean;
   active: boolean;
   open: boolean;
+  byHand: "open" | "closed" | null;
+  sendsTo: string | null;
+  why: "default" | "open" | "opened_by_hand" | "closed_by_hand" | "out_of_hours" | "switched_off";
+}
+
+export interface StationDestination {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+export interface StationTodayWrite {
+  state: "open" | "closed";
+  sendsToStationId?: string;
+  override?: { personId: string; pin: string };
 }
 
 /**
@@ -2462,6 +2476,18 @@ export class TillApi {
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */
   listStations(options: ReadOptions = {}): Promise<Station[]> {
     return this.#request<Station[]>("/api/stations", "GET", undefined, options.signal);
+  }
+
+  stationToday(stationId: string): Promise<{ destinations: StationDestination[] }> {
+    return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "GET");
+  }
+
+  setStationToday(stationId: string, body: StationTodayWrite): Promise<void> {
+    return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "PUT", body);
+  }
+
+  serviceDayAuthorizers(): Promise<StaffMember[]> {
+    return this.#request("/api/service-day/authorizers", "GET");
   }
 
   moveDishStation(

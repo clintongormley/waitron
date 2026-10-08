@@ -1271,8 +1271,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Stored period extensions now change the running and ended menus for today; the resolver reports
   the running or last-ended period and its effective end. The extension read and writer offer
   future quarter-hours, retain the scheduled start on repeated extension and refuse invalid ends;
-  the shared service contract exposes both. Server extension request paths and till/kitchen
-  visible controls remain to build.
+  the shared service contract exposes both. The server's extension routes and the till's service
+  response carry the current or last period's keep-open subject. The station-today widget and
+  destination dialog now support status, close/open requests, destination refresh after a refusal,
+  manager PIN retry and unsaved-choice protection. Wiring them into the Station screen and kitchen
+  display, and building the visible keep-open control, remain to do.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows

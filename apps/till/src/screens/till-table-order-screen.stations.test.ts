@@ -15,6 +15,9 @@ const bar: Station = {
   isDefault: false,
   active: true,
   open: false,
+  byHand: null,
+  sendsTo: null,
+  why: "out_of_hours" as const,
 };
 const kitchen: Station = {
   id: "kitchen",
@@ -23,6 +26,9 @@ const kitchen: Station = {
   isDefault: true,
   active: true,
   open: true,
+  byHand: null,
+  sendsTo: null,
+  why: "default" as const,
 };
 
 async function draft(stations: Station[], makeAt?: string) {

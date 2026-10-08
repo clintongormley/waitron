@@ -6,8 +6,28 @@ import type { TillStationScreen } from "./till-station-screen.js";
 import type { KitchenNotice, Station, StationQueueGroup, TillApi } from "../api/client.js";
 
 const stations: Station[] = [
-  { id: "st-1", name: "Cocina", displayOrder: 0, isDefault: true, active: true, open: true },
-  { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true, open: true },
+  {
+    id: "st-1",
+    name: "Cocina",
+    displayOrder: 0,
+    isDefault: true,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "default" as const,
+  },
+  {
+    id: "st-2",
+    name: "Barra",
+    displayOrder: 1,
+    isDefault: false,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "open" as const,
+  },
 ];
 
 // No fixture below injects `now`, so every ticket ages off the real wall clock against a `queuedAt` far

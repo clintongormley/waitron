@@ -3,6 +3,19 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "station.destination_invalid": {
+    en: "That station cannot take the work now. Choose another.",
+    es: "Esa estación no puede recibir el trabajo ahora. Elige otra.",
+  },
+  "station.always_open": {
+    en: "The default station is always open.",
+    es: "La estación predeterminada siempre está abierta.",
+  },
+  "time_zone.unreadable": {
+    en: "The venue's clock cannot be read, so this cannot be changed now.",
+    es: "No se puede leer la hora del local, así que ahora no se puede cambiar.",
+  },
+
   "menu_period.not_running": {
     en: "That menu is not available in the current period.",
     es: "Esa carta no está disponible en el periodo actual.",
