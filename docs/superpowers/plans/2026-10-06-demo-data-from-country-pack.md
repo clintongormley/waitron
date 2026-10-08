@@ -1,5 +1,10 @@
 # The demo data set comes from the country pack — Implementation Plan
 
+> 2026-10-08: A419 replaces this plan's Valencian code/default with `ca-ES-valencia`;
+> see [Content languages per region](../../developers/products.md#content-languages-per-region).
+> The decisions below record the earlier Catalan mapping.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status: the owner answered the six decisions on 2026-10-06 (~08:19, amended ~08:21), and the

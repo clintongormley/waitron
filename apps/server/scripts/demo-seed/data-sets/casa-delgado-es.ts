@@ -10,7 +10,7 @@ import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "../floor.js";
 import { DEMO_STAFF } from "../staff.js";
 import { DEMO_ADJUSTMENT_REASONS } from "../seed-adjustments.js";
 
-export const CASA_DELGADO_LANGUAGES = ["es", "en", "ca", "gl"] as const;
+export const CASA_DELGADO_LANGUAGES = ["es", "en", "ca", "ca-ES-valencia", "gl"] as const;
 export type CasaDelgadoLanguage = (typeof CASA_DELGADO_LANGUAGES)[number];
 
 export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
@@ -25,6 +25,7 @@ export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
       en: "Drinks menu",
       es: "Carta de bebidas",
       ca: "Carta de begudes",
+      "ca-ES-valencia": "Carta de begudes",
       gl: "Carta de bebidas",
     },
   },

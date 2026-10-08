@@ -1165,3 +1165,24 @@ it("a real translation PUT closes once before a failing report refresh", async (
     edits: [{ kind: "product", id: "dish", expected: "baseline", text: "Sopa" }],
   });
 });
+
+describe("Valencian names on the content languages screen", () => {
+  it.each([
+    ["en-GB", "Valencian"],
+    ["es-ES", "Valenciano"],
+  ])("names the separate enabled language in %s", async (locale, label) => {
+    setLocale(locale);
+    const el = await mount(
+      api({
+        getContentLanguages: vi
+          .fn()
+          .mockResolvedValue({
+            defaultLanguage: "ca-ES-valencia",
+            languages: ["ca-ES-valencia", "ca", "es"],
+          }),
+      }),
+    );
+    expect(shown(el)).toContain(label);
+    expect(shown(el)).toContain(locale === "es-ES" ? "Catalán" : "Catalan");
+  });
+});

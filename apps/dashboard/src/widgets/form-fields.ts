@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { currentContentLanguages, type SummaryField } from "@waitron/ui";
-import { formatMoney, resolveContentText } from "@waitron/shared";
+import { contentLanguageCode, formatMoney, resolveContentText } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { currentLocale, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -36,22 +36,23 @@ export const priceText = (value: string) =>
 export const priceSearchText = (shown: string, raw: readonly string[]) =>
   [shown, shown.replace(/\u00a0/g, " "), ...raw].join(" ");
 
-/** A language's own text in `value`, read as the customer-facing resolver reads a request for the
- * language's plain code: that code first, then its regional keys such as `en-GB`. "" when the
- * language has none. `locale` must be a plain code, here and in `withLanguageText`. */
 export const languageText = (value: Readonly<Record<string, string>>, locale: string) =>
   resolveContentText(value, locale, locale);
 
-/** `value` with `locale`'s text set to `text` under its plain code, every regional key of that
- * language dropped so none outlives the edit; other languages' keys are kept as stored. */
 export function withLanguageText(
   value: Readonly<Record<string, string>>,
   locale: string,
   text: string,
 ): Record<string, string> {
-  const others = Object.entries(value).filter(
-    ([key]) => key !== locale && !key.startsWith(`${locale}-`),
-  );
+  const others = Object.entries(value).filter(([key]) => {
+    if (key === locale) return false;
+    if (!key.startsWith(`${locale}-`)) return true;
+    try {
+      return contentLanguageCode(key) !== locale;
+    } catch {
+      return false;
+    }
+  });
   return { ...Object.fromEntries(others), [locale]: text };
 }
 

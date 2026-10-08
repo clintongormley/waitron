@@ -220,3 +220,28 @@ describe("menuPriceRange", () => {
     expect(menuPriceRange(offer(["2.10", "2.09", "12.01"]))).toEqual({ min: "2.09", max: "12.01" });
   });
 });
+
+describe("Valencian customer menu", () => {
+  const language = "ca-ES-valencia";
+  const config = { defaultLanguage: "es", languages: ["es", language] };
+  it("reports the enabled Valencian text and its actual variant key", () => {
+    expect(
+      resolveMenuText(
+        { ca: "Catalan", [language]: "Valencian", es: "Spanish" },
+        "Staff",
+        { kind: "customer", language },
+        config,
+      ),
+    ).toEqual({ text: "Valencian", origin: "requested", language, missingRequested: false });
+  });
+  it("reports a missing Valencian translation rather than borrowing Catalan", () => {
+    expect(
+      resolveMenuText(
+        { ca: "Catalan", es: "Spanish" },
+        "Staff",
+        { kind: "customer", language },
+        config,
+      ),
+    ).toEqual({ text: "Spanish", origin: "default", language: "es", missingRequested: true });
+  });
+});

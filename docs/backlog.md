@@ -837,11 +837,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **A person who may not read routing sees "Kitchen routing unavailable" on every category**,
   because a refused read counts as a failed one. Left open by W86 (#1203, a category's Made at).
 
-- **A419 — Valencian offered as a content language in Spain's pack (owner, 2026-10-08; open;
-  campaign lane E).** The Content languages screen's "Add language" list shows Basque and Galician
-  under "Official languages" in a Catalan venue; the owner asks for Valencian there too.
-  [Detail](backlog/catalogue.md#a419--valencian-offered-as-a-content-language-in-spains-pack)
-
 - **One writer still skips the required-language check (`content.language_required`) — OPEN.**
   The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
   copies the saved row as it is, unplanned. The demo seed

@@ -20,6 +20,8 @@ export interface ContentLanguageRules {
   };
 }
 
+const VALENCIAN = "ca-ES-valencia";
+
 const languageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
 
 const displayNamesByLocale = new Map<string, Intl.DisplayNames>();
@@ -54,16 +56,18 @@ export function contentLanguageChoices(displayLocale: string): { code: string; n
       for (let third = 97; third <= 122; third++) add(prefix + String.fromCharCode(third));
     }
   }
+  choices.push({ code: VALENCIAN, name: languageDisplayName(VALENCIAN, displayLocale) });
   choices.sort((a, b) => a.name.localeCompare(b.name, displayLocale));
   choicesByLocale.set(displayLocale, choices);
   return choices.map((choice) => ({ ...choice }));
 }
 
-/** Catalogue translations use language codes; receipt and browser tags can include a region. */
 export function contentLanguageCode(value: string): string {
   let language: string;
   try {
-    language = new Intl.Locale(value).language;
+    const locale = new Intl.Locale(value);
+    if (locale.baseName === VALENCIAN) return VALENCIAN;
+    language = locale.language;
   } catch {
     throw new AppError("content.language_invalid", {});
   }
@@ -82,7 +86,13 @@ export function languageDisplayName(tag: string, locale: string, standalone = tr
   } catch {
     return tag;
   }
-  const name = languageNamesFor(locale).of(code);
+  const displayLanguage = new Intl.Locale(locale).language;
+  const name =
+    code === VALENCIAN && (displayLanguage === "en" || displayLanguage === "es")
+      ? displayLanguage === "en"
+        ? "Valencian"
+        : "valenciano"
+      : languageNamesFor(locale).of(code);
   if (name === undefined) return tag;
   return standalone ? capitaliseFirst(name, locale) : name;
 }
@@ -94,12 +104,24 @@ export function resolveContentText(
   defaultLanguage: string,
 ): string {
   for (const locale of [requestedLanguage, defaultLanguage]) {
-    const language = locale.split("-")[0]!;
+    let language: string;
+    try {
+      language = contentLanguageCode(locale);
+    } catch {
+      language = locale.split("-")[0]!;
+    }
     const keys = [
       locale,
       language,
       ...Object.keys(translations)
-        .filter((key) => key.startsWith(`${language}-`))
+        .filter((key) => {
+          if (!key.startsWith(`${language}-`)) return false;
+          try {
+            return contentLanguageCode(key) === language;
+          } catch {
+            return true;
+          }
+        })
         .sort(),
     ];
     for (const key of keys) {
@@ -120,7 +142,8 @@ export function resolveEnabledContentText(
   let requested = config.defaultLanguage;
   try {
     const locale = new Intl.Locale(requestedLanguage);
-    if (config.languages.includes(locale.language)) requested = locale.toString();
+    if (config.languages.includes(contentLanguageCode(requestedLanguage)))
+      requested = locale.toString();
   } catch {
     // A malformed display preference uses the same fallback as an unavailable language.
   }

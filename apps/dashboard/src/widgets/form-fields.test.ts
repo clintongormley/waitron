@@ -20,6 +20,7 @@ import {
   textField,
   translations,
   wholeWithin,
+  withLanguageText,
 } from "./form-fields.js";
 
 let host: HTMLDivElement;
@@ -613,4 +614,36 @@ describe("priceField", () => {
     expect(changeFrom(input!, { value: "2.80" })).toBe(false);
     expect(change).toHaveBeenCalledExactlyOnceWith("2.80");
   });
+});
+
+describe("separate Catalan and Valencian edits", () => {
+  it("keeps Valencian when Catalan replaces its regional keys", () => {
+    expect(
+      withLanguageText(
+        {
+          ca: "Old Catalan",
+          "ca-ES": "Regional Catalan",
+          "ca-ES-valencia": "Valencian",
+          es: "Spanish",
+        },
+        "ca",
+        "New Catalan",
+      ),
+    ).toEqual({ ca: "New Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" });
+  });
+  it("keeps Catalan when Valencian is edited", () => {
+    expect(
+      withLanguageText(
+        { ca: "Catalan", "ca-ES-valencia": "Old Valencian" },
+        "ca-ES-valencia",
+        "New Valencian",
+      ),
+    ).toEqual({ ca: "Catalan", "ca-ES-valencia": "New Valencian" });
+  });
+});
+
+it("retains deletion of legacy malformed regional keys when their language is edited", () => {
+  expect(
+    withLanguageText({ "en-invalid!": "Legacy", "en-GB": "Regional" }, "en", "English"),
+  ).toEqual({ en: "English" });
 });

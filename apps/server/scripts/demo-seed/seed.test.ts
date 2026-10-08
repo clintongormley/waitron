@@ -719,7 +719,12 @@ describe("seedDemoRestaurant", () => {
 
   it.each([
     ["Barcelona", "08001", "ca-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
-    ["Valencia", "46001", "es-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
+    [
+      "Valencia",
+      "46001",
+      "es-ES",
+      { defaultLanguage: "ca-ES-valencia", languages: ["ca-ES-valencia", "es", "en"] },
+    ],
     ["A Coruña", "15001", "es-ES", { defaultLanguage: "gl", languages: ["gl", "es", "en"] }],
     ["Illes Balears", "07001", "es-ES", { defaultLanguage: "ca", languages: ["ca", "es", "en"] }],
     ["Madrid", "28013", "es-ES", { defaultLanguage: "es", languages: ["es", "en"] }],

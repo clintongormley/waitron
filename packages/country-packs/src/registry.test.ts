@@ -85,7 +85,7 @@ describe("installed country packs", () => {
 });
 
 describe("content-language rules", () => {
-  const SPAIN_OFFICIAL = ["es", "ca", "gl", "eu"];
+  const SPAIN_OFFICIAL = ["es", "ca", "ca-ES-valencia", "gl", "eu"];
 
   it("requires Catalan and Spanish for a Barcelona venue, as language codes", () => {
     expect(
@@ -95,7 +95,7 @@ describe("content-language rules", () => {
 
   it("carries the area's foreign-language notice for a Valencia venue", () => {
     const rules = resolveInstalledContentLanguageRules({ country: "ES", area: "46" });
-    expect(rules.required).toEqual(["ca", "es"]);
+    expect(rules.required).toEqual(["ca-ES-valencia", "es"]);
     expect(rules.official).toEqual(SPAIN_OFFICIAL);
     expect(rules.foreignLanguageNotice?.minimumForeign).toBe(1);
     expect(Object.keys(rules.foreignLanguageNotice!.text).sort()).toEqual(["en", "es"]);
@@ -131,7 +131,9 @@ describe("content-language rules", () => {
 
   it("gives a new Spanish venue the regional language as its default where one is required, Spanish where Spanish alone is required, and none in the Basque Country", () => {
     expect(resolveInstalledDefaultContentLanguage({ country: "es", area: "Barcelona" })).toBe("ca");
-    expect(resolveInstalledDefaultContentLanguage({ country: "ES", area: "Valencia" })).toBe("ca");
+    expect(resolveInstalledDefaultContentLanguage({ country: "ES", area: "Valencia" })).toBe(
+      "ca-ES-valencia",
+    );
     expect(resolveInstalledDefaultContentLanguage({ country: "ES", area: "Madrid" })).toBe("es");
     for (const input of [
       { country: "XX", area: "Barcelona" },
@@ -154,7 +156,11 @@ describe("starting content languages", () => {
     ],
     [
       { country: "ES", area: "46" },
-      { defaultLanguage: "ca", languages: ["ca", "es", "en"], required: ["ca", "es"] },
+      {
+        defaultLanguage: "ca-ES-valencia",
+        languages: ["ca-ES-valencia", "es", "en"],
+        required: ["ca-ES-valencia", "es"],
+      },
     ],
     [
       { country: "ES", area: "07" },

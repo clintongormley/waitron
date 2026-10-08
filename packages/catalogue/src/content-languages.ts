@@ -164,7 +164,6 @@ export async function readSavedContentLanguages(
   return row;
 }
 
-/** `saved`, or, when none is saved, `fallbackLanguage`'s language alone. */
 export function contentLanguagesOr(
   saved: ContentLanguages | undefined,
   fallbackLanguage: string,

@@ -314,19 +314,6 @@ On 2026-10-08 A349's six Preview, price-table and navigation suites also logged 
 `menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 
-## A419 — Valencian offered as a content language in Spain's pack
-
-- **A419 — Valencian offered as a content language in Spain's pack (owner, 2026-10-08; open; campaign lane E).** The Content languages screen's "Add language" list shows Basque and Galician under
-  "Official languages" in a Catalan venue; the owner asks for Valencian there too. This reverses
-  the 2026-10-06 decision _"'Valenciano' is Catalan (`ca`) for now"_ (entry "Content languages per
-  region", A2), so the first step is the owner's choice of what Valencian IS in the data: its own
-  language code (BCP 47's variant tag gives `ca-ES-valencia`; not checked against what the
-  language list and the screens accept) or a second name for Catalan. That choice decides whether
-  the Valencian Community's required language and default (`VALENCIAN_COMMUNITY`, `ca-ES` for
-  both today, beside `officialLocales` in `packages/country-es/src/spain.ts`) move to it, and what a
-  venue already holding Catalan text sees. The receipt and whole-app translations into Valencian
-  stay with the parked C125 entry (A8).
-
 ## A customer-facing name with no text in the default language prints a blank goods line — OPEN (found 2026-10-01 by C122)
 
 - **A customer-facing name with no text in the default language prints a blank goods line — OPEN

@@ -27,8 +27,16 @@ describe("content languages", () => {
     const names = new Intl.DisplayNames(["en-GB"], { type: "language", fallback: "none" });
     for (const choice of choices) {
       expect(choice).toEqual({ code: expect.any(String), name: expect.any(String) });
-      expect(choice.code).toBe(new Intl.Locale(choice.code).language);
-      expect(choice.name).toBe(capitaliseFirst(names.of(choice.code)!, "en-GB"));
+      expect(choice.code).toBe(
+        choice.code === "ca-ES-valencia"
+          ? new Intl.Locale(choice.code).baseName
+          : new Intl.Locale(choice.code).language,
+      );
+      expect(choice.name).toBe(
+        choice.code === "ca-ES-valencia"
+          ? "Valencian"
+          : capitaliseFirst(names.of(choice.code)!, "en-GB"),
+      );
       expect(["und", "mul", "zxx", "zz"]).not.toContain(choice.code);
     }
     expect(choices.map(({ name }) => name)).toEqual(
@@ -209,4 +217,58 @@ describe("language display name", () => {
       spy.mockRestore();
     }
   });
+});
+
+describe("Valencian content language", () => {
+  const valencian = "ca-ES-valencia";
+  it("keeps the canonical Valencian variant apart from Catalan", () => {
+    expect(contentLanguageCode(valencian)).toBe(valencian);
+    expect(contentLanguageCode("CA-es-VALENCIA-u-nu-latn")).toBe(valencian);
+    expect(contentLanguageCode("ca-ES")).toBe("ca");
+  });
+  it.each([
+    ["en", "Valencian"],
+    ["es", "Valenciano"],
+  ])("offers and names Valencian in %s", (locale, name) => {
+    expect(contentLanguageChoices(locale)).toContainEqual({ code: valencian, name });
+    expect(languageDisplayName(valencian, locale)).toBe(name);
+    expect(languageDisplayName(valencian, locale, false)).toBe(
+      locale === "es" ? "valenciano" : "Valencian",
+    );
+  });
+  it("does not borrow Catalan text for Valencian or Valencian text for Catalan", () => {
+    expect(resolveContentText({ ca: "Catalan", es: "Spanish" }, valencian, "es")).toBe("Spanish");
+    expect(resolveContentText({ [valencian]: "Valencian", es: "Spanish" }, "ca", "es")).toBe(
+      "Spanish",
+    );
+    expect(resolveContentText({ "ca-ES": "Catalan" }, valencian, valencian)).toBe("");
+    expect(resolveContentText({ [valencian]: "Valencian" }, "ca-ES", "ca")).toBe("");
+  });
+  it("selects enabled Valencian without enabling Catalan", () => {
+    const map = { ca: "Catalan", [valencian]: "Valencian", es: "Spanish" };
+    const config = { defaultLanguage: "es", languages: ["es", valencian] };
+    expect(resolveEnabledContentText(map, valencian, config)).toBe("Valencian");
+    expect(resolveEnabledContentText(map, "CA-es-VALENCIA-u-nu-latn", config)).toBe("Valencian");
+    expect(resolveEnabledContentText(map, "ca", config)).toBe("Spanish");
+    expect(
+      resolveEnabledContentText(map, valencian, { defaultLanguage: "es", languages: ["es", "ca"] }),
+    ).toBe("Spanish");
+    expect(map).toEqual({ ca: "Catalan", [valencian]: "Valencian", es: "Spanish" });
+  });
+  it("selects a stored Valencian snapshot and an explicit Catalan default separately", () => {
+    expect(resolveSnapshotText({ ca: "Catalan", [valencian]: "Valencian" }, valencian, "ca")).toBe(
+      "Valencian",
+    );
+    expect(resolveContentText({ ca: "Catalan" }, valencian, "ca")).toBe("Catalan");
+  });
+});
+
+it("uses the runtime name for Valencian outside English and Spanish", () => {
+  expect(languageDisplayName("ca-ES-valencia", "ca", false)).toBe(
+    new Intl.DisplayNames(["ca"], { type: "language", fallback: "none" }).of("ca-ES-valencia"),
+  );
+});
+
+it("retains matching of a legacy malformed regional key", () => {
+  expect(resolveContentText({ "en-invalid!": "Legacy", fr: "French" }, "en", "fr")).toBe("Legacy");
 });

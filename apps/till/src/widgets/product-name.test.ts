@@ -237,3 +237,19 @@ describe("unit labels without ids", () => {
     ).toBe("");
   });
 });
+
+describe("Valencian allergen sheet names", () => {
+  it("uses enabled Valencian while keeping Catalan disabled", () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es", "ca-ES-valencia"] });
+    const dish = product({
+      customerName: {
+        ca: "Catalan coffee",
+        "ca-ES-valencia": "Valencian coffee",
+        es: "Spanish coffee",
+      },
+    });
+    expect(customerProductName(dish, "ca-ES-valencia")).toBe("Valencian coffee");
+    expect(customerProductName(dish, "ca")).toBe("Coffee");
+    expect(customerProductName(dish, "invalid_locale")).toBe("Coffee");
+  });
+});
