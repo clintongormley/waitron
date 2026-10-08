@@ -35,7 +35,7 @@ export class WtTabs extends LitElement {
       }
       .tab-actions {
         flex: 0 0 auto;
-        max-width: 50%;
+        max-width: calc(100% - 2 * var(--wt-tap-min));
         min-width: 0;
         overflow-x: auto;
         padding-inline: var(--wt-space-1);
@@ -147,8 +147,13 @@ export class WtTabs extends LitElement {
     // Move only the tab strip; scrolling the selected button into view can move the whole page.
     const barBounds = bar.getBoundingClientRect();
     const tabBounds = selected.getBoundingClientRect();
-    if (tabBounds.right > barBounds.right) bar.scrollLeft += tabBounds.right - barBounds.right;
-    else if (tabBounds.left < barBounds.left) bar.scrollLeft += tabBounds.left - barBounds.left;
+    const rtl = getComputedStyle(bar).direction === "rtl";
+    const toLeft = tabBounds.left - barBounds.left;
+    const toRight = tabBounds.right - barBounds.right;
+    // A tab wider than the strip shows its start, so its label reads from the beginning.
+    if (tabBounds.width > barBounds.width || (rtl ? toRight > 0 : toLeft < 0))
+      bar.scrollLeft += rtl ? toRight : toLeft;
+    else if (rtl ? toLeft < 0 : toRight > 0) bar.scrollLeft += rtl ? toLeft : toRight;
   }
 
   override connectedCallback(): void {

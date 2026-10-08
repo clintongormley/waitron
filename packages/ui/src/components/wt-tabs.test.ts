@@ -243,6 +243,128 @@ test("keeps a tab action visible beside a scrolling tablist at phone width", asy
   expect(tabs).toHaveLength(3);
 });
 
+async function wideAction(width: number) {
+  const el = (await mountThemed(
+    `<wt-tabs label="Venue operations"><button slot="actions" style="width: 180px; white-space: nowrap">Añadir una impresora</button><div slot="status">Ready</div></wt-tabs>`,
+  )) as WtTabs;
+  el.items = items;
+  host.style.width = `${width}px`;
+  await el.updateComplete;
+  await frames();
+  return el;
+}
+
+function centre(box: DOMRect): number {
+  return box.top + box.height / 2;
+}
+
+// At 300 px the action is wider than half the row; 390 and 641 px are controls where it is not.
+test.each([300, 390, 641])(
+  "keeps a 180 px action whole and on the tabs' line in a %s px row",
+  async (width) => {
+    const el = await wideAction(width);
+    const action = el.querySelector<HTMLButtonElement>("button[slot=actions]")!;
+    const area = el.shadowRoot!.querySelector<HTMLElement>('[part="tab-actions"]')!;
+    const row = el.shadowRoot!.querySelector<HTMLElement>('[part="tab-row"]')!;
+    const strip = tablist(el).getBoundingClientRect();
+    const actionBox = action.getBoundingClientRect();
+    expect(area.scrollWidth).toBeLessThanOrEqual(area.clientWidth);
+    expect(actionBox.width).toBe(180);
+    expect(actionBox.right).toBeLessThanOrEqual(el.getBoundingClientRect().right + 1);
+    expect(actionBox.left).toBeGreaterThanOrEqual(strip.right - 1);
+    expect(
+      Math.abs(centre(actionBox) - centre(buttons(el)[0]!.getBoundingClientRect())),
+    ).toBeLessThanOrEqual(1);
+    expect(row.clientHeight).toBe(tablist(el).offsetHeight);
+  },
+);
+
+test("a strip beside a wide action scrolls, and End brings the last tab clear of the action", async () => {
+  const el = await wideAction(390);
+  const action = el
+    .querySelector<HTMLButtonElement>("button[slot=actions]")!
+    .getBoundingClientRect();
+  expect(tablist(el).scrollWidth).toBeGreaterThan(tablist(el).clientWidth);
+  buttons(el)[0]!.focus();
+  buttons(el)[0]!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }),
+  );
+  await el.updateComplete;
+  await frames();
+  const last = buttons(el)[2]!.getBoundingClientRect();
+  expect(el.shadowRoot!.activeElement).toBe(buttons(el)[2]);
+  expectSelectedInView(el);
+  expect(last.right).toBeLessThanOrEqual(action.left + 1);
+});
+
+test("a selected tab that fits scrolls in only as far as its end, keeping the tabs before it", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const strip = tablist(el).getBoundingClientRect();
+  const tab = buttons(el)[2]!.getBoundingClientRect();
+  expect(tab.width).toBeLessThan(tablist(el).clientWidth);
+  expect(tablist(el).scrollLeft).toBeGreaterThan(0);
+  expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+});
+
+test("a selected tab wider than the strip shows its start, cut where the action begins", async () => {
+  const el = await wideAction(300);
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const strip = tablist(el).getBoundingClientRect();
+  const tab = buttons(el)[2]!.getBoundingClientRect();
+  const action = el
+    .querySelector<HTMLButtonElement>("button[slot=actions]")!
+    .getBoundingClientRect();
+  expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
+  expect(tablist(el).scrollLeft).toBeGreaterThan(0);
+  expect(tab.left).toBeGreaterThanOrEqual(strip.left - 1);
+  expect(tab.left).toBeLessThanOrEqual(strip.left + 1);
+  expect(strip.right).toBeLessThanOrEqual(action.left + 1);
+});
+
+test("right to left, a selected tab wider than the strip shows its start at the strip's right edge", async () => {
+  const el = await wideAction(300);
+  host.dir = "rtl";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const strip = tablist(el).getBoundingClientRect();
+  const tab = buttons(el)[2]!.getBoundingClientRect();
+  expect(tab.width).toBeGreaterThan(tablist(el).clientWidth);
+  expect(tablist(el).scrollLeft).toBeLessThan(0);
+  expect(Math.abs(tab.right - strip.right)).toBeLessThanOrEqual(1);
+});
+
+test("right to left, a selected tab that fits scrolls in only as far as its end", async () => {
+  const el = await setup();
+  host.dir = "rtl";
+  host.style.width = "220px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  const strip = tablist(el).getBoundingClientRect();
+  const tab = buttons(el)[2]!.getBoundingClientRect();
+  expect(tab.width).toBeLessThan(tablist(el).clientWidth);
+  expect(tablist(el).scrollLeft).toBeLessThan(0);
+  expect(Math.abs(tab.left - strip.left)).toBeLessThanOrEqual(1);
+});
+
+test("control: at 1280 px neither the tabs nor a wide action scroll", async () => {
+  const el = await wideAction(1280);
+  expect(tablist(el).scrollWidth).toBeLessThanOrEqual(tablist(el).clientWidth);
+  const area = el.shadowRoot!.querySelector<HTMLElement>('[part="tab-actions"]')!;
+  expect(area.scrollWidth).toBeLessThanOrEqual(area.clientWidth);
+  const action = el
+    .querySelector<HTMLButtonElement>("button[slot=actions]")!
+    .getBoundingClientRect();
+  expect(action.right).toBeCloseTo(el.getBoundingClientRect().right - 4, 0);
+});
+
 test("bounds several actions within their own scrolling area at phone width", async () => {
   const el = (await mountThemed(
     `<wt-tabs label="Menu"><div slot="actions"><button>Add a new section</button><button>Include another menu</button><button>Add products to this section</button></div><div slot="structure">Content</div></wt-tabs>`,
@@ -259,7 +381,10 @@ test("bounds several actions within their own scrolling area at phone width", as
   const hostRect = el.getBoundingClientRect();
   const actionRect = actions.getBoundingClientRect();
   expect(actionRect.right).toBeLessThanOrEqual(hostRect.right + 1);
-  expect(tablist.clientWidth).toBeGreaterThanOrEqual(195);
+  const tap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+  expect(tap).toBeGreaterThan(0);
+  expect(tablist.clientWidth).toBeGreaterThanOrEqual(2 * tap - 1);
+  expect(actionRect.width).toBeCloseTo(hostRect.width - 2 * tap, 0);
   expect(actions.scrollWidth).toBeGreaterThan(actions.clientWidth);
 });
 

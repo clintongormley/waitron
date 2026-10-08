@@ -109,6 +109,10 @@ export class PrepStationsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
+      /* Two add buttons share the action area, so the tabs keep half the row (A424). */
+      wt-tabs::part(tab-actions) {
+        max-width: 50%;
+      }
       wt-data-table::part(watcher-cell),
       wt-data-table::part(printer-cell) {
         display: grid;
