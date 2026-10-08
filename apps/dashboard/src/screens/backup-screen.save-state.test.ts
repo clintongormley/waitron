@@ -65,8 +65,8 @@ function stubApi(status: BackupStatusView): DashboardApi {
 const q = <T extends HTMLElement = HTMLElement>(el: BackupScreen, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector);
 
-async function openSettings() {
-  const api = stubApi(ENABLED);
+async function openSettings(status: BackupStatusView = ENABLED) {
+  const api = stubApi(status);
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
   await vi.waitFor(() => expect(q(el, "[data-test=edit-settings]")).not.toBeNull());
   q(el, "[data-test=edit-settings]")!.click();
@@ -204,6 +204,60 @@ describe("the backup settings editor's Save", () => {
     expect(q(el, "[data-test=edit-title]")).not.toBeNull();
     expect(await state(el, "save-settings")).toEqual(ready);
     await typeInto("destination", "/mnt/usb/second")(el);
+    expect(await state(el, "save-settings")).toEqual(quiet);
+  });
+});
+
+// The form cannot write these stored shapes, so it shows its defaults in their place: saving what it
+// shows changes the box, and Save must be pressable at once.
+describe("the settings editor over a stored policy the form cannot write", () => {
+  it.each<[string, BackupStatusView, object]>([
+    [
+      "an interval schedule",
+      { ...ENABLED, schedule: { kind: "interval", ms: 3_600_000 } },
+      {
+        ...STORED_BODY,
+        schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+      },
+    ],
+    [
+      "no retention",
+      { ...ENABLED, retention: undefined },
+      { ...STORED_BODY, retention: { count: 7, days: 30 } },
+    ],
+  ])(
+    "over %s opens with Save ready, sends the defaults it shows, and opens quiet once saved",
+    async (_, status, body) => {
+      const { el, api } = await openSettings(status);
+      expect(await state(el, "save-settings")).toEqual(ready);
+      await press(el, "save-settings");
+      await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledExactlyOnceWith(body));
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-title]")).toBeNull());
+      q(el, "[data-test=edit-settings]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+      expect(await state(el, "save-settings")).toEqual(quiet);
+    },
+  );
+
+  it("an edit made while that save is in flight leaves Save measured from what was sent", async () => {
+    const { el, api } = await openSettings({
+      ...ENABLED,
+      schedule: { kind: "interval", ms: 3_600_000 },
+    });
+    let finish!: (status: BackupStatusView) => void;
+    vi.mocked(api.applyBackup).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await press(el, "save-settings");
+    await typeInto("destination", "/mnt/usb/other")(el);
+    finish(ENABLED);
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(q(el, "[data-test=edit-title]")).not.toBeNull();
+    expect(await state(el, "save-settings")).toEqual(ready);
+    await typeInto("destination", "/mnt/usb/waitron")(el);
     expect(await state(el, "save-settings")).toEqual(quiet);
   });
 });

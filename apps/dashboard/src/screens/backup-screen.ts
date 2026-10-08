@@ -237,6 +237,9 @@ export class BackupScreen extends LitElement {
   /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
    * reactive state so it is never rendered. */
   #reuseKey: string | null = null;
+  /** The stored policy is one the form cannot write, so the editor shows defaults in its place and
+   * saving it as shown changes the box. */
+  #policyReplaced = false;
   /** The status watcher asks for a key at most once, so a failing mint is not retried on every
    * refresh: the mint is a POST, and a POST is never passive session activity. */
   #watcherAsked = false;
@@ -639,7 +642,7 @@ export class BackupScreen extends LitElement {
   }
 
   async #saveSettings(): Promise<void> {
-    if (saveActionState(this.#archiveScope).unchanged) return;
+    if (this.#settingsAction().unchanged) return;
     if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
     if (!this.#checkPolicy()) return;
     this.errorKey = null;
@@ -659,6 +662,7 @@ export class BackupScreen extends LitElement {
       if (generation !== this.#generation) return;
       this.status = status;
       scope?.commit(submitted);
+      this.#policyReplaced = false;
       if (!scope?.isDirty()) {
         this.editSettings = false;
         this.#reuseKey = null;
@@ -683,6 +687,7 @@ export class BackupScreen extends LitElement {
   /** A non-`wall-clock` running schedule (the box-image `interval` form the UI cannot author) leaves
    * the schedule controls at their defaults. */
   #prefillFromStatus(s: BackupStatusView): void {
+    this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
     this.destinationDir = s.destinations[0]?.dir ?? "";
     if (s.schedule?.kind === "wall-clock") {
       this.daysMode = s.schedule.days === "daily" ? "daily" : "weekdays";
@@ -1020,8 +1025,12 @@ export class BackupScreen extends LitElement {
     `;
   }
 
+  #settingsAction() {
+    return saveActionState(this.#archiveScope, { savableAtOpen: this.#policyReplaced });
+  }
+
   #renderEditSettings(): TemplateResult {
-    const s = saveActionState(this.#archiveScope);
+    const s = this.#settingsAction();
     return html`
       <h2 data-test="edit-title">${t("backup.edit.title")}</h2>
       ${this.#renderDestinationField()}
