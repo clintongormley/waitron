@@ -641,6 +641,7 @@ describe("Hours: the standard week", () => {
       const el = await mount(api);
       await click(el, cellButton(el, restaurant, 1));
       state.writes.push({ reject: refusal });
+      await choose(el, "monday.mode", "all_day");
       await click(el, saveButton(el));
       expect(await bottomMessage(el)).toBe(message);
       expect(field(el, "monday.mode")!.error).toBe("");
@@ -655,6 +656,7 @@ describe("Hours: the standard week", () => {
     state.writes.push({
       reject: { code: "hours.invalid", params: { field: "days.2.cell.periods.1.closesAt" } },
     });
+    await setField(el, "tuesday.periods.1.closesAt", "23:00");
     await click(el, saveButton(el));
     expect(field(el, "tuesday.periods.1.closesAt")!.error).toBe("Check this value.");
     expect(field(el, "tuesday.mode")!.error).toBe("");
@@ -665,6 +667,7 @@ describe("Hours: the standard week", () => {
     const el = await mount(api);
     await click(el, cellButton(el, bar, 2));
     state.reads.push({ reject: { code: "connection.failed" } });
+    await setField(el, "tuesday.periods.0.opensAt", "18:00");
     await click(el, saveButton(el));
     expect(modal(el)).toBeNull();
     expect(text(el.shadowRoot!.querySelector('[data-test="page-alert"]'))).toBe(
@@ -677,6 +680,7 @@ describe("Hours: the standard week", () => {
     const el = await mount(api);
     await click(el, cellButton(el, deli, 5));
     expect(modal(el)!.getAttribute("size")).toBe("standard");
+    await choose(el, "friday.mode", "all_day");
     await click(el, saveButton(el));
     expect(modal(el)!.getAttribute("size")).toBe("compact");
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
@@ -787,6 +791,7 @@ describe("Hours: the standard week", () => {
     const el = await mount(api);
     await click(el, cellButton(el, restaurant, 2));
     state.writes.push({ reject: { code: "server.internal" } });
+    await setField(el, "tuesday.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe("The change could not be saved.");
 
@@ -820,6 +825,7 @@ describe("Hours: the standard week", () => {
       saved.week[0]!.days = week((d) => (d === 2 ? ALL_DAY : restaurantWeek[d]!.cell));
       state.model = saved;
       await click(el, cellButton(el, restaurant, 2));
+      await choose(el, "tuesday.mode", "all_day");
       await click(el, saveButton(el));
       await vi.waitFor(() => expect(text(cell(el, restaurant, 2))).toContain("Open all day"));
       slow.resolve(model());
@@ -841,6 +847,7 @@ describe("Hours: the standard week", () => {
     const late = deferred();
     state.writes.push(late.promise);
     await click(el, cellButton(el, restaurant, 2));
+    await setField(el, "tuesday.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
     expect(saveButton(el).disabled).toBe(true);
     expect(cancelButton(el).disabled).toBe(true);
@@ -862,6 +869,7 @@ describe("Hours: the standard week", () => {
     const late = deferred();
     state.writes.push(late.promise);
     await click(el, cellButton(el, restaurant, 2));
+    await setField(el, "tuesday.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
     await click(el, cancelButton(el));
     expect(modal(el)).not.toBeNull();
@@ -1623,6 +1631,7 @@ describe("Hours: special dates", () => {
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     state.writes.push({ reject: refusal });
+    await setField(el, "colour", "blue");
     await click(el, saveButton(el));
     expect(field(el, name)!.error).toBe(message);
     expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
@@ -1668,6 +1677,7 @@ describe("Hours: special dates", () => {
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     state.writes.push({ reject: refusal });
+    await setField(el, "colour", "blue");
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe(message);
     expect(
@@ -2047,6 +2057,7 @@ describe("Hours: the calendar", () => {
     await openDay(el, "2026-10-01");
     await panelAction(el, "edit");
     expect(field(el, "name")!.value).toBe("Past party");
+    await setField(el, "name", "Past party edited");
     await click(el, saveButton(el));
     await vi.waitFor(() => expect(modal(el)).toBeNull());
     expect(calls("PUT")).toEqual([
@@ -2054,7 +2065,7 @@ describe("Hours: the calendar", () => {
         "/management-api/venue-service/special-dates/past",
         {
           date: "2026-10-01",
-          name: "Past party",
+          name: "Past party edited",
           colour: "amber",
           closeWholeVenue: false,
           cells: [deliClosed],
@@ -2287,6 +2298,7 @@ describe("Hours: the calendar", () => {
     const { api, state } = server(liveData);
     const el = await mount(api);
     await click(el, cellButton(el, bar, 2));
+    await setField(el, "tuesday.periods.0.opensAt", "18:00");
     await click(el, saveButton(el));
     expect(modal(el)).toBeNull();
     state.reads.push({ reject: { code: "connection.failed" } });
@@ -2600,6 +2612,7 @@ it.each([
         },
       },
     });
+    await setField(el, "colour", "blue");
     await click(el, saveButton(el));
     expect(field(el, "date")!.error).toBe(message);
     expect(saveButton(el).disabled).toBe(false);

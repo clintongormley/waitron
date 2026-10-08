@@ -232,6 +232,8 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
   "the seven-day draft's confirmation": async (theme) => {
     const el = await mount(theme);
     await press(el, 'td[data-subject="station:deli"][data-weekday="1"] button');
+    await chooseOption(deep(el, '[name="monday.mode"]')!, "all_day");
+    await settle(el);
     await press(el, '[data-test="save-editor"]');
     expect(deep(el, '[data-test="confirm-text"]')).not.toBeNull();
     return el;
