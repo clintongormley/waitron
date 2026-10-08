@@ -562,15 +562,37 @@ describe("product-course config", () => {
     expect(await productCourse(productId)).toBeNull();
   });
 
-  it("setProductCourse leaves a variant's id alone, as it does an id naming no product", async () => {
+  it("setProductCourse refuses a variant's id, as it does an id naming no product, with product.not_found", async () => {
     const cfg = await setupVenue();
     const productId = await seedProduct();
     const variantId = await seedVariant(productId);
+    const missing = randomUUID();
     const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
-    await asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId));
+    await expect(
+      asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId)),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: variantId } });
     expect(await productCourse(variantId)).toBeNull();
+    await expect(
+      asApp(cfg, (tx) => setProductCourse(tx, cfg, missing, courseId)),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: missing } });
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, courseId));
     expect(await productCourse(productId)).toBe(courseId);
+  });
+
+  it('setProductCourse writes to a variant under scope "any"', async () => {
+    const cfg = await setupVenue();
+    const variantId = await seedVariant(await seedProduct());
+    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId, "any"));
+    expect(await productCourse(variantId)).toBe(courseId);
+  });
+
+  it("setProductCourse names the product before an unknown course", async () => {
+    const cfg = await setupVenue();
+    const missing = randomUUID();
+    await expect(
+      asApp(cfg, (tx) => setProductCourse(tx, cfg, missing, randomUUID())),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: missing } });
   });
 
   it("setProductCourse rejects an inactive or absent course with course.not_found", async () => {

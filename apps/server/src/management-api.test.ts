@@ -14,6 +14,7 @@ import {
   parties,
   partyTables,
   printers,
+  products,
   watcherPrinters,
   withTransaction,
 } from "@waitron/db";
@@ -3227,7 +3228,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     }
   });
 
-  it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product is a no-op", async () => {
+  it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product → 404 product.not_found", async () => {
     const courseId = await createCourse(unique("Course"));
     const { productId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, {
@@ -3271,8 +3272,58 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const missingCourse = await put({ courseId: randomUUID() });
     expect(missingCourse.status).toBe(404);
     expect(await missingCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
-    // A malformed PRODUCT id gets the verb's unknown-id no-op, a 204.
-    expect((await put({ courseId }, "not-a-uuid")).status).toBe(204);
+    const malformed = await put({ courseId }, "not-a-uuid");
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({
+      error: { code: "product.not_found", params: { productId: "not-a-uuid" } },
+    });
+  });
+
+  it("PUT /products/:id/course on an unknown or a variant's :id → 404 product.not_found", async () => {
+    const courseId = await createCourse(unique("Course"));
+    const { variantId } = await withTransaction(suite.db, async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: unique("Prod"),
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      const [variant] = await tx
+        .insert(products)
+        .values({ catalogueId: catalogue.id, parentId: product.id, name: unique("Variant") })
+        .returning({ id: products.id });
+      return { variantId: variant!.id };
+    });
+    const put = (id: string, body: unknown) =>
+      req(`/products/${id}/course`, { method: "PUT", body: JSON.stringify(body) }, managerCookie);
+    for (const id of [randomUUID(), variantId]) {
+      const res = await put(id, { courseId });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "product.not_found", params: { productId: id } },
+      });
+    }
+  });
+
+  it("PUT /products/:id/course names the product before the course", async () => {
+    const unknown = randomUUID();
+    for (const [id, courseId] of [
+      ["not-a-uuid", "not-a-uuid"],
+      [unknown, randomUUID()],
+    ] as const) {
+      const res = await req(
+        `/products/${id}/course`,
+        { method: "PUT", body: JSON.stringify({ courseId }) },
+        managerCookie,
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "product.not_found", params: { productId: id } },
+      });
+    }
   });
 
   it("GET /fire-control reads the venue setting (defaults 'waiter'); PUT sets it; a bad value → 400", async () => {

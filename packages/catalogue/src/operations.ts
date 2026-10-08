@@ -780,10 +780,6 @@ async function readOfferVariants(
   return grouped;
 }
 
-/**
- * Check an untrusted catalogue id before a location-menu write, so an absent catalogue produces
- * `catalogue.not_found` (404) instead of an opaque foreign-key failure.
- */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
     .select({ id: catalogues.id })
@@ -952,25 +948,26 @@ export async function applyDietDerivation(
 }
 
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
-  return insertProduct(tx, input, true);
+  return insertProduct(tx, input, { checkNames: true, checkCatalogue: true });
 }
 
 /**
- * {@link createProduct} without the unique-name check, for `saveProductEditor`, which checks every
- * name its whole save leaves before writing any of it. Left out of the package's exports
+ * {@link createProduct} without the unique-name check or the catalogue check, for
+ * `saveProductEditor`, which checks every name its whole save leaves before writing any of it, and
+ * has already read its path's catalogue in the same transaction. Left out of the package's exports
  * (`index.ts`).
  */
 export async function createProductSkippingNameCheck(
   tx: Transaction,
   input: CreateProductInput,
 ): Promise<Product> {
-  return insertProduct(tx, input, false);
+  return insertProduct(tx, input, { checkNames: false, checkCatalogue: false });
 }
 
 async function insertProduct(
   tx: Transaction,
   input: CreateProductInput,
-  checkNames: boolean,
+  { checkNames, checkCatalogue }: { checkNames: boolean; checkCatalogue: boolean },
 ): Promise<Product> {
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("product.invalid", { field: "unitId" });
@@ -1013,6 +1010,7 @@ async function insertProduct(
     diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
     image: input.image ?? null,
   };
+  if (checkCatalogue) await assertCatalogueExists(tx, input.catalogueId);
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
@@ -1260,9 +1258,11 @@ export async function setLocationDefaultCatalogue(
     .select({ id: locations.catalogueId })
     .from(locations)
     .where(eq(locations.id, locationId));
-  const defaultId = row?.id ?? null;
+  if (row === undefined) throw new AppError("location.not_found", { locationId });
+  await assertCatalogueExists(tx, catalogueId);
+  const defaultId = row.id;
   if (defaultId !== null && defaultId !== catalogueId) {
-    await addCatalogueToLocation(tx, locationId, defaultId);
+    await insertLocationCatalogue(tx, locationId, defaultId);
   }
   await assignCatalogueToLocation(tx, locationId, catalogueId);
 }
@@ -1272,6 +1272,26 @@ export async function setLocationDefaultCatalogue(
  * Idempotent: the primary key (location_id, catalogue_id) makes a re-attach a no-op.
  */
 export async function addCatalogueToLocation(
+  tx: Transaction,
+  locationId: string,
+  catalogueId: string,
+): Promise<void> {
+  const [location] = await tx
+    .select({ id: locations.id })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  if (location === undefined) throw new AppError("location.not_found", { locationId });
+  await assertCatalogueExists(tx, catalogueId);
+  await insertLocationCatalogue(tx, locationId, catalogueId);
+}
+
+async function assertCatalogueExists(tx: Transaction, catalogueId: string): Promise<void> {
+  if (!(await catalogueExists(tx, catalogueId)))
+    throw new AppError("catalogue.not_found", { catalogueId });
+}
+
+/** Both ids must already be known to exist. */
+async function insertLocationCatalogue(
   tx: Transaction,
   locationId: string,
   catalogueId: string,

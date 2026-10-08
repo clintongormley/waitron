@@ -362,7 +362,8 @@ Defect fixes first:
   already 404 in this table); unknown ingredient on `PATCH` 204 → 404 (a new `ingredient.not_found`,
   registered with dashboard wording). Clients: none. Tests: none found. Size S. Depends on: nothing.
 - **A394-3 — Catalogue: unknown catalogues, locations and products answer 500, 204 or 200.** Files:
-  `packages/catalogue/src/operations.ts`, `location-catalogues.ts`, `apps/server/src/catalogue-api.ts`,
+  `packages/catalogue/src/operations.ts` (the location functions; the schema file
+  `packages/db/src/schema/location-catalogues.ts` does not change), `apps/server/src/catalogue-api.ts`,
   the product-course route in `apps/server/src/management-api.ts` with `kitchen.ts`. Fixes the five
   catalogue rows in the defects table. Clients: none. Tests: none found. Size M. Depends on: nothing.
 - **A394-4 — Purchasing: editing an invoice to another invoice's supplier number crashes.** Files:
@@ -1500,3 +1501,119 @@ it, as it already does for a variant; not this item's to add — say so in the P
 
 Clients: none read these statuses. No migration. Tests changed: none expected; any that change go in
 `~/waitron-campaign-c/item-a394-2-changed-tests.md`.
+
+## A394-3 — tasks (lane C, 2026-10-08)
+
+Re-read on `main` at `6a8320998` before writing. The five rows still hold, by reading:
+`insertProduct` (`packages/catalogue/src/operations.ts`, behind `createProduct`) checks the body's
+category and unit but never its `catalogueId`, so an unknown one meets the `products.catalogue_id`
+foreign key; `addCatalogueToLocation` inserts the path's `locationId` unchecked (foreign key), and
+`setLocationDefaultCatalogue` reads the location row, finds none, and its `assignCatalogueToLocation`
+update matches nothing (204); `GET /management-api/catalogues/:id/products` hands the path id to
+`listProducts`, which filters by it (200 `[]`); `PUT /management-api/products/:id/course`
+(`apps/server/src/management-api.ts`) returns early on a malformed id and `setProductCourse`
+(`apps/server/src/kitchen.ts`) updates no row for an unknown or variant id (both 204). No
+`location.not_found` code exists anywhere (`git grep -n 'location.not_found'`), and
+`management-api.ts`'s `STATUS` has no `product.not_found` row (it would fall to 400). Precedence as
+A394-1 and A394-2: the thing the path names is checked before anything the body names. Existence
+only, never "active".
+
+The two location routes' body `catalogueId` keeps answering `catalogue.not_found` 404 here; moving
+a body catalogue to 400 there is A394-11's (pinned by `catalogue-api.test.ts:1123-1138`). The
+location list `GET …/locations/:locationId/catalogues` and the member `DELETE` are not in the
+defects table and are left as they are (the DELETE is documented as a no-op for a non-member); the
+PR names both as open points, with a third: a MALFORMED location or catalogue path id on these
+catalogue routes keeps answering 400 `shared.invalid_id` (pinned at `catalogue-api.test.ts:1147,1545`)
+until A394-22, while the course route below answers 404 for the same mistake.
+
+Catalogues are never deleted (no `delete(catalogues)` outside tests), and the dashboard asks for a
+catalogue's product list only for catalogues it has just listed (`catalogue-screen.ts:294-300`), so
+a live screen cannot meet the new 404 on the product list. Plan review (fresh context, 2026-10-08)
+folded in below.
+
+1. **Package, test first** (`packages/catalogue`, its existing suites beside `operations.ts`'s
+   location and product tests):
+   - `createProduct` with an unknown `catalogueId` → `catalogue.not_found` `{ catalogueId }`.
+     Precedence: an unknown catalogue with an unknown `categoryId` → still `catalogue.not_found`
+     (the route screens `catalogueId` first).
+   - `addCatalogueToLocation` with an unknown location → `location.not_found` `{ locationId }`, no
+     `location_catalogues` row; with a real location and an unknown catalogue →
+     `catalogue.not_found` `{ catalogueId }`; unknown both → `location.not_found`.
+   - `setLocationDefaultCatalogue` with an unknown location → `location.not_found`; real location,
+     unknown catalogue → `catalogue.not_found`; unknown both → `location.not_found`.
+   No "nothing written" read-backs: a throw rolls the whole transaction back wherever the check
+   sits, so such a read-back passes for a right and a wrong fix alike; the asserted CODE is what
+   tells them apart. Run each on `main`'s code first and record what it does (a driver foreign-key
+   error, or a silent success).
+2. **Package, the fix.**
+   - New code `"location.not_found": { locationId: string }` in `packages/catalogue/src/errors.ts`
+     (the only thrower; `operations.ts` already imports that registry).
+   - `insertProduct`: `catalogueExists` just before `readCategory` (after the plain input checks,
+     as A394-2 kept them first); no row → `catalogue.not_found` `{ catalogueId }`. Only
+     `createProduct` asks for it: `insertProduct`'s boolean becomes an options object
+     `{ checkNames, checkCatalogue }`, and `createProductSkippingNameCheck` passes both false, because
+     its one caller, the product editor, has already read its PATH catalogue in the same transaction
+     (`product-editor.ts:155-161`) — so the editor pays no second read and its answer is unchanged.
+     Say so in that function's doc comment.
+   - `addCatalogueToLocation`: read the location (`locations.id`), none → `location.not_found`; then
+     `catalogueExists`, none → `catalogue.not_found`; then insert. `setLocationDefaultCatalogue`:
+     its existing location read, no row → `location.not_found`; then `catalogueExists`; its demote of
+     the old default goes through an unexported unchecked insert (the old default is a stored
+     foreign key, so it exists), so the location is not read twice. Reads awaited in turn on `tx`.
+     The route's `assertCatalogueVisible` calls on these two routes are removed (the package now
+     checks, path first); `assertCatalogueVisible` stays for the product list in step 3. Fix the doc comment on
+     `catalogueExists` / `assertCatalogueVisible` if a sentence stops being true.
+3. **Routes, test first** (`apps/server/src/catalogue-api.test.ts`, `management-api.test.ts`),
+   asserting status AND `{ code, params }`:
+   - `POST /management-api/products` with an unknown body `catalogueId` → 400
+     `catalogue.not_found` `{ catalogueId }`: a second boundary for this route only,
+     `{ ...STATUS, "catalogue.not_found": 400 }`, beside `runSize`, with a one-line comment (body id
+     → 400, the rule in `docs/developers/conventions-data.md`).
+   - `POST /management-api/locations/:locationId/catalogues` and `PUT …/default-catalogue`, unknown
+     location (with a real catalogue, and with an unknown one) → 404 `location.not_found`
+     `{ locationId }`; add `"location.not_found": 404` to `STATUS`. The existing
+     real-location/unknown-catalogue cases (`:1123-1138`) must still pass unedited.
+   - `GET /management-api/catalogues/:id/products`, unknown catalogue → 404 `catalogue.not_found`
+     `{ catalogueId }`, by `assertCatalogueVisible` in the route before `listProducts` (other
+     `listProducts` callers keep their answer).
+   - `PUT /management-api/products/:id/course`: a malformed `:id` → 404 `product.not_found`
+     `{ productId }` (owner answer to question 7: a malformed path id is 404; the sibling course
+     routes already answer a malformed course id this way, `requireCourseId`). Add a
+     `requireProductId` beside the other `require*Id` helpers (`management-api.ts` ~326-390) and call
+     it right after `requireManagementSession`, before `readJsonBody`, so the path is screened before
+     the body — like the sibling course routes, it answers before the permission check. Precedence
+     case: malformed `:id` with a malformed `courseId` → `product.not_found`. An unknown
+     product and a variant's id → 404 `product.not_found`, nothing written. In `setProductCourse`,
+     read the product with `productWithId(productId, scope)` FIRST, none → `product.not_found`
+     `{ productId }`, then the course check, then the update; replace the doc comment's "an absent
+     `productId` … is a no-op" with the new answer. Precedence: unknown product with a well-formed
+     unknown course → `product.not_found`. Add `"product.not_found": 404` to `management-api.ts`'s
+     `STATUS` after checking with `git grep` that no other route on that boundary can raise it.
+     Fix the route comment naming `registerStationRoute`, which no longer exists.
+   Run every route case on `main` first and record each: unknown body catalogue 500
+   `server.internal`; unknown location with a real catalogue 500 (add) and 204 (default); unknown
+   location with an unknown catalogue 404 `catalogue.not_found` on both (the route's catalogue
+   check runs first today); product list 200 `[]`; course 204 for malformed, unknown and variant ids.
+   **Two existing checks change** (they pin the no-op this item replaces; list each in the
+   changed-tests file, old → new → why):
+   - `apps/server/src/management-api.test.ts:3230` (title "a malformed product is a no-op") and
+     `:3273-3274` (a malformed product id answers 204) → 404 `product.not_found`.
+   - `apps/server/src/kitchen.test.ts:565-574` ("leaves a variant's id alone, as it does an id
+     naming no product") → split: a variant's id or an unknown id under the default scope →
+     `product.not_found`, and scope `"any"` still writes to a variant.
+4. **Dashboard wording.** `location.not_found` in `apps/dashboard/src/i18n/codes.ts`, English and
+   Spanish ("local", as the file's other location wording), saying the location no longer exists
+   and to refresh; a case in `codes.test.ts` that it is not the generic message in either language.
+   `product.not_found` has no dashboard wording; not this item's (say so in the PR).
+5. **Proof by deletion.** Remove each new check in turn (catalogue in `insertProduct`, location and
+   catalogue in each location function, the route's catalogue check on the product list, the product
+   read in `setProductCourse`, the malformed-id check) and confirm its package and route cases fail;
+   restore.
+6. **Guards.** From the root: `pnpm exec vitest run scripts/errors-reachable.test.ts
+   scripts/alert-codes.test.ts`; the golden huella and `inmutabilidad` unedited. Coverage is CI's;
+   run `pnpm --filter @waitron/catalogue test:coverage` only if chasing a gap.
+
+Clients: none read these statuses (the dashboard maps refusals by code). No migration. Tests
+changed: the two above, and any other existing assertion that changes, go in
+`~/waitron-campaign-c/item-a394-3-changed-tests.md` (old, new, why); `setProductCourse`'s callers' suites in `apps/server` are run in full because its
+no-op answer changes.

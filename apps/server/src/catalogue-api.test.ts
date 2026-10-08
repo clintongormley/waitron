@@ -1150,6 +1150,37 @@ describe("mountCatalogueApi — location menus", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
+
+  describe.each([
+    ["POST", "catalogues"],
+    ["PUT", "default-catalogue"],
+  ] as const)("%s …/%s at a location that does not exist", (method, leaf) => {
+    const unknownLocationPath = (missing: string) => `/management-api/locations/${missing}/${leaf}`;
+
+    it("answers 404 location.not_found with a real catalogue", async () => {
+      const app = mountApp();
+      const casa = await createCatalogueVia(app, `Casa ${crypto.randomUUID()}`);
+      const missing = crypto.randomUUID();
+      const res = await send(app, method, unknownLocationPath(missing), {
+        body: { catalogueId: casa },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "location.not_found", params: { locationId: missing } },
+      });
+    });
+
+    it("answers 404 location.not_found, not catalogue.not_found, with an unknown catalogue", async () => {
+      const missing = crypto.randomUUID();
+      const res = await send(mountApp(), method, unknownLocationPath(missing), {
+        body: { catalogueId: crypto.randomUUID() },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "location.not_found", params: { locationId: missing } },
+      });
+    });
+  });
 });
 
 describe("mountCatalogueApi — categories", () => {
@@ -1539,6 +1570,33 @@ describe("mountCatalogueApi — products", () => {
     expect(await menuPricesVia(app, downstairsMenuId)).toMatchObject([
       { menuItemId: downstairsItemId, override: "9.00" },
     ]);
+  });
+
+  it("GET /management-api/catalogues/:id/products for a catalogue that does not exist → 404 catalogue.not_found", async () => {
+    const missing = crypto.randomUUID();
+    const res = await send(mountApp(), "GET", `/management-api/catalogues/${missing}/products`);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+    });
+  });
+
+  it("POST /management-api/products naming a catalogue that does not exist → 400 catalogue.not_found", async () => {
+    const missing = crypto.randomUUID();
+    const res = await send(mountApp(), "POST", "/management-api/products", {
+      body: {
+        catalogueId: missing,
+        categoryId: null,
+        name: "Stray",
+        pricingUnit: "each",
+        unitPrice: "3",
+        vatClass: "general",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+    });
   });
 
   it("GET /management-api/catalogues/:id/products with a non-uuid id → shared.invalid_id 400", async () => {

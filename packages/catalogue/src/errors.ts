@@ -64,8 +64,9 @@ declare module "@waitron/shared" {
     /** `detected` names the type when it is recognisable: a fact about the bytes, never the
      * bytes. */
     "media.unsupported_type": { detected?: string };
-    /** A location-menu write, or a read or write of a menu's structure, names no menu. */
     "catalogue.not_found": { catalogueId: string };
+    /** A location-menu write names a location that does not exist. */
+    "location.not_found": { locationId: string };
     "menu.reset_required": { menuId: string };
     "menu.clashes_unresolved": { menuId: string; count: number };
     /** The menu's working state no longer hashes to what its preview showed, so nothing was

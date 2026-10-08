@@ -427,6 +427,38 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("refuses a create naming an unknown catalogue with catalogue.not_found", async () => {
+    const missing = crypto.randomUUID();
+    await expect(
+      asTenant((tx) =>
+        createProduct(tx, {
+          catalogueId: missing,
+          categoryId: null,
+          name: "Stray",
+          unitId: eachUnitId,
+          unitPrice: "1.00",
+          vatClass: "general",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "catalogue.not_found", params: { catalogueId: missing } });
+  });
+
+  it("names the catalogue before the category when both are unknown", async () => {
+    const missing = crypto.randomUUID();
+    await expect(
+      asTenant((tx) =>
+        createProduct(tx, {
+          catalogueId: missing,
+          categoryId: crypto.randomUUID(),
+          name: "Stray",
+          unitId: eachUnitId,
+          unitPrice: "1.00",
+          vatClass: "general",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "catalogue.not_found", params: { catalogueId: missing } });
+  });
+
   it("still rejects a create with neither unitId nor pricingUnit", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
@@ -1488,8 +1520,38 @@ describe("catalogue operations", () => {
     });
   });
 
-  // The trust-boundary guard the location-menu write routes use: does this catalogue exist at all?
-  // A real id is true; an absent id is false.
+  describe.each([
+    ["addCatalogueToLocation", addCatalogueToLocation],
+    ["setLocationDefaultCatalogue", setLocationDefaultCatalogue],
+  ] as const)("%s with an id naming nothing", (_name, write) => {
+    it("refuses an unknown location with location.not_found", async () => {
+      const casa = await asTenant((tx) => createCatalogue(tx, { name: "Casa" }));
+      const missing = crypto.randomUUID();
+      await expect(asTenant((tx) => write(tx, missing, casa.id))).rejects.toMatchObject({
+        code: "location.not_found",
+        params: { locationId: missing },
+      });
+    });
+
+    it("refuses an unknown catalogue at a real location with catalogue.not_found", async () => {
+      const missing = crypto.randomUUID();
+      await expect(asTenant((tx) => write(tx, locationId, missing))).rejects.toMatchObject({
+        code: "catalogue.not_found",
+        params: { catalogueId: missing },
+      });
+    });
+
+    it("names the location first when both ids are unknown", async () => {
+      const missing = crypto.randomUUID();
+      await expect(asTenant((tx) => write(tx, missing, crypto.randomUUID()))).rejects.toMatchObject(
+        {
+          code: "location.not_found",
+          params: { locationId: missing },
+        },
+      );
+    });
+  });
+
   it("catalogueExists is true for an existing catalogue and false for an absent id", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Casa" });

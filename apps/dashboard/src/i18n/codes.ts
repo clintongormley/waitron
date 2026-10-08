@@ -304,6 +304,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That menu could not be found",
     es: "No se ha encontrado esa carta",
   },
+  "location.not_found": {
+    en: "This location no longer exists. Refresh the page and try again.",
+    es: "Este local ya no existe. Actualiza la página y vuelve a intentarlo.",
+  },
   "authorization.not_permitted": {
     en: "You don't have permission to do that",
     es: "No tienes permiso para hacer eso",
