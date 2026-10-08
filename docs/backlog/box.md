@@ -414,6 +414,15 @@ today); generalise archive entry routing off declared source ids when a second n
   [2026-09-18-handheld-and-till-hardware-decisions.md](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
   §5.
 
+## A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN
+
+**A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
+prepare should use a real SMTP server": a prepare venue would send invitations and password resets
+through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
+demo-only again. Not built.
+(2026-10-03: the owner keeps this item open. A231d's design, below, sends a prepare venue's invoice
+email through its mail server when one is set, and adds no way to set one there.)
+
 ## Decisions and deliberate limits
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not

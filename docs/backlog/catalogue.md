@@ -474,6 +474,101 @@ section. What landed is duplicating a section and §10.2's Add products flow. Si
 follow-up belongs in the owning menu editor. **Next action:** the owner decides whether §10.2's
 flow replaces §2's copy.
 
+## Content languages and the image library (#339, #344) — what is left open
+
+**Content languages and the image library (#339, #344) — what is left open.**
+[Operator guide](../content-and-images.md).
+
+- **A new picture consumer has to add a real database reference, not just store a filename.**
+  Products point at the image table through a foreign key on the picture's filename
+  (`products_media_image_fk`, `ON DELETE RESTRICT`), which is what makes "you cannot delete a
+  picture something is using" true. Any future screen that shows a
+  library picture has to add the same kind of reference and a sentence naming the use, or that
+  check will not see it.
+- **The online language selector has nothing to select for yet.** The setting and the rule for
+  choosing a language are built and tested; the customer-facing online ordering surface they were
+  built for does not exist.
+- **Left by A157's review:** the upgrade test `packages/media/src/schema/name-only-upgrade.test.ts`
+  makes its scratch folder with `tmpdir()` rather than `scratchParent()` (`scripts/scratch-dir.mjs`),
+  unmeasured either way; the list of hand-written migrations in
+  `docs/developers/conventions-data.md` leaves out core `0036` and `0047`, catalogue `0013` and
+  media `0004`, and A157's media `0005`; and the photo search's "a phrase cannot straddle two
+  translations of a name" is untested. **Next action:** fill the list when next touching that
+  file; the other two need a decision whether they are worth a change at all.
+
+## Extras and Options — deliberate limits, and what is left open
+
+**Extras and Options — deliberate limits, and what is left open.**
+[integration contract](../developers/modifiers.md).
+
+- **Clearing the Extras editor's Minimum choices box saves 0** (the save format's own default); the
+  A66 plan's Review Focus item 3 reads as if a cleared minimum should be refused. Open for the
+  owner.
+- **The Options list's rows centre their contents rather than lining up by text baseline (D6).**
+  When a server refusal adds an error line under an option's name, the dot and menu centre on the
+  name and the error together. Expected from the CSS in `option-list-form.ts`, not looked at on
+  screen. **Next action:** screenshot a row carrying an error and decide.
+- **A stored empty options default is still possible** through configuration transfer, which
+  copies rows without re-parsing them (the spec's D8).
+- **The two list forms still share about a hundred lines of per-form plumbing**
+  (`#primaryLanguage`, `#mapFieldErrors`, `#edit`, `#emit`, `#cancel`, the `willUpdate` reseed
+  guard, the Escape-while-busy handler and the footer). **Next action:** decide whether a shared
+  base or a controller is the right vehicle before a third list form is written; the row editors
+  genuinely differ and should NOT be merged.
+- **The seven string-parsing helpers are copied between the two contracts.**
+  `packages/catalogue/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
+  `invalid`, `record`, `keys`, `staffName`, `translations`, `kitchenName` and `id`, differing only in
+  the error-code prefix. **Next action:** extract them, and decide at the same time whether
+  `product-editor-input.ts`'s near-copies join them. A review also suggested moving
+  `resolveExtraPrice` from `extras.ts` into `extra-contract.ts`, beside the price parsing.
+- **`optionListDependants` and `listOptionLists`' usage count each select the carrying
+  `product_modifiers` rows with their own condition on `option_list_id`.** Whoever writes a refusal
+  that uses the same condition shares it then.
+- **A list switched on with no pickable label is refused only by the parser.**
+  `parseOptionListInput` is the only door today; a path that writes `option_labels.available`
+  directly, or flips `option_lists.active` with a plain update, could leave a list nobody can answer.
+- **`packages/catalogue/src/options.ts` still says `findContentTranslationGap` returns rather than
+  throwing.** It throws `content.translation_invalid` for a non-text value.
+- **The definition reads behind a dish's offered lists take no lock, and whether the storage
+  switch closed the gap is unestablished.** `readMenuExtras`, `readProductExtras`,
+  `readOptionListsByIds` and `readProductModifiers`, reached from `walkAttachedModifiers`
+  (`packages/catalogue/src/offered-modifiers.ts`), are off the sale path since menus Task 7 except
+  for an edit of a saved line whose dish the live version no longer offers (`productOptionLists`,
+  `apps/server/src/working-order.ts`). The concern is a list edit committing mid-read, giving one
+  order a snapshot mixing pre- and post-edit wording; not measured. **Next action:** trace those
+  reads — if every one goes through `withTransaction` (the write lock), the entry closes on that
+  alone; if any does not, decide deliberately.
+
+## Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and `image-picker.ts`)
+
+- **Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and
+  `image-picker.ts`).** (1) When the picker is handed a new live-data source, the library keeps
+  listening to the first one until its next load. (2) The delete confirmation's Close button has no
+  in-flight check of its own and relies on being drawn disabled; two clicks dispatched by script in
+  one task, confirm then Close, close it while the delete runs. **Next action:** decide whether (1)
+  re-subscribes as soon as the source is replaced, and whether (2) gets a `busy` check like the
+  modal's `wt-close` listener.
+
+## A name stored under a regional code such as `en-GB` is read by the forms as the plain code first, then its regional ones
+
+Left open by W77 (a folded Customer-facing names section shows every language's name, inherited
+ones in italic, owner 2026-10-04; #1197; W77a #1206):
+
+The only other folded section holding customer-facing names is the Product editor's Descriptors
+section, whose Name row says "None specified" for a blank language by A211's decision; left as it
+is (asked of the owner, 2026-10-04).
+A name stored under a regional code such as `en-GB` is read by the forms as the plain code first,
+then its regional ones (`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A till or
+receipt asking for `en-GB` reads `en-GB` before `en`, so a map holding both can show one name in the
+form and serve the other. An option's label, a variant and a menu section reach the same helper
+through `optionalTextFields` but have no case of their own. Still reading the plain code only: the
+unit form's names, the adjustment reasons' names
+(`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image library's names
+(`packages/media/src/dashboard/image-library.ts`). Left from #1206's review, optional tidying: the
+Product editor keeps a private `text()` helper doing what `languageText` does, and
+`product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
+names; folding them into the one helper was not part of W77a.
+
 ## Decisions and deliberate limits
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
@@ -489,3 +584,12 @@ so this is expected only while the dashboard's category list is behind.
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.
+
+From "Extras and Options — deliberate limits, and what is left open"
+([integration contract](../developers/modifiers.md)):
+
+- **An options list is always required.** It asks for exactly one pick, with the default
+  preselected; an unanswered ACTIVE list refuses the order with `options.label_required`. An
+  optional options list is a possible future change, not built.
+- **A variant offers its parent's lists and cannot override them**; a per-variant attachment row
+  is a possible later addition.

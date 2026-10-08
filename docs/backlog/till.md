@@ -1138,6 +1138,25 @@ check back. Since table actions Task 10 the till no longer merges it back on its
 mind is undone by Merge bills on the party's table screen, by hand. **Next action:** the owner
 decides whether that still covers the no-Void decision.
 
+## A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English abbreviation
+
+- **A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English
+  abbreviation** (observed during A333, 2026-10-08). On the real Spanish-seeded till, the salad
+  picker reads `1.00 rac`; its queued receipt reads `1.000 rac`, and its queued kitchen ticket
+  reads `1.000 srv`. **Next action:** trace the portion formatting and kitchen-unit language
+  choice in `apps/till/src/widgets/modifier-picker.ts`, `apps/server/src/receipt-lines.ts` and
+  `apps/server/src/kitchen-print.ts`; establish the intended kitchen wording, then test-first
+  localize the affected quantities. No change to those renderers in A333.
+
+## Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses the variant, and says it saved
+
+- **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
+  the variant, and says it saved.** Measured with a throwaway browser test: no variant radio is
+  selected, because `willUpdate` never seeds `variantId`, and when the operator picks one,
+  `setLineModifiers` (`apps/till/src/state/working-order.ts`) discards it. Needs a decision first
+  about whether a basket edit may change a variant AT ALL: if no, stop offering the variant control
+  on a reopened line; if yes, `setLineModifiers` has to carry the product.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no

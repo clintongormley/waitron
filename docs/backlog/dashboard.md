@@ -482,6 +482,100 @@ derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a seco
 flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
 `apps/server/src/attempt-turns.ts`) or an in-flight refusal.
 
+## Ongoing — the dashboard UI overhaul, screen by screen
+
+**Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
+shared look, and the rules for it live in [design-system.md](../developers/design-system.md). That
+document is the contract, and it grows as we go: each screen tends to raise a question the rules do
+not answer yet, and the answer is written down there in the same change rather than left in the
+screen. It is screenshot-driven iteration with the owner looking at each step, not a
+write-a-plan-and-dispatch job.
+
+Still to do, roughly in the order a venue meets them. As each one lands, add the rule it taught to
+`design-system.md`:
+
+1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
+2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The
+   owner-requested Products overhaul has landed ([operator guidance](../products.md)). One question
+   hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
+   whether any intended case legally needs N1 or N2 instead — to be answered before the first live
+   filing (the #345 entry below).
+3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations Tickets/Watchers,
+   and department/zone Receipt cells. A261 step 8 retired Printing rules; review the surviving
+   screens against the rules before changing them.
+4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
+   `packages/payments-sumup`. #333 changed only their row menus.
+5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
+   `kitchen-screen.ts`, `service-status-screen.ts`.
+6. **The two editors** — `canvas-editor-screen.ts`. The receipt one is done: C116 (2026-10-01)
+   rebuilt it under the current forms rules as the Receipts page, `receipts-screen.ts`.
+7. **Workforce** — `roster-screen.ts`, `my-schedule-screen.ts`, `planned-actual-screen.ts`,
+   `approvals-screen.ts`.
+8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
+   `packages/bookings/src/dashboard/`. #333 touched only the venue-operations row menu.
+9. **Operator utilities** — `backup-screen.ts`, `diagnostics-screen.ts`, `email-screen.ts`.
+10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
+    (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
+    A191 (#1074, 2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
+    steps put their own way in outside the action row (design-system.md, login section). Since A228
+    the Google step's is Google's own button, not a primary one.
+
+The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
+shared components. Whether they follow in this pass or later is open — decide it before the
+component rules harden around the dashboard alone.
+
+## Open, and it bites this work first: two documents state the component rules and they have drifted
+
+**Open, and it bites this work first: two documents state the component rules and they have
+drifted** (found by the #337 review). `design-system.md` binds the token rule to "any component or
+view" and its forbidden-colour list omits `color()`; [conventions-ui.md](../developers/conventions-ui.md)
+records what the guard mechanically enforces, which is narrower —
+`packages/ui/src/no-hardcoded-chrome.test.ts` globs `packages/ui/src/components/*.ts` only — and
+its list does include `color()`. **Next action:** decide whether the token rule binds views as well
+as components, then make the guard and both documents agree. Whoever picks up the next screen should
+settle this first, because every screen after it inherits the answer.
+
+## Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the page background, in the light theme
+
+**Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
+page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on `--wt-color-bg`
+(`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
+(`packages/ui/src/tokens/colors.css`). The dark theme is fine (`#4c8dff` on `#101216`, 5.86 to 1),
+and so is the same blue on a card or modal surface (4.63 to 1 on white). The `*.a11y.test.ts`
+suites run axe's full default ruleset, but axe only sees a pairing some mounted component paints;
+nothing enumerates the tokens against each other. **Next action:** an owner colour call — darken
+the light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on
+the page background and add a check that says so.
+
+## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
+
+- **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**
+  Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
+  rim-free fill hold there, is unknown; and whether choosing black in the browser's picker from the
+  no-colour state registers was not run. With a palette colour chosen, the Custom square shows that
+  colour too, beside the ringed swatch (pinned in `apps/dashboard/src/widgets/color-field.test.ts`,
+  "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
+  the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
+
+## Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03 while checking lane A's W18) — OPEN
+
+**Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
+while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
+readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
+failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
+Roster and Planned vs actual.
+
+## The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN
+
+**The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
+`waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS variables, so it carries
+`#4c8dff` (`--wt-color-primary`, dark) and `#eceef2` (`--wt-color-text`, dark) literally, from
+`build-icons.mjs`. Until this is done, change either token and change the generator, then re-run it.
+`scripts/brand-icons.test.ts` fails when they drift, weaker than its name: it reads `colors.css` as
+text and takes the dark values from the `@media (prefers-color-scheme: dark)` block only.
+**Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
+there is no copy to keep in step.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'
@@ -528,3 +622,12 @@ flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
   native `<form>`, and showing chosen options as chips (it shows a count instead).
 - **Venue settings' Tables and Kitchen tabs (A261 step 1, #1166; owner amendment, 2026-10-04).**
   Supervisors can read Tables and Kitchen, while writes remain manager-only.
+
+- **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177,
+  #1037).** Kept as they were, because they answer a question rather than say nothing was made: the
+  Alerts screen's two, the adjustment report's, a printer scan's, the Servers screen's and a list's
+  "No products use this list.".
+
+- **The "Continue with Google" button follows Google's branding rules (A228, #1078).** Kept
+  from the house rather than Google's drawing: the 44px tap height (Google's drawing is 40px; its
+  text allows scaling), the full card width and `wt-button`'s corner radius.

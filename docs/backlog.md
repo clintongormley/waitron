@@ -852,6 +852,57 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   flow. **Next action:** the owner decides whether §10.2's flow replaces §2's copy.
   [Detail](backlog/catalogue.md#copying-some-of-a-sections-products-into-another-section-is-not-built)
 
+- **Content languages and the image library (#339, #344) — what is left open.**
+  [Operator guide](content-and-images.md). **A new picture consumer has to add a real database
+  reference, not just store a filename.** **The online language selector has nothing to select for
+  yet.**
+  [Detail](backlog/catalogue.md#content-languages-and-the-image-library-339-344--what-is-left-open)
+
+- **The upload limit is 20 MB (owner decision 2026-09-23).** It bounds how large an upload the
+  server will buffer; the decode is bounded by `MAX_INPUT_PIXELS` (100 million). What current
+  phones produce has not been measured. Left open by photos shrunk on upload (#543).
+
+- **The library grid loads the full 1600-pixel copy for each tile**, 24 photos a page
+  (`packages/media/src/dashboard/image-library.ts`), about 4 MB at the average size. **Next
+  action:** decide whether the grid needs a thumbnail copy for slow Wi-Fi. Left open by photos
+  shrunk on upload (#543).
+
+- **Category authoring serialises across the whole database, and nobody has measured what that
+  costs.** `withTransaction` admits one write transaction per venue file
+  (`packages/catalogue/src/categories.ts`, above `listCategories`). **Next action:** measure it
+  before anyone widens category authoring to more concurrent editors. Left open by product
+  categories (#340, [API and integration guide](developers/product-categories.md)).
+
+- **Extras and Options — deliberate limits, and what is left open.**
+  [integration contract](developers/modifiers.md). **Clearing the Extras editor's Minimum choices
+  box saves 0** (the save format's own default); the A66 plan's Review Focus item 3 reads as if a
+  cleared minimum should be refused. Open for the owner.
+  [Detail](backlog/catalogue.md#extras-and-options--deliberate-limits-and-what-is-left-open)
+
+- **Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and
+  `image-picker.ts`).** (1) When the picker is handed a new live-data source, the library keeps
+  listening to the first one until its next load. (2) The delete confirmation's Close button has no
+  in-flight check of its own and relies on being drawn disabled. From "Review points left for the
+  owner".
+  [Detail](backlog/catalogue.md#image-library-547s-review-packagesmediasrcdashboardimage-libraryts-and-image-pickerts)
+
+- **The translation gap report (`listContentTranslationGaps`,
+  `packages/catalogue/src/content-languages.ts`) counts "Spanish filled, English blank" as a gap**;
+  whether it is still a gap once English falls back to the Spanish name is a decision to make with
+  the owner before building (A172 left the report unchanged). Left open by A172 and A172b (a name
+  field's hint shows what a blank field will actually use, #1053, #1061).
+
+- **The Price heading reads "Price per portion" also over a row sold by the unit.** Still open from
+  its review: neither screen counts a stored unit seeded as `each` as Each, which `isEachUnit`
+  (`packages/catalogue/src/units.ts`) does; no code outside tests seeds one. Left open by W75 (the
+  Extras editor shows Portion beside Price, #1194).
+
+- **A name stored under a regional code such as `en-GB` is read by the forms as the plain code
+  first, then its regional ones** (`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A
+  till or receipt asking for `en-GB` reads `en-GB` before `en`, so a map holding both can show one
+  name in the form and serve the other. Left open by W77 (#1197; W77a #1206).
+  [Detail](backlog/catalogue.md#a-name-stored-under-a-regional-code-such-as-en-gb-is-read-by-the-forms-as-the-plain-code-first-then-its-regional-ones)
+
 ### Service periods, opening hours and departments
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
@@ -1141,6 +1192,9 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere; part of A9._ De
   merge-or-split check read it as not Each, because `readLinesSoldInEach` looks the seed key up on
   the live unit row…
   [Detail](backlog/kitchen.md#each-is-decided-by-the-units-identity-with-one-known-gap)
+
+- **Whether a `+ <list>: <label>` sub-line is prominent enough on a kitchen ticket** to replace the
+  old `** MEDIUM RARE **` framing has not been put to a real cook.
 
 ### The till, devices and table service
 
@@ -1974,6 +2028,33 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   owner decides whether that still covers the no-Void decision.
   [Detail](backlog/till.md#the-owner-decided-a-split-check-gets-no-void-the-server-now-allows-one)
 
+- **A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English
+  abbreviation** (observed during A333, 2026-10-08). On the real Spanish-seeded till, the salad
+  picker reads `1.00 rac`; its queued receipt reads `1.000 rac`, and its queued kitchen ticket
+  reads `1.000 srv`.
+  [Detail](backlog/till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation)
+
+- **`line-extras-editor.ts` holds the per-line kitchen note**, which was never part of this
+  feature; the file name is misleading.
+
+- **A retrieved line's options answers are re-sent by matching their WORDING**
+  (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
+  withdrawn label matches nothing, and the till surfaces `held.options_changed`.
+
+- **A child extras row renders FLAT in the tab drawer**, beside the dishes, where the basket and
+  the settled ticket nest it under its dish; whether the drawer should indent it is undecided.
+
+- **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
+  the variant, and says it saved.** Needs a decision first about whether a basket edit may change a
+  variant AT ALL: if no, stop offering the variant control on a reopened line; if yes,
+  `setLineModifiers` has to carry the product.
+  [Detail](backlog/till.md#reopening-the-picker-on-a-line-whose-dish-has-variants-_and_-at-least-one-offered-list-loses-the-variant-and-says-it-saved)
+
+- **Both of the modifier picker's LIST inputs carry a generated id as their `name`**
+  (`extras-${list.id}`, `options-${list.id}`, `apps/till/src/widgets/modifier-picker.ts`), against
+  `docs/developers/conventions-ui.md` and CLAUDE.md §3. The offered-list wire carries no stable
+  per-list identifier to use instead, so closing this means adding one to that wire.
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -2283,6 +2364,16 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   product folders work. A Reprint does not clear its failed job because watcher copies have no
   station or bill link.
 
+- **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
+  discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap
+  while half the row stands empty; and the till's option picker puts each price far from its name.
+  [Detail](backlog/printers.md#seen-while-looking-at-every-modal-at-1024px-not-changed)
+
+- **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
+  #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
+  so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
+  category warns about exactly what will go, #1196).
+
 ### Payments and card readers
 
 _Formerly A6, and Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
@@ -2437,6 +2528,20 @@ _Formerly A6, and Track C's payments items; part of A9._ Detail: [backlog/paymen
   automatic resend under the same id gets the failed payment back and tells staff the card was
   declined: no card was charged, but the reason shown is wrong; the next tap starts a fresh
   payment (read, not run). Left open by W97 (#1311).
+
+- **A provider that keeps sending data slowly, or a connection that is slow to open, can take
+  longer** — a reader's status and the provider's available readers wait up to 250 seconds. Stripe
+  gives up on an attempt after 80 seconds of silence once connected and tries three times (stated
+  in `defaultMakeStripe`, `packages/payments-stripe/src/card-provider.ts`). A provider that keeps
+  sending data slowly, or a connection that is slow to open, can take longer, since Stripe's limit
+  is on silence, not on the whole answer. Left open by A255 (#1145, lane A's W18c).
+
+- **The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit.**
+  The SumUp pairing dialog's status reads (`#pollTick` and `#unpairOrphan`,
+  `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the limit, other
+  screens' reads are not limited, and it was not measured in a real browser against a real silent
+  provider. Left open by A260 (several card readers' status reads at once can use up the browser's
+  connections to the box; W18c #1145 and W48 #1162).
 
 ### Users, sign-in and the dashboard shell
 
@@ -2768,6 +2873,98 @@ _Formerly A7, and Track A's dashboard part; part of A9._ Detail: [backlog/dashbo
   turn-taking (`inTurn`, `apps/server/src/attempt-turns.ts`) or an in-flight refusal.
   [Detail](backlog/dashboard.md#a-burst-of-till-pin-sign-ins-derives-a-key-for-every-attempt--open-found-2026-10-03-by-w1)
 
+- **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
+  shared look, and the rules for it live in [design-system.md](developers/design-system.md). The
+  till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
+  shared components. Whether they follow in this pass or later is open — decide it before the
+  component rules harden around the dashboard alone.
+  [Detail](backlog/dashboard.md#ongoing--the-dashboard-ui-overhaul-screen-by-screen)
+
+- **Open, and it bites this work first: two documents state the component rules and they have
+  drifted** (found by the #337 review). **Next action:** decide whether the token rule binds views
+  as well as components, then make the guard and both documents agree. Whoever picks up the next
+  screen should settle this first, because every screen after it inherits the answer.
+  [Detail](backlog/dashboard.md#open-and-it-bites-this-work-first-two-documents-state-the-component-rules-and-they-have-drifted)
+
+- **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on
+  the page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on
+  `--wt-color-bg` (`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
+  (`packages/ui/src/tokens/colors.css`). **Next action:** an owner colour call — darken the light
+  theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on the
+  page background and add a check that says so.
+  [Detail](backlog/dashboard.md#also-open-and-product-wide-the-primary-blue-fails-the-accessibility-contrast-bar-as-text-on-the-page-background-in-the-light-theme)
+
+- **Nothing stops the next screen styling `wt-data-table` cell markup with a class.** A check that
+  compares the class names a screen's own stylesheet styles against the class names it puts inside
+  `wt-data-table` cell callbacks looks feasible; nobody has tried to write it. Left open by product
+  categories (#340).
+
+- **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**
+  Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
+  rim-free fill hold there, is unknown; and whether choosing black in the browser's picker from the
+  no-colour state registers was not run. **Next action:** try the first in Safari or Playwright's
+  WebKit, and the second by hand in Chromium. From "Review points left for the owner".
+  [Detail](backlog/dashboard.md#the-colour-fields-custom-square-appsdashboardsrcwidgetscolor-fieldts-left-by-c25)
+
+- **`--wt-cell-name-max-width` is used in three different directions, and is named for one.** Some
+  consumers CAP a name cell with it, others use it as a `min-width` FLOOR, and one uses it as a FLEX
+  BASIS on a combobox. **Next action (design decision):** a second token for the floor, or one
+  shared sizing value used three ways.
+
+- **The Payments screen's readers table gets no button**, because "Add reader" sits beside each
+  connected provider (none, one or several), so there is no single Add to put there, and the list
+  is pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none
+  either, because its rows come from "Add products" on the Structure tab.
+  Left open by A176 (an empty table shows a proper empty box, with the screen's Add button, #1033).
+
+- **Not covered: empty sentences outside a `wt-data-table` (floor, kitchen, devices and others)
+  still use "Aún no hay" and other shapes.** Left open by A177 (one fixed "nothing matches"
+  sentence; a specific "nothing yet" sentence per screen, #1037).
+
+- **That saved-password visual check remains unverified** — an isolated Chromium profile accepted
+  a saved test password through `navigator.credentials.store`, but did not autofill it after a
+  reload or restart under automation; that saved-password visual check remains unverified. Left
+  open by A190 (a field the browser fills in keeps the field's own look, #1047).
+
+- **The new key and passkey icons draw lines at width 2** while the change-account icon beside them
+  uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing
+  keeps the two in step. Left open by A191 (the dashboard's sign-in pages, #1074; owner to decide).
+
+- **The "Continue with Google" button was checked in Chromium only** (the vitest browser suites and
+  screenshots); Firefox and Safari not looked at. Left open by A228 (#1078).
+
+- **The error-styled notice keeps `role="status"`** (read out politely, as the item asked), where
+  the dashboard's other error text uses `role="alert"` (read out at once); switching it is a
+  one-line change if wanted. Left open for the owner by W103 (the login card's session-expired
+  notice is drawn as an error, #1190).
+
+- **Other non-table dropdowns offering an empty "Any …" or "No …" row** were outside A193; their
+  appearance needs a separate review. Left open by A193 (a table filter's "Any …" choice is drawn
+  as a chosen value, #1084).
+
+- **The owner has not confirmed whether one common width was intended for every filter**; this uses
+  one stable width per filter. A filter whose longest choice exceeds the available phone width
+  fills its row, and that choice is cut short in the closed control. Left open by A194 (a table
+  filter's dropdown keeps one width whatever is chosen, #1085).
+
+- **Left as it was: the focus ring of a row's button shows only along the row's top edge**, in both
+  tables, as on the shared table. Left open by W71 (clicking an Extras or Options list's row
+  opens its editor, in the product editor and on the Modifiers page, #1192).
+
+- **Left as it was** (#1142's run-it review, which found the same on `main`): **on Device profiles,
+  a failed one-off reload's message can stay after fresh data arrives.** Left open by A224 (dashboard
+  reads have no time limit, #1125, #1135, #1142).
+
+- **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
+  while checking lane A's W18) — OPEN.** It is the kind of empty-state text W18 removed from
+  Roster and Planned vs actual.
+  [Detail](backlog/dashboard.md#empty-state-text-shows-beside-a-failed-read-on-payments-and-cloud-services-a252-seen-2026-10-03-while-checking-lane-as-w18--open)
+
+- **The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
+  **Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs,
+  so there is no copy to keep in step.
+  [Detail](backlog/dashboard.md#the-dark-logos-colours-are-copies-of-the-dark-themes-a253-2026-10-03-from-a225--open)
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
@@ -2845,6 +3042,10 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   product folders work. Give the alert text more room at phone width while keeping its handling
   action reachable.
   [Detail](backlog/alerts.md#the-alerts-table-makes-long-station-warnings-hard-to-read-on-a-phone)
+
+- **A provider call that ignores cancellation may continue after the server has answered**; the
+  source's five-minute cache shares that in-flight call with reads during its lifetime. Left open
+  by the A258 follow-up (the alerts list's battery check has its own deadline, W58, #1176).
 
 ### Working time and staff
 
@@ -3189,6 +3390,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   supervisor's injected errors, not against a real bucket. Left open by #668, #686, A57, A60 and
   #723 (the pause test and the bucket's error reports).
   [Detail](backlog/box.md#that-a-real-buckets-403-to-the-pauses-listing-reads-that-code-and-the-status-and-errorname-on-each-line-were-shown-by-reading)
+
+- **A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
+  prepare should use a real SMTP server": a prepare venue would send invitations and password resets
+  through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
+  demo-only again. Not built.
+  [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 ### Replication, failover and the cloud
 
@@ -3680,6 +3887,18 @@ _Formerly B9, and Track C's development-stack and house-rules items; part of A9.
   coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
   (#1332).
 
+- **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
+  person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
+  other half — a matrix that varies two things separately and never crosses them proves less than
+  it looks — wants its own line. Left open by content languages and the image library (#339).
+
+- **A two-transaction concurrency test that starts both sides in sequence is racing itself.**
+  Nothing guards the shape; look for it in any new racing test.
+
+- **A trap not yet in `CLAUDE.md`: `pnpm --filter <pkg> test <file> -t "name"` silently drops the
+  `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
+  it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -4075,6 +4294,11 @@ _Formerly B8, parts of B9, and Track C's correctness items; part of A9._ Detail:
 
 _Formerly entries spread across the old sections._
 
+- **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
+  source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
+  confirm it (`docs/compliance/action-plan.md`, 2026-09-23). Left open by photos shrunk
+  on upload (#543).
+
 ### Later and parked
 
 _Formerly _Later and parked_._
@@ -4082,407 +4306,6 @@ _Formerly _Later and parked_._
 ---
 
 ## Track A — UI and application
-
-**Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
-shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
-document is the contract, and it grows as we go: each screen tends to raise a question the rules do
-not answer yet, and the answer is written down there in the same change rather than left in the
-screen. It is screenshot-driven iteration with the owner looking at each step, not a
-write-a-plan-and-dispatch job.
-
-**Open, and it bites this work first: two documents state the component rules and they have
-drifted** (found by the #337 review). `design-system.md` binds the token rule to "any component or
-view" and its forbidden-colour list omits `color()`; [conventions-ui.md](developers/conventions-ui.md)
-records what the guard mechanically enforces, which is narrower —
-`packages/ui/src/no-hardcoded-chrome.test.ts` globs `packages/ui/src/components/*.ts` only — and
-its list does include `color()`. **Next action:** decide whether the token rule binds views as well
-as components, then make the guard and both documents agree. Whoever picks up the next screen should
-settle this first, because every screen after it inherits the answer.
-
-**Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
-page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on `--wt-color-bg`
-(`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
-(`packages/ui/src/tokens/colors.css`). The dark theme is fine (`#4c8dff` on `#101216`, 5.86 to 1),
-and so is the same blue on a card or modal surface (4.63 to 1 on white). The `*.a11y.test.ts`
-suites run axe's full default ruleset, but axe only sees a pairing some mounted component paints;
-nothing enumerates the tokens against each other. **Next action:** an owner colour call — darken
-the light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on
-the page background and add a check that says so.
-
-Done so far: the dashboard shell itself — the sidebar, the banner and the account menu — plus
-**Account settings** (Your profile) and the **user administration** section (#333; what changed is
-under A7).
-
-Still to do, roughly in the order a venue meets them. As each one lands, add the rule it taught to
-`design-system.md`:
-
-1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
-2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The
-   owner-requested Products overhaul has landed ([operator guidance](products.md)). One question
-   hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
-   whether any intended case legally needs N1 or N2 instead — to be answered before the first live
-   filing (the #345 entry below).
-3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations Tickets/Watchers,
-   and department/zone Receipt cells. A261 step 8 retired Printing rules; review the surviving
-   screens against the rules before changing them.
-4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
-   `packages/payments-sumup`. #333 changed only their row menus.
-5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
-   `kitchen-screen.ts`, `service-status-screen.ts`.
-6. **The two editors** — `canvas-editor-screen.ts`. The receipt one is done: C116 (2026-10-01)
-   rebuilt it under the current forms rules as the Receipts page, `receipts-screen.ts`.
-7. **Workforce** — `roster-screen.ts`, `my-schedule-screen.ts`, `planned-actual-screen.ts`,
-   `approvals-screen.ts`.
-8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
-   `packages/bookings/src/dashboard/`. #333 touched only the venue-operations row menu.
-9. **Operator utilities** — `backup-screen.ts`, `diagnostics-screen.ts`, `email-screen.ts`.
-10. **Login** — `login-screen.ts`, which already carries the owner's own review from 2026-09-09
-    (CLAUDE.md §3, the `ui-login` findings). Fold those corrections in rather than restyle it twice.
-    A191 (#1074, 2026-10-03) put every sign-in step in a card; the email, password, passkey and Google
-    steps put their own way in outside the action row (design-system.md, login section). Since A228
-    the Google step's is Google's own button, not a primary one.
-
-The till (`apps/till`) and the setup wizard (`apps/setup`) are separate apps drawing on the same
-shared components. Whether they follow in this pass or later is open — decide it before the
-component rules harden around the dashboard alone.
-
-**Content languages and the image library (#339, #344) — what is left open.**
-[Operator guide](content-and-images.md).
-
-- **A new picture consumer has to add a real database reference, not just store a filename.**
-  Products point at the image table through a foreign key on the picture's filename
-  (`products_media_image_fk`, `ON DELETE RESTRICT`), which is what makes "you cannot delete a
-  picture something is using" true. Any future screen that shows a
-  library picture has to add the same kind of reference and a sentence naming the use, or that
-  check will not see it.
-- **The online language selector has nothing to select for yet.** The setting and the rule for
-  choosing a language are built and tested; the customer-facing online ordering surface they were
-  built for does not exist.
-- **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
-  person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
-  other half — a matrix that varies two things separately and never crosses them proves less than
-  it looks — wants its own line.
-- **Left by A157's review:** the upgrade test `packages/media/src/schema/name-only-upgrade.test.ts`
-  makes its scratch folder with `tmpdir()` rather than `scratchParent()` (`scripts/scratch-dir.mjs`),
-  unmeasured either way; the list of hand-written migrations in
-  `docs/developers/conventions-data.md` leaves out core `0036` and `0047`, catalogue `0013` and
-  media `0004`, and A157's media `0005`; and the photo search's "a phrase cannot straddle two
-  translations of a name" is untested. **Next action:** fill the list when next touching that
-  file; the other two need a decision whether they are worth a change at all.
-
-**Photos are shrunk on upload — LANDED #543.** What it leaves open:
-
-- **The upload limit is 20 MB (owner decision 2026-09-23).** It bounds how large an upload the
-  server will buffer; the decode is bounded by `MAX_INPUT_PIXELS` (100 million). What current
-  phones produce has not been measured.
-- **The library grid loads the full 1600-pixel copy for each tile**, 24 photos a page
-  (`packages/media/src/dashboard/image-library.ts`), about 4 MB at the average size. **Next
-  action:** decide whether the grid needs a thumbnail copy for slow Wi-Fi.
-- **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
-  source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
-  confirm it (`docs/compliance/action-plan.md`, 2026-09-23).
-
-**Product categories (#340) — what is left open.**
-[API and integration guide](developers/product-categories.md).
-
-- **Category authoring serialises across the whole database, and nobody has measured what that
-  costs.** `withTransaction` admits one write transaction per venue file
-  (`packages/catalogue/src/categories.ts`, above `listCategories`). **Next action:** measure it
-  before anyone widens category authoring to more concurrent editors.
-- **Nothing stops the next screen styling `wt-data-table` cell markup with a class.** A check that
-  compares the class names a screen's own stylesheet styles against the class names it puts inside
-  `wt-data-table` cell callbacks looks feasible; nobody has tried to write it.
-
-**Extras and Options — deliberate limits, and what is left open.**
-[integration contract](developers/modifiers.md).
-
-- **An options list is always required.** It asks for exactly one pick, with the default
-  preselected; an unanswered ACTIVE list refuses the order with `options.label_required`. An
-  optional options list is a possible future change, not built.
-- **A variant offers its parent's lists and cannot override them**; a per-variant attachment row
-  is a possible later addition.
-- **The demo venue demonstrates optional sides (A333) — DONE (2026-10-08).** Pollo asado
-  offers Guarniciones, with zero to three picks: Padrón peppers (2.00), mixed salad (1.50)
-  and house bread (0.50), one portion of each at most. `seed-extra-lists.ts` uses the catalogue
-  write paths and keeps existing options attachments. Published-offer and attachment-preservation
-  cases run through `seedDemoRestaurant`; the practice-sales golden fixture stays unchanged.
-- **A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English
-  abbreviation** (observed during A333, 2026-10-08). On the real Spanish-seeded till, the salad
-  picker reads `1.00 rac`; its queued receipt reads `1.000 rac`, and its queued kitchen ticket
-  reads `1.000 srv`. **Next action:** trace the portion formatting and kitchen-unit language
-  choice in `apps/till/src/widgets/modifier-picker.ts`, `apps/server/src/receipt-lines.ts` and
-  `apps/server/src/kitchen-print.ts`; establish the intended kitchen wording, then test-first
-  localize the affected quantities. No change to those renderers in A333.
-- **Whether a `+ <list>: <label>` sub-line is prominent enough on a kitchen ticket** to replace the
-  old `** MEDIUM RARE **` framing has not been put to a real cook.
-- **Clearing the Extras editor's Minimum choices box saves 0** (the save format's own default); the
-  A66 plan's Review Focus item 3 reads as if a cleared minimum should be refused. Open for the
-  owner.
-- **The Options list's rows centre their contents rather than lining up by text baseline (D6).**
-  When a server refusal adds an error line under an option's name, the dot and menu centre on the
-  name and the error together. Expected from the CSS in `option-list-form.ts`, not looked at on
-  screen. **Next action:** screenshot a row carrying an error and decide.
-- **A stored empty options default is still possible** through configuration transfer, which
-  copies rows without re-parsing them (the spec's D8).
-- **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
-  discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap
-  while half the row stands empty; and the till's option picker, 1024px wide on a 1280px screen,
-  puts each price far from its name (which adds to the "prices are not a column" item in the till
-  layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
-- **`--wt-cell-name-max-width` is used in three different directions, and is named for one.** Some
-  consumers CAP a name cell with it, others use it as a `min-width` FLOOR, and one uses it as a FLEX
-  BASIS on a combobox. **Next action (design decision):** a second token for the floor, or one
-  shared sizing value used three ways.
-- **The two list forms still share about a hundred lines of per-form plumbing**
-  (`#primaryLanguage`, `#mapFieldErrors`, `#edit`, `#emit`, `#cancel`, the `willUpdate` reseed
-  guard, the Escape-while-busy handler and the footer). **Next action:** decide whether a shared
-  base or a controller is the right vehicle before a third list form is written; the row editors
-  genuinely differ and should NOT be merged.
-- **The seven string-parsing helpers are copied between the two contracts.**
-  `packages/catalogue/src/extra-contract.ts` and `option-contract.ts` carry byte-identical copies of
-  `invalid`, `record`, `keys`, `staffName`, `translations`, `kitchenName` and `id`, differing only in
-  the error-code prefix. **Next action:** extract them, and decide at the same time whether
-  `product-editor-input.ts`'s near-copies join them. A review also suggested moving
-  `resolveExtraPrice` from `extras.ts` into `extra-contract.ts`, beside the price parsing.
-- **`optionListDependants` and `listOptionLists`' usage count each select the carrying
-  `product_modifiers` rows with their own condition on `option_list_id`.** Whoever writes a refusal
-  that uses the same condition shares it then.
-- **A list switched on with no pickable label is refused only by the parser.**
-  `parseOptionListInput` is the only door today; a path that writes `option_labels.available`
-  directly, or flips `option_lists.active` with a plain update, could leave a list nobody can answer.
-- **`packages/catalogue/src/options.ts` still says `findContentTranslationGap` returns rather than
-  throwing.** It throws `content.translation_invalid` for a non-text value.
-- **`line-extras-editor.ts` holds the per-line kitchen note**, which was never part of this
-  feature; the file name is misleading.
-- **A retrieved line's options answers are re-sent by matching their WORDING**
-  (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
-  withdrawn label matches nothing, and the till surfaces `held.options_changed`.
-- **A child extras row renders FLAT in the tab drawer**, beside the dishes, where the basket and
-  the settled ticket nest it under its dish; whether the drawer should indent it is undecided.
-- **Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses
-  the variant, and says it saved.** Measured with a throwaway browser test: no variant radio is
-  selected, because `willUpdate` never seeds `variantId`, and when the operator picks one,
-  `setLineModifiers` (`apps/till/src/state/working-order.ts`) discards it. Needs a decision first
-  about whether a basket edit may change a variant AT ALL: if no, stop offering the variant control
-  on a reopened line; if yes, `setLineModifiers` has to carry the product.
-- **Both of the modifier picker's LIST inputs carry a generated id as their `name`**
-  (`extras-${list.id}`, `options-${list.id}`, `apps/till/src/widgets/modifier-picker.ts`), against
-  `docs/developers/conventions-ui.md` and CLAUDE.md §3. The offered-list wire carries no stable
-  per-list identifier to use instead, so closing this means adding one to that wire.
-- **The definition reads behind a dish's offered lists take no lock, and whether the storage
-  switch closed the gap is unestablished.** `readMenuExtras`, `readProductExtras`,
-  `readOptionListsByIds` and `readProductModifiers`, reached from `walkAttachedModifiers`
-  (`packages/catalogue/src/offered-modifiers.ts`), are off the sale path since menus Task 7 except
-  for an edit of a saved line whose dish the live version no longer offers (`productOptionLists`,
-  `apps/server/src/working-order.ts`). The concern is a list edit committing mid-read, giving one
-  order a snapshot mixing pre- and post-edit wording; not measured. **Next action:** trace those
-  reads — if every one goes through `withTransaction` (the write lock), the entry closes on that
-  alone; if any does not, decide deliberately.
-- **A two-transaction concurrency test that starts both sides in sequence is racing itself.**
-  Nothing guards the shape; look for it in any new racing test.
-- **A trap not yet in `CLAUDE.md`: `pnpm --filter <pkg> test <file> -t "name"` silently drops the
-  `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
-  it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
-
-**Review points left for the owner: the image library, the colour field.**
-
-- **Image library (#547's review, `packages/media/src/dashboard/image-library.ts` and
-  `image-picker.ts`).** (1) When the picker is handed a new live-data source, the library keeps
-  listening to the first one until its next load. (2) The delete confirmation's Close button has no
-  in-flight check of its own and relies on being drawn disabled; two clicks dispatched by script in
-  one task, confirm then Close, close it while the delete runs. **Next action:** decide whether (1)
-  re-subscribes as soon as the source is replaced, and whether (2) gets a `busy` check like the
-  modal's `wt-close` listener.
-- **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**
-  Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
-  rim-free fill hold there, is unknown; and whether choosing black in the browser's picker from the
-  no-colour state registers was not run. With a palette colour chosen, the Custom square shows that
-  colour too, beside the ringed swatch (pinned in `apps/dashboard/src/widgets/color-field.test.ts`,
-  "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
-  the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
-
-**Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78, #1215;
-the portrait-photo bands W78a, #1280; on a phone a narrow photo centred and at most 40% of the
-window high, A293, #1313; the till allergen test title #1215's review questioned, W78b, #1340 — in
-Playwright's Chromium 153, a real click on the dialog's backdrop left it open and Escape closed it,
-so the title now says Escape).**
-
-**The folding section jumps about when it opens (A169) — DONE (#1026).**
-
-**The option window inside an Options list: two owner fixes (A170) — DONE (#1040).**
-
-**The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171) —
-DONE (#1044).**
-
-**A name field's hint shows what a blank field will actually use (A172, A172b) — DONE (#1053, #1061);
-left open:** the translation gap report (`listContentTranslationGaps`,
-`packages/catalogue/src/content-languages.ts`) counts "Spanish filled, English blank" as a gap;
-whether it is still a gap once English falls back to the Spanish name is a decision to make with
-the owner before building (A172 left the report unchanged).
-
-**An empty table shows a proper empty box, with the screen's Add button (A176) — DONE (#1033); left
-open:** the Payments screen's readers table gets no button, because "Add reader" sits beside each
-connected provider (none, one or several), so there is no single Add to put there, and the list is
-pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none either,
-because its rows come from "Add products" on the Structure tab.
-
-**One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177) — DONE
-(#1037).** Kept as they were, because they answer a question rather than say nothing was made: the
-Alerts screen's two, the adjustment report's, a printer scan's, the Servers screen's and a list's
-"No products use this list.". Not covered: empty sentences outside a `wt-data-table` (floor,
-kitchen, devices and others) still use "Aún no hay" and other shapes.
-
-**The language chooser moves to the top bar, in every app (A187) — DONE (#1062).**
-
-**The sidebar no longer lists the email inbox; the top-bar link is the way in (A227) — DONE
-(#1094).**
-
-**A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
-prepare should use a real SMTP server": a prepare venue would send invitations and password resets
-through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
-demo-only again. Not built.
-(2026-10-03: the owner keeps this item open. A231d's design, below, sends a prepare venue's invoice
-email through its mail server when one is set, and adds no way to set one there.)
-
-**A field the browser fills in keeps the field's own look (A190) — DONE (#1047); left open:** an
-isolated Chromium profile accepted a saved test password through `navigator.credentials.store`, but
-did not autofill it after a reload or restart under automation; that saved-password visual check
-remains unverified.
-
-**The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191) —
-DONE (#1074); left open by #1074 (owner to decide):** the new key and passkey icons draw lines at
-width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card
-styles rather than sharing `wt-card`, and nothing keeps the two in step.
-
-**The "Continue with Google" button follows Google's branding rules (A228) — DONE (#1078).** Kept
-from the house rather than Google's drawing: the 44px tap height (Google's drawing is 40px; its
-text allows scaling), the full card width and `wt-button`'s corner radius. Checked in Chromium only
-(the vitest browser suites and screenshots); Firefox and Safari not looked at.
-
-**The login card drops its logo, and a session-expired notice is drawn as an error (W103) — DONE
-(#1190); left open for the owner:** the error-styled notice keeps `role="status"` (read out
-politely, as the item asked), where the dashboard's other error text uses `role="alert"` (read out
-at once); switching it is a one-line change if wanted.
-
-**A table filter's "Any …" choice is drawn as a chosen value, not a hint (A193, owner
-2026-10-02) — DONE (#1084); left open:** Other non-table dropdowns offering an empty "Any …" or
-"No …" row were outside A193; their appearance needs a separate review.
-
-**A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — DONE
-(#1085); left open:** The owner has not confirmed whether one common width was intended for every
-filter; this uses one stable width per filter. A filter whose longest choice exceeds the available
-phone width fills its row, and that choice is cut short in the closed control.
-
-**A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE (#1086).**
-
-**Clicking an Extras or Options list's row opens its editor, in the product editor and on the
-Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198; W71g #1208; W71h #1211); left
-open:** Left as it was: the focus ring of a row's button shows only along the row's top edge, in
-both tables, as on the shared table.
-
-**The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
-(W75, owner 2026-10-04) — DONE (#1194; W75a #1205; W75b #1201; W75c #1204; W75d #1221; W75e #1226);
-left open:** The Price heading reads "Price per portion" also over a row sold by the unit.
-Still open from its review: neither screen counts a
-stored unit seeded as `each` as Each, which `isEachUnit` (`packages/catalogue/src/units.ts`) does;
-no code outside tests seeds one.
-
-**A folded Customer-facing names section shows every language's name, inherited ones in italic
-(W77, owner 2026-10-04) — DONE (#1197; W77a #1206); left open:**
-The only other folded section holding customer-facing names is the Product editor's Descriptors
-section, whose Name row says "None specified" for a blank language by A211's decision; left as it
-is (asked of the owner, 2026-10-04).
-A name stored under a regional code such as `en-GB` is read by the forms as the plain code first,
-then its regional ones (`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A till or
-receipt asking for `en-GB` reads `en-GB` before `en`, so a map holding both can show one name in the
-form and serve the other. An option's label, a variant and a menu section reach the same helper
-through `optionalTextFields` but have no case of their own. Still reading the plain code only: the
-unit form's names, the adjustment reasons' names
-(`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image library's names
-(`packages/media/src/dashboard/image-library.ts`). Left from #1206's review, optional tidying: the
-Product editor keeps a private `text()` helper doing what `languageText` does, and
-`product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
-names; folding them into the one helper was not part of W77a.
-
-**Dashboard reads have no time limit, and a save's lost-connection message can vanish when reads
-recover (A224, from A206's review, 2026-10-02) — DONE (lane A's W18, #1125; W18a, #1135; W18b, #1142);
-left open:** Left as it was (#1142's run-it review, which found the same on `main`): on
-Device profiles, a failed one-off reload's message can stay after fresh data arrives.
-
-**A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
-broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — DONE (#1145, lane A's W18c).** A
-reader's status and the provider's available readers wait up to 250 seconds. Stripe gives up on an
-attempt after 80 seconds of silence once connected and tries three times (stated in
-`defaultMakeStripe`, `packages/payments-stripe/src/card-provider.ts`). A provider that keeps sending
-data slowly, or a connection that is slow to open, can take longer, since Stripe's limit is on
-silence, not on the whole answer.
-
-**The alerts list's battery check has its own deadline (A258 follow-up — DONE, W58, #1176).** A
-provider call that ignores cancellation may continue after the server has answered; the source's
-five-minute cache shares that in-flight call with reads during its lifetime.
-
-**Several card readers' status reads at once can use up the browser's connections to the box
-(A260, found by W18c's review, 2026-10-03) — DONE (W18c #1145 and W48 #1162); left open:** The W48
-test does not measure a real silent provider or the box's HTTP/1.1 connection limit. The SumUp
-pairing dialog's status reads (`#pollTick` and `#unpairOrphan`,
-`packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the limit, other screens'
-reads are not limited, and it was not measured in a real browser against a real silent provider.
-
-**Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
-while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
-readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
-failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
-Roster and Planned vs actual.
-
-**The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
-`waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS variables, so it carries
-`#4c8dff` (`--wt-color-primary`, dark) and `#eceef2` (`--wt-color-text`, dark) literally, from
-`build-icons.mjs`. Until this is done, change either token and change the generator, then re-run it.
-`scripts/brand-icons.test.ts` fails when they drift, weaker than its name: it reads `colors.css` as
-text and takes the dark values from the `@media (prefers-color-scheme: dark)` block only.
-**Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
-there is no copy to keep in step.
-
-**The Products screen as a category tree (A208) — DONE (#1064).** Spec
-[2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md);
-plan [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
-
-**Deleting a category warns about exactly what will go (W74, owner 2026-10-04) — DONE (#1196; W74a #1217;
-W74b #1219; W74c #1220; W74d #1242; W74e #1224).**
-
-Still open from W74:
-
-- **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
-  #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
-  so a lookup by name finds the first row drawn for that device.
-
-**The category Delete dialog counts disabled products and says how many are disabled (A288, owner
-2026-10-06) — DONE (#1295).** Both when it opens and after A278's `category.contents_changed`
-refusal re-reads; a selection with no disabled products keeps the old sentence. _2026-10-06:
-A296 (#1301) retired that wording; the dialog no longer mentions disabled products._
-
-**A category holding only routing rules gets the Delete confirmation (A279, owner 2026-10-06) —
-DONE (#1297).** It reverses the 2026-10-01 decision; a category with nothing at all is still deleted at once.
-
-**The category Delete dialog is compact and says what each answer does (A296, owner 2026-10-06) —
-DONE (#1301).** The keep answer reads "1 category and 3 products move to Drinks" and the other
-"Also: deletes 1 category and disables 3 products. They move to Drinks.", counting active products
-only, leaving out zeros, naming **No category** at the top level and "each category's parent" when
-the parents differ; routing rules naming a subcategory join the "Also: deletes …" list. A category
-holding only disabled products is no longer asked what happens to them. Being compact, the dialog
-now fits its content, which closes W74's finding that it stretched to nearly the full screen
-height. The products-only "Disable N products?" dialog is compact too. Point (1) of what was left
-open — the same place named three ways — is DONE by A305 (#1333, owner 2026-10-06): the Move-to list, the
-product editor, the menu prices table, the sales-by-category report on screen and printed, and this
-dialog all read **No category** / **Sin categoría**; the Products tree's heading row keeps "All
-products". A316 (owner 2026-10-07) is DONE: the report's own part under Not recorded reads
-**Category unknown** / **Categoría desconocida** on screen and in print, distinguishing missing
-category information from the explicitly uncategorised **No category** row. Point (2) — the SERVER refusing a delete with `category.contents_changed` when only
-disabled products changed, whose message said to check counts this dialog no longer shows — is
-DONE by A304 (#1338, owner 2026-10-06): after the refusal the dialog re-reads, and when nothing it
-shows changed it says the contents changed, that what it shows is up to date, and asks to choose
-Delete again (`folders.changed_unshown`); when a shown count changed the old message stays. The
-server's refusal is unchanged. Re-sending the delete automatically was considered and not built.
 
 **The Products and Structure trees show drag grips only in a mode, and a category's colour square
 comes before its name (A294, owner 2026-10-06) — DONE (#1300); left open:** Products' selection

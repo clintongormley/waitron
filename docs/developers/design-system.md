@@ -467,7 +467,8 @@ tap-target minimum and cuts the value off mid-word; the same value gives it room
 does scroll sideways, which is exactly what the cap exists to avoid — it carries its own focusable
 horizontal scroller so the dialog does not scroll instead. **So the two uses disagree about the
 sideways scroll.** Whether the floor deserves a token of its own is an open design question, not a
-settled convention; it is recorded in `docs/backlog.md` under what Task 11 left open.
+settled convention; it is recorded in `docs/backlog.md` under "Users, sign-in and the dashboard
+shell", the entry on `--wt-cell-name-max-width`.
 
 ### `--wt-tap-min`
 

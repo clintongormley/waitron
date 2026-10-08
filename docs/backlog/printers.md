@@ -408,6 +408,14 @@ just a green typecheck.
   `apps/server/src/receipt-ticket.ts`; read in the code: the test checks what is filed, not a
   printed receipt).
 
+## Seen while looking at every modal at 1024px, not changed
+
+- **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
+  discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap
+  while half the row stands empty; and the till's option picker, 1024px wide on a 1280px screen,
+  puts each price far from its name (which adds to the "prices are not a column" item in the till
+  layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
+
 ## Decisions and deliberate limits
 
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
