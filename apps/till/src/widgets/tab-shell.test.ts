@@ -1209,6 +1209,64 @@ describe("till-tab-shell above phone width", () => {
     );
   });
 
+  it("keeps everything in More when an open More that held a redraw closes at phone width, and refits once wider", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(1024, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        const fitted = inMore(el);
+        expect(fitted.length).toBeLessThan(leaveOrder.length);
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        el.transferCount = 3;
+        await settle(el);
+        await page.viewport(390, 844);
+        await settle(el);
+        await userEvent.keyboard("{Escape}");
+        await settle(el);
+        expect(popoverOpen(el)).toBe(false);
+        expect(inMore(el)).toEqual(leaveOrder.map(([k]) => k));
+        expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
+        await page.viewport(1024, 844);
+        await settle(el);
+        expect(inMore(el)).toEqual(fitted);
+        expectOneRow(el);
+      }),
+    );
+  });
+
+  it("leaves kiosk mode cleanly while a fit begun in kiosk mode is still under way", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(ROOMY_WIDTH, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", { ...full, kiosk: true });
+        await settle(el);
+        const rejections: unknown[] = [];
+        const record = (event: PromiseRejectionEvent) => rejections.push(event.reason);
+        addEventListener("unhandledrejection", record);
+        try {
+          // Each pass switches kiosk mode off one microtask later than the last, so some pass
+          // does it after the fit has looked at kiosk mode and before the shell has redrawn.
+          for (let ticks = 0; ticks <= 20; ticks += 1) {
+            Object.assign(el, { kiosk: true, transferCount: 2 });
+            await settle(el);
+            expect(el.shadowRoot!.querySelector("header")).toBeNull();
+            el.transferCount = 3;
+            for (let i = 0; i < ticks; i += 1) await Promise.resolve();
+            el.kiosk = false;
+            await settle(el);
+            expect(menuOf(el), `${ticks}`).toBeNull();
+            expect(el.shadowRoot!.querySelector("header > .brand"), `${ticks}`).not.toBeNull();
+            expectOneRow(el);
+          }
+          await frame();
+          expect(rejections.map(String)).toEqual([]);
+        } finally {
+          removeEventListener("unhandledrejection", record);
+        }
+      }),
+    );
+  });
+
   it("keeps fitting after it is taken off the page and put back", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
