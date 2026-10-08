@@ -5657,6 +5657,34 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(location.pathname).toBe("/manage/printers/view/printers");
   });
 
+  it("shows the printers table loading, not 'No printers yet', while its list is read", async () => {
+    const before = currentLocale();
+    try {
+      for (const locale of ["en", "es-ES"] as const) {
+        setLocale(locale);
+        history.replaceState(null, "", "/manage/printers/view/printers");
+        let answer!: (rows: Printer[]) => void;
+        const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+          api: stubApi({
+            listPrinters: vi.fn(() => new Promise<Printer[]>((resolve) => (answer = resolve))),
+          }),
+        });
+        await flush(el);
+        const table = () => q(el, "[data-test=printers-table]")!.shadowRoot!.textContent!;
+        expect(table()).toContain(t("printers.table_loading"));
+        expect(table()).not.toContain(t("printers.no_printers"));
+
+        answer([]);
+        await flush(el);
+        expect(table()).toContain(t("printers.no_printers"));
+        expect(table()).not.toContain(t("printers.table_loading"));
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("does not switch tabs for a change event raised by a control inside a tab", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi(),

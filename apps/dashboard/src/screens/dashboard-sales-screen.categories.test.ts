@@ -765,6 +765,19 @@ describe("dashboard-sales-screen — printing the category report", () => {
     expect(api.printCategorySales).not.toHaveBeenCalled();
   });
 
+  it("does not say there is nowhere to print while the printers load or after their read fails", async () => {
+    const pending = await mount(
+      stubApi({ getReportPrinters: vi.fn().mockReturnValue(new Promise(() => undefined)) }),
+    );
+    expect(q(pending, "print-categories")).not.toBeNull();
+    expect(q(pending, "no-printers")).toBeNull();
+    const failed = await mount(
+      stubApi({ getReportPrinters: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+    );
+    await vi.waitFor(() => expect(q(failed, "printers-error")).not.toBeNull());
+    expect(q(failed, "no-printers")).toBeNull();
+  });
+
   it("falls back to the first printer when the chosen one leaves the list", async () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });

@@ -1419,6 +1419,20 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
   normalisation).
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
 
+- **Printer lists that still read as empty while loading or after a failed read** — left open by
+  A428, which fixed the reprint dialog, the device profile window's printer section and the
+  Printers list's loading line. Still open: the Printers screen's printers, agents and jobs tables
+  say "No printers yet.", "No print agents yet." and "No print jobs yet." after a FAILED read,
+  beside the screen's refresh-failed message (sibling tables pass `errorMessage`); the devices
+  screen's device editor is believed, from reading only, to offer just "Use default (None)" while
+  its printer list loads; the device profile window, after its first printer read failed and before
+  a later one succeeds, shows no printer section and no loading line, even while the next read is
+  under way; after an empty printer list loaded and a later refresh failed, that window shows the
+  failure but still says "Add a printer first.", because the shared query code does not say which
+  read failed; its kitchen section says "Add a prep station or a watcher first." while stations and
+  watchers load or after their read fails (read, not run); and Cancel in that window clears the
+  screen's message without putting back a read failure that is still standing (read, not run).
+
 - Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
   migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
   presence light.
@@ -4517,9 +4531,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     **Landed as #1446.** Delete on a canvas's last tab is left as it is, because canvases are
     being deleted (A182, owner 2026-10-08). **Left open by A427, not queued:** the product editor's
     image picker can still be opened while the editor's own save is being sent (found by #1446's
-    Codex review, which held the save request open and clicked the image chooser). Also seen in
-    A416's look and not changed: the reprint dialog says there is no active printer while its
-    printer list is still loading (queued as A428, lane B);
+    Codex review, which held the save request open and clicked the image chooser);
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
     window with Save active, and pressing it untouched gives the option back to the list, which

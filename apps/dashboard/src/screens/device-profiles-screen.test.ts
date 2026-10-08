@@ -2529,3 +2529,117 @@ it("decimal input inactivity refuses ambiguous marks without clearing the timeou
   expect(control.error).toBe("");
   expect(save.disabled).toBe(false);
 });
+
+describe("the printer lists while the venue's printers are not read", () => {
+  const loading = { en: "Loading printers…", es: "Cargando impresoras…" } as const;
+  const bottom = (el: DeviceProfilesScreen) =>
+    el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+  const loadingLine = (el: DeviceProfilesScreen) =>
+    el.shadowRoot!.querySelector("[data-test=printers-loading]");
+  const noPrinters = (el: DeviceProfilesScreen) =>
+    el.shadowRoot!.querySelector("[data-test=no-printers]");
+
+  for (const locale of ["en", "es"] as const) {
+    it(`says the printers are loading, not to add one, while they load (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mount(
+          stubApi({ listPrinters: vi.fn().mockReturnValue(new Promise(() => undefined)) }),
+        );
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+        expect(noPrinters(el)).toBeNull();
+        expect(loadingLine(el)?.getAttribute("role")).toBe("status");
+        expect(loadingLine(el)?.textContent?.trim()).toBe(loading[locale]);
+      } finally {
+        setLocale(previous);
+      }
+    });
+  }
+
+  for (const open of ["create", "edit-p1"]) {
+    it(`shows a failed printer read as the form's load failure, not as no printers (${open})`, async () => {
+      const el = await mount(
+        stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+          codeMessage("connection.failed"),
+        ),
+      );
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${open}]`)!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+      expect(noPrinters(el)).toBeNull();
+      expect(loadingLine(el)).toBeNull();
+      expect(bottom(el)).toBe(codeMessage("connection.failed"));
+    });
+  }
+
+  it("draws the printer lists and drops the failure once a later read succeeds", async () => {
+    const liveData = new LiveData();
+    const listPrinters = vi.fn().mockRejectedValue({ code: "connection.failed" });
+    const el = await mount(stubApi({ listPrinters, liveData } as Partial<DashboardApi>));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(bottom(el)).toBe(codeMessage("connection.failed"));
+    listPrinters.mockResolvedValue([
+      { id: "pr1", name: "Barra", active: true, hasCashDrawer: false } as Printer,
+    ]);
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=receipt-printers]")).not.toBeNull(),
+    );
+    expect(bottom(el)).toBeNull();
+    expect(noPrinters(el)).toBeNull();
+  });
+
+  it("keeps a later failed printer read on screen when the editor opens", async () => {
+    const liveData = new LiveData();
+    const listPrinters = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockRejectedValue({ code: "connection.failed" });
+    const el = await mount(stubApi({ listPrinters, liveData } as Partial<DashboardApi>));
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+    expect(bottom(el)).toBe(codeMessage("connection.failed"));
+    expect(noPrinters(el)).not.toBeNull();
+  });
+
+  it("shows a read failure a refused delete was covering once the editor opens", async () => {
+    const liveData = new LiveData();
+    const listPrinters = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockRejectedValue({ code: "connection.failed" });
+    const el = await mount(
+      stubApi({
+        listPrinters,
+        liveData,
+        deleteDeviceProfile: vi.fn().mockRejectedValue({ code: "device_profile.not_found" }),
+      } as Partial<DashboardApi>),
+    );
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("device_profile.not_found")));
+    liveData.refresh();
+    await vi.waitFor(() => expect(listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(alert()).toBe(codeMessage("device_profile.not_found"));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(bottom(el)).toBe(codeMessage("connection.failed"));
+  });
+});

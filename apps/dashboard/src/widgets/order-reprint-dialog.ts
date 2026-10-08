@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-spinner.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { DashboardApi, OrderRowDto } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -22,6 +23,7 @@ export class OrderReprintDialog extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) row: OrderRowDto | null = null;
   @state() private printers: { id: string; name: string }[] | null = null;
+  @state() private printersFailed = false;
   @state() private printerId = "";
   @state() private printing = false;
   @state() private sentTo: string | null = null;
@@ -29,10 +31,14 @@ export class OrderReprintDialog extends LitElement {
   @state() private error: string | null = null;
   /** Whether `error` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
+  /** The printer list is this dialog's only query, so every failure and recovery reported here is its own. */
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => this.#showReadError(error),
+    (error) => {
+      this.printersFailed = true;
+      this.#showReadError(error);
+    },
     () => {
       if (this.#readErrorShown) this.#showError(null);
     },
@@ -55,14 +61,49 @@ export class OrderReprintDialog extends LitElement {
     this.printerError = null;
     this.#showError(null);
     if (this.row === null) this.#queries.release("getOrderPrinters");
-    else
-      void this.#queries
-        .watch("getOrderPrinters", [], (printers) => {
-          this.printers = printers;
-          if (!printers.some((printer) => printer.id === this.printerId))
-            this.printerId = printers[0]?.id ?? "";
-        })
-        .catch(() => undefined);
+    else this.#watchPrinters();
+  }
+
+  /** An empty list is dropped so a fresh read says it is loading rather than that there is no
+   * printer; a non-empty one stays usable until the read answers. */
+  #watchPrinters(): void {
+    if (this.printers?.length === 0) this.printers = null;
+    this.printersFailed = false;
+    if (this.#readErrorShown) this.#showError(null);
+    void this.#queries
+      .watch("getOrderPrinters", [], (printers) => {
+        this.printers = printers;
+        this.printersFailed = false;
+        if (!printers.some((printer) => printer.id === this.printerId))
+          this.printerId = printers[0]?.id ?? "";
+      })
+      .catch(() => undefined);
+  }
+
+  /** After a failed read, a list an earlier read delivered stays usable: a printer gone since then
+   * is refused by the print itself, under the chooser. */
+  #renderPrinters() {
+    const printers = this.printers;
+    if (printers === null || printers.length === 0) {
+      if (this.printersFailed) return nothing;
+      if (printers === null)
+        return html`<p role="status" data-test="printers-loading">
+          <wt-spinner decorative size="sm"></wt-spinner> ${t("orders.reprint.loading")}
+        </p>`;
+      return html`<p>${t("orders.reprint.no_printers")}</p>`;
+    }
+    return html`<wt-combobox
+      name="printerId"
+      search="auto"
+      label=${t("orders.reprint.printer")}
+      .options=${printers.map((printer) => ({ value: printer.id, label: printer.name }))}
+      .value=${this.printerId}
+      .error=${this.printerError ?? ""}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        this.printerId = event.detail.value;
+        this.printerError = null;
+      }}
+    ></wt-combobox>`;
   }
 
   async #print(): Promise<void> {
@@ -98,24 +139,19 @@ export class OrderReprintDialog extends LitElement {
             </p>`
           : nothing
       }
-      ${
-        printers.length
-          ? html`<wt-combobox
-              name="printerId"
-              search="auto"
-              label=${t("orders.reprint.printer")}
-              .options=${printers.map((printer) => ({ value: printer.id, label: printer.name }))}
-              .value=${this.printerId}
-              .error=${this.printerError ?? ""}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                this.printerId = event.detail.value;
-                this.printerError = null;
-              }}
-            ></wt-combobox>`
-          : html`<p>${t("orders.reprint.no_printers")}</p>`
-      }
+      ${this.#renderPrinters()}
       ${this.sentTo === null ? nothing : html`<p role="status">${t("orders.reprint.sent").replace("{printer}", this.sentTo)}</p>`}
       ${this.error === null ? nothing : html`<p role="alert">${this.error}</p>`}
+      ${
+        this.printersFailed
+          ? html`<wt-button
+              variant="secondary"
+              data-test="printers-retry"
+              @click=${() => this.#watchPrinters()}
+              >${t("content_languages.retry")}</wt-button
+            >`
+          : nothing
+      }
       <wt-button
         slot="footer"
         variant="secondary"
