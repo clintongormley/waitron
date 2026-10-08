@@ -34,6 +34,22 @@ the scope for both the hook and CI. Package tests and coverage run in CI; the ro
 because they check the machinery that decides what runs. CI also runs mutation testing and
 `bundle-smoke`.
 
+### A rebased feature push can include main commits in the sign-off check
+
+An existing remote ref makes the hook use its remote tip as the range base
+(`.husky/pre-push`). After you rebase a feature onto newer main, that range can include main
+commits alongside your feature commits. Check the two ranges separately before trying to repair
+your feature's sign-offs.
+
+Measured 2026-10-08 for A231p part 1, candidate
+`dccc28a1575993028aba265d5932eeb7e3f6a116`: `scripts/check-signoff.sh` passed the 34 commits
+from main `dd8510d005843474daedcd61b95625b7ad4cf7dd` to that candidate. It failed the 67-commit
+push range from old remote tip `8adba929fde4faa3256412bf2d7d0c5269aab419`, naming only
+main's A376 squash `6797bc03a8c5770718a6fdc1efca7fdd397c6092`. `git show -s --format=%B`
+for that squash contained no `Signed-off-by` trailer. The normal push stopped before installation,
+formatting, lint, root coverage or types. This receipt identifies the blocker; it supplies no
+hook bypass or correction.
+
 ### What `bundle-smoke` does NOT cover: the three front-end bundles
 
 `bundle-smoke` runs the build scripts of two packages, `@waitron/credentials` and `@waitron/server`,
