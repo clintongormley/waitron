@@ -131,8 +131,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 2. **Build good screens for each kind of device, and retire canvases** (A4's A182, owner
    2026-10-01). The till, handheld, kitchen screen and pass are still built from stored canvases of
    tabs and cards, against the owner's 2026-09-20 decision for well-designed built-in screens.
-   Design the screens first, then remove canvases; until then, no new feature is built as a canvas
-   card.
+   Owner, 2026-10-08: delete canvases now, keeping today's default layouts as fixed built-in
+   screens, and redesign the screens afterwards; no new feature is built as a canvas card.
 
 3. **Staff cannot clock in or out** (A10). The working-time record is a legal duty from the first day
    the deli employs anyone, and only its library is built: nothing in `apps/` calls `clockIn` or
@@ -4780,8 +4780,10 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   configuration, and the floor-plan editor.
 
   **Owner, 2026-10-08:** "delete the canvases functionality. we provide prebuilt screens with
-  configuration settings." Open question to the owner: delete now, keeping today's default canvases
-  as fixed built-in screens and redesigning after, or keep the order above (design, then delete).
+  configuration settings." **Decided the same day: delete now**, before the redesign. Today's
+  default canvases (`packages/layouts/src/default-canvases.ts`) become the fixed built-in screens
+  for each kind of device, and part 2 below runs first; part 1's redesign follows, starting from
+  those fixed screens rather than from canvases.
 
   **Until this lands, build no new feature as a canvas card or card setting** — put it in the
   screen itself. Slice 3d already kept its kitchen-group choice off the `expo` card (its P15).
