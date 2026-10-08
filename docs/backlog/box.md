@@ -277,6 +277,107 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   test titles still say "before connecting" and "before opening a connection", and one title
   ("rather than opening the working directory") rests on the false reason above.
 
+## The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does not link or scroll to it
+
+**Task 2a** (#557, a recovery key that does not need an archive destination). Open:
+
+- The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does
+  not link or scroll to it. The panel picks its message from `managedByEnvironment` alone, so with a
+  key hand-edited too short in `backup.env` it can name a button that does not help: with archives
+  on it names a button that is not shown; with archives off, until the next status read reports the
+  key too short, the button sends no new key (it reuses the held one) — after that read the screen
+  makes one.
+
+## Every synchronous `deriveKey` caller still blocks the event loop while it derives
+
+**Task 5** (#569, `@waitron/stream`). Open:
+
+- Every synchronous `deriveKey` caller still blocks the event loop while it derives:
+  `encodeConfigurationBundle` (through `encryptArtifact`); everything reaching `decryptArtifact`
+  (`apps/server/src/artifact-cipher.ts`) — `decodeConfigurationBundle` (on the request path),
+  `validateArtifact` (`apps/server/src/restore.ts`) and `unsealNodeState`
+  (`apps/server/src/sealed-state.ts`); and the recovery bundle's `encryptBundle` and
+  `decryptBundle` (`apps/server/src/recovery-bundle.ts`).
+
+## A pointer write from a process that has since died, landing after the restart, can still make the box refuse itself
+
+**Task 6** (#590, the Litestream supervisor). Open:
+
+- A pointer write from a process that has since died, landing after the restart, can still make the
+  box refuse itself, because a restarted process starts with an empty record; so does a
+  `current.json` deleted after the supervisor read it, on a bucket that answers a conditional write
+  to a missing object with 412 (SeaweedFS; the in-memory test store). In both cases the owner's alert
+  (`backup.stream_refused`) still says another box is writing. On a bucket that answers that write
+  with 404 instead (AWS, as it documents; versitygw, as measured), the deleted pointer surfaces as
+  `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
+  `stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
+  reaching `refused`.
+
+## When the key rename and the put-back both fail, the new certificate is left beside the old key
+
+**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
+node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
+Open:
+
+- When the key rename and the put-back both fail, the new certificate is left beside the old key
+  (the listener refuses the pair) and `server.crt.previous` holds the old certificate until the
+  next reissue. The next start repairs it, because the marker stays — unless that start defers the
+  first start. Publishing the pair through one atomic switch (for example a directory swapped by a
+  single rename) would remove this case.
+
+## A copy over 2 GiB cannot be restored
+
+**Task 9b** (#642, `waitron-restore restore --from-bucket`, `apps/server/src/restore-stream.ts`).
+Open:
+
+- A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
+  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). Archive creation has the same limit
+  (`apps/server/src/backup-sweep.ts`). The root is that placement (`restoreDatabase`) takes bytes,
+  not a file. Letting it take a source path and rename it into place on the same filesystem would
+  remove the read into memory on the bucket path, and also the archive form's extra full copy:
+  `refuseIfArchiveSourceLive` writes the whole database to a scratch folder only to read the bucket
+  settings from it.
+
+## Litestream at trace logging deadlocked sales for five seconds
+
+**A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133 #889,
+A135 #907 and #917).** A probe that reproduced the pause test's one failure on `main` (run 36559470238) on one runner in 20 found the CI runner's disk stalling, not the bucket, and the stream
+tests' CI step now sets `TMPDIR=/dev/shm`. The figures are in
+[testing-guide.md](../developers/testing-guide.md), "A sale can wait behind Litestream's own
+checkpoint".
+
+- **Open: Litestream at trace logging deadlocked sales for five seconds.** The probe first ran it at
+  trace level by mistake, and 13 of 24 runs failed with a 500, each one looked at being
+  `begin immediate` failing `database is locked` after 5,006 to 5,008 ms. The inferred mechanism:
+  Litestream held the write lock while blocked writing its log to a pipe that only the server's main
+  thread reads, and the main thread was waiting for that lock. At the normal level Litestream writes
+  too little to fill the pipe; that is inferred, not measured. **Next:** check whether any setting
+  lets an operator raise Litestream's log level, and read the pipe on a thread that does not wait on
+  the database if so.
+
+## The bucket client's limits (A44, #676) — what is still open
+
+**The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
+request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
+`packages/stream/src/s3-store.ts`). An answer whose headers arrive within three seconds and whose
+body then stalls is not bounded; the deadline on the pause and the freshness read cannot cancel a
+listing whose answer keeps arriving; the idle limit is per request, not per call, so a listing of
+many pages, or a bucket answering each request just inside the limit, can take longer; a bucket that
+takes more than 30 seconds to answer a request whose body is already sent, such as a delete of 1,000
+keys, is cut off, and how long real providers take for one was not measured; and the tests run the
+handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
+
+## That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName` on each line, were shown by reading
+
+**The pause test and the bucket's error reports — what is still open (left by #668, #686, A57, A60
+and #723).**
+
+- That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName` on
+  each line, were shown by reading, by the store's scripted HTTP answers and by the supervisor's
+  injected errors, not against a real bucket; A60's `errorName` list
+  (`packages/stream/src/bucket-error-names.ts`) was checked against Amazon's reference only, not
+  against the names versitygw gives its errors.
+
 ## Decisions and deliberate limits
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
@@ -289,3 +390,13 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   against the current list only when it re-seals one: it skips a secret already on the current key
   (`rotateCredentials`, `packages/credentials/src/store.ts`), so an out-of-date one stops a key
   rotation only when it is on an older key, until it is re-entered.
+
+**Task 2b** (#560, the box's own state files locked with the recovery key in `node_sealed_state`).
+Every node writes its own row at every start, standby and mirror nodes included, while the backup
+job runs only on the primary — kept by design (owner, 2026-09-24).
+
+From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
+
+- A setup-wizard restore whose placement fails is not retried and is not reported on the setup
+  screen, nor normally on the recovery page; the code and which database was kept are only in the
+  server's own output and in `waitron.log`. **Owner decision 2026-09-25: leave it as it is.**

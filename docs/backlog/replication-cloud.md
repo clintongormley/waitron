@@ -113,3 +113,155 @@ that sends garbage after registering, and keeps serving" claims more than it che
 action:** only if `@waitron/tunnel` outlives its planned retirement (see _Waitron retains_ below) —
 drop the entry on close, test-first (a live client after the reset is paired with a live box), and
 narrow or extend that older test.
+
+## Fiscal-certificate distribution
+
+- **Fiscal-certificate distribution** — rebuild on the asynchronous adopt (see the residuals). Open
+  design question: how the dormant certificate is protected when the seal must happen after the
+  initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
+  [plan](../superpowers/plans/2026-09-07-fiscal-cert-distribution.md)). Beside it, **the vault-ring
+  question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
+  under another's, so `fiscal.aeat` and `payments.stripe` do not travel to a standby at all.
+
+## Adding a mirror while the internet is down
+
+- **Adding a mirror while the internet is down** (owner, 2026-10-02). Today the only way a second
+  machine gets a copy of `venue.db` is from the owner's bucket — the rebuild
+  (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
+  Adoption (`apps/server/src/adopt.ts`) fetches its identity bundle from the primary by URL but
+  carries no data, and nothing in the tree follows a stream yet. So with the internet down there is
+  no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a new mirror
+  takes its first copy straight from the primary over the LAN. The topology design's §4.4 already
+  has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
+  new place should begin with a full copy of the database (to be checked on the pinned Litestream),
+  so the design may cover it — but it never says so, and it does not list what else enrolling needs
+  from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
+  internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
+
+## A stop made while `cloud-replacement.json` is unreadable is not recorded in it
+
+- A stop made while `cloud-replacement.json` is unreadable is not recorded in it. If that file is
+  later repaired and `cloud-connection.json` lost, the next start restores the connection without
+  the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (left open
+  by C29, #808). Owner to choose: refuse Stop access while the replacement file is unreadable, or
+  record the stop somewhere that survives the repair.
+
+## Waitron retains
+
+**Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side networking
+and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
+proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
+settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
+to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
+[Box maintenance and remote support](../superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md);
+its cloud support-service proposal is tracked in Cloud and is not approved by this move.
+
+## SQLite + Litestream replaces PostgreSQL
+
+**SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
+[SQLite + Litestream topologies](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md),
+whose §11 is the build order. The failover-loop prototype gate is done (#392, #395, #406, #411, #415, #417, #422, #425;
+[the results note](../research/2026-09-16-sqlite-failover-prototype.md)); its one
+negative result, **S2** — a handed-over batch can re-file a sale the receiver already filed, which
+costs one wasted AEAT call (error 3000, already read as filed) — produced the fence-before-ship rule
+in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
+any of this code. **Slice 1, the storage swap, is complete (2026-09-23; F1 #489, T1 #490, T2 #492,
+T3 #494, and its preparation tasks).** **Slice 2, stream and cold restore, is complete
+(2026-09-25;** #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630, #642, #646
+and #652, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
+**Next: slice 3, seats and promotion. Its first task is already decided: credentials move to a
+venue key** stored in `venue.db` only in locked form — do not reopen it.
+
+## Validate every supported object store
+
+**What the prototype gate left open (the receipts are in the results note):**
+
+- **Validate every supported object store.** Cloud owns its production-provider checks in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
+  Waitron retains the engine's required semantics and checks for claimed self-host targets.
+  Topology §12.2's real-store gate remains open; the conditional-write promotion tie-break must be
+  demonstrated on each target (risk 11). Each owner's bucket is checked by the Backups screen's Test
+  and Save (`probeBucket`, `packages/stream/src/probe.ts`), which refuse a bucket that does not
+  refuse a stale conditional write, and the loop test runs that check against versitygw. Waitron
+  Cloud's production store still needs its own run.
+
+## Two comments claim more than the code keeps
+
+**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
+node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
+Open:
+
+- Two comments claim more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
+  says a signing failure "leaves the node exactly as it was", and `promoteMirrorToPrimary`'s
+  (`apps/server/src/promote.ts`) says a failure before the commit "leaves the mirror as it was".
+  Signing empties pending `change_log` rows (measured by #655's Codex seat), so they are not strictly
+  untouched; no case losing a real one is known. Narrow both the next time either file is edited.
+
+## A restored box whose cloud peer does not answer during its first start signs the next term and removes the marker
+
+**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
+node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
+Open:
+
+- A restored box whose cloud peer does not answer during its first start signs the next term and
+  removes the marker; a fencing document the peer serves later at that same term reads as not
+  newer, so the box is never fenced (reproduced with a temporary two-boot case in
+  `apps/server/src/boot.reconcile.test.ts`). I believe it cannot happen today — the only writer of
+  `mirror_config`, which the peer check needs, is `apps/server/src/adopt.ts`, for a standby that
+  never finishes adoption — from reading, not a run. Recorded, not redesigned.
+
+## The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the restored copy holds
+
+**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
+node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
+Open:
+
+- The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
+  restored copy holds: a copy whose `nodes.public_key` for this node was rewritten, with its
+  document re-signed by the matching key, passes, and the next term is signed over the added node
+  (the case "passes a document re-signed with a key the copy's own node row was changed to name"
+  pins that).
+
+## Only the start that finishes a restore checks the row's signature
+
+**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
+node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
+Open:
+
+- Only the start that finishes a restore checks the row's signature. A mirror or fenced start
+  checks only that it can be read and is shaped as a document (A53); a start still finishing an
+  adoption checks neither. Promotion, `retireSelf` and the standby chart append
+  (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
+  sign over the held row without checking it. Gating promotion on the same check was measured and
+  not done, because it would refuse a genuine document: on 2026-09-26 a scratch case built the way
+  `promote.test.ts` builds a mirror found, after `setDeploymentMode(…, "mirror")` alone (what
+  `adoptFromPrimary` leaves), no document and an empty trust set; after
+  `establishReservedStandbyIdentity`, a trust set naming the standby alone; and a document the
+  primary signed with its real key, written there, verified as `untrusted_signer`. The owner's
+  decision (2026-09-26) is under the failover residuals ("a standby checks a promotion against the
+  primary's key"); a restored mirror's own start is not covered by it.
+
+## On a start with NO restore marker, text that is not JSON or a machine list that is not a list fails with the generic text
+
+**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
+node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
+Open:
+
+- On a start with NO restore marker, text that is not JSON or a machine list that is not a list
+  fails with the generic text; a stored JSON null reads as no document, and a document breaking only
+  a shape limit is read and used unchecked. From reading its writers, nothing this program writes
+  produces one. Once starts have failed repeatedly the recovery page shows the generic text (code
+  `unknown`), not `restore.membership_invalid`. Whether to give it a curated code is open.
+
+## Decisions and deliberate limits
+
+From the Cloud connection integration (2026-09-24): Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS
+override, gateway replacement and revocation.
+
+From the shared account controls: Cloud has published private `@waitron-io/ui-core@0.1.0` (see the [release receipt and setup](https://github.com/waitron-io/waitron-cloud/blob/main/docs/shared-ui-release.md))
+and owns the release workflow and account screens.
+
+Cloud product and infrastructure work moved to the
+[Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)
+on 2026-09-22: provisioning, cloud-only redundancy, trials, remote access, provider integration
+and cloud operations. See [documentation ownership](../cloud-ownership.md).

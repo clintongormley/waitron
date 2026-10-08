@@ -607,8 +607,8 @@ is weakened knowingly: the records the stream holds are, once submitted, already
    > now refuses the start (`restore.membership_invalid`, branch `fix/verify-restored-membership`),
    > so "never blocked" here and in the Provenance table's "Cold restore mints a fresh chain, never
    > blocked" row no longer holds for that copy. The same holds for a copy whose document cannot be
-   > read or is not shaped as a list of machines (A53, 2026-09-26). See `docs/backlog.md`'s Task 9a
-   > entry.
+   > read or is not shaped as a list of machines (A53, 2026-09-26). See the entries left open by
+   > Task 9a (#630) in `docs/backlog.md`, under "Replication, failover and the cloud".
 
 3. **Point-in-time** (an operator mistake) — restore to a **side** file and inspect. **Never over a
    live ledger**: rolling the ledger back would re-issue invoice numbers. Going back for real is a cold
@@ -723,7 +723,8 @@ slice in §11 adds a step to it.
 > and a skip reads as a pass"). It does not run the whole arc: box A streams, box B is rebuilt from
 > the bucket, sells under a fresh installation number, and streams into a generation of its own.
 > Follow, promote, return-with-a-tail, ship and rejoin are left to the later slices §11 lists,
-> starting with slice 3 (`docs/backlog.md`, "Slice 2, stream and cold restore, is COMPLETE").
+> starting with slice 3 (`docs/backlog/replication-cloud.md`, "Slice 2, stream and cold restore, is
+> COMPLETE").
 
 Proved by deletion (CLAUDE.md §4):
 
@@ -769,7 +770,8 @@ quietly assumes finer granularity than Litestream gives.
   short" and covers with a recommended 5-second `busy_timeout` — short, not proven sub-second (Fable
   review finding 8). *(2026-09-29, A133, run 36615242523: measured through the server with one
   seller, a write waited 829–831 ms behind Litestream 0.5.17's checkpoint on a disk delayed 100 ms
-  per flush, and up to 629 ms on a CI runner's normal disk; `docs/backlog.md`, A130's entry.)* With
+  per flush, and up to 629 ms on a CI runner's normal disk; `docs/developers/testing-guide.md`, "A sale
+  can wait behind Litestream's own checkpoint".)* With
   `wal_autocheckpoint = 0` only Litestream checkpoints, so the one shape that
   could put our own process on the sale path is a long offline stretch (§4.2) letting the WAL grow
   unbounded; **§12's prototype must run a multi-day offline write load and confirm the sale latency and

@@ -667,7 +667,7 @@ database, Litestream's files and versitygw's bucket, so all of them move; the S3
 keeps its scratch and its stub programs under `tmpdir()` too. Main run 36559470238 (2026-09-29)
 failed with the slowest frozen sale at 1,228 ms. A probe with per-sale timing reproduced it on one
 runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill stage): that sale's commit took 1,017
-ms. The next write waited 1,029 ms to begin, which the backlog's A130 entry infers was Litestream's
+ms. The next write waited 1,029 ms to begin, which A130 inferred was Litestream's
 own checkpoint (A133 later measured such checkpoints holding a write up: see
 [A sale can wait behind Litestream's own checkpoint](#a-sale-can-wait-behind-litestreams-own-checkpoint)),
 and Linux's pressure counters showed every process stalled on the disk for 1,094 ms of that sale. The write queue wait was 0 ms and nothing waited on the
@@ -677,7 +677,7 @@ still reached 790 ms on slow-disk runners. With `TMPDIR=/dev/shm`, 58 runs acros
 passed, and the slowest frozen sale was 104 ms (run 36575480881). So in CI no timed sale includes
 a commit waiting on the runner's disk. What it gave up, in CI only, is timing sales against a real
 disk, and with it any view there of how long a sale waits behind a Litestream checkpoint on a slow
-disk (`docs/backlog.md`, A130); its assertions are unchanged. How much of `/dev/shm` the job's tests
+disk (A130); its assertions are unchanged. How much of `/dev/shm` the job's tests
 use, and its size on CI's runners, was not measured; the 58 runs passed with it.
 
 **A bucket question the pause is waiting on.** While paused, the supervisor asks the bucket for a
@@ -826,13 +826,23 @@ per flush, 14 writes in three runs waited 829–831 ms to begin; on a CI runner'
 writes waited 20 ms or more, most of them 33–105 ms and the longest 629 ms. Each such wait spanned
 a Litestream checkpoint log line; with streaming off no write waited over 1 ms. How long a write
 waits behind a checkpoint with several sellers at once, and on the box's own disk, is not measured.
-How A133's probe ran is in `docs/backlog.md`, A130's entry, under A133. Litestream runs two routine
+How A133's probe ran is in the paragraph after this one. Litestream runs two routine
 checkpoints, and the product leaves both at Litestream's defaults: a timed one (by default once the
 database file has gone a minute without changing, `DefaultCheckpointInterval`, `db.go` line 34 at
 tag v0.5.17, checked at line 1479), and a regular page-count one (`min-checkpoint-page-count`,
 once the side file holds 1,000 pages by default, line 36). Its emergency checkpoint, at
 `truncate-page-n` pages, is separate. What switching off the timed one and setting the regular
 page-count one to a billion pages did is below.
+
+**How A133's probe ran** (a throwaway branch, since deleted; workflow run 36615242523, 12
+GitHub-hosted runners): it booted the real server on a provisioned venue and sold through
+`POST /api/sales` with one seller, one sale at a time, for 150 s. Litestream ran with the
+product's own configuration, the bucket answering, and its log at DEBUG written to a file rather
+than a pipe. Each write's wait for `begin immediate` was timed in the write queue. The slow disk
+was a device-mapper `delay` target: 10 ms per write, 100 ms per flush. Decided before running: if
+the stream cannot hold up a sale, writes wait under 20 ms to begin with streaming on, as with it
+off. Litestream 0.5.17 holds the database's write lock for a PASSIVE checkpoint
+(`checkpointWithExecutor`, `db.go` at tag v0.5.17).
 
 **Switching off Litestream's timed checkpoint and setting its regular page-count one to a billion
 pages removed the wait on the delayed disk, but not on the runner's normal disk at about 80 sales a
@@ -883,7 +893,13 @@ it on the normal disk, where 10 writes per run waited 20 ms or more.
 Not measured: a venue's own sale rate, several sellers at once, and the box's own disk.
 
 The owner chose on 2026-09-30 to leave both routine checkpoints at Litestream's defaults, so neither
-setting shipped (`docs/backlog.md`, A130's entry).
+setting shipped. The decision as the backlog recorded it:
+
+**DECIDED (owner, 2026-09-30, after A135): leave Litestream's checkpoints as they are; neither
+setting ships.** A135 measured switching off the timed checkpoint and moving the page-count one out
+of reach: it removed the wait on the delayed disk but not on the runner's normal disk at about 80
+sales a second. The owner was offered shipping the two settings, leaving the checkpoints alone, or
+first running A133's probe on the box's own disk, and chose to leave them alone.
 
 **A copy behind, the side file's bound, and the guards.** A copy fifteen minutes behind raises
 `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it

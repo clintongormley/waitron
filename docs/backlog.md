@@ -78,42 +78,6 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 
 ---
 
-## Cloud connection integration — 2026-09-24
-
-Built: the Settings → Cloud services screen and local manager adapter implement the
-[connection journey](developers/cloud-connection.md); installation credentials use key-bound
-one-hour leases with a background refresh worker and owner/manager revocation; the local
-remote-access integration covers venue-owned staff certificate keys, CSR/install commands, live TLS
-reload and the minimal public availability endpoint; the serving-primary test installation schedules
-signed, encrypted daily snapshots and uploads them to Cloud; the setup wizard guides a fresh
-replacement through Cloud owner approval of one verified snapshot for a test venue; and the restored
-test-server Cloud replacement path has landed (#638). A stopped replacement stays stopped when
-`cloud-connection.json` is lost, because Stop access also records the stop in
-`cloud-replacement.json` (#808), unless that file cannot be read (see Open). Observations are
-synthetic until service adapters exist. Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS
-override, gateway replacement and revocation.
-
-Open:
-
-- Customer remote setup UI and production deployment remain open.
-- Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
-  shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly beyond
-  its current in-memory 512 MiB format limit. Cloud documentation: `docs/authenticated-captures.md`
-  in waitron-cloud.
-- After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
-  operator step. Continuous complete-server recovery, planned final-write handover and production
-  recovery remain open. Cloud owns route placement and fencing in its backlog.
-- A stop made while `cloud-replacement.json` is unreadable is not recorded in it. If that file is
-  later repaired and `cloud-connection.json` lost, the next start restores the connection without
-  the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (left open
-  by C29, #808). Owner to choose: refuse Stop access while the replacement file is unreadable, or
-  record the stop somewhere that survives the repair.
-
-The Litestream stream's sealed-state restore and activation still need integration with Cloud
-storage and owner recovery. Connected does not mean those services are configured. Cloud service
-ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side
-behavior. Public hosting, ingress controls and Cloud audit/retention remain deployment work.
-
 ## What to work on next
 
 Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were checked against the code
@@ -247,6 +211,28 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   The done screen treats a non-network status refusal as ready, so an HTTP 503 can announce "The
   server is ready" early. [Detail](backlog/setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
+
+- **The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
+  (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes;** the wizard shows one
+  sentence for all three, as the command line does. Left open by SQLite slice 2 Task 9c (#646,
+  "Restore from my bucket" in the setup wizard).
+
+- **The first, unconfirmed attempt downloads the whole copy only to show whose it is,** and the
+  confirmed attempt downloads it again; the HTTP request stays open for the whole download. Left
+  open by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
+
+- **Walked in the browser test harness against a stubbed server, not yet on a running box.** Left
+  open by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
+
+- **After an archive restore or a Cloud restore the final screen does not show the device steps the
+  bucket rebuild's shows** (`rebuilt` is set only on the bucket path,
+  `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
+  machine's addresses after an archive restore too. Left open by SQLite slice 2 Task 9c (#646,
+  "Restore from my bucket" in the setup wizard).
+
+- **After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
+  peers are stopped" confirmation again.** Left open by SQLite slice 2 Task 9c (#646, "Restore from
+  my bucket" in the setup wizard).
 
 ### Menus and the catalogue
 
@@ -552,9 +538,20 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
 - **Product decision to take before production:** A human account always keeps an email (no
   remove-email action; `setEmail` rejects clearing) — the rule now, rather than a missing UI path.
 
+- **Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
+  screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
+  row, so the screens now only save a lookup. Also open: now that both ends are `state`, the keys
+  #426 dropped could be declared again — `sessions` to `persons`, and `management_sessions`,
+  `totp_enrollments` and `google_oidc_states` to `persons`. Doing so would change what deleting a
+  person does. Left open by SQLite slice 2.
+  [Detail](backlog/dashboard.md#task-1b-554-session-cookies-stored-only-as-hashes)
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them._
+
+- **The recovery page's Spanish (#650) has not been read by a native speaker.** Left open by SQLite
+  slice 2 Task 3a (#566, one process per venue folder; #573; #608).
 
 ### Alerts, logging and diagnostics
 
@@ -706,9 +703,183 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   more, which may hide code a test could reach.
   [Detail](backlog/box.md#quoteident-has-no-caller-outside-its-own-suite)
 
+- **On a box that holds a key while backups are off because its venue failed to open**, an apply
+  that reuses the held key writes, reloads, the venue fails to open again, and the route answers
+  `backup.effective_mismatch` (read from the route, not run). Left open by SQLite slice 2 Task 2a
+  (#557, a recovery key that does not need an archive destination).
+
+- **The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does
+  not link or scroll to it.** Left open by SQLite slice 2 Task 2a (#557, a recovery key that does
+  not need an archive destination).
+  [Detail](backlog/box.md#the-bucket-copy-panels-refusal-for-a-too-short-key-names-the-turn-on-backups-button-but-does-not-link-or-scroll-to-it)
+
+- **The status watcher does not retry its own failed mint** (the mint is a POST, never passive
+  session activity), so the screen then offers no key until it is reopened. Left open by SQLite
+  slice 2 Task 2a (#557, a recovery key that does not need an archive destination).
+
+- **The edit-settings form can meet `backup.recovery_key_exists`** when a rotate (from another tab
+  or admin) lands after it fetched the key. Left open by SQLite slice 2 Task 2a (#557, a recovery
+  key that does not need an archive destination).
+
+- **The owner's call: `rotate` with a destination loaded rebuilds `backup.env`** from the running
+  settings rather than keeping the file's other lines, so a destination added to the file by hand
+  and not yet loaded is dropped. Left open by SQLite slice 2 Task 2a (#557, a recovery key that does
+  not need an archive destination).
+
+- **From #608: the recovery level is read before `recovery.lock`,** so the pre-boot count another
+  start writes can still push a server restarting at that moment onto the recovery page. Left open
+  by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).
+
+- **From #573's review, the owner's call: only an unwrapped `provisioning.database_in_use` is
+  recognised** — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path
+  wraps them today). Left open by SQLite slice 2 Task 3a (#566, one process per venue folder; #573;
+  #608).
+
+- **From #608, no behaviour change decided: the watchdog appends its line to `waitron.log` without
+  creating the log folder,** so on a machine with no such folder that line is lost; only a store's
+  `close()` waits for the watchdog thread to end, not a bare `release()`. Left open by SQLite slice
+  2 Task 3a (#566, one process per venue folder; #573; #608).
+
+- **From #566's review: the migrator's lock and the venue lock use one technique in two copies,**
+  and the test helper that holds the lock from another process is copied into several test files.
+  Left open by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).
+
+- **Which real providers lack S3's multi-object delete, and what each answers, is not established;**
+  a provider that refuses it with a status other than 501 fails the day's prune
+  (`stream.prune_failed`). `probeBucket` deletes one object at a time, so it cannot reveal such a
+  provider; having it delete its test object through `deleteMany` would. Left open by SQLite slice 2
+  Task 5 (#569, `@waitron/stream`).
+
+- **Nothing in the package has been run against a real provider's bucket:** the unit tests drive the
+  real S3 client over a scripted network, and the loop test drives it against versitygw. Left open
+  by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
+
+- **Every synchronous `deriveKey` caller still blocks the event loop while it derives.** Left open
+  by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
+  [Detail](backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives)
+
+- **A pointer write from a process that has since died, landing after the restart, can still make
+  the box refuse itself**, because a restarted process starts with an empty record. In both cases
+  the owner's alert (`backup.stream_refused`) still says another box is writing. Left open by SQLite
+  slice 2 Task 6 (#590, the Litestream supervisor).
+  [Detail](backlog/box.md#a-pointer-write-from-a-process-that-has-since-died-landing-after-the-restart-can-still-make-the-box-refuse-itself)
+
+- **The server's 8-second shutdown stops the stream last,** after the Cloud snapshot loop, so on a
+  large database Litestream may not finish its last upload (it is still told to stop and does not
+  outlive the server). Left open by SQLite slice 2 Task 6 (#590, the Litestream supervisor).
+
+- **`pnpm setup:litestream` skips the download when the installed binary already reports the pinned
+  version,** so the checksum protects fresh downloads only. Left open by SQLite slice 2 Task 6
+  (#590, the Litestream supervisor).
+
+- **A bucket read given up after five minutes is not cancelled,** because the bucket client's list
+  takes no way to stop it; what the deadline can still leave running is a listing whose answer keeps
+  arriving, or one whose answer stalls after headers that arrived within the first three seconds.
+  Left open by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
+
+- **A commit that changes no row but writes to the side file,** such as a schema change or a pragma
+  such as `user_version`, is not reported, so the lag can read low. Left open by SQLite slice 2 Task
+  7 (#619, how current the bucket copy is).
+
+- **An update that writes the same value, straight after a schema-only commit, is still reported,**
+  although it adds nothing for the bucket (a test pins it). Left open by SQLite slice 2 Task 7
+  (#619, how current the bucket copy is).
+
+- **The check that the side file changed was measured on the Mac's filesystem only,** not the box's
+  Linux one; a commit landing in the same file-time tick after a side-file restart is missed. Left
+  open by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
+
+- **A sale whose write transaction began before the supervisor first subscribed after boot is not
+  counted,** so the lag reads low for it. Left open by SQLite slice 2 Task 7 (#619, how current the
+  bucket copy is).
+
+- **Whether Litestream uploads anything while the side file is unchanged is not measured.** Left
+  open by SQLite slice 2 Task 7 (#619, how current the bucket copy is).
+
+- **Task 8a** (#627, the server side of the bucket-copy settings): the dead-process pointer write
+  under Task 6 applies here too. Left open by SQLite slice 2.
+
+- **Task 8b** (#628, the Backups screen's bucket-copy panel). Open: the Backups screen's own card
+  width is still a `34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no
+  guard reads; and a change of the secret access key alone, made in another tab, still leaves the
+  old kit showing, because a settings read does not carry the secret. Left open by SQLite slice 2.
+
+- **When the key rename and the put-back both fail, the new certificate is left beside the old key**
+  (the listener refuses the pair). Publishing the pair through one atomic switch (for example a
+  directory swapped by a single rename) would remove this case. Left open by SQLite slice 2 Task 9a
+  (#630, the first start after a restore).
+  [Detail](backlog/box.md#when-the-key-rename-and-the-put-back-both-fail-the-new-certificate-is-left-beside-the-old-key)
+
+- **A copy over 2 GiB cannot be restored**: `restoreFromStream` reads the downloaded file whole, and
+  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). The root is that placement
+  (`restoreDatabase`) takes bytes, not a file. Left open by SQLite slice 2 Task 9b (#642,
+  `waitron-restore restore --from-bucket`).
+  [Detail](backlog/box.md#a-copy-over-2-gib-cannot-be-restored)
+
+- **`pragma integrity_check` is one blocking statement,** and the venue watchdog kills a process
+  after 120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on NVMe;
+  box storage has not been measured. Left open by SQLite slice 2 Task 9b (#642, `waitron-restore
+  restore --from-bucket`).
+
+- **A staged request whose marker is invalid, or whose payload cannot be read, throws before the
+  request is cleared,** so every start fails the same way. I believe this predates the branch. Left
+  open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+
+- **A copy with no `tenants` row reads an empty tax id,** which neither the command line nor the
+  setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code names
+  that case. Left open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+
+- **An interrupted bucket rebuild or archive check leaves its scratch folder,** a full copy of the
+  venue database, under the state folder; the next run makes a new one and does not remove it. Left
+  open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+
+- **A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start**
+  (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other way
+  (the dev stack) does not. Left open by SQLite slice 2 Task 9b (#642, `waitron-restore restore
+  --from-bucket`).
+
+- **Open question: the first start's pointer read and the bucket rebuild's calls** (the command
+  line's `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15
+  seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
+  `backup.stream_request_failed`). The code does not say why they differ. Left open by SQLite slice
+  2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+
+- **Whether a sale's write waited behind the server's fold-back, rather than landing before it, is
+  not observed,** and the fold-back of a 256 MiB file is still timed only by the bench rig (results
+  note, 1b), not through the supervisor. Left open by SQLite slice 2 Task 10 (#652, the loop test
+  against a real S3-compatible server).
+
+- **Open: Litestream at trace logging deadlocked sales for five seconds.** **Next:** check whether
+  any setting lets an operator raise Litestream's log level, and read the pipe on a thread that does
+  not wait on the database if so. Left open by A133 (#889).
+  [Detail](backlog/box.md#litestream-at-trace-logging-deadlocked-sales-for-five-seconds)
+
+- **The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
+  request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
+  `packages/stream/src/s3-store.ts`).
+  [Detail](backlog/box.md#the-bucket-clients-limits-a44-676--what-is-still-open)
+
+- **The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
+  502** — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same code
+  also covers a bad value in the recovery kit, where 400 is right. Left open by #668, #686, A57, A60
+  and #723 (the pause test and the bucket's error reports).
+
+- **A batch delete's `backup.stream_request_failed` still carries the file's name as the bucket
+  listed it in `key`** (the `deleteMany` refusal in `packages/stream/src/s3-store.ts`); that the
+  prune logger drops it is a review seat's reading and one run, not a guard. Left open by #668,
+  #686, A57, A60 and #723 (the pause test and the bucket's error reports).
+
+- **That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName`
+  on each line, were shown by reading**, by the store's scripted HTTP answers and by the
+  supervisor's injected errors, not against a real bucket. Left open by #668, #686, A57, A60 and
+  #723 (the pause test and the bucket's error reports).
+  [Detail](backlog/box.md#that-a-real-buckets-403-to-the-pauses-listing-reads-that-code-and-the-status-and-errorname-on-each-line-were-shown-by-reading)
+
 ### Replication, failover and the cloud
 
 _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/replication-cloud.md](backlog/replication-cloud.md).
+
+Not in any track until the standalone primary is done.
 
 - **A completed provision or adopt operation replayed on a later request still answers 200 without
   restarting and keeps the setup lock set** — found by #657 while pruning comments. After a refused
@@ -738,6 +909,174 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
   When a parked box closes, it stays in `idle` until a client takes it, so the next client is paired
   with the dead box and its bytes go nowhere (both reviewers of that branch ran this).
   [Detail](backlog/replication-cloud.md#the-tunnels-stand-in-relay-pairs-with-sockets-that-have-already-gone)
+
+**The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
+outstanding on code that exists. The membership, promotion and rejoin arc (#197–#272) is still in
+the tree. What remains, largest first:
+
+- **Status, alarms and the operator surface for replication.** An operator needs to see whether the
+  standby is keeping up, and to be alarmed when it is not.
+
+- **Fiscal-certificate distribution** — rebuild on the asynchronous adopt (see the residuals). Open
+  design question: how the dormant certificate is protected when the seal must happen after the
+  initial copy. Beside it, **the vault-ring question**: `tenant_credentials` is `local` and a blob
+  sealed under one node's ring cannot be opened under another's, so `fiscal.aeat` and
+  `payments.stripe` do not travel to a standby at all.
+  [Detail](backlog/replication-cloud.md#fiscal-certificate-distribution)
+
+- **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document and pick one
+  rule: every role change is a restart, or the worker-lifecycle manager — not both.
+
+- **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box
+  TLS).
+
+- **Adding a mirror while the internet is down** (owner, 2026-10-02). So with the internet down
+  there is no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a
+  new mirror takes its first copy straight from the primary over the LAN. Slice 5 should name this
+  as the way a mirror is added and prove it with the internet unplugged.
+  [Detail](backlog/replication-cloud.md#adding-a-mirror-while-the-internet-is-down)
+
+- **The two-node end-to-end proof over LAN and over WireGuard**, including the same-site cookie
+  browser receipt still owed from the till reroute, #257 (needs interactive Chrome + mkcert +
+  `/etc/hosts`).
+
+- **Richer daily close** — one close run by the primary across all tills.
+
+- The residuals under _Detail → Replication_: re-admission, the membership chart filling up, chart
+  hygiene, the resume-at-restore marker, power-loss durability and the selling gate,
+  restore-onto-cloud re-encrypt, mirror fidelity, split-brain on the promoted side, the till UX for
+  a timed-out card.
+
+- **A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted
+  changes in `packages/sync`) was designed on the application outbox that #280 deleted, and the
+  replication it was rewritten against went too; the `ledger` classification of the fiscal tables
+  survives both. Remove it once the owner confirms nothing in its uncommitted diff is wanted.
+
+**Cloud integration and SQLite work.**
+
+- **Customer remote setup UI and production deployment remain open.** Left open by the Cloud
+  connection integration (2026-09-24; #638, #808).
+
+- **Shutdown waits for an in-progress local database copy or encryption step.** Next: measure that
+  shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly beyond
+  its current in-memory 512 MiB format limit. Cloud documentation: `docs/authenticated-captures.md`
+  in waitron-cloud. Left open by the Cloud connection integration (2026-09-24; #638, #808).
+
+- **After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
+  operator step.** Continuous complete-server recovery, planned final-write handover and production
+  recovery remain open. Cloud owns route placement and fencing in its backlog. Left open by the
+  Cloud connection integration (2026-09-24; #638, #808).
+
+- **A stop made while `cloud-replacement.json` is unreadable is not recorded in it.** Owner to
+  choose: refuse Stop access while the replacement file is unreadable, or record the stop somewhere
+  that survives the repair. Left open by the Cloud connection integration (2026-09-24; #638, #808).
+  [Detail](backlog/replication-cloud.md#a-stop-made-while-cloud-replacementjson-is-unreadable-is-not-recorded-in-it)
+
+- **The Litestream stream's sealed-state restore and activation still need integration with Cloud
+  storage and owner recovery.** Connected does not mean those services are configured. Cloud service
+  ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side
+  behavior. Public hosting, ingress controls and Cloud audit/retention remain deployment work. Left
+  open by the Cloud connection integration (2026-09-24; #638, #808).
+
+- **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
+  integration (2026-09-24; #638, #808).
+
+- **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
+  networking and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the
+  cloud-standby end-to-end proof. **Do not restart the cloud-standby work until the
+  Waitron↔Waitron-Cloud boundary contract is settled.**
+  [Detail](backlog/replication-cloud.md#waitron-retains)
+
+- **SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). **Next: slice 3, seats
+  and promotion. Its first task is already decided: credentials move to a venue key** stored in
+  `venue.db` only in locked form — do not reopen it.
+  [Detail](backlog/replication-cloud.md#sqlite--litestream-replaces-postgresql)
+
+- **Validate every supported object store.** Topology §12.2's real-store gate remains open; the
+  conditional-write promotion tie-break must be demonstrated on each target (risk 11). Waitron
+  Cloud's production store still needs its own run. Left open by the SQLite failover-loop prototype
+  gate (#425; receipts in [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
+  [Detail](backlog/replication-cloud.md#validate-every-supported-object-store)
+
+- **The store pointer and a new generation are exercised for a rebuild, not for a promotion.** A
+  promoted node's generation, and Cloud's recovery orchestration (tracked in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)), remain;
+  settle the Waitron ↔ Waitron Cloud contract before assigning them. Left open by the SQLite
+  failover-loop prototype gate (#425; receipts in
+  [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
+
+- **250 sales a day is still an assumption** nothing in this repository measures, so the
+  days-per-GiB figure rescales but does not hold. Left open by the SQLite failover-loop prototype
+  gate (#425; receipts in [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
+
+- **Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
+  wrapper are driven by no scenario, and the runner's own `main()` is undriven** — a later task
+  should pin them or delete them. Left open by the SQLite failover-loop prototype gate (#425;
+  receipts in [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
+
+- **Task 1a** (#548, each machine's own rows keyed by its node id). Deny's delete is the one
+  join-request node filter no test fails without (the `requirePending` read before it already
+  refuses another node's row); and the run-it review did not reach three claims within its budget —
+  holders torn by a concurrent promotion, credential sealing, and scheduler takeover. Left open by
+  SQLite slice 2.
+
+- **A node row holding no endorsement still signs `endorsements: []`, and no first-start case
+  asserts it.** Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
+
+- **Two comments claim more than the code keeps.** Narrow both the next time either file is edited.
+  Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
+  [Detail](backlog/replication-cloud.md#two-comments-claim-more-than-the-code-keeps)
+
+- **A restored box whose cloud peer does not answer during its first start signs the next term and
+  removes the marker**; a fencing document the peer serves later at that same term reads as not
+  newer, so the box is never fenced (reproduced with a temporary two-boot case in
+  `apps/server/src/boot.reconcile.test.ts`). Recorded, not redesigned. Left open by SQLite slice 2
+  Task 9a (#630, the first start after a restore).
+  [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
+
+- **The pointer read gives up after 15 seconds but does not cancel the request:** the bucket
+  interface takes no way to stop one. Left open by SQLite slice 2 Task 9a (#630, the first start
+  after a restore).
+
+- **The pointer's term is taken without checking its signature,** as the supervisor already does, so
+  whoever can write the bucket can push a restored box's term up (never down). Left open by SQLite
+  slice 2 Task 9a (#630, the first start after a restore).
+
+- **A marker left on a fenced box survives `waitron-rejoin`,** which wipes the database and removes
+  only `trading.env` from the state folder (`apps/server/src/rejoin-command.ts`), so the first start
+  runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin should
+  clear it is the owner's call. Left open by SQLite slice 2 Task 9a (#630, the first start after a
+  restore).
+
+- **A sell-only local secondary that is not fenced runs the first start and signs the next term.**
+  Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
+
+- **The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
+  restored copy holds.** Left open by SQLite slice 2 Task 9a (#630, the first start after a
+  restore).
+  [Detail](backlog/replication-cloud.md#the-restored-membership-rows-check-assertrestoredmembershipvalid-678-trusts-the-keys-the-restored-copy-holds)
+
+- **Only the start that finishes a restore checks the row's signature.** A mirror or fenced start
+  checks only that it can be read and is shaped as a document (A53); a start still finishing an
+  adoption checks neither. Left open by SQLite slice 2 Task 9a (#630, the first start after a
+  restore).
+  [Detail](backlog/replication-cloud.md#only-the-start-that-finishes-a-restore-checks-the-rows-signature)
+
+- **On a start with NO restore marker, text that is not JSON or a machine list that is not a list
+  fails with the generic text.** Whether to give it a curated code is open. Left open by SQLite
+  slice 2 Task 9a (#630, the first start after a restore).
+  [Detail](backlog/replication-cloud.md#on-a-start-with-no-restore-marker-text-that-is-not-json-or-a-machine-list-that-is-not-a-list-fails-with-the-generic-text)
+
+- **A mirror that deferred its first start and is then promoted without a restart**
+  (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
+  `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
+  Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
+
+- **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
+  5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
+  that writes another attached database, so either `change_log` is reclassified to the file its
+  writers live on, or the triggers stop writing it directly and something above them does (P3). Left
+  open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
 
@@ -933,6 +1272,50 @@ _Formerly B9, and Track C's development-stack and house-rules items._ Detail: [b
   provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
   succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
   curated line. Nobody has hit this.
+
+- **Read the first weekly mutation results for both UI packages after the split**; the split
+  preserved the 90% gates but did not measure their new full mutation scores. Left open by the
+  shared account controls (`@waitron/ui-core` owns the seven account controls).
+
+- **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe** (its
+  fixture closes the handles first, which removes the sidecars). The wipe's sidecar removal is
+  pinned by `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars
+  on disk. Left open by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
+
+- **`scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a
+  pipe, so the selection guard does not count it and a change to it alone runs none of those jobs.**
+  Listing it against every member those jobs test would send every change to it through all of them
+  — the owner's call. Left open by SQLite slice 2 Task 10 (#652, the loop test against a real
+  S3-compatible server).
+
+- **The S3 test server's ports (C88, #920).** Fixed in the harness; the mechanism is in
+  [testing-guide.md](developers/testing-guide.md), "The S3 test server knows its own server". Left:
+  the Waitron servers' own ports in the loop and pause tests are drawn the same way, and a lost one
+  fails the boot loudly (`server.listen_failed`) rather than silently; not changed.
+
+- **Why the side file's growth per sale differs so much between runs is not tested.** If the test
+  turns unreliable on CI, that margin is where to look. Left open by #668, #686, A57, A60 and #723
+  (the pause test and the bucket's error reports).
+  [Detail](backlog/ci.md#why-the-side-files-growth-per-sale-differs-so-much-between-runs-is-not-tested)
+
+- **The case "refused while the run is stopping" catches a removed stop check only through the order
+  two pending steps finish in,** so re-run that removal if `#bucketAnswers` is restructured. Left
+  open by #668, #686, A57, A60 and #723 (the pause test and the bucket's error reports).
+
+- **Every `maxWorkers: 1` config whose comment gives the coverage reason**, apart from `payments`,
+  which carries its own measurement, still says the pin is needed without having measured it; the
+  same one-worker-against-several coverage comparison would settle each. Left open by SQLite slice 1
+  (#490 and the preparation tasks).
+
+- **P7's leftovers (#533):** `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
+  because it checks for an absence and the remaining files clear its floor of eight. Left open by
+  SQLite slice 1 (#490 and the preparation tasks).
+  [Detail](backlog/ci.md#p7s-leftovers-533)
+
+- **A few suites still build engine-shaped refusals by hand** rather than through `refusalError`
+  (`packages/db/src/testing/refusals.ts`, P10, #527), among them
+  `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
+  Left open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### Dependency upgrades
 
@@ -1269,6 +1652,15 @@ _Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/ar
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
   `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
   constant (the theme colour is literal in three places).
+
+- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** Each
+  site needs checking against the path it actually takes, then rewording. Left open by SQLite slice
+  1 (#490 and the preparation tasks).
+  [Detail](backlog/architecture.md#comments-still-describe-a-drizzlequeryerror-wrapper-that-this-engine-does-not-produce)
+
+- **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test
+  helpers, and production functions (`apps/server/src/working-order.ts` holds several) that take
+  `cfg` and discard it. Left open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### Data protection and legal compliance
 
@@ -7569,438 +7961,6 @@ format. **Before building, ask the labour
 advisor** whether the digital-registro decree is in force and which fields it requires
 ([asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)). The time record cannot be
 edited once written, so its chain and correction paths take the owner's sign-off at land.
-
----
-
-## Afterwards — the on-prem mirror, then the cloud primary
-
-Not in any track until the standalone primary is done. Kept here so the decisions and residuals do
-not get lost.
-
-### The on-prem mirror
-
-Read this section as requirements slices 3–5 must meet, not as work outstanding on code that exists.
-The membership, promotion and rejoin arc (#197–#272) is still in the tree. What remains, largest first:
-
-- **Status, alarms and the operator surface for replication.** An operator needs to see whether the
-  standby is keeping up, and to be alarmed when it is not.
-- **Fiscal-certificate distribution** — rebuild on the asynchronous adopt (see the residuals). Open
-  design question: how the dormant certificate is protected when the seal must happen after the
-  initial copy ([design](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
-  [plan](superpowers/plans/2026-09-07-fiscal-cert-distribution.md)). Beside it, **the vault-ring
-  question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
-  under another's, so `fiscal.aeat` and `payments.stripe` do not travel to a standby at all.
-- **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document and pick one
-  rule: every role change is a restart, or the worker-lifecycle manager — not both.
-- **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box TLS).
-- **Adding a mirror while the internet is down** (owner, 2026-10-02). Today the only way a second
-  machine gets a copy of `venue.db` is from the owner's bucket — the rebuild
-  (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
-  Adoption (`apps/server/src/adopt.ts`) fetches its identity bundle from the primary by URL but
-  carries no data, and nothing in the tree follows a stream yet. So with the internet down there is
-  no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a new mirror
-  takes its first copy straight from the primary over the LAN. The topology design's §4.4 already
-  has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
-  new place should begin with a full copy of the database (to be checked on the pinned Litestream),
-  so the design may cover it — but it never says so, and it does not list what else enrolling needs
-  from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
-  internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
-- **The two-node end-to-end proof over LAN and over WireGuard**, including the same-site cookie
-  browser receipt still owed from the till reroute, #257 (needs interactive Chrome + mkcert +
-  `/etc/hosts`).
-- **Richer daily close** — one close run by the primary across all tills.
-- The residuals under _Detail → Replication_: re-admission, the membership chart filling up, chart
-  hygiene, the resume-at-restore marker, power-loss durability and the selling gate, restore-onto-cloud
-  re-encrypt, mirror fidelity, split-brain on the promoted side, the till UX for a timed-out card.
-
-**A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted
-changes in `packages/sync`) was designed on the application outbox that #280 deleted, and the
-replication it was rewritten against went too; the `ledger` classification of the fiscal tables
-survives both. Remove it once the owner confirms nothing in its uncommitted diff is wanted.
-
-### Cloud integration and SQLite work
-
-**Shared account controls:** `@waitron/ui-core` owns the seven account controls, tokens and common
-helpers inside this repository, and existing `@waitron/ui` imports re-export them. Cloud has
-published private `@waitron-io/ui-core@0.1.0` (see the [release receipt and setup](https://github.com/waitron-io/waitron-cloud/blob/main/docs/shared-ui-release.md))
-and owns the release workflow and account screens. Read the first weekly mutation results for both
-UI packages after the split; the split preserved the 90% gates but did not measure their new full
-mutation scores.
-
-Cloud product and infrastructure work moved to the
-[Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)
-on 2026-09-22: provisioning, cloud-only redundancy, trials, remote access, provider integration
-and cloud operations. See [documentation ownership](cloud-ownership.md).
-
-**Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side networking
-and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
-proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
-settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
-to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
-[Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md);
-its cloud support-service proposal is tracked in Cloud and is not approved by this move.
-
-**SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
-[SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md),
-whose §11 is the build order. The failover-loop prototype gate is done (#392, #395, #406, #411, #415, #417, #422, #425;
-[the results note](research/2026-09-16-sqlite-failover-prototype.md)); its one
-negative result, **S2** — a handed-over batch can re-file a sale the receiver already filed, which
-costs one wasted AEAT call (error 3000, already read as filed) — produced the fence-before-ship rule
-in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
-any of this code. **Slice 1, the storage swap, is complete (2026-09-23; F1 #489, T1 #490, T2 #492,
-T3 #494, and its preparation tasks).** **Slice 2, stream and cold restore, is complete
-(2026-09-25;** #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630, #642, #646
-and #652, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
-**Next: slice 3, seats and promotion. Its first task is already decided: credentials move to a
-venue key** stored in `venue.db` only in locked form — do not reopen it.
-
-**What the prototype gate left open (the receipts are in the results note):**
-
-- **Validate every supported object store.** Cloud owns its production-provider checks in the
-  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
-  Waitron retains the engine's required semantics and checks for claimed self-host targets.
-  Topology §12.2's real-store gate remains open; the conditional-write promotion tie-break must be
-  demonstrated on each target (risk 11). Each owner's bucket is checked by the Backups screen's Test
-  and Save (`probeBucket`, `packages/stream/src/probe.ts`), which refuse a bucket that does not
-  refuse a stale conditional write, and the loop test runs that check against versitygw. Waitron
-  Cloud's production store still needs its own run.
-- **The store pointer and a new generation are exercised for a rebuild, not for a promotion.** A
-  promoted node's generation, and Cloud's recovery orchestration (tracked in the
-  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)), remain;
-  settle the Waitron ↔ Waitron Cloud contract before assigning them.
-- **250 sales a day is still an assumption** nothing in this repository measures, so the days-per-GiB
-  figure rescales but does not hold.
-- **Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
-  wrapper are driven by no scenario, and the runner's own `main()` is undriven** — a later task should
-  pin them or delete them.
-
-**SQLite slice 2 — what each task left open.** Task 4's measured values are under "What later tasks
-read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements);
-what Task 0 (#543, photo shrinking) left is under _Photos are shrunk on upload_ in Track A.
-
-**Task 1a** (#548, each machine's own rows keyed by its node id). Deny's delete is the one
-join-request node filter no test fails without (the `requirePending` read before it already refuses
-another node's row); and the run-it review did not reach three claims within its budget — holders
-torn by a concurrent promotion, credential sealing, and scheduler takeover.
-
-**Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
-screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
-row, so the screens now only save a lookup. Also open: now that both ends are `state`, the
-keys #426 dropped could be declared again — `sessions` to `persons`, and
-`management_sessions`, `totp_enrollments` and `google_oidc_states` to `persons` (`sessions`' key to
-`tills` went with that table in A238, and `sessions.device_id` holds one to `devices`). Doing so would
-change what deleting a person does.
-
-**Task 2a** (#557, a recovery key that does not need an archive destination). Open:
-
-- On a box that holds a key while backups are off because its venue failed to open, an apply that
-  reuses the held key writes, reloads, the venue fails to open again, and the route answers
-  `backup.effective_mismatch` (read from the route, not run).
-- The bucket copy panel's refusal for a too-short key names the "Turn on backups" button but does
-  not link or scroll to it. The panel picks its message from `managedByEnvironment` alone, so with a
-  key hand-edited too short in `backup.env` it can name a button that does not help: with archives
-  on it names a button that is not shown; with archives off, until the next status read reports the
-  key too short, the button sends no new key (it reuses the held one) — after that read the screen
-  makes one.
-- The status watcher does not retry its own failed mint (the mint is a POST, never passive session
-  activity), so the screen then offers no key until it is reopened.
-- The edit-settings form can meet `backup.recovery_key_exists` when a rotate (from another tab or
-  admin) lands after it fetched the key.
-- The owner's call: `rotate` with a destination loaded rebuilds `backup.env` from the running
-  settings rather than keeping the file's other lines, so a destination added to the file by hand
-  and not yet loaded is dropped.
-
-**Task 2b** (#560, the box's own state files locked with the recovery key in `node_sealed_state`).
-Every node writes its own row at every start, standby and mirror nodes included, while the backup
-job runs only on the primary — kept by design (owner, 2026-09-24).
-
-**Task 3a** (#566, one process per venue folder; #573; #608). Open:
-
-- From #608: the recovery level is read before `recovery.lock`, so the pre-boot count another start
-  writes can still push a server restarting at that moment onto the recovery page.
-- From #573's review, the owner's call: only an unwrapped `provisioning.database_in_use` is
-  recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path wraps
-  them today).
-- From #608, no behaviour change decided: the watchdog appends its line to `waitron.log` without
-  creating the log folder, so on a machine with no such folder that line is lost; only a store's
-  `close()` waits for the watchdog thread to end, not a bare `release()`.
-- The recovery page's Spanish (#650) has not been read by a native speaker.
-- From #566's review: the migrator's lock and the venue lock use one technique in two copies, and
-  the test helper that holds the lock from another process is copied into several test files.
-
-**Task 5** (#569, `@waitron/stream`). Open:
-
-- Which real providers lack S3's multi-object delete, and what each answers, is not established; a
-  provider that refuses it with a status other than 501 fails the day's prune
-  (`stream.prune_failed`). `probeBucket` deletes one object at a time, so it cannot reveal such a
-  provider; having it delete its test object through `deleteMany` would.
-- Nothing in the package has been run against a real provider's bucket: the unit tests drive the
-  real S3 client over a scripted network, and the loop test drives it against versitygw.
-- `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe (its fixture
-  closes the handles first, which removes the sidecars). The wipe's sidecar removal is pinned by
-  `apps/server/src/db-wipe.test.ts`; what is missing is a rejoin-level case with sidecars on disk.
-- Every synchronous `deriveKey` caller still blocks the event loop while it derives:
-  `encodeConfigurationBundle` (through `encryptArtifact`); everything reaching `decryptArtifact`
-  (`apps/server/src/artifact-cipher.ts`) — `decodeConfigurationBundle` (on the request path),
-  `validateArtifact` (`apps/server/src/restore.ts`) and `unsealNodeState`
-  (`apps/server/src/sealed-state.ts`); and the recovery bundle's `encryptBundle` and
-  `decryptBundle` (`apps/server/src/recovery-bundle.ts`).
-
-**Task 6** (#590, the Litestream supervisor). Open:
-
-- A pointer write from a process that has since died, landing after the restart, can still make the
-  box refuse itself, because a restarted process starts with an empty record; so does a
-  `current.json` deleted after the supervisor read it, on a bucket that answers a conditional write
-  to a missing object with 412 (SeaweedFS; the in-memory test store). In both cases the owner's alert
-  (`backup.stream_refused`) still says another box is writing. On a bucket that answers that write
-  with 404 instead (AWS, as it documents; versitygw, as measured), the deleted pointer surfaces as
-  `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
-  `stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
-  reaching `refused`.
-- The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a large
-  database Litestream may not finish its last upload (it is still told to stop and does not outlive
-  the server).
-- `pnpm setup:litestream` skips the download when the installed binary already reports the pinned
-  version, so the checksum protects fresh downloads only.
-
-**Task 7** (#619, how current the bucket copy is). Open:
-
-- A bucket read given up after five minutes is not cancelled, because the bucket client's list
-  takes no way to stop it; what the deadline can still leave running is a listing whose answer
-  keeps arriving, or one whose answer stalls after headers that arrived within the first three
-  seconds.
-- A commit that changes no row but writes to the side file, such as a schema change or a pragma
-  such as `user_version`, is not reported, so the lag can read low.
-- An update that writes the same value, straight after a schema-only commit, is still reported,
-  although it adds nothing for the bucket (a test pins it).
-- The check that the side file changed was measured on the Mac's filesystem only, not the box's
-  Linux one; a commit landing in the same file-time tick after a side-file restart is missed.
-- A sale whose write transaction began before the supervisor first subscribed after boot is not
-  counted, so the lag reads low for it.
-- Whether Litestream uploads anything while the side file is unchanged is not measured.
-
-**Task 8a** (#627, the server side of the bucket-copy settings): the dead-process pointer write
-under Task 6 applies here too.
-
-**Task 8b** (#628, the Backups screen's bucket-copy panel). Open: the Backups screen's own card width
-is still a `34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no guard reads;
-and a change of the secret access key alone, made in another tab, still leaves the old kit showing,
-because a settings read does not carry the secret.
-
-**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
-node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
-Open:
-
-- Two comments claim more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
-  says a signing failure "leaves the node exactly as it was", and `promoteMirrorToPrimary`'s
-  (`apps/server/src/promote.ts`) says a failure before the commit "leaves the mirror as it was".
-  Signing empties pending `change_log` rows (measured by #655's Codex seat), so they are not strictly
-  untouched; no case losing a real one is known. Narrow both the next time either file is edited.
-- A restored box whose cloud peer does not answer during its first start signs the next term and
-  removes the marker; a fencing document the peer serves later at that same term reads as not
-  newer, so the box is never fenced (reproduced with a temporary two-boot case in
-  `apps/server/src/boot.reconcile.test.ts`). I believe it cannot happen today — the only writer of
-  `mirror_config`, which the peer check needs, is `apps/server/src/adopt.ts`, for a standby that
-  never finishes adoption — from reading, not a run. Recorded, not redesigned.
-- When the key rename and the put-back both fail, the new certificate is left beside the old key
-  (the listener refuses the pair) and `server.crt.previous` holds the old certificate until the
-  next reissue. The next start repairs it, because the marker stays — unless that start defers the
-  first start. Publishing the pair through one atomic switch (for example a directory swapped by a
-  single rename) would remove this case.
-- The pointer read gives up after 15 seconds but does not cancel the request: the bucket interface
-  takes no way to stop one.
-- The pointer's term is taken without checking its signature, as the supervisor already does, so
-  whoever can write the bucket can push a restored box's term up (never down).
-- A marker left on a fenced box survives `waitron-rejoin`, which wipes the database and removes
-  only `trading.env` from the state folder (`apps/server/src/rejoin-command.ts`), so the first
-  start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
-  should clear it is the owner's call.
-- A sell-only local secondary that is not fenced runs the first start and signs the next term.
-- The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
-  restored copy holds: a copy whose `nodes.public_key` for this node was rewritten, with its
-  document re-signed by the matching key, passes, and the next term is signed over the added node
-  (the case "passes a document re-signed with a key the copy's own node row was changed to name"
-  pins that).
-- Only the start that finishes a restore checks the row's signature. A mirror or fenced start
-  checks only that it can be read and is shaped as a document (A53); a start still finishing an
-  adoption checks neither. Promotion, `retireSelf` and the standby chart append
-  (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
-  sign over the held row without checking it. Gating promotion on the same check was measured and
-  not done, because it would refuse a genuine document: on 2026-09-26 a scratch case built the way
-  `promote.test.ts` builds a mirror found, after `setDeploymentMode(…, "mirror")` alone (what
-  `adoptFromPrimary` leaves), no document and an empty trust set; after
-  `establishReservedStandbyIdentity`, a trust set naming the standby alone; and a document the
-  primary signed with its real key, written there, verified as `untrusted_signer`. The owner's
-  decision (2026-09-26) is under the failover residuals ("a standby checks a promotion against the
-  primary's key"); a restored mirror's own start is not covered by it.
-- On a start with NO restore marker, text that is not JSON or a machine list that is not a list
-  fails with the generic text; a stored JSON null reads as no document, and a document breaking only
-  a shape limit is read and used unchecked. From reading its writers, nothing this program writes
-  produces one. Once starts have failed repeatedly the recovery page shows the generic text (code
-  `unknown`), not `restore.membership_invalid`. Whether to give it a curated code is open.
-- A mirror that deferred its first start and is then promoted without a restart
-  (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
-  `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
-
-**Task 9b** (#642, `waitron-restore restore --from-bucket`, `apps/server/src/restore-stream.ts`).
-Open:
-
-- A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
-  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). Archive creation has the same limit
-  (`apps/server/src/backup-sweep.ts`). The root is that placement (`restoreDatabase`) takes bytes,
-  not a file. Letting it take a source path and rename it into place on the same filesystem would
-  remove the read into memory on the bucket path, and also the archive form's extra full copy:
-  `refuseIfArchiveSourceLive` writes the whole database to a scratch folder only to read the bucket
-  settings from it.
-- `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process after
-  120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on NVMe; box
-  storage has not been measured.
-- A staged request whose marker is invalid, or whose payload cannot be read, throws before the
-  request is cleared, so every start fails the same way. I believe this predates the branch.
-- A copy with no `tenants` row reads an empty tax id, which neither the command line nor the setup
-  wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code names that
-  case.
-- An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
-  venue database, under the state folder; the next run makes a new one and does not remove it.
-- A setup-wizard restore whose placement fails is not retried and is not reported on the setup
-  screen, nor normally on the recovery page; the code and which database was kept are only in the
-  server's own output and in `waitron.log`. **Owner decision 2026-09-25: leave it as it is.**
-- A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start
-  (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other way
-  (the dev stack) does not.
-- Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
-  `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15 seconds
-  and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-  `backup.stream_request_failed`). The code does not say why they differ.
-
-**Task 9c** (#646, "Restore from my bucket" in the setup wizard). Open:
-
-- The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
-  (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows one
-  sentence for all three, as the command line does.
-- The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
-  confirmed attempt downloads it again; the HTTP request stays open for the whole download.
-- Walked in the browser test harness against a stubbed server, not yet on a running box.
-- After an archive restore or a Cloud restore the final screen does not show the device steps the
-  bucket rebuild's shows (`rebuilt` is set only on the bucket path, `apps/setup/src/setup-app.ts`),
-  although the first start re-issues the certificate for this machine's addresses after an archive
-  restore too.
-- After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
-  peers are stopped" confirmation again.
-
-**Task 10** (#652, the loop test against a real S3-compatible server). Open:
-
-- `scripts/changed-packages.mjs runnable` runs before the tests in many packages' jobs, fed from a
-  pipe, so the selection guard does not count it and a change to it alone runs none of those jobs.
-  Listing it against every member those jobs test would send every change to it through all of them
-  — the owner's call.
-- Whether a sale's write waited behind the server's fold-back, rather than landing before it, is not
-  observed, and the fold-back of a 256 MiB file is still timed only by the bench rig (results note,
-  1b), not through the supervisor.
-
-**A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133 #889,
-A135 #907 and #917).** A probe that reproduced the pause test's one failure on `main` (run 36559470238) on one runner in 20 found the CI runner's disk stalling, not the bucket, and the stream
-tests' CI step now sets `TMPDIR=/dev/shm`. The figures are in
-[testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
-checkpoint".
-
-- **How A133's probe ran** (a throwaway branch, since deleted; workflow run 36615242523, 12
-  GitHub-hosted runners): it booted the real server on a provisioned venue and sold through
-  `POST /api/sales` with one seller, one sale at a time, for 150 s. Litestream ran with the
-  product's own configuration, the bucket answering, and its log at DEBUG written to a file rather
-  than a pipe. Each write's wait for `begin immediate` was timed in the write queue. The slow disk
-  was a device-mapper `delay` target: 10 ms per write, 100 ms per flush. Decided before running: if
-  the stream cannot hold up a sale, writes wait under 20 ms to begin with streaming on, as with it
-  off. Litestream 0.5.17 holds the database's write lock for a PASSIVE checkpoint
-  (`checkpointWithExecutor`, `db.go` at tag v0.5.17).
-- **DECIDED (owner, 2026-09-30, after A135): leave Litestream's checkpoints as they are; neither
-  setting ships.** A135 measured switching off the timed checkpoint and moving the page-count one out
-  of reach: it removed the wait on the delayed disk but not on the runner's normal disk at about 80
-  sales a second. The owner was offered shipping the two settings, leaving the checkpoints alone, or
-  first running A133's probe on the box's own disk, and chose to leave them alone.
-- **Open: Litestream at trace logging deadlocked sales for five seconds.** The probe first ran it at
-  trace level by mistake, and 13 of 24 runs failed with a 500, each one looked at being
-  `begin immediate` failing `database is locked` after 5,006 to 5,008 ms. The inferred mechanism:
-  Litestream held the write lock while blocked writing its log to a pipe that only the server's main
-  thread reads, and the main thread was waiting for that lock. At the normal level Litestream writes
-  too little to fill the pipe; that is inferred, not measured. **Next:** check whether any setting
-  lets an operator raise Litestream's log level, and read the pipe on a thread that does not wait on
-  the database if so.
-
-**The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
-request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-`packages/stream/src/s3-store.ts`). An answer whose headers arrive within three seconds and whose
-body then stalls is not bounded; the deadline on the pause and the freshness read cannot cancel a
-listing whose answer keeps arriving; the idle limit is per request, not per call, so a listing of
-many pages, or a bucket answering each request just inside the limit, can take longer; a bucket that
-takes more than 30 seconds to answer a request whose body is already sent, such as a delete of 1,000
-keys, is cut off, and how long real providers take for one was not measured; and the tests run the
-handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
-
-**The S3 test server's ports (C88, #920).** Fixed in the harness; the mechanism is in
-[testing-guide.md](developers/testing-guide.md), "The S3 test server knows its own server". Left:
-the Waitron servers' own ports in the loop and pause tests are drawn the same way, and a lost one
-fails the boot loudly (`server.listen_failed`) rather than silently; not changed.
-
-**The pause test and the bucket's error reports — what is still open (left by #668, #686, A57, A60
-and #723).**
-
-- **Why the side file's growth per sale differs so much between runs is not tested.** The pause
-  test's fill to 16 MiB took about 13 KB a sale on one CI run, about 41.6 KB a sale on its own
-  runner, and about 79 KB a sale locally, one run each and all on disk, before CI's stream step
-  moved these files into memory (A130). Litestream's own checkpoints reusing the file is the
-  guess. If the test turns unreliable on CI, that margin is where to look.
-- The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer 502
-  — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same code also
-  covers a bad value in the recovery kit, where 400 is right.
-- A batch delete's `backup.stream_request_failed` still carries the file's name as the bucket
-  listed it in `key` (the `deleteMany` refusal in `packages/stream/src/s3-store.ts`); that the prune
-  logger drops it is a review seat's reading and one run, not a guard.
-- That a real bucket's 403 to the pause's listing reads that code, and the status and `errorName` on
-  each line, were shown by reading, by the store's scripted HTTP answers and by the supervisor's
-  injected errors, not against a real bucket; A60's `errorName` list
-  (`packages/stream/src/bucket-error-names.ts`) was checked against Amazon's reference only, not
-  against the names versitygw gives its errors.
-- The case "refused while the run is stopping" catches a removed stop check only through the order
-  two pending steps finish in, so re-run that removal if `#bucketAnswers` is restructured.
-
-**What slice 1 left (#490 and the preparation tasks):**
-
-- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** On
-  `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run the query '<sql>'`),
-  while `db.all`, `db.get`, `db.execute` and an awaited query builder reject with the engine's own
-  error (`packages/db/src/testing/errors.ts` records both shapes). Each site needs checking against
-  the path it actually takes, then rewording. The candidates are what
-  `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
-  also includes test fixtures that build a wrapped error by hand. `engineErrorMessage` in
-  `packages/db/src/testing/errors.ts` names the old wrapper on purpose and is pinned verbatim by its
-  test.
-- **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test
-  helpers, and production functions (`apps/server/src/working-order.ts` holds several) that take
-  `cfg` and discard it.
-- **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
-  5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
-  that writes another attached database, so either `change_log` is reclassified to the file its
-  writers live on, or the triggers stop writing it directly and something above them does (P3).
-- **Every `maxWorkers: 1` config whose comment gives the coverage reason**, apart from `payments`,
-  which carries its own measurement, still says the pin is needed without having measured it; the
-  same one-worker-against-several coverage comparison would settle each.
-- **P7's leftovers (#533):** `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
-  because it checks for an absence and the remaining files clear its floor of eight.
-  `module-graph-honesty`, `schema-constraints` and `packages/db/src/classification.test.ts` still
-  read a set's SQL their own way — the top of the `drizzle` folder only, and `module-graph-honesty`
-  unsorted — rather than through `migrationSqlFiles`, which walks subfolders (no set has SQL in a
-  subfolder today). `journal-monotonic` parses `_journal.json` itself rather than sharing
-  `headSnapshot`'s reader.
-- **Declined, with reasons:** writing `moneyNum` in `packages/workforce-es/src/convenio.ts` as
-  `cents / 100` — it would put a second copy of the money scale outside `packages/shared/src/cents.ts`
-  and the files `packages/shared/src/conventions.test.ts` checks (P5, #531); and one constant for the
-  `10000` literals — four sit in check constraints, where only `sql.raw(String(n))` renders the
-  number, and a constant that works only through `sql.raw` is a trap for the next tidy-up (P6,
-  #529).
-- **A few suites still build engine-shaped refusals by hand** rather than through `refusalError`
-  (`packages/db/src/testing/refusals.ts`, P10, #527), among them
-  `packages/provisioning/src/cli.test.ts` and `packages/scheduler/src/store.concurrency.test.ts`.
 
 ---
 

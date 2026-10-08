@@ -66,6 +66,16 @@ folding ASCII-only, and the column is still nullable, so nothing at the compiler
 forgetting it. **Next action:** decide whether the column becomes mandatory — which breaks every
 fixture at the compiler rather than silently — or whether a guard over the write sites is enough.
 
+## Task 1b (#554, session cookies stored only as hashes)
+
+**Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
+screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
+row, so the screens now only save a lookup. Also open: now that both ends are `state`, the
+keys #426 dropped could be declared again — `sessions` to `persons`, and
+`management_sessions`, `totp_enrollments` and `google_oidc_states` to `persons` (`sessions`' key to
+`tills` went with that table in A238, and `sessions.device_id` holds one to `devices`). Doing so would
+change what deleting a person does.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'

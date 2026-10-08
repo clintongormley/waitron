@@ -595,7 +595,8 @@ carry over to WAL, and nothing was run that would settle the WAL case.
 **The five seconds is not justified by a measurement.** It is a bound on a stall, and nothing here
 has measured how long a litestream checkpoint holds the file — the wait it exists for. (Measured
 since, outside this rig, 2026-09-29: a write waited up to 831 ms behind one on a disk delayed 100 ms
-per flush; `docs/backlog.md`, A130's entry.) The only wait in this rig on record is an ARTIFICIAL
+per flush; `docs/developers/testing-guide.md`, "A sale can wait behind Litestream's own
+checkpoint".) The only wait in this rig on record is an ARTIFICIAL
 one the probe above chose: a 1500ms hold, waited out in 1590ms and 1613ms because the wait also
 covers the holder's commit. That is a fact about the probe. The number is
 deliberately large rather than dialled to anything.

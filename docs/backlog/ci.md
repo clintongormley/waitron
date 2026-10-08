@@ -265,6 +265,29 @@ the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-h
   OPENS one, so a bundle that builds and renders nothing passes there too. This is the work item
   `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` point at.
 
+## Why the side file's growth per sale differs so much between runs is not tested
+
+**The pause test and the bucket's error reports — what is still open (left by #668, #686, A57, A60
+and #723).**
+
+- **Why the side file's growth per sale differs so much between runs is not tested.** The pause
+  test's fill to 16 MiB took about 13 KB a sale on one CI run, about 41.6 KB a sale on its own
+  runner, and about 79 KB a sale locally, one run each and all on disk, before CI's stream step
+  moved these files into memory (A130). Litestream's own checkpoints reusing the file is the
+  guess. If the test turns unreliable on CI, that margin is where to look.
+
+## P7's leftovers (#533)
+
+**What slice 1 left (#490 and the preparation tasks):**
+
+- **P7's leftovers (#533):** `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
+  because it checks for an absence and the remaining files clear its floor of eight.
+  `module-graph-honesty`, `schema-constraints` and `packages/db/src/classification.test.ts` still
+  read a set's SQL their own way — the top of the `drizzle` folder only, and `module-graph-honesty`
+  unsorted — rather than through `migrationSqlFiles`, which walks subfolders (no set has SQL in a
+  subfolder today). `journal-monotonic` parses `_journal.json` itself rather than sharing
+  `headSnapshot`'s reader.
+
 ## Decisions and deliberate limits
 
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator

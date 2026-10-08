@@ -214,7 +214,7 @@ their full text.
   saying drizzle wraps a failed query remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps
 every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `media`,
   `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the
-  `DrizzleQueryError` entry under _Afterwards_).
+  `DrizzleQueryError` entry [in this file](#comments-still-describe-a-drizzlequeryerror-wrapper-that-this-engine-does-not-produce)).
 
 ## Comments and test titles still cite sections of specs that were deleted
 
@@ -405,3 +405,28 @@ sent.
   `> 0`) and `fiscal-none`. A rename would want to keep that "did this pass attempt work?" meaning
   rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
   a pass that exercised the certificate and skipped.
+
+## Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce
+
+**What slice 1 left (#490 and the preparation tasks):**
+
+- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** On
+  `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run the query '<sql>'`),
+  while `db.all`, `db.get`, `db.execute` and an awaited query builder reject with the engine's own
+  error (`packages/db/src/testing/errors.ts` records both shapes). Each site needs checking against
+  the path it actually takes, then rewording. The candidates are what
+  `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
+  also includes test fixtures that build a wrapped error by hand. `engineErrorMessage` in
+  `packages/db/src/testing/errors.ts` names the old wrapper on purpose and is pinned verbatim by its
+  test.
+
+## Decisions and deliberate limits
+
+**What slice 1 left (#490 and the preparation tasks):**
+
+- **Declined, with reasons:** writing `moneyNum` in `packages/workforce-es/src/convenio.ts` as
+  `cents / 100` — it would put a second copy of the money scale outside `packages/shared/src/cents.ts`
+  and the files `packages/shared/src/conventions.test.ts` checks (P5, #531); and one constant for the
+  `10000` literals — four sit in check constraints, where only `sql.raw(String(n))` renders the
+  number, and a constant that works only through `sql.raw` is a trap for the next tidy-up (P6,
+  #529).
