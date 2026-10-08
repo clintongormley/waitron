@@ -31,6 +31,11 @@ their full text.
   in two pull requests — combined tickets on shared printers, period choices in routing cells and
   the station editor after slice 1; station hours, fallbacks and the tester removed, with each
   station's worked-out times, after slices 2 and 3 — with its open decisions at its top.
+  Slice 6's plan is written ahead of lane D (A366-6p, 2026-10-08): [slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md),
+  in three pull requests — the department list and page, "How orders start" and the service
+  settings shared by departments and zones, now (it needs slice 1 only); each zone's closed times
+  on its Zones tab after slice 2; the floor plan on the Zones tab after A429's editor — with its
+  open decisions at its top.
 
 ## A432 — a service period's signed end offset
 
