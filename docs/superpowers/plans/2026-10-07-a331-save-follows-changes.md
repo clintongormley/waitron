@@ -808,7 +808,8 @@ a regression: stop and report it.
 **Forms that open already savable** (each passes `{ savableAtOpen: true }` — or the condition
 given — to `saveActionState`, and gets a save-state case asserting it opens enabled and `primary`).
 None of these forms needs the early return, because their action is never `unchanged`. Their
-registrations stay as they are:
+registrations stay as they are — except the calibration wizard, which is savable at open only after
+a re-add: 3b.1b converts its registration, and its early return reads the same flag:
 
 - **Printers, "name this printer" dialog** (`confirm-add-printer`, ~3511–3518, labelled Add or
   Enable). `#namePrinter` (~569–593) fills the name from what discovery reported, or from a
@@ -879,8 +880,9 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   `if (scope && …) … else if (this.detail… === savingDraft)` (~2447–2454, ~2501–2504) and the
   success paths' `if (scope) … else if (… === savingDraft)` (~2458–2469, ~2508–2518). I believe
   each `else` becomes unreachable once the scope always exists; delete them (coverage confirms).
-- Immediate, not gated: `edit-agent-*`, `revoke-agent-*`, `allow-agent-*`, `scan-agents`, the join
-  dialog's number choices and `join-deny-*`, the status switch (`printer-detail-active`),
+- Immediate, not gated: `edit-agent-*`, `revoke-agent-*`, `allow-agent-*`, `scan-agents`,
+  `open-add-agent` (the Add-an-agent dialog has no field and only a Close), `join-review-*` (opens
+  the join dialog), the join dialog's number choices and `join-deny-*`, the status switch (`printer-detail-active`),
   `edit-printer-name`, `edit-printer-connection`, `open-equipment-label`.
 - Predicted changed checks (`printers-screen.test.ts`): "does nothing when a Save from a closed
   agent editor is pressed" (~5539) and "does nothing when Save from a closed name editor is
@@ -899,7 +901,11 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   3 only) on `#calibrationScope` (`?.register`, ~2251–2264): make it `draftScopeFor`; bind
   `variant` and `?disabled=${s.unchanged}` (keep `?loading`) with
   `saveActionState(this.#calibrationScope, { savableAtOpen: <the re-add flag> })` (see "Forms that
-  open already savable"). Early return in `#savePrinter` (~1691) after its `submitting` check.
+  open already savable"). Early return in `#savePrinter` (~1691) after its `submitting` check,
+  on `saveActionState(…)` with the SAME `savableAtOpen` flag as the render, so a re-added
+  printer's untouched Save still sends. Clear that flag where a save succeeds (beside
+  `scope?.commit(submitted)`, ~1720): a wizard a newer edit keeps open (`scope.isDirty()`) must
+  turn quiet again when that edit is undone, as any form left open after a save does.
   `submitOnEnter` on the wizard (~3248) already skips a disabled button
   (`packages/ui-core/src/submit-on-enter.ts` ~35).
 - Leave paths: `.beforeClose=${this.#calibrationScope ? …}` (~3244), `#beforeCalibrationClose`'s
@@ -918,7 +924,12 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
 - Predicted changed checks (`printers-screen.test.ts`): "keeps the printer's saved paper width and
   resolution when calibration is run again" (~509–531) and "does not write unchanged calibration
   settings" (~818–825) — both press an untouched Save and expect no write: assert Save disabled
-  instead (the second also expected the wizard to close; it now stays open until Cancel).
+  instead (the second also expected the wizard to close; it now stays open until Cancel). Also
+  (plan review): "does not resend detail edits when finishing calibration" (~827–880) edits the
+  name and connection first, so the script missed it, but its calibration Save (~867) is pressed
+  untouched: its `toHaveBeenCalledTimes(3)` would still pass with Save disabled, proving nothing —
+  change one calibration setting before the press and assert the fourth call carries only that
+  setting.
 - Suites: `src/screens/printers-screen src/screens/printer-calibration.unsaved`.
 
 ### Task 3b.1c — printers: Add a printer (the name dialog and the Bluetooth Pair dialog)
@@ -1063,7 +1074,11 @@ All in `apps/dashboard/src/screens/printers-screen.ts`.
   updateCanvas and returns to the list" (~670), "surfaces a server canvas.name_taken rejection"
   (~704), "keeps the newer canvas open when an earlier save finishes" (~916), "does not save twice
   before the disabled state renders" (~955) — each opens an existing canvas and presses Save
-  untouched: one edit first. The `.unsaved.test.ts` presses all follow `canvasName(…)`.
+  untouched: one edit first. The `.unsaved.test.ts` presses all follow `canvasName(…)`. Also
+  (plan review): "ignores move and resize intents naming a card the tab does not have" (~1359)
+  and "keeps the last tab when its delete is clicked anyway" (~1374) make an edit that changes
+  nothing, then press Save and expect `updateCanvas` with the unchanged definition: assert Save
+  stays disabled instead, which proves the ignored edit changed nothing.
 - Suites: `src/screens/canvas-editor-screen` (the `.test`, `.a11y.test` and `.unsaved.test`
   files).
 
