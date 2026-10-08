@@ -1556,6 +1556,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **Investigate a null device identity during profile switching.** A432’s full till coverage run
+  on 2026-10-08 passed 5,951 tests and its thresholds, but the browser logged an unhandled
+  rejection at `apps/till/src/till-app.ts:4468` through `#readIdentity` / `#enterSwitchedProfile`.
+  Reproduce which profile-switch test answers null and determine whether the fixture or the
+  public identity response needs correction; keep the existing profile and login assertions.
+  Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
+
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the

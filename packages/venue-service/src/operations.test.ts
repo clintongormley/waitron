@@ -2633,6 +2633,7 @@ describe("each served menu's structure and Device Home Page", () => {
         isDefault: false,
         audience: "staff",
         orderable: true,
+        sendable: true,
         versionId: venue.dinnerVersionId,
         structure: {
           members: [
@@ -2659,8 +2660,8 @@ describe("each served menu's structure and Device Home Page", () => {
         },
       });
       expect((await menuState(tx, venue.cfg, venue.diningZone)).menus).toEqual([
-        { menuId: venue.menuId, versionId: venue.versionId },
-        { menuId: venue.dinner, versionId: venue.dinnerVersionId },
+        { menuId: venue.menuId, versionId: venue.versionId, orderable: true, sendable: true },
+        { menuId: venue.dinner, versionId: venue.dinnerVersionId, orderable: true, sendable: true },
       ]);
     });
   });

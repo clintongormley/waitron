@@ -7,6 +7,7 @@ import {
   draftServer,
   expectNoA11yViolations,
   mountWidget,
+  servedMenus,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -272,7 +273,7 @@ const offers: ZoneOfferCatalogue = {
     serviceMode: "prepay",
   },
   defaultMenuId: null,
-  menus: [],
+  menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true }], []),
   offers: [],
 };
 
@@ -1786,6 +1787,7 @@ describe("till-app: a partly paid order at the counter", () => {
       {
         id: "beer",
         menuItemId: "offer-beer",
+        catalogueId: "cat-default",
         name: "Beer",
         pricingUnit: "each",
         unitPrice: "5.00",
@@ -1833,6 +1835,7 @@ describe("till-app: a partly paid order at the counter", () => {
       {
         id: "beer",
         menuItemId: "offer-beer",
+        catalogueId: "cat-default",
         name: "Beer",
         pricingUnit: "each",
         unitPrice: "5.00",

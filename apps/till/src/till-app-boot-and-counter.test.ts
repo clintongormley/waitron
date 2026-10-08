@@ -3687,6 +3687,8 @@ describe("department transfers across operator lifetimes", () => {
       HTMLElement & { draftStore: import("./state/working-order.js").WorkingOrderStore }
     >("till-table-order-screen")!;
     expect(table).not.toBeNull();
+    Object.assign(table, { menus: counter(el)!.menus });
+    await flush(el);
     table.draftStore.addProduct(product, "1", { note: "Table unsent edit" });
     accepted = true;
     desk.refresh();

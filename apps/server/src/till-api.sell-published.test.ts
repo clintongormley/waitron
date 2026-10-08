@@ -959,7 +959,7 @@ describe("GET /api/menu-state", () => {
     const v1 = await publish(v.menuId);
     expect(await state(v)).toEqual({
       service: { open: true, periodName: "Always" },
-      menus: [{ menuId: v.menuId, versionId: v1 }],
+      menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
       unavailable: nothing,
       defaultMenuId: v.menuId,
     });
@@ -969,7 +969,7 @@ describe("GET /api/menu-state", () => {
     await setBurger(false);
     expect(await state(v)).toEqual({
       service: { open: true, periodName: "Always" },
-      menus: [{ menuId: v.menuId, versionId: v1 }],
+      menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,
     });
@@ -1000,7 +1000,9 @@ describe("GET /api/menu-state", () => {
   it("answers for the default zone when no zone is named, and refuses an unknown zone", async () => {
     const v = await setupLunch();
     const v1 = await publish(v.menuId);
-    expect((await state(v, "")).menus).toEqual([{ menuId: v.menuId, versionId: v1 }]);
+    expect((await state(v, "")).menus).toEqual([
+      { menuId: v.menuId, versionId: v1, orderable: true, sendable: true },
+    ]);
     const unknown = await send(v, "GET", `/api/menu-state?zoneId=${randomUUID()}`);
     expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
@@ -1050,6 +1052,7 @@ describe("the Device Home Page each menu serves", () => {
       isDefault: true,
       audience: "customer",
       orderable: true,
+      sendable: true,
       versionId,
       structure: {
         members: [
@@ -1077,7 +1080,9 @@ describe("the Device Home Page each menu serves", () => {
     // The session names the device, so a request without the device cookie is served the same.
     for (const path of [zonePath, "/api/default-service-zone/offers"])
       expect((await served(v, path, v.sessionCookie)).menus).toEqual([lunch]);
-    expect(await menuState(v)).toEqual([{ menuId: v.menuId, versionId }]);
+    expect(await menuState(v)).toEqual([
+      { menuId: v.menuId, versionId, orderable: true, sendable: true },
+    ]);
   });
 
   it("a draft shortcut or display change reaches no device until the menu is published", async () => {
@@ -1090,7 +1095,9 @@ describe("the Device Home Page each menu serves", () => {
       const [menu] = (await served(v, path)).menus;
       expect(menu).toMatchObject({ versionId: published, home: before });
     }
-    expect(await menuState(v)).toEqual([{ menuId: v.menuId, versionId: published }]);
+    expect(await menuState(v)).toEqual([
+      { menuId: v.menuId, versionId: published, orderable: true, sendable: true },
+    ]);
     const republished = await publish(v.menuId);
     expect(republished).not.toBe(published);
     const after = {
@@ -1102,7 +1109,9 @@ describe("the Device Home Page each menu serves", () => {
       const [menu] = (await served(v, path)).menus;
       expect(menu).toMatchObject({ versionId: republished, home: after });
     }
-    expect(await menuState(v)).toEqual([{ menuId: v.menuId, versionId: republished }]);
+    expect(await menuState(v)).toEqual([
+      { menuId: v.menuId, versionId: republished, orderable: true, sendable: true },
+    ]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  servedMenus,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
@@ -209,7 +210,7 @@ const offers: ZoneOfferCatalogue = {
     serviceMode: "prepay",
   },
   defaultMenuId: null,
-  menus: [],
+  menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true }], []),
   offers: [],
 };
 
@@ -3858,6 +3859,7 @@ describe("till-app: the order's groups", () => {
   const cafe: TillProduct = {
     id: "cafe",
     menuItemId: "menu-item-cafe",
+    catalogueId: "cat-default",
     name: "Café",
     pricingUnit: "each",
     unitPrice: "1.50",
@@ -3899,6 +3901,7 @@ describe("till-app: the order's groups", () => {
   const roundDish = (menuItemId: string): TillProduct => ({
     id: menuItemId,
     menuItemId,
+    catalogueId: "cat-default",
     name: menuItemId,
     pricingUnit: "each",
     unitPrice: "5.00",
@@ -5310,6 +5313,7 @@ describe("till-app: submitting the draft", () => {
   const dish = (id: string, name: string, courseId: string): TillProduct => ({
     id,
     menuItemId: `offer-${id}`,
+    catalogueId: "cat-default",
     name,
     pricingUnit: "each",
     unitPrice: "5.00",
