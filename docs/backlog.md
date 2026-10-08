@@ -1261,7 +1261,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   stopping for the owner**. Slice 3 Part A is in progress: its storage adds today's station
   destination and period extensions, and the station's close/open writers and destination choices
   are implemented. Routing follows today's destination, with the active default taking work if
-  that path ends without an open station; controls and their request paths remain to build.
+  that path ends without an open station. The module contract exposes destination choices and
+  today's close/open writes; controls and their request paths remain to build.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows

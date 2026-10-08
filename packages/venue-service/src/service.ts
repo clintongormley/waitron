@@ -18,6 +18,7 @@ import {
   routingAt,
   stationStates,
 } from "./routing-store.js";
+import { stationDestinations, closeStationForToday, openStationForToday } from "./station-times.js";
 import type { VenueServiceContribution } from "@waitron/module";
 import {
   assertPeriodEndOffsets,
@@ -98,6 +99,9 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveExtraMakers,
   routingAt,
   stationStates,
+  stationDestinations,
+  closeStationForToday,
+  openStationForToday,
   describeMakers,
   listZoneOffers,
   resolveDefaultMenu,

@@ -507,6 +507,25 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     at: Date,
   ): Promise<ReadonlyMap<string, StationTodayState>>;
+  stationDestinations(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationId: string,
+    at: Date,
+  ): Promise<readonly { id: string; name: string; isDefault: boolean }[]>;
+  closeStationForToday(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationId: string,
+    sendsToStationId: string,
+    at: Date,
+  ): Promise<void>;
+  openStationForToday(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    stationId: string,
+    at: Date,
+  ): Promise<void>;
   /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
   describeMakers(
     tx: Transaction,
