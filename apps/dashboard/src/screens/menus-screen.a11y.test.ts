@@ -512,6 +512,27 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     },
   );
 
+  it.each([390, 1280])(
+    "accessible Home page tab editing its shortcuts with a shortcut's ⋮ open, %ipx wide",
+    async (width) => {
+      const { el, host } = await mountHome(width);
+      const preview = q(
+        el,
+        "dashboard-device-home-preview",
+      ) as HTMLElementTagNameMap["dashboard-device-home-preview"];
+      await vi.waitFor(() => {
+        if (!preview.shadowRoot!.querySelector('[data-test="grip-t-soup"]'))
+          throw new Error("edit");
+      });
+      preview
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+          '[data-test="actions-t-lager"]',
+        )!
+        .show();
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("accessible Structure tab with the Device Home Page row open and the shortcut picker", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     await vi.waitFor(() =>

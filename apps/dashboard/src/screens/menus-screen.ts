@@ -404,8 +404,29 @@ export class MenusScreen extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
+      .home {
+        container-type: inline-size;
+      }
+      .home-columns,
+      .home-settings,
+      .home-preview {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+      .home-columns {
+        gap: var(--wt-space-5);
+      }
+      /* The Preview tab's breakpoint, so both tabs go to two columns at the same width. */
+      @container (min-width: 800px) {
+        .home-columns {
+          grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+          align-items: start;
+        }
+      }
       .home h2 {
-        margin: var(--wt-space-3) 0 0;
+        margin: 0;
         font-size: var(--wt-font-size-lg);
       }
       wt-data-table::part(name) {
@@ -688,7 +709,8 @@ export class MenusScreen extends LitElement {
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
-  #focusReturn: { menuId: string; key: string } | null = null;
+  #focusReturn: { menuId: string; key: string } | { menuId: string; shortcuts: string[] } | null =
+    null;
   #windowShut = false;
   /** What a home page tile may point at: the active products and the sections the structure
    * reaches. The server checks reach by membership alone; an inactive product is not offered. */
@@ -1436,8 +1458,17 @@ export class MenusScreen extends LitElement {
     const target = this.#focusReturn;
     if (!target || !this.#windowShut || this.busy) return;
     this.#focusReturn = null;
-    if (target.menuId === this.menuId)
+    if (target.menuId !== this.menuId) return;
+    if ("key" in target) {
       this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu(target.key);
+      return;
+    }
+    const preview = this.renderRoot.querySelector("dashboard-device-home-preview");
+    if (preview === null) return;
+    void (async () => {
+      for (const memberId of target.shortcuts) if (await preview.focusShortcut(memberId)) return;
+      await preview.focusAdd("product");
+    })();
   }
 
   #saveSection(input: SectionInput): void {
@@ -1606,6 +1637,25 @@ export class MenusScreen extends LitElement {
     );
   }
 
+  /** Focus then goes to the removed shortcut's ⋮ while it is still drawn, as after a refusal, else
+   * the next shortcut's, else the previous one's, else the tile that adds products. */
+  #removeHomeShortcut(memberId: string): void {
+    const order = this.#shortcutOrder();
+    const at = order.indexOf(memberId);
+    this.#focusReturn = {
+      menuId: this.menuId!,
+      shortcuts: [memberId, order[at + 1], order[at - 1]].filter((id) => id !== undefined),
+    };
+    this.#windowShut = true;
+    this.homeError = null;
+    void this.#shortcutWrite(
+      (menuId) => this.api.removeHomeShortcut(menuId, memberId),
+      (error) => {
+        this.homeError = codeMessage(codeOf(error));
+      },
+    );
+  }
+
   #openShortcutPicker(kind: "product" | "section"): void {
     this.addingShortcut = kind;
     this.shortcutChoice = "";
@@ -1651,7 +1701,13 @@ export class MenusScreen extends LitElement {
   /** Not `busy`, as for a member's move: the keyboard user's focus stays on the row. The last queued
    * write's answer is shown only while the order on screen is the one the move was sent over, or
    * the answer itself; any other order may be a newer change, so the home is read again. */
-  #moveShortcut(memberId: string, to: number): void {
+  #moveShortcut(
+    memberId: string,
+    to: number,
+    report: (message: string) => void = (message) => {
+      this.memberError = message;
+    },
+  ): void {
     const menuId = this.menuId!;
     this.memberError = null;
     let sentOver: string[] = [];
@@ -1681,7 +1737,7 @@ export class MenusScreen extends LitElement {
       },
       async (error) => {
         if (this.menuId !== menuId) return;
-        this.memberError = codeMessage(codeOf(error));
+        report(codeMessage(codeOf(error)));
         await this.#rereadHome(menuId);
       },
     );
@@ -2369,7 +2425,27 @@ export class MenusScreen extends LitElement {
         : home[device];
     const range = HOME_COLUMN_RANGE[device];
     return html`${error}${loadError}
-      <fieldset>
+      <div class="home-columns">
+        <section
+          class="home-preview"
+          data-test="home-preview-pane"
+          aria-labelledby="home-preview-heading"
+        >
+          <h2 id="home-preview-heading">${t("home.preview_heading")}</h2>
+          ${this.#renderHomePreview(device, home)}
+        </section>
+        <div class="home-settings" data-test="home-settings">
+          ${this.#renderHomeSettings(device, display, range)}
+        </div>
+      </div>`;
+  }
+
+  #renderHomeSettings(
+    device: HomeDevice,
+    display: HomeDisplay,
+    range: (typeof HOME_COLUMN_RANGE)[HomeDevice],
+  ) {
+    return html`<fieldset>
         <legend>${t("home.device")}</legend>
         <div class="choices">
           ${HOME_DEVICES.map(
@@ -2424,11 +2500,7 @@ export class MenusScreen extends LitElement {
         })),
         display.order,
         (value) => void this.#saveDisplay({ order: value as HomeDisplay["order"] }),
-      )}
-      <section aria-labelledby="home-preview-heading">
-        <h2 id="home-preview-heading">${t("home.preview_heading")}</h2>
-        ${this.#renderHomePreview(device)}
-      </section>`;
+      )}`;
   }
 
   /** One display setting as a group of radios, its refusal beneath it. These radios and the slider
@@ -2471,11 +2543,28 @@ export class MenusScreen extends LitElement {
     </fieldset>`;
   }
 
-  #renderHomePreview(device: HomeDevice) {
+  #renderHomePreview(device: HomeDevice, home: MenuHome) {
     if (this.preview !== null)
       return html`<dashboard-device-home-preview
         .document=${this.preview.document}
         device=${device}
+        .shortcuts=${home.shortcuts}
+        .busy=${this.busy}
+        @wt-shortcut-add=${(event: CustomEvent<{ kind: "product" | "section" }>) => {
+          event.stopPropagation();
+          this.#openShortcutPicker(event.detail.kind);
+        }}
+        @wt-shortcut-remove=${(event: CustomEvent<{ memberId: string }>) => {
+          event.stopPropagation();
+          this.#removeHomeShortcut(event.detail.memberId);
+        }}
+        @wt-shortcut-move=${(event: CustomEvent<{ memberId: string; to: number }>) => {
+          event.stopPropagation();
+          this.homeError = null;
+          this.#moveShortcut(event.detail.memberId, event.detail.to, (message) => {
+            this.homeError = message;
+          });
+        }}
       ></dashboard-device-home-preview>`;
     if (!this.previewError)
       return html`<p role="status" data-test="home-preview-loading">
