@@ -1143,7 +1143,7 @@ number the same as its own, as when it names none and the parent has no primary 
 
 **A module's transfer `validate` may read when and where the bundle was made.**
 `ModuleConfigurationTransfer.validate` (`packages/module/src/module.ts`) takes an optional second
-argument, `{ createdAt, timeZone }`, which `validateConfigurationBundle`
+argument, `{ createdAt, timeZone, dayCutover }`, which `validateConfigurationBundle`
 (`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
 `validate` before the import writes anything. Core, catalogue and media take only the tables.
 Venue-service's station-hours validator uses the export date and zone to leave past neighbour
