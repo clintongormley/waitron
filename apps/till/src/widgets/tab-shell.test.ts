@@ -1100,6 +1100,21 @@ describe("till-tab-shell above phone width", () => {
     );
   });
 
+  it("keeps fitting after it is taken off the page and put back", async () => {
+    await atViewport(ROOMY_WIDTH, async () => {
+      const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      await settle(el);
+      expect(menuOf(el)).toBeNull();
+      el.remove();
+      host.append(el);
+      await settle(el);
+      await page.viewport(1024, 844);
+      await settle(el);
+      expect(menuOf(el)).not.toBeNull();
+      expectOneRow(el);
+    });
+  });
+
   it("reports no ResizeObserver loop while the screen narrows and widens across the phone width", async () => {
     await atViewport(1280, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);

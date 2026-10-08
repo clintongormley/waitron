@@ -232,6 +232,7 @@ export class TillTabShell extends LitElement {
     this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
     this.phone = this.#phoneWidth.matches;
     this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
+    if (this.hasUpdated) this.#observe();
   }
 
   override disconnectedCallback(): void {
