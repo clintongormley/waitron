@@ -6908,6 +6908,10 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(pinField(el).error).toBe("");
     expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe("");
 
+    typeField(el, sel("bluetooth-pin"), "12 34");
+    await flush(el);
+    expect(pinField(el).error).toBe("");
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
     q(el, sel("confirm-pair"))!.click();
     await flush(el);
     expect(api.pairBluetooth).not.toHaveBeenCalled();
@@ -7030,6 +7034,9 @@ describe("printers-screen Bluetooth pairing", () => {
     await flush(el);
     expect(pinField(el).error).toBe("");
     expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe("");
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(true);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
     expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
     expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
   });

@@ -759,9 +759,9 @@ export class PrintersScreen extends LitElement {
   #pairLeave?: LeaveCoordinator;
   readonly #beforePairClose = async (reason: LeaveReason): Promise<boolean> =>
     this.pairSubmitting ||
-    !this.#pairScope ||
-    (await this.#pairLeave!.request({
-      scopes: [this.#pairScope.id],
+    !this.#pairLeave ||
+    (await this.#pairLeave.request({
+      scopes: [this.#pairScope!.id],
       reason,
       proceed() {},
     })) === "proceeded";
@@ -1601,8 +1601,7 @@ export class PrintersScreen extends LitElement {
     this.pairingDevice = device;
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-printer-modal]");
     if (modal) modal.open = true;
-    this.#pairLeave = leaveCoordinatorFor(this);
-    this.#pairScope = this.#pairLeave?.register<string>({
+    ({ coordinator: this.#pairLeave, scope: this.#pairScope } = draftScopeFor<string>(this, {
       id: {},
       parent: this.#addressScope?.id,
       current: () => this.pairPin,
@@ -1611,11 +1610,11 @@ export class PrintersScreen extends LitElement {
       restore: (value) => {
         this.pairPin = value;
       },
-    });
+    }));
   }
 
   async #pair(device: DiscoveredPrinter): Promise<void> {
-    if (this.pairSubmitting) return;
+    if (this.pairSubmitting || saveActionState(this.#pairScope).unchanged) return;
     this.pairAttempted = true;
     this.pairRefused = false;
     this.pairErrorKey = null;
@@ -1631,14 +1630,14 @@ export class PrintersScreen extends LitElement {
       const { command } = await this.api.pairBluetooth(device.agentId, device.localKey!, pin);
       if (this.addingPrinter) this.#trackCommand(device.agentId, command, device);
       if (epoch === this.#pairEpoch && this.isConnected) {
-        scope?.commit(pin);
-        if (scope?.isDirty()) return;
+        scope!.commit(pin);
+        if (scope!.isDirty()) return;
         const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-printer-modal]");
-        if (scope && modal) {
+        if (modal) {
           modal.closeAfter("saved");
           await modal.updateComplete;
           if (epoch === this.#pairEpoch) this.#resetPair();
-        } else await this.#closeModal("pair-printer-modal");
+        }
       }
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
@@ -3162,7 +3161,7 @@ export class PrintersScreen extends LitElement {
         return;
       }
     }
-    if (id === "pair-printer-modal" && this.#pairScope) {
+    if (id === "pair-printer-modal" && this.#pairLeave) {
       await modal.requestClose("cancel");
       return;
     }
@@ -3510,7 +3509,7 @@ export class PrintersScreen extends LitElement {
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          variant="primary"
+          variant=${saveActionState(this.#printerNameScope, { savableAtOpen: true }).variant}
           data-test="confirm-add-printer"
           ?loading=${this.submitting}
           ?disabled=${this.submitting || nameError !== ""}
@@ -3527,12 +3526,13 @@ export class PrintersScreen extends LitElement {
     const epoch = this.#pairEpoch;
     const pinInvalid = this.pairAttempted && !BLUETOOTH_PIN.test(this.pairPin);
     const pinError = pinInvalid || this.pairRefused ? t("printers.bluetooth_pin_invalid") : "";
+    const s = saveActionState(this.#pairScope);
     return html`<wt-modal
       size="compact"
       data-test="pair-printer-modal"
       heading=${t("printers.bluetooth_pair_title")}
       .open=${true}
-      .beforeClose=${this.#pairScope ? this.#beforePairClose : undefined}
+      .beforeClose=${this.#pairLeave ? this.#beforePairClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         if (epoch === this.#pairEpoch) this.#resetPair();
@@ -3572,10 +3572,10 @@ export class PrintersScreen extends LitElement {
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          variant="primary"
+          variant=${s.variant}
           data-test="confirm-pair"
           ?loading=${this.pairSubmitting}
-          ?disabled=${pinInvalid}
+          ?disabled=${s.unchanged || pinInvalid}
           @click=${() => void this.#pair(d)}
           >${this.#canPairOnly(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
         >

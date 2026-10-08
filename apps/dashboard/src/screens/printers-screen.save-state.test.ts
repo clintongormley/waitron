@@ -636,6 +636,191 @@ describe("the calibration wizard's Save, when an add opened it", () => {
   });
 });
 
+const bluetoothDevice: DiscoveredPrinter = {
+  agentId: "a1",
+  agentName: "Cocina agent",
+  transport: "bluetooth",
+  localKey: "00:11:22:33:44:55",
+  name: "Bar printer",
+  printerLike: true,
+  alreadyRegistered: false,
+  printerId: null,
+  lastSeenAt: "2023-11-14T22:13:20.000Z",
+};
+const pairCommand = {
+  id: "pair-1",
+  kind: "pair" as const,
+  address: "00:11:22:33:44:55",
+  state: "pending" as const,
+  expiresInMs: 120_000,
+};
+
+async function openAddPrinter(devices: DiscoveredPrinter[], api: DashboardApi) {
+  history.replaceState(null, "", "/manage/printers/view/printers");
+  vi.mocked(api.listDiscoveredPrinters).mockResolvedValue(devices);
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await vi.waitFor(() => expect(q(el, "[data-test=open-add-printer]")).not.toBeNull());
+  q(el, "[data-test=open-add-printer]")!.click();
+  await el.updateComplete;
+  return el;
+}
+
+describe("the name dialog's Add, which opening it already asks for", () => {
+  const unregistered: DiscoveredPrinter = {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "usb",
+    localKey: "SN-1",
+    make: "Epson",
+    model: "TM-T20",
+    name: "EPSON TM-T20",
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+  };
+  const switchedOff: Printer = {
+    ...printer,
+    id: "p3",
+    name: "Barra USB",
+    transport: "usb",
+    host: null,
+    port: null,
+    localKey: "SN-2",
+    active: false,
+  };
+  const seenAgain: DiscoveredPrinter = {
+    ...unregistered,
+    localKey: "SN-2",
+    name: null,
+    alreadyRegistered: true,
+    printerId: "p3",
+  };
+
+  async function openName(device: DiscoveredPrinter) {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([printer, switchedOff]) });
+    const el = await openAddPrinter([device], api);
+    await vi.waitFor(() => expect(q(el, `[data-test=register-${device.localKey}]`)).not.toBeNull());
+    q(el, `[data-test=register-${device.localKey}]`)!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=confirm-add-printer]")).not.toBeNull());
+    return { el, api };
+  }
+
+  it("opens on the reported name with Add ready, stays ready with the name typed back, and a press adds the printer", async () => {
+    const { el, api } = await openName(unregistered);
+    const field = `[data-test=discovered-name-${unregistered.localKey}]`;
+    expect(q<HTMLElementTagNameMap["wt-input"]>(el, field)!.value).toBe("EPSON TM-T20");
+    expect(await state(el, "confirm-add-printer")).toEqual(ready);
+    await typeInto(el, field, "Barra");
+    expect(await state(el, "confirm-add-printer")).toEqual(ready);
+    await typeInto(el, field, "EPSON TM-T20");
+    expect(await state(el, "confirm-add-printer")).toEqual(ready);
+    await press(el, "confirm-add-printer");
+    await vi.waitFor(() => expect(api.createPrinter).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.createPrinter).mock.calls[0]![0]).toMatchObject({ name: "EPSON TM-T20" });
+  });
+
+  it("opens on a switched-off printer's stored name with Enable ready, and a press switches it on", async () => {
+    const { el, api } = await openName(seenAgain);
+    expect(
+      q<HTMLElementTagNameMap["wt-input"]>(el, "[data-test=discovered-name-SN-2]")!.value,
+    ).toBe("Barra USB");
+    expect(action(el, "confirm-add-printer").textContent!.trim()).toBe(t("printers.enable"));
+    expect(await state(el, "confirm-add-printer")).toEqual(ready);
+    await press(el, "confirm-add-printer");
+    await vi.waitFor(() =>
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { active: true }),
+    );
+  });
+
+  it("a name emptied by an edit keeps Add drawn ready but unpressable once tried", async () => {
+    const { el, api } = await openName(unregistered);
+    await typeInto(el, "[data-test=discovered-name-SN-1]", "");
+    expect(await state(el, "confirm-add-printer")).toEqual(ready);
+    await press(el, "confirm-add-printer");
+    expect(await state(el, "confirm-add-printer")).toEqual(blocked);
+    expect(api.createPrinter).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Bluetooth Pair dialog's Pair", () => {
+  async function openPair(api: DashboardApi = stubApi()) {
+    vi.mocked(api).pairBluetooth = vi.fn().mockResolvedValue({ command: pairCommand });
+    const el = await openAddPrinter([bluetoothDevice], api);
+    await vi.waitFor(() => expect(q(el, '[data-test="pair-00:11:22:33:44:55"]')).not.toBeNull());
+    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=confirm-pair]")).not.toBeNull());
+    return { el, api };
+  }
+
+  it("opens on an empty PIN with Pair quiet, and a press sends nothing and marks nothing", async () => {
+    const { el, api } = await openPair();
+    expect(q<HTMLElementTagNameMap["wt-input"]>(el, "[data-test=bluetooth-pin]")!.value).toBe("");
+    expect(await state(el, "confirm-pair")).toEqual(quiet);
+    await press(el, "confirm-pair");
+    await settle();
+    expect(api.pairBluetooth).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=pair-printer-modal]")).not.toBeNull();
+    noComplaint(el);
+  });
+
+  it("a typed PIN wakes Pair, and clearing it quiets it", async () => {
+    const { el } = await openPair();
+    await typeInto(el, "[data-test=bluetooth-pin]", "8472");
+    expect(await state(el, "confirm-pair")).toEqual(ready);
+    await typeInto(el, "[data-test=bluetooth-pin]", "");
+    expect(await state(el, "confirm-pair")).toEqual(quiet);
+  });
+
+  it("a press that reaches an untouched Pair's handler sends nothing and marks nothing", async () => {
+    const { el, api } = await openPair();
+    action(el, "confirm-pair").click();
+    await el.updateComplete;
+    await settle();
+    expect(api.pairBluetooth).not.toHaveBeenCalled();
+    noComplaint(el);
+  });
+
+  it("a PIN its own check refuses keeps Pair drawn as a change but unpressable once tried", async () => {
+    const { el, api } = await openPair();
+    await typeInto(el, "[data-test=bluetooth-pin]", "12 34");
+    expect(await state(el, "confirm-pair")).toEqual(ready);
+    await press(el, "confirm-pair");
+    expect(await state(el, "confirm-pair")).toEqual(blocked);
+    expect(api.pairBluetooth).not.toHaveBeenCalled();
+  });
+
+  it("a press after typing a PIN pairs and closes the dialog", async () => {
+    const { el, api } = await openPair();
+    await typeInto(el, "[data-test=bluetooth-pin]", "8472");
+    await press(el, "confirm-pair");
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-printer-modal]")).toBeNull());
+    expect(api.pairBluetooth).toHaveBeenCalledExactlyOnceWith("a1", "00:11:22:33:44:55", "8472");
+  });
+
+  it("an edit made while the pairing is in flight keeps the dialog open, measured from what was sent", async () => {
+    let finish!: () => void;
+    const api = stubApi();
+    const { el } = await openPair(api);
+    vi.mocked(api.pairBluetooth).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = () => resolve({ command: pairCommand });
+      }),
+    );
+    await typeInto(el, "[data-test=bluetooth-pin]", "8472");
+    await press(el, "confirm-pair");
+    await vi.waitFor(() => expect(typeof finish).toBe("function"));
+    // The field is locked while the pairing runs, so the edit arrives as the field reports one.
+    q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "84720" }, bubbles: true }),
+    );
+    finish();
+    await vi.waitFor(async () => expect(await state(el, "confirm-pair")).toEqual(ready));
+    expect(q(el, "[data-test=pair-printer-modal]")).not.toBeNull();
+    await typeInto(el, "[data-test=bluetooth-pin]", "8472");
+    expect(await state(el, "confirm-pair")).toEqual(quiet);
+  });
+});
+
 class SharedLeaveFixture extends LitElement {
   readonly leave = new LeaveController(this);
   override render() {
@@ -705,5 +890,42 @@ describe("under the dashboard's leave coordinator", () => {
     expect(await state(el, "save-printer-p1")).toEqual(quiet);
     await toggle(el, "printer-portable", true);
     expect(await state(el, "save-printer-p1")).toEqual(ready);
+  });
+
+  it("the Pair dialog opens quiet and wakes on a PIN, and the name dialog opens ready", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers");
+    const { el: app } = await mountWidget<SharedLeaveFixture>(
+      "printers-save-state-leave-fixture",
+      {},
+    );
+    const el = document.createElement("dashboard-printers-screen");
+    const unregistered: DiscoveredPrinter = {
+      ...bluetoothDevice,
+      transport: "usb",
+      localKey: "SN-1",
+      name: "EPSON TM-T20",
+      printerLike: undefined,
+    };
+    el.api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([bluetoothDevice, unregistered]),
+      pairBluetooth: vi.fn().mockResolvedValue({ command: pairCommand }),
+    });
+    app.append(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=open-add-printer]")).not.toBeNull());
+    q(el, "[data-test=open-add-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, '[data-test="pair-00:11:22:33:44:55"]')).not.toBeNull());
+    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=confirm-pair]")).not.toBeNull());
+    expect(await state(el, "confirm-pair")).toEqual(quiet);
+    await typeInto(el, "[data-test=bluetooth-pin]", "8472");
+    expect(await state(el, "confirm-pair")).toEqual(ready);
+    await typeInto(el, "[data-test=bluetooth-pin]", "");
+    expect(await state(el, "confirm-pair")).toEqual(quiet);
+    q(el, "[data-test=cancel-pair]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-printer-modal]")).toBeNull());
+
+    q(el, "[data-test=register-SN-1]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=confirm-add-printer]")).not.toBeNull());
+    expect(await state(el, "confirm-add-printer")).toEqual(ready);
   });
 });

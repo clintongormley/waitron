@@ -672,6 +672,17 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
     q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
     await flush(el);
+    expect((q(el, "[data-test=confirm-pair]") as HTMLElementTagNameMap["wt-button"]).variant).toBe(
+      "secondary",
+    );
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "12 34" }, bubbles: true }),
+    );
+    await flush(el);
+    expect((q(el, "[data-test=confirm-pair]") as HTMLElementTagNameMap["wt-button"]).variant).toBe(
+      "primary",
+    );
     await expectNoA11yViolations(host);
     q(el, "[data-test=confirm-pair]")!.click();
     await flush(el);
