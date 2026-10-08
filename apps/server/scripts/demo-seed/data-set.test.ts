@@ -99,7 +99,7 @@ describe("demo data sets", () => {
         (menu) => menu.categories,
       );
       for (const category of categories)
-        expect(category.color, `${pack.id}: ${category.name.en}`).toMatch(/^#[0-9a-f]{6}$/);
+        expect(category.color, `${pack.countryCode}: ${category.name.en}`).toMatch(/^#[0-9a-f]{6}$/);
       expect(new Set(categories.map((category) => category.color)).size).toBe(categories.length);
     }
   });
