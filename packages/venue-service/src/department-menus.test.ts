@@ -340,30 +340,20 @@ describe("a department's menu list", () => {
     });
   });
 
-  it("reports each active zone with no all-day default of its own or its department's", async () => {
+  it("reports departments with no normal-week periods regardless of legacy zone defaults", async () => {
     const v = await venue();
     await scoped((tx) => setDepartmentMenus(tx, v.cfg, v.restaurant, [v.bebidas.id]));
     const missing = async () =>
       (await scoped((tx) => listVenueReadiness(tx, v.cfg))).filter(
-        (issue) => issue.code === "zone.menu_missing",
+        (issue) => issue.code === "department.no_periods",
       );
-    const missingIn = (zoneId: string, zoneName: string) => ({
-      code: "zone.menu_missing",
-      zoneId,
-      zoneName,
-    });
-    expect(await missing()).toEqual([
-      missingIn(v.barra, "Barra"),
-      missingIn(v.sala, "Sala"),
-      missingIn(v.terraza, "Terraza"),
-      missingIn(v.mostrador, "Mostrador deli"),
-    ]);
+    const expected = [
+      { code: "department.no_periods", departmentId: v.deli, departmentName: "Deli" },
+      { code: "department.no_periods", departmentId: v.restaurant, departmentName: "Restaurant" },
+    ];
+    expect(await missing()).toEqual(expected);
     await scoped((tx) => setZoneAllDayMenu(tx, v.cfg, v.sala, v.bebidas.id));
-    expect(await missing()).toEqual([
-      missingIn(v.barra, "Barra"),
-      missingIn(v.terraza, "Terraza"),
-      missingIn(v.mostrador, "Mostrador deli"),
-    ]);
+    expect(await missing()).toEqual(expected);
   });
 });
 
