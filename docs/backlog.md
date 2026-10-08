@@ -2969,7 +2969,8 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   schedule, Pass, Kitchen, Find a bill, Department transfers (count and button together), and last
   the operator's name with Log out. Tabs and the language chooser never leave; once everything
   else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
-  `design-system.md` says which icon means which menu.
+  `design-system.md` says which icon means which menu. While More is open nothing moves out of
+  it; the bar refits when it closes.
   - **Open, for the owner:** because items leave strictly in that order, a wide item can take
     narrower ones with it. In screenshots of the demo counter in Spanish at 1024 px, and in both
     languages at 800 px, the transfer count and its button do not fit, so Find a bill, Kitchen and
@@ -4334,8 +4335,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
       countdown keeps running,
       since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
       or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
-    - **Done (lane C's W27, #1140) — the counter header fits at phone width.** (Since A395, 2026-10-08,
-      the bar does not wrap at any width: items move into a More menu instead; see A395.) The
+    - **Done (lane C's W27, #1140) — the counter header fits at phone width.** (Since 2026-10-08 the bar
+      does not wrap: A378 at phone width, A395 wider; items move into a More menu instead.) The
       header, its tab row and its button group wrap onto further rows (`apps/till/src/widgets/tab-shell.ts`). Measured
       in real Chromium at 390 px: with Find a bill, Kitchen, Pass, My schedule, Allergens, the
       language chooser, the operator and Log out all shown, every one sits on screen in English
