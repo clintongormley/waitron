@@ -182,10 +182,15 @@ function token(
   target: Omit<TranslationTarget, "expected">,
   config: ContentLanguages,
   required: string[],
+  language: string,
   structure?: TranslationStructure,
+  inheritedNames: Record<string, string> = {},
 ): string {
   return JSON.stringify({
     ref: { kind: target.kind, id: target.id },
+    language,
+    inheritedSelectedText: inheritedNames[language] ?? null,
+    inheritedDefaultText: inheritedNames[config.defaultLanguage] ?? null,
     owners: target.owners,
     structure,
     selectedText: target.selectedText,
@@ -262,7 +267,10 @@ function resolved(
   };
   return {
     state: "present",
-    target: { ...target, expected: token(target, config, required, structure) },
+    target: {
+      ...target,
+      expected: token(target, config, required, language, structure, inheritedNames),
+    },
     config,
     names,
     inheritedNames,
@@ -273,6 +281,7 @@ function missing(
   ref: TranslationRef,
   config: ContentLanguages,
   required: string[],
+  language: string,
 ): ResolvedTranslationTarget {
   const target: Omit<TranslationTarget, "expected"> = {
     ...ref,
@@ -287,7 +296,10 @@ function missing(
     eligible: false,
     unavailableReason: "missing",
   };
-  return { state: "missing", target: { ...target, expected: token(target, config, required) } };
+  return {
+    state: "missing",
+    target: { ...target, expected: token(target, config, required, language) },
+  };
 }
 async function readTargets(
   tx: Transaction,
@@ -300,7 +312,7 @@ async function readTargets(
     const row = rows.get(`${ref.kind}:${ref.id}`);
     return row
       ? resolved(row, state.language, state.config, state.required)
-      : missing(ref, state.config, state.required);
+      : missing(ref, state.config, state.required, state.language);
   });
 }
 export async function resolveTranslationTargets(
@@ -373,5 +385,39 @@ export async function listTranslationTargets(
     rows,
     total: count.rows[0]!.total,
     next: refs.length === 50 && last ? JSON.stringify(last) : null,
+  };
+}
+
+export function projectTranslationTarget(
+  entry: Extract<ResolvedTranslationTarget, { state: "present" }>,
+  names: Record<string, string>,
+  inheritedNames: Record<string, string>,
+  language: string,
+  required: string[],
+): Extract<ResolvedTranslationTarget, { state: "present" }> {
+  const effective = { ...inheritedNames, ...names };
+  const target = {
+    ...entry.target,
+    reason: "partial" as const,
+    name:
+      entry.target.kind === "unit"
+        ? names[entry.config.defaultLanguage]?.trim()
+          ? names[entry.config.defaultLanguage]!
+          : Object.values(names).find((text) => text.trim()) || ""
+        : entry.target.name,
+    selectedText: names[language] ?? null,
+    defaultText: names[entry.config.defaultLanguage] ?? null,
+    effectiveSelectedText: effective[language] ?? null,
+    effectiveDefaultText: effective[entry.config.defaultLanguage] ?? null,
+    defaultRequired: !(effective[entry.config.defaultLanguage] ?? "").trim(),
+  };
+  return {
+    ...entry,
+    names,
+    inheritedNames,
+    target: {
+      ...target,
+      expected: token(target, entry.config, required, language, entry.structure, inheritedNames),
+    },
   };
 }

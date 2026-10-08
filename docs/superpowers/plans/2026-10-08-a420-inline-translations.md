@@ -56,7 +56,7 @@ Resolved targets are either `{state: "missing"; target: TranslationTarget}` or
 inheritedNames: Record<string,string>; structure: TranslationStructure}`.
 `TranslationStructure = {role: string | null; active: boolean; ownerActive: boolean;
 rootMatched: boolean; parentRole: string | null; childActive: boolean}`.
-Only present, eligible targets reach a names-only writer. Expected values include the
+Only present, eligible targets reach a names-only writer. Expected values include the selected language, inherited selected/default cells,
 selected/default stored/effective cells, ownership/structure and value-normalized configuration;
 unrelated names and other aggregate fields are excluded.
 
@@ -90,12 +90,12 @@ unrelated names and other aggregate fields are excluded.
 
 **Interfaces:** Add `writeMenuTranslation`, `writeSectionTranslation`, `writeIncludedMenuTranslation` with Task 2's signature. Produce `saveContentTranslations(tx: Transaction, language: string, batch: TranslationBatch, context: TranslationContext): Promise<{saved: TranslationTarget[]}>`. Register `content.translation_stale`, `content.translation_unavailable`, `content.translation_batch_invalid`, `content.translation_refused`. Refused params: domain `causeCode`/`causeParams`, kind/id, field (`text`/`defaultText`), language.
 
-- [ ] Write `mixed batch rollback`, `cell conflict versus unrelated concurrency`, `equivalent retry`, `root include final maps`. Assert same-cell/owner/role/activity/config changes refuse all writes; reordered sets/maps and concurrent price/other-language changes succeed. Retry the original payload after success and assert canonical results with no writes; one divergent cell refuses the entire retry. Include inherited default, folder-off, foreign label and replaced inclusion cases. Probe root fallback through existing menu/section/include writers configured/unset.
-- [ ] RED: `pnpm --filter @waitron/catalogue exec vitest run src/content-translations.test.ts src/content-translation-writes.test.ts`.
-- [ ] Resolve once, merge only requested cells, build all proposed maps before validation. For includes validate effective names as if the folder were on, preserving `showAsFolder`, image/color and other overrides; resolve root through `menu_details.rootSectionId`, section role/owner and both inclusion menus.
-- [ ] Compare normal requests against baseline dependencies. Permit no-op retry only when **every** intended stored cell equals the canonical request and all other preconditions match. Project this batch's root/default effects into retry dependency baselines; retain ownership/config checks. Accept `defaultText` only for a required, currently missing companion, or an equivalent retry of that companion. Preserve existing defaults; reject gratuitous second-language writes. Validate all targets, then sequentially dispatch the nine commands in the caller's transaction; never recreate missing rows.
-- [ ] GREEN: repeat RED command; `pnpm --filter @waitron/catalogue exec vitest run src/include-folder.db.test.ts src/sections.db.test.ts src/content-languages.concurrency.test.ts`.
-- [ ] `git commit -s -m "feat: save translation batches atomically with value comparisons"`. Checkpoint: domain behavior and rollback/read-count receipts.
+- [x] Write `mixed batch rollback`, `cell conflict versus unrelated concurrency`, `equivalent retry`, `root include final maps`. Assert same-cell/owner/role/activity/config changes refuse all writes; reordered sets/maps and concurrent price/other-language changes succeed. Retry the original payload after success and assert canonical results with no writes; one divergent cell refuses the entire retry. Include inherited default, folder-off, foreign label and replaced inclusion cases. Probe root fallback through existing menu/section/include writers configured/unset.
+- [x] RED: `pnpm --filter @waitron/catalogue exec vitest run src/content-translations.test.ts src/content-translation-writes.test.ts`.
+- [x] Resolve once, merge only requested cells, build all proposed maps before validation. For includes validate effective names as if the folder were on, preserving `showAsFolder`, image/color and other overrides; resolve root through `menu_details.rootSectionId`, section role/owner and both inclusion menus.
+- [x] Compare normal requests against baseline dependencies. Permit no-op retry only when **every** intended stored cell equals the canonical request and all other preconditions match. Project this batch's root/default effects into retry dependency baselines; retain ownership/config checks. Accept `defaultText` only for a required, currently missing companion, or an equivalent retry of that companion. Preserve existing defaults; reject gratuitous second-language writes. Validate all targets, then sequentially dispatch the nine commands in the caller's transaction; never recreate missing rows.
+- [x] GREEN: repeat RED command; `pnpm --filter @waitron/catalogue exec vitest run src/include-folder.db.test.ts src/sections.db.test.ts src/content-languages.concurrency.test.ts`.
+- [x] `git commit -s -m "feat: save translation batches atomically with value comparisons"`. Checkpoint: domain behavior and rollback/read-count receipts.
 
 ## Task 4: Authenticated GET/PUT and dashboard transport
 
@@ -164,3 +164,13 @@ and root 3605 checks passed, with scoped types/lint/format. Restricted writer co
 100/100/100/100 is not package or CI coverage. Four installed removals failed at their intended
 assertions; restored read/write suites passed 47 cases. Existing assertions are unchanged.
 Tasks 3–8 remain unbuilt; no route or editable dialog is exposed.
+
+
+Task 3 local checkpoint (2026-10-08): all nine names-only commands and atomic domain saves
+are built. The expected token now records the selected language and inherited selected/default
+cells. Batch retries project this batch's root/default effects and issue no updates; conflicts
+retain their target identity. Default-name refusals preserve the existing domain code/params.
+Five installed safeguard removals failed as expected (four controls produced assertion failures; root-projection
+removal refused the valid joint save); restored suites passed 111 cases. Restricted source
+coverage 99.56/97.5/100/100 is not package or CI coverage. Existing assertions remain unchanged.
+The authenticated route, staged dialog and Tasks 4–8 remain unbuilt.

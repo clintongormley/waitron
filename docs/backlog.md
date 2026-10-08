@@ -610,9 +610,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   required, and a bounded all-or-nothing save. The table and read-only report dialog landed in
   #1448. The [implementation plan](superpowers/plans/2026-10-08-a420-inline-translations.md)
   divides the remaining work into bounded target reads, names-only writers, an atomic route and
-  a staged dialog with its unsaved checks. The internal target reads and six names-only
-  shared-definition writers are built locally;
-  menu-name commands, the atomic save route and the staged dialog remain.
+  a staged dialog with its unsaved checks. The internal target reads, all nine names-only
+  commands and atomic domain save are built locally, including cell/owner/configuration conflicts,
+  equivalent retries and projected root/include defaults. The authenticated route and staged
+  dialog remain. The Task 3 real-store probe in `content-translations.test.ts` confirms that, with
+  no saved language configuration, the existing menu-root writer uses English while section and
+  include writers use their supplied Spanish fallback; inline saves use the resolver's context.
   No inline translation route or editable dialog has landed. Exercise full-app Open navigation
   and newly added language refresh when replacing the report; #1448's review did not independently run those paths.
 

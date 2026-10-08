@@ -1,15 +1,16 @@
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { contentTranslationGap } from "./content-languages.js";
 import type { ResolvedTranslationTarget } from "./content-translation-targets.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 import { optionLists, optionLabels } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
 import { units } from "./schema/units.js";
+import { sections, sectionMembers } from "./schema/sections.js";
 import "./errors.js";
 
-function mergedNames(
+export function validateTranslationNames(
   target: ResolvedTranslationTarget,
   kind: TranslationGapKind,
   names: Record<string, string>,
@@ -17,7 +18,10 @@ function mergedNames(
   if (target.state !== "present" || !target.target.eligible || target.target.kind !== kind)
     throw new AppError("content.translation_invalid", {});
   const merged = { ...target.names, ...names };
-  const gap = contentTranslationGap([merged], target.config);
+  const gap = contentTranslationGap(
+    [kind === "included_menu" ? { ...target.inheritedNames, ...merged } : merged],
+    target.config,
+  );
   if (gap) {
     switch (kind) {
       case "option_list":
@@ -29,6 +33,13 @@ function mergedNames(
       case "extra_list":
         throw new AppError("extras.translation_required", {
           field: "customerName",
+          language: gap.language,
+        });
+      case "menu":
+      case "section":
+      case "included_menu":
+        throw new AppError("menu_section.translation_required", {
+          field: "names",
           language: gap.language,
         });
       case "unit":
@@ -46,7 +57,7 @@ export async function writeProductTranslation(
   target: ResolvedTranslationTarget,
   names: Record<string, string>,
 ): Promise<void> {
-  const customerName = mergedNames(target, "product", names);
+  const customerName = validateTranslationNames(target, "product", names);
   await tx.update(products).set({ customerName }).where(eq(products.id, target.target.id));
 }
 export async function writeVariantTranslation(
@@ -54,7 +65,7 @@ export async function writeVariantTranslation(
   target: ResolvedTranslationTarget,
   names: Record<string, string>,
 ): Promise<void> {
-  const customerName = mergedNames(target, "variant", names);
+  const customerName = validateTranslationNames(target, "variant", names);
   await tx.update(products).set({ customerName }).where(eq(products.id, target.target.id));
 }
 export async function writeOptionListTranslation(
@@ -62,7 +73,7 @@ export async function writeOptionListTranslation(
   target: ResolvedTranslationTarget,
   names: Record<string, string>,
 ): Promise<void> {
-  const customerName = mergedNames(target, "option_list", names);
+  const customerName = validateTranslationNames(target, "option_list", names);
   await tx.update(optionLists).set({ customerName }).where(eq(optionLists.id, target.target.id));
 }
 export async function writeOptionLabelTranslation(
@@ -70,7 +81,7 @@ export async function writeOptionLabelTranslation(
   target: ResolvedTranslationTarget,
   names: Record<string, string>,
 ): Promise<void> {
-  const customerName = mergedNames(target, "option_label", names);
+  const customerName = validateTranslationNames(target, "option_label", names);
   await tx.update(optionLabels).set({ customerName }).where(eq(optionLabels.id, target.target.id));
 }
 export async function writeExtraListTranslation(
@@ -78,7 +89,7 @@ export async function writeExtraListTranslation(
   target: ResolvedTranslationTarget,
   names: Record<string, string>,
 ): Promise<void> {
-  const customerName = mergedNames(target, "extra_list", names);
+  const customerName = validateTranslationNames(target, "extra_list", names);
   await tx.update(extraLists).set({ customerName }).where(eq(extraLists.id, target.target.id));
 }
 export async function writeUnitTranslation(
@@ -86,6 +97,36 @@ export async function writeUnitTranslation(
   target: ResolvedTranslationTarget,
   names: Record<string, string>,
 ): Promise<void> {
-  const name = mergedNames(target, "unit", names);
+  const name = validateTranslationNames(target, "unit", names);
   await tx.update(units).set({ name }).where(eq(units.id, target.target.id));
+}
+
+export async function writeMenuTranslation(
+  tx: Transaction,
+  target: ResolvedTranslationTarget,
+  names: Record<string, string>,
+): Promise<void> {
+  const merged = validateTranslationNames(target, "menu", names);
+  await tx.update(sections).set({ names: merged }).where(eq(sections.id, target.target.id));
+}
+export async function writeSectionTranslation(
+  tx: Transaction,
+  target: ResolvedTranslationTarget,
+  names: Record<string, string>,
+): Promise<void> {
+  const merged = validateTranslationNames(target, "section", names);
+  await tx.update(sections).set({ names: merged }).where(eq(sections.id, target.target.id));
+}
+export async function writeIncludedMenuTranslation(
+  tx: Transaction,
+  target: ResolvedTranslationTarget,
+  names: Record<string, string>,
+): Promise<void> {
+  const merged = validateTranslationNames(target, "included_menu", names);
+  await tx
+    .update(sectionMembers)
+    .set({
+      folderOverrides: sql`json_set(${sectionMembers.folderOverrides}, '$.names', json(${JSON.stringify(merged)}))`,
+    })
+    .where(eq(sectionMembers.id, target.target.id));
 }

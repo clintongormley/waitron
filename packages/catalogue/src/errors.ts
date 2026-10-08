@@ -40,6 +40,17 @@ declare module "@waitron/shared" {
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     /** A translation map contains a non-text value. */
+    "content.translation_stale": { kind: string; id: string };
+    "content.translation_unavailable": { kind: string; id: string };
+    "content.translation_batch_invalid": Record<string, never>;
+    "content.translation_refused": {
+      causeCode: string;
+      causeParams: Readonly<Record<string, unknown>>;
+      kind: string;
+      id: string;
+      field: "text" | "defaultText";
+      language: string;
+    };
     "content.translation_invalid": Record<string, never>;
     /** Required content has no text in the configured default language. */
     "content.translation_required": { language: string };

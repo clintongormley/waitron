@@ -12,10 +12,16 @@ import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { createUnit, updateUnit } from "./units.js";
 import { optionLists, optionLabels } from "./schema/options.js";
 import { extraLists, extraListItems, productModifiers } from "./schema/extras.js";
+import { menuDetails } from "./schema/menu.js";
+import { sections, sectionMembers } from "./schema/sections.js";
+import { addMember } from "./sections.js";
 import { units } from "./schema/units.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
 import {
+  writeMenuTranslation,
+  writeSectionTranslation,
+  writeIncludedMenuTranslation,
   writeProductTranslation,
   writeVariantTranslation,
   writeOptionListTranslation,
@@ -419,6 +425,93 @@ describe("shared translation writes", () => {
         expect(after[0]).toMatchObject({
           names: { en: "New English", es: "Nuevo castellano", ca: "" },
         });
+      });
+    },
+  );
+});
+
+describe("menu translation writes", () => {
+  const menuWriters = {
+    menu: writeMenuTranslation,
+    section: writeSectionTranslation,
+    included_menu: writeIncludedMenuTranslation,
+  };
+  it.each(["menu", "section", "included_menu"] as const)(
+    "%s requires the effective default and preserves non-name columns",
+    async (kind) => {
+      await seedTenant(suite.db);
+      const ids = await withTransaction(suite.db, async (tx) => {
+        const shared = await fixture(tx);
+        const child = await createCatalogue(tx, { name: "STAFF Drinks" });
+        const details = await tx.select().from(menuDetails);
+        const root = details.find((row) => row.menuId === shared.menuId)!.rootSectionId;
+        const childRoot = details.find((row) => row.menuId === child.id)!.rootSectionId;
+        const [section] = await tx
+          .insert(sections)
+          .values({ internalName: "STAFF Section", ownerMenuId: shared.menuId })
+          .returning();
+        const member = await addMember(tx, root, { kind: "section", sectionId: childRoot });
+        await tx
+          .update(sectionMembers)
+          .set({
+            showAsFolder: false,
+            folderOverrides: { color: "#123456", image: null, names: { ca: "CLIENT Begudes" } },
+          })
+          .where(eq(sectionMembers.id, member.id));
+        return { menu: root, section: section!.id, included_menu: member.id };
+      });
+      await expect(
+        withTransaction(suite.db, async (tx) => {
+          const resolved = await resolveTranslationTargets(
+            tx,
+            "en",
+            [{ kind, id: ids[kind] }],
+            context,
+          );
+          await menuWriters[kind](tx, resolved.targets[0]!, { en: "English" });
+        }),
+      ).rejects.toMatchObject({
+        code: "menu_section.translation_required",
+        params: { field: "names", language: "es" },
+      });
+      await withTransaction(suite.db, async (tx) => {
+        const beforeSections = await tx.select().from(sections).orderBy(sections.id);
+        const beforeMembers = await tx.select().from(sectionMembers).orderBy(sectionMembers.id);
+        const resolved = await resolveTranslationTargets(
+          tx,
+          "en",
+          [{ kind, id: ids[kind] }],
+          context,
+        );
+        const readSpy = vi.spyOn(tx, "execute");
+        try {
+          await menuWriters[kind](tx, resolved.targets[0]!, { en: "English", es: "Castellano" });
+          expect(readSpy).not.toHaveBeenCalled();
+        } finally {
+          readSpy.mockRestore();
+        }
+        const afterSections = await tx.select().from(sections).orderBy(sections.id);
+        const afterMembers = await tx.select().from(sectionMembers).orderBy(sectionMembers.id);
+        if (kind === "included_menu") {
+          const row = afterMembers.find((row) => row.id === ids[kind])!;
+          expect(row).toMatchObject({
+            showAsFolder: false,
+            folderOverrides: {
+              names: { ca: "CLIENT Begudes", en: "English", es: "Castellano" },
+              color: "#123456",
+              image: null,
+            },
+          });
+          delete row.folderOverrides.names!.en;
+          delete row.folderOverrides.names!.es;
+        } else {
+          const row = afterSections.find((row) => row.id === ids[kind])!;
+          expect(row.names).toEqual({ en: "English", es: "Castellano" });
+          delete row.names.en;
+          delete row.names.es;
+        }
+        expect(afterSections).toEqual(beforeSections);
+        expect(afterMembers).toEqual(beforeMembers);
       });
     },
   );
