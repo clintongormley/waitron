@@ -105,6 +105,25 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   `<table>` and a row menu (found by grep, not read). None has a phone-width case and none was
   measured.
 
+## A keydown guard that cancels Escape while a save runs did not keep one dialog open
+
+- **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** On
+  Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`) a real Escape
+  during a save closed the editor although its keydown handler called `preventDefault()` and
+  `stopPropagation()`; the screen now sets `wt-modal`'s `dismissible` to false while busy, and
+  `wt-dialog` sets `closedby="none"` while `dismissible` is off. Why that screen behaved
+  differently has not been established. The same keydown guard is on other dashboard forms:
+  those whose tests press a real Escape during a save also ignore a close while busy in their
+  `wt-close` handler, except the Departments and zones screen
+  (`packages/venue-service/src/dashboard/venue-operations-screen.ts`), whose handler has no such
+  check and which does not set `dismissible`. The rest were tried only with a hand-built
+  `KeyboardEvent` (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
+  `option-list-form`, `option-label-form` and `variant-form`, under `apps/dashboard/src`) or not at all
+  (`#guardEscape` in `apps/dashboard/src/screens/menus-screen.ts`). **Next action:** repeat the reasons-screen case
+  recording which element has focus just before the Escape; then press a real Escape during a
+  save on each form tried only with a hand-built event or not at all, and move the ones that close
+  to `dismissible`.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'

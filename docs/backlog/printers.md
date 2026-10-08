@@ -352,3 +352,8 @@ just a green typecheck.
   renaming the error code `printer.probe_busy` (kept under the domain-naming rule, per #335's
   commit message), and deduplicating targets in the agent host (the issuing server already
   normalises and deduplicates its bounded list of eight).
+
+- The dashboard's "Test open drawer" calibration
+  (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
+  manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
+  is (owner, 2026-10-02).

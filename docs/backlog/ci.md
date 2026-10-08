@@ -307,6 +307,17 @@ request for `/manage/devices` on 5190 returned the till HTML, while the same pat
 the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
 server without changing their deployed same-origin paths; this also affects setup's existing links.
 
+## Two till tests wait a fixed real time for a resend to give up
+
+- **Two till tests wait a fixed real time for a resend to give up** (found 2026-09-30, B13). In
+  `apps/till/src/till-app-bill-payments.test.ts`, the cases that send the next operator's same
+  payment, and same refund, under the id of one that got no answer after its operator logged
+  out each sleep `SUBMIT_RETRY_PAUSE_MS` after failing the lost send: the one retry pause, after
+  which the send sees the session has ended and gives up, before the next operator signs in.
+  Neither case reads anything that marks the giving up.
+  **Next action:** run that pause on fake timers, as the lost-reply case in
+  `till-app-drafts.test.ts`'s "a Send the session outlives" does.
+
 ## Decisions and deliberate limits
 
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator

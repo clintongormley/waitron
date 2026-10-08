@@ -339,3 +339,6 @@ so this is expected only while the dashboard's category list is behind.
 **Products: the Move dialog's destination categories (W82, #1210).** Two sibling categories with the same name are left as they are (owner: "leave it"): they still show as two identical entries, in the tree and in a search.
 
 **Products: a category's Made at (W86, #1203).** The "some items made elsewhere" note does not look at whether the categories involved hold any products, so it can claim items that do not exist yet; the owner chose to keep these words (2026-10-05).
+
+- **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
+  sold separately; Staff only behaves exactly as Public until guest ordering exists.

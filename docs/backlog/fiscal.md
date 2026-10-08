@@ -518,3 +518,88 @@ Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR che
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan.
+
+## C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b, decided without the asesor) — landed as #1030
+
+- **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
+  decided without the asesor) — landed as #1030.** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
+  `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) issues
+  an R5 corrective invoice, by differences, for the whole invoice. The PIN override is B33
+  (#1041). The owner dropped the dashboard Orders screen's "Invoice not credited" mark
+  (2026-10-02 ~12:05): such a bill is to show as Cancelled with its credit note. Open:
+  - **For the owner, from B33's review: the cancel checks the permission after its payment
+    refusals.** A bill holding a payment, or with a card payment in flight, is refused for that
+    before `sale.rectify` or an override is looked at — the order C126 built, which B33 kept. So
+    someone without the permission is told about the payment rather than "not permitted", and a
+    PIN sent with that request is neither checked nor counted. The drawer, refund and
+    unpaid-departure routes check the permission first. Moving it earlier changes who gets which
+    refusal; not decided.
+  - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — landed as #1055.**
+    The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
+    shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
+    cancel's answer empty, so the till goes on reading the credit note's number from the bills.
+    Open:
+    - **The approver list is fetched with no time limit.** After a refusal for lack of
+      permission the till asks `GET /api/cancel-credit-authorizers` who can approve, and until
+      the answer arrives the dialog stays busy with its buttons disabled (`apps/till/src/till-app.ts`,
+      the approvers fetch). The unpaid-departure and refund dialogs fetch theirs the same way and
+      predate B32; a time limit belongs on all three together. Raised by B32's review by reading
+      only; nobody reproduced a stalled answer.
+  - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
+    unpaid can be cancelled with a credit note at the till.** The waiting list "is drawn only
+    inside the held-orders card" (Task 16, in [till.md](till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)), so a till layout without that card offers no Cancel and
+    credit for counter orders either. How it differs from the table's path, and what is left open:
+    - **The result does not name the credit note.** The table's dialog reads the credit note's
+      number from the party's bills; the waiting list drops a cancelled order, and the cancel's
+      answer is empty, so the dialog says "A credit note was issued and the bill is cancelled"
+      without a number. Naming it would need the number from somewhere new; not decided.
+    - **A cancel that gets no answer is never shown as done.** On the table, the till reads the
+      bills again and shows a bill now cancelled as done. On the counter, an order missing from
+      the list may have been cancelled, or may have left it another way (paid and handed over,
+      say), so the dialog says the cancel may have been made and to check the waiting orders (a
+      new sentence, `cancel_credit.unconfirmed_counter`). The dialog shows this first, and then the
+      till reads the waiting list again.
+    - Unlike the table's button, the counter's does not check for a payment on the order. Two ways
+      of giving a placed counter order a bill payment were tried while building B34 and both were
+      refused: taking the payment on the placed order (`working_order.not_open`), and placing an
+      order already holding one (`bill.payments_received`). Other ways were not looked for. If an
+      order does hold one, the cancel refuses it with `bill.payments_received` and the dialog says
+      so.
+  - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
+    Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
+    `cash.drawer`, so its cases cannot tell which of those it reads.
+  - **Done by C132 (landed as #1060, 2026-10-03): a credit note's line names the invoice line it reverses.**
+    `sale_lines.corrects_line_id` (core migration `0070_sale_line_corrects`, a foreign key to
+    `sale_lines.id`) holds, on a corrective invoice's line, the original line it reverses or
+    adjusts. A partial correction keeps the looser rule: its lines may name a line or not. No
+    report reads the link yet. Open, for partial corrections only, which no product code makes yet
+    (only tests and demo scripts do): whether a line a correction ADDS (a new charge, not a change
+    to an invoice line) stays unlinked, and whether two adjustments may name the same invoice
+    line. When a report starts reading the link it will want an index on the column, as
+    `sales_corrects_idx` serves `sales.corrects_sale_id`.
+  - **A fully credited bill's original invoice can still be reprinted**, from the till and from
+    the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
+    not decided.
+  - **Left in the dashboard Orders plan and spec after #1034 landed beside C126:** their banners
+    still say C126 "is to" credit the bill (it is built); the plan's owner-answers row 7 still says
+    "Task 2, as written" for the dropped mark; its Task 1 voided-bill case still lists
+    `invoiceNotCredited: false` with no pointer to the drop; and #1034 did not write its planned
+    test that a cancelled bill with an invoice shows its credit note.
+  - **An invoice that already has a correction cannot be cancelled.** One that lowered it leaves
+    less than the whole credit takes back, so the cancel is refused
+    `sale.correction_exceeds_total`; one that raised it is refused `sale.correction_not_whole`,
+    because a whole credit must be the invoice's first correction. Both are cases in
+    `apps/server/src/cancel-invoiced-order.test.ts`. No route issues a credit note other than this
+    one.
+  - **The credit note is not printed** for the customer (asesor Q32 (b)).
+  - **A placed order with no invoice is not checked against stored card payments.** Its cancel
+    sees a card running at the reader in this process, but not a stored payment its provider has
+    not resolved, nor one captured and not yet filed; the cancel had no payment check at all
+    before C126.
+
+## Decisions and deliberate limits
+
+- **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
+  negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
+  Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
+  0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.

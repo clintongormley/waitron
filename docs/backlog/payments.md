@@ -55,3 +55,15 @@ their full text.
      {provider}" tick box and its can't-be-undone warning, shown only where the provider can unpair
      (`canUnpair`). A reader already disabled but still paired keeps an "Unpair from {provider}"
      item, or it could never be unpaired.
+
+## The card refund path records only after the provider call, with a fresh key each time
+
+- **The card refund path records only after the provider call, with a fresh key each time.**
+  `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()`
+  idempotency key on every call and writes `payment_refunds` only after the call returns, so a
+  crash between the two leaves no record, and a repeat would send a new key. SumUp's refund sends
+  no key at all. Its only product caller is the reconciler's reversal of an abandoned order's
+  capture (`packages/payments-stripe/src/reconciler.ts`); refunding a bill's card payment before
+  its invoice goes through the separate durable path of Task 14 (design §6b). **Next action:**
+  give the reconciler's reversal, and any post-invoice refund route when one is built, the same
+  durable-attempt rule.
