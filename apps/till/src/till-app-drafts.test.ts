@@ -79,13 +79,21 @@ function catalogue(version: string, prices: Record<string, string> = {}): ZoneOf
     offer("offer-flan", "Flan", "desserts"),
   ].map((each) => ({ ...each, unitPrice: prices[each.name] ?? each.unitPrice }));
   return {
-    context: { zoneId: "z1", departmentId: "department-bar", serviceMode: "table_tab" },
+    service: { open: true, periodName: null },
+    context: {
+      departmentName: "Restaurant",
+      zoneId: "z1",
+      departmentId: "department-bar",
+      serviceMode: "table_tab",
+    },
     defaultMenuId: "lunch",
     menus: [
       {
         id: "lunch",
         name: "Lunch",
         isDefault: true,
+        orderable: true,
+        audience: "customer",
         versionId: version,
         structure: {
           members: offers.map((each) => ({
@@ -3485,6 +3493,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const state = (versionId: string) => ({
+        service: { open: true, periodName: null },
         menus: [{ menuId: "lunch", versionId }],
         unavailable: { products: [], optionLabels: [] },
       });
@@ -3543,6 +3552,7 @@ describe("till-app: other people's drafts and taking one over", () => {
 
 describe("till-app: a menu published while a table's draft is open (D9)", () => {
   const state = (versionId: string, soldOut: string[] = []) => ({
+    service: { open: true, periodName: null },
     menus: [{ menuId: "lunch", versionId }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
@@ -4225,6 +4235,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
 
 describe("till-app: a draft line that cannot be sold now", () => {
   const state = (soldOut: string[]) => ({
+    service: { open: true, periodName: null },
     menus: [{ menuId: "lunch", versionId: "v1" }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
@@ -4558,6 +4569,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       defaultMenuId: null,
     });
     const at = (versionId: string) => ({
+      service: { open: true, periodName: null },
       menus: [{ menuId: "lunch", versionId }],
       unavailable: { products: [], optionLabels: [] },
     });

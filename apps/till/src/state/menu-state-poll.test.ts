@@ -4,6 +4,7 @@ import type { MenuState } from "../api/client.js";
 
 function state(versionId: string): MenuState {
   return {
+    service: { open: true, periodName: null },
     menus: [{ menuId: "lunch", versionId }],
     unavailable: { products: [], optionLabels: [] },
   };

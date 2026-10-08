@@ -169,6 +169,8 @@ async function mountBrowser(product: TillProduct, store: WorkingOrderStore) {
     id: "menu",
     name: "Menu",
     isDefault: true,
+    orderable: true,
+    audience: "customer",
     versionId: "v1",
     structure: {
       members: [{ kind: "product", menuItemId: product.menuItemId!, productId: product.id }],

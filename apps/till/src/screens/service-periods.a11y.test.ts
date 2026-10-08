@@ -1,0 +1,102 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
+import { WorkingOrderStore } from "../state/working-order.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  servedMenus,
+} from "../widgets/test-helpers.js";
+import { TillCounterScreen } from "./till-counter-screen.js";
+import { TillTableOrderScreen } from "./till-table-order-screen.js";
+import type { TillProduct } from "../api/client.js";
+
+const coffee: TillProduct = {
+  id: "coffee",
+  productId: "coffee",
+  name: "Staff coffee",
+  customerName: { en: "Customer coffee", es: "Café para el cliente" },
+  kitchenName: "Kitchen coffee",
+  unitPrice: "3.00",
+  pricingUnit: "each",
+  vatClass: "general",
+  category: null,
+  allergens: null,
+};
+const menus = servedMenus(
+  [{ id: "breakfast", name: "Breakfast", versionId: "v1", isDefault: true, orderable: false }],
+  [{ id: "coffee-offer", menuId: "breakfast", productId: "coffee" }],
+);
+
+afterEach(cleanupWidgets);
+
+for (const locale of ["en-GB", "es-ES"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      describe(`${locale} ${theme} ${width}px`, () => {
+        for (const kind of ["counter", "table"] as const) {
+          it(`${kind} announces the closed department and keeps a readable basket`, async () => {
+            const previousLocale = currentLocale();
+            try {
+              setLocale(locale);
+              await page.viewport(width, 900);
+              const store = new WorkingOrderStore();
+              store.addProduct(coffee, "2");
+              const shared = {
+                service: { open: false, periodName: null },
+                departmentName: "Restaurant",
+                products: [coffee],
+                menus,
+              };
+              const { el, host } =
+                kind === "counter"
+                  ? await mountWidget<TillCounterScreen>(
+                      "till-counter-screen",
+                      {
+                        ...shared,
+                        embedded: true,
+                        store,
+                        counterTab: {
+                          key: "counter",
+                          title: "Counter",
+                          columns: 4,
+                          cards: [
+                            { type: "product-grid", colSpan: 2, rowSpan: 2, config: {} },
+                            { type: "basket", colSpan: 2, rowSpan: 2, config: {} },
+                          ],
+                        },
+                      },
+                      theme,
+                    )
+                  : await mountWidget<TillTableOrderScreen>(
+                      "till-table-order-screen",
+                      { ...shared, draftStore: store },
+                      theme,
+                    );
+              const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-service-closed]")!;
+              expect(notice.textContent!.trim()).toBe(
+                locale === "en-GB"
+                  ? "Restaurant is closed: no period is running"
+                  : "Restaurant está cerrado: no hay ningún periodo en curso",
+              );
+              expect(notice.getAttribute("role")).toBe("status");
+              expect(notice.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+              expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+              expect(store.lines.map((line) => [line.product.id, line.quantity])).toEqual([
+                ["coffee", "2"],
+              ]);
+              await expectNoA11yViolations(host);
+              await page.screenshot({
+                path: `../__screenshots__/a366-service/${kind}-${locale}-${theme}-${width}.png`,
+              });
+            } finally {
+              setLocale(previousLocale);
+              await page.viewport(1280, 768);
+            }
+          });
+        }
+      });
+    }
+  }
+}

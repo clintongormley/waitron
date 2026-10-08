@@ -59,7 +59,13 @@ const till = {
 };
 
 const offers: ZoneOfferCatalogue = {
-  context: { zoneId: "zone-counter", departmentId: "department-default", serviceMode: "prepay" },
+  service: { open: true, periodName: null },
+  context: {
+    departmentName: "Restaurant",
+    zoneId: "zone-counter",
+    departmentId: "department-default",
+    serviceMode: "prepay",
+  },
   defaultMenuId: null,
   menus: [],
   offers: [],

@@ -109,7 +109,13 @@ function zoneOffers(
   defaultMenuId: string | null = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null,
 ): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    context: { zoneId, departmentId: "department-default", serviceMode },
+    service: { open: true, periodName: null },
+    context: {
+      departmentName: "Restaurant",
+      zoneId,
+      departmentId: "department-default",
+      serviceMode,
+    },
     defaultMenuId,
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.

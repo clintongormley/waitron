@@ -442,13 +442,17 @@ export async function priceOrderLines(
   offers: ZoneOffers;
 }> {
   if (requestedLines.length === 0) {
-    // A lineless call needs no zone and reads nothing.
     return {
       lineRows: [],
       gross: grossBasketWithOptions([]),
       identities: [],
       lineContexts: [],
-      offers: { defaultMenuId: null, menus: [], offers: [] },
+      offers: {
+        service: { open: false, periodName: null },
+        defaultMenuId: null,
+        menus: [],
+        offers: [],
+      },
     };
   }
   const offers =

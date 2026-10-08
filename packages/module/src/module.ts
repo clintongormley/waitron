@@ -238,6 +238,8 @@ export interface ZoneMenu {
   readonly id: string;
   readonly name: string;
   readonly isDefault: boolean;
+  readonly orderable: boolean;
+  readonly audience: "customer" | "staff";
   readonly versionId: string;
   readonly structure: { readonly members: readonly ZoneMenuMember[] };
   readonly home: ZoneDeviceHome;
@@ -246,6 +248,7 @@ export interface ZoneMenu {
 /** What a zone sells: its active, published menus' live versions, each offer marked with its
  *  availability. */
 export interface ZoneOffers {
+  readonly service: { readonly open: boolean; readonly periodName: string | null };
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];

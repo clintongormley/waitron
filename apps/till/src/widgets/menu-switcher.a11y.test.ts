@@ -4,8 +4,14 @@ import "./menu-switcher.js";
 import type { TillMenuSwitcher } from "./menu-switcher.js";
 
 const twoMenus = [
-  { id: "cat-food", name: "Food", isDefault: true },
-  { id: "cat-drinks", name: "Drinks", isDefault: false },
+  { id: "cat-food", name: "Food", isDefault: true, orderable: true, audience: "customer" as const },
+  {
+    id: "cat-drinks",
+    name: "Drinks",
+    isDefault: false,
+    orderable: true,
+    audience: "staff" as const,
+  },
 ];
 
 afterEach(cleanupWidgets);

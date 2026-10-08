@@ -181,6 +181,11 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) editSentLines = true;
   @property({ attribute: false }) cancelOffer: number | null = null;
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
+  @property({ attribute: false }) service: { open: boolean; periodName: string | null } | null = {
+    open: true,
+    periodName: null,
+  };
+  @property() departmentName = "";
   @property() selectedMenuId = "";
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
@@ -319,6 +324,7 @@ export class TillCardGrid extends LitElement {
   #element(card: CardInstance): TemplateResult | typeof nothing {
     switch (card.type) {
       case "product-grid": {
+        if (this.service?.open !== true) return nothing;
         const configured = card.config.columns;
         const menu = shownMenu(this.menus, this.selectedMenuId);
         return html`<till-menu-browser
@@ -419,6 +425,8 @@ export class TillCardGrid extends LitElement {
           .cancelOffer=${this.cancelOffer}
           .products=${this.products}
           .menus=${this.menus}
+          .service=${this.service}
+          .departmentName=${this.departmentName}
           .selectedMenuId=${this.selectedMenuId}
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}

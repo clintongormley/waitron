@@ -150,6 +150,8 @@ function lunch(overrides: Partial<TillZoneMenu> = {}): TillZoneMenu {
     id: "menu-lunch",
     name: "Lunch",
     isDefault: true,
+    orderable: true,
+    audience: "customer",
     versionId: "v1",
     structure: {
       members: [favourites, drinks, food, empty, plain, member("water"), member("ghost")],
@@ -986,6 +988,8 @@ describe("till-menu-browser", () => {
         id: "menu-drinks",
         name: "Drinks",
         isDefault: false,
+        orderable: true,
+        audience: "customer",
         versionId: "v-drinks",
         structure: {
           members: [
@@ -1006,6 +1010,8 @@ describe("till-menu-browser", () => {
         id: "menu-brunch",
         name: "Brunch",
         isDefault: false,
+        orderable: true,
+        audience: "customer",
         versionId: "v-brunch",
         structure: { members: [memberOn("brunch", "pancakes"), memberOn("brunch", "porridge")] },
         ...withShortcuts([]),
@@ -1053,6 +1059,17 @@ describe("till-menu-browser", () => {
 
     const resultsText = (el: TillMenuBrowser) =>
       root(el).querySelector('[data-region="results"]')!.textContent!;
+
+    it("search never offers retained ended or future menus", async () => {
+      const drinks = { ...drinksMenu(), orderable: false };
+      const brunch = { ...brunchMenu(), orderable: false };
+      const { el } = await served({ menus: [lunch(), drinks, brunch] });
+      await search(el, "pancake");
+      expect(names(entries(el, "results"))).toEqual([]);
+      await search(el, "co");
+      expect(names(entries(el, "results"))).toEqual(["Cola"]);
+      expect(groupSections(el)).toHaveLength(0);
+    });
 
     it("lists the shown menu's matches first, then each other served menu's, labelled by menu", async () => {
       const { el } = await served();

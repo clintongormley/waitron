@@ -1,3 +1,4 @@
+import { orderableMenus } from "../menu-filter.js";
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -583,7 +584,7 @@ export class TillMenuBrowser extends LitElement {
   #results(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
     const wanted = foldForSearch(this.query.trim());
     const found = this.#matches(index, wanted);
-    const otherMenus = this.menus.filter((other) => other.id !== menu.id);
+    const otherMenus = orderableMenus(this.menus).filter((other) => other.id !== menu.id);
     const others = otherMenus
       .map((other) => ({ menu: other, found: this.#matches(this.#otherIndex(other), wanted) }))
       .filter((other) => other.found.length > 0);

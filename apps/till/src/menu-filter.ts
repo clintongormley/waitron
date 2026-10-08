@@ -46,17 +46,28 @@ export function hasDietData(products: TillProduct[]): boolean {
   return products.some((product) => product.diet != null);
 }
 
-/** The zone's default menu, else its first. */
-export function defaultMenu<M extends { isDefault: boolean }>(menus: readonly M[]): M | undefined {
-  return menus.find((menu) => menu.isDefault) ?? menus[0];
+interface OrderableMenu {
+  isDefault: boolean;
+  orderable: boolean;
+  audience: "customer" | "staff";
 }
 
-/** The menu to show: the selected one, else {@link defaultMenu}. */
-export function shownMenu<M extends { id: string; isDefault: boolean }>(
+export function orderableMenus<M extends OrderableMenu>(menus: readonly M[]): M[] {
+  return menus
+    .filter((menu) => menu.orderable)
+    .sort((a, b) => Number(a.audience === "staff") - Number(b.audience === "staff"));
+}
+
+export function defaultMenu<M extends OrderableMenu>(menus: readonly M[]): M | undefined {
+  const running = orderableMenus(menus);
+  return running.find((menu) => menu.isDefault) ?? running[0];
+}
+
+export function shownMenu<M extends OrderableMenu & { id: string }>(
   menus: readonly M[],
   selectedId: string,
 ): M | undefined {
-  return menus.find((menu) => menu.id === selectedId) ?? defaultMenu(menus);
+  return menus.find((menu) => menu.id === selectedId && menu.orderable) ?? defaultMenu(menus);
 }
 
 /**
