@@ -354,7 +354,9 @@ function aptRunGaps(dockerfile: string): { runs: number; gaps: string[] } {
     ) {
       missing.push(`${where}: writes no http and https read timeout under /etc/apt/apt.conf.d/`);
     } else if (
-      !new RegExp(`\\brm\\s+-rf\\b[^;]*\\s${config.replace(/\./g, "\\.")}(?:\\s|;|$)`).test(run)
+      !new RegExp(
+        `\\brm\\s+-rf\\b[^;]*\\s${config.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|;|$)`,
+      ).test(run)
     ) {
       missing.push(`${where}: does not remove ${config}`);
     }
