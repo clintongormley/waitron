@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
@@ -169,6 +170,65 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     expect(el.shadowRoot!.querySelector("[data-test=payment-slip-printers-pr-old]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it.each([
+    ["en", 390],
+    ["en", 1280],
+    ["es", 390],
+    ["es", 1280],
+  ] as const)(
+    "renders the missing-zone error and repair accessibly in %s at %ipx",
+    async (locale, width) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        await page.viewport(width, 900);
+        const { el, host } = await mountWidget<DeviceProfilesScreen>(
+          "dashboard-device-profiles-screen",
+          {
+            api: stubApi(venuePrinters, {
+              getDeviceProfile: vi.fn().mockResolvedValue({
+                ...profiles[0]!,
+                allowedZoneIds: ["z-off"],
+                startingZoneId: "z-off",
+              }),
+            }),
+          },
+          theme,
+        );
+        await flush(el);
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
+        );
+        await flush(el);
+        expect(window.innerWidth).toBe(width);
+        expect(
+          el.shadowRoot!.querySelector("[data-test=profile-zones-error]")?.textContent?.trim(),
+        ).toBe(t("device_profiles.err_zones_required"));
+        expect(el.shadowRoot!.querySelector(".form-message")?.textContent?.trim()).toBe(
+          t("form.fix_fields"),
+        );
+        expect(await saveState(el)).toEqual(["secondary", true, true]);
+        await expectNoA11yViolations(host);
+        const zone = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "[data-test=profile-zone-z1]",
+        )!;
+        await zone.updateComplete;
+        const input = zone.shadowRoot!.querySelector("input")!;
+        input.focus();
+        await userEvent.keyboard(" ");
+        expect(input.checked).toBe(true);
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("[data-test=profile-zones-error]")).toBeNull();
+        expect(await saveState(el)).toEqual(["primary", false, false]);
+        await expectNoA11yViolations(host);
+      } finally {
+        setLocale(previous);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("renders the editor with Save quiet, and then with a change, accessibly", async () => {
     const { el, host } = await mountWidget<DeviceProfilesScreen>(

@@ -1407,7 +1407,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(extras(api)).toBeUndefined();
   });
 
-  it("saves a name change on a profile whose only zone is switched off, sending no zones", async () => {
+  it("holds a name and role change until a profile with no active zone has its scope repaired", async () => {
     const { api, el } = await openEdit({
       ...profiles[0]!,
       allowedZoneIds: ["z4"],
@@ -1416,8 +1416,19 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     change(el, "profile-name", "Renamed counter");
     toggle(el, "profile-role-staff", false);
     await save(el);
+    expect(api.updateDeviceProfile).not.toHaveBeenCalled();
+    expect(text(el, "profile-zones-error")).toBe(t("device_profiles.err_zones_required"));
+    expect(q(el, "editor-form")).not.toBeNull();
+    toggle(el, "profile-zone-z1", true);
+    await flush(el);
+    await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledOnce();
-    expect(extras(api)).toEqual({ admittedRoles: ["supervisor", "manager", "admin"] });
+    expect(extras(api)).toEqual({
+      admittedRoles: ["supervisor", "manager", "admin"],
+      departmentId: "d1",
+      allowedZoneIds: ["z1"],
+      startingZoneId: "z1",
+    });
     expect(q(el, "editor-form")).toBeNull();
   });
 

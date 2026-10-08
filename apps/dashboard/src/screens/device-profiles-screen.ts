@@ -710,11 +710,14 @@ export class DeviceProfilesScreen extends LitElement {
     });
   }
 
-  /** Whether this save decides where the profile serves: a new one, one that had no department, or
-   * one whose scope the manager changed. Otherwise the stored scope is neither checked nor sent. */
   #decidesScope(): boolean {
     const loaded = this.#loaded;
-    return loaded === null || loaded.departmentId === null || this.#scopeEdited;
+    return (
+      loaded === null ||
+      loaded.departmentId === null ||
+      this.#scopeEdited ||
+      this.#allowedZones().length === 0
+    );
   }
 
   #ownErrors(): FieldErrors {
@@ -727,7 +730,7 @@ export class DeviceProfilesScreen extends LitElement {
       if (this.#decidesScope()) {
         if (this.draftDepartmentId === "")
           errors.department = t("device_profiles.err_department_required");
-        else if (!this.draftEveryZone && this.draftZoneIds.length === 0)
+        else if (this.#allowedZones().length === 0)
           errors.zones = t("device_profiles.err_zones_required");
         if (this.draftStartingZoneId === "")
           errors.startingZone = t("device_profiles.err_starting_zone_required");
@@ -987,6 +990,8 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftRoles = ROLES.filter((role) => profile.admittedRoles.includes(role));
       this.draftExceptions = [...profile.personExceptions];
       this.draftStartingScreen = profile.startingScreen;
+      this.attempted =
+        this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
       this.mode = "editor";
       this.#registerDraft();
       void this.#loadReaders(id, this.#opened);
@@ -1190,12 +1195,6 @@ export class DeviceProfilesScreen extends LitElement {
     return { stationIds: [...draft.stationIds], watcherIds: [...draft.watcherIds] };
   }
 
-  /**
-   * What the save sends beside the profile's own settings. An edit sends a part only when it
-   * changed, and where the profile serves only when {@link #decidesScope} says so, so a save that
-   * leaves it alone keeps the zones switched off since; a new profile sends its department and what
-   * is not the server's default. A kitchen display has no department, sign-in rule or starting screen.
-   */
   #extrasToSend(formFactor: FormFactor): ProfileSaveExtras | undefined {
     const loaded = this.#loaded;
     const extras: ProfileSaveExtras = {
