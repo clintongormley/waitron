@@ -154,3 +154,4 @@ export * from "./settings.js";
 
 export * from "./content-translation-types.js";
 export * from "./content-translation-targets.js";
+export * from "./content-translation-writes.js";

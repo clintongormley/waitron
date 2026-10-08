@@ -78,11 +78,11 @@ unrelated names and other aggregate fields are excluded.
 
 **Interfaces:** Produce `writeProductTranslation`, `writeVariantTranslation`, `writeOptionListTranslation`, `writeOptionLabelTranslation`, `writeExtraListTranslation`, `writeUnitTranslation`, each `(tx: Transaction, target: ResolvedTranslationTarget, names: Record<string,string>): Promise<void>`; define `ResolvedTranslationTarget` in targets.
 
-- [ ] Write `shared named cells preserve aggregates`: exercise six kinds with distinct staff/customer/kitchen text; assert untouched cells and aggregate state unchanged. Add default-companion missing/present controls using the existing product editor, options/extras writers and unit name validation to establish equivalent name rules.
-- [ ] RED: `pnpm --filter @waitron/catalogue exec vitest run src/content-translation-writes.test.ts`.
-- [ ] Implement explicit column updates on resolved own ids, never aggregate saves or generic table updates. Validate merged maps through `contentTranslationGap` against the already-read config, preserving domain codes/fields. No per-row config read. Recheck active parent/list and label ownership during resolution; unit writes touch only `name`.
-- [ ] GREEN: repeat RED command; run `pnpm --filter @waitron/catalogue exec vitest run src/product-editor.test.ts src/options.test.ts src/extras.test.ts src/units.operations.test.ts`.
-- [ ] `git commit -s -m "feat: write shared translation cells without aggregate reconciliation"` after staging. Checkpoint: six tested commands, no route.
+- [x] Write `shared named cells preserve aggregates`: exercise six kinds with distinct staff/customer/kitchen text; assert untouched cells and aggregate state unchanged. Add default-companion missing/present controls using the existing product editor, options/extras writers and unit name validation to establish equivalent name rules.
+- [x] RED: `pnpm --filter @waitron/catalogue exec vitest run src/content-translation-writes.test.ts`.
+- [x] Implement explicit column updates on resolved own ids, never aggregate saves or generic table updates. Validate merged maps through `contentTranslationGap` against the already-read config, preserving domain codes/fields. No per-row config read. Recheck active parent/list and label ownership during resolution; unit writes touch only `name`.
+- [x] GREEN: repeat RED command; run `pnpm --filter @waitron/catalogue exec vitest run src/product-editor.test.ts src/options.test.ts src/extras.test.ts src/units.operations.test.ts`.
+- [x] `git commit -s -m "feat: write shared translation cells without aggregate reconciliation"` after staging. Checkpoint: six tested commands, no route.
 
 ## Task 3: Menu commands and atomic comparison/retry algorithm
 
@@ -157,3 +157,10 @@ Coverage: nine kinds 1–3; auth/limits 4; companion/filters/pages/save 3–5; c
 Fresh-context plan review (2026-10-08) found four gaps: resolver language, concrete result fields, separate GET/domain limits and whole-scan live refresh. The contracts above incorporate each finding. Runtime results remain unverified until execution.
 
 Task 1 local checkpoint (2026-10-08): focused 66 cases, fiscal 20 unedited, root 97, scoped types/lint/format passed. Restricted read-model coverage 100/98.16/100/100; this is not package or CI coverage. Four installed safeguard removals failed at their intended assertions; restored focused 66 passed. Tasks 2–8 remain unbuilt; no route or editable dialog is exposed.
+
+Task 2 local checkpoint (2026-10-08): six shared-definition commands merge names and validate
+against the configuration carried by the internal resolved target. Focused 206, fiscal 20 unedited
+and root 3605 checks passed, with scoped types/lint/format. Restricted writer coverage
+100/100/100/100 is not package or CI coverage. Four installed removals failed at their intended
+assertions; restored read/write suites passed 47 cases. Existing assertions are unchanged.
+Tasks 3–8 remain unbuilt; no route or editable dialog is exposed.

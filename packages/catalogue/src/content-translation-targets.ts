@@ -28,6 +28,7 @@ export type ResolvedTranslationTarget =
   | {
       state: "present";
       target: TranslationTarget;
+      config: ContentLanguages;
       names: Record<string, string> | null;
       inheritedNames: Record<string, string>;
       structure: TranslationStructure;
@@ -262,6 +263,7 @@ function resolved(
   return {
     state: "present",
     target: { ...target, expected: token(target, config, required, structure) },
+    config,
     names,
     inheritedNames,
     structure,
