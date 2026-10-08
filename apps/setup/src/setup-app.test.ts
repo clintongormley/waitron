@@ -2909,11 +2909,11 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "The export has the zone “Terraza” switched on, but its department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.",
+      "The export has the zone “Terraza” active, but its department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.",
     ],
     [
       "es-ES",
-      "La exportación tiene la zona «Terraza» habilitada, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
     ],
   ] as const)(
     "names a switched-on zone whose department is switched off (%s)",

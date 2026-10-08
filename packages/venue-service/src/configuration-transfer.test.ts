@@ -1389,6 +1389,25 @@ describe("validateRoutingConfiguration", () => {
       expect(() => validateRoutingConfiguration(tables)).not.toThrow();
     });
 
+    it.each([true, "1", 2, null])(
+      "refuses a department flag of %j rather than guessing how storage keeps it",
+      (active) => {
+        const tables = routingTables();
+        tables.departments!.find((row) => row.id === DELI)!.active = active;
+        tables.routing_cells!.push(cell({ category: DRINKS, zone: INSIDE, station: KITCHEN }));
+        expect(() => validateRoutingConfiguration(tables)).toThrowError(
+          refusal("departments.active"),
+        );
+      },
+    );
+
+    it("reads a department row without the flag as switched on, as storage does", () => {
+      const tables = routingTables();
+      delete tables.departments!.find((row) => row.id === DELI)!.active;
+      tables.routing_cells!.push(cell({ category: DRINKS, zone: INSIDE, station: KITCHEN }));
+      expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+    });
+
     it("never refuses an Every zone cell for a switched-off department", () => {
       const tables = routingTables();
       tables.departments!.forEach((row) => (row.active = 0));
@@ -1474,6 +1493,23 @@ describe("validateRoutingConfiguration", () => {
     refusedFor({ category: DRINKS, zone: BARE_ZONE, station: BAR }, "routing_cells.zone_id");
   });
 
+  it.each([true, "1", 2, null])(
+    "refuses a zone flag of %j rather than guessing how storage keeps it",
+    (active) => {
+      const tables = routingTables();
+      tables.floor_zones!.find((row) => row.id === TERRACE)!.active = active;
+      expect(() => validateRoutingConfiguration(tables)).toThrowError(
+        refusal("floor_zones.active"),
+      );
+    },
+  );
+
+  it("reads a zone row without the flag as switched on, as storage does", () => {
+    const tables = routingTables();
+    delete tables.floor_zones!.find((row) => row.id === TERRACE)!.active;
+    expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+  });
+
   it("refuses a station the bundle does not hold", () => {
     refusedFor(
       { category: DRINKS, zone: INSIDE, station: "k-missing" },
@@ -1551,6 +1587,36 @@ describe("a switched-on zone whose department is switched off", () => {
   it("is accepted once the zone is switched off too, as switching a department off leaves it", () => {
     const tables = zoneTables();
     tables.floor_zones![0]!.active = 0;
+    expect(() => validate(tables)).not.toThrow();
+  });
+
+  it.each([true, "1"])(
+    "refuses a zone flag of %j beside a switched-off department, rather than reading it as off",
+    (active) => {
+      const tables = zoneTables();
+      tables.floor_zones![0]!.active = active;
+      expect(() => validate(tables)).toThrowError(refusal("floor_zones.active"));
+    },
+  );
+
+  it.each([true, "1"])(
+    "refuses a department flag of %j, rather than reading it as off",
+    (active) => {
+      const tables = zoneTables();
+      tables.departments!.find((row) => row.id === DELI)!.active = active;
+      expect(() => validate(tables)).toThrowError(refusal("departments.active"));
+    },
+  );
+
+  it("reads a zone row without the flag as switched on, as storage does", () => {
+    const tables = zoneTables();
+    delete tables.floor_zones![0]!.active;
+    expect(refusalOf(tables)).toMatchObject({ code: "zone.department_inactive" });
+  });
+
+  it("reads a department row without the flag as switched on, as storage does", () => {
+    const tables = zoneTables();
+    delete tables.departments!.find((row) => row.id === DELI)!.active;
     expect(() => validate(tables)).not.toThrow();
   });
 

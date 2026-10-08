@@ -62,6 +62,16 @@ function nameOf<K extends string>(key: K, row: Row | undefined): { [P in K]?: st
   return (typeof name === "string" && name !== "" ? { [key]: name } : {}) as { [P in K]?: string };
 }
 
+/**
+ * Whether a row will be stored switched on. A row without the flag takes the column's default, on;
+ * any value but 0 or 1 is refused.
+ */
+function isActive(row: Row, table: string): boolean {
+  if (row.active === undefined) return true;
+  if (row.active !== 0 && row.active !== 1) refuse(`${table}.active`);
+  return row.active === 1;
+}
+
 /** The venue's calendar date when the bundle was made; `null` when it cannot be read. */
 function exportDate(bundle: { readonly createdAt: Date; readonly timeZone: string } | undefined) {
   if (bundle === undefined) return null;
@@ -477,8 +487,10 @@ function validateDepartmentTransfers(tables: Tables): void {
 }
 
 /**
- * Refuses (`setup.request_invalid`, `field` naming `routing_cells.<column>`) routing cells a save
- * could not have written: a bad coordinate or target shape, the All categories × Every zone cell, a
+ * Refuses (`setup.request_invalid`) a zone whose `active` flag is not 0 or 1 (`field`
+ * `floor_zones.active`), and routing cells a save could not have written (`field` naming
+ * `routing_cells.<column>`, or `departments.active` when the department of a cell's zone holds a
+ * flag that is not 0 or 1): a bad coordinate or target shape, the All categories × Every zone cell, a
  * second cell at one coordinate, a variant or a product, category, zone or station the bundle does
  * not hold, and a zone that is switched off or has no service configuration. A zone whose
  * department is switched off is refused with the grid's own `service_zone.not_found`, its params
@@ -493,7 +505,7 @@ export function validateRoutingConfiguration(tables: Tables): void {
   const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
   const zones = new Set(
     (tables.floor_zones ?? [])
-      .filter((row) => row.active === 1 && configured.has(row.id))
+      .filter((row) => isActive(row, "floor_zones") && configured.has(row.id))
       .map((row) => row.id),
   );
   const named = (rows: readonly Row[] | undefined) =>
@@ -537,7 +549,7 @@ export function validateRoutingConfiguration(tables: Tables): void {
     taken.add(key);
     const departmentId = zoneDepartment.get(zone);
     const department = departmentRows.get(departmentId);
-    if (department === undefined || department.active === 1) continue;
+    if (department === undefined || isActive(department, "departments")) continue;
     throw new AppError("service_zone.not_found", {
       zoneId: String(zone),
       ...nameOf("zoneName", zoneRows.get(zone)),
@@ -554,7 +566,9 @@ export function validateRoutingConfiguration(tables: Tables): void {
 
 /**
  * Refuses (`zone.department_inactive`) a switched-on zone whose department the bundle holds switched
- * off, which no save produces: switching a department off switches its zones off.
+ * off, which no save produces: switching a department off switches its zones off. A department a
+ * zone belongs to whose `active` flag is not 0 or 1 is refused (`setup.request_invalid`,
+ * `departments.active`).
  */
 function validateZoneDepartments(tables: Tables): void {
   const zones = new Map((tables.floor_zones ?? []).map((row) => [row.id, row]));
@@ -562,7 +576,8 @@ function validateZoneDepartments(tables: Tables): void {
   for (const policy of tables.zone_service_policies ?? []) {
     const zone = zones.get(policy.zone_id);
     const department = departments.get(policy.department_id);
-    if (zone?.active !== 1 || department === undefined || department.active === 1) continue;
+    const zoneOn = zone !== undefined && isActive(zone, "floor_zones");
+    if (department === undefined || isActive(department, "departments") || !zoneOn) continue;
     throw new AppError("zone.department_inactive", {
       zoneId: String(policy.zone_id),
       ...nameOf("zoneName", zone),

@@ -135,7 +135,7 @@ export const shellEn = {
   "shell.configuration.department_off_all":
     "The export has a routing setting for the All categories row in the zone “{zone}”, but that zone's department, “{department}”, is disabled. Enable “{department}” in your prepared restaurant, export again, then load the new export.",
   "shell.configuration.zone_department_off":
-    "The export has the zone “{zone}” switched on, but its department, “{department}”, is disabled. Enable “{department}” in your prepared restaurant, export again, then load the new export.",
+    "The export has the zone “{zone}” active, but its department, “{department}”, is disabled. Enable “{department}” in your prepared restaurant, export again, then load the new export.",
 } as const;
 
 export const shellEs: Record<keyof typeof shellEn, string> = {
@@ -278,5 +278,5 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.configuration.department_off_all":
     "La exportación tiene un ajuste de asignación para la fila Todas las categorías en la zona «{zone}», pero el departamento de esa zona, «{department}», está deshabilitado. Habilita «{department}» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.zone_department_off":
-    "La exportación tiene la zona «{zone}» habilitada, pero su departamento, «{department}», está deshabilitado. Habilita «{department}» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+    "La exportación tiene la zona «{zone}» activa, pero su departamento, «{department}», está deshabilitado. Habilita «{department}» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
 };
