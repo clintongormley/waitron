@@ -1226,6 +1226,21 @@ business dates too (`saveSpecialDateMenus`, `packages/venue-service/src/menu-tim
 The station-hour assertions were retained. Remaining schema and screen work is tracked in
 A366's plan; these experiments are not a complete-slice result.
 
+### Today's station destination and period extension
+
+A station's by-hand state and chosen destination belong to one business date. Routing tries
+that destination before the configured fallback; if the walk finds no open station, the active
+venue default receives the work. Opening the station does not move already sent work back.
+Period extensions also belong to one business date: the resolver overlays the stored range
+before choosing the running and ended menus. The extension read offers future quarter-hours
+through the business-day boundary. Configuration exports omit both `station_day_states` and
+`period_extensions`; these are today's service choices, rather than a venue template.
+
+Focused receipts: `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
+`routing-store.test.ts`, `service-day.test.ts`, `menu-timetable.test.ts`, `keep-open.test.ts`,
+and `configuration-transfer.test.ts`. The approved slice 3 decision 14 leaves the authorising
+person unstored; the open history decision is in `docs/backlog/service-periods.md`.
+
 **Transactions**
 
 ## Multi-table writes share ONE transaction, and `withTransaction` IS that transaction

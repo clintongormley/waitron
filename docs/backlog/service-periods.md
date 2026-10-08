@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 2–7, each planned then built without
+  APPROVED 2026-10-07; remaining work is slices 2, 3 Part B, and 4–7, each planned then built without
   stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -40,6 +40,14 @@ their full text.
   settings shared by departments and zones, now (it needs slice 1 only); each zone's closed times
   on its Zones tab after slice 2; the floor plan on the Zones tab after A429's editor — with its
   open decisions at its top.
+
+## Who authorised today's station or period change
+
+The approved [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md)
+leaves the authorising person unstored (decision 14). The station-day and period-extension rows
+hold the choice, but no person ID. Decide whether to retain that identity before adding a history
+view; this is separate from checking the manager's permission and PIN before a write.
+
 
 ## Changing the business-day start after saving service hours
 

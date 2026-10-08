@@ -1257,44 +1257,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 2–7, each planned then built without
-  stopping for the owner**. Slice 3 Part A is in progress: its storage adds today's station
-  destination and period extensions, and the station's close/open writers and destination choices
-  are implemented. Routing follows today's destination, with the active default taking work if
-  that path ends without an open station. The module contract exposes destination choices and
-  today's close/open writes. Identity accepts the module permission and authorises a manager PIN
-  without a session under the wrong-PIN limit. The till now reads destinations and authorizers,
-  closes or opens a station with a manager permission or PIN, and reports today's state. The
-  kitchen display reads its station's name and today's state, and closes or opens that station
-  with a manager PIN, under its profile's preparation permission and the shared PIN limit.
-  The dashboard keeps today's status without close/open buttons; its today-write route is removed.
-  Stored period extensions now change the running and ended menus for today; the resolver reports
-  the running or last-ended period and its effective end. The extension read and writer offer
-  future quarter-hours, retain the scheduled start on repeated extension and refuse invalid ends;
-  the shared service contract exposes both. The server's extension routes and the till's service
-  response carry the current or last period's keep-open subject. The station-today widget and
-  destination dialog now support status, close/open requests, destination refresh after a refusal,
-  manager PIN retry and unsaved-choice protection. The operator Station screen now shows the
-  selected station's control above its queue, names the closed station's destination and marks
-  closed picker entries. Closing or reopening refreshes its status and queue; polling also reads
-  station status. The kitchen display now uses the same status and destination dialog, asking
-  for a manager PIN before each close/open write through the device routes. It keeps the
-  destination after a refused PIN and reloads its status after saving or on its polling tick.
-  The keep-open widget and dialog now offer the server's endpoints, explain delays to the next
-  period, end an extension and retry with a manager PIN. The dialog protects an edited endpoint
-  across Cancel, Escape and reconnect. Counter and table order screens now show the period
-  endpoint beside that control, including recovery from a closed department after a period ran.
-  A successful change immediately reads that zone; polls also refresh extension-only changes.
-  Opening hours and
-  the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
-  a department's day is time ranges each given a period, with last-order and leftover windows
-  set by its signed end offset. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service
-  zones spec; it folds in S11. [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+  APPROVED 2026-10-07; remaining work is slices 2, 3 Part B, and 4–7.** Zone closed times
+  and named days remain in slice 2; keeping a zone open later remains in slice 3 Part B.
+  Station-hours and fallback retirement, period routing, combined tickets, monitors, department
+  pages and department receipts remain in slices 4–7.
+  [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
-  Slice 3 Part A remains in progress on `feat/service-periods-slice-3-station-controls`:
-  its station-day and period-extension server controls and station UI are implemented; the
-  keep-open widget, dialog and order-screen wiring are implemented; documentation, final rebase,
-  full branch review and current-head CI remain.
+
+- **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
+  the authorising person's identity unstored. Decide whether to retain that identity before
+  adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-period-change)
 
 - **Changing the business-day start after saving service hours** — open review follow-up from
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
@@ -1347,10 +1319,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   untranslated in English; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-public-holidays-reviews)
 
-- **Opening or closing a station from the till** (S11, owner, 2026-10-01). Add a core till route
-  calling a new `VENUE_SERVICE` seat method, so staff can open or close the station from the till.
-  Take a manager's PIN as the cash drawer route does (`POST /api/drawer/open`,
-  `apps/server/src/till-api.ts`).
 
 ### The kitchen and preparation
 
