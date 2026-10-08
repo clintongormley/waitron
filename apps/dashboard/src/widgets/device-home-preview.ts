@@ -95,7 +95,8 @@ function tilePaint(color: string): string {
  *
  * Given `shortcuts`, the home view's shortcut block is drawn from that list instead, each tile with
  * a grip and a menu to remove it, followed by two tiles to add more; it then sends
- * `wt-shortcut-move`, `wt-shortcut-remove` and `wt-shortcut-add` and changes nothing itself.
+ * `wt-shortcut-move`, `wt-shortcut-remove` and `wt-shortcut-add` and saves nothing itself; a move
+ * shows at once until the host hands it a new list.
  */
 @customElement("dashboard-device-home-preview")
 export class DeviceHomePreview extends LitElement {

@@ -629,7 +629,8 @@ export class MenusScreen extends LitElement {
   /** Null until the open menu's Device Home Page is read, which happens only on the Home page tab. */
   @state() private menuHome: MenuHome | null = null;
   @state() private homeLoadError = false;
-  /** Why a display setting was refused, when the refusal names no control on screen. */
+  /** Why a display setting, or a shortcut's remove or move, was refused, when the refusal names no
+   * control on screen. */
   @state() private homeError: string | null = null;
   @state() private homeDevice: HomeDevice = "handheld";
   /** The setting whose save is out, shown over the saved one until the save is answered. */
@@ -711,7 +712,8 @@ export class MenusScreen extends LitElement {
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
-  /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
+  /** The tree row's ⋮, or the Home page tab's shortcut ⋮ or add tile, that gets focus back once
+   * nothing is out and the window it opened, if any, has closed. */
   #focusReturn:
     | { menuId: string; key: string }
     | { menuId: string; shortcuts: string[]; add: "product" | "section" }
@@ -1611,34 +1613,27 @@ export class MenusScreen extends LitElement {
     if (this.menuId === menuId && this.view === "home") await this.#menuReads.refresh(afterWrite);
   }
 
-  /** Adds and removes hold `busy` until the home is read again. Their scope is the menu's home, as
-   * a move's is, so a move knows when another write to the shortcuts waits behind it. A refusal
-   * that lands after the person has left the menu is dropped. Answers whether the write was saved,
-   * once the home has been read again. */
+  /** A remove holds `busy` until the home is read again. Its scope is the menu's home, as a move's
+   * is, so a move knows when another write to the shortcuts waits behind it. A refusal that lands
+   * after the person has left the menu is dropped. */
   #shortcutWrite(
     write: (menuId: string) => Promise<unknown>,
     refused: (error: unknown) => void,
-    saved?: () => void,
-  ): Promise<boolean> {
+  ): void {
     const menuId = this.menuId!;
     this.memberError = null;
     this.busy = true;
-    return new Promise((done) =>
-      this.#writes.run(`home:${menuId}`, async () => {
-        try {
-          await write(menuId);
-        } catch (error) {
-          if (this.menuId === menuId) refused(error);
-          this.busy = false;
-          done(false);
-          return;
-        }
-        saved?.();
-        await this.#rereadHome(menuId, true);
+    this.#writes.run(`home:${menuId}`, async () => {
+      try {
+        await write(menuId);
+      } catch (error) {
+        if (this.menuId === menuId) refused(error);
         this.busy = false;
-        done(true);
-      }),
-    );
+        return;
+      }
+      await this.#rereadHome(menuId, true);
+      this.busy = false;
+    });
   }
 
   /** Focus then goes to the removed shortcut's ⋮ while it is still drawn, as after a refusal, else
@@ -1653,7 +1648,7 @@ export class MenusScreen extends LitElement {
     };
     this.#windowShut = true;
     this.homeError = null;
-    void this.#shortcutWrite(
+    this.#shortcutWrite(
       (menuId) => this.api.removeHomeShortcut(menuId, memberId),
       (error) => {
         this.homeError = codeMessage(codeOf(error));
@@ -1743,7 +1738,7 @@ export class MenusScreen extends LitElement {
     return (this.menuHome?.shortcuts ?? []).map(({ memberId }) => memberId);
   }
 
-  /** Not `busy`, as for a member's move: the keyboard user's focus stays on the row. The last queued
+  /** Not `busy`, as for a member's move: the keyboard user's focus stays on the grip. The last queued
    * write's answer is shown only while the order on screen is the one the move was sent over, or
    * the answer itself; any other order may be a newer change, so the home is read again. */
   #moveShortcut(memberId: string, to: number, report: (message: string) => void): void {
