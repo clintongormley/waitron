@@ -53,18 +53,6 @@ export interface SpecialDate {
 
 export type SpecialDateInput = Omit<SpecialDate, "id"> & { cells: DateHoursCell[] };
 
-/**
- * One subject's hours on one opening date and where they came from. `specialDateId` names the
- * date's special date whenever it has one, even where the subject inherits its standard week.
- */
-export interface ResolvedHours {
-  subject: HoursSubject;
-  openingDate: LocalDate;
-  specialDateId: string | null;
-  source: "standard" | "special" | "whole_venue" | "default_station";
-  cell: WeekCell | { mode: "always_open"; periods: [] };
-}
-
 /** How the calendar colours a date: a special date's own colour, or one of the two reserved. */
 export type CalendarTone = CalendarColour | "standard" | "closed";
 

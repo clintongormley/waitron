@@ -8,7 +8,6 @@ import {
   cellIntervals,
   effective,
   invalidHours,
-  isLocalDate,
   parseDuplicateDates,
   parseSpecialDateInput,
   parseSubject,
@@ -31,7 +30,6 @@ import {
   type HoursModelSubject,
   type HoursSubject,
   type LocalDate,
-  type ResolvedHours,
   type SpecialDate,
   type SpecialDateInput,
   type WeekCell,
@@ -891,96 +889,6 @@ export async function deleteSpecialDate(
   );
   for (const participant of participants) await participant.beforeDelete(tx, cfg, id, at);
   await tx.delete(specialDates).where(eq(specialDates.id, id));
-}
-
-/**
- * Each subject's hours on one opening date, in a fixed number of reads however many subjects,
- * with the date's special date if it has one. The subjects must already be this venue's, and
- * `defaults` names those of them that are the default station.
- */
-async function resolveSubjects(
-  tx: Transaction,
-  cfg: VenueScope,
-  subjects: readonly HoursSubject[],
-  defaults: ReadonlySet<string>,
-  date: LocalDate,
-): Promise<{ special: SpecialDate | null; resolved: ResolvedHours[] }> {
-  const stationIds = subjects.map((subject) => subject.id);
-  const owners = (cells: CellTable) => inArray(cells.stationId, stationIds);
-  const [special] = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      name: specialDates.name,
-      colour: specialDates.colour,
-      closeWholeVenue: specialDates.closeWholeVenue,
-    })
-    .from(specialDates)
-    .where(and(eq(specialDates.locationId, cfg.locationId), eq(specialDates.date, date)));
-  const dateCells =
-    special === undefined
-      ? []
-      : await tx
-          .select()
-          .from(specialDateHours)
-          .where(and(eq(specialDateHours.specialDateId, special.id), owners(specialDateHours)));
-  const weekCells = await tx
-    .select()
-    .from(hoursWeekCells)
-    .where(and(eq(hoursWeekCells.weekday, weekdayOf(date)), owners(hoursWeekCells)));
-  const datePeriods = await periodsByCell(
-    tx,
-    specialDateHoursPeriods,
-    dateCells.map((cell) => cell.id),
-  );
-  const weekPeriods = await periodsByCell(
-    tx,
-    hoursWeekPeriods,
-    weekCells.map((cell) => cell.id),
-  );
-  const resolved = subjects.map((subject): ResolvedHours => {
-    const base = { subject, openingDate: date, specialDateId: special?.id ?? null };
-    if (subject.kind === "station" && defaults.has(subject.id))
-      return { ...base, source: "default_station", cell: { mode: "always_open", periods: [] } };
-    if (special?.closeWholeVenue)
-      return { ...base, source: "whole_venue", cell: { mode: "closed", periods: [] } };
-    const key = keyOf(subject);
-    const own = dateCells.find((cell) => keyOf(subjectOfRow(cell)) === key);
-    if (own !== undefined)
-      return {
-        ...base,
-        source: "special",
-        cell: cellOf(own.mode, datePeriods.get(own.id) ?? []),
-      };
-    const standard = weekCells.find((cell) => keyOf(subjectOfRow(cell)) === key);
-    return {
-      ...base,
-      source: "standard",
-      cell:
-        standard === undefined
-          ? { mode: "not_set", periods: [] }
-          : cellOf(standard.mode, weekPeriods.get(standard.id) ?? []),
-    };
-  });
-  return { special: special ?? null, resolved };
-}
-
-/**
- * One subject's hours on one opening date: the default station is always open, a whole-venue
- * closure closes everything else, then the date's own cell, then the standard week.
- */
-export async function resolveOpeningDateHours(
-  tx: Transaction,
-  cfg: VenueScope,
-  subject: HoursSubject,
-  openingDate: LocalDate,
-): Promise<ResolvedHours> {
-  const parsed = parseSubject(subject, "subject");
-  if (!isLocalDate(openingDate)) invalidHours("openingDate");
-  const defaults = await requireSubjects(tx, cfg, [
-    { subject: parsed, field: "subject", writing: false },
-  ]);
-  return (await resolveSubjects(tx, cfg, [parsed], defaults, openingDate)).resolved[0]!;
 }
 
 /**

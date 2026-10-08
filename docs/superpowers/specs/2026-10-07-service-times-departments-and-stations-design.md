@@ -1,5 +1,9 @@
 # Service times, departments, zones and prep stations
 
+> **2026-10-08:** A366 slice 1 Task 10 retires `resolveOpeningDateHours`; its station week,
+> named-date and default-opening checks move to the retained Hours model and station-state
+> readers. See [slice 1 plan](../plans/2026-10-07-a366-slice-1-service-periods.md).
+
 **Status:** owner decisions of 2026-10-07, from one brainstorm with mockups. The owner approved
 this written spec on 2026-10-07, including section 15's three defaults. Not built. Backlog item **A366**. Behaviour below is the target design, not a
 claim about what runs today; section 2 is the only part that describes today's code, and it cites

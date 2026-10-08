@@ -41,7 +41,6 @@ export {
   readWeekHours,
   renameSpecialDate,
   replaceWeekHours,
-  resolveOpeningDateHours,
   saveSpecialDate,
   type HolidayReader,
   type SpecialDateParticipant,
