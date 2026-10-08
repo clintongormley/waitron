@@ -151,6 +151,14 @@ nothing stores "handheld" or "till".
    differ without colour, in both modes; a thumbnail tile keeps the name. A missing or unreachable
    shortcut stays an empty slot, as today. Tapping a section, or an included menu's section, opens
    it behind the breadcrumb as today.
+> **2026-10-08, A336 supersedes Decisions 9 and 10's placement (owner, 2026-10-07):** shortcuts are
+> edited on the Home page tab, in its preview, and the Structure tab no longer has a "Device Home
+> Page" row. On a wide screen the tab is two columns, the preview on the left and the settings on the
+> right; on a narrow one the preview comes first. Each shortcut tile in the preview has a menu with
+> Remove and a grip that moves it by drag or by arrow keys; after the last shortcut two tiles add
+> products and add sections, each opening a picker that takes several at once and adds them, in the
+> order chosen, with one Add. The server routes are the ones Decision 9 used.
+
 9. **Structure tab:** the tree gets a fixed first row, "Device Home Page", above the menu itself. It
    cannot be renamed, moved or deleted. Its row menu adds a product shortcut or a section shortcut,
    each from a picker of what the menu reaches (the choices the Home tab builds today,
