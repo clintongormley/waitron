@@ -7832,6 +7832,21 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
     const start = source.getBoundingClientRect();
     const bounds = box.getBoundingClientRect();
     const initial = box.scrollTop;
+    const pending = new Set<number>();
+    const requestFrame = window.requestAnimationFrame.bind(window);
+    const cancelFrame = window.cancelAnimationFrame.bind(window);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      const id = requestFrame((time) => {
+        pending.delete(id);
+        callback(time);
+      });
+      pending.add(id);
+      return id;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+      pending.delete(id);
+      cancelFrame(id);
+    });
     source.dispatchEvent(
       new PointerEvent("pointerdown", {
         pointerId: 94,
@@ -7853,6 +7868,7 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
             timeout: 1500,
           })
           .toBeGreaterThan(100);
+      if (action === "cancel" || action === "Escape") expect(pending.size).toBe(1);
       if (action === "up") {
         send("pointerup");
         await el.updateComplete;
@@ -7862,6 +7878,8 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
       else if (action === "Escape")
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       else if (action === "disconnect") el.remove();
+      if (action === "cancel" || action === "Escape" || action === "fits")
+        expect(pending.size).toBe(0);
       await el.updateComplete;
       for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
       const ended = box.scrollTop;

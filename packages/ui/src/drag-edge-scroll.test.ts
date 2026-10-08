@@ -82,9 +82,13 @@ it.each(["middle", "outside", "stop", "detach"])(
 it("does not scroll a list that fits and restarts a stopped loop after another pointer move", async () => {
   const { box, row, edge } = await fixture();
   row.style.height = "100px";
-  scroll.start(row, { x: edge.left + 20, y: edge.bottom - 5 }, () => {});
+  let refreshes = 0;
+  scroll.start(row, { x: edge.left + 20, y: edge.bottom - 5 }, () => {
+    refreshes++;
+  });
   await frames();
   expect(box.scrollTop).toBe(0);
+  expect(refreshes).toBe(0);
   row.style.height = "1000px";
   scroll.update({ x: edge.left + 20, y: edge.bottom - 5 });
   await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(40);

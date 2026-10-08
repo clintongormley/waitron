@@ -5048,9 +5048,8 @@ it.each([false, true])(
   async (up) => {
     const { root, box, send, drops, initial } = await edgeProduct(up);
     try {
-      await expect
-        .poll(() => (up ? initial - box.scrollTop : box.scrollTop), { timeout: 2000 })
-        .toBeGreaterThan(350);
+      for (let frame = 0; frame < 40; frame++) await new Promise(requestAnimationFrame);
+      expect(up ? initial - box.scrollTop : box.scrollTop).toBeGreaterThan(350);
       await expect
         .poll(
           () =>
@@ -5069,6 +5068,7 @@ it.each([false, true])(
       await new Promise(requestAnimationFrame);
     }
   },
+  10_000,
 );
 
 it.each(["leave", "cancel", "Escape", "disconnect", "fits"])(
