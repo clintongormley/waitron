@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } from "drizzle-orm";
 import { kitchenStations, newId, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
@@ -1043,16 +1043,6 @@ async function readRange(
   dates: readonly LocalDate[],
   listFrom?: LocalDate,
 ) {
-  const departmentRows = await tx
-    .select({
-      id: departments.id,
-      name: departments.name,
-      active: departments.active,
-      isDefault: departments.isDefault,
-    })
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId))
-    .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   const stationRows = await tx
     .select({
       id: kitchenStations.id,
@@ -1063,31 +1053,15 @@ async function readRange(
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
-  const subjects: HoursModelSubject[] = [
-    ...departmentRows.map((row) => ({ kind: "department" as const, ...row })),
-    ...stationRows.map((row) => ({ kind: "station" as const, ...row })),
-  ];
+  const subjects: HoursModelSubject[] = stationRows.map((row) => ({
+    kind: "station",
+    ...row,
+  }));
+  const stationIds = stationRows.map((row) => row.id);
   const weekCells = await tx
     .select()
     .from(hoursWeekCells)
-    .where(
-      or(
-        and(
-          isNotNull(hoursWeekCells.departmentId),
-          inArray(
-            hoursWeekCells.departmentId,
-            departmentRows.map((row) => row.id),
-          ),
-        ),
-        and(
-          isNotNull(hoursWeekCells.stationId),
-          inArray(
-            hoursWeekCells.stationId,
-            stationRows.map((row) => row.id),
-          ),
-        ),
-      ),
-    );
+    .where(inArray(hoursWeekCells.stationId, stationIds));
   const weekPeriods = await periodsByCell(
     tx,
     hoursWeekPeriods,
@@ -1126,9 +1100,12 @@ async function readRange(
           .select()
           .from(specialDateHours)
           .where(
-            inArray(
-              specialDateHours.specialDateId,
-              specials.map((special) => special.id),
+            and(
+              inArray(
+                specialDateHours.specialDateId,
+                specials.map((special) => special.id),
+              ),
+              inArray(specialDateHours.stationId, stationIds),
             ),
           );
   const datePeriods = await periodsByCell(

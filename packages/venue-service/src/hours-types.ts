@@ -97,7 +97,6 @@ export interface HoursModel {
   /** The venue's date now; null when its clock cannot be read. */
   civilDate: LocalDate | null;
   clockReadable: boolean;
-  /** Departments first, then stations, inactive ones included. */
   subjects: HoursModelSubject[];
   /** Each subject's standard week, Sunday first, in `subjects` order. */
   week: { subject: HoursSubject; days: WeekDay[] }[];

@@ -397,6 +397,12 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 
 ## Opening hours store "no claim" as no row
 
+**2026-10-08, A366 slice 1:** `readHoursModel` now returns station subjects, weeks and
+special-date cells only. `hours-station-model.test.ts` exercises retained department cells
+and another venue's station cells alongside exact local station periods. The department
+writers and other readers described below remain pending Task 10 retirement on the feature
+branch; follow the [slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md).
+
 Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
 `hours_week_cells` and `hours_week_periods` for each department's and non-default station's
 standard week, and `special_dates`, `special_date_hours` and `special_date_hours_periods` for dated
