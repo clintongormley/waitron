@@ -20,6 +20,21 @@ export async function readCatalogueSettings(tx: Transaction): Promise<CatalogueS
   return row ?? { defaultProductVatClass: "general", defaultColor: null };
 }
 
+async function upsertSettings(
+  tx: Transaction,
+  values: Partial<CatalogueSettings>,
+): Promise<CatalogueSettings> {
+  const [row] = await tx
+    .insert(catalogueSettings)
+    .values(values)
+    .onConflictDoUpdate({ target: catalogueSettings.id, set: values })
+    .returning({
+      defaultProductVatClass: catalogueSettings.defaultProductVatClass,
+      defaultColor: catalogueSettings.defaultColor,
+    });
+  return row!;
+}
+
 export async function saveCatalogueSettings(
   tx: Transaction,
   input: { defaultProductVatClass: unknown },
@@ -27,12 +42,7 @@ export async function saveCatalogueSettings(
   const value = input.defaultProductVatClass;
   if (typeof value !== "string" || !VAT_CLASSES.includes(value as VatClass))
     throw new AppError("product.invalid", { field: "defaultProductVatClass" });
-  const settings = { defaultProductVatClass: value as VatClass };
-  await tx
-    .insert(catalogueSettings)
-    .values(settings)
-    .onConflictDoUpdate({ target: catalogueSettings.id, set: settings });
-  return readCatalogueSettings(tx);
+  return upsertSettings(tx, { defaultProductVatClass: value as VatClass });
 }
 
 export async function saveCatalogueDefaultColor(
@@ -42,9 +52,5 @@ export async function saveCatalogueDefaultColor(
   const defaultColor = colorOrNull(color, () => {
     throw new AppError("category.invalid", { field: "color" });
   });
-  await tx
-    .insert(catalogueSettings)
-    .values({ defaultColor })
-    .onConflictDoUpdate({ target: catalogueSettings.id, set: { defaultColor } });
-  return readCatalogueSettings(tx);
+  return upsertSettings(tx, { defaultColor });
 }

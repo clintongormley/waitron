@@ -28,11 +28,11 @@ function isActive(row: Record<string, unknown>): boolean {
 
 /** Screens paint a stored colour into a style attribute, so only the spelling a save stores may come
  * in. */
-function checkColors(rows: Rows | undefined, table: string): void {
+function checkColors(rows: Rows | undefined, table: string, column = "color"): void {
   for (const row of rows ?? [])
-    if (row.color !== undefined)
-      colorOrNull(row.color, () => {
-        throw new AppError("setup.request_invalid", { field: `${table}.color` });
+    if (row[column] !== undefined)
+      colorOrNull(row[column], () => {
+        throw new AppError("setup.request_invalid", { field: `${table}.${column}` });
       });
 }
 
@@ -79,11 +79,8 @@ export function validateCatalogueConfiguration(tables: Readonly<Record<string, R
       throw new AppError("setup.request_invalid", {
         field: "catalogue_settings.default_product_vat_class",
       });
-    if (row.default_color !== undefined)
-      colorOrNull(row.default_color, () => {
-        throw new AppError("setup.request_invalid", { field: "catalogue_settings.default_color" });
-      });
   }
+  checkColors(tables.catalogue_settings, "catalogue_settings", "default_color");
   checkHomeDisplays(tables.menu_details);
   checkColors(tables.products, "products");
   checkColors(tables.category_details, "category_details");

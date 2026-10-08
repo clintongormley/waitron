@@ -59,8 +59,6 @@ import {
 
 export const ROOT_KEY = "root";
 
-/** A swatch slot, at a product photo's width. */
-const folderFrame = (content: unknown) => html`<span part="folder-frame">${content}</span>`;
 /** How long a drag must rest on a closed category before it opens. */
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
@@ -1409,8 +1407,8 @@ export class ProductList extends LitElement {
   }
 
   #swatchButton(key: string, name: string, color: string | null, event: string, detail: unknown) {
-    return folderFrame(
-      html`<button
+    return html`<span part="folder-frame"
+      ><button
         part="swatch-button"
         type="button"
         data-test=${`color-${key}`}
@@ -1421,8 +1419,8 @@ export class ProductList extends LitElement {
         }}
       >
         ${swatchChip(color)}
-      </button>`,
-    );
+      </button></span
+    >`;
   }
 
   #send(name: string, detail: unknown): void {
