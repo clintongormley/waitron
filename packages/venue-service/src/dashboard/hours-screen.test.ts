@@ -301,7 +301,7 @@ describe("Hours: the standard week", () => {
   it("shows Monday to Sunday down the side and departments, then a separated block of stations", async () => {
     const { api } = server();
     const el = await mount(api);
-    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Hours");
+    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Station hours");
     expect(el.shadowRoot!.querySelectorAll("h1")).toHaveLength(1);
     const grid = el.shadowRoot!.querySelector('table[data-test="week-grid"]')!;
     expect([...grid.querySelectorAll("tbody th")].map(text)).toEqual([
@@ -938,7 +938,7 @@ describe("Hours: the standard week", () => {
     setLocale("es");
     const { api } = server();
     const el = await mount(api);
-    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Horarios");
+    expect(text(el.shadowRoot!.querySelector("h1"))).toBe("Horario de estaciones");
     const grid = el.shadowRoot!.querySelector('table[data-test="week-grid"]')!;
     expect(text(grid.querySelector("tbody th"))).toBe("Lunes");
     expect(text(cell(el, restaurant, 1))).toBe("Cerrado");
@@ -949,7 +949,7 @@ describe("Hours: the standard week", () => {
 
 describe("Hours: where a link opens it", () => {
   it.each([
-    ["/manage/hours/view/week/department/deli", deli],
+    ["/manage/hours/view/week/station/bar", bar],
     ["/manage/hours/station/bar", bar],
   ])("focuses the subject %s names", async (path, key) => {
     history.replaceState(null, "", path);
@@ -964,6 +964,7 @@ describe("Hours: where a link opens it", () => {
   });
 
   it.each([
+    "/manage/hours/department/deli",
     "/manage/hours/department/nobody",
     "/manage/hours/department/bar",
     "/manage/hours/station/terrace",
@@ -2562,3 +2563,12 @@ describe("Hours: public holidays", () => {
 function requestWrites(calls: (method: string) => unknown[][]) {
   return [...calls("POST"), ...calls("PUT"), ...calls("DELETE")];
 }
+
+it("a retired department URL cannot override the station named alongside it", async () => {
+  history.replaceState(null, "", "/manage/hours/department/deli/station/bar");
+  const { api } = server();
+  const el = await mount(api);
+  const header = el.shadowRoot!.querySelector('th[data-subject="station:bar"]')!;
+  expect(el.shadowRoot!.activeElement).toBe(header);
+  expect(modal(el)).toBeNull();
+});

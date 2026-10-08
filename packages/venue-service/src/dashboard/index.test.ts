@@ -230,8 +230,8 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       requiresPermission: "venue_service.manage",
       readPermission: "venue.view",
     });
-    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.hours"]).toBe("Hours");
-    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.hours"]).toBe("Horarios");
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.hours"]).toBe("Station hours");
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.hours"]).toBe("Horario de estaciones");
     const handle = hours.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,

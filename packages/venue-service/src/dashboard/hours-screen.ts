@@ -292,20 +292,14 @@ export class HoursScreen extends LitElement {
       if (this.#url.read("dashboard") !== "hours") return;
       const view = this.#url.read("view");
       this.view = view === "dates" || view === "calendar" ? view : "week";
-      const department = this.#url.read("department");
       const station = this.#url.read("station");
-      this.#linked =
-        department !== null
-          ? `department:${department}`
-          : station !== null
-            ? `station:${station}`
-            : undefined;
+      this.#linked = station !== null ? `station:${station}` : undefined;
       void this.#focusLinked();
     },
     {
       basePath: "/manage",
       primary: "dashboard",
-      children: { hours: { view: "view", department: "department", station: "station" } },
+      children: { hours: { view: "view", station: "station" } },
     },
   );
 
