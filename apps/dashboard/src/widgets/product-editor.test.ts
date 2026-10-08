@@ -2108,6 +2108,58 @@ it("describes Use category colour by the draft category's colour, and follows a 
   await describes("#7a25b1");
 });
 
+it("describes the inherited choice by the venue default when the product has no category", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, primaryCategoryId: null },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    categories: colouredCategories,
+    defaultColor: "#b12525",
+  });
+  await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleDescription("#b12525");
+  expect(getComputedStyle(useCategory(el).querySelector(".chip")!).backgroundColor).toBe(
+    "rgb(177, 37, 37)",
+  );
+});
+
+it.each([
+  { locale: "en-GB", useDefault: "Use default colour", useCategory: "Use category colour" },
+  {
+    locale: "es-ES",
+    useDefault: "Usar el color predeterminado",
+    useCategory: "Usar el color de la categoría",
+  },
+])(
+  "in $locale, names the inherited choice by the venue default when no category above the product has a colour, and by the category when one does",
+  async ({ locale, useDefault, useCategory: categoryLabel }) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      for (const primaryCategoryId of [null, "plates"]) {
+        const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+          open: true,
+          value: { ...product, primaryCategoryId },
+          locales: ["en"],
+          units: [unit],
+          taxChoices: reduced,
+          categories: colouredCategories,
+          defaultColor: "#b12525",
+        });
+        await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleName(useDefault);
+        await pickIn(el, "primary", { value: "wine" });
+        await expect
+          .element(page.elementLocator(useCategory(el)))
+          .toHaveAccessibleName(categoryLabel);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  },
+);
+
 it("saves a chosen swatch as the product's own colour", async () => {
   const el = await mountColoured();
   expect(useCategory(el).getAttribute("aria-checked")).toBe("true");

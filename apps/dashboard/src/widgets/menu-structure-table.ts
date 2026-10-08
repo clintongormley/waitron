@@ -193,8 +193,9 @@ export class MenuStructureTable extends LitElement {
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   /** Where members' staff names and images come from. */
   @property({ attribute: false }) products: Product[] = [];
-  /** Where a product without its own colour takes one from. */
+  /** With `defaultColor`, where a product without its own colour takes one from. */
   @property({ attribute: false }) categories: CategorySummary[] = [];
+  @property({ attribute: false }) defaultColor: string | null = null;
   @property() menuName = "";
   /** The path of the current section; empty for the menu's own top level. */
   @property({
@@ -703,7 +704,11 @@ export class MenuStructureTable extends LitElement {
         productId,
         name,
         image: product?.image ?? null,
-        color: product?.color ?? categoryColor(product?.categoryId ?? null, this.#categoryById),
+        color:
+          product === undefined
+            ? null
+            : (product.color ??
+              categoryColor(product.categoryId, this.#categoryById, this.defaultColor)),
         editable: !row.readOnly && product !== undefined,
         busy: this.busy,
       });

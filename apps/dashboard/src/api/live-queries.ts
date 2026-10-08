@@ -2,6 +2,7 @@ import type { ResourceQuery } from "@waitron/dashboard-kit";
 import type { DashboardApi, MenuReadPart } from "./client.js";
 
 const MENU_PUBLICATION_READS = [
+  "catalogue_settings",
   "catalogues",
   "categories",
   "category_details",
@@ -188,7 +189,7 @@ export const QUERY_DEPENDENCIES = {
     "units",
   ],
   // The tables `menuStatus` and `previewMenu` read (packages/catalogue/src/menu-publication.ts); a
-  // category's colour is part of each offer's colour.
+  // category's colour and the venue default colour are part of each offer's colour.
   getMenuRead: MENU_PUBLICATION_READS,
   getMenuStatuses: MENU_PUBLICATION_READS,
   getMenuStatus: MENU_PUBLICATION_READS,

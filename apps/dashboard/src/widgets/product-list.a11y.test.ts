@@ -323,9 +323,29 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    expect(table.shadowRoot!.querySelectorAll('[part~="swatch-button"]')).toHaveLength(2);
+    expect(table.shadowRoot!.querySelectorAll('[part~="swatch-button"]')).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
+
+  it.each([null, "#b12525"])(
+    "renders accessibly with All products' swatch for a venue default of %s",
+    async (defaultColor) => {
+      const { el, host } = await mountWidget<ProductList>(
+        "dashboard-product-list",
+        { products, categories: [], defaultColor },
+        theme,
+      );
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const chip = table.shadowRoot!.querySelector(
+        '[data-test="color-root"] [part~="color-swatch"]',
+      )!;
+      expect(chip.getAttribute("part")).toBe(
+        defaultColor === null ? "color-swatch empty" : "color-swatch",
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders accessibly mid-drag", async () => {
     const { el, host } = await mountWidget<ProductList>(

@@ -399,6 +399,7 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
+  @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
@@ -1188,12 +1189,14 @@ export class ProductEditor extends LitElement {
   }
 
   private renderColor() {
+    const fromCategory = categoryColor(this.draft.primaryCategoryId, this.#categoryNodes, null);
     return html`<div class="group" data-section="color">
       ${colorField({
         color: this.draft.color,
         name: "product-color",
         errorId: "product-color-error",
-        categoryColor: categoryColor(this.draft.primaryCategoryId, this.#categoryNodes),
+        categoryColor: fromCategory ?? this.defaultColor,
+        inheritedFrom: fromCategory === null && this.defaultColor !== null ? "default" : "category",
         error: this.error("product-color"),
         busy: this.suspended,
         change: (color) => this.change("color", color),

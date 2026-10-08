@@ -225,6 +225,7 @@ export const en = {
   "editor.color_none": "No colour",
   "editor.color_custom": "Custom",
   "editor.color_use_category": "Use category colour",
+  "editor.color_use_default": "Use default colour",
   "editor.color_category_none": "Its category has no colour.",
 
   "nav.modifiers": "Modifiers",
@@ -2656,6 +2657,7 @@ export const es: Record<StringKey, string> = {
   "editor.color_none": "Sin color",
   "editor.color_custom": "Personalizado",
   "editor.color_use_category": "Usar el color de la categoría",
+  "editor.color_use_default": "Usar el color predeterminado",
   "editor.color_category_none": "Su categoría no tiene color.",
 
   "nav.modifiers": "Modificadores",

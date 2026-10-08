@@ -21,6 +21,7 @@ import {
   type ShownFolderCounts,
   catalogueExists,
   readCatalogueSettings,
+  saveCatalogueDefaultColor,
   saveCatalogueSettings,
   readContentLanguages,
   listTranslationGapReport,
@@ -762,6 +763,15 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           saveCatalogueSettings(tx, { defaultProductVatClass: body.defaultProductVatClass }),
         ),
       );
+    }),
+  );
+  app.put("/management-api/catalogue-settings/default-color", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<{ color?: unknown }>(c);
+      if (body.color !== null && typeof body.color !== "string")
+        throw new AppError("management.request_invalid", { field: "color" });
+      return c.json(await gated(c, sessionId, (tx) => saveCatalogueDefaultColor(tx, body.color)));
     }),
   );
 

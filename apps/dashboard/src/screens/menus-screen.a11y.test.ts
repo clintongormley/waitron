@@ -119,6 +119,9 @@ function api(state: State): DashboardApi {
     listSections: vi.fn().mockResolvedValue(sections),
     listLibraryProducts: vi.fn().mockResolvedValue([lager]),
     listCategories: vi.fn().mockResolvedValue([]),
+    getCatalogueSettings: vi
+      .fn()
+      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getMenuStructure:
       state === "structure-failed"
         ? vi.fn().mockRejectedValue(new Error("offline"))

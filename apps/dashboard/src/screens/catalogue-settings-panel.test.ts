@@ -29,14 +29,16 @@ async function change(panel: Panel, value: string) {
   await panel.updateComplete;
 }
 function fixture(overrides: Partial<DashboardApi> = {}) {
-  let stored: CatalogueSettings = { defaultProductVatClass: "reduced" };
+  let stored: CatalogueSettings = { defaultProductVatClass: "reduced", defaultColor: null };
   const api = {
     liveData: new LiveData(),
     getCatalogueSettings: vi.fn(async () => ({ ...stored })),
-    saveCatalogueSettings: vi.fn(async (value: CatalogueSettings) => {
-      stored = { ...value };
-      return { ...stored };
-    }),
+    saveCatalogueSettings: vi.fn(
+      async (value: Pick<CatalogueSettings, "defaultProductVatClass">) => {
+        stored = { ...stored, ...value };
+        return { ...stored };
+      },
+    ),
     ...overrides,
   } as unknown as DashboardApi;
   Object.defineProperty(api, "background", { get: () => api });
@@ -144,12 +146,16 @@ it("keeps a failed save editable and its field refusal through a successful live
 it("refreshes a pristine default but preserves a changed draft", async () => {
   const api = fixture();
   const panel = await mount(api);
-  vi.mocked(api.getCatalogueSettings).mockResolvedValue({ defaultProductVatClass: "general" });
+  vi.mocked(api.getCatalogueSettings).mockResolvedValue({
+    defaultProductVatClass: "general",
+    defaultColor: null,
+  });
   api.liveData.refresh();
   await expect.poll(() => field(panel).value).toBe("general");
   await change(panel, "zero");
   vi.mocked(api.getCatalogueSettings).mockResolvedValue({
     defaultProductVatClass: "super_reduced",
+    defaultColor: null,
   });
   api.liveData.refresh();
   await expect.poll(() => vi.mocked(api.getCatalogueSettings).mock.calls.length).toBe(3);
@@ -175,7 +181,7 @@ it.each(["success", "refusal"])(
     await panel.updateComplete;
     expect(api.saveCatalogueSettings).toHaveBeenCalledOnce();
     panel.remove();
-    if (outcome === "success") resolve({ defaultProductVatClass: "zero" });
+    if (outcome === "success") resolve({ defaultProductVatClass: "zero", defaultColor: null });
     else reject({ code: "product.invalid", params: { field: "defaultProductVatClass" } });
     await pending.catch(() => undefined);
     await panel.updateComplete;

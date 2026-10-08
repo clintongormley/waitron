@@ -8,7 +8,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { colorField, colorFieldStyles } from "./color-field.js";
 import { t } from "../i18n/t.js";
 
-/** A category's colour chooser. Choosing is the answer: there is no Save. */
+/** The colour chooser for a category, or for All products' venue default. Choosing is the answer: there is no Save. */
 @customElement("dashboard-category-color-form")
 export class CategoryColorForm extends LitElement {
   constructor() {

@@ -286,6 +286,35 @@ describe("validateCatalogueConfiguration: new-product VAT default", () => {
   );
 });
 
+describe("validateCatalogueConfiguration: default colour", () => {
+  it.each([
+    ["a stored colour", { default_color: "#b12525" }],
+    ["null", { default_color: null }],
+    ["an absent key", {}],
+  ])("accepts %s", (_label, extra) => {
+    expect(() =>
+      validateCatalogueConfiguration({
+        catalogue_settings: [{ id: 1, default_product_vat_class: "general", ...extra }],
+      }),
+    ).not.toThrow();
+  });
+
+  it("refuses a colour no save would store", () => {
+    expect(() =>
+      validateCatalogueConfiguration({
+        catalogue_settings: [
+          { id: 1, default_product_vat_class: "general", default_color: "#ABCDEF" },
+        ],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "catalogue_settings.default_color" },
+      }),
+    );
+  });
+});
+
 describe("validateCatalogueConfiguration: include folders", () => {
   const sections = [
     { id: "lunch-root", role: "menu_root" },

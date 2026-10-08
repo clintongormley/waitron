@@ -11,14 +11,16 @@ import "./catalogue-settings-panel.js";
 afterEach(cleanupWidgets);
 
 function stubApi(overrides: Partial<DashboardApi> = {}) {
-  let stored: CatalogueSettings = { defaultProductVatClass: "reduced" };
+  let stored: CatalogueSettings = { defaultProductVatClass: "reduced", defaultColor: null };
   const api = {
     liveData: new LiveData(),
     getCatalogueSettings: vi.fn(async () => ({ ...stored })),
-    saveCatalogueSettings: vi.fn(async (value: CatalogueSettings) => {
-      stored = { ...value };
-      return { ...stored };
-    }),
+    saveCatalogueSettings: vi.fn(
+      async (value: Pick<CatalogueSettings, "defaultProductVatClass">) => {
+        stored = { ...stored, ...value };
+        return { ...stored };
+      },
+    ),
     ...overrides,
   } as unknown as DashboardApi;
   Object.defineProperty(api, "background", { get: () => api });
@@ -138,7 +140,10 @@ it("a refused save leaves the changed class and Save enabled", async () => {
 it("a live read that moves an untouched default leaves Save quiet", async () => {
   const api = stubApi();
   const el = await mount(api);
-  vi.mocked(api.getCatalogueSettings).mockResolvedValue({ defaultProductVatClass: "general" });
+  vi.mocked(api.getCatalogueSettings).mockResolvedValue({
+    defaultProductVatClass: "general",
+    defaultColor: null,
+  });
   api.liveData.refresh();
   await expect.poll(() => field(el).value).toBe("general");
   expect(await saveState(el)).toEqual(quiet);

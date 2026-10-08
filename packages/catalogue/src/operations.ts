@@ -145,8 +145,8 @@ export interface UpdateProductInput {
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
-  /** `null` takes its category's colour. On a variant's id any value, null included, is refused
-   * `product.not_found`: a variant's colour is always its parent's. */
+  /** `null` takes its category's colour, else the venue's default. On a variant's id any value,
+   * null included, is refused `product.not_found`: a variant's colour is always its parent's. */
   color?: string | null;
   /** `null` clears the declaration back to unreviewed. */
   allergens?: ProductAllergens | null;

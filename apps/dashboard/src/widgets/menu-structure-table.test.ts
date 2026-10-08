@@ -1521,6 +1521,22 @@ describe("colour swatches", () => {
     );
   });
 
+  it("paints the venue default on a product with nothing coloured above it, never on a missing product", async () => {
+    const el = await mountColoured({ defaultColor: "#777777" });
+    await toggle(el, "m-drinks");
+    // Burger has a photo, so its colour paints the ring around it.
+    expect(chipOf(el, "m-burger").part.contains("empty")).toBe(false);
+    expect(getComputedStyle(chipOf(el, "m-burger")).borderTopColor).toBe("rgb(119, 119, 119)");
+    expect(getComputedStyle(chipOf(el, "m-drinks/m-lemonade")).backgroundColor).toBe(
+      "rgb(37, 107, 177)",
+    );
+
+    el.products = coloured.filter((item) => item.id !== "p-burger");
+    await settle(el);
+    expect(chipOf(el, "m-burger").part.contains("empty")).toBe(true);
+    expect(chipOf(el, "m-burger").hasAttribute("style")).toBe(false);
+  });
+
   it("the swatch shows the folder's fixed colour while it is a folder", async () => {
     const ownColour = { ...wines(), color: "#7a1f3d" };
     const fixed = (showAsFolder: boolean): MenuStructureNode => ({

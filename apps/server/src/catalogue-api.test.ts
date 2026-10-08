@@ -5961,10 +5961,10 @@ describe("catalogue settings routes", () => {
         body: { defaultProductVatClass },
       });
       expect(saved.status).toBe(200);
-      expect(await saved.json()).toEqual({ defaultProductVatClass });
+      expect(await saved.json()).toEqual({ defaultProductVatClass, defaultColor: null });
       const loaded = await send(app, "GET", "/management-api/catalogue-settings");
       expect(loaded.status).toBe(200);
-      expect(await loaded.json()).toEqual({ defaultProductVatClass });
+      expect(await loaded.json()).toEqual({ defaultProductVatClass, defaultColor: null });
     }
   });
 
@@ -6000,6 +6000,74 @@ describe("catalogue settings routes", () => {
       });
     },
   );
+
+  it("saves, reloads and clears the venue default colour", async () => {
+    const app = mountApp();
+    await send(app, "PUT", "/management-api/catalogue-settings", {
+      body: { defaultProductVatClass: "reduced" },
+    });
+    const saved = await send(app, "PUT", "/management-api/catalogue-settings/default-color", {
+      body: { color: "#b12525" },
+    });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({
+      defaultProductVatClass: "reduced",
+      defaultColor: "#b12525",
+    });
+    const loaded = await send(app, "GET", "/management-api/catalogue-settings");
+    expect(await loaded.json()).toEqual({
+      defaultProductVatClass: "reduced",
+      defaultColor: "#b12525",
+    });
+    const cleared = await send(app, "PUT", "/management-api/catalogue-settings/default-color", {
+      body: { color: null },
+    });
+    expect(cleared.status).toBe(200);
+    expect(await cleared.json()).toEqual({ defaultProductVatClass: "reduced", defaultColor: null });
+    const reloaded = await send(app, "GET", "/management-api/catalogue-settings");
+    expect(await reloaded.json()).toEqual({
+      defaultProductVatClass: "reduced",
+      defaultColor: null,
+    });
+  });
+
+  it("refuses a default colour that is not lowercase #rrggbb", async () => {
+    const app = mountApp();
+    const response = await send(app, "PUT", "/management-api/catalogue-settings/default-color", {
+      body: { color: "#ABCDEF" },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "category.invalid", params: { field: "color" } },
+    });
+  });
+
+  it.each([{ color: 5 }, {}])("refuses a default colour body %j", async (body) => {
+    const app = mountApp();
+    const response = await send(app, "PUT", "/management-api/catalogue-settings/default-color", {
+      body,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "color" } },
+    });
+  });
+
+  it("refuses an unauthenticated or staff default colour save", async () => {
+    const app = mountApp();
+    const path = "/management-api/catalogue-settings/default-color";
+    const body = { color: "#b12525" };
+    const anonymous = await send(app, "PUT", path, { cookie: null, body });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const staff = await send(app, "PUT", path, { cookie: staffCookie, body });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    const loaded = await send(app, "GET", "/management-api/catalogue-settings");
+    expect(await loaded.json()).toMatchObject({ defaultColor: null });
+  });
 
   it("still requires an explicit class on the product create API", async () => {
     const app = mountApp();

@@ -219,7 +219,9 @@ const sections: SectionDetails[] = [
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
-    getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "general" }),
+    getCatalogueSettings: vi
+      .fn()
+      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     listCategories: vi.fn().mockResolvedValue(categories),
@@ -3316,8 +3318,8 @@ it("closing a guarded linked product retires its field query before opening anot
 });
 
 it("waits for the venue's VAT default before enabling Add product", async () => {
-  let resolve!: (value: { defaultProductVatClass: "reduced" }) => void;
-  const pending = new Promise<{ defaultProductVatClass: "reduced" }>((yes) => {
+  let resolve!: (value: { defaultProductVatClass: "reduced"; defaultColor: null }) => void;
+  const pending = new Promise<{ defaultProductVatClass: "reduced"; defaultColor: null }>((yes) => {
     resolve = yes;
   });
   const api = stubApi({ getCatalogueSettings: vi.fn(() => pending) });
@@ -3333,7 +3335,7 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   (await add()).click();
   await el.updateComplete;
   expect(editor(el).open).toBe(false);
-  resolve({ defaultProductVatClass: "reduced" });
+  resolve({ defaultProductVatClass: "reduced", defaultColor: null });
   await pending;
   await flush(el);
   expect((await add()).disabled).toBe(false);
@@ -3346,11 +3348,66 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   ).toBe("reduced");
 });
 
+it("paints All products' square, an uncategorised product and a new product's inherited colour with the venue default, and repaints them on a live answer", async () => {
+  const liveData = new LiveData();
+  const loose: Product = {
+    ...products[0]!,
+    id: "p2",
+    name: "Agua",
+    categoryId: null,
+    primaryCategoryId: null,
+  };
+  const api = Object.assign(
+    stubApi({
+      getCatalogueSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: "#b12525" }),
+      listProducts: vi
+        .fn()
+        .mockImplementation((id: string) =>
+          Promise.resolve(id === "cat-a" ? [...products, loose] : []),
+        ),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await flush(el);
+  const fills = async () => {
+    const root = (await productTable(el)).shadowRoot!;
+    const fill = (selector: string) =>
+      getComputedStyle(root.querySelector<HTMLElement>(selector)!).backgroundColor;
+    return [
+      fill('[data-test="color-root"] [part~="color-swatch"]'),
+      fill('[data-test="color-p2"] [data-test="thumb-placeholder"]'),
+    ];
+  };
+  await expect.poll(fills).toEqual(["rgb(177, 37, 37)", "rgb(177, 37, 37)"]);
+  emit(list(el), "add-product", { categoryId: null });
+  await el.updateComplete;
+  await editor(el).updateComplete;
+  const inherited = () =>
+    getComputedStyle(
+      editor(el).shadowRoot!.querySelector<HTMLElement>('fieldset.color [data-color=""] .chip')!,
+    ).backgroundColor;
+  expect(inherited()).toBe("rgb(177, 37, 37)");
+
+  vi.mocked(api.getCatalogueSettings).mockResolvedValue({
+    defaultProductVatClass: "general",
+    defaultColor: "#256bb1",
+  });
+  liveData.refresh();
+  await expect.poll(fills).toEqual(["rgb(37, 107, 177)", "rgb(37, 107, 177)"]);
+  await editor(el).updateComplete;
+  expect(inherited()).toBe("rgb(37, 107, 177)");
+});
+
 it("reads the venue's default into a new editor without replacing an open draft", async () => {
   const liveData = new LiveData();
   const api = Object.assign(
     stubApi({
-      getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "super_reduced" }),
+      getCatalogueSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultProductVatClass: "super_reduced", defaultColor: null }),
     }),
     { liveData },
   );
@@ -3370,7 +3427,10 @@ it("reads the venue's default into a new editor without replacing an open draft"
     }),
   );
   await editor(el).updateComplete;
-  vi.mocked(api.getCatalogueSettings).mockResolvedValue({ defaultProductVatClass: "reduced" });
+  vi.mocked(api.getCatalogueSettings).mockResolvedValue({
+    defaultProductVatClass: "reduced",
+    defaultColor: null,
+  });
   liveData.refresh();
   await expect.poll(() => vi.mocked(api.getCatalogueSettings).mock.calls.length).toBe(2);
   await flush(el);

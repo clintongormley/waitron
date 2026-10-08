@@ -240,7 +240,7 @@ for (const succeeds of [true, false]) {
     let refreshDirty: boolean | undefined;
     let written = false;
     const api = {
-      getCatalogueSettings: async () => ({ defaultProductVatClass: "general" }),
+      getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
       listCategories: async () => [],

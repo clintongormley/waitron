@@ -252,6 +252,24 @@ it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
   },
 );
 
+it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
+  "refreshes %s when the catalogue settings change, since the venue default colour ends each offer's colour walk",
+  async (name) => {
+    const fetchImpl = vi.fn(async () => new Response("[]"));
+    const api = new DashboardApi("", fetchImpl);
+    const args: [] | [string] = name === "getMenuStatuses" ? [] : ["lunch"];
+    const observed = api.liveData.observe(dashboardQuery(api, name, args), () => {});
+    try {
+      await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+      const before = fetchImpl.mock.calls.length;
+      api.liveData.invalidate([{ type: "catalogue_settings", id: "1" }]);
+      await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));
+    } finally {
+      observed.unsubscribe();
+    }
+  },
+);
+
 it("leaves the category report at time of sale alone when the catalogue is edited", async () => {
   const fetchImpl = vi.fn(async () => new Response("{}"));
   const api = new DashboardApi("", fetchImpl);

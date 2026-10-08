@@ -741,6 +741,7 @@ export class CatalogueScreen extends LitElement {
               }
               .canAddProduct=${this.catalogueSettings !== null && locales.length > 0 && this.units.length > 0}
               .loaded=${this.productsLoaded}
+              .defaultColor=${this.catalogueSettings?.defaultColor ?? null}
               @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
                 event.stopPropagation();
                 this.#addFrom = event.detail.categoryId;
@@ -777,6 +778,7 @@ export class CatalogueScreen extends LitElement {
         .value=${this.editorValue}
         .initialField=${this.editorInitialField}
         .defaultVatClass=${this.catalogueSettings?.defaultProductVatClass ?? "general"}
+        .defaultColor=${this.catalogueSettings?.defaultColor ?? null}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}

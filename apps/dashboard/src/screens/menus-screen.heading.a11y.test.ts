@@ -46,6 +46,9 @@ function api(status: MenuStatus = changed): DashboardApi {
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listLibraryProducts: vi.fn().mockResolvedValue([lager]),
     listCategories: vi.fn().mockResolvedValue([]),
+    getCatalogueSettings: vi
+      .fn()
+      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
     getMenuStructure: vi.fn().mockResolvedValue({
       rootSectionId: "root-lunch",
       root: {

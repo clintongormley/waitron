@@ -921,7 +921,7 @@ Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
 holds a section's colour square, a product's colour square or photo, or nothing on the Home and
 menu rows. A photo has a ring in the product's own colour, falling back to its category's inherited
-colour. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
+colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
 media in both trees when the tree's box is at most 440px wide. In the Products list the product
@@ -1117,17 +1117,19 @@ the tree arrow and indentation. Leave a blank grip on All products and a categor
 outside that mode, draw no grip or its space and allow no drag. In the name column, first comes
 the table's arrow or its blank space, narrower at phone width as above.
 Last comes a slot a product photo wide: on a category
-row it holds the category's colour square, centred; on a product row, the product's photo with a
+row it holds the category's colour square, centred, and on All products the venue's default colour
+square, an empty outline when there is none; on a product row, the product's photo with a
 colour ring, or a filled colour square when it has no photo. Both use the product's own colour,
-falling back to its category's inherited colour; without either colour the frame is empty. Clicking
-the product slot opens the product's Edit dialog with its photo field focused. Category squares still open their
-colour picker directly. On All products the slot is blank; on a category being added or renamed it holds the name box's colour square (below). No row draws a folder icon, though the picture that follows the pointer while you drag
+falling back to its category's inherited colour, then to the venue's default; without any of them
+the frame is empty. Clicking
+the product slot opens the product's Edit dialog with its photo field focused. Category squares and
+All products' square open their colour picker directly. On a category being added or renamed the slot holds the name box's colour square (below). No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
 table's indent per level whether the row is a category or a product, and the Name heading, which
 moves with the mode, sits over the All products name. A colour square and a product's photo or
 placeholder each occupy a `--wt-tap-min` square, including their border. This keeps the square's
 colour action at the minimum tap size and gives photos the same visual size. At phone width, when
-the table carries `narrow` (its box is 440px wide or less), both trees hide the category or section
+the table carries `narrow` (its box is 440px wide or less), both trees hide the category, All products or section
 slot — except a category's while it is being named (below) — and the product photo or placeholder, so names at the same level start together. The Products
 tree visually hides each category's count, including All products', with the shared visually hidden
 pattern. The text remains in the row's accessible name, so screen readers retain the contents count

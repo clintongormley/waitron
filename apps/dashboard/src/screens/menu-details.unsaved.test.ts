@@ -51,6 +51,10 @@ for (const kind of ["menu", "section"] as const) {
         },
         listLibraryProducts: async () => [],
         listCategories: async () => [],
+        getCatalogueSettings: async () => ({
+          defaultProductVatClass: "general",
+          defaultColor: null,
+        }),
         getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
         getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
         getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),
@@ -140,6 +144,7 @@ for (const succeeds of [true, false]) {
       listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
       listLibraryProducts: async () => [],
       listCategories: async () => [],
+      getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
       getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),

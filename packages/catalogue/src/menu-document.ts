@@ -6,6 +6,7 @@ import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
 import { effectiveColor } from "./color-inheritance.js";
+import { readCatalogueSettings } from "./settings.js";
 import { includedMenus } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
 import type { CombinedOffer, MenuClash, ValueSource } from "./menu-combine-types.js";
@@ -139,7 +140,11 @@ export async function buildMenuDocuments(
     { includeEveryModifierItem: true, graph: loaded },
   );
   const offeredProducts = [...new Set(offers.map((offer) => offer.productId))];
-  const dishFacts = await readDishFacts(tx, offeredProducts);
+  const dishFacts = await readDishFacts(
+    tx,
+    offeredProducts,
+    offeredProducts.length === 0 ? null : (await readCatalogueSettings(tx)).defaultColor,
+  );
   const extraImages = await readEffectiveImages(tx, [
     ...new Set(
       offers.flatMap((offer) =>
@@ -270,11 +275,12 @@ interface DishFacts {
 }
 
 /** The dish's own photo and description, which `MenuOffer` does not carry, and its effective colour
- * (a variant's is its parent's): one read of the category tree, then one read of the products per
- * batch. */
+ * (a variant's is its parent's), ending at `fallback`: one read of the category tree, then one read
+ * of the products per batch. */
 export async function readDishFacts(
   tx: Transaction,
   productIds: readonly string[],
+  fallback: string | null,
 ): Promise<Map<string, DishFacts>> {
   const facts = new Map<string, DishFacts>();
   if (productIds.length === 0) return facts;
@@ -294,7 +300,7 @@ export async function readDishFacts(
       facts.set(row.id, {
         image: row.image,
         description: row.description,
-        color: effectiveColor(row.color, row.categoryId, tree),
+        color: effectiveColor(row.color, row.categoryId, tree, fallback),
       });
   return facts;
 }

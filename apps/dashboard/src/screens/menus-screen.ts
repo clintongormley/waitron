@@ -526,6 +526,7 @@ export class MenusScreen extends LitElement {
   }
   @state() private products: Product[] = [];
   @state() private categories: CategorySummary[] = [];
+  @state() private defaultColor: string | null = null;
   @state() private loading = true;
   @state() private loadError = false;
 
@@ -871,6 +872,9 @@ export class MenusScreen extends LitElement {
         }),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
+        }),
+        this.#queries.watch("getCatalogueSettings", [], (value) => {
+          this.defaultColor = value.defaultColor;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           setContentLanguages(value);
@@ -2156,6 +2160,7 @@ export class MenusScreen extends LitElement {
         .nodes=${structure.nodes}
         .products=${this.products}
         .categories=${this.categories}
+        .defaultColor=${this.defaultColor}
         .current=${this.path}
         .busy=${this.busy}
         .reordering=${this.structureReordering}
