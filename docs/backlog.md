@@ -3482,7 +3482,7 @@ On 2026-10-08 A349's six Preview, price-table and navigation suites also logged 
 `menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 
-**A407: currency measurements, ready for branch review (2026-10-08).** On main
+**A407: currency measurements, IN PROGRESS (2026-10-08), branch `fix/resize-observer-loop`.** On main
 `c7624e1b4396fe6123cdbe26487b3b06134e6bc0`, the four-suite catalogue/Preview/prices command
 ran 561 passing cases and logged the warning. Instrumenting real observers attributed the
 phone-price cases to `wt-price-input`: its currency callback increased a field from
@@ -3496,6 +3496,11 @@ The eight-suite catalogue/Preview/prices/navigation run passed 630 cases without
 The catalogue-only command on the original main commit passed 270 cases without the warning.
 Its historical occurrence was not reproduced here; this receipt does not attribute it to
 currency fields.
+The whole-branch review found repeated initial layout reads and a hidden-field spacing gap.
+The driver reproduced the latter in a disposable checkout: a later observer saw the sign at
+8.671875 px while its reserved width was still 0; the same check passed on the original code.
+The candidate is not ready to push or land. Next: batch initial measurements, address first-frame
+hidden/font spacing, and exercise pending disconnect/stale measurement work before finishing.
 See [the focused experiment](developers/conventions-ui.md#currency-measurements-and-resize-notifications-a407).
 
 

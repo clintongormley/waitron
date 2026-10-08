@@ -866,8 +866,9 @@ numeric text is a separate draft field, included in snapshots, restoration and t
 ### Currency measurements and resize notifications (A407)
 
 A currency field can change a surrounding table's layout when it reserves room for its sign.
-Measure the initial sign while rendering; defer subsequent writes from its resize observer to an
-animation frame. The EN/ES watched-container cases in
+The initial A407 candidate measures the sign after rendering and defers subsequent writes from
+its resize observer to an animation frame. This candidate is still under review; its timing is
+not the approved prescription. The EN/ES watched-container cases in
 `packages/ui/src/components/wt-price-input.test.ts` exercise the real browser observer and retain
 sign clearance after changing the font. Running them against main
 `c7624e1b4396fe6123cdbe26487b3b06134e6bc0` failed on Chromium's
@@ -884,3 +885,12 @@ src/widgets/menu-preview.a11y.test.ts src/widgets/menu-prices-table.test.ts src/
 src/widgets/catalogue-browser.test.ts src/widgets/folder-made-at.test.ts` ran 630 cases without
 that warning. Final price-table screenshots were inspected in EN/ES, light/dark, at measured
 390/1280 px browser widths. Those results cover the selected fixtures, not every resize observer.
+
+
+The review exposed the limit of waiting two frames in the existing hidden/font cases. A separate
+native observer, registered after the field's observer, saw a newly revealed sign measure
+8.671875 px while `--currency-width` still held 0. The driver reproduced that failing comparison
+on the candidate and a passing comparison with the original implementation in an installed
+disposable checkout. This observes spacing during resize delivery, not a screenshot of a painted
+frame. The initial-measurement strategy and the deferred hidden/font update still need correction
+before A407 lands; pending disconnect and stale-frame handling also need behavioural coverage.
