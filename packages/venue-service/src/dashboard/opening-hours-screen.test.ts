@@ -40,6 +40,7 @@ function model(): OpeningHoursModel {
         id: "restaurant",
         name: "Restaurant",
         active: true,
+        zones: [],
         periods: [
           {
             id: "p1",
@@ -54,7 +55,7 @@ function model(): OpeningHoursModel {
         week: Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: [] })),
         dates: [],
       },
-      { id: "deli", name: "Deli", active: false, periods: [], week: [], dates: [] },
+      { id: "deli", name: "Deli", active: false, zones: [], periods: [], week: [], dates: [] },
     ],
   };
 }
@@ -575,7 +576,7 @@ it("explains an empty venue and falls back to an inactive department when there 
   expect(el.shadowRoot!.textContent).toContain("No departments yet.");
   expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull();
   data.departments = [
-    { id: "deli", name: "Deli", active: false, periods: [], week: [], dates: [] },
+    { id: "deli", name: "Deli", active: false, zones: [], periods: [], week: [], dates: [] },
   ];
   el.api.rereadWatches();
   await expect

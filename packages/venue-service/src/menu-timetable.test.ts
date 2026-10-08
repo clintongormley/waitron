@@ -1736,7 +1736,22 @@ describe("statements", () => {
     ]);
     expect(moved.defaultMenuId).toBe(v.menus["Deli para llevar"]);
     const after = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
-    expect(after.departments).toEqual(before.departments);
+    expect(after.departments.map((department) => ({ ...department, zones: [] }))).toEqual(
+      before.departments.map((department) => ({ ...department, zones: [] })),
+    );
+    expect(before.departments.find((d) => d.id === v.restaurant)!.zones.map((z) => z.id)).toEqual([
+      v.barra,
+      v.sala,
+      v.terraza,
+    ]);
+    expect(after.departments.find((d) => d.id === v.restaurant)!.zones.map((z) => z.id)).toEqual([
+      v.sala,
+      v.terraza,
+    ]);
+    expect(after.departments.find((d) => d.id === v.deli)!.zones.map((z) => z.id)).toEqual([
+      v.barra,
+      v.mostrador,
+    ]);
     const unchanged = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.sala, { at: madrid(MONDAY, "13:00") }),
     );
@@ -1890,6 +1905,26 @@ describe("the editor's model", () => {
       id: v.restaurant,
       name: "Restaurant",
       active: true,
+      zones: [
+        {
+          id: v.barra,
+          name: "Barra",
+          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          dates: [],
+        },
+        {
+          id: v.sala,
+          name: "Sala",
+          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          dates: [],
+        },
+        {
+          id: v.terraza,
+          name: "Terraza",
+          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          dates: [],
+        },
+      ],
       periods: [
         {
           id: periods.brunch,
@@ -2616,6 +2651,26 @@ describe("department service periods", () => {
       id: v.restaurant,
       name: "Restaurant",
       active: true,
+      zones: [
+        {
+          id: v.barra,
+          name: "Barra",
+          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          dates: [],
+        },
+        {
+          id: v.sala,
+          name: "Sala",
+          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          dates: [],
+        },
+        {
+          id: v.terraza,
+          name: "Terraza",
+          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          dates: [],
+        },
+      ],
       periods: [
         {
           id: v.afternoon,
@@ -2660,6 +2715,7 @@ describe("department service periods", () => {
       id: v.deli,
       name: "Deli",
       active: false,
+      zones: [],
       periods: [],
       week: weekOf(() => []),
       dates: [],

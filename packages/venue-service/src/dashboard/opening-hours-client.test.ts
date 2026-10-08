@@ -58,6 +58,9 @@ describe("OpeningHoursApi", () => {
           "departments",
           "catalogues",
           "locations",
+          "zone_closed_times",
+          "zone_service_policies",
+          "floor_zones",
         ].map((type) => ({ type })),
       );
       expect(request.mock.calls).toEqual([
@@ -97,4 +100,17 @@ describe("OpeningHoursApi", () => {
     api.rereadWatches();
     expect(request).toHaveBeenCalledTimes(3);
   });
+});
+
+it("encodes zone closing-time writes and preserves their bodies", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new OpeningHoursApi(request as DashboardRequest);
+  const ranges = [{ startsAt: "23:00", endsAt: "06:00" }];
+  const days = [{ weekday: 1, ranges }];
+  await api.saveZoneWeek("z/1", days);
+  await api.saveZoneDate("s/1", "z/1", ranges);
+  expect(request.mock.calls).toEqual([
+    [`${base}/zones/z%2F1/closed-week`, "PUT", { days }],
+    [`${base}/special-dates/s%2F1/zone-closed-times/z%2F1`, "PUT", { ranges }],
+  ]);
 });

@@ -76,5 +76,8 @@ it("refreshes Opening hours from its periods, ranges, dates and menu names", () 
     "departments",
     "catalogues",
     "locations",
+    "zone_closed_times",
+    "zone_service_policies",
+    "floor_zones",
   ]);
 });

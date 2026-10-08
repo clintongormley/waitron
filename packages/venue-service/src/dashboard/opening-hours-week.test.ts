@@ -29,6 +29,7 @@ export function fixture(): OpeningHoursModel {
         id: "d1",
         name: "Restaurant",
         active: true,
+        zones: [],
         periods: [
           {
             id: "p1",

@@ -21,6 +21,7 @@ export function dayFixture(): OpeningHoursModel {
         id: "d1",
         name: "Restaurant",
         active: true,
+        zones: [],
         periods: [
           {
             id: "p1",
@@ -44,6 +45,7 @@ export function dayFixture(): OpeningHoursModel {
         id: "d2",
         name: "Deli",
         active: true,
+        zones: [],
         periods: [
           {
             id: "p2",
@@ -61,7 +63,15 @@ export function dayFixture(): OpeningHoursModel {
         ],
         dates: [],
       },
-      { id: "disabled", name: "Closed counter", active: false, periods: [], week: [], dates: [] },
+      {
+        id: "disabled",
+        name: "Closed counter",
+        active: false,
+        zones: [],
+        periods: [],
+        week: [],
+        dates: [],
+      },
     ],
   };
 }

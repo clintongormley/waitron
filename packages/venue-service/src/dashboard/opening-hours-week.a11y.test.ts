@@ -20,6 +20,7 @@ describe.each(["light", "dark"] as const)("Opening week (%s)", (theme) => {
       id: "d1",
       name: "Restaurant",
       active: true,
+      zones: [],
       periods: [
         {
           id: "p1",
