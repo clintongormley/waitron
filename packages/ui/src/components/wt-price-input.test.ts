@@ -826,6 +826,9 @@ test("an overriding field draws its value bold and upright, with a primary bar a
   const bar = getComputedStyle(box, "::before");
   expect(bar.backgroundColor).toBe("rgb(1, 2, 3)");
   expect(bar.width).toBe("3px");
+  expect(bar.position).toBe("absolute");
+  expect(box.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(parseFloat(bar.height)).toBeCloseTo(box.getBoundingClientRect().height, 1);
 });
 
 test("an overriding field keeps its value upright inside italic text, where an ordinary field's value turns italic", async () => {
@@ -856,6 +859,7 @@ test("overriding follows the property, and a disabled overriding field draws no 
   )) as WtPriceInput;
   el.overriding = true;
   await el.updateComplete;
+  expect(el.hasAttribute("overriding")).toBe(true);
   expect(field(el).field.hasAttribute("data-overriding")).toBe(true);
   el.disabled = true;
   await el.updateComplete;
@@ -863,6 +867,7 @@ test("overriding follows the property, and a disabled overriding field draws no 
   el.disabled = false;
   el.overriding = false;
   await el.updateComplete;
+  expect(el.hasAttribute("overriding")).toBe(false);
   expect(field(el).field.hasAttribute("data-overriding")).toBe(false);
 });
 

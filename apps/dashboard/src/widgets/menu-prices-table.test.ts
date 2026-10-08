@@ -2658,6 +2658,26 @@ it("a price typed into an inherited field is drawn as set but named plainly unti
   expect(override(el, "mi-burger").label).toBe(setLabel("Burger"));
 });
 
+/** A keystroke as the browser delivers it: the field's own value changes before the table hears. */
+async function keyIn(el: MenuPricesTable, key: string, value: string) {
+  const input = override(el, key).shadowRoot!.querySelector("input")!;
+  input.value = value;
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  await table(el).updateComplete;
+  await override(el, key).updateComplete;
+}
+
+it("typing into the field itself turns the set look on and off as the text starts and stops holding a price", async () => {
+  const el = await mount();
+  await keyIn(el, "mi-burger", "4.00");
+  expect(override(el, "mi-burger").overriding).toBe(true);
+  await keyIn(el, "mi-burger", "");
+  expect(override(el, "mi-burger").overriding).toBe(false);
+  await keyIn(el, "mi-burger", "5.00");
+  expect(override(el, "mi-burger").overriding).toBe(true);
+});
+
 it("a refused well-formed price stays marked set while its error shows", async () => {
   const el = await mount();
   await typeIn(el, "mi-burger", "4.00");
