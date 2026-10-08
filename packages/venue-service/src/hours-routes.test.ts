@@ -262,11 +262,11 @@ describe("reading Hours", () => {
     const fx = await fixture();
     const lunch = period("12:00", "16:00");
     await withTransaction(db, (tx) =>
-      replaceWeekHours(tx, fx.cfg, fx.restaurant, week({ 2: periods(lunch) }), new Date()),
+      replaceWeekHours(tx, fx.cfg, fx.bar, week({ 2: periods(lunch) }), new Date()),
     );
     const party = await createDate(
       fx,
-      input({ cells: [{ subject: fx.deli, cell: { mode: "closed", periods: [] } }] }),
+      input({ cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }] }),
     );
     const before = civilDateOf(new Date(), "Europe/Madrid");
     const response = await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-16", fx.supervisor);
@@ -281,22 +281,18 @@ describe("reading Hours", () => {
       civilDate: model.civilDate,
       clockReadable: true,
       subjects: [
-        { ...fx.restaurant, name: "Restaurant", active: true, isDefault: true },
-        { ...fx.deli, name: "Deli", active: true, isDefault: false },
         { ...fx.kitchen, name: "Kitchen", active: true, isDefault: true },
         { ...fx.bar, name: "Bar", active: true, isDefault: false },
       ],
       week: [
+        { subject: fx.kitchen, days: unset },
         {
-          subject: fx.restaurant,
+          subject: fx.bar,
           days: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
             cell: weekday === 2 ? periods(lunch) : closed,
           })),
         },
-        { subject: fx.deli, days: unset },
-        { subject: fx.kitchen, days: unset },
-        { subject: fx.bar, days: unset },
       ],
       days: [
         { date: "2030-10-14", specialDate: null, holidays: [], tone: "standard" },
@@ -326,7 +322,7 @@ describe("reading Hours", () => {
       specialCells: [
         {
           specialDateId: party.id,
-          cells: [{ subject: fx.deli, cell: { mode: "closed", periods: [] } }],
+          cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }],
         },
       ],
       // No tenant row is stored here, so there is no country to read holidays for.
@@ -478,11 +474,11 @@ describe("reading Hours", () => {
     const fx = await fixture();
     /** Sunday 6 October 2030, 12:00 in Madrid. */
     const at = new Date("2030-10-06T10:00:00Z");
-    const closedDeli = [{ subject: fx.deli, cell: { mode: "closed", periods: [] } as DateCell }];
+    const closedBar = [{ subject: fx.bar, cell: { mode: "closed", periods: [] } as DateCell }];
     const saved: Record<string, SpecialDate> = {};
     for (const date of ["2030-10-04", "2030-10-05", "2030-10-14", "2032-12-25"])
       saved[date] = await withTransaction(db, (tx) =>
-        saveSpecialDate(tx, fx.cfg, null, input({ date, name: date, cells: closedDeli }), at),
+        saveSpecialDate(tx, fx.cfg, null, input({ date, name: date, cells: closedBar }), at),
       );
     const read = () =>
       withTransaction(db, (tx) => readHoursModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
@@ -502,7 +498,7 @@ describe("reading Hours", () => {
     for (const date of ["2030-10-05", "2030-10-14", "2032-12-25"])
       expect(
         model.specialCells.find((entry) => entry.specialDateId === saved[date]!.id)?.cells,
-      ).toEqual(closedDeli);
+      ).toEqual(closedBar);
     expect(
       model.specialCells.some((entry) => entry.specialDateId === saved["2030-10-04"]!.id),
     ).toBe(false);
