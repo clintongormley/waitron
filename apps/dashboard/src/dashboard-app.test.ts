@@ -15,7 +15,6 @@ import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 declare module "vitest/browser" {
   interface BrowserCommands {
     emulateColorScheme: (colorScheme: "light" | "dark" | null) => Promise<void>;
-    emulateTouch: (enabled: boolean) => Promise<void>;
   }
 }
 
@@ -2108,31 +2107,6 @@ describe("dashboard-app", () => {
         ),
       ).toBeLessThanOrEqual(1);
     } finally {
-      await page.viewport(width, height);
-    }
-  });
-
-  it("keeps touch nav rows at 44px and their chevrons visible without hover", async () => {
-    const width = window.innerWidth,
-      height = window.innerHeight;
-    try {
-      await commands.emulateTouch(true);
-      await page.viewport(390, 844);
-      expect(matchMedia("(pointer: coarse)").matches).toBe(true);
-      expect(matchMedia("(hover: none)").matches).toBe(true);
-      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
-      await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
-      await flush(el);
-      for (const header of el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")) {
-        expect(header.matches(":hover")).toBe(false);
-        expect(header.matches(":focus-visible")).toBe(false);
-        expect(header.getBoundingClientRect().height).toBe(44);
-        expect(getComputedStyle(header.querySelector(".chevron")!).opacity).toBe("1");
-      }
-      expect(navItem(el, "overview")!.getBoundingClientRect().height).toBe(44);
-    } finally {
-      await commands.emulateTouch(false);
       await page.viewport(width, height);
     }
   });

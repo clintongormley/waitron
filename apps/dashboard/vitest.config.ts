@@ -1,7 +1,6 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
-import type { CDPSession, Page } from "playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
@@ -34,21 +33,6 @@ const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = asy
   await page.emulateMedia({ reducedMotion });
 };
 
-const touchSessions = new WeakMap<Page, CDPSession>();
-const emulateTouch: BrowserCommand<[enabled: boolean]> = async (context, enabled) => {
-  const { page } = context as unknown as { page: Page };
-  let session = touchSessions.get(page);
-  if (!session) {
-    session = await page.context().newCDPSession(page);
-    touchSessions.set(page, session);
-  }
-  await session.send("Emulation.setTouchEmulationEnabled", { enabled });
-  if (!enabled) {
-    touchSessions.delete(page);
-    await session.detach();
-  }
-};
-
 // The browser context is pinned to UTC so screen tests' wall-clock assertions read the same on every
 // machine. That pin cannot test local-time rendering, so date-utils runs in a Node project below.
 const browserProject = {
@@ -57,7 +41,12 @@ const browserProject = {
     name: "browser",
     globals: true,
     clearMocks: false,
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/date-utils.test.ts"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/.stryker-tmp/**",
+      "src/date-utils.test.ts",
+      "src/dashboard-app.touch.test.ts",
+    ],
     browser: {
       enabled: true,
       // On the provider: Vitest 4 silently ignores a `context` key on the instance.
@@ -67,9 +56,26 @@ const browserProject = {
       commands: {
         emulateColorScheme,
         emulateReducedMotion,
-        emulateTouch,
         ...parkPointerCommands,
       },
+    },
+  },
+} as const;
+
+// Touch input has its own context so a touch test never changes a mouse suite's input devices.
+const touchProject = {
+  ...browserProject,
+  test: {
+    ...browserProject.test,
+    name: "browser-touch",
+    include: ["src/dashboard-app.touch.test.ts"],
+    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    browser: {
+      ...browserProject.test.browser,
+      instances: [{ browser: "chromium", name: "browser-touch (chromium)" }],
+      provider: playwright({
+        contextOptions: { timezoneId: "UTC", hasTouch: true, isMobile: true },
+      }),
     },
   },
 } as const;
@@ -92,7 +98,7 @@ export default defineConfig({
   // Pre-bundled so Vite cannot discover it mid-run and reload an in-flight browser test.
   optimizeDeps: { include: ["axe-core"] },
   test: {
-    projects: [browserProject, nodeTimezoneProject],
+    projects: [browserProject, touchProject, nodeTimezoneProject],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

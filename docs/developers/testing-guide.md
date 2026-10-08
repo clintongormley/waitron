@@ -1455,3 +1455,17 @@ full `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-s
 reported four failures and 219 passes: later transfer cases received Spanish labels instead of
 the English labels their existing assertions required. Restoring `currentLocale()` in the new
 case's `finally` left those assertions unchanged and produced 223 passes in the full file.
+
+### Touch input gets its own browser context
+
+Run mouse and touch assertions in separate Playwright contexts. The dashboard's
+`browser-touch` Vitest project uses `hasTouch: true` and `isMobile: true`; it selects
+`dashboard-app.touch.test.ts`, which the mouse project leaves to that project.
+
+A325's 2026-10-08 probe in `mcr.microsoft.com/playwright:v1.63.0-noble` started with
+`(pointer: fine)` and `(hover: hover)` true. After `Emulation.setTouchEmulationEnabled`
+was enabled and then disabled, both pointer queries were false and `(hover: none)`
+was true. Detaching the CDP session and waiting 500ms did not restore them. A second
+page in the same context retained its fine pointer and hover throughout. The macOS
+focused suites passed while Linux CI failed the later mouse assertions, so a local
+pass was not evidence of restored input devices on Linux.

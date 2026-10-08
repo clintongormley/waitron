@@ -4332,6 +4332,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   drawer cap of 85vw. The scroll test now exercises opening a lower group while the group
   above closes. With browser scroll anchoring disabled in that fixture, deleting the app's
   correction moved the clicked header by 128px and failed; restoring it passed.
+  Touch assertions run in their own Chromium context after a Linux probe showed that
+  disabling a CDP touch override left the touched page without a mouse pointer or hover.
 
 - **The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN.**
   A325's independent review deleted the app's scroll correction: the new lower-header check
