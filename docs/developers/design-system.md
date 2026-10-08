@@ -959,9 +959,10 @@ Hold a dragged row near the visible top or bottom edge to reach rows outside the
 shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
 scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
 Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, preparation
-stations and the Customise column list use this helper. Shared reorder tables and preparation
-stations keep the moves already made when a drag is cancelled, as they do on pointer cancellation;
-Products and Menu Structure apply their move only on release.
+stations, the Customise column list and the Home page tab's shortcut preview use this helper. Shared
+reorder tables and preparation stations keep the moves already made when a drag is cancelled, as
+they do on pointer cancellation; Products, Menu Structure and the shortcut preview apply their move
+only on release.
 
 ### Remembered, searchable, filterable tables
 

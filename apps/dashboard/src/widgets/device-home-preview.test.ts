@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import type {
@@ -1311,6 +1311,98 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
       el.remove();
       expect(document.body.style.cursor).toBe("");
     });
+
+    /** Thirty shortcuts in a 300 px scrolling box, the first one's grip held near the box's bottom
+     * edge. `pending` holds the animation frames asked for and not yet run. */
+    async function edgeHome() {
+      const many = Array.from({ length: 30 }, (_, i) =>
+        shortcut(`sc-${i}`, { kind: "product", productId: "p-lemonade" }, `Tile ${i}`),
+      );
+      const { el, host } = await mount({ shortcuts: many });
+      const box = document.createElement("div");
+      box.style.cssText =
+        "position:fixed;top:100px;left:40px;width:420px;height:300px;overflow:auto";
+      host.append(box);
+      box.append(el);
+      await el.updateComplete;
+      const events = heard(host);
+      const bounds = box.getBoundingClientRect();
+      const x = centre(grip(el, "sc-0")).x;
+      const y = bounds.bottom - 8;
+      const send = (type: string, at = y) => pointer(el, "sc-0", type, { x, y: at });
+      const pending = new Set<number>();
+      const request = window.requestAnimationFrame.bind(window);
+      const cancel = window.cancelAnimationFrame.bind(window);
+      const requested = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+        const id = request((time) => {
+          pending.delete(id);
+          callback(time);
+        });
+        pending.add(id);
+        return id;
+      });
+      const cancelled = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+        pending.delete(id);
+        cancel(id);
+      });
+      const restoreFrames = () => {
+        requested.mockRestore();
+        cancelled.mockRestore();
+      };
+      pointer(el, "sc-0", "pointerdown", centre(grip(el, "sc-0")));
+      send("pointermove");
+      return { el, box, bounds, send, events, pending, restoreFrames };
+    }
+
+    it("scrolls a box too short for the shortcuts while the drag is held at its edge, and drops on the tile it reveals", async () => {
+      const { el, box, send, events, pending, restoreFrames } = await edgeHome();
+      try {
+        await expect.poll(() => box.scrollTop, { timeout: 4000 }).toBeGreaterThan(350);
+        await expect
+          .poll(() => Number(marked(el)[0]?.dataset.memberId?.slice(3)), { timeout: 4000 })
+          .toBeGreaterThan(8);
+        const target = marked(el)[0]!.dataset.memberId!;
+        expect(pending.size).toBe(1);
+        send("pointerup");
+        expect(pending.size).toBe(0);
+        expect(events).toEqual([
+          { type: "wt-shortcut-move", detail: { memberId: "sc-0", to: Number(target.slice(3)) } },
+        ]);
+        await el.updateComplete;
+        const ended = box.scrollTop;
+        for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+        expect(box.scrollTop).toBe(ended);
+      } finally {
+        send("pointercancel");
+        restoreFrames();
+      }
+    }, 15000);
+
+    it.each(["leave", "cancel", "Escape", "disconnect"])(
+      "stops scrolling at the edge on %s, sending nothing",
+      async (end) => {
+        const { el, box, bounds, send, events, pending, restoreFrames } = await edgeHome();
+        try {
+          await expect.poll(() => box.scrollTop, { timeout: 4000 }).toBeGreaterThan(100);
+          expect(pending.size).toBe(1);
+          if (end === "leave") send("pointermove", bounds.top + bounds.height / 2);
+          else if (end === "cancel") send("pointercancel");
+          else if (end === "Escape")
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          else el.remove();
+          expect(pending.size).toBe(0);
+          for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+          const ended = box.scrollTop;
+          for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+          expect(box.scrollTop).toBe(ended);
+          if (end !== "leave") expect(events).toEqual([]);
+        } finally {
+          send("pointercancel");
+          restoreFrames();
+        }
+      },
+      15000,
+    );
 
     it("does not drag while busy", async () => {
       const { el, host } = await mount({ shortcuts: LIST, busy: true });

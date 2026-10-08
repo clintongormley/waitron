@@ -16,6 +16,7 @@ import {
   reorder,
   visuallyHiddenStyles,
 } from "@waitron/ui";
+import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import {
   holdPageCursor,
   pointerElementsAt,
@@ -411,6 +412,11 @@ export class DeviceHomePreview extends LitElement {
     dragging: boolean;
   } | null = null;
 
+  readonly #edgeScroll = new DragEdgeScroll();
+
+  /** Where the pointer was last seen during a drag. */
+  #pointer = { x: 0, y: 0 };
+
   /** The shortcut the dragged one would take the place of, if released now. */
   @state() private dropOn: string | null = null;
 
@@ -552,14 +558,21 @@ export class DeviceHomePreview extends LitElement {
   readonly #onPointerMove = (event: PointerEvent): void => {
     const press = this.#press!;
     if (event.pointerId !== press.pointerId) return;
+    this.#pointer = { x: event.clientX, y: event.clientY };
     if (!press.dragging) {
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD_PX) return;
       press.dragging = true;
       holdPageCursor();
       this.requestUpdate();
+      this.#edgeScroll.start(press.grip, this.#pointer, () => this.#trackDrop());
     }
-    this.dropOn = this.#shortcutAt(event.clientX, event.clientY, press.memberId);
+    this.#edgeScroll.update(this.#pointer);
+    this.#trackDrop();
   };
+
+  #trackDrop(): void {
+    this.dropOn = this.#shortcutAt(this.#pointer.x, this.#pointer.y, this.#press!.memberId);
+  }
 
   readonly #onPointerUp = (event: PointerEvent): void => {
     const press = this.#press!;
@@ -588,6 +601,7 @@ export class DeviceHomePreview extends LitElement {
   #endPress(): void {
     const press = this.#press;
     if (press === null) return;
+    this.#edgeScroll.stop();
     this.#press = null;
     releasePointer(press.grip, press.pointerId);
     if (press.dragging) releasePageCursor();
