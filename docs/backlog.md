@@ -3482,6 +3482,22 @@ On 2026-10-08 A349's six Preview, price-table and navigation suites also logged 
 `menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 
+**A407: currency measurements, ready for branch review (2026-10-08).** On main
+`c7624e1b4396fe6123cdbe26487b3b06134e6bc0`, the four-suite catalogue/Preview/prices command
+ran 561 passing cases and logged the warning. Instrumenting real observers attributed the
+phone-price cases to `wt-price-input`: its currency callback increased a field from
+141.4375 to 150.109375 px; the table's scroll area then lost 17 px of height in the same
+observer delivery. This is a layout change during notification, not evidence of a permanent loop
+or of a painted jump. The field now measures its initial sign during rendering and schedules
+later measurement writes for an animation frame, cancelling that work on disconnect.
+The EN/ES watched-container regressions failed on the original code and pass with the change;
+existing sign-placement, hidden-field and font-change assertions are retained.
+The eight-suite catalogue/Preview/prices/navigation run passed 630 cases without this warning.
+The historical catalogue-only observation is investigated separately; this receipt does not
+attribute every occurrence of the same browser message to currency fields.
+See [the focused experiment](developers/conventions-ui.md#currency-measurements-and-resize-notifications-a407).
+
+
 **Products: the Move dialog's destination categories — DONE (W82, #1210; a tree since W82a, #1229;
 paths joined with " › " in W82b, #1232, and W82c, #1262).** Two sibling categories with the same
 name are left as they are (owner: "leave it"): they still show as two identical entries, in the

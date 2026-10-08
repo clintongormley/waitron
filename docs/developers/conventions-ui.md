@@ -861,3 +861,26 @@ failed, while English dot entry submitted 150 seconds. Decimal mode and the shar
 handle the field; the full screen family passed 138 cases, including its unchanged blank and
 non-numeric clearing checks. The numeric minute state and seconds conversion are retained; bad
 numeric text is a separate draft field, included in snapshots, restoration and the form's checks.
+
+
+### Currency measurements and resize notifications (A407)
+
+A currency field can change a surrounding table's layout when it reserves room for its sign.
+Measure the initial sign while rendering; defer subsequent writes from its resize observer to an
+animation frame. The EN/ES watched-container cases in
+`packages/ui/src/components/wt-price-input.test.ts` exercise the real browser observer and retain
+sign clearance after changing the font. Running them against main
+`c7624e1b4396fe6123cdbe26487b3b06134e6bc0` failed on Chromium's
+"ResizeObserver loop completed with undelivered notifications" message.
+
+The 2026-10-08 instrumented phone-price experiment observed a currency callback increase its
+field from 141.4375 to 150.109375 px and a subsequent scroll-area notification reduce its height
+by 17 px within that delivery. It does not establish that either size was painted or that a
+permanent loop existed. The changed implementation passed the existing two-frame sign-placement
+assertions, hidden/show and font-change cases. The command
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-preview.test.ts
+src/widgets/menu-preview-top.test.ts src/widgets/menu-preview-navigation.test.ts
+src/widgets/menu-preview.a11y.test.ts src/widgets/menu-prices-table.test.ts src/navigation.test.ts
+src/widgets/catalogue-browser.test.ts src/widgets/folder-made-at.test.ts` ran 630 cases without
+that warning. Final price-table screenshots were inspected in EN/ES, light/dark, at measured
+390/1280 px browser widths. Those results cover the selected fixtures, not every resize observer.

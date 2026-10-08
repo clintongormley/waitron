@@ -178,12 +178,20 @@ export class WtPriceInput extends LitElement {
   private readonly unitId = uniqueId("wt-price-input-unit");
   private readonly currencyId = uniqueId("wt-price-input-currency");
 
+  private currencyFrame = 0;
   private readonly currencyObserver = new ResizeObserver((entries) => {
-    for (const { target, contentRect } of entries)
-      (target.parentElement as HTMLElement).style.setProperty(
-        "--currency-width",
-        `${contentRect.width}px`,
-      );
+    cancelAnimationFrame(this.currencyFrame);
+    // Padding changes the field's width, so a container watching it must get a new frame.
+    this.currencyFrame = requestAnimationFrame(() => {
+      this.currencyFrame = 0;
+      for (const { target, contentRect } of entries) {
+        if (target !== this.observedCurrency || !this.isConnected) continue;
+        (target.parentElement as HTMLElement).style.setProperty(
+          "--currency-width",
+          `${contentRect.width}px`,
+        );
+      }
+    });
   });
   private observedCurrency: Element | null = null;
 
@@ -193,7 +201,13 @@ export class WtPriceInput extends LitElement {
     const currency = this.renderRoot.querySelector(".currency");
     if (currency === this.observedCurrency) return;
     if (this.observedCurrency) this.currencyObserver.unobserve(this.observedCurrency);
-    if (currency) this.currencyObserver.observe(currency);
+    if (currency) {
+      (currency.parentElement as HTMLElement).style.setProperty(
+        "--currency-width",
+        `${currency.getBoundingClientRect().width}px`,
+      );
+      this.currencyObserver.observe(currency);
+    }
     this.observedCurrency = currency;
   }
 
@@ -205,6 +219,8 @@ export class WtPriceInput extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.currencyObserver.disconnect();
+    cancelAnimationFrame(this.currencyFrame);
+    this.currencyFrame = 0;
     this.observedCurrency = null;
   }
 

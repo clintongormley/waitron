@@ -1,4 +1,4 @@
-import { expect, test, afterEach } from "vitest";
+import { expect, test, afterEach, onTestFinished } from "vitest";
 import { stringToCents } from "@waitron/shared";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { applyTokens } from "../tokens/index.js";
@@ -1167,3 +1167,38 @@ for (const locale of ["en", "es"]) {
     expect(input.selectionEnd).toBe(3);
   });
 }
+
+test.each(["en-GB", "es-ES"])(
+  "measuring the %s currency keeps a watched container clear of resize errors",
+  async (locale) => {
+    const errors: string[] = [];
+    const record = (event: ErrorEvent) => {
+      if (event.message.includes("ResizeObserver")) errors.push(event.message);
+    };
+    addEventListener("error", record);
+    onTestFinished(() => removeEventListener("error", record));
+    const el = await mount(
+      `<wt-price-input label="Price" name="price" locale="${locale}" value="12.50"></wt-price-input>`,
+    );
+    host.style.display = "inline-block";
+    onTestFinished(() => {
+      host.style.display = "";
+    });
+    const observer = new ResizeObserver(() => {});
+    observer.observe(host);
+    onTestFinished(() => observer.disconnect());
+    for (let i = 0; i < 4; i++)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const input = el.shadowRoot!.querySelector("input")!;
+    const currency = el.shadowRoot!.querySelector(".currency")!;
+    expect(input.value).toBe(locale === "es-ES" ? "12,50" : "12.50");
+    expectSignClearOfText(currency as HTMLElement, input);
+    expect(errors).toEqual([]);
+    host.style.setProperty("--wt-font-family", "monospace");
+    host.style.setProperty("--wt-font-size-base", "24px");
+    for (let i = 0; i < 4; i++)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expectSignClearOfText(currency as HTMLElement, input);
+    expect(errors).toEqual([]);
+  },
+);
