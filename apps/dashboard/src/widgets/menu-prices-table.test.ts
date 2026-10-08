@@ -1,5 +1,5 @@
 import { combinedFixture } from "./test-helpers.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
@@ -2514,6 +2514,99 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+/** The line boxes a node's text is drawn across: a word broken mid-way spans two. */
+function linesOf(node: Element): number {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return range.getClientRects().length;
+}
+
+/** At 390 px, once the row menu's column has been measured into --actions-width. */
+async function atPhoneWidth(
+  locale: string,
+  props: Partial<MenuPricesTable> = {},
+): Promise<MenuPricesTable> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  setLocale(locale);
+  onTestFinished(async () => {
+    setLocale("es-ES");
+    await page.viewport(width, height);
+  });
+  await page.viewport(390, 844);
+  await vi.waitFor(() => expect(window.innerWidth).toBe(390));
+  const el = await mount(props);
+  await vi.waitFor(() => expect(el.style.getPropertyValue("--actions-width")).not.toBe(""));
+  await frame();
+  await frame();
+  return el;
+}
+
+it.each(["en-GB", "es-ES"])(
+  "keeps ordinary one-word names whole beside the row menu at phone width, with each field wholly left of it (%s)",
+  async (locale) => {
+    const el = await atPhoneWidth(locale);
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    await frame();
+    const names: [string, string][] = [
+      ["mi-burger", '[part="name"]'],
+      ["mi-lemonade", '[part="name"]'],
+      ["mi-lemonade:v-small", '[part="variant-name"]'],
+      ["mi-lemonade:v-large", '[part="variant-name"]'],
+    ];
+    for (const [key, selector] of names) {
+      const name = row(el, key)!.querySelector(selector)!;
+      expect(text(name), key).toMatch(/^(Burger|Lemonade|Small|Large)$/);
+      expect(linesOf(name), `${key} "${text(name)}" ${name.getBoundingClientRect().width}px`).toBe(
+        1,
+      );
+      expect(override(el, key).getBoundingClientRect().right, key).toBeLessThanOrEqual(
+        pinnedCell(el, key).getBoundingClientRect().left + 0.5,
+      );
+    }
+    const root = document.documentElement;
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "fits a typical range placeholder whole inside the field at phone width (%s)",
+  async (locale) => {
+    const ranged: MenuPriceRow = {
+      ...lemonade,
+      menuItemId: "mi-ranged",
+      override: null,
+      combined: combinedFixture(
+        "p-lemonade",
+        "12.50",
+        [
+          { variantId: "v-small", price: "12.50" },
+          { variantId: "v-large", price: "15.00" },
+        ],
+        null,
+        "12.50",
+        { "v-small": "12.50", "v-large": "15.00" },
+      ),
+      variants: [
+        { variantId: "v-small", price: "12.50", active: true, available: true },
+        { variantId: "v-large", price: "15.00", active: true, available: true },
+      ],
+    };
+    const el = await atPhoneWidth(locale, { rows: [ranged] });
+    const input = override(el, "mi-ranged").shadowRoot!.querySelector("input")!;
+    expect(input.placeholder).toMatch(/^12[.,]50 – 15[.,]00$/);
+    const style = getComputedStyle(input);
+    const context = document.createElement("canvas").getContext("2d")!;
+    context.font = getComputedStyle(input, "::placeholder").font;
+    const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
+    expect(override(el, "mi-ranged").getBoundingClientRect().right).toBeLessThanOrEqual(
+      pinnedCell(el, "mi-ranged").getBoundingClientRect().left + 0.5,
+    );
+  },
+);
 
 it("measures the row menu's column when the table resizes, and not on each keystroke in a price field", async () => {
   const width = window.innerWidth,

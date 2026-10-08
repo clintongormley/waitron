@@ -204,10 +204,11 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(price-note) {
         font-size: var(--wt-font-size-sm);
       }
-      /* Wide enough that a range placeholder shows whole rather than clipped into one price. Its
-         positioned box holds the field's hidden hint, which otherwise escapes the table's scroller
-         and widens the page. Its end margin clears the outcome message floating at the bottom,
-         whose height is measured into --outcome-height because a long sentence wraps it. */
+      /* Wide enough that a range placeholder shows whole rather than clipped into one price, until
+         phone width narrows it (below). Its positioned box holds the field's hidden hint, which otherwise
+         escapes the table's scroller and widens the page. Its end margin clears the outcome message
+         floating at the bottom, whose height is measured into --outcome-height because a long
+         sentence wraps it. */
       wt-data-table::part(override-field) {
         position: relative;
         --wt-price-field-width: var(--wt-price-range-field-width);
@@ -244,30 +245,32 @@ export class MenuPricesTable extends LitElement {
       /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
          the note under it, is capped at the room the price column and the pinned row-menu column
          leave beside the cell's padding and the tree's toggle. The row-menu column is as wide as
-         its heading in the current language, so its width is measured into --actions-width. A
-         size's name is indented one tree step further. */
+         its heading in the current language, so its width is measured into --actions-width. The
+         price field gives up width first, down to the base field's, so at 390px a one-word name
+         such as "Lemonade" keeps its line. A size's name is indented one tree step further. */
       @container (max-width: 30rem) {
         wt-data-table {
-          --price-column: calc(
-            var(--wt-price-range-field-width) + var(--wt-space-4) + 2 * var(--wt-space-3)
+          --name-and-field-room: calc(
+            100cqi - var(--actions-width, var(--wt-tap-min)) - 4 *
+              var(--wt-space-3) - var(--tree-arrow-width) - var(--wt-space-4)
           );
-          --name-room: calc(
-            100cqi - var(--price-column) - var(--actions-width, var(--wt-tap-min)) - 2 *
-              var(--wt-space-3) - var(--wt-tap-min)
+          --narrow-price-field-width: clamp(
+            var(--wt-price-field-width),
+            var(--name-and-field-room) - var(--wt-tap-min) - var(--wt-space-6),
+            var(--wt-price-range-field-width)
           );
+          --name-room: calc(var(--name-and-field-room) - var(--narrow-price-field-width));
+        }
+        wt-data-table::part(override-field) {
+          --wt-price-field-width: var(--narrow-price-field-width);
         }
         wt-data-table::part(name-box) {
           display: block;
           max-inline-size: max(var(--wt-tap-min), var(--name-room));
         }
-        /* The floor is a step under the tap size: at the full tap size, at 390 px in Spanish, the
-           price field runs under the pinned row menu. */
         wt-data-table::part(variant-name) {
           padding-inline-start: var(--wt-space-3);
-          max-inline-size: max(
-            var(--wt-tap-min) - var(--wt-space-1),
-            var(--name-room) - var(--wt-space-2)
-          );
+          max-inline-size: max(var(--wt-tap-min), var(--name-room) - var(--wt-space-2));
         }
       }
       @media (max-width: 48rem) {
