@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { MenuDocument } from "../api/client.js";
+import type { HomeTile, MenuDocument } from "../api/client.js";
 import type { DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import {
   cleanupWidgets,
@@ -125,6 +125,39 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
     expect(heading.getBoundingClientRect().width).toBeLessThanOrEqual(1);
     await expectNoA11yViolations(host);
   });
+
+  it.each(["handheld", "till"] as const)(
+    "renders editing the %s's shortcuts accessibly, missing and unshown ones included",
+    async (device) => {
+      const shortcut = (memberId: string, ref: HomeTile["ref"], name: string): HomeTile => ({
+        memberId,
+        position: 0,
+        ref,
+        missingName: null,
+        name,
+        reachable: true,
+      });
+      const { el, host } = await mountWidget<DeviceHomePreview>(
+        "dashboard-device-home-preview",
+        {
+          document: lunch(),
+          device,
+          shortcuts: [
+            shortcut("sc-lemonade", { kind: "product", productId: "p-lemonade" }, "Lemonade"),
+            shortcut("sc-drinks", { kind: "section", sectionId: "s-drinks" }, "Drinks"),
+            { ...shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup"), reachable: false },
+            shortcut("sc-unshown", { kind: "section", sectionId: "s-empty" }, "Empty"),
+          ],
+        },
+        theme,
+      );
+      expect(el.shadowRoot!.querySelectorAll('[data-test^="grip-"]')).toHaveLength(4);
+      await expectNoA11yViolations(host);
+      el.busy = true;
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders a search with no results accessibly", async () => {
     const { el, host } = await mountWidget<DeviceHomePreview>(

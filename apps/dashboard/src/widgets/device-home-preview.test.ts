@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
-import type { DocumentMember, HomeDevice, HomeDisplay, MenuDocument } from "../api/client.js";
+import type {
+  DocumentMember,
+  HomeDevice,
+  HomeDisplay,
+  HomeTile,
+  MenuDocument,
+} from "../api/client.js";
 import type { DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
@@ -800,5 +806,282 @@ describe("dashboard-device-home-preview", () => {
     await search(el, "lemo");
     expect(names(tiles(el, "results"))).toEqual(["Lemonade"]);
     expect(heard).toEqual([]);
+  });
+});
+
+describe("dashboard-device-home-preview editing the shortcuts", () => {
+  const shortcut = (
+    memberId: string,
+    ref: HomeTile["ref"],
+    name: string,
+    extra: Partial<HomeTile> = {},
+  ): HomeTile => ({
+    memberId,
+    position: 0,
+    ref,
+    missingName: null,
+    name,
+    reachable: true,
+    ...extra,
+  });
+
+  const LEMONADE = shortcut(
+    "sc-lemonade",
+    { kind: "product", productId: "p-lemonade" },
+    "Lemonade",
+  );
+  const DRINKS = shortcut("sc-drinks", { kind: "section", sectionId: "s-drinks" }, "Drinks");
+  /** Not among the published document's shortcuts. */
+  const HAM = shortcut("sc-ham", { kind: "product", productId: "p-ham" }, "Ham");
+  const LIST = [LEMONADE, DRINKS, HAM];
+
+  const cells = (el: DeviceHomePreview) => [
+    ...root(el).querySelectorAll<HTMLElement>('[data-region="shortcuts"] .grid > *'),
+  ];
+  const grip = (el: DeviceHomePreview, memberId: string) =>
+    root(el).querySelector<HTMLButtonElement>(`[data-test="grip-${memberId}"]`)!;
+  const menu = (el: DeviceHomePreview, memberId: string) =>
+    root(el).querySelector<HTMLElement>(`[data-test="actions-${memberId}"]`)!;
+  const remove = (el: DeviceHomePreview, memberId: string) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>(
+      `[data-test="remove-${memberId}"]`,
+    )!;
+  const add = (el: DeviceHomePreview, kind: "product" | "section") =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>(`[data-test="add-${kind}"]`)!;
+  const status = (el: DeviceHomePreview) =>
+    root(el).querySelector('[role="status"]')!.textContent!.trim();
+
+  function heard(host: HTMLElement): { type: string; detail: unknown }[] {
+    const events: { type: string; detail: unknown }[] = [];
+    for (const type of ["wt-shortcut-move", "wt-shortcut-remove", "wt-shortcut-add"])
+      host.addEventListener(type, (event) =>
+        events.push({ type, detail: (event as CustomEvent).detail }),
+      );
+    return events;
+  }
+
+  /** Presses `key` on the grip, as a person would with it focused; answers whether the key's
+   * default action was prevented. */
+  async function press(el: DeviceHomePreview, memberId: string, key: string): Promise<boolean> {
+    const target = grip(el, memberId);
+    target.focus();
+    const event = new KeyboardEvent("keydown", {
+      key,
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    await el.updateComplete;
+    return event.defaultPrevented;
+  }
+
+  it("draws no grips, menus or add tiles while it is not given shortcuts", async () => {
+    const { el } = await mount();
+    expect(el.shortcuts).toBeNull();
+    expect(root(el).querySelector('[data-test^="grip-"]')).toBeNull();
+    expect(root(el).querySelector("wt-row-actions")).toBeNull();
+    expect(root(el).querySelector('[data-test^="add-"]')).toBeNull();
+    expect(root(el).querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("draws the given shortcuts in the given order, one the published document lacks included", async () => {
+    const { el } = await mount({ shortcuts: [HAM, DRINKS, LEMONADE] });
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Ham", "Drinks para clientes", "Lemonade"]);
+    expect(root(el).querySelector('[data-region="shortcuts"] .slot')).toBeNull();
+    expect(grip(el, "sc-ham").getAttribute("aria-label")).toBe("Reorder: Ham");
+    expect(menu(el, "sc-drinks").getAttribute("label")).toBe("Actions: Drinks para clientes");
+    expect(names(tiles(el, "structure"))).toEqual([
+      "Drinks para clientes",
+      "Lemonade",
+      "Ham",
+      "Water",
+    ]);
+  });
+
+  it("draws a missing shortcut dashed, by its missing name, else its name, with a grip and Remove", async () => {
+    const gone = shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup", {
+      reachable: false,
+      missingName: "Old soup",
+    });
+    const unnamed = shortcut("sc-unnamed", { kind: "section", sectionId: "s-old" }, "Desserts", {
+      reachable: false,
+    });
+    const { el } = await mount({ shortcuts: [gone, unnamed] });
+    const [first, second] = tiles(el, "shortcuts");
+    expect(first!.dataset.state).toBe("missing");
+    expect(first!.querySelector(".name")!.textContent!.trim()).toBe("Missing: Old soup");
+    expect(second!.querySelector(".name")!.textContent!.trim()).toBe("Missing: Desserts");
+    expect(getComputedStyle(first!).borderTopStyle).toBe("dashed");
+    expect(grip(el, "sc-gone")).not.toBeNull();
+    expect(remove(el, "sc-gone").textContent!.trim()).toBe("Remove shortcut");
+  });
+
+  it("draws a reachable shortcut the device cannot show muted, saying it is not shown on devices", async () => {
+    const chips = shortcut("sc-chips", { kind: "product", productId: "p-chips" }, "Chips");
+    const { el } = await mount({ shortcuts: [chips] });
+    const [cell] = tiles(el, "shortcuts");
+    expect(cell!.dataset.state).toBe("hidden");
+    expect(cell!.querySelector(".name")!.textContent!.trim()).toBe("Chips");
+    expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe("Not shown on devices");
+    expect(remove(el, "sc-chips")).not.toBeNull();
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(
+      "No se muestra en los dispositivos",
+    );
+  });
+
+  it("sends a remove for the tile's member, a missing one included", async () => {
+    const gone = shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup", {
+      reachable: false,
+    });
+    const { el, host } = await mount({ shortcuts: [LEMONADE, gone] });
+    const events = heard(host);
+    await click(el, remove(el, "sc-lemonade"));
+    await click(el, remove(el, "sc-gone"));
+    expect(events).toEqual([
+      { type: "wt-shortcut-remove", detail: { memberId: "sc-lemonade" } },
+      { type: "wt-shortcut-remove", detail: { memberId: "sc-gone" } },
+    ]);
+  });
+
+  it("ends the shortcuts with two add tiles that send their kind, drawn with no shortcuts too", async () => {
+    const { el } = await mount({ shortcuts: LIST });
+    const drawn = cells(el);
+    expect(drawn.slice(-2)).toEqual([add(el, "product"), add(el, "section")]);
+    expect(add(el, "product").textContent!.trim()).toBe("Add product shortcuts");
+    expect(add(el, "section").textContent!.trim()).toBe("Add section shortcuts");
+
+    const empty = await mount({ shortcuts: [], document: lunch([], []) });
+    expect(regions(empty.el)).toEqual(["search", "shortcuts"]);
+    const events = heard(empty.host);
+    await click(empty.el, add(empty.el, "product"));
+    await click(empty.el, add(empty.el, "section"));
+    expect(events).toEqual([
+      { type: "wt-shortcut-add", detail: { kind: "product" } },
+      { type: "wt-shortcut-add", detail: { kind: "section" } },
+    ]);
+
+    const dividing = await mount({ shortcuts: [] });
+    expect(regions(dividing.el)).toEqual(["search", "shortcuts", "structure"]);
+    expect(divider(dividing.el)).toBe("Full menu");
+  });
+
+  it.each([
+    ["ArrowRight", "sc-lemonade", 1, ["Drinks para clientes", "Lemonade", "Ham"]],
+    ["ArrowDown", "sc-lemonade", 1, ["Drinks para clientes", "Lemonade", "Ham"]],
+    ["ArrowLeft", "sc-ham", 1, ["Lemonade", "Ham", "Drinks para clientes"]],
+    ["ArrowUp", "sc-ham", 1, ["Lemonade", "Ham", "Drinks para clientes"]],
+  ] as const)(
+    "moves a shortcut one place with %s on its grip, at once, keeping focus and announcing it",
+    async (key, memberId, to, order) => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      const moved = grip(el, memberId);
+      expect(await press(el, memberId, key)).toBe(true);
+      expect(events).toEqual([{ type: "wt-shortcut-move", detail: { memberId, to } }]);
+      expect(names(tiles(el, "shortcuts"))).toEqual(order);
+      expect(grip(el, memberId)).toBe(moved);
+      expect(root(el).activeElement).toBe(moved);
+      const name = memberId === "sc-ham" ? "Ham" : "Lemonade";
+      expect(status(el)).toBe(`${name} moved to position 2 of 3`);
+    },
+  );
+
+  it("moves nothing past either end", async () => {
+    const { el, host } = await mount({ shortcuts: LIST });
+    const events = heard(host);
+    await press(el, "sc-lemonade", "ArrowLeft");
+    await press(el, "sc-lemonade", "ArrowUp");
+    await press(el, "sc-ham", "ArrowRight");
+    await press(el, "sc-ham", "ArrowDown");
+    expect(events).toEqual([]);
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
+    expect(status(el)).toBe("");
+  });
+
+  it("ignores other keys on a grip", async () => {
+    const { el, host } = await mount({ shortcuts: LIST });
+    const events = heard(host);
+    expect(await press(el, "sc-drinks", "Enter")).toBe(false);
+    expect(events).toEqual([]);
+  });
+
+  it("keeps its own order across moves until a new list of shortcuts replaces it", async () => {
+    const { el } = await mount({ shortcuts: LIST });
+    await press(el, "sc-lemonade", "ArrowRight");
+    await press(el, "sc-lemonade", "ArrowRight");
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Drinks para clientes", "Ham", "Lemonade"]);
+    el.document = lunch();
+    await el.updateComplete;
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Drinks para clientes", "Ham", "Lemonade"]);
+    el.shortcuts = [...LIST];
+    await el.updateComplete;
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
+  });
+
+  it("while busy, disables grips, menus' Remove and the add tiles, and sends nothing", async () => {
+    const { el, host } = await mount({ shortcuts: LIST, busy: true });
+    const events = heard(host);
+    for (const { memberId } of LIST) {
+      expect(grip(el, memberId).disabled).toBe(true);
+      expect(remove(el, memberId).disabled).toBe(true);
+    }
+    expect(add(el, "product").disabled).toBe(true);
+    expect(add(el, "section").disabled).toBe(true);
+    await press(el, "sc-lemonade", "ArrowRight");
+    await click(el, remove(el, "sc-lemonade"));
+    await click(el, add(el, "product"));
+    expect(events).toEqual([]);
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
+
+    el.busy = false;
+    await el.updateComplete;
+    expect(grip(el, "sc-lemonade").disabled).toBe(false);
+    expect(remove(el, "sc-lemonade").disabled).toBe(false);
+    expect(add(el, "product").disabled).toBe(false);
+  });
+
+  it("opens a section from its shortcut tile, which holds no other control", async () => {
+    const { el } = await mount({ shortcuts: LIST });
+    const section = tile(el, "shortcuts", "Drinks para clientes");
+    expect(section.localName).toBe("wt-button");
+    expect(section.querySelector("button, wt-button, wt-row-actions")).toBeNull();
+    for (const control of root(el).querySelectorAll("button, wt-button, wt-row-actions"))
+      expect(control.parentElement!.closest("button, wt-button")).toBeNull();
+    await click(el, section);
+    expect(regions(el)).toEqual(["search", "section"]);
+    expect(breadcrumb(el)).toBe("Home › Drinks para clientes");
+  });
+
+  it.each(["handheld", "till"] as const)("edits on the %s's home page", async (device) => {
+    const { el, host } = await mount({ shortcuts: LIST, device });
+    const events = heard(host);
+    expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
+    expect(add(el, "section")).not.toBeNull();
+    await press(el, "sc-drinks", "ArrowRight");
+    expect(events).toEqual([
+      { type: "wt-shortcut-move", detail: { memberId: "sc-drinks", to: 2 } },
+    ]);
+    for (const cell of cells(el)) {
+      const box = cell.getBoundingClientRect();
+      for (const control of cell.querySelectorAll<HTMLElement>("button.grip, wt-row-actions")) {
+        const inner = control.getBoundingClientRect();
+        expect(inner.left).toBeGreaterThanOrEqual(box.left);
+        expect(inner.right).toBeLessThanOrEqual(box.right + 0.5);
+      }
+    }
+  });
+
+  it("focuses a shortcut's menu, or an add tile, when asked", async () => {
+    const { el } = await mount({ shortcuts: LIST });
+    expect(await el.focusShortcut("sc-drinks")).toBe(true);
+    expect(root(el).activeElement).toBe(menu(el, "sc-drinks"));
+    expect(await el.focusShortcut("sc-nowhere")).toBe(false);
+    expect(await el.focusAdd("section")).toBe(true);
+    expect(root(el).activeElement).toBe(add(el, "section"));
+    expect(await el.focusAdd("product")).toBe(true);
+    expect(root(el).activeElement).toBe(add(el, "product"));
   });
 });
