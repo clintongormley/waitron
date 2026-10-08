@@ -1787,6 +1787,67 @@ it("draws Delete quiet while its summary loads, then red", async () => {
   await vi.waitFor(() => expect(confirm.getAttribute("disabled")).toBeNull());
   expect(confirm.variant).toBe("danger");
 });
+const toolbarButton = (el: CatalogueBrowser, test: string) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`)!;
+const buttonFill = (host: Element) =>
+  getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+it.each(["light", "dark"])(
+  "draws the toolbar Delete quiet like Done while nothing is selected, then red (%s theme)",
+  async (theme) => {
+    const el = await mountBrowser();
+    el.parentElement!.setAttribute("data-theme", theme);
+    await press(el, "select");
+    const remove = toolbarButton(el, "delete");
+    const doneFill = buttonFill(toolbarButton(el, "cancel-selection"));
+    expect(remove.getAttribute("disabled")).not.toBeNull();
+    expect(remove.variant).toBe("secondary");
+    expect(buttonFill(remove)).toBe(doneFill);
+    (await tableOf(el))
+      .shadowRoot!.querySelector<HTMLInputElement>(
+        'tr[data-row-key="bread"] input[type="checkbox"]',
+      )!
+      .click();
+    await el.updateComplete;
+    await remove.updateComplete;
+    expect(remove.getAttribute("disabled")).toBeNull();
+    expect(remove.variant).toBe("danger");
+    expect(buttonFill(remove)).not.toBe(doneFill);
+  },
+);
+it("draws the toolbar Delete quiet while the summary it asked for loads, then red", async () => {
+  const el = await mountBrowser();
+  let resolve!: (value: Awaited<ReturnType<DashboardApi["summariseFolders"]>>) => void;
+  vi.mocked(el.api.summariseFolders).mockReturnValueOnce(new Promise((r) => (resolve = r)));
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  const remove = toolbarButton(el, "delete");
+  await remove.updateComplete;
+  expect(remove.getAttribute("disabled")).not.toBeNull();
+  expect(remove.variant).toBe("secondary");
+  resolve([{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }]);
+  await vi.waitFor(() => expect(remove.getAttribute("disabled")).toBeNull());
+  expect(remove.variant).toBe("danger");
+});
+it("keeps the toolbar Delete red while the delete it started is being sent", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+  ]);
+  let finish!: () => void;
+  vi.mocked(el.api.deleteCatalogueItems).mockReturnValueOnce(
+    new Promise<void>((resolve) => (finish = resolve)),
+  );
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalled());
+  const remove = toolbarButton(el, "delete");
+  await remove.updateComplete;
+  expect(remove.getAttribute("disabled")).not.toBeNull();
+  expect(remove.variant).toBe("danger");
+  finish();
+  await vi.waitFor(() => expect(toolbarButton(el, "delete").variant).toBe("secondary"));
+  expect(dialog(el)).toBeNull();
+});
 it("shows a move refused for a duplicate name in the move dialog, keeping the choice", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.moveCatalogueItems).mockRejectedValueOnce({

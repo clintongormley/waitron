@@ -1144,6 +1144,53 @@ describe("dashboard-app", () => {
     expect(editButton.disabled).toBe(false);
   });
 
+  it.each(["light", "dark"] as const)(
+    "draws the profile's Edit quiet like Close until the profile has loaded, then blue (%s theme)",
+    async (theme) => {
+      let resolveProfile!: (value: unknown) => void;
+      const { el } = await mountWidget<DashboardApp>(
+        "dashboard-app",
+        {
+          api: stubApi({
+            listStaff: vi.fn().mockResolvedValue([]),
+            getProfile: vi.fn(() => new Promise((resolve) => (resolveProfile = resolve))),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+      await flush(el);
+      const button = (test: string) =>
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`)!;
+      const fill = (host: Element) =>
+        getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+      const edit = button("edit-profile-details");
+      const closeFill = fill(button("close-profile"));
+      await edit.updateComplete;
+      expect(edit.getAttribute("disabled")).not.toBeNull();
+      expect(edit.variant).toBe("secondary");
+      expect(fill(edit)).toBe(closeFill);
+      resolveProfile({
+        displayName: "Alex",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: "alex@example.com",
+        pendingEmail: null,
+        locale: "en-GB",
+        hasPassword: true,
+        hasTotp: false,
+        hasGoogle: false,
+        passkeys: [],
+      });
+      await vi.waitFor(() => expect(edit.getAttribute("disabled")).toBeNull());
+      expect(edit.variant).toBe("primary");
+      await edit.updateComplete;
+      expect(fill(edit)).not.toBe(closeFill);
+    },
+  );
+
   it("resets both the active tab and the Edit button's readiness on a fresh reopen, not stale state from the previous visit", async () => {
     // Only the fresh profile-screen instance announcing itself on connect resets `profileTab` and
     // `profileReady`; nothing in the shell resets them on close.

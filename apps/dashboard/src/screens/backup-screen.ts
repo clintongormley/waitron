@@ -461,10 +461,14 @@ export class BackupScreen extends LitElement {
     );
   }
 
-  get #rotateDisabled(): boolean {
+  get #rotateWaiting(): boolean {
     // The OLD key must be re-shown first: rotating overwrites it, so the operator has to have had the
     // chance to record it.
-    return this.submitting || !this.savedIt || this.#effectiveKey === "" || this.oldKey === null;
+    return !this.savedIt || this.#effectiveKey === "" || this.oldKey === null;
+  }
+
+  get #rotateDisabled(): boolean {
+    return this.submitting || this.#rotateWaiting;
   }
 
   get #saveSettingsDisabled(): boolean {
@@ -1243,7 +1247,7 @@ export class BackupScreen extends LitElement {
       ${this.#renderKeyStep()}
 
       <wt-button
-        variant="primary"
+        variant=${this.submitting || !this.#rotateWaiting ? "primary" : "secondary"}
         data-test="rotate-confirm"
         ?disabled=${this.#rotateDisabled}
         @click=${() => void this.#rotate()}

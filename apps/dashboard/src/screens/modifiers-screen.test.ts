@@ -1239,6 +1239,92 @@ it("shows a failed initial load and retries", async () => {
   );
 });
 
+describe("after a retry, while the content languages are still being read", () => {
+  const fill = (host: Element) =>
+    getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+  const button = (root: ParentNode, test: string) =>
+    root.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`)!;
+
+  /** Fails the first languages read, presses Retry and holds the second one open. Returns the
+   * Retry button's fill as the screen's known quiet fill. */
+  async function retryWithLanguagesHeld(theme: "light" | "dark") {
+    let arrive!: (value: unknown) => void;
+    const client = api({
+      getContentLanguages: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockReturnValueOnce(new Promise((resolve) => (arrive = resolve))),
+    });
+    const { el } = await mountWidget<ModifiersScreen>(
+      "dashboard-modifiers-screen",
+      { api: client },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="load-error"]')).not.toBeNull(),
+    );
+    const retry = button(el.shadowRoot!, "retry");
+    await retry.updateComplete;
+    const quietFill = fill(retry);
+    retry.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="extra-lists"]')).not.toBeNull(),
+    );
+    expect(client.getContentLanguages).toHaveBeenCalledTimes(2);
+    const languages = () => arrive({ defaultLanguage: "es", languages: ["es", "en"] });
+    return { el, quietFill, languages };
+  }
+
+  it.each(["light", "dark"] as const)(
+    "draws each tab's Add quiet like Retry until the languages arrive, then blue (%s theme)",
+    async (theme) => {
+      const { el, quietFill, languages } = await retryWithLanguagesHeld(theme);
+      const addExtra = button(el.shadowRoot!, "add-extra-list");
+      await addExtra.updateComplete;
+      expect(addExtra.disabled).toBe(true);
+      expect(addExtra.variant).toBe("secondary");
+      expect(fill(addExtra)).toBe(quietFill);
+      await selectTab(el, "options");
+      const addOption = button(el.shadowRoot!, "add-option-list");
+      await addOption.updateComplete;
+      expect(addOption.disabled).toBe(true);
+      expect(addOption.variant).toBe("secondary");
+      expect(fill(addOption)).toBe(quietFill);
+      languages();
+      await vi.waitFor(() => expect(addOption.disabled).toBe(false));
+      expect(addOption.variant).toBe("primary");
+      await addOption.updateComplete;
+      expect(fill(addOption)).not.toBe(quietFill);
+      await selectTab(el, "extras");
+      const addExtraAgain = button(el.shadowRoot!, "add-extra-list");
+      await addExtraAgain.updateComplete;
+      expect(addExtraAgain.disabled).toBe(false);
+      expect(addExtraAgain.variant).toBe("primary");
+      expect(fill(addExtraAgain)).not.toBe(quietFill);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "draws the Used by window's Edit quiet like Close until the languages arrive, then blue (%s theme)",
+    async (theme) => {
+      const { el, languages } = await retryWithLanguagesHeld(theme);
+      await clickInTable(el, "extra-lists", "used-by-extra-e1");
+      expect(detailModal(el).open).toBe(true);
+      const edit = button(el.shadowRoot!, "detail-edit");
+      await edit.updateComplete;
+      const closeFill = fill(button(el.shadowRoot!, "close-detail"));
+      expect(edit.disabled).toBe(true);
+      expect(edit.variant).toBe("secondary");
+      expect(fill(edit)).toBe(closeFill);
+      languages();
+      await vi.waitFor(() => expect(edit.disabled).toBe(false));
+      expect(edit.variant).toBe("primary");
+      await edit.updateComplete;
+      expect(fill(edit)).not.toBe(closeFill);
+    },
+  );
+});
+
 describe("after the server comes back", () => {
   const down = { code: "connection.failed" };
   const loadError = (el: ModifiersScreen) =>
@@ -1663,6 +1749,56 @@ it("ignores a stale detail read from an earlier open of the same list", async ()
   expect(modal.querySelector('[data-test="usage-error"]')).not.toBeNull();
 });
 
+const buttonFill = (host: Element) =>
+  getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+
+it.each(["light", "dark"])(
+  "draws Delete quiet like Cancel while what uses the list loads, then red (%s theme)",
+  async (theme) => {
+    let arrive!: (value: ExtraListDependants) => void;
+    const el = await mount(
+      api({
+        getExtraListDependants: vi
+          .fn()
+          .mockReturnValue(new Promise<ExtraListDependants>((resolve) => (arrive = resolve))),
+      }),
+    );
+    el.parentElement!.setAttribute("data-theme", theme);
+    await clickInTable(el, "extra-lists", "delete-extra-e1");
+    const dialog = deleteDialog(el);
+    const confirm = confirmDelete(el);
+    await confirm.updateComplete;
+    const cancelFill = buttonFill(dialog.querySelector('wt-button[slot="cancel"]')!);
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.variant).toBe("secondary");
+    expect(buttonFill(confirm)).toBe(cancelFill);
+    arrive(noExtraDependants);
+    await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+    expect(confirm.variant).toBe("danger");
+    expect(buttonFill(confirm)).not.toBe(cancelFill);
+  },
+);
+
+it("keeps Delete red while the delete it sent is in progress", async () => {
+  let finish!: () => void;
+  const client = api({
+    deleteExtraList: vi.fn().mockReturnValue(new Promise<void>((done) => (finish = done))),
+  });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "delete-extra-e1");
+  const dialog = deleteDialog(el);
+  const confirm = confirmDelete(el);
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  confirm.click();
+  await vi.waitFor(() => expect(client.deleteExtraList).toHaveBeenCalled());
+  await el.updateComplete;
+  await confirm.updateComplete;
+  expect(confirm.disabled).toBe(true);
+  expect(confirm.variant).toBe("danger");
+  finish();
+  await vi.waitFor(() => expect(dialog.open).toBe(false));
+});
+
 // ---------------------------------------------------------------------------
 // Searching the tables
 
@@ -2060,3 +2196,26 @@ it.each([
     }, cleanupWidgets);
   },
 );
+
+describe("the editor's Save", () => {
+  const button = (root: ParentNode, selector: string) =>
+    root.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
+
+  it("still opens a list's editor with Save quiet, and turns it blue once something changes", async () => {
+    const el = await mount();
+    await clickInTable(el, "extra-lists", "edit-extra-e1");
+    const form = extraForm(el);
+    await form.updateComplete;
+    const save = button(form.shadowRoot!, '[data-test="save"]');
+    expect(save.disabled).toBe(true);
+    expect(save.variant).toBe("secondary");
+    form
+      .shadowRoot!.querySelector('[name="name"]')!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "Rolls" }, bubbles: true, composed: true }),
+      );
+    await form.updateComplete;
+    expect(save.disabled).toBe(false);
+    expect(save.variant).toBe("primary");
+  });
+});

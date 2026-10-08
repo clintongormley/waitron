@@ -1944,7 +1944,7 @@ export class DashboardApp extends LitElement {
             this.profileTab === "details"
               ? html`<wt-button
                   data-test="edit-profile-details"
-                  variant="primary"
+                  variant=${this.profileReady ? "primary" : "secondary"}
                   ?disabled=${!this.profileReady}
                   @click=${() =>
                     this.renderRoot
