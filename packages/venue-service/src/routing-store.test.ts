@@ -29,9 +29,15 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
+  chooseExtraMakerBeside,
+  chooseMaker,
   selectRoutingCell,
   selectionRulesFromModel,
+  targetKey,
+  type MakerChoice,
+  type ProductFacts,
   type RouteTarget,
+  type RoutingRules,
   type RoutingModel,
   type RoutingMoment,
   type RoutingRow,
@@ -1815,6 +1821,245 @@ describe("routing previews", () => {
         ]);
       }));
   });
+
+  it("reports exactly what working out every product in every zone reports, for every kind of change", async () =>
+    scoped(async (tx) => {
+      const [loc] = await tx
+        .insert(locations)
+        .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+        .returning();
+      const cfg = { locationId: locationId(loc!.id) };
+      const zone = async (name: string) => {
+        const [row] = await tx
+          .insert(floorZones)
+          .values({ ...cfg, name })
+          .returning();
+        const department = await createDepartment(tx, cfg, {
+          name: `${name} service`,
+          defaultServiceMode: "table_tab",
+        });
+        await configureZone(tx, cfg, { zoneId: row!.id, departmentId: department.id });
+        return row!.id;
+      };
+      const terrace = await zone("Terrace");
+      const patio = await zone("Patio");
+      const [bar, kitchen, grill, fryer, pass] = await tx
+        .insert(kitchenStations)
+        .values([
+          { ...cfg, name: "Bar", isDefault: true },
+          { ...cfg, name: "Kitchen" },
+          { ...cfg, name: "Grill" },
+          { ...cfg, name: "Fryer" },
+          { ...cfg, name: "Pass" },
+        ])
+        .returning();
+      const food = (await createCategory(tx, { name: "Food" })).id;
+      const mains = (await createCategory(tx, { name: "Mains", parentId: food })).id;
+      const grills = (await createCategory(tx, { name: "Grills", parentId: mains })).id;
+      const drinks = (await createCategory(tx, { name: "Drinks" })).id;
+      const sides = (await createCategory(tx, { name: "Sides" })).id;
+      const menu = await createCatalogue(tx, { name: "Menu" });
+      const product = async (name: string, categoryId: string | null) =>
+        (
+          await createProduct(tx, {
+            catalogueId: menu.id,
+            name,
+            categoryId,
+            pricingUnit: "each",
+            unitPrice: "3.00",
+            vatClass: "general",
+          })
+        ).id;
+      const variant = async (parentId: string, name: string, categoryId: string | null) => {
+        const [row] = await tx
+          .insert(products)
+          .values({ catalogueId: menu.id, parentId, name, categoryId })
+          .returning();
+        return row!.id;
+      };
+      const steak = await product("Steak", grills);
+      const pasta = await product("Pasta", mains);
+      const salad = await product("Salad", food);
+      const wine = await product("Wine", drinks);
+      const bread = await product("Bread", null);
+      const chips = await product("Chips", sides);
+      const cheese = await product("Cheese", null);
+      const sauce = await product("Sauce", grills);
+      const retired = await product("Retired", grills);
+      await updateProduct(tx, retired, { active: false });
+      const bigSteak = await variant(steak, "Large", null);
+      const halfBread = await variant(bread, "Half", food);
+      const list = async (name: string, items: readonly string[]) =>
+        (
+          await createExtraList(
+            tx,
+            {
+              name,
+              minPicks: 0,
+              maxPicks: 2,
+              active: true,
+              items: items.map((productId) => ({ productId, price: "0.50" })),
+            },
+            "en",
+          )
+        ).id;
+      await writeProductModifiers(tx, steak, [
+        { kind: "extras", id: await list("Toppings", [chips, cheese]) },
+      ]);
+      // Pasta offers Sauce only through the menu Terrace serves: detached since it was published.
+      await writeProductModifiers(tx, pasta, [
+        { kind: "extras", id: await list("Sauces", [sauce]) },
+      ]);
+      await offerMenuThroughZone(tx, cfg, terrace, menu.id);
+      await addProductToMenu(tx, { menuId: menu.id, productId: pasta });
+      const { document } = await buildMenuDocument(tx, menu.id);
+      await publishMenu(tx, menu.id, menuDocumentHash(document), "person-1");
+      await writeProductModifiers(tx, pasta, []);
+
+      await setRoutingCell(tx, cfg, { row: categoryRow(food), zoneId: null }, station(kitchen!.id));
+      await setRoutingCell(
+        tx,
+        cfg,
+        { row: categoryRow(grills), zoneId: terrace },
+        station(grill!.id),
+      );
+      await setRoutingCell(tx, cfg, { row: categoryRow(drinks), zoneId: null }, station(pass!.id));
+      await setRoutingCell(tx, cfg, { row: productRow(chips), zoneId: null }, station(fryer!.id));
+      await setRoutingCell(tx, cfg, { row: noCategoryRow, zoneId: patio }, station(kitchen!.id));
+      await setRoutingCell(tx, cfg, { row: allCategories, zoneId: terrace }, noPrep);
+      await setStationFallback(tx, cfg, fryer!.id, grill!.id);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(inArray(kitchenStations.id, [fryer!.id, pass!.id]));
+
+      const active: readonly ProductFacts[] = [
+        { productId: steak, routedProductId: steak, categoryId: grills },
+        { productId: pasta, routedProductId: pasta, categoryId: mains },
+        { productId: salad, routedProductId: salad, categoryId: food },
+        { productId: wine, routedProductId: wine, categoryId: drinks },
+        { productId: bread, routedProductId: bread, categoryId: null },
+        { productId: chips, routedProductId: chips, categoryId: sides },
+        { productId: cheese, routedProductId: cheese, categoryId: null },
+        { productId: sauce, routedProductId: sauce, categoryId: grills },
+        { productId: bigSteak, routedProductId: steak, categoryId: grills },
+        { productId: halfBread, routedProductId: bread, categoryId: null },
+      ];
+      const offers: readonly [string, string, readonly string[]][] = [
+        [steak, chips, [terrace, patio]],
+        [steak, cheese, [terrace, patio]],
+        [pasta, sauce, [terrace]],
+      ];
+      const facts = (id: string) => active.find((p) => p.productId === id)!;
+      const moveKey = (move: {
+        productId: string;
+        dish?: { productId: string };
+        zoneId: string | null;
+        from: RouteTarget | null;
+        to: RouteTarget | null;
+        toNoReplacement: boolean;
+      }) =>
+        JSON.stringify([
+          move.productId,
+          move.dish?.productId ?? null,
+          move.zoneId,
+          targetKey(move.from),
+          targetKey(move.to),
+          move.toNoReplacement,
+        ]);
+      const placement = (rules: RoutingRules, dish: MakerChoice, extra: string, zoneId: string) => {
+        const made = chooseExtraMakerBeside(rules, dish, facts(extra), zoneId, null)?.outcome;
+        return made?.kind === "made"
+          ? { follows: false, target: station(made.stationId), noReplacement: false }
+          : { follows: true, target: dish.route, noReplacement: dish.noReplacement };
+      };
+      const reference = (before: RoutingRules, after: RoutingRules) => {
+        const keys: string[] = [];
+        for (const zoneId of [terrace, patio]) {
+          for (const p of active) {
+            const from = chooseMaker(before, p, zoneId, null);
+            const to = chooseMaker(after, p, zoneId, null);
+            if (
+              targetKey(from.route) !== targetKey(to.route) ||
+              from.noReplacement !== to.noReplacement
+            )
+              keys.push(
+                moveKey({
+                  ...p,
+                  zoneId,
+                  from: from.route,
+                  to: to.route,
+                  toNoReplacement: to.noReplacement,
+                }),
+              );
+          }
+          for (const [dish, extra, inZones] of offers) {
+            if (!inZones.includes(zoneId)) continue;
+            const from = placement(
+              before,
+              chooseMaker(before, facts(dish), zoneId, null),
+              extra,
+              zoneId,
+            );
+            const to = placement(
+              after,
+              chooseMaker(after, facts(dish), zoneId, null),
+              extra,
+              zoneId,
+            );
+            if ((from.follows && to.follows) || targetKey(from.target) === targetKey(to.target))
+              continue;
+            keys.push(
+              moveKey({
+                productId: extra,
+                dish: { productId: dish },
+                zoneId,
+                from: from.target,
+                to: to.target,
+                toNoReplacement: to.noReplacement,
+              }),
+            );
+          }
+        }
+        return keys.sort();
+      };
+
+      const rows = [
+        productRow(steak),
+        productRow(chips),
+        categoryRow(food),
+        categoryRow(grills),
+        noCategoryRow,
+        allCategories,
+      ];
+      const targets: (RouteTarget | null)[] = [station(bar!.id), station(grill!.id), noPrep, null];
+      let dishMoves = 0;
+      let extraMoveCount = 0;
+      for (const row of rows)
+        for (const zoneId of [terrace, patio, null]) {
+          if (row.kind === "all" && zoneId === null) continue;
+          const address: CellAddress = { row, zoneId };
+          for (const target of targets) {
+            const moves = await previewRoutingChange(tx, cfg, { kind: "cell", address, target });
+            const before = await loadRoutingRules(tx, cfg, null);
+            const saved = await tx.select().from(routingCells);
+            if (target === null) await clearRoutingCell(tx, cfg, address);
+            else await setRoutingCell(tx, cfg, address, target);
+            const after = await loadRoutingRules(tx, cfg, null);
+            await tx.delete(routingCells);
+            await tx.insert(routingCells).values(saved);
+            expect([address, target, moves.map(moveKey).sort()]).toEqual([
+              address,
+              target,
+              reference(before, after),
+            ]);
+            dishMoves += moves.filter((move) => move.dish === undefined).length;
+            extraMoveCount += moves.filter((move) => move.dish !== undefined).length;
+          }
+        }
+      expect(dishMoves).toBeGreaterThan(50);
+      expect(extraMoveCount).toBeGreaterThan(5);
+    }));
 });
 
 describe("timed routing explanation", () => {
