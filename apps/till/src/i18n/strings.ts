@@ -49,6 +49,8 @@ export const en = {
   "department_transfer.read_failed":
     "Transfer updates could not be loaded. The last received state is shown.",
   "department_transfer.open": "Department transfers ({count} pending)",
+  "shell.more": "More",
+  "shell.more_transfers": "More, {count} department transfers pending",
   "unsaved.heading": "Discard unsaved changes?",
   "unsaved.message": "Your changes have not been saved.",
   "unsaved.keep": "Keep editing",
@@ -1157,6 +1159,8 @@ export const es: Record<StringKey, string> = {
   "department_transfer.read_failed":
     "No se pudieron cargar las novedades. Se muestra el último estado recibido.",
   "department_transfer.open": "Traspasos entre departamentos (pendientes: {count})",
+  "shell.more": "Más",
+  "shell.more_transfers": "Más, traspasos entre departamentos pendientes: {count}",
   "unsaved.heading": "¿Descartar los cambios sin guardar?",
   "unsaved.message": "Tus cambios no se han guardado.",
   "unsaved.keep": "Seguir editando",

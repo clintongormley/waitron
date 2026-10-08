@@ -1,17 +1,26 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
-import { customElement, property, queryAssignedElements } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
+import { baseStyles, registerIcons } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TabDef } from "../layout.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
-import { languageChooserStyles } from "./language-chooser-styles.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-count-badge.js";
+import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
 
 export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
+
+type ActionVariant = "secondary" | "ghost";
+
+registerIcons({
+  kebab:
+    "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+});
 
 /**
  * Presentational: `till-app` owns data, active-tab state and the drill-in stack; the shell only emits
@@ -96,6 +105,36 @@ export class TillTabShell extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      /* One row on a phone: the tabs scroll sideways rather than wrap, the rest sits in the menu. */
+      .head.phone {
+        flex-wrap: nowrap;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-2) var(--wt-space-3);
+      }
+
+      .head.phone .tabs {
+        flex: 1;
+        min-width: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+      }
+
+      .head.phone .tab {
+        flex: none;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        white-space: nowrap;
+      }
+
+      .head.phone .session {
+        flex: none;
+        flex-wrap: nowrap;
+        gap: var(--wt-space-2);
+      }
+
+      wt-row-actions > span {
+        padding: var(--wt-space-2) var(--wt-space-4);
+      }
+
       .region {
         position: relative;
         display: flex;
@@ -139,6 +178,25 @@ export class TillTabShell extends LitElement {
 
   @queryAssignedElements({ slot: "drill" }) private drillNodes!: HTMLElement[];
 
+  @state() private phone = false;
+  #phoneWidth?: MediaQueryList;
+  readonly #onPhoneWidth = (event: MediaQueryListEvent) => {
+    this.phone = event.matches;
+  };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
+    this.phone = this.#phoneWidth.matches;
+    this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#phoneWidth?.removeEventListener("change", this.#onPhoneWidth);
+    this.#phoneWidth = undefined;
+  }
+
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
@@ -150,6 +208,81 @@ export class TillTabShell extends LitElement {
           .loadLocales=${this.loadLocales}
         ></wt-language-chooser>`
       : nothing;
+  }
+
+  #tools(variant: ActionVariant): TemplateResult {
+    const action = (cls: string, type: string, label: string): TemplateResult =>
+      html`<wt-button
+        class=${cls}
+        variant=${variant}
+        align=${variant === "ghost" ? "start" : nothing}
+        @click=${() => this.#emit(type)}
+        >${label}</wt-button
+      >`;
+    return html`${
+      this.transferCount === undefined
+        ? nothing
+        : html`<span data-test="department-transfers" role="status"
+            >${t("department_transfer.open").replace("{count}", String(this.transferCount))}</span
+          >`
+    }${
+      this.transferAvailable
+        ? html`<wt-button
+            data-open-transfers
+            variant=${variant}
+            align=${variant === "ghost" ? "start" : nothing}
+            @click=${() => this.#emit("open-transfers")}
+            >${t("department_transfer.title")}</wt-button
+          >`
+        : nothing
+    }${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}${
+      this.affordances.includes("station")
+        ? action("station", "show-station", t("station.open"))
+        : nothing
+    }${this.affordances.includes("expo") ? action("expo", "show-expo", t("expo.open")) : nothing}${
+      this.affordances.includes("schedule")
+        ? action("schedule", "show-schedule", t("schedule.open"))
+        : nothing
+    }${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open")) : nothing}${action(
+      "equipment",
+      "open-equipment",
+      t("equipment.open"),
+    )}${action("allergens", "open-allergens", t("allergens.open"))}`;
+  }
+
+  #operatorAndLogout(variant: ActionVariant): TemplateResult {
+    return html`<span class="operator">${this.operatorName}</span
+      ><wt-button
+        class="logout"
+        variant=${variant}
+        align=${variant === "ghost" ? "start" : nothing}
+        @click=${() => this.#emit("logout")}
+        >${t("action.logout")}</wt-button
+      >`;
+  }
+
+  #menu(): TemplateResult {
+    const pending = this.transferCount !== undefined && this.transferCount > 0;
+    return html`<wt-row-actions
+      icon="kebab"
+      align="end"
+      label=${
+        pending
+          ? t("shell.more_transfers").replace("{count}", String(this.transferCount))
+          : t("shell.more")
+      }
+    >
+      ${
+        pending
+          ? html`<wt-count-badge
+              slot="badge"
+              tone="warning"
+              .count=${this.transferCount!}
+            ></wt-count-badge>`
+          : nothing
+      }
+      ${this.#tools("ghost")}${this.#operatorAndLogout("ghost")}
+    </wt-row-actions>`;
   }
 
   #tabTitle(tab: TabDef): string {
@@ -180,8 +313,8 @@ export class TillTabShell extends LitElement {
               ? html`<div class="language-corner">${this.#chooser()}</div>`
               : nothing
             : html`
-                <header class="head">
-                  <span class="brand">${BRAND}</span>
+                <header class=${this.phone ? "head phone" : "head"}>
+                  ${this.phone ? nothing : html`<span class="brand">${BRAND}</span>`}
                   <nav class="tabs" role="tablist">
                     ${this.tabs.map(
                       (tab) => html`
@@ -198,84 +331,9 @@ export class TillTabShell extends LitElement {
                     )}
                   </nav>
                   <div class="session">
-                    ${
-                      this.transferCount === undefined
-                        ? nothing
-                        : html`<span data-test="department-transfers" role="status"
-                            >${t("department_transfer.open").replace("{count}", String(this.transferCount))}</span
-                          >`
+                    ${this.phone ? nothing : this.#tools("secondary")}${this.#chooser()}${
+                      this.phone ? this.#menu() : this.#operatorAndLogout("secondary")
                     }
-                    ${this.transferAvailable ? html`<wt-button data-open-transfers variant="secondary" @click=${() => this.#emit("open-transfers")}>${t("department_transfer.title")}</wt-button>` : nothing}
-                    ${
-                      this.affordances.includes("find-bill")
-                        ? html`<wt-button
-                            class="find-bill"
-                            variant="secondary"
-                            @click=${() => this.#emit("find-bill")}
-                            >${t("find_bill.open")}</wt-button
-                          >`
-                        : nothing
-                    }
-                    ${
-                      this.affordances.includes("station")
-                        ? html`<wt-button
-                            class="station"
-                            variant="secondary"
-                            @click=${() => this.#emit("show-station")}
-                            >${t("station.open")}</wt-button
-                          >`
-                        : nothing
-                    }
-                    ${
-                      this.affordances.includes("expo")
-                        ? html`<wt-button
-                            class="expo"
-                            variant="secondary"
-                            @click=${() => this.#emit("show-expo")}
-                            >${t("expo.open")}</wt-button
-                          >`
-                        : nothing
-                    }
-                    ${
-                      this.affordances.includes("schedule")
-                        ? html`<wt-button
-                            class="schedule"
-                            variant="secondary"
-                            @click=${() => this.#emit("show-schedule")}
-                            >${t("schedule.open")}</wt-button
-                          >`
-                        : nothing
-                    }
-                    ${
-                      this.canSwitchProfile
-                        ? html`<wt-button
-                            class="profile"
-                            variant="secondary"
-                            @click=${() => this.#emit("open-profile")}
-                            >${t("profile.open")}</wt-button
-                          >`
-                        : nothing
-                    }
-                    <wt-button
-                      class="equipment"
-                      variant="secondary"
-                      @click=${() => this.#emit("open-equipment")}
-                      >${t("equipment.open")}</wt-button
-                    >
-                    <wt-button
-                      class="allergens"
-                      variant="secondary"
-                      @click=${() => this.#emit("open-allergens")}
-                      >${t("allergens.open")}</wt-button
-                    >
-                    ${this.#chooser()}
-                    <span class="operator">${this.operatorName}</span>
-                    <wt-button
-                      class="logout"
-                      variant="secondary"
-                      @click=${() => this.#emit("logout")}
-                      >${t("action.logout")}</wt-button
-                    >
                   </div>
                 </header>
               `
