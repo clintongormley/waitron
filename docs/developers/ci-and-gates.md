@@ -741,6 +741,21 @@ WHICH entries a new export competes with, list them with sizes and last-access t
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
 
+### The second image build uses the runner's local cache
+
+The print-agent build in `image-smoke.yml` follows the app build on the same builder and
+imports no remote GHA cache. Its export remains enabled. This avoids a second remote
+download for the print-agent layers; it does not remove the app build's remote import.
+
+Measured 2026-10-08 on PR #1399, run `37743000577`, job `113198431831`: the cached
+print-agent layer `sha256:6e14a6c2683e027cbf0f8e85962c02bf23fea4a97b588241ddac0b68fdc621b8`
+reported `0B / 20.81MB` from 07:27:22 UTC until 08:13:06 UTC, then finished downloading
+at 08:13:10 UTC. The same layer downloaded in 1.2 seconds in the earlier main-based
+image-nightly run `37741541793`. The cause of the remote delay remains unverified.
+Retrieve the logs with `gh api --allow-escape-sequences
+repos/clintongormley/waitron/actions/jobs/113198431831/logs` and
+`gh run view 37741541793 --log`.
+
 ### sharp and the server bundle
 
 sharp, which shrinks uploaded photos (`packages/media/src/prepare.ts`), is a native addon that loads
