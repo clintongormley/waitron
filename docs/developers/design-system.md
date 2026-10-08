@@ -3034,8 +3034,10 @@ left-aligned, at normal text size, in `--wt-color-primary-text`: the parent's na
 underlined link back to it, inside a `nav` landmark with its own name. The page's own name is its
 one `h1`, at the list page's heading size and outside the landmark, so no other heading repeats it;
 the page's tabs come under it. A one-word name longer than the screen breaks inside the `h1`. A
-short fact about the item sits in brackets beside the `h1`, on its line, in normal muted text. A
-click on the parent link with a modifier key is left to the browser.
+short fact about the item sits in brackets after the `h1`, on its line where there is room, in
+normal muted text. A click on the parent link with a modifier key is left to the browser. The menu
+editor is the one page drawn this way today; the printer page still names the printer after "All
+printers ›" inside its `nav`; A405 plans to turn its details into a modal instead.
 
 The menu editor (`apps/dashboard/src/screens/menus-screen.ts`) reads "Menus ›" above the menu's
 name, then its live version in brackets — "(Live: version 2 · <time>)", or "(Unpublished)" for a

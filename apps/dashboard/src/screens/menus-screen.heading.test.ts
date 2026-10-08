@@ -526,7 +526,7 @@ describe("the menu editor's heading", () => {
     return mount(api(undefined, [{ id: "menu-lunch", name, active: true, version: 1 }]));
   }
 
-  it("wraps the path and a long menu name at phone width without scrolling sideways", async () => {
+  it("keeps the path above a long menu name inside a phone's width without scrolling sideways", async () => {
     const name = "The weekend brunch and late lunch menu served on the terrace until four";
     const el = await onPhone(name);
     const heading = q(el, "h1")!;
@@ -536,9 +536,7 @@ describe("the menu editor's heading", () => {
     const path = trail(el).getBoundingClientRect();
     expect(h1.right).toBeLessThanOrEqual(window.innerWidth);
     expect(path.right).toBeLessThanOrEqual(window.innerWidth);
-    expect(h1.top, "the name wraps onto the line under the path").toBeGreaterThanOrEqual(
-      path.bottom - 1,
-    );
+    expect(h1.top, "the name sits under the path").toBeGreaterThanOrEqual(path.bottom - 1);
   });
 
   it("breaks a menu name in one word longer than the phone is wide inside the heading", async () => {

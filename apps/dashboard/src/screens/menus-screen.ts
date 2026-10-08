@@ -104,13 +104,13 @@ type ListLayout = "narrow" | "middle" | "wide";
 /** Sorted by status, the menus needing a publish come first. */
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
-/** The state in one line, for the editor's heading. */
 /** The live version and when it went live; a menu never published says so instead. */
 function liveWords(status: MenuStatus) {
-  const { label, live } = statusWords(status);
-  if (live === null || status.state === "unpublished") return label;
-  const version = t("menu_status.changed_version").replace("{number}", String(status.version));
-  return html`${version} · <span class="time">${live.time}</span>`;
+  const { label, live } = statusWords(
+    status.state === "current" ? { ...status, state: "changed" } : status,
+  );
+  if (live === null) return label;
+  return html`${live.version} · <span class="time">${live.time}</span>`;
 }
 
 function tabAddress(menuId: string, tab: Tab): string {
