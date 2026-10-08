@@ -17,6 +17,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./period-editor.js";
 import "./opening-hours-week.js";
+import "./opening-hours-day.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { MenuPeriodInput, MenuPeriodUse, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -346,7 +347,7 @@ export class OpeningHoursScreen extends LitElement {
         !this.model
           ? nothing
           : html` ${
-                department
+                department && this.view !== "day"
                   ? html`<div class="chooser">
                       <wt-combobox
                         name="departmentId"
@@ -366,7 +367,9 @@ export class OpeningHoursScreen extends LitElement {
                         }}
                       ></wt-combobox>
                     </div>`
-                  : html`<p>${t("menu.no_departments")}</p>`
+                  : this.view === "day"
+                    ? nothing
+                    : html`<p>${t("menu.no_departments")}</p>`
               }
               <wt-tabs
                 label=${t("opening.title")}
@@ -390,7 +393,9 @@ export class OpeningHoursScreen extends LitElement {
                 <div slot="periods">
                   ${this.view === "periods" && department ? this.periods(department) : nothing}
                 </div>
-                <div slot="day"></div>
+                <div slot="day">
+                  ${this.view === "day" ? html`<opening-hours-day .api=${this.api} .model=${this.model} .readOnly=${this.readOnly}></opening-hours-day>` : nothing}
+                </div>
               </wt-tabs>`
       }
       ${

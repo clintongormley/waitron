@@ -856,8 +856,28 @@ that weekday, with the note "Changes every {weekday}" (decision 9). Departments 
 row's "Hours" action and the readiness link open `/manage/opening-hours?department=<id>`;
 `department.no_periods` reads "Has no opening periods" with that link; `zone.menu_missing` goes.
 
-- [ ] Steps: failing tests per behaviour; watch them fail; implement; pass; commit
+- [x] Steps: failing tests per behaviour; watch them fail; implement; pass; commit
 `feat(venue-service): Opening hours day view; Departments links to it (A366)`.
+
+**Checkpoint 2026-10-08 — Task 14 complete locally.** The Day tab starts on the venue business
+date and shows the active departments in one grid. One staged Save writes normal weekdays with
+all seven days preserved, or named-date ranges. Date stepping uses the shared leave coordinator;
+ordinary dates explain the repeating weekday. The range and nested period dialogs retain their
+department identity, times and late-response checks. Dirty drafts keep their original department
+and date targets across background reads and reconnect.
+
+**Ruling:** Save writes changed departments sequentially through the existing per-department
+routes, committing each success before another request. A later refusal keeps only the remaining
+departments dirty. The plan does not require atomic writes across those separate requests.
+The already-built Departments row action retains the canonical path used by the dashboard's URL
+controller; the readiness anchor uses the query form. Both select the named department in Opening
+hours. Their existing navigation, history and readiness assertions pass unchanged.
+
+The focused browser run passes 499 tests; the unedited fiscal pair passes 20. The new Day file's
+focused coverage exceeds the package bars, and both-theme axe checks pass. Five safeguard deletions
+fail intended assertions in an installed disposable candidate; restoring it passes 53 tests.
+The final 64 Day captures cover EN/ES, both themes and measured 390/1280 widths. Task 12's old
+source retirement, Task 15 and final branch review, CI and landing remain.
 
 ---
 

@@ -1558,7 +1558,13 @@ compare the override's presence as well as its ranges, so choosing Closed on an 
 weekday still enables Save. Changing the date or returning to the normal week asks before
 discarding a staged draft. A special-date range explains endpoints the venue clock repeats on
 their calendar morning; its ending changeover belongs to the next morning. A skipped-time refusal
-names the clock gap at the date header and keeps Save available for retry. The Day consumer is still being built in A366 slice 1.
+names the clock gap at the date header and keeps Save available for retry. The Day tab starts on the venue's business date and shows one editable column per active
+department in a shared grid. Previous/next date actions ask before discarding a staged draft.
+An ordinary date shows “Changes every {weekday}” and saves that weekday in the normal week;
+a special date saves only that date's ranges. One Save writes changed departments in order.
+If a later department is refused, earlier successful writes stay saved and the remaining draft
+stays available to retry. A dirty draft keeps its original departments and date target through
+background reads and reconnect.
 
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
