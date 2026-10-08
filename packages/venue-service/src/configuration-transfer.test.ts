@@ -142,6 +142,19 @@ describe("validateHoursConfiguration", () => {
     },
   );
 
+  it.each([null, undefined])(
+    "refuses a missing station even when the station inventory contains %s",
+    (id) => {
+      const tables = validTables();
+      const owner = tables.hours_week_cells![0]!.station_id;
+      tables.kitchen_stations!.push({ id, is_default: 0 });
+      for (const row of tables.hours_week_cells!) if (row.station_id === owner) row.station_id = id;
+      expect(() => validateHoursConfiguration(tables)).toThrowError(
+        refusal("hours_week_cells.station_id"),
+      );
+    },
+  );
+
   it("is run by the venue-service transfer's validate callback, with the export's date and zone", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
     const badTime = validTables();

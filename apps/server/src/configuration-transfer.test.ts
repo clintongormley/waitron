@@ -4123,7 +4123,7 @@ describe("opening hours in a configuration transfer", () => {
   });
 
   it.each(["hours_week_cells", "special_date_hours"] as const)(
-    "refuses a department-owned %s import before writing the venue",
+    "refuses a department-owned %s import without retaining the target taxpayer",
     async (table) => {
       const suffix = table === "hours_week_cells" ? "66" : "77";
       const { versions, transferred } = await preparedWithHours(`B4400${suffix}11`);

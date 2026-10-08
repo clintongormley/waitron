@@ -403,6 +403,14 @@ and another venue's station cells alongside exact local station periods. The dep
 writers and other readers described below remain pending Task 10 retirement on the feature
 branch; follow the [slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md).
 
+**2026-10-08, Task 10 import boundary:** an hours cell in a configuration bundle must name
+one of its stations and carry no department owner. `configuration-transfer.test.ts` checks
+both `hours_week_cells` and `special_date_hours`; the server's same-named suite checks
+`setup.request_invalid` with the table's `department_id` field and no persisted target
+taxpayer row. The former department schedule fixtures now belong to Pass and Grill stations,
+with their time, clash, default-station and fresh-ID assertions retained. The remaining
+Hours request and reader retirement is still pending on this feature branch.
+
 Hours (A261 step 5) keeps opening hours in five venue-service tables, all classified `state`:
 `hours_week_cells` and `hours_week_periods` for each department's and non-default station's
 standard week, and `special_dates`, `special_date_hours` and `special_date_hours_periods` for dated

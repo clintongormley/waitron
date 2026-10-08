@@ -77,21 +77,12 @@ function exportDate(bundle: { readonly createdAt: Date; readonly timeZone: strin
   }
 }
 
-/** The `kind:id` key of a cell's one owner, which must be a department or station the bundle holds. */
-function ownerKey(
-  row: Row,
-  table: string,
-  departments: Set<unknown>,
-  stations: Set<unknown>,
-): string {
-  const department = row.department_id ?? null;
-  const station = row.station_id ?? null;
-  if ((department === null) === (station === null)) refuse(`${table}.department_id`);
-  if (department !== null) {
-    if (!departments.has(department)) refuse(`${table}.department_id`);
-    return `department:${department as string}`;
-  }
-  if (!stations.has(station)) refuse(`${table}.station_id`);
+function ownerKey(row: Row, table: string, stations: Set<unknown>): string {
+  if (row.department_id !== undefined && row.department_id !== null)
+    refuse(`${table}.department_id`);
+  const station = row.station_id;
+  if (station === undefined || station === null || !stations.has(station))
+    refuse(`${table}.station_id`);
   return `station:${station as string}`;
 }
 
@@ -132,26 +123,11 @@ function storedMode(row: Row, table: string): string {
   return row.mode as string;
 }
 
-/**
- * Refuses (`setup.request_invalid`, `field` naming the table or `<table>.<column>`) hours rows a
- * save could not have written. An import inserts rows as they come, so this holds what the writers
- * hold: canonical times, one cell per subject and day, periods only in a periods cell, a whole week
- * or none, no overlap within a day or across a midnight, and owners the bundle carries. It leaves
- * out a clash between two days already past in the venue's zone when the bundle was made, and
- * checks every pair when that date cannot be read. It reads no day cutover, so for a venue whose
- * cutover or numeric-offset zone a save finds unreadable (and then checks every pair), it can still
- * leave past pairs out. A special-date period may not open or close at a minute the clocks skip in
- * the venue's zone, unless its date and the day after were both past at export. With no readable
- * zone that goes unchecked, as a save leaves it unchecked for an unreadable clock; but reading no
- * cutover, it is checked for a venue whose zone reads and whose cutover does not, which a save
- * leaves unchecked. A default station's cells may travel, as the default keeps them, and take no
- * part in either check.
- */
+/** Retained default-station cells travel but do not constrain its opening times. */
 export function validateHoursConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string },
 ): void {
-  const departments = ids(tables.departments);
   const stations = ids(tables.kitchen_stations);
 
   const weekCells = tables.hours_week_cells ?? [];
@@ -162,7 +138,7 @@ export function validateHoursConfiguration(
   );
   const weeks = new Map<string, { weekday: number; cell: unknown }[]>();
   for (const row of weekCells) {
-    const key = ownerKey(row, "hours_week_cells", departments, stations);
+    const key = ownerKey(row, "hours_week_cells", stations);
     const weekday = row.weekday;
     if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
       refuse("hours_week_cells.weekday");
@@ -208,10 +184,9 @@ export function validateHoursConfiguration(
   const cellsByDate = new Map<unknown, { key: string; cell: unknown }[]>();
   for (const row of dateCells) {
     if (!dates.has(row.special_date_id)) refuse("special_date_hours.special_date_id");
-    const key = ownerKey(row, "special_date_hours", departments, stations);
+    const key = ownerKey(row, "special_date_hours", stations);
     const cells = cellsByDate.get(row.special_date_id) ?? [];
-    if (cells.some((cell) => cell.key === key))
-      refuse(`special_date_hours.${key.startsWith("department:") ? "department" : "station"}_id`);
+    if (cells.some((cell) => cell.key === key)) refuse("special_date_hours.station_id");
     const mode = storedMode(row, "special_date_hours");
     cells.push({ key, cell: { mode, periods: datePeriods.get(row.id) ?? [] } });
     cellsByDate.set(row.special_date_id, cells);
@@ -254,10 +229,9 @@ export function validateHoursConfiguration(
     });
   }
 
-  const subjects = [
-    ...[...departments].map((id) => `department:${id as string}`),
-    ...[...stations].filter((id) => !defaults.has(id)).map((id) => `station:${id as string}`),
-  ];
+  const subjects = [...stations]
+    .filter((id) => !defaults.has(id))
+    .map((id) => `station:${id as string}`);
   for (const key of subjects) {
     const week = (weekday: number) => weekIntervals.get(key)?.[weekday] ?? null;
     for (const date of states.keys())
