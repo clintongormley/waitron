@@ -6868,7 +6868,7 @@ approved.
   diff of a rebased push named only main's file. See
   [ci-and-gates.md](developers/ci-and-gates.md), "The pre-push hook" and "After a rebase, the
   old-tip..new-tip diff can leave out the branch's own changes".
-  **Follow-up — DONE (A411).** The hook trusted the checkout's own `origin/main`: in #1421's Codex
+  **Follow-up — DONE (A411, #1445).** The hook trusted the checkout's own `origin/main`: in #1421's Codex
   review, an unsigned commit placed by hand on a local `origin/main` that the real remote lacked
   passed it. The hook now refreshes `origin/main` from the remote first and, when it cannot,
   does not leave main's commits out of the sign-off range; licence.yml's `dco` job now runs on every push to `main`
