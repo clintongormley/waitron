@@ -1273,14 +1273,14 @@ describe("validateRoutingConfiguration", () => {
   function routingTables(): Tables {
     return {
       departments: [
-        { id: RESTAURANT, active: 1 },
-        { id: DELI, active: 0 },
+        { id: RESTAURANT, name: "Restaurant", active: 1 },
+        { id: DELI, name: "Deli", active: 0 },
       ],
       floor_zones: [
-        { id: TERRACE, active: 1 },
-        { id: INSIDE, active: 1 },
-        { id: CLOSED_ZONE, active: 0 },
-        { id: BARE_ZONE, active: 1 },
+        { id: TERRACE, name: "Terrace", active: 1 },
+        { id: INSIDE, name: "Inside", active: 1 },
+        { id: CLOSED_ZONE, name: "Closed", active: 0 },
+        { id: BARE_ZONE, name: "Bare", active: 1 },
       ],
       zone_service_policies: [
         { zone_id: TERRACE, department_id: RESTAURANT },
@@ -1292,10 +1292,10 @@ describe("validateRoutingConfiguration", () => {
         { id: BAR, is_default: 0, active: 1 },
         { id: OFF, is_default: 0, active: 0 },
       ],
-      categories: [{ id: DRINKS }],
+      categories: [{ id: DRINKS, name: "Drinks" }],
       products: [
-        { id: MOJITO, parent_id: null },
-        { id: LARGE, parent_id: MOJITO },
+        { id: MOJITO, name: "Mojito", parent_id: null },
+        { id: LARGE, name: "Large", parent_id: MOJITO },
       ],
       routing_cells: [
         cell({ category: DRINKS, station: BAR }),
@@ -1303,7 +1303,6 @@ describe("validateRoutingConfiguration", () => {
         cell({ product: MOJITO, station: OFF }),
         cell({ product: MOJITO, zone: TERRACE, station: KITCHEN }),
         cell({ zone: TERRACE, station: BAR }),
-        cell({ zone: INSIDE, station: KITCHEN }),
         cell({ noCategory: 1 }),
         cell({ noCategory: 1, zone: TERRACE, station: BAR }),
       ],
@@ -1321,10 +1320,49 @@ describe("validateRoutingConfiguration", () => {
     expect(() => validateRoutingConfiguration({})).not.toThrow();
   });
 
-  it("accepts a cell for a zone whose department is switched off", () => {
-    const tables = routingTables();
-    expect(tables.routing_cells!.some((row) => row.zone_id === INSIDE)).toBe(true);
-    expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+  describe("a cell for a zone whose department is switched off", () => {
+    const inside = { zoneId: INSIDE, zone: "Inside", departmentId: DELI, department: "Deli" };
+    const refusalFor = (spec: CellSpec) => {
+      const tables = routingTables();
+      tables.routing_cells!.push(cell(spec));
+      try {
+        validateRoutingConfiguration(tables);
+      } catch (error) {
+        return error;
+      }
+      throw new Error("the bundle was accepted");
+    };
+
+    it.each([
+      ["a category", { category: DRINKS }, { row: "category", name: "Drinks" }],
+      ["a product", { product: MOJITO }, { row: "product", name: "Mojito" }],
+      ["a No category", { noCategory: 1 }, { row: "no_category" }],
+      ["an All categories", {}, { row: "all" }],
+    ])("refuses %s row with the routing grid's code, naming the choice", (_, spec, row) => {
+      const error = refusalFor({ ...spec, zone: INSIDE, station: KITCHEN });
+      expect(error).toMatchObject({ code: "service_zone.not_found" });
+      expect((error as { params: unknown }).params).toEqual({ ...inside, ...row });
+    });
+
+    it("accepts the same cells once the department is switched on", () => {
+      const tables = routingTables();
+      tables.departments!.find((row) => row.id === DELI)!.active = 1;
+      tables.routing_cells!.push(
+        cell({ category: DRINKS, zone: INSIDE, station: KITCHEN }),
+        cell({ product: MOJITO, zone: INSIDE, station: KITCHEN }),
+        cell({ noCategory: 1, zone: INSIDE, station: KITCHEN }),
+        cell({ zone: INSIDE, station: KITCHEN }),
+      );
+      expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+    });
+
+    it("never refuses an Every zone cell for a switched-off department", () => {
+      const tables = routingTables();
+      tables.departments!.forEach((row) => (row.active = 0));
+      tables.routing_cells = tables.routing_cells!.filter((row) => row.zone_id === null);
+      expect(tables.routing_cells).toHaveLength(3);
+      expect(() => validateRoutingConfiguration(tables)).not.toThrow();
+    });
   });
 
   it("refuses a row naming both a category and a product", () => {

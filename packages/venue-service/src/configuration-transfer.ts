@@ -475,7 +475,8 @@ function validateDepartmentTransfers(tables: Tables): void {
  * could not have written: a bad coordinate or target shape, the All categories × Every zone cell, a
  * second cell at one coordinate, a variant or a product, category, zone or station the bundle does
  * not hold, and a zone that is switched off or has no service configuration. A zone whose
- * department is switched off is not refused.
+ * department is switched off is refused with the grid's own `service_zone.not_found`, its params
+ * naming the zone, the department and the row so the import screen can say which choice to fix.
  */
 export function validateRoutingConfiguration(tables: Tables): void {
   const categories = ids(tables.categories);
@@ -488,6 +489,15 @@ export function validateRoutingConfiguration(tables: Tables): void {
     (tables.floor_zones ?? [])
       .filter((row) => row.active === 1 && configured.has(row.id))
       .map((row) => row.id),
+  );
+  const named = (rows: readonly Row[] | undefined) =>
+    new Map((rows ?? []).map((row) => [row.id, row]));
+  const zoneRows = named(tables.floor_zones);
+  const departmentRows = named(tables.departments);
+  const categoryRows = named(tables.categories);
+  const productRows = named(tables.products);
+  const zoneDepartment = new Map(
+    (tables.zone_service_policies ?? []).map((row) => [row.zone_id, row.department_id]),
   );
   const taken = new Set<string>();
   for (const row of tables.routing_cells ?? []) {
@@ -519,6 +529,20 @@ export function validateRoutingConfiguration(tables: Tables): void {
     const key = JSON.stringify([subject, category ?? product, zone]);
     if (taken.has(key)) refuse(`routing_cells.${subject}`);
     taken.add(key);
+    const departmentId = zoneDepartment.get(zone);
+    const department = departmentRows.get(departmentId);
+    if (department === undefined || department.active === 1) continue;
+    throw new AppError("service_zone.not_found", {
+      zoneId: String(zone),
+      zone: String(zoneRows.get(zone)!.name),
+      departmentId: String(departmentId),
+      department: String(department.name),
+      ...(category !== null
+        ? { row: "category" as const, name: String(categoryRows.get(category)!.name) }
+        : product !== null
+          ? { row: "product" as const, name: String(productRows.get(product)!.name) }
+          : { row: noCategory ? ("no_category" as const) : ("all" as const) }),
+    });
   }
 }
 
