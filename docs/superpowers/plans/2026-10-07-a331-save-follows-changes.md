@@ -616,7 +616,8 @@ adopt `draftScopeFor` / `saveActionState` test-first where its owning batch has 
   `customer-menu*`, `add-to-menus`, `include-folder-form` and `section-*` under that widgets folder.
 - Venue-service batch 4b / `feat/service-periods-slice-1`: all `packages/venue-service/`, including
   hours/date/holiday/menu-slot editors, watcher, service settings, venue operations, timetable
-  and preparation-station forms.
+  and preparation-station forms. (2026-10-08: the local holiday editor and the watcher form were
+  done in Batch 4c below.)
 - Parked invoice part 1, [#1399](https://github.com/clintongormley/waitron/pull/1399):
   `apps/server/src/configuration-transfer*`, `apps/server/src/setup-api.ts`,
   `packages/db/src/configuration-transfer.ts`, `apps/till/src/i18n/codes*`, and print-agent
@@ -1127,7 +1128,8 @@ changing them: `hours-screen.ts`, `menu-timetable-screen.ts`, `venue-operations-
 `feat/service-periods-slice-1`), `prep-stations-screen.ts` (lane E's `fix/drag-edge-scroll`), every
 `configuration-transfer*` file, and `apps/till/src/i18n/codes*` (#1399). This batch edits none of
 them; a changed check in `prep-stations-screen.test.ts` is allowed (a test file only, different
-hunks from a drag test), and whichever branch lands second rebases.
+hunks from a drag test), and whichever branch lands second rebases. (2026-10-08: #1416, which was
+`fix/drag-edge-scroll`, landed first; this branch rebased onto it.)
 
 **The 3a rules block and Batch 5's three extra rules apply to every task** (watch for
 `Unhandled error`; the temporary THROW probe at each new early return; an `if (scope) … else …`

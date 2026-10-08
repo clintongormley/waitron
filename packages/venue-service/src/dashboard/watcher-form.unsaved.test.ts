@@ -306,7 +306,7 @@ it("Watcher disconnect aborts its question and removes unload handling", async (
   await expect.poll(async () => (await question()).open).toBe(false);
   expect(unload()).toBe(false);
 });
-it("Watcher taken out of the page and put back keeps its edit and asks before discarding it", async () => {
+it("Watcher taken out of the page and put back keeps an edit made afterwards and asks before discarding it", async () => {
   const { screen } = await mount();
   const { form } = await open(screen);
   const parent = form.parentNode!;

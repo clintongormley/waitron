@@ -55,6 +55,7 @@ describe.each(["light", "dark"] as const)("till-profile-dialog a11y (%s theme)",
     )!;
     await button.updateComplete;
     expect(button.disabled).toBe(disabled);
+    expect(button.variant).toBe(disabled ? "secondary" : "primary");
     await expectNoA11yViolations(host);
   });
 });

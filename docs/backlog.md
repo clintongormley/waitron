@@ -1618,8 +1618,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   and SumUp Connect/Pair/Try again remain provider operations;
   [classification and call paths](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a).
 - **Batch 4b — OPEN.** The venue-service screens other branches are changing: hours, the menu
-  timetable and venue operations (after `feat/service-periods-slice-1`), and preparation stations
-  (after `fix/drag-edge-scroll`).
+  timetable and venue operations (after `feat/service-periods-slice-1`). Preparation stations were
+  held for `fix/drag-edge-scroll`, which landed as #1416, and are no longer reserved.
 - **Batch 4c — DONE (A331-4c, 2026-10-08).** The local holiday Add and Edit and the watcher form
   (New and Edit) in `packages/venue-service`, and the till's profile dialog, whose Switch now waits
   until another profile is chosen — this closes the profile-dialog point left open by batch 5. A
@@ -1627,8 +1627,10 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   closed the dialog. Holiday Remove and Forget stay red confirmations and the holiday area saves on
   choice; [the Batch 4c table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4c--the-venue-service-forms-nobody-else-is-changing-and-the-tills-profile-dialog-lane-c-a331-4c)
   gives the call path for each. Looked at on 2026-10-08 in 13 screenshots of the forms mounted with
-  test data in Chromium (each unchanged and after one edit at 1280px, light, English; the watcher
-  form and the profile dialog also at 390px, dark, Spanish), kept outside the repository in
+  test data in Chromium (the holiday Add and Edit, the watcher form's Edit and the profile dialog,
+  each unchanged and after one edit at 1280px, light, English, plus the holiday Remove confirmation;
+  the watcher Edit and the profile dialog also at 390px, dark, Spanish; the watcher form's New was
+  not captured), kept outside the repository in
   `~/waitron-campaign-c/a331-4c-shots/`: no defect found.
 - **Batch 5 — LANDED in #1414 (A331-5).** The till's five forms that save an edit: the party name dialog,
   the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
@@ -1666,7 +1668,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   a rerun of Batch 7's two inventories; till dialogs left for after
   `feat/save-follows-changes-till` lands; device-home, menus and Preview widgets left for after
   `fix/home-column-ranges` and its following Preview work land; hours/date/slot, service
-  settings, operations, timetable and preparation-station forms left for after
+  settings, operations and timetable forms left for after
   `feat/service-periods-slice-1` lands (batch 4b; the local holiday and watcher forms are done in
   batch 4c); invoice configuration/setup and agent paths left
   for after parked invoice part 1 [#1399](https://github.com/clintongormley/waitron/pull/1399) lands.
