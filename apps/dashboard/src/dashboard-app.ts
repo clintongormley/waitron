@@ -320,10 +320,7 @@ export class DashboardApp extends LitElement {
       :host {
         display: block;
         height: 100%;
-        /* Sidebar column width — a documented LOCAL custom property, not design-system chrome.
-           Override it on the host to reflow. Expressed in ch (not rem/em, not a pixel guess) so the
-           column tracks its own nav text; the responsive drawer (Task 12) layers over this. */
-        --dashboard-sidebar-width: 18ch;
+        --dashboard-sidebar-width: 34ch;
       }
 
       /* The banner owns the first full-width row; navigation and content share the row below it.
@@ -346,10 +343,6 @@ export class DashboardApp extends LitElement {
         min-height: 0;
       }
 
-      /* The desktop sidebar: fixed width, scrolls vertically on its own when the nav is tall.
-         max-height is relative to .layout's now-bounded cross size (via .shell's firm height), not
-         a flat 100vh guess — a flat 100vh ignored the banner's own height, so on a page taller than
-         one screen the sidebar capped out short of where .main actually ended. */
       .sidebar {
         flex: 0 0 var(--dashboard-sidebar-width);
         box-sizing: border-box;
@@ -357,13 +350,13 @@ export class DashboardApp extends LitElement {
         overflow-y: auto;
         padding: var(--wt-space-3);
         border-right: 1px solid var(--wt-color-border);
+        box-shadow: var(--wt-shadow-1);
       }
 
-      /* One vertical stack of grouped nav items. */
       .nav {
         display: flex;
         flex-direction: column;
-        gap: var(--wt-space-1);
+        gap: 0;
       }
 
       .nav > wt-input {
@@ -378,26 +371,22 @@ export class DashboardApp extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* Group header: a toggle button (collapses/expands its own items; a plain label while a
-         search term is typed), small caps (uppercase, letter-spacing) — makes it unmistakably a
-         label rather than a fainter link, which plain small+muted text didn't. Uses the primary
-         accent rather than muted grey so it doesn't read as the same weight of "quiet" as a resting
-         nav item beneath it; sharing the accent hue with the current-page indicator is fine here
-         because a header is never itself the current page, so there's no ambiguity about what the
-         colour is pointing at. */
       .nav-group {
+        position: relative;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: var(--wt-space-1);
         width: 100%;
         min-height: var(--wt-tap-min);
-        margin: var(--wt-space-2) 0 0;
-        padding: 0;
+        margin: var(--wt-space-1) 0 0;
+        padding: var(--wt-space-3);
         border: none;
+        border-inline-start: 3px solid transparent;
         background: transparent;
         color: var(--wt-color-primary-text);
         font: inherit;
         font-size: var(--wt-font-size-sm);
+        line-height: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -413,31 +402,46 @@ export class DashboardApp extends LitElement {
         cursor: default;
       }
 
-      /* Holds the chevron's place, so a header does not shift sideways when a search starts. */
-      .nav-group .chevron-space {
-        flex-shrink: 0;
-        width: var(--wt-font-size-lg);
+      .nav-group .group-icon {
+        position: absolute;
+        inset-inline-start: calc(-1 * var(--wt-space-1));
+        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-font-size-md)) / 2);
       }
 
-      /* Points down at rest ("expand downward"); rotated to point up when expanded ("collapse"),
-         matching the direction its own panel of items opens in. */
+      .nav-group-label {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .nav-group .chevron-space {
+        flex-shrink: 0;
+        width: var(--wt-space-4);
+      }
+
       .nav-group .chevron {
         flex-shrink: 0;
-        width: var(--wt-font-size-lg);
-        height: var(--wt-font-size-lg);
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-space-4)) / 2);
+        opacity: 0;
         transition: transform 150ms ease;
+      }
+
+      .nav-group:hover .chevron,
+      .nav-group:focus-visible .chevron {
+        opacity: 1;
+      }
+
+      @media (hover: none) {
+        .nav-group .chevron {
+          opacity: 1;
+        }
       }
 
       .nav-group[aria-expanded="true"] .chevron {
         transform: rotate(180deg);
       }
 
-      /* A flat nav row, not a button: no border/background box, so a list of ~20 of these reads as
-         navigation rather than a stack of buttons. Resting items are muted, not full-strength text —
-         at equal weight and colour they competed with the group headers above and buried the
-         current page's accent in a crowd of equally dark siblings. The selected-item treatment
-         (accent edge + bold coloured text, no fill) mirrors wt-tabs' own selected state — same idiom,
-         vertical instead of horizontal — and is now the one loud thing in an otherwise calm list. */
       .nav-item {
         display: block;
         width: 100%;
@@ -451,6 +455,14 @@ export class DashboardApp extends LitElement {
         font-weight: var(--wt-font-weight-normal);
         text-align: start;
         cursor: pointer;
+      }
+
+      @media (pointer: fine) {
+        .nav-item,
+        .nav-group {
+          min-height: var(--wt-space-6);
+          padding-block: var(--wt-space-1);
+        }
       }
 
       .nav-item:hover {
@@ -653,7 +665,8 @@ export class DashboardApp extends LitElement {
              sizes it — without its own width it fell back to shrink-to-fit over the nav's content,
              a width that moved every time a group expanded or collapsed and that translateX(-100%)
              then closed against inconsistently. */
-          width: var(--dashboard-sidebar-width);
+          width: min(var(--dashboard-sidebar-width), 85vw);
+          box-shadow: none;
           z-index: 30;
           /* Opaque so the dimmed main column never shows through the sliding panel. */
           background: var(--wt-color-bg);
@@ -661,6 +674,7 @@ export class DashboardApp extends LitElement {
           transition: transform 150ms ease;
         }
         .layout.drawer-open .sidebar {
+          box-shadow: var(--wt-shadow-1);
           transform: translateX(0);
         }
       }
@@ -715,13 +729,17 @@ export class DashboardApp extends LitElement {
   @state() private collapsedGroups = new Set<NavGroupId>(
     NAV_GROUPS.filter((group) => group.headerKey).map((group) => group.id),
   );
-  // Collapsing a group shrinks the sidebar, and the browser clamps scrollTop, snapping the list
-  // upward. Correcting scrollTop by how far the clicked header moved keeps it where it was clicked.
+  // Keep the clicked header in place when another group's panel closes above it.
   #toggleGroup(id: NavGroupId, trigger: HTMLElement): void {
     const before = trigger.getBoundingClientRect().top;
-    const next = new Set(this.collapsedGroups);
-    if (trigger.getAttribute("aria-expanded") === "true") next.add(id);
-    else next.delete(id);
+    const next =
+      trigger.getAttribute("aria-expanded") === "true"
+        ? new Set(this.collapsedGroups).add(id)
+        : new Set(
+            NAV_GROUPS.filter((group) => group.headerKey && group.id !== id).map(
+              (group) => group.id,
+            ),
+          );
     this.collapsedGroups = next;
     void this.updateComplete.then(() => {
       const sidebar = trigger.closest<HTMLElement>(".sidebar");
@@ -1074,10 +1092,10 @@ export class DashboardApp extends LitElement {
     const group =
       NAV_GROUPS.find((entry) => coreItems(entry).some((item) => item.screen === screen))?.id ??
       this.#activeScreens.get(screen)?.screen.group;
-    if (group === undefined || !this.collapsedGroups.has(group)) return;
-    const next = new Set(this.collapsedGroups);
-    next.delete(group);
-    this.collapsedGroups = next;
+    if (group === undefined) return;
+    this.collapsedGroups = new Set(
+      NAV_GROUPS.filter((entry) => entry.headerKey && entry.id !== group).map((entry) => entry.id),
+    );
   }
 
   override updated(changed: PropertyValues): void {
@@ -1723,7 +1741,6 @@ export class DashboardApp extends LitElement {
     if (this.screen === "login" || this.sessionRole === undefined) return;
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
-    this.#openGroupOf(this.screen);
     this.drawerOpen = false;
     diag.record("info", "nav", { screen: this.screen });
   };
@@ -1834,9 +1851,9 @@ export class DashboardApp extends LitElement {
                 ? nothing
                 : searching
                   ? html`<div class="nav-group" data-test="nav-group-${group.id}">
+                      ${group.icon ? html`<wt-icon class="group-icon" name=${group.icon}></wt-icon>` : nothing}
+                      <span class="nav-group-label">${t(group.headerKey)}</span>
                       <span class="chevron-space"></span>
-                      ${group.icon ? html`<wt-icon name=${group.icon}></wt-icon>` : nothing}
-                      ${t(group.headerKey)}
                     </div>`
                   : html`<button
                       type="button"
@@ -1847,9 +1864,9 @@ export class DashboardApp extends LitElement {
                       @click=${(e: MouseEvent) =>
                         this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
                     >
+                      ${group.icon ? html`<wt-icon class="group-icon" name=${group.icon}></wt-icon>` : nothing}
+                      <span class="nav-group-label">${t(group.headerKey)}</span>
                       <wt-icon name="chevron-down" class="chevron"></wt-icon>
-                      ${group.icon ? html`<wt-icon name=${group.icon}></wt-icon>` : nothing}
-                      ${t(group.headerKey)}
                     </button>`
             }
             <div id=${panelId} ?hidden=${collapsed}>

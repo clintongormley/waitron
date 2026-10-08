@@ -4324,12 +4324,22 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
   `apps/till/src/i18n/allergen-names.ts`) are not scanned.
 
-- **A sidebar test that guards nothing (left by C35, #822).** "keeps the clicked group header at the
-  same on-screen position…" in `apps/dashboard/src/dashboard-app.test.ts` still passes with the
-  scroll correction in `#toggleGroup` deleted — on `main` at 55504ee1b too, before C35. Making it
-  catch a missing correction needs a layout where the browser pulls the list back on its own, which
-  may not be reachable; next action is to find out whether it is, then either fix the test or drop
-  the correction and its test.
+- **Dashboard side-menu changes (A325) — DONE.** One headed
+  group opens at a time; search still shows every matching group without changing those choices.
+  Header labels align with page labels, with 16px chevrons at the trailing edge that appear on
+  hover, keyboard focus or a device without hover. Fine-pointer rows use a 32px minimum;
+  coarse-pointer rows retain 44px. The 34ch sidebar has the shared soft shadow and a phone
+  drawer cap of 85vw. The scroll test now exercises opening a lower group while the group
+  above closes. With browser scroll anchoring disabled in that fixture, deleting the app's
+  correction moved the clicked header by 128px and failed; restoring it passed.
+  Touch assertions run in their own Chromium context after a Linux probe showed that
+  disabling a CDP touch override left the touched page without a mouse pointer or hover.
+
+- **The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN.**
+  A325's independent review deleted the app's scroll correction: the new lower-header check
+  failed by 128px, while "keeps the clicked group header … when collapsing …" still passed.
+  The older test and its existing assertions were retained. Find a collapse-only case that
+  needs the app's correction before changing or retiring that test.
 
 - **Add a device, like adding a printer (A268, owner 2026-10-04) — DONE: W104 (#1225), W105
   (#1235), W106 (#1240), W105a (#1244), W105b (#1248), W105c (#1251), W105d (#1263), W105e (#1266),

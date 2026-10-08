@@ -483,8 +483,13 @@ but never lets the textarea itself fall below `--wt-tap-min`, growing the box in
 `--wt-tap-min` in a compact field. Among the field primitives, `wt-number-stepper`'s two buttons are
 the one exception, by the owner's decision (A263, 2026-10-03): each is `--wt-stepper-button-width` (24px) wide, because the
 number between them keeps them apart and 24 by 24 CSS px is WCAG 2.2's level AA minimum (criterion
-2.5.8; the 44px figure is the level AAA criterion 2.5.5). Outside the field primitives,
-`wt-relative-time`'s words are an inline button below `--wt-tap-min`, under criterion 2.5.8's
+2.5.8; the 44px figure is the level AAA criterion 2.5.5).
+
+The dashboard sidebar's page rows and group headers use `--wt-space-6` (32px) minimum
+height with a fine pointer (A325, owner 2026-10-07). With a coarse pointer they retain
+`--wt-tap-min` (44px). This exception applies to sidebar navigation only.
+
+Outside the field primitives, `wt-relative-time`'s words are an inline button below `--wt-tap-min`, under criterion 2.5.8's
 exception for a target in a sentence (quoted in its row of the component table); that is the
 implementer's choice and awaits the owner's view (`docs/backlog.md`, W106's open point (f)). `wt-switch`'s `:host` and `.control` and
 `wt-price-input`'s unit button take `min-width` and
@@ -2081,8 +2086,11 @@ shown, that page's group is taken out of the set, so it shows open. After that i
 and reopens it like any other group's (A161, owner 2026-09-30): a header click records the opposite
 of what the header shows, and outside a search the header's `aria-expanded` and the item list's
 `hidden` follow the set alone. A collapsed group holding the current page hides that page's row;
-arriving at another page in it opens it again. A group opened on arrival stays open after you leave
-it, as one opened by hand does.
+arriving at another page in it opens it again. Opening a headed group, by clicking its header
+or arriving at one of its pages, closes every other headed group (A325, owner 2026-10-07).
+Opening Overview, the page without a group header, closes every headed group. A same-page
+address change or Back step leaves a manually opened group alone. Typing a search term leaves
+those stored choices unchanged.
 
 A group draws no header when this session cannot open any of its pages. Search also hides a group
 when it removes all of its pages. A group may mix module pages with core pages: a core item listed in
@@ -2112,17 +2120,17 @@ keyed by page, so at desktop width a result row pressed with Enter or Space keep
 full list comes back. A language switch keeps the term and searches the new
 language's labels, and signing out empties the box.
 
-A group that has ITS OWN scrolled-to items shrink when collapsed can leave the sidebar's
-`scrollTop` past the new (shorter) scrollable range — the browser then clamps it down on its own,
-snapping every visible row upward even though nothing above the clicked header moved. `#toggleGroup`
-records the clicked header's own on-screen position before the toggle and corrects `scrollTop` by
-the same delta once the DOM has updated, so the header stays where it was clicked. This can't
-always be perfect — if the collapsing group's own items were propping up enough scroll range to
-reach that position in the first place, restoring it exactly may be mathematically impossible once
-they're gone — but it always gets as close as the remaining content allows, which reads as "stayed
-put" in every case that matters (the group being collapsed isn't the last thing wedging the page
-open). A group header can also carry an `icon` (a registered `wt-icon` name) — kept rare, used only
-where it's as unambiguous as Settings' gear; most groups have none.
+A header's text starts at the same leading edge as its page labels; an optional group icon
+occupies the gutter before it. The trailing chevron uses `--wt-space-4` (16px), reserves its
+space while hidden, and centres on the label's first line. It appears under hover or keyboard
+focus, and stays visible on devices without hover. Search labels reserve that same trailing space.
+The sidebar is 34ch wide, capped at 85vw in the phone drawer, with a border and `--wt-shadow-1`.
+
+`#toggleGroup` records the clicked header's position and corrects the sidebar's scroll offset
+after the DOM changes. The browser still bounds that offset to the available scroll range.
+The Chromium case opening Team while Products closes checks preservation with the clicked
+header visible and enough content to scroll in both states. Its fixture disables browser scroll
+anchoring so that heuristic cannot mask the application correction.
 
 The sidebar and the content column both scroll independently, bounded to the space below the
 banner (`.shell { height: 100%; max-height: 100vh }` filling `apps/dashboard/index.html`'s body,
