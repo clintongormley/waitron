@@ -171,10 +171,11 @@ it("puts a host's own Cancel beside Add", async () => {
 });
 
 it("counts what is chosen in English", async () => {
+  setLocale("en-GB");
   const { el } = await mount();
   await choose(el, ["p-lager", "p-burger"]);
   await combobox(el).updateComplete;
-  expect(trigger(el).querySelector(".value")!.textContent!.trim()).toBe("2 chosen");
+  expect(trigger(el).querySelector(".value")!.textContent!.trim()).toBe("2 selected");
 });
 
 it("counts what is chosen in Spanish", async () => {

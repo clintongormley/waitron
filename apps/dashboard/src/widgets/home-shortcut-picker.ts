@@ -49,7 +49,7 @@ export class HomeShortcutPicker extends LitElement {
   #saved: string[] = [];
   #scope?: DraftScope<string[]>;
   readonly #countLabel = (count: number) =>
-    t("home.chosen_count").replace("{count}", String(count));
+    t("home.selected_count").replace("{count}", String(count));
 
   override connectedCallback(): void {
     super.connectedCallback();
