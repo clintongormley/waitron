@@ -2505,9 +2505,15 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   including the demo banner's space, operator controls and simulator reader. Other card arrangements
   retain their configured row spans. Full invoice and Hold share a row; Cash, Card and Hold use
   the shared medium button size. Phone cards remain stacked in their configured order.
-- **Phone till: the top bar keeps too much space for its buttons (A378, queued).**
-  A310 measured about 440 of 844 px before A364 removed the clock notices. Re-measure the
-  remaining controls for A378; the earlier capture was described as including a clock notice.
+- **A378 DONE: on a phone the till's top bar is one row.** At 390×844 the demo counter's bar
+  measured 293 px before and 61 px after (EN; in a Chromium test of the bar with every button it can show, 322 px EN and
+  378 px ES before). On a phone the bar holds the tabs, which scroll sideways when they do not fit,
+  the language chooser, and a "More" menu with everything else: department transfers, Find a bill,
+  Kitchen, Pass, My schedule, Profile, Equipment, Allergens, the operator's name and Log out. The
+  menu button shows a count of pending transfers. Above 40rem the bar is unchanged.
+  - **Open, for the owner:** at 1280 px the bar still wraps to two rows in English and three in
+    Spanish (125 and 181 px on the demo counter). The same menu would make it one row there too;
+    not done, because the item kept wider screens unchanged.
 - **A379 DONE: standard till tab titles follow the UI language.** Standard key/title pairs
   Counter, Floor and Order read Mostrador, Sala and Pedido in Spanish; renamed and custom
   tabs keep their stored titles. The service-area selector reserves room for its full label,
