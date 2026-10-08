@@ -87,6 +87,11 @@ async function send(
   });
 }
 
+async function refusal(res: Response): Promise<[number, string, unknown]> {
+  const body = (await res.json()) as { error: { code: string; params: unknown } };
+  return [res.status, body.error.code, body.error.params];
+}
+
 describe("mountWorkforceApi — locations + roster read/create", () => {
   it("GET /management-api/locations lists the tenant's locations", async () => {
     const res = await send(mountApp(), "GET", "/management-api/locations");
@@ -133,6 +138,17 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "shared.invalid_id" },
     });
+  });
+
+  it("400s a POST /roster whose locationId names no location (management.request_invalid, never a 500)", async () => {
+    const res = await send(mountApp(), "POST", "/management-api/roster", {
+      body: { locationId: crypto.randomUUID(), period: "2026-12-07" },
+    });
+    expect(await refusal(res)).toEqual([
+      400,
+      "management.request_invalid",
+      { field: "locationId" },
+    ]);
   });
 
   it("400s a malformed period on POST (management.request_invalid)", async () => {
@@ -344,6 +360,31 @@ describe("mountWorkforceApi — shift routes", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management.request_invalid" },
     });
+  });
+
+  it.each([["personId"], ["locationId"]])(
+    "400s an add whose %s names no row (management.request_invalid, never a 500)",
+    async (field) => {
+      const app = mountApp();
+      const versionId = await draftVersion(field === "personId" ? "2026-12-14" : "2026-12-21");
+      const res = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+        body: { ...shiftBody("2026-12-14"), [field]: crypto.randomUUID() },
+      });
+      expect(await refusal(res)).toEqual([400, "management.request_invalid", { field }]);
+    },
+  );
+
+  it("400s a PATCH whose personId names no person (management.request_invalid, never a 500)", async () => {
+    const app = mountApp();
+    const versionId = await draftVersion("2026-12-28");
+    const add = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: shiftBody("2026-12-28"),
+    });
+    const { shiftId } = (await add.json()) as { shiftId: string };
+    const res = await send(app, "PATCH", `/management-api/roster/shifts/${shiftId}`, {
+      body: { personId: crypto.randomUUID() },
+    });
+    expect(await refusal(res)).toEqual([400, "management.request_invalid", { field: "personId" }]);
   });
 
   it("400s an out-of-range startsOffsetMinutes on add (management.request_invalid, never a 500)", async () => {

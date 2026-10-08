@@ -41,6 +41,19 @@ async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | und
   return error instanceof AppError ? error.code : `not an AppError: ${String(error)}`;
 }
 
+async function refusalOf(fn: () => Promise<unknown>): Promise<{ code: string; params: unknown }> {
+  const error = await captureError(fn);
+  if (!(error instanceof AppError)) throw new Error(`not an AppError: ${String(error)}`);
+  return { code: error.code, params: error.params };
+}
+
+async function countRows(query: ReturnType<typeof sql>): Promise<number> {
+  const result = await suite.db.execute<{ n: number }>(query);
+  return Number(result.rows[0]!.n);
+}
+
+const UNKNOWN_ID = "00000000-0000-0000-0000-00000000dead";
+
 async function attachedVersion(shiftId: string): Promise<string | null> {
   const rows = await suite.db.execute<{ roster_version_id: string | null }>(
     sql`select roster_version_id from shifts where id = ${shiftId}`,
@@ -286,6 +299,23 @@ describe("createRosterVersion", () => {
     ); // Thursday, same week
     expect(code).toBe("roster.draft_exists");
   });
+
+  it("refuses a locationId that names no location — management.request_invalid, no row written", async () => {
+    const refusal = await refusalOf(() =>
+      run((tx) =>
+        backend.createRosterVersion(tx, { locationId: UNKNOWN_ID, period: "2026-12-07" }),
+      ),
+    );
+    expect(refusal).toEqual({
+      code: "management.request_invalid",
+      params: { field: "locationId" },
+    });
+    expect(
+      await countRows(
+        sql`select count(*) as n from roster_versions where location_id = ${UNKNOWN_ID}`,
+      ),
+    ).toBe(0);
+  });
 });
 
 describe("getRoster / getRosterVersion", () => {
@@ -434,6 +464,50 @@ describe("addShift", () => {
       ),
     ).toBe("shift.invalid");
   });
+
+  it("refuses a personId that names no person — management.request_invalid, no row written", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { locationId, period: "2026-12-14" }),
+    );
+    const refusal = await refusalOf(() =>
+      run((tx) => backend.addShift(tx, shiftInput(versionId, { personId: UNKNOWN_ID }))),
+    );
+    expect(refusal).toEqual({
+      code: "management.request_invalid",
+      params: { field: "personId" },
+    });
+    expect(
+      await countRows(sql`select count(*) as n from shifts where roster_version_id = ${versionId}`),
+    ).toBe(0);
+  });
+
+  it("refuses a locationId that names no location — management.request_invalid, no row written", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { locationId, period: "2026-12-21" }),
+    );
+    const refusal = await refusalOf(() =>
+      run((tx) => backend.addShift(tx, shiftInput(versionId, { locationId: UNKNOWN_ID }))),
+    );
+    expect(refusal).toEqual({
+      code: "management.request_invalid",
+      params: { field: "locationId" },
+    });
+    expect(
+      await countRows(sql`select count(*) as n from shifts where roster_version_id = ${versionId}`),
+    ).toBe(0);
+  });
+
+  it("answers roster.not_found, not the person check, when the version is unknown too", async () => {
+    const code = await codeOfRejection(() =>
+      run((tx) =>
+        backend.addShift(
+          tx,
+          shiftInput("00000000-0000-0000-0000-000000000000", { personId: UNKNOWN_ID }),
+        ),
+      ),
+    );
+    expect(code).toBe("roster.not_found");
+  });
 });
 
 describe("updateShift / removeShift", () => {
@@ -502,6 +576,33 @@ describe("updateShift / removeShift", () => {
     expect(
       await codeOfRejection(() => run((tx) => backend.removeShift(tx, { shiftId: missing }))),
     ).toBe("shift.not_found");
+  });
+
+  it("refuses a personId patch that names no person — management.request_invalid, person unchanged", async () => {
+    const { shiftId } = await draftShift("2026-12-28");
+    const refusal = await refusalOf(() =>
+      run((tx) => backend.updateShift(tx, { shiftId, personId: UNKNOWN_ID })),
+    );
+    expect(refusal).toEqual({
+      code: "management.request_invalid",
+      params: { field: "personId" },
+    });
+    const row = await suite.db.execute<{ person_id: string }>(
+      sql`select person_id from shifts where id = ${shiftId}`,
+    );
+    expect(row.rows[0]!.person_id).toBe(personId);
+  });
+
+  it("answers shift.not_found, not the person check, when the shift is unknown too", async () => {
+    const code = await codeOfRejection(() =>
+      run((tx) =>
+        backend.updateShift(tx, {
+          shiftId: "00000000-0000-0000-0000-000000000000",
+          personId: UNKNOWN_ID,
+        }),
+      ),
+    );
+    expect(code).toBe("shift.not_found");
   });
 
   it("rejects editing/removing a shift whose version is PUBLISHED — roster.not_draft", async () => {

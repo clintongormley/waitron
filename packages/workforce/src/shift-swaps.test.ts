@@ -146,6 +146,56 @@ describe("requestSwap", () => {
     );
     expect(code).toBe("swap.not_permitted");
   });
+
+  async function unknownToPersonRefusal(toShiftId: (requester: string) => Promise<string | null>) {
+    const { requester, fromShift } = await twoPeopleAndAShift();
+    const toShift = await toShiftId(requester);
+    const error = await captureError(() =>
+      run((tx) =>
+        requestSwap(tx, {
+          requestedByPersonId: requester,
+          fromShiftId: fromShift,
+          toPersonId: crypto.randomUUID(),
+          toShiftId: toShift,
+        }),
+      ),
+    );
+    const written = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from shift_swaps where from_shift_id = ${fromShift}`,
+    );
+    return {
+      refusal:
+        error instanceof AppError
+          ? { code: error.code, params: error.params }
+          : `not an AppError: ${String(error)}`,
+      written: Number(written.rows[0]!.n),
+    };
+  }
+
+  it("refuses a give-away to a toPersonId that names no person — management.request_invalid, no row written", async () => {
+    expect(await unknownToPersonRefusal(async () => null)).toEqual({
+      refusal: { code: "management.request_invalid", params: { field: "toPersonId" } },
+      written: 0,
+    });
+  });
+
+  it("refuses an unknown toPersonId beside a real toShiftId — management.request_invalid, no row written", async () => {
+    const result = await unknownToPersonRefusal(async () => {
+      const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
+      return insertDraftShift(suite.db, { personId: other, locationId });
+    });
+    expect(result).toEqual({
+      refusal: { code: "management.request_invalid", params: { field: "toPersonId" } },
+      written: 0,
+    });
+  });
+
+  it("refuses an unknown toPersonId beside an unknown toShiftId — management.request_invalid, not shift.not_found", async () => {
+    expect(await unknownToPersonRefusal(async () => crypto.randomUUID())).toEqual({
+      refusal: { code: "management.request_invalid", params: { field: "toPersonId" } },
+      written: 0,
+    });
+  });
 });
 
 describe("acceptSwap", () => {

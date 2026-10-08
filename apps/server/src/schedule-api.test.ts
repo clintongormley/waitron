@@ -253,6 +253,20 @@ describe("mountScheduleApi — swaps", () => {
     });
   });
 
+  it("400s a give-away to a toPersonId that names no person (management.request_invalid, never a 500)", async () => {
+    const myShift = await insertShift(me, "2026-12-07T09:00:00Z", "2026-12-07T17:00:00Z");
+    const res = await send(mountApp(), "POST", "/api/schedule/swaps", {
+      cookie: await cookieFor(me, "1111"),
+      body: { fromShiftId: myShift, toPersonId: crypto.randomUUID(), toShiftId: null },
+    });
+    const body = (await res.json()) as { error: { code: string; params: unknown } };
+    expect([res.status, body.error.code, body.error.params]).toEqual([
+      400,
+      "management.request_invalid",
+      { field: "toPersonId" },
+    ]);
+  });
+
   it("400s a non-UUID fromShiftId (management.request_invalid)", async () => {
     const res = await send(mountApp(), "POST", "/api/schedule/swaps", {
       cookie: await cookieFor(me, "1111"),

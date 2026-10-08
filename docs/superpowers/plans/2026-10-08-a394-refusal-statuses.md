@@ -1378,3 +1378,45 @@ not the request; I read it as a clash and count it as fitting.
   constraint is `purchase_invoices_supplier_number_key`
   (`packages/db/src/schema/purchase-invoices.ts:83`). The roster, ingredient-PATCH (204) and
   units-reassign rows also re-read as stated._
+
+## A394-1 — tasks (lane C, 2026-10-08)
+
+Re-read on `main` at `dd7490505` before writing: the four inserts still take the body ids unchecked
+(`packages/workforce/src/clocking.ts` `createRosterVersion`, `addShift`, `updateShift`;
+`packages/workforce/src/shift-swaps.ts` `requestSwap`), and `management.request_invalid` is already
+400 in all three status tables that serve them (`apps/server/src/workforce-api.ts`,
+`schedule-api.ts`, `me-api.ts`), so no table changes. The check goes in the workforce package, where
+every caller passes through it; package code already throws `management.request_invalid` elsewhere
+(`packages/venue-service/src/routing-store.ts`). Existence only — the same thing the foreign key
+holds — never "active" or "not suspended", which would be a new rule.
+
+1. **Package, test first.** In `scheduling.test.ts` and `shift-swaps.test.ts`: an unknown body
+   `locationId` on `createRosterVersion`; an unknown `personId` and an unknown `locationId` on
+   `addShift`; an unknown `personId` on `updateShift`; an unknown `toPersonId` on `requestSwap`, both
+   as a give-away (`toShiftId: null`) and beside a real `toShiftId`. Each asserts
+   `management.request_invalid` with the body field's name (`locationId`, `personId`, `toPersonId`)
+   and that no row was written. Run them on `main`'s code first and record what each throws (a
+   driver foreign-key error, or `swap.not_permitted` for the second swap case).
+2. **Package, the fix.** One existence read per body id, after the checks on the thing the path
+   names, so a missing roster version or shift still answers its own 404: `createRosterVersion`
+   checks the location first; `addShift` after the version's status; `updateShift` after
+   `shiftForWrite`, and only when `personId` is in the patch; `requestSwap` after the `fromShift`
+   checks and before the `toShift` block. `addShift` checks `personId` before `locationId` (the
+   route's screening order), the two reads awaited in turn on `tx`, never in `Promise.all`. Two
+   precedence cases: an unknown version with an unknown person still throws `roster.not_found`, and
+   an unknown shift with an unknown person still throws `shift.not_found`. For `updateShift`, "no row
+   written" means the shift's `person_id` is unchanged. Two swap answers move, and the PR says so:
+   an unknown `toPersonId` beside a real `toShiftId` (today `swap.not_permitted`, 403) and beside an
+   unknown `toShiftId` (today `shift.not_found`) both become `management.request_invalid`; no test
+   pins either (plan review, 2026-10-08).
+3. **Routes, test first.** One case per route that reaches each check, asserting status 400 AND
+   `{ code: "management.request_invalid", params.field }`: `POST /management-api/roster`,
+   `POST /management-api/roster/:versionId/shifts` (person, location),
+   `PATCH /management-api/roster/shifts/:shiftId` (person), `POST /api/schedule/swaps` and
+   `POST /management-api/me/schedule/swaps` (give-away to an unknown person). Run them on `main`
+   first: each must answer 500 `server.internal` there.
+4. **Proof by deletion.** Remove each new check in turn and confirm its package and route cases
+   fail; restore.
+
+Clients: none read these statuses (the dashboard and till map refusals by code). No migration.
+Tests changed: none expected; any that change go in `~/waitron-campaign-c/item-a394-1-changed-tests.md`.

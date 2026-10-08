@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { newId, nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { assertPersonExists } from "./body-ids.js";
 import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 // Registers this package's error codes, so `new AppError(...)` below type-checks.
 import "./errors.js";
@@ -20,7 +21,7 @@ export interface AcceptSwapInput {
 
 /**
  * Records a `requested` swap and returns its id. The requester must own `fromShift`, and a supplied
- * `toShift` must be `toPerson`'s own (`swap.not_permitted`); either shift missing is `shift.not_found`.
+ * `toShift` must be `toPerson`'s own (`swap.not_permitted`).
  */
 export async function requestSwap(tx: Transaction, input: RequestSwapInput): Promise<string> {
   const fromShiftOwner = await shiftOwner(tx, input.fromShiftId);
@@ -32,6 +33,7 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
       personId: input.requestedByPersonId,
     });
   }
+  await assertPersonExists(tx, input.toPersonId, "toPersonId");
   if (input.toShiftId !== null) {
     const toShiftOwner = await shiftOwner(tx, input.toShiftId);
     if (toShiftOwner === undefined) {
