@@ -407,7 +407,7 @@ export async function moveMembersInto(
   return ordered.map((member, at) => ({ ...member, position: at }));
 }
 
-/** Removes members from their lists; an owned section is deleted, never removed. */
+/** Removes members from their lists; naming an owned section refuses the whole request. */
 export async function removeMembers(tx: Transaction, members: readonly MemberAt[]): Promise<void> {
   const graph = await loadSectionGraph(tx);
   const removing = heldMembers(graph, members);

@@ -511,6 +511,49 @@ describe("moving and removing several members", () => {
     expect((await ids(f.root))[0]).toBe(aInRoot);
   });
 
+  it("removes an included menu beside a product and clears the price of a product reached only through it", async () => {
+    const f = await lists();
+    const other = await app((tx) => createSection(tx, { internalName: "Other" }));
+    const cider = await app(
+      async (tx) =>
+        (
+          await createProduct(tx, {
+            catalogueId: other.ownerMenuId,
+            categoryId: null,
+            name: "Cider (staff)",
+            customerName: { en: "Cider (customer)" },
+            kitchenName: "Cider (kitchen)",
+            pricingUnit: "each",
+            unitPrice: "2",
+            vatClass: "general",
+          })
+        ).id,
+    );
+    await app((tx) => addMember(tx, other.id, { kind: "product", productId: cider }));
+    const include = await app(
+      async (tx) => (await addMember(tx, f.a, { kind: "section", sectionId: other.id })).id,
+    );
+    const offers = async () =>
+      fx.db
+        .select({ id: menuItems.id, grossPrice: menuItems.grossPrice })
+        .from(menuItems)
+        .where(and(eq(menuItems.menuId, f.menu), eq(menuItems.productId, cider)));
+    const [offer] = await offers();
+    await app((tx) => updateMenuItem(tx, f.menu, offer!.id, { grossPrice: "3.10" }));
+    expect(await offers()).toEqual([{ id: offer!.id, grossPrice: 310 }]);
+    const aA1 = (await ids(f.a))[1]!;
+    await app((tx) =>
+      removeMembers(tx, [
+        { listId: f.a, memberId: f.aWater },
+        { listId: f.a, memberId: include },
+      ]),
+    );
+    expect(await membersIn(f.a)).toEqual([
+      { id: aA1, position: 0, productId: null, childSectionId: f.a1 },
+    ]);
+    expect(await offers()).toEqual([{ id: offer!.id, grossPrice: null }]);
+  });
+
   it("refuses a removal holding an owned section and removes nothing", async () => {
     const f = await lists();
     const aInRoot = (await ids(f.root))[0]!;
