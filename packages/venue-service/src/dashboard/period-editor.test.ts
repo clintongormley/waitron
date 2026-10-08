@@ -18,6 +18,7 @@ const period = {
   colour: "blue" as const,
   menuId: "lunch",
   staffMenuIds: ["deli"],
+  endOffsetMinutes: 0,
   weekdays: [1, 2],
 };
 beforeEach(() => setLocale("en"));

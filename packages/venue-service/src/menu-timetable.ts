@@ -18,6 +18,7 @@ import {
 import type { SpecialDateParticipant } from "./hours.js";
 import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
+import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import type {
   DepartmentService,
   OpeningHoursModel,
@@ -79,6 +80,7 @@ async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string)
       departmentId: menuPeriods.departmentId,
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
+      endOffsetMinutes: menuPeriods.endOffsetMinutes,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -355,6 +357,9 @@ async function writeMenuPeriod(
   period: MenuPeriodInput,
 ): Promise<{ id: string }> {
   const name = menuPeriodName(period.name);
+  const endOffsetMinutes = parseEndOffsetMinutes(
+    period.endOffsetMinutes === undefined ? 0 : period.endOffsetMinutes,
+  );
   await assertDepartment(tx, cfg, departmentId);
   if (
     period.colour !== undefined &&
@@ -399,7 +404,7 @@ async function writeMenuPeriod(
     period.colour ??
     CALENDAR_COLOURS.find((value) => !used.some((row) => row.colour === value)) ??
     CALENDAR_COLOURS[0];
-  const values = { name, menuId: period.menuId, colour };
+  const values = { name, menuId: period.menuId, colour, endOffsetMinutes };
   let id = periodId;
   if (periodId === null) {
     const [row] = await tx
@@ -445,6 +450,8 @@ export async function updateMenuPeriod(
     colour: period.colour === undefined ? appearance!.colour : period.colour,
     staffMenuIds:
       period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
+    endOffsetMinutes:
+      period.endOffsetMinutes === undefined ? stored.endOffsetMinutes : period.endOffsetMinutes,
   });
 }
 
@@ -640,6 +647,7 @@ export async function readOpeningHoursModel(
       name: menuPeriods.name,
       colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
+      endOffsetMinutes: menuPeriods.endOffsetMinutes,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -718,11 +726,12 @@ export async function readOpeningHoursModel(
         ...department,
         periods: periods
           .filter((period) => period.departmentId === department.id)
-          .map(({ id, name, colour, menuId }) => ({
+          .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({
             id,
             name,
             colour,
             menuId,
+            endOffsetMinutes,
             staffMenuIds: staff
               .filter((entry) => entry.periodId === id)
               .map((entry) => entry.menuId),

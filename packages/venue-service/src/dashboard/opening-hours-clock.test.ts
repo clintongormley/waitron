@@ -44,6 +44,7 @@ async function mount(
             colour: "green" as const,
             menuId: "m1",
             staffMenuIds: [],
+            endOffsetMinutes: 0,
             weekdays: [],
           },
         ],

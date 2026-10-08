@@ -161,6 +161,44 @@ async function answers(response: Response, status: number, error?: Record<string
 }
 
 describe("the opening-hours routes", () => {
+  it("accepts a signed end offset on create and PATCH, and retains it on a name-only edit", async () => {
+    const r = await routed();
+    const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+      name: "Lunch",
+      menuId: r.almuerzo,
+      staffMenuIds: [],
+      endOffsetMinutes: -15,
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const saved = async () => restaurantOf(await r.model(), r).periods.find((p) => p.id === id)!;
+    expect(await saved()).toMatchObject({ endOffsetMinutes: -15 });
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { name: "Afternoon" }),
+      204,
+    );
+    expect(await saved()).toMatchObject({ name: "Afternoon", endOffsetMinutes: -15 });
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { endOffsetMinutes: 14 }),
+      204,
+    );
+    expect(await saved()).toMatchObject({ endOffsetMinutes: 14 });
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { endOffsetMinutes: 0 }),
+      204,
+    );
+    expect(await saved()).toMatchObject({ endOffsetMinutes: 0 });
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { endOffsetMinutes: null }),
+      400,
+      {
+        code: "menu_period.invalid",
+        params: { field: "endOffsetMinutes", reason: "whole_minutes" },
+      },
+    );
+    expect(await saved()).toMatchObject({ endOffsetMinutes: 0 });
+  });
+
   it("show the model to anyone who may view the venue's settings", async () => {
     const r = await routed();
     const read = await r.send("GET", "/opening-hours", r.supervisor);
@@ -459,6 +497,7 @@ describe("the opening-hours period API", () => {
           menuId: r.desayunos,
           colour: "red",
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: [],
         },
       ],
@@ -486,6 +525,7 @@ describe("the opening-hours period API", () => {
       colour: "blue",
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
+      endOffsetMinutes: 0,
       weekdays: [],
     });
     await answers(
@@ -498,6 +538,7 @@ describe("the opening-hours period API", () => {
       colour: "green",
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
+      endOffsetMinutes: 0,
       weekdays: [],
     });
     await answers(
@@ -512,6 +553,7 @@ describe("the opening-hours period API", () => {
       colour: "green",
       menuId: r.almuerzo,
       staffMenuIds: [r.deliParaLlevar, r.cafe],
+      endOffsetMinutes: 0,
       weekdays: [],
     });
     await answers(

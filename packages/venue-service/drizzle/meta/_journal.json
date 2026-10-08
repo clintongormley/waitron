@@ -239,6 +239,13 @@
       "when": 1791449989126,
       "tag": "0033_aromatic_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1791490605863,
+      "tag": "0034_period_end_offset",
+      "breakpoints": true
     }
   ]
 }

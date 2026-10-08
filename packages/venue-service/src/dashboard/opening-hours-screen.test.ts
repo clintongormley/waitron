@@ -47,6 +47,7 @@ function model(): OpeningHoursModel {
             colour: "green",
             menuId: "lunch",
             staffMenuIds: ["staff"],
+            endOffsetMinutes: 0,
             weekdays: [1, 3],
           },
         ],
@@ -203,7 +204,15 @@ it("creates the changed draft and closes it before refreshing the list", async (
     writes.push({ path, method, body });
     data.departments[0]!.periods = [
       ...data.departments[0]!.periods,
-      { id: "p2", name: "Dinner", colour: "red", menuId: "lunch", staffMenuIds: [], weekdays: [] },
+      {
+        id: "p2",
+        name: "Dinner",
+        colour: "red",
+        menuId: "lunch",
+        staffMenuIds: [],
+        endOffsetMinutes: 0,
+        weekdays: [],
+      },
     ];
     return { id: "p2" };
   }) as DashboardRequest);

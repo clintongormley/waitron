@@ -18,6 +18,7 @@ import {
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock, isReadableZone, skippedEndpoint } from "./hours-clock.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
+import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import { calendarDateOfTime, parseServiceDay } from "./service-day.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
@@ -40,7 +41,9 @@ function parsedAs<T>(table: string, parse: () => T): T {
   } catch (error) {
     if (
       error instanceof AppError &&
-      (error.code === "hours.invalid" || error.code === "menu_timetable.invalid")
+      (error.code === "hours.invalid" ||
+        error.code === "menu_timetable.invalid" ||
+        error.code === "menu_period.invalid")
     )
       refuse(table);
     throw error;
@@ -317,6 +320,9 @@ export function validateMenuTimetables(
     names.add(name);
     if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("menu_periods.colour");
     if (!menus.has(row.menu_id)) refuse("menu_periods.menu_id");
+    parsedAs("menu_periods.end_offset_minutes", () =>
+      parseEndOffsetMinutes(row.end_offset_minutes === undefined ? 0 : row.end_offset_minutes),
+    );
     periodDepartment.set(row.id, row.department_id);
     customerMenus.set(row.id, row.menu_id);
   }

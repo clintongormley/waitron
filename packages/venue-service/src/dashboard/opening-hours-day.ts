@@ -372,6 +372,7 @@ export class OpeningHoursDay extends LitElement {
             colour: input.colour ?? "blue",
             menuId: input.menuId,
             staffMenuIds: [...input.staffMenuIds],
+            endOffsetMinutes: input.endOffsetMinutes ?? 0,
             weekdays: [],
           },
         ],

@@ -21,7 +21,15 @@ describe.each(["light", "dark"] as const)("Opening week (%s)", (theme) => {
       name: "Restaurant",
       active: true,
       periods: [
-        { id: "p1", name: "Lunch", colour: "green", menuId: "m1", staffMenuIds: [], weekdays: [1] },
+        {
+          id: "p1",
+          name: "Lunch",
+          colour: "green",
+          menuId: "m1",
+          staffMenuIds: [],
+          endOffsetMinutes: 0,
+          weekdays: [1],
+        },
       ],
       week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
       dates: [],

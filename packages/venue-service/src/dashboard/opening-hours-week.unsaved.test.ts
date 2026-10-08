@@ -56,6 +56,7 @@ class WeekLeaveApp extends LitElement {
               colour: "blue",
               menuId: "m1",
               staffMenuIds: [],
+              endOffsetMinutes: 0,
               weekdays: [1],
             },
           ],

@@ -26,6 +26,7 @@ describe.each(["light", "dark"] as const)("Period editor (%s)", (theme) => {
         colour: "green",
         menuId: "lunch",
         staffMenuIds: ["deli"],
+        endOffsetMinutes: 0,
         weekdays: [1],
       };
     }

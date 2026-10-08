@@ -183,6 +183,60 @@ describe("Always fixture periods", () => {
 });
 
 describe("service-period writers", () => {
+  it("saves signed end offsets, defaults to zero and preserves an omitted update", async () => {
+    const v = await venue({ timetable: false });
+    const offsets = async () =>
+      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).departments
+        .find((department) => department.id === v.restaurant)!
+        .periods.map((period) => ({ name: period.name, offset: period.endOffsetMinutes }));
+    const created = await scoped((tx) =>
+      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        name: "Lunch",
+        menuId: v.menus.Almuerzo,
+        staffMenuIds: [],
+      }),
+    );
+    expect(await offsets()).toEqual([{ name: "Lunch", offset: 0 }]);
+    for (const endOffsetMinutes of [-15, 14]) {
+      await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { endOffsetMinutes }));
+      expect(await offsets()).toEqual([{ name: "Lunch", offset: endOffsetMinutes }]);
+    }
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { name: "Afternoon" }));
+    expect(await offsets()).toEqual([{ name: "Afternoon", offset: 14 }]);
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { endOffsetMinutes: 0 }));
+    expect(await offsets()).toEqual([{ name: "Afternoon", offset: 0 }]);
+  });
+
+  it.each([null, "15", 1.5, NaN, Infinity, -1440, 1440])(
+    "refuses malformed end offset %s without changing a period",
+    async (endOffsetMinutes) => {
+      const v = await venue({ timetable: false });
+      const input = { name: "Lunch", menuId: v.menus.Almuerzo, staffMenuIds: [] };
+      const created = await scoped((tx) => saveMenuPeriod(tx, v.cfg, v.restaurant, input));
+      const before = await db.select().from(menuPeriods).where(eq(menuPeriods.id, created.id));
+      await expect(
+        scoped((tx) =>
+          updateMenuPeriod(tx, v.cfg, created.id, {
+            name: "Changed",
+            endOffsetMinutes: endOffsetMinutes as number,
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "menu_period.invalid",
+        params: {
+          field: "endOffsetMinutes",
+          reason:
+            typeof endOffsetMinutes === "number" && Number.isInteger(endOffsetMinutes)
+              ? "range"
+              : "whole_minutes",
+        },
+      });
+      expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, created.id))).toEqual(
+        before,
+      );
+    },
+  );
+
   it("returns only the new period id and updates without a response body", async () => {
     const v = await venue({ timetable: false });
     const created = await scoped((tx) =>
@@ -1797,6 +1851,7 @@ describe("the editor's model", () => {
           menuId: menus["Brunch de Navidad"],
           colour: "green",
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: [],
         },
         {
@@ -1805,6 +1860,7 @@ describe("the editor's model", () => {
           menuId: menus.Copas,
           colour: "blue",
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: weekdays(5),
         },
         {
@@ -1813,6 +1869,7 @@ describe("the editor's model", () => {
           menuId: menus.Desayunos,
           colour: "red",
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: weekdays(1, 2, 3, 4, 5),
         },
         {
@@ -1821,6 +1878,7 @@ describe("the editor's model", () => {
           menuId: menus.Almuerzo,
           colour: "amber",
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: weekdays(0, 1, 2, 3, 4, 5, 6),
         },
         {
@@ -1829,6 +1887,7 @@ describe("the editor's model", () => {
           menuId: menus.Cena,
           colour: "grey",
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: weekdays(1, 2, 3, 4, 5),
         },
       ],
@@ -2313,6 +2372,7 @@ describe("department service periods", () => {
           colour: "amber",
           menuId: v.menus.Café,
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: [5],
         },
         {
@@ -2321,6 +2381,7 @@ describe("department service periods", () => {
           colour: "blue",
           menuId: v.menus.Almuerzo,
           staffMenuIds: [v.menus.Bebidas, v.menus.Café],
+          endOffsetMinutes: 0,
           weekdays: [5],
         },
         {
@@ -2329,6 +2390,7 @@ describe("department service periods", () => {
           colour: "grey",
           menuId: v.menus.Cena,
           staffMenuIds: [],
+          endOffsetMinutes: 0,
           weekdays: [5],
         },
       ],

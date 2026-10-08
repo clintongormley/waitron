@@ -42,8 +42,9 @@ their full text.
 Owner, 2026-10-08: one signed whole-minute setting per service period, measured from its end.
 Slice 1 fixes it at 0. Negative means last orders before the end; positive allows unsent dishes
 within the window after it. Keep the editor, server refusal and till selection/sending rules aligned.
-The implementation needs its own small plan, migration and review. Campaign lane D queues A432
-immediately after slice 1.
+Build the [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md): validate
+placement bounds, apply the selection and sending windows, and add the Periods editor field.
+Campaign lane D queues A432 immediately after slice 1.
 
 ## Changing the business-day start after saving service hours
 

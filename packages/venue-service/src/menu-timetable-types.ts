@@ -7,6 +7,7 @@ export interface MenuPeriodInput {
   colour?: CalendarColour;
   menuId: string;
   staffMenuIds: readonly string[];
+  endOffsetMinutes?: number;
 }
 
 export interface MenuSlot {
@@ -56,6 +57,7 @@ export interface OpeningHoursModel {
       colour: CalendarColour;
       menuId: string;
       staffMenuIds: readonly string[];
+      endOffsetMinutes: number;
       weekdays: readonly number[];
     }[];
     week: readonly { weekday: number; slots: readonly ServiceRange[] }[];

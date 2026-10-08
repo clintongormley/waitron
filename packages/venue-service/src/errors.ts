@@ -49,7 +49,14 @@ declare module "@waitron/shared" {
     "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
     "menu_period.not_found": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };
-    "menu_period.invalid": { field: "staffMenuIds" | "colour" };
+    "menu_period.invalid": {
+      field: "staffMenuIds" | "colour" | "endOffsetMinutes";
+      reason?: "whole_minutes" | "range" | "placement";
+      periodId?: string;
+      departmentId?: string;
+      weekday?: number;
+      date?: string;
+    };
     /** Deleting a named period that `uses` still place, past special dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
     /** Another of the department's named periods already has `name`, as trimmed. */

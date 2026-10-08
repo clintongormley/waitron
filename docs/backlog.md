@@ -1273,6 +1273,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A432 — a service period's signed end offset** (owner, 2026-10-08). Slice 1 fixes the offset
   at 0. Add one signed whole-minute value per period: negative stops new dishes before the end,
   positive allows sending leftovers after it. Editor, request gate and till follow the same window.
+  [Plan](superpowers/plans/2026-10-08-a432-period-end-offset.md).
   [Detail](backlog/service-periods.md#a432--a-service-periods-signed-end-offset)
 
 - **Changing the business-day start after saving service hours** — open review follow-up from
