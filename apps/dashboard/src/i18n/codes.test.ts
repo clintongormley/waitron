@@ -486,3 +486,12 @@ it("says an ingredient that no longer exists needs a refresh, in English and Spa
     "Este ingrediente ya no existe. Actualiza la página y vuelve a intentarlo.",
   );
 });
+
+it("says a location that no longer exists needs a refresh, in English and Spanish", () => {
+  expect(codeMessage("location.not_found", "en")).toBe(
+    "This location no longer exists. Refresh the page and try again.",
+  );
+  expect(codeMessage("location.not_found", "es")).toBe(
+    "Este local ya no existe. Actualiza la página y vuelve a intentarlo.",
+  );
+});
