@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-price-input.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   followsClash,
   productInherited,
@@ -246,23 +247,33 @@ export class MenuPricesTable extends LitElement {
         block-size: calc(var(--outcome-height, 0px) + var(--wt-space-3));
       }
       /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
-         the note under it, is capped at the room the price column leaves beside the cell's padding
-         and the tree's toggle. A size's name is indented one tree step further. */
+         the note under it, is capped at the room the price column and the pinned row-menu column
+         leave beside the cell's padding and the tree's toggle. The row-menu column is as wide as
+         its heading in the current language, so its width is measured into --actions-width. A
+         size's name is indented one tree step further. */
       @container (max-width: 30rem) {
         wt-data-table {
           --price-column: calc(
             var(--wt-price-range-field-width) + var(--wt-space-4) + 2 * var(--wt-space-3)
           );
           --name-room: calc(
-            100cqi - var(--price-column) - 2 * var(--wt-space-3) - var(--wt-tap-min)
+            100cqi - var(--price-column) - var(--actions-width, var(--wt-tap-min)) - 2 *
+              var(--wt-space-3) - var(--wt-tap-min)
           );
         }
         wt-data-table::part(name-box) {
           display: block;
           max-inline-size: max(var(--wt-tap-min), var(--name-room));
         }
+        /* A size's name at its floor sets the name column's width, so here its indent is one
+           step smaller, and its floor smaller by as much, keeping the room for its words, or the
+           price field runs under the pinned row menu. */
         wt-data-table::part(variant-name) {
-          max-inline-size: max(var(--wt-tap-min), var(--name-room) - var(--wt-space-2));
+          padding-inline-start: var(--wt-space-3);
+          max-inline-size: max(
+            var(--wt-tap-min) - var(--wt-space-1),
+            var(--name-room) - var(--wt-space-2)
+          );
         }
       }
       @media (max-width: 48rem) {
@@ -446,10 +457,26 @@ export class MenuPricesTable extends LitElement {
   /** Watched, not only measured on each outcome, so a narrower window that wraps the message onto
    * another row still keeps a field clear of it. */
   readonly #outcomeSize = new ResizeObserver(() => this.#fitOutcome());
+  /** The table resizes when the window does and when a redraw changes its columns' words. Measured
+   * a frame later, never inside the observer's callback, which the names' new widths would
+   * re-trigger. */
+  readonly #tableSize = new ResizeObserver(() => {
+    cancelAnimationFrame(this.#actionsFrame);
+    this.#actionsFrame = requestAnimationFrame(() => this.#fitActions());
+  });
+  #actionsFrame = 0;
   #outcomeFitted: Promise<void> = Promise.resolve();
 
   #toast(): WtToast {
     return this.renderRoot.querySelector("wt-toast")!;
+  }
+
+  #fitActions(): void {
+    const cell = this.#table()?.shadowRoot?.querySelector('thead th[data-pinned="end"]');
+    const width = cell ? `${cell.getBoundingClientRect().width}px` : "";
+    if (this.style.getPropertyValue("--actions-width") === width) return;
+    if (width === "") this.style.removeProperty("--actions-width");
+    else this.style.setProperty("--actions-width", width);
   }
 
   #fitOutcome(): void {
@@ -468,16 +495,20 @@ export class MenuPricesTable extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated) this.#outcomeSize.observe(this.#toast());
+    if (!this.hasUpdated) return;
+    this.#outcomeSize.observe(this.#toast());
+    this.#tableSize.observe(this.#table()!);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#outcomeSize.disconnect();
+    this.#tableSize.disconnect();
   }
 
   protected override firstUpdated(): void {
     this.#outcomeSize.observe(this.#toast());
+    this.#tableSize.observe(this.#table()!);
   }
 
   /** Resolves once the outcome message's new height is measured too. */
@@ -489,7 +520,11 @@ export class MenuPricesTable extends LitElement {
 
   protected override updated(changed: PropertyValues): void {
     const table = this.#table();
-    if (table !== null) void table.updateComplete.then(() => this.#readFilter());
+    if (table !== null)
+      void table.updateComplete.then(() => {
+        this.#readFilter();
+        this.#fitActions();
+      });
     if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
     // The cells read these, and the table redraws only when its own properties change.
     if (
@@ -705,6 +740,21 @@ export class MenuPricesTable extends LitElement {
           ? html` <span part="muted status-note">${t("menu_prices.status_parent_disabled")}</span>`
           : nothing
       }`;
+  }
+
+  #actionsCell(line: Line) {
+    const id = line.variant?.variantId ?? line.item.productId;
+    return html`<wt-row-actions
+      align="end"
+      data-test=${`actions-${keyOf(line)}`}
+      label=${`${t("members.actions")}: ${this.#lineName(line)}`}
+      ><a
+        data-test=${`edit-product-${keyOf(line)}`}
+        href=${`/manage/catalogue/product/${encodeURIComponent(id)}`}
+        @click=${(event: MouseEvent) => this.#openProduct(event, id)}
+        >${t("product.edit")}</a
+      ></wt-row-actions
+    >`;
   }
 
   /** A product opens in the dashboard's own catalogue screen; a held modifier key keeps the
@@ -1023,6 +1073,13 @@ export class MenuPricesTable extends LitElement {
         sortValue: (line) => (this.#active(line) ? 0 : 1),
         searchValue: (line) => productStatusName(this.#active(line), line.variant !== null),
         cell: (line) => this.#status(line),
+      },
+      {
+        key: "actions",
+        label: t("members.actions"),
+        align: "end",
+        pinned: "end",
+        cell: (line) => this.#actionsCell(line),
       },
     ];
   }

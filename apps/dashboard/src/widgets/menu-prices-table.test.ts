@@ -171,6 +171,18 @@ function cell(el: MenuPricesTable, key: string, rowKey: string): HTMLElement {
   return row(el, rowKey)!.children[index] as HTMLElement;
 }
 
+/** A shown row's pinned row-menu cell, which has no sort key for `cell` to find it by. */
+function pinnedCell(el: MenuPricesTable, rowKey: string): HTMLElement {
+  return row(el, rowKey)!.querySelector<HTMLElement>('td[data-pinned="end"]')!;
+}
+
+/** A shown row's "Edit product" link, in its row menu. */
+function editLink(el: MenuPricesTable, rowKey: string): HTMLAnchorElement {
+  return pinnedCell(el, rowKey).querySelector<HTMLAnchorElement>(
+    `a[data-test="edit-product-${rowKey}"]`,
+  )!;
+}
+
 /** The text of one column's cell in each shown row, in order. */
 function column(el: MenuPricesTable, key: string): string[] {
   const index = headers(el).indexOf(key);
@@ -2276,7 +2288,7 @@ describe("variants", () => {
       ["category", true],
       ["status", true],
     ]);
-    expect(headers(el)).toEqual(["name", "override", "placements", "category", "status"]);
+    expect(headers(el)).toEqual(["name", "override", "placements", "category", "status", ""]);
     box(el, "category").click();
     await table(el).updateComplete;
     expect(headers(el)).not.toContain("category");
@@ -2284,10 +2296,10 @@ describe("variants", () => {
       category: false,
     });
     const again = await mountVariants();
-    expect(headers(again)).toEqual(["name", "override", "placements", "status"]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "status", ""]);
     table(again).shadowRoot.querySelector<HTMLElement>("[data-restore-columns]")!.click();
     await table(again).updateComplete;
-    expect(headers(again)).toEqual(["name", "override", "placements", "category", "status"]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "category", "status", ""]);
   });
 
   it.each(["en-GB", "es-ES"])(
@@ -2466,6 +2478,21 @@ it.each(["en-GB", "es-ES"])(
         const field = override(el, key).getBoundingClientRect();
         expect(field.left, key).toBeGreaterThanOrEqual(scroller.left - 0.5);
         expect(field.right, key).toBeLessThanOrEqual(scroller.right + 0.5);
+        const pinned = pinnedCell(el, key);
+        expect(field.right, `${key} against the row menu`).toBeLessThanOrEqual(
+          pinned.getBoundingClientRect().left + 0.5,
+        );
+        const trigger = pinned
+          .querySelector("wt-row-actions")!
+          .shadowRoot!.querySelector("button")!
+          .getBoundingClientRect();
+        expect(trigger.left, key).toBeGreaterThanOrEqual(0);
+        expect(trigger.right, key).toBeLessThanOrEqual(window.innerWidth);
+        const hit = table(el).shadowRoot.elementFromPoint(
+          trigger.left + trigger.width / 2,
+          trigger.top + trigger.height / 2,
+        );
+        expect(hit !== null && pinned.contains(hit), `${key} ⋮ covered`).toBe(true);
       }
       for (const key of ["mi-lager", "mi-lemonade", "mi-lemonade:v-small"]) {
         const sentence = cell(el, "override", key).querySelector("[part~=clash]")!;
@@ -3215,7 +3242,7 @@ it("opens the product page in the dashboard on a plain click, and leaves a modif
   const el = await mount();
   const heard = vi.fn();
   document.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
-  const link = cell(el, "status", "mi-burger").querySelector<HTMLAnchorElement>("a")!;
+  const link = editLink(el, "mi-burger");
   const plain = new MouseEvent("click", {
     bubbles: true,
     composed: true,
@@ -3238,18 +3265,106 @@ it("opens the product page in the dashboard on a plain click, and leaves a modif
   expect(heard).toHaveBeenCalledOnce();
 });
 
-it("opens a size's own page from its status link", async () => {
+it("opens a size's own page from its row menu's Edit product", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   const heard = vi.fn();
   el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
-  cell(el, "status", "mi-lemonade:v-small")
-    .querySelector<HTMLAnchorElement>("a")!
-    .dispatchEvent(
-      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, button: 0 }),
-    );
+  editLink(el, "mi-lemonade:v-small").dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, button: 0 }),
+  );
   expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "v-small" });
+});
+
+it("puts Edit product in each row's ⋮, in a pinned actions column, and opens the product, or a size's own page, by click and by keyboard", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const columns = (table(el) as Table & { columns: { key: string; pinned?: string }[] }).columns;
+  expect(columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
+  expect(headers(el).at(-1)).toBe("");
+  const labels: Record<string, string> = {
+    "mi-burger": "Acciones: Burger",
+    "mi-lemonade": "Acciones: Lemonade",
+    "mi-lemonade:v-small": "Acciones: Lemonade — Small",
+    "mi-lemonade:v-large": "Acciones: Lemonade — Large",
+    "mi-lager": "Acciones: Lager",
+  };
+  const pages: Record<string, string> = {
+    "mi-burger": "p-burger",
+    "mi-lemonade": "p-lemonade",
+    "mi-lemonade:v-small": "v-small",
+    "mi-lemonade:v-large": "v-large",
+    "mi-lager": "p-lager",
+  };
+  expect([...shown(el)].sort()).toEqual(Object.keys(labels).sort());
+  for (const key of shown(el)) {
+    const menus = pinnedCell(el, key).querySelectorAll("wt-row-actions");
+    expect(menus.length, key).toBe(1);
+    expect(menus[0]!.getAttribute("label"), key).toBe(labels[key]);
+    expect(menus[0]!.getAttribute("data-test"), key).toBe(`actions-${key}`);
+    const link = editLink(el, key);
+    expect(text(link), key).toBe(t("product.edit"));
+    expect(link.getAttribute("href"), key).toBe(`/manage/catalogue/product/${pages[key]}`);
+  }
+
+  const heard = vi.fn();
+  el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
+  const plain = new MouseEvent("click", {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    button: 0,
+  });
+  editLink(el, "mi-burger").dispatchEvent(plain);
+  expect(plain.defaultPrevented).toBe(true);
+  expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
+  const link = editLink(el, "mi-burger");
+  // Stop the browser following it inside the test page.
+  link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+  link.dispatchEvent(
+    new MouseEvent("click", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      button: 0,
+      metaKey: true,
+    }),
+  );
+  expect(heard).toHaveBeenCalledOnce();
+
+  heard.mockClear();
+  const menu = pinnedCell(el, "mi-lemonade:v-large").querySelector("wt-row-actions")!;
+  menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+  );
+  await userEvent.keyboard("{Tab}");
+  const large = editLink(el, "mi-lemonade:v-large");
+  expect(large.matches(":focus")).toBe(true);
+  await userEvent.keyboard("{Enter}");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "v-large" });
+});
+
+it("keeps the row menu last and pinned when a remembered column order and choice name only the other columns", async () => {
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:column-order",
+    JSON.stringify(["status", "category", "placements", "override"]),
+  );
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:columns",
+    JSON.stringify({ category: false, status: false }),
+  );
+  const el = await mount();
+  expect(headers(el)).not.toContain("category");
+  expect(headers(el).at(-1)).toBe("");
+  for (const key of shown(el)) {
+    const pinned = pinnedCell(el, key);
+    expect(pinned, key).toBe(row(el, key)!.lastElementChild);
+    expect(editLink(el, key), key).not.toBeNull();
+  }
 });
 
 it("keeps Active apart from Available: a sold-out Active product reads Active", async () => {
@@ -3455,7 +3570,7 @@ it("puts the prices table's Filters before its search, beside the rows on a wide
   await expectFiltersFirst(async () => table(await mount()), cleanupWidgets);
 });
 
-it("draws no help tooltip and no row menu, and has no actions column, on a load holding a product clash and a size clash", async () => {
+it("draws no help tooltip, and one row menu per drawn row in a pinned actions column, on a load holding a product clash and a size clash", async () => {
   const el = await allPrices(await mount({ rows: [clashRow(lager), variantClashRow()] }));
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -3469,9 +3584,12 @@ it("draws no help tooltip and no row menu, and has no actions column, on a load 
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
   expect(root.querySelectorAll("wt-help-tooltip").length).toBe(0);
-  expect(root.querySelectorAll("wt-row-actions").length).toBe(0);
-  const keys = (table(el) as Table & { columns: { key: string }[] }).columns.map(({ key }) => key);
-  expect(keys).not.toContain("actions");
+  expect(root.querySelectorAll("wt-row-actions").length).toBe(shown(el).length);
+  for (const key of shown(el)) {
+    expect(pinnedCell(el, key).querySelectorAll("wt-row-actions").length, key).toBe(1);
+  }
+  const columns = (table(el) as Table & { columns: { key: string; pinned?: string }[] }).columns;
+  expect(columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
 });
 
 describe("the clash message and the Clashes filter", () => {

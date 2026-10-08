@@ -124,6 +124,7 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
       const tr = root.querySelector(`tr[data-row-key="${key}"]`)!;
       expect(tr.querySelector("a[part~=status-link]"), key).not.toBeNull();
       expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
+      expect(tr.querySelector('td[data-pinned="end"] wt-row-actions'), key).not.toBeNull();
     }
     expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="clash"]')).not.toBeNull();
     // The filter is off Clashes, so the red line offers to put it back.
@@ -134,6 +135,19 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     expect(
       root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="status-note"]'),
     ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible open row menu", async () => {
+    const { el, host } = await mount(theme, {});
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      'tr[data-row-key="mi-burger"] td[data-pinned="end"] wt-row-actions',
+    )!;
+    menu.show();
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(menu.querySelector('a[data-test="edit-product-mi-burger"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
