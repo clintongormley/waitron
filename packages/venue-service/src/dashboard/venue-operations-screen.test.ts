@@ -149,6 +149,18 @@ async function bottom(el: VenueOperationsScreen): Promise<string> {
 function saveDisabled(el: VenueOperationsScreen) {
   return find(el, '[data-test="save-editor"]')!.hasAttribute("disabled");
 }
+/** Whether Save is switched off, and how it is drawn. */
+function saveLook(el: VenueOperationsScreen) {
+  const save = find(el, '[data-test="save-editor"]') as HTMLElement & { variant: string };
+  return { disabled: save.hasAttribute("disabled"), variant: save.variant };
+}
+/** Save on an editor whose draft is what it opened with. */
+const QUIET = { disabled: true, variant: "secondary" };
+/** Chooses a dropdown's value the way a person does, so the editor hears the change. */
+async function choose(el: VenueOperationsScreen, name: string, value: string) {
+  await chooseOption(field(el, name), value);
+  await settle(el);
+}
 /** Types a value the way a person does, into the shared field's own control, so the editor hears
  * the change. */
 async function type(el: VenueOperationsScreen, name: string, value: string) {
@@ -329,6 +341,7 @@ describe("venue operations screen", () => {
       createZone,
     } as unknown as VenueServiceApi);
     await action(el, "new-zone");
+    await choose(el, "new-zone-department", "d2");
     await action(el, "save-editor");
     expect(fieldError(el, "new-zone-name")).toBe("This field is required.");
     expect(createZone).not.toHaveBeenCalled();
@@ -2119,6 +2132,7 @@ describe("venue operations screen", () => {
     const el = await mount(api);
     await selectTab(el, "departments");
     await action(el, "new-department");
+    await choose(el, "department-mode", "table_tab");
     await action(el, "save-editor");
     expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(pageAlert(el)).toBe("");
@@ -2138,6 +2152,7 @@ describe("venue operations screen", () => {
       } as unknown as VenueServiceApi);
       await selectTab(el, "departments");
       await action(el, "new-department");
+      await choose(el, "department-mode", "table_tab");
       await action(el, "save-editor");
       const probe = document.createElement("div");
       probe.style.width = "var(--wt-form-max-width)";
@@ -2680,6 +2695,7 @@ describe("the venue editors refuse an incomplete form", () => {
     const el = await mount(api);
     await selectTab(el, "zones");
     await action(el, "edit-zone-z2");
+    await choose(el, "zone-mode-z2", "table_tab");
     await action(el, "save-editor");
     expect(fieldError(el, "zone-department-z2")).toBe("This field is required.");
     expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
@@ -2713,6 +2729,11 @@ describe("an editor's messages", () => {
     expect(fieldError(el, "department-name")).toBeUndefined();
     expect(invalid(el, "department-name")).toBe("false");
     expect(await bottom(el)).toBe("");
+    expect(saveLook(el)).toEqual(QUIET);
+    await type(el, "trading-name", "Casa Brunch");
+    expect(fieldError(el, "department-name")).toBeUndefined();
+    expect(invalid(el, "department-name")).toBe("false");
+    expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
   });
 
@@ -2720,6 +2741,7 @@ describe("an editor's messages", () => {
   // Save.
   it("marks the fields, says so above Save, focuses the first and holds Save after a failed press", async () => {
     const el = await newDepartment();
+    await choose(el, "department-mode", "table_tab");
     await action(el, "save-editor");
     expect(invalid(el, "department-name")).toBe("true");
     expect(invalid(el, "trading-name")).toBe("true");
@@ -2732,6 +2754,7 @@ describe("an editor's messages", () => {
   // Fails if the editor stops re-checking itself on every change once Save has been pressed.
   it("re-checks every change: a fixed field loses its message and the last fix frees Save", async () => {
     const el = await newDepartment();
+    await choose(el, "department-mode", "table_tab");
     await action(el, "save-editor");
     await type(el, "department-name", "Brunch");
     expect(fieldError(el, "department-name")).toBeUndefined();
@@ -2775,20 +2798,27 @@ describe("an editor's messages", () => {
     const el = await newDepartment({
       createDepartment: vi.fn().mockRejectedValue(new Error("offline")),
     });
+    await choose(el, "department-mode", "table_tab");
     await action(el, "save-editor");
+    expect(await bottom(el)).toBe(FIX);
     await action(el, "cancel-editor");
     await action(el, "new-department");
     expect(fieldError(el, "department-name")).toBeUndefined();
     expect(await bottom(el)).toBe("");
-    expect(saveDisabled(el)).toBe(false);
+    expect(saveLook(el)).toEqual(QUIET);
     await type(el, "department-name", "");
     expect(fieldError(el, "department-name")).toBeUndefined();
     await type(el, "department-name", "Brunch");
+    expect(fieldError(el, "trading-name")).toBeUndefined();
+    expect(saveDisabled(el)).toBe(false);
     await type(el, "trading-name", "Casa Brunch");
     await action(el, "save-editor");
     expect(await bottom(el)).toBe("The change could not be saved.");
     await action(el, "cancel-editor");
     await action(el, "new-department");
+    expect(await bottom(el)).toBe("");
+    expect(saveLook(el)).toEqual(QUIET);
+    await type(el, "department-name", "Brunch");
     expect(await bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
   });
@@ -2807,6 +2837,7 @@ describe("an editor's messages", () => {
   it("says it in Spanish", async () => {
     setLocale("es");
     const el = await newDepartment();
+    await choose(el, "department-mode", "table_tab");
     await action(el, "save-editor");
     expect(await bottom(el)).toBe("Corrige los campos marcados para continuar.");
   });
@@ -2841,6 +2872,7 @@ describe("an editor's messages", () => {
     const liveData = new LiveData();
     const load = vi.fn().mockResolvedValue(structuredClone(model));
     const el = await newDepartment({ load, liveData } as Partial<VenueServiceApi>);
+    await type(el, "department-name", "Brunch");
     load.mockRejectedValue(new Error("offline"));
     liveData.invalidate([{ type: "departments", id: "d1" }]);
     await vi.waitFor(() =>
@@ -2856,6 +2888,14 @@ describe("an editor's messages", () => {
     params: { field },
     status: 400,
   });
+  /** The one edit a refusal case makes, so its Save sends. */
+  async function change(
+    el: VenueOperationsScreen,
+    edit: { type: string; value: string } | { choose: string; value: string },
+  ) {
+    if ("type" in edit) await type(el, edit.type, edit.value);
+    else await choose(el, edit.choose, edit.value);
+  }
 
   // Fails if a refusal naming a field the editor shows is not put under it, holds Save, survives a
   // change to that field, is cleared by a change to another field, or outlives the editor.
@@ -2885,6 +2925,9 @@ describe("an editor's messages", () => {
     await action(el, "cancel-editor");
     await action(el, "new-department");
     expect(fieldError(el, "trading-name")).toBeUndefined();
+    expect(saveLook(el)).toEqual(QUIET);
+    await type(el, "department-name", "Brunch");
+    expect(fieldError(el, "trading-name")).toBeUndefined();
     expect(saveDisabled(el)).toBe(false);
   });
 
@@ -2896,6 +2939,7 @@ describe("an editor's messages", () => {
       method: "updateDepartment",
       name: "name",
       control: "department-name",
+      edit: { type: "department-name", value: "Restaurant" },
     },
     {
       tab: "departments",
@@ -2903,6 +2947,7 @@ describe("an editor's messages", () => {
       method: "updateDepartment",
       name: "tradingName",
       control: "trading-name",
+      edit: { type: "department-name", value: "Restaurant" },
     },
     {
       tab: "departments",
@@ -2910,6 +2955,7 @@ describe("an editor's messages", () => {
       method: "updateDepartment",
       name: "defaultServiceMode",
       control: "department-mode",
+      edit: { type: "department-name", value: "Restaurant" },
     },
     {
       tab: "zones",
@@ -2917,6 +2963,7 @@ describe("an editor's messages", () => {
       method: "configureZone",
       name: "departmentId",
       control: "zone-department-z1",
+      edit: { choose: "zone-mode-z1", value: "table_tab" },
     },
     {
       tab: "zones",
@@ -2924,14 +2971,16 @@ describe("an editor's messages", () => {
       method: "configureZone",
       name: "serviceMode",
       control: "zone-mode-z1",
+      edit: { choose: "zone-mode-z1", value: "table_tab" },
     },
-  ])("puts a refused $name under $control", async ({ tab, open, method, name, control }) => {
+  ])("puts a refused $name under $control", async ({ tab, open, method, name, control, edit }) => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
       [method]: vi.fn().mockRejectedValue(invalidRequest(name)),
     } as unknown as VenueServiceApi);
     await selectTab(el, tab);
     for (const step of open) await action(el, step);
+    await change(el, edit);
     await action(el, "save-editor");
     expect(fieldError(el, control)).toBe(REFUSED);
     expect(await bottom(el)).toBe(FIX);
@@ -2947,14 +2996,16 @@ describe("an editor's messages", () => {
       method: "configureZone",
       code: "department.not_found",
       control: "zone-department-z1",
+      edit: { choose: "zone-mode-z1", value: "table_tab" },
     },
-  ])("puts a refused $code under $control", async ({ tab, open, method, code, control }) => {
+  ])("puts a refused $code under $control", async ({ tab, open, method, code, control, edit }) => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
       [method]: vi.fn().mockRejectedValue({ code, params: {}, status: 404 }),
     } as unknown as VenueServiceApi);
     await selectTab(el, tab);
     for (const step of open) await action(el, step);
+    await change(el, edit);
     await action(el, "save-editor");
     expect(fieldError(el, control)).toBe(REFUSED);
     expect(await bottom(el)).toBe(FIX);
@@ -2969,6 +3020,7 @@ describe("an editor's messages", () => {
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
     await action(el, "edit-zone-z1");
+    await choose(el, "zone-mode-z1", "table_tab");
     await action(el, "save-editor");
     expect(await bottom(el)).toBe("The change could not be saved.");
     expect(el.shadowRoot!.querySelector("[data-field-error]")).toBeNull();
@@ -3126,14 +3178,17 @@ it("returns focus to the tree's Add action when an edited department disappears"
 });
 
 it("returns focus to a row's menu after an edit opened from it is saved", async () => {
-  const el = await mount({
+  const api = {
     load: vi.fn().mockResolvedValue(model),
     liveData: new LiveData(),
     updateDepartment: vi.fn().mockResolvedValue(undefined),
-  } as unknown as VenueServiceApi);
+  } as unknown as VenueServiceApi;
+  const el = await mount(api);
   await selectTab(el, "departments");
   await action(el, "edit-department-d1");
+  await type(el, "trading-name", "Casa Delgado Bar");
   await action(el, "save-editor");
+  expect(api.updateDepartment).toHaveBeenCalledTimes(1);
   await vi.waitFor(() => expect(modal(el)).toBeNull());
   await vi.waitFor(() => {
     const menu = table(el, "departments").shadowRoot!.activeElement as HTMLElement | null;
@@ -3352,6 +3407,7 @@ describe("the venue screen's fields are the shared field components", () => {
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     await action(el, "edit-department-d1");
+    await type(el, "department-name", "Restaurant");
     await action(el, "save-editor");
     const mode = dropdown(el.shadowRoot!, "department-mode");
     expect(mode.error).toBe("This value was not accepted. Change it and save again.");
@@ -3368,6 +3424,7 @@ describe("the venue screen's fields are the shared field components", () => {
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     await action(el, "new-department");
+    await choose(el, "department-mode", "table_tab");
     await action(el, "save-editor");
     const name = textBox(el, "department-name");
     expect(name.error).toBe("This field is required.");
@@ -3892,7 +3949,7 @@ describe("department transfer configuration", () => {
         departmentId: "d1",
         receivingProfileId: null,
         destinationDepartmentIds: ["d2"],
-        profiles: [],
+        profiles: [{ id: "p1", name: "Restaurant desk" }],
       }),
       saveDepartmentTransfers: async () => {
         throw {
@@ -3902,6 +3959,7 @@ describe("department transfer configuration", () => {
       },
     } as unknown as VenueServiceApi);
     await action(el, "transfers-tree-department-d1");
+    await choose(el, "receiving-profile", "p1");
     await action(el, "save-editor");
     const destinations = el.shadowRoot!.querySelector("fieldset")!;
     expect(destinations.textContent).toContain("Choose active departments other than this one.");
@@ -3931,6 +3989,8 @@ describe("department transfer configuration", () => {
       },
     } as unknown as VenueServiceApi);
     await action(el, "transfers-tree-department-d1");
+    field(el, "transfer-destination-d2").click();
+    await settle(el);
     await action(el, "save-editor");
     expect(field(el, "receiving-profile").getAttribute("error")).toBe(
       "Choose a profile with an active service zone in this department, or no receiving desk.",
