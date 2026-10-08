@@ -109,6 +109,7 @@ jobs:
   # `--filter "...<pkg>"` arguments built below.
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
@@ -317,6 +318,7 @@ jobs:
   # path and a clean path identically, so the obvious probe proves nothing.
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -584,6 +586,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
 
@@ -1595,6 +1598,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -1651,6 +1655,7 @@ jobs:
       - test-light-b
       - mutation-shared
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Naming a permission drops the workflow's defaults. This job checks nothing out, so it holds
     # `actions: read` alone: the permission GitHub lists for the jobs API the second step reads.
     permissions:
@@ -1756,15 +1761,14 @@ jobs:
   # of `ci` (needs `ci`, `if:` reads `needs.ci.result`) rather than merely absent.
   #
   # A fresh runner: it re-does checkout and the buildx setup, and builds the same single platform the
-  # image job's smoke build did minutes earlier in the same run. It LOOKS FOR that build's layers in
-  # the shared GHA cache scope — `cache-to` carries `ignore-error`, so a green smoke job is not on
-  # its own proof the export landed.
+  # image job's smoke build did minutes earlier in the same run.
   publish:
     needs: [changes, ci]
     # `needs: ci` already enforces GitHub's implicit success(); the explicit `needs.ci.result` keeps
     # the gate legible in place and is what the guard test pins. A pull request never publishes.
     if: github.event_name == 'push' && needs.changes.outputs.code == 'true' && needs.ci.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Naming any permission drops every default. `packages: write` is for the GHCR push.
     permissions:
       contents: read
@@ -1772,8 +1776,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The default builder uses the `docker` driver, which does not serve the `cache-to: type=gha`
-      # export below.
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
@@ -1830,9 +1832,8 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
 
-      # Single platform: amd64 is what every box runs. A second one costs twice over — the runner is
-      # x86, so it is built under QEMU, and `mode=max` then exports its layers into a cache at the
-      # ceiling (CLAUDE.md §2). Pay that on a release tag, not on every merge to `main` — and re-add
+      # Single platform: amd64 is what every box runs. The runner is x86, so a second platform would
+      # be built under QEMU. Pay that on a release tag, not on every merge to `main` — and re-add
       # `docker/setup-qemu-action` when you do, since buildx alone registers no binfmt handler and an
       # emulated stage would fail at its first `RUN`.
       - name: Publish to GHCR
@@ -1844,8 +1845,6 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Publish the print-agent image to GHCR
         uses: docker/build-push-action@v7
@@ -1857,5 +1856,3 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.agent_tags }}
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true

@@ -141,8 +141,12 @@ hook, or how tests are scheduled:
   ci.yml alone, as TEXT) and `scripts/main-tag-guard.test.mjs`.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
-- **The GHA cache is a shared per-repository budget and this repo sits AT it.** Name the entries a new
-  exporter would compete with before adding it.
+- **The GHA cache is a shared per-repository budget, evicted least-recently-used; Docker layer
+  exports filled it until A399 removed them.** Name the entries a new exporter would compete with
+  before adding it.
+- **Every workflow job carries `timeout-minutes`**, set from measured durations; GitHub's default is
+  six hours. Guard: the timeout case in `scripts/ci-workflow.test.mjs`, weaker than its name — it
+  reads text and does not judge the number.
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
 - **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS. Both

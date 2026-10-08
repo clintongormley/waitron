@@ -729,29 +729,83 @@ The since-removed `mutation-verifactu` job was ungated because a mutant is cheap
 it was 3m26s of a 4m8s run. Sort a run's jobs by duration before calling a job cheap enough to leave
 ungated.
 
-### The GHA cache is a shared per-repository budget and this repo sits AT it
+### Every job has a time limit
+
+Every job in `.github/workflows/` carries `timeout-minutes`, because without one GitHub lets a job
+run for six hours: github/docs `workflow-syntax.md`, `jobs.<job_id>.timeout-minutes`, "The maximum
+number of minutes to let a job run before GitHub automatically cancels it. Default: 360". The one
+stall that prompted this: PR #1399's image smoke sat 46 minutes on one cache layer download (run
+`37743000577`, see "Neither image build uses the remote layer cache" below). A job that reaches its
+limit ends `cancelled`, not `failed` — see "The `ci` check passes only when every needed job
+succeeded or was skipped" above.
+
+The rule: the longest measured run that ran to its end, times two, rounded up to the next multiple
+of 5, and never under 5. A run that failed its own checks ran to its end and counts (ui's 90-minute
+mutation run did); a cancelled run does not. The window: ci.yml's latest 264 runs, 2026-10-07 08:24
+to 2026-10-08T09:03:33Z, read 2026-10-08; the other workflows' latest 30 runs; `mutation-db` only
+since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a different engine.
+
+| file               | job                               | longest measured (min)         | limit |
+| ------------------ | --------------------------------- | ------------------------------ | ----- |
+| ci.yml             | changes                           | 0.9                            | 5     |
+| ci.yml             | lint                              | 5.1                            | 15    |
+| ci.yml             | typecheck                         | 2.1                            | 5     |
+| ci.yml             | mutation-shared                   | 3.1                            | 10    |
+| ci.yml             | ci                                | 0.7                            | 5     |
+| ci.yml             | publish                           | 3.2                            | 10    |
+| image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
+| licence.yml        | licence-integrity                 | 0.2                            | 5     |
+| licence.yml        | dco                               | 0.3                            | 5     |
+| mutation.yml       | mutation (matrix ui, ui-core)     | 90.2 (ui, 2026-10-05)          | 185   |
+| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch)  | 20    |
+| mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
+| stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
+
+The `smoke` figure was measured while the remote layer cache was still in place; its limit is
+checked again without it (final-state run: TBD). The workflows' other jobs already carried their own
+limits and are not in the table. A job that calls a reusable workflow (ci.yml's `image`,
+image-nightly.yml's `smoke`) cannot carry `timeout-minutes` — it is not among the keywords github/docs
+`reusing-workflow-configurations.md` lists for "the job containing the call" — so the called
+workflow's own jobs carry it.
+
+Guard: the "job time limits" cases in `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
+each workflow as TEXT by indent, so a flow-style job or a `timeout-minutes` written as an expression
+is reported as unbounded, and it does not judge whether the number is a sensible one.
+
+### The GHA cache is a shared per-repository budget, evicted least-recently-used
 
 A new `cache-to: type=gha,mode=max` exporter does not merely cost its own bytes — it competes for
 space against every other job's entries, and GitHub reclaims by evicting the least recently used.
 
-Docker layers are what fill it here: measured 2026-09-12, the total was at GitHub's 10 GB limit and
+Docker layers are what filled it: measured 2026-09-12, the total was at GitHub's 10 GB limit and
 image blobs were roughly nine tenths of it, leaving the Playwright browser download and the pnpm
-store caches that the test jobs restore to share the remainder. That is the second reason
-`publish` dropped arm64 (`linux/amd64` alone, ci.yml): an emulated second platform's `mode=max`
-export put a second set of image layers in on every merge to `main`.
+store caches that the test jobs restore to share the remainder. On 2026-10-08 at 09:26 UTC the total
+was 11,296 MB, 9,154 MB of it in 941 `buildkit` entries. That was the second reason `publish`
+dropped arm64 (`linux/amd64` alone, ci.yml): an emulated second platform's `mode=max` export put a
+second set of image layers in on every merge to `main`. Since A399 no workflow exports Docker
+layers; the `buildkit` entries already there are left for GitHub to evict, and the pnpm store,
+Playwright and CodeQL entries remain.
 
 The total is `gh api repos/:owner/:repo/actions/cache/usage`, but it answers only "how full" — for
 WHICH entries a new export competes with, list them with sizes and last-access times
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
 
-### The second image build uses the runner's local cache
+### Neither image build uses the remote layer cache
 
-The print-agent build in `image-smoke.yml` follows the app build on the same builder and
-imports no remote GHA cache. Its export remains enabled. This avoids a second remote
-download for the print-agent layers; it does not remove the app build's remote import.
+Since A399, neither `image-smoke.yml`'s builds nor `publish`'s (ci.yml) import or export a
+`type=gha` layer cache.
 
-Measured 2026-10-08 on PR #1399, run `37743000577`, job `113198431831`: the cached
+The import hit only the layers before `COPY . .` in `deploy/Dockerfile` — pnpm's global install,
+`WORKDIR`, and on the runtime side `setcap` and `useradd`, about 2 s of work. Every layer after
+`COPY . .` rebuilt in the runs read: the image-nightly control run `37722747608`, and publish run
+`37750748442`, which rebuilt `pnpm install` even after the smoke build of the same commit. "Build
+the image" took a mean of 88 s and at most 127 s over 30 image-nightly runs with the import, and
+110 s in run `37755993548` (commit `9ff673d12`) without the import but still exporting, of which
+"preparing build cache for export" was 23.4 s. The export was about 17–23 s of every main build.
+Without import or export: (final-state run: TBD).
+
+The one stall: measured 2026-10-08 on PR #1399, run `37743000577`, job `113198431831`, the cached
 print-agent layer `sha256:6e14a6c2683e027cbf0f8e85962c02bf23fea4a97b588241ddac0b68fdc621b8`
 reported `0B / 20.81MB` from 07:27:22 UTC until 08:13:06 UTC, then finished downloading
 at 08:13:10 UTC. The same layer downloaded in 1.2 seconds in the earlier main-based
@@ -869,7 +923,7 @@ They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usag
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
 about nine tenths of that day's total in Docker layers; a new entry would compete under least-recently-used eviction
 with the pnpm store and Playwright entries the test jobs restore (see "The GHA cache is a shared
-per-repository budget" above). An error answer from a release download fails the job with a message
+per-repository budget, evicted least-recently-used" above). An error answer from a release download fails the job with a message
 naming the URL.
 
 **A change to either installer alone selects `apps/server`**, because both are in

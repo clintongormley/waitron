@@ -6543,6 +6543,15 @@ approved.
 
 ### B9. CI and test infra
 
+- **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
+  watcher/owner 2026-10-08, "active monitoring") — DONE (#TBD).** PR #1399's image smoke sat
+  46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
+  would have let it run six hours. Every workflow job now carries a limit of twice its longest
+  measured run, rounded up to 5; a case in `scripts/ci-workflow.test.mjs` fails on a job without
+  one; and neither the image smoke's builds nor `publish`'s import or export the `type=gha` layer
+  cache, which reused only the layers before `COPY . .`. See
+  [ci-and-gates.md](developers/ci-and-gates.md), "Every job has a time limit" and "Neither image
+  build uses the remote layer cache".
 - **A rebased branch's push was refused for an unsigned commit already on main (A392, owner
   2026-10-08) — DONE (#1421).** Main's squash `6797bc03a` (#1377) has no `Signed-off-by`; the pre-push
   hook checked every commit from the remote's old tip, so a rebase over it refused the push, and

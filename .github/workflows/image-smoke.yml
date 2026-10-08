@@ -21,6 +21,7 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Naming any permission drops every default, so `contents: read` is restated. This job pushes
     # nothing to a registry — the GHCR publish is ci.yml's `publish` job, which holds `packages: write`.
     permissions:
@@ -81,15 +82,14 @@ jobs:
             fi
           done
 
-      # The default builder uses the `docker` driver, which does not serve the `cache-to: type=gha`
-      # export below.
       - uses: docker/setup-buildx-action@v4
 
       # Loaded into the runner's daemon so `docker compose` can run it — this job never pushes. That
       # is ci.yml's `publish`, which therefore builds a second time on its own runner: it is gated on
       # the whole `ci` aggregate (its header says why), and this job also runs on pull requests,
-      # which must not publish. Its build is the same single platform, so these are the layers it
-      # looks for in the shared GHA cache scope.
+      # which must not publish.
+      # No remote layer cache: it reused only the layers before `COPY . .`, and a download of it
+      # once stalled 46 min. Receipt: docs/developers/ci-and-gates.md.
       - name: Build the image
         uses: docker/build-push-action@v7
         with:
@@ -99,10 +99,6 @@ jobs:
           load: true
           tags: waitron:ci
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
-          cache-from: type=gha
-          # ignore-error, because a cache EXPORT failure is a slow build, not a broken image, and
-          # this job gates the pull request.
-          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Build the print-agent image
         uses: docker/build-push-action@v7
@@ -114,8 +110,6 @@ jobs:
           load: true
           tags: waitron-print-agent:ci
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
-          # Reuse this runner's builder cache without downloading remote print-agent layers.
-          cache-to: type=gha,mode=max,ignore-error=true
 
       # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
       # /setup-api/status — /health is 503 by design on a setup box, so waiting on that alone would

@@ -31,6 +31,9 @@ jobs:
       matrix:
         package: [ui, ui-core]
     runs-on: ubuntu-latest
+    # ui's weekly run took 90 min on 2026-10-05 (run 37267389722, 4930 mutants); the limit is twice
+    # that, rounded up to a multiple of 5.
+    timeout-minutes: 185
     steps:
       - uses: actions/checkout@v7
 
@@ -122,6 +125,9 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     runs-on: ubuntu-latest
+    # Shards took at most 8.8 min in the two weekly runs since the SQLite switch, 36380351019 and
+    # 37267389722.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -170,6 +176,7 @@ jobs:
     needs: mutation-db
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
 
