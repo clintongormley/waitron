@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { ingredients, products, recipeLines } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -26,6 +26,11 @@ import type { Ingredient } from "./ingredients.js";
  * batch, so created_at ties on every row and the tiebreak falls to id, which is a random UUID the
  * column vocabulary generates per row (`newId`, `packages/db/src/schema/columns.ts`)). */
 export async function getProductRecipe(tx: Transaction, productId: string): Promise<Ingredient[]> {
+  const [product] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(eq(products.id, productId));
+  if (!product) throw new AppError("product.not_found", { productId });
   return tx
     .select(INGREDIENT_COLUMNS)
     .from(recipeLines)
@@ -82,12 +87,25 @@ export async function setProductRecipe(
   ingredientIds: string[],
 ): Promise<void> {
   // A variant's recipe would write derived allergens and diet onto its own row, breaking its
-  // inheritance from its parent; an unknown id is deliberately left to its existing answer.
-  const [variant] = await tx
-    .select({ id: products.id })
+  // inheritance from its parent.
+  const [product] = await tx
+    .select({ parentId: products.parentId })
     .from(products)
-    .where(and(eq(products.id, productId), isNotNull(products.parentId)));
-  if (variant) throw new AppError("product.not_found", { productId });
+    .where(eq(products.id, productId));
+  if (!product || product.parentId !== null) throw new AppError("product.not_found", { productId });
+  const distinct = new Set(ingredientIds);
+  if (distinct.size !== ingredientIds.length) {
+    throw new AppError("management.request_invalid", { field: "ingredientIds" });
+  }
+  if (distinct.size > 0) {
+    const known = await tx
+      .select({ id: ingredients.id })
+      .from(ingredients)
+      .where(inArray(ingredients.id, [...distinct]));
+    if (known.length !== distinct.size) {
+      throw new AppError("management.request_invalid", { field: "ingredientIds" });
+    }
+  }
   await tx.delete(recipeLines).where(eq(recipeLines.productId, productId));
   if (ingredientIds.length > 0) {
     await tx.insert(recipeLines).values(

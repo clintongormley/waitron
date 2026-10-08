@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { ingredients, now } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import {
   validateAllergens,
@@ -9,6 +10,7 @@ import {
 } from "@waitron/catalogue";
 import { INGREDIENT_COLUMNS } from "./columns.js";
 import { productsUsingIngredient, recomputeProductDerivations } from "./recipes.js";
+import "./errors.js";
 
 /** Ingredient writes share the caller's transaction. Deactivation preserves recipe references. */
 
@@ -72,10 +74,12 @@ export async function updateIngredient(
   // The patch keys map 1:1 to `ingredients` columns, so the spread stays fully typed against `.set()`.
   if (patch.allergens != null) validateAllergens(patch.allergens);
   if (patch.dietaryOrigin != null) validateOrigin(patch.dietaryOrigin);
-  await tx
+  const updated = await tx
     .update(ingredients)
     .set({ ...patch, updatedAt: now() })
-    .where(eq(ingredients.id, id));
+    .where(eq(ingredients.id, id))
+    .returning({ id: ingredients.id });
+  if (updated.length === 0) throw new AppError("ingredient.not_found", { ingredientId: id });
   // Propagate only when a derivation input moved: the folds read `allergens`/`dietary_origin`, never
   // `name`/`active`, so a rename or an `active` toggle would recompute the identical floor.
   //

@@ -132,4 +132,14 @@ describe("ingredient operations", () => {
     });
     expect(fetched).toBeNull();
   });
+
+  it.each([
+    ["a rename", { name: "renamed" }],
+    ["an allergens change", { allergens: { eggs: { presence: "contains" as const } } }],
+  ])("refuses %s of an unknown ingredient", async (_label, patch) => {
+    const ingredientId = "00000000-0000-0000-0000-000000000003";
+    await expect(
+      withTransaction(fx.db, (tx) => updateIngredient(tx, ingredientId, patch)),
+    ).rejects.toMatchObject({ code: "ingredient.not_found", params: { ingredientId } });
+  });
 });

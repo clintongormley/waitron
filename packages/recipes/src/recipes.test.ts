@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, ingredients, products, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, ingredients, products, recipeLines, withTransaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS, setProductVariants, type DietaryOrigin } from "@waitron/catalogue";
@@ -257,5 +257,89 @@ describe("recipe composition and allergen derivation", () => {
       return getProductRecipe(tx, productId);
     });
     expect(recipe.map((i) => i.name).sort()).toEqual(["a", "b"]);
+  });
+
+  describe("unknown ids", () => {
+    const unknownProductId = "00000000-0000-0000-0000-000000000001";
+    const unknownIngredientId = "00000000-0000-0000-0000-000000000002";
+
+    async function linesFor(ingredientId: string) {
+      return withTransaction(fx.db, (tx) =>
+        tx.select().from(recipeLines).where(eq(recipeLines.ingredientId, ingredientId)),
+      );
+    }
+
+    async function recipeNames(id: string) {
+      const recipe = await withTransaction(fx.db, (tx) => getProductRecipe(tx, id));
+      return recipe.map((i) => i.name).sort();
+    }
+
+    it("refuses a recipe for an unknown product with an empty list", async () => {
+      await expect(
+        withTransaction(fx.db, (tx) => setProductRecipe(tx, unknownProductId, [])),
+      ).rejects.toMatchObject({
+        code: "product.not_found",
+        params: { productId: unknownProductId },
+      });
+    });
+
+    it("refuses a recipe for an unknown product with a real ingredient, writing nothing", async () => {
+      const egg = await withTransaction(fx.db, (tx) => createIngredient(tx, { name: "egg" }));
+      await expect(
+        withTransaction(fx.db, (tx) => setProductRecipe(tx, unknownProductId, [egg.id])),
+      ).rejects.toMatchObject({
+        code: "product.not_found",
+        params: { productId: unknownProductId },
+      });
+      expect(await linesFor(egg.id)).toEqual([]);
+    });
+
+    it("refuses the same ingredient twice, leaving the recipe unchanged", async () => {
+      const egg = await withTransaction(fx.db, (tx) => createIngredient(tx, { name: "egg" }));
+      const salt = await withTransaction(fx.db, (tx) => createIngredient(tx, { name: "salt" }));
+      await withTransaction(fx.db, (tx) => setProductRecipe(tx, productId, [salt.id]));
+      await expect(
+        withTransaction(fx.db, (tx) => setProductRecipe(tx, productId, [egg.id, egg.id])),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "ingredientIds" },
+      });
+      expect(await recipeNames(productId)).toEqual(["salt"]);
+    });
+
+    it("refuses an unknown ingredient on a real product, leaving its recipe unchanged", async () => {
+      const egg = await withTransaction(fx.db, (tx) => createIngredient(tx, { name: "egg" }));
+      const salt = await withTransaction(fx.db, (tx) => createIngredient(tx, { name: "salt" }));
+      await withTransaction(fx.db, (tx) => setProductRecipe(tx, productId, [salt.id]));
+      await expect(
+        withTransaction(fx.db, (tx) =>
+          setProductRecipe(tx, productId, [egg.id, unknownIngredientId]),
+        ),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "ingredientIds" },
+      });
+      expect(await recipeNames(productId)).toEqual(["salt"]);
+    });
+
+    it("names the unknown product before an unknown ingredient", async () => {
+      await expect(
+        withTransaction(fx.db, (tx) =>
+          setProductRecipe(tx, unknownProductId, [unknownIngredientId]),
+        ),
+      ).rejects.toMatchObject({
+        code: "product.not_found",
+        params: { productId: unknownProductId },
+      });
+    });
+
+    it("refuses to read the recipe of an unknown product", async () => {
+      await expect(
+        withTransaction(fx.db, (tx) => getProductRecipe(tx, unknownProductId)),
+      ).rejects.toMatchObject({
+        code: "product.not_found",
+        params: { productId: unknownProductId },
+      });
+    });
   });
 });
