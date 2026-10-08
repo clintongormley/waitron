@@ -4910,7 +4910,7 @@ describe("product media link", () => {
     expect(media!.tagName).toBe("A");
     expect(media!.getAttribute("href")).toBe("/manage/catalogue/product/cola?field=image");
     expect(media!.getAttribute("aria-label")).toBe(
-      t("product.edit_named").replace("{name}", "Cola"),
+      t("product.edit_named_inherited").replace("{name}", "Cola").replace("{from}", "Drinks"),
     );
     expect(media!.querySelector("wt-row-actions, button")).toBeNull();
     expect(root.querySelector("wt-row-actions[data-test='color-cola']")).toBeNull();
