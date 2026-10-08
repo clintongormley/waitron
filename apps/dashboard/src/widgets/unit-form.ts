@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { sameValue } from "./product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -116,8 +122,7 @@ export class UnitForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<UnitDraft>({
+      const { coordinator, scope } = draftScopeFor<UnitDraft>(this, {
         id: this,
         parent: this.draftParent,
         current: () => this.#comparisonValue(),
@@ -129,6 +134,8 @@ export class UnitForm extends LitElement {
           this.precision = String(value.precision);
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -223,6 +230,7 @@ export class UnitForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.#dismiss(...Object.keys(this.fieldErrors));
     if (Object.keys(this.#validate()).length > 0) {
@@ -272,7 +280,7 @@ export class UnitForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#reportCancel();
   }
 
@@ -291,12 +299,13 @@ export class UnitForm extends LitElement {
       " ",
     );
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const saveAction = saveActionState(this.#scope);
     return html`
       <wt-modal
         size="standard"
         heading=${this.value ? t("units.edit") : t("units.create")}
         .open=${this.open}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           this.#reportCancel();
@@ -389,8 +398,8 @@ export class UnitForm extends LitElement {
           >
           <wt-button
             data-test="submit"
-            variant="primary"
-            ?disabled=${this.busy || invalid}
+            variant=${saveAction.variant}
+            ?disabled=${saveAction.unchanged || this.busy || invalid}
             @click=${this.#submit}
             >${t("action.save")}</wt-button
           >

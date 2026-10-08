@@ -434,18 +434,28 @@ describe("units-screen", () => {
 
   /** Opens New unit, submits it and lets the stubbed refusal land. */
   async function refusedCreate(refusal: unknown) {
-    const el = await mount(stubApi({ createUnit: vi.fn().mockRejectedValue(refusal) }));
+    const createUnit = vi.fn().mockRejectedValue(refusal);
+    const el = await mount(stubApi({ createUnit }));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
     const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
-    form.dispatchEvent(
-      new CustomEvent("wt-submit", {
-        detail: { value: { name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 2 } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    await form.updateComplete;
+    for (const [testId, value] of [
+      ["name-es", "caja"],
+      ["abbreviation-es", "cj"],
+    ])
+      form
+        .shadowRoot!.querySelector(`[data-test=${testId}]`)!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    await chooseOption(form.shadowRoot!.querySelector("wt-combobox[name=precision]")!, "2");
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await flush(el);
+    expect(createUnit).toHaveBeenCalledWith({
+      name: { es: "caja" },
+      abbreviation: { es: "cj" },
+      precision: 2,
+    });
     await form.updateComplete;
     const message = await formMessageOf(form.shadowRoot!.querySelector("wt-form-actions")!);
     return {

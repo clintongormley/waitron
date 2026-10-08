@@ -53,11 +53,16 @@ it("a busy ingredient ignores delivered name, active and allergen changes withou
   expect(unloadProtected()).toBe(false);
   form.busy = false;
   await form.updateComplete;
+  const save =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  expect(save.disabled).toBe(true);
+  expect(save.variant).toBe("secondary");
+  await name(form, "Sea salt");
   const sent: unknown[] = [];
   form.addEventListener("update-ingredient", (event) => sent.push((event as CustomEvent).detail));
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  save.click();
   expect(sent).toEqual([
-    { id: "salt", patch: { name: "Salt", active: true, allergens: null, dietaryOrigin: null } },
+    { id: "salt", patch: { name: "Sea salt", active: true, allergens: null, dietaryOrigin: null } },
   ]);
 });
 async function fixture(props: Partial<IngredientLeaveApp> = {}) {
@@ -368,10 +373,15 @@ it("a detached ingredient control cannot change the body submitted after reconne
   expect(unloadProtected()).toBe(false);
   app.shadowRoot!.prepend(form);
   await form.updateComplete;
+  const save =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  expect(save.disabled).toBe(true);
+  expect(save.variant).toBe("secondary");
+  await name(form, "Sea salt");
   const sent: unknown[] = [];
   form.addEventListener("update-ingredient", (event) => sent.push((event as CustomEvent).detail));
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  save.click();
   expect(sent).toEqual([
-    { id: "salt", patch: { name: "Salt", active: true, allergens: null, dietaryOrigin: null } },
+    { id: "salt", patch: { name: "Sea salt", active: true, allergens: null, dietaryOrigin: null } },
   ]);
 });

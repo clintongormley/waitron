@@ -1371,13 +1371,23 @@ describe("catalogue-screen", () => {
     });
     const el = await openNested(api, "unit");
     const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
-    await submitNested(el, form, {
+    await form.updateComplete;
+    emit(form.shadowRoot!.querySelector("[data-test=name-es]")!, "wt-change", { value: "ración" });
+    emit(form.shadowRoot!.querySelector("[data-test=abbreviation-es]")!, "wt-change", {
+      value: "ra",
+    });
+    await chooseOption(form.shadowRoot!.querySelector("wt-combobox[name=precision]")!, "2");
+    await form.updateComplete;
+    const save =
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=submit]")!;
+    save.click();
+    await flush(el);
+    await form.updateComplete;
+    expect(api.createUnit).toHaveBeenCalledWith({
       name: { es: "ración" },
       abbreviation: { es: "ra" },
       precision: 2,
     });
-    const save =
-      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=submit]")!;
     expect(errorBeside(form, "wt-combobox[name=precision]")).not.toBe("");
     expect(save.disabled).toBe(false);
 

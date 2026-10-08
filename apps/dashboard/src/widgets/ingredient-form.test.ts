@@ -137,6 +137,7 @@ describe("ingredient-form", () => {
 
   it("blocks confirm and shows the name's error under it and one message at the bottom of the form", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "   ");
     let fired = false;
     el.addEventListener("create-ingredient", () => (fired = true));
     confirm(el);
@@ -163,6 +164,7 @@ describe("ingredient-form", () => {
 
   it("clears the name error once the operator types a name", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "   ");
     confirm(el);
     await el.updateComplete;
     expect(nameErrorOf(el)).not.toBe("");
@@ -181,7 +183,7 @@ describe("ingredient-form", () => {
 
   it("says nothing about errors before the first submission, and Create works", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
-    await setInput(el, "name", "");
+    await setInput(el, "name", "   ");
     expect(nameErrorOf(el)).toBe("");
     expect(await bottomOf(el)).toBe(null);
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
@@ -189,6 +191,7 @@ describe("ingredient-form", () => {
 
   it("on an invalid submission focuses the name and disables Create until it is fixed", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", " ");
     confirm(el);
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
@@ -207,14 +210,21 @@ describe("ingredient-form", () => {
     expect((await created).detail).toEqual({ name: "Sal" });
   });
 
-  it("starts again when reopened: no messages and Create working", async () => {
+  it("starts again when reopened: no messages, Create quiet, and working after an edit", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "   ");
     confirm(el);
     await el.updateComplete;
+    expect(nameErrorOf(el)).not.toBe("");
     el.open = false;
     await el.updateComplete;
     el.open = true;
     await el.updateComplete;
+    expect(nameErrorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe(null);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    expect(confirmOf(el).getAttribute("variant")).toBe("secondary");
+    await setInput(el, "name", "   ");
     expect(nameErrorOf(el)).toBe("");
     expect(await bottomOf(el)).toBe(null);
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
@@ -276,6 +286,7 @@ describe("ingredient-form", () => {
       ingredient: EDIT_INGREDIENT,
     });
     await el.updateComplete;
+    await setInput(el, "name", "Leche desnatada");
     const updated = nextEvent<{ id: string; patch: Record<string, unknown> }>(
       el,
       "update-ingredient",
@@ -284,7 +295,7 @@ describe("ingredient-form", () => {
     const detail = (await updated).detail;
     expect(detail.id).toBe("ing-1");
     expect(detail.patch).toEqual({
-      name: "Leche entera",
+      name: "Leche desnatada",
       active: false,
       allergens: { milk: { presence: "contains" } },
       dietaryOrigin: "dairy",
@@ -348,7 +359,7 @@ describe("ingredient-form", () => {
     expect(patch.allergens).toBe(null);
   });
 
-  it("carries allergens: null in the patch when editing a PENDING ingredient untouched", async () => {
+  it("carries allergens: null in the patch when only a PENDING ingredient's name is edited", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
       ingredient: {
@@ -360,6 +371,7 @@ describe("ingredient-form", () => {
       },
     });
     await el.updateComplete;
+    await setInput(el, "name", "Azúcar moreno");
     const updated = nextEvent<{ patch: { allergens: unknown } }>(el, "update-ingredient");
     confirm(el);
     const patch = (await updated).detail.patch;
@@ -484,7 +496,7 @@ describe("ingredient-form — a server refusal", () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     el.fieldErrors = { _form: codeMessage("server.internal") };
     await el.updateComplete;
-    await setInput(el, "name", "");
+    await setInput(el, "name", "   ");
     confirm(el);
     await el.updateComplete;
     // The submit drops the old refusal; the name's own error remains.

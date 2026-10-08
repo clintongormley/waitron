@@ -276,9 +276,15 @@ describe("recipe-screen", () => {
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!.click();
     await el.updateComplete;
-    emit(form(el), "create-ingredient", { name: "Azúcar" });
+    await form(el).updateComplete;
+    emit(form(el).shadowRoot!.querySelector("[data-test=name]")!, "wt-change", {
+      value: "Azúcar",
+    });
+    await form(el).updateComplete;
+    form(el).shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await flush(el);
     await form(el).updateComplete;
+    expect(api.createIngredient).toHaveBeenCalledWith({ name: "Azúcar" });
 
     expect(
       form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=name]")!
