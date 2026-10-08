@@ -345,6 +345,85 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(engineErrorMessage(error), constraint).toContain("FOREIGN KEY constraint failed");
   }
 
+  it("retires the department and zone menu lists", async () => {
+    const rows = await db.execute(sql`select name from sqlite_master where type = 'table'
+      and name in ('department_menus', 'department_all_day_menus', 'zone_all_day_menus', 'zone_period_menus')`);
+    expect(rows.rows).toEqual([]);
+  });
+
+  it("links a period directly to an existing catalogue without a separate membership row", async () => {
+    const v = await venue();
+    const periodId = randomUUID();
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    expect(
+      (await db.execute(sql`select menu_id from menu_periods where id = ${periodId}`)).rows,
+    ).toEqual([{ menu_id: v.menuId }]);
+    await refusal(
+      sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${randomUUID()}, ${v.departmentId}, 'Missing', ${randomUUID()})`,
+      "menu_periods_menu_fk",
+    );
+  });
+
+  it("stores a full business day and ordinary quarter-hour ranges", async () => {
+    const v = await venue();
+    const periodId = randomUUID();
+    // Establish the period before testing slots on the current and replacement schema.
+    await db.execute(sql`insert into department_menus (department_id, menu_id)
+      values (${v.departmentId}, ${v.menuId})`);
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Open', ${v.menuId})`);
+    const timetableId = randomUUID();
+    await db.execute(sql`insert into menu_day_timetables (id, department_id, weekday)
+      values (${timetableId}, ${v.departmentId}, 1)`);
+    const slot = (start: string, end: string) => sql`insert into menu_slots
+      (id, timetable_id, department_id, period_id, starts_at, ends_at)
+      values (${randomUUID()}, ${timetableId}, ${v.departmentId}, ${periodId}, ${start}, ${end})`;
+    for (const [start, end] of [
+      ["06:00:00", "06:00:00"],
+      ["12:15:00", "14:45:00"],
+    ])
+      await db.execute(slot(start!, end!));
+    expect(
+      (
+        await db.execute(
+          sql`select starts_at, ends_at from menu_slots where timetable_id = ${timetableId} order by starts_at`,
+        )
+      ).rows,
+    ).toEqual([
+      { starts_at: "06:00:00", ends_at: "06:00:00" },
+      { starts_at: "12:15:00", ends_at: "14:45:00" },
+    ]);
+  });
+
+  it("refuses either endpoint between quarter-hours", async () => {
+    const v = await venue();
+    const periodId = randomUUID();
+    // Establish the period before testing slots on the current and replacement schema.
+    await db.execute(sql`insert into department_menus (department_id, menu_id)
+      values (${v.departmentId}, ${v.menuId})`);
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Open', ${v.menuId})`);
+    const timetableId = randomUUID();
+    await db.execute(sql`insert into menu_day_timetables (id, department_id, weekday)
+      values (${timetableId}, ${v.departmentId}, 1)`);
+    const slot = (start: string, end: string) => sql`insert into menu_slots
+      (id, timetable_id, department_id, period_id, starts_at, ends_at)
+      values (${randomUUID()}, ${timetableId}, ${v.departmentId}, ${periodId}, ${start}, ${end})`;
+    await db.execute(slot("12:15:00", "14:45:00"));
+    for (const [start, end] of [
+      ["12:10:00", "14:00:00"],
+      ["12:00:00", "14:10:00"],
+    ]) {
+      const error = await captureError(() =>
+        db.transaction((tx) => tx.execute(slot(start!, end!))),
+      );
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toContain("menu_slots_step_ck");
+    }
+  });
+
   it("defaults period colour and removes staff menus when the period is deleted", async () => {
     const v = await venue();
     const periodId = randomUUID();
