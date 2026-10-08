@@ -741,8 +741,12 @@ manager and viewer Periods views have been inspected in both languages, themes a
 widths. New periods now start with the first unused department colour, repeating the first palette colour
 once all have been used (decision 6). Existing periods keep their recorded colour; background reads
 keep a selected draft colour. Focused browser checks and two safeguard-deletion controls cover that
-selection. Old Menu timetable sources and their tests remain pending retirement; preserve the Week
-and special-date assertions while moving them to their new consumers. Week and Day content remain
+selection. The old named-period block's four tests have moved to Opening hours and its editor: complete
+POST/PATCH bodies, required fields, duplicate and invalid-name refusals, and the in-use sentence
+naming all weekdays and the special date. Its old follow-week button in the deletion refusal is
+retired; the new refusal is one sentence as specified above. The remaining old Menu timetable
+sources and tests still need retirement; preserve the Week and special-date assertions until
+their new consumers exist. Week and Day content remain
 Tasks 13 and 14. Leave Task 12 unchecked until its remaining work and verification finish.
 
 ---
