@@ -1283,6 +1283,17 @@ describe("the stream loop and pause tests' and the S3 test server suite's own jo
     );
   });
 
+  it("gives loopback a 1500-byte packet size before it runs them", () => {
+    const body = stream().body;
+    const code = (line) => !line.trim().startsWith("#");
+    const run = body.findIndex((line) => code(line) && line.includes("test:shard"));
+    const mtu = body.findIndex(
+      (line) => code(line) && /^\s*(run:\s*)?sudo ip link set dev lo mtu 1500\s*$/.test(line),
+    );
+    expect(mtu, "no step runs `sudo ip link set dev lo mtu 1500`").toBeGreaterThan(-1);
+    expect(mtu, "loopback's packet size must be set before the tests run").toBeLessThan(run);
+  });
+
   it("is the only job that installs the binaries", () => {
     for (const { id, body } of jobs.filter(({ id }) => id !== STREAM_JOB)) {
       const code = body.filter((line) => !line.trim().startsWith("#")).join("\n");
