@@ -341,6 +341,7 @@ const WRITES = [
   "removeSectionMember",
   "removeSectionMembers",
   "moveSectionMember",
+  "moveSectionMembersInto",
   "updateMenuItem",
   "setMenuVariantPrice",
   "publishMenu",
@@ -547,6 +548,33 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
         .map(({ memberId }) => memberId);
       root = root.filter((node) => !gone.includes(node.memberId));
     }),
+    /** Takes the named members out wherever they sit and appends them, in order, to `listId`. */
+    moveSectionMembersInto: vi.fn(
+      async (listId: string, members: { listId: string; memberId: string }[]) => {
+        const ids = members.map(({ memberId }) => memberId);
+        const taken = new Map<string, MenuStructureNode>();
+        const strip = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
+          nodes.flatMap((node) => {
+            if (ids.includes(node.memberId)) {
+              if (!taken.has(node.memberId)) taken.set(node.memberId, node);
+              return [];
+            }
+            return [node.children ? { ...node, children: strip(node.children) } : node];
+          });
+        root = strip(root);
+        const moved = ids.flatMap((id) => (taken.has(id) ? [taken.get(id)!] : []));
+        const place = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
+          nodes.map((node) =>
+            node.ref.kind === "section" && node.ref.sectionId === listId
+              ? { ...node, children: [...(node.children ?? []), ...structuredClone(moved)] }
+              : node.children
+                ? { ...node, children: place(node.children) }
+                : node,
+          );
+        root = listId === "root-lunch" ? [...root, ...moved] : place(root);
+        return [];
+      },
+    ),
     moveSectionMember: vi.fn(async (list: string, memberId: string, to: number) => {
       if (list === "root-lunch") {
         const moved = root.find((node) => node.memberId === memberId)!;
@@ -4154,6 +4182,221 @@ describe("the Structure tree", () => {
       expect(structure(el).shadowRoot!.activeElement?.getAttribute("data-test")).toBe(
         "new-section-empty",
       );
+    });
+
+    describe("Move to section", () => {
+      const moveButton = (el: MenusScreen) =>
+        q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!;
+      const destination = (el: MenusScreen) =>
+        inModal<HTMLElementTagNameMap["wt-combobox"]>(
+          el,
+          "move-selected",
+          'wt-combobox[name="destination"]',
+        );
+      const confirm = (el: MenusScreen) =>
+        inModal<HTMLElementTagNameMap["wt-button"]>(
+          el,
+          "move-selected",
+          '[data-test="move-selected-save"]',
+        );
+      const cancel = (el: MenusScreen) =>
+        inModal<HTMLElementTagNameMap["wt-button"]>(
+          el,
+          "move-selected",
+          '[data-test="move-selected-cancel"]',
+        );
+      const labels = (el: MenusScreen) => destination(el).options.map(({ label }) => label);
+
+      async function openMove(el: MenusScreen): Promise<void> {
+        moveButton(el).click();
+        await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
+        await el.updateComplete;
+      }
+
+      it("sits before Remove, quiet and disabled until something is selected", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        expect(moveButton(el).nextElementSibling).toBe(removeButton(el));
+        expect(text(moveButton(el))).toBe("Move to section…");
+        expect(moveButton(el).disabled).toBe(true);
+        expect(moveButton(el).variant).toBe("secondary");
+        moveButton(el).click();
+        await el.updateComplete;
+        expect(modal(el, "move-selected").open).toBe(false);
+        await tick(el, "m-drinks");
+        expect(moveButton(el).disabled).toBe(false);
+        expect(moveButton(el).variant).toBe("primary");
+      });
+
+      it("moves products from two lists in one request, in tree order, then opens the destination", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await toggleRow(el, "m-drinks");
+        await toggleRow(el, "m-drinks/m-beer");
+        await pressSelect(el);
+        await tick(el, "m-drinks/m-beer/m-lager-2");
+        await tick(el, "m-burger");
+        await openMove(el);
+        const dialog = modal(el, "move-selected");
+        expect(dialog.getAttribute("size")).toBe("compact");
+        expect(dialog.getAttribute("heading")).toBe("Move 2 items");
+        expect(destination(el).required).toBe(true);
+        expect(labels(el)).toEqual(["Top level", "Drinks", "Drinks › Beer", "Favourites"]);
+        expect(destination(el).options[0]!.value).toBe("root-lunch");
+        await chooseOption(destination(el), "s-fav");
+        await el.updateComplete;
+        expect(text(confirm(el))).toBe("Move");
+        confirm(el).click();
+        await vi.waitFor(() =>
+          expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("s-fav", [
+            { listId: "root-lunch", memberId: "m-burger" },
+            { listId: "s-beer", memberId: "m-lager-2" },
+          ]),
+        );
+        expect(writeCalls(client)).toEqual(["moveSectionMembersInto"]);
+        await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(false));
+        await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+        await afterDialogCloses(el);
+        await settleStructure(el);
+        expect(structure(el).current).toEqual(["m-fav"]);
+        await vi.waitFor(() => expect(rowOf(el, "m-fav/m-burger")).not.toBeNull());
+        expect(structure(el).selected).toEqual([]);
+        expect(selectToggle(el).getAttribute("aria-pressed")).toBe("true");
+        expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+      });
+
+      it("sends only a selected section, not its selected child, which stays inside it", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await toggleRow(el, "m-drinks");
+        await pressSelect(el);
+        await tick(el, "m-drinks/m-beer");
+        await toggleRow(el, "m-drinks/m-beer");
+        await tick(el, "m-drinks/m-beer/m-lager-2");
+        expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
+        await openMove(el);
+        expect(modal(el, "move-selected").getAttribute("heading")).toBe("Move 1 item");
+        await chooseOption(destination(el), "s-fav");
+        await el.updateComplete;
+        confirm(el).click();
+        await vi.waitFor(() =>
+          expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("s-fav", [
+            { listId: "s-drinks", memberId: "m-beer" },
+          ]),
+        );
+        await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(false));
+        await vi.waitFor(() =>
+          expect(
+            structure(el)
+              .nodes.find((node) => node.memberId === "m-fav")!
+              .children!.find((node) => node.memberId === "m-beer")!
+              .children!.map((node) => node.memberId),
+          ).toEqual(["m-lager-2"]),
+        );
+      });
+
+      it("offers Top level and every section the menu owns, but no selected section or anything below it", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await openMove(el);
+        expect(labels(el)).toEqual(["Top level", "Favourites"]);
+        cancel(el).click();
+        await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(false));
+        await tick(el, "m-drinks");
+        await tick(el, "m-fav");
+        await openMove(el);
+        expect(labels(el)).toEqual(["Top level"]);
+      });
+
+      it("offers no section inside an included menu", async () => {
+        const wines: MenuStructureNode = {
+          memberId: "m-wines",
+          ref: { kind: "section", sectionId: "wine-root" },
+          internalName: "Wines",
+          includedMenuId: "menu-wine",
+          ownerMenuId: "menu-wine",
+          folder: { showAsFolder: true, overrides: {} },
+          children: [
+            {
+              memberId: "m-reds",
+              ref: { kind: "section", sectionId: "s-reds" },
+              internalName: "Reds",
+              ownerMenuId: "menu-wine",
+              children: [],
+            },
+          ],
+        };
+        const el = await mountLunch(
+          api({ getMenuStructure: vi.fn(async () => lunchWith([...lunchNodes(), wines])) }),
+        );
+        await pressSelect(el);
+        await tick(el, "m-burger");
+        await openMove(el);
+        expect(labels(el)).toEqual(["Top level", "Drinks", "Drinks › Beer", "Favourites"]);
+      });
+
+      it("keeps Move quiet and disabled until a destination is chosen", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, "m-burger");
+        await openMove(el);
+        expect(destination(el).value).toBe("");
+        expect(confirm(el).disabled).toBe(true);
+        expect(confirm(el).variant).toBe("secondary");
+        await chooseOption(destination(el), "s-drinks");
+        await el.updateComplete;
+        expect(confirm(el).disabled).toBe(false);
+        expect(confirm(el).variant).toBe("primary");
+      });
+
+      it("keeps the dialog open with the refusal's message, holding Cancel while the request is out", async () => {
+        const moving = deferred<never>();
+        const client = api({ moveSectionMembersInto: vi.fn(() => moving.promise) });
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, "m-burger");
+        await openMove(el);
+        await chooseOption(destination(el), "s-drinks");
+        await el.updateComplete;
+        confirm(el).click();
+        await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
+        await el.updateComplete;
+        expect(confirm(el).variant).toBe("primary");
+        expect(cancel(el).disabled).toBe(true);
+        cancel(el).click();
+        await userEvent.keyboard("{Escape}");
+        await el.updateComplete;
+        expect(modal(el, "move-selected").open).toBe(true);
+
+        moving.reject({ code: "menu_section.member_duplicate" });
+        await vi.waitFor(() =>
+          expect(bottom(el, "move-selected")).resolves.toBe(
+            codeMessage("menu_section.member_duplicate"),
+          ),
+        );
+        expect(modal(el, "move-selected").open).toBe(true);
+        expect(confirm(el).disabled).toBe(false);
+        expect(cancel(el).disabled).toBe(false);
+        expect(structure(el).selected).toEqual(["m-burger"]);
+        cancel(el).click();
+        await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(false));
+        expect(client.moveSectionMembersInto).toHaveBeenCalledOnce();
+      });
+
+      it("names the button, the dialog and Top level in Spanish", async () => {
+        setLocale("es");
+        const el = await mountLunch();
+        await pressSelect(el);
+        await tick(el, "m-burger");
+        await tick(el, "m-fav");
+        expect(text(moveButton(el))).toBe("Mover a una sección…");
+        await openMove(el);
+        expect(modal(el, "move-selected").getAttribute("heading")).toBe("Mover 2 elementos");
+        expect(labels(el)[0]).toBe("Nivel principal");
+        expect(text(confirm(el))).toBe("Mover");
+      });
     });
   });
 
