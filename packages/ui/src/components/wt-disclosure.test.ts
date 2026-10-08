@@ -5,6 +5,50 @@ import "./wt-disclosure.js";
 
 afterEach(cleanup);
 
+function pauseHeightTransition(body: HTMLElement, previous?: Animation): Promise<Animation> {
+  return new Promise((resolve, reject) => {
+    let frames = 0;
+    const pause = () => {
+      if (!body.isConnected) {
+        reject(new Error("Disclosure removed before its height transition started"));
+        return;
+      }
+      const animation = body
+        .getAnimations()
+        .find(
+          (candidate) =>
+            candidate !== previous &&
+            candidate instanceof CSSTransition &&
+            candidate.transitionProperty === "height",
+        );
+      if (!animation) {
+        if (++frames === 3) {
+          reject(
+            new Error(
+              `No height transition started; body is ${body.getBoundingClientRect().height}px`,
+            ),
+          );
+          return;
+        }
+        requestAnimationFrame(pause);
+        return;
+      }
+      // Pause in the frame that finds the transition, before an awaited observer can miss it.
+      animation.pause();
+      animation.currentTime = 0;
+      resolve(animation);
+    };
+    requestAnimationFrame(pause);
+  });
+}
+
+async function finishHeightTransition(body: HTMLElement, animation: Animation): Promise<void> {
+  animation.finish();
+  await expect
+    .poll(() => ({ animating: body.classList.contains("animating"), height: body.style.height }))
+    .toEqual({ animating: false, height: "" });
+}
+
 test("the section chevron is large enough to read beside its heading", async () => {
   const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
   const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
@@ -41,18 +85,20 @@ test("the body moves through intermediate heights while opening and closing", as
 
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  const opening = await pauseHeightTransition(body);
+  opening.currentTime = Number(opening.effect!.getTiming().duration) / 2;
   expect(body.getBoundingClientRect().height).toBeGreaterThan(0);
   expect(body.getBoundingClientRect().height).toBeLessThan(200);
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await finishHeightTransition(body, opening);
   expect(body.getBoundingClientRect().height).toBe(200);
 
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
   expect(body.getBoundingClientRect().height).toBeGreaterThan(0);
   expect(body.getBoundingClientRect().height).toBeLessThan(200);
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await finishHeightTransition(body, closing);
   expect(body.hidden).toBe(true);
 });
 
@@ -65,12 +111,14 @@ test("rapid toggles settle at the last state and keep closed content out of focu
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  const opening = await pauseHeightTransition(body);
+  opening.currentTime = Number(opening.effect!.getTiming().duration) / 2;
   header.click();
   await disclosure.updateComplete;
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 1050));
+  const reopening = await pauseHeightTransition(body, opening);
+  await finishHeightTransition(body, reopening);
   expect(body.hidden).toBe(false);
   expect(body.getBoundingClientRect().height).toBeGreaterThan(200);
 
@@ -78,7 +126,8 @@ test("rapid toggles settle at the last state and keep closed content out of focu
   await disclosure.updateComplete;
   expect(body.inert).toBe(true);
   expect(body.getAttribute("aria-hidden")).toBe("true");
-  await new Promise((resolve) => setTimeout(resolve, 1050));
+  const closing = await pauseHeightTransition(body);
+  await finishHeightTransition(body, closing);
   expect(body.hidden).toBe(true);
 });
 
@@ -89,58 +138,22 @@ test("reopening during collapse continues from the current height", async () => 
   const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
   const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
-  const pauseHeightTransition = (previous?: Animation): Promise<Animation> =>
-    new Promise((resolve, reject) => {
-      let frames = 0;
-      const pause = () => {
-        if (!body.isConnected) {
-          reject(new Error("Disclosure removed before its height transition started"));
-          return;
-        }
-        const animation = body
-          .getAnimations()
-          .find(
-            (candidate) =>
-              candidate !== previous &&
-              candidate instanceof CSSTransition &&
-              candidate.transitionProperty === "height",
-          );
-        if (!animation) {
-          if (++frames === 3) {
-            reject(
-              new Error(
-                `No height transition started; body is ${body.getBoundingClientRect().height}px`,
-              ),
-            );
-            return;
-          }
-          requestAnimationFrame(pause);
-          return;
-        }
-        // Pause in the frame that finds the transition, before an awaited observer can miss it.
-        animation.pause();
-        animation.currentTime = 0;
-        resolve(animation);
-      };
-      requestAnimationFrame(pause);
-    });
 
   header.click();
   await disclosure.updateComplete;
-  const closing = await pauseHeightTransition();
+  const closing = await pauseHeightTransition(body);
   closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
   const heightWhileClosing = body.getBoundingClientRect().height;
   expect(heightWhileClosing).toBeGreaterThan(0);
   expect(heightWhileClosing).toBeLessThan(200);
   header.click();
   await disclosure.updateComplete;
-  const reopening = await pauseHeightTransition(closing);
+  const reopening = await pauseHeightTransition(body, closing);
   expect(body.getBoundingClientRect().height).toBeCloseTo(heightWhileClosing, 0);
   reopening.currentTime = Number(reopening.effect!.getTiming().duration) / 2;
   expect(body.getBoundingClientRect().height).toBeGreaterThanOrEqual(heightWhileClosing - 1);
   expect(body.getBoundingClientRect().height).toBeLessThan(200);
-  reopening.finish();
-  await expect.poll(() => body.classList.contains("animating")).toBe(false);
+  await finishHeightTransition(body, reopening);
   expect(body.hidden).toBe(false);
   expect(body.getBoundingClientRect().height).toBe(200);
 });
@@ -153,7 +166,10 @@ test("an empty body opened before content arrives grows with its content", async
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
   el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  expect(body.classList.contains("animating")).toBe(false);
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
   (el.querySelector(".late") as HTMLElement).style.height = "150px";
   expect(body.getBoundingClientRect().height).toBe(150);
 });
@@ -168,7 +184,10 @@ test("a same-frame close and reopen leaves the body free to grow", async () => {
   header.click();
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  expect(body.classList.contains("animating")).toBe(false);
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
   (el.querySelector(".growing") as HTMLElement).style.height = "400px";
   expect(body.getBoundingClientRect().height).toBe(400);
 });
@@ -193,12 +212,15 @@ test("a validation error interrupts closing and exposes its fields immediately",
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
   disclosure.hasError = true;
   await disclosure.updateComplete;
   expect(header.getAttribute("aria-expanded")).toBe("true");
   expect(body.hidden).toBe(false);
   expect(body.inert).toBe(false);
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.style.height).toBe("");
   expect(body.getBoundingClientRect().height).toBe(200);
 });
 
@@ -208,7 +230,7 @@ test("a body with no height still becomes hidden after closing", async () => {
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
   el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(body.classList.contains("animating")).toBe(false);
   expect(body.hidden).toBe(true);
 });
 
@@ -246,10 +268,13 @@ test("switching on reduced motion during a close hides the body immediately", as
     const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
     el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
     await disclosure.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    const closing = await pauseHeightTransition(body);
+    closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
     expect(body.hidden).toBe(false);
     await commands.emulateReducedMotion("reduce");
     await expect.poll(() => body.hidden, { timeout: 450, interval: 25 }).toBe(true);
+    expect(body.classList.contains("animating")).toBe(false);
+    expect(body.style.height).toBe("");
   } finally {
     await commands.emulateReducedMotion(null);
   }
