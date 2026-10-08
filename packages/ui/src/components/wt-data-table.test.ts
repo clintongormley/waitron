@@ -7757,3 +7757,118 @@ test("a screen-owned search is available when it is the only toolbar control", a
   await userEvent.keyboard("Ada");
   expect(search.value).toBe("Ada");
 });
+
+test("edge scroll reaches hidden column choices during a stationary reorder", async () => {
+  const el = await table({
+    columns: [
+      choosable[0]!,
+      ...Array.from({ length: 35 }, (_, i) => ({
+        key: `edge-${i}`,
+        label: `Edge ${i}`,
+        cell: () => "value",
+        choosable: "shown" as const,
+      })),
+    ],
+  });
+  await userEvent.click(trigger(el));
+  const box = panel(el).querySelector<HTMLElement>(".columns-list")!;
+  box.style.maxHeight = "240px";
+  box.style.overflow = "auto";
+  const source = box.querySelector<HTMLElement>('[data-reorder="edge-0"]')!;
+  const start = source.getBoundingClientRect();
+  const bounds = box.getBoundingClientRect();
+  source.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 90,
+      clientX: start.left + 8,
+      clientY: start.top + 8,
+      bubbles: true,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      pointerId: 90,
+      clientX: start.left + 8,
+      clientY: bounds.bottom - 8,
+    }),
+  );
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(150);
+    document.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 90,
+        clientX: start.left + 8,
+        clientY: bounds.bottom - 8,
+      }),
+    );
+    await el.updateComplete;
+    expect(headers(el).indexOf("Edge 0")).toBeGreaterThan(4);
+  } finally {
+    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 90 }));
+  }
+});
+
+test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
+  "edge scroll column drag handles %s",
+  async (action) => {
+    const el = await table({
+      columns: [
+        choosable[0]!,
+        ...Array.from({ length: action === "fits" ? 2 : 35 }, (_, i) => ({
+          key: `lifecycle-${i}`,
+          label: `Lifecycle ${i}`,
+          cell: () => "value",
+          choosable: "shown" as const,
+        })),
+      ],
+    });
+    await userEvent.click(trigger(el));
+    const box = panel(el).querySelector<HTMLElement>(".columns-list")!;
+    box.style.maxHeight = "240px";
+    const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
+    const source = box.querySelector<HTMLElement>(`[data-reorder="${key}"]`)!;
+    if (action === "up")
+      box.scrollTop = source.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
+    const start = source.getBoundingClientRect();
+    const bounds = box.getBoundingClientRect();
+    const initial = box.scrollTop;
+    source.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerId: 94,
+        clientX: start.left + 8,
+        clientY: start.top + 8,
+        bubbles: true,
+      }),
+    );
+    const send = (type: string, y = action === "up" ? bounds.top + 8 : bounds.bottom - 8) =>
+      document.dispatchEvent(
+        new PointerEvent(type, { pointerId: 94, clientX: start.left + 8, clientY: y }),
+      );
+    send("pointermove");
+    try {
+      if (action === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
+      else
+        await expect
+          .poll(() => (action === "up" ? initial - box.scrollTop : box.scrollTop), {
+            timeout: 1500,
+          })
+          .toBeGreaterThan(100);
+      if (action === "up") {
+        send("pointerup");
+        await el.updateComplete;
+        expect(headers(el).indexOf("Lifecycle 30")).toBeLessThan(28);
+      } else if (action === "leave") send("pointermove", bounds.top + bounds.height / 2);
+      else if (action === "cancel") send("pointercancel");
+      else if (action === "Escape")
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      else if (action === "disconnect") el.remove();
+      await el.updateComplete;
+      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+      const ended = box.scrollTop;
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      expect(box.scrollTop).toBe(ended);
+    } finally {
+      send("pointercancel");
+    }
+  },
+);

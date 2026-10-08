@@ -6,6 +6,7 @@ import {
   type ReactiveControllerHost,
   type TemplateResult,
 } from "lit";
+import { DragEdgeScroll } from "./drag-edge-scroll.js";
 import { disabledStyles } from "./base-styles.js";
 import "./components/wt-icon.js";
 
@@ -94,6 +95,7 @@ export class ReorderController implements ReactiveController {
   #frame = 0;
   /** Everything a scroll listener was added to for the current drag. */
   #scrollTargets: EventTarget[] = [];
+  readonly #edgeScroll = new DragEdgeScroll();
 
   static readonly styles: CSSResult = css`
     .handle {
@@ -276,9 +278,13 @@ export class ReorderController implements ReactiveController {
     this.#stopSlide(row);
     row.setAttribute("data-dragging", "");
     holdPageCursor();
+    this.#edgeScroll.start(row, { x: event.clientX, y: event.clientY }, () => {
+      if (this.#drag) this.#track(this.#drag);
+    });
     document.addEventListener("pointermove", this.#onPointerMove);
     document.addEventListener("pointerup", this.#onPointerEnd);
     document.addEventListener("pointercancel", this.#onPointerEnd);
+    document.addEventListener("keydown", this.#onDragKey, true);
     // A scroll of any ancestor moves the rows under a pointer that has not moved. An element's scroll
     // event does not bubble, and a capturing listener outside a shadow root does not hear one fired
     // inside it, so each ancestor in the flattened tree gets its own listener; the document's hears
@@ -299,6 +305,7 @@ export class ReorderController implements ReactiveController {
   readonly #onPointerMove = (event: PointerEvent): void => {
     const drag = this.#drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
+    this.#edgeScroll.update({ x: event.clientX, y: event.clientY });
     drag.y = event.clientY;
     this.#track(drag);
   };
@@ -324,7 +331,17 @@ export class ReorderController implements ReactiveController {
     this.#model.drop?.(drag.id);
   };
 
+  readonly #onDragKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.#drag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = this.#drag.id;
+    this.#endDrag();
+    this.#model.drop?.(id);
+  };
+
   #endDrag(): void {
+    this.#edgeScroll.stop();
     if (this.#drag !== null) releasePageCursor();
     const row = this.#draggedRow;
     if (row !== null) {
@@ -339,6 +356,7 @@ export class ReorderController implements ReactiveController {
     document.removeEventListener("pointermove", this.#onPointerMove);
     document.removeEventListener("pointerup", this.#onPointerEnd);
     document.removeEventListener("pointercancel", this.#onPointerEnd);
+    document.removeEventListener("keydown", this.#onDragKey, true);
     for (const target of this.#scrollTargets) target.removeEventListener("scroll", this.#onScroll);
     this.#scrollTargets = [];
   }

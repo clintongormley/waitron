@@ -993,3 +993,130 @@ it.each([
     expect(middleWithin(line)(icon), JSON.stringify({ icon, line })).toBe(true);
   },
 );
+
+it("edge scroll follows a stationary held row to rows beyond the visible box", async () => {
+  const el = await mount(Array.from({ length: 40 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}` })));
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:100px;width:300px;height:220px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-r0"]')!;
+  const rect = handle.getBoundingClientRect();
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 83,
+      clientX: rect.left + 10,
+      clientY: rect.top + 10,
+    }),
+  );
+  const edge = box.getBoundingClientRect();
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      pointerId: 83,
+      clientX: rect.left + 10,
+      clientY: edge.bottom - 8,
+    }),
+  );
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(150);
+    await expect
+      .poll(() => el.items.findIndex((item) => item.id === "r0"), { timeout: 1500 })
+      .toBeGreaterThan(5);
+  } finally {
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 83 }));
+  }
+});
+
+it("edge scroll stops when Escape ends a held reorder", async () => {
+  const el = await mount(Array.from({ length: 30 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}` })));
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:100px;width:300px;height:220px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-r0"]')!;
+  const edge = box.getBoundingClientRect();
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 84,
+      clientX: edge.left + 20,
+      clientY: edge.top + 20,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      pointerId: 84,
+      clientX: edge.left + 20,
+      clientY: edge.bottom - 5,
+    }),
+  );
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(40);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(el.shadowRoot!.querySelector("[data-dragging]")).toBeNull();
+    const ended = box.scrollTop;
+    for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+    expect(box.scrollTop).toBe(ended);
+  } finally {
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 84 }));
+  }
+});
+
+it.each(["up", "leave", "cancel", "disconnect", "fits"])(
+  "edge scroll held reorder handles %s",
+  async (action) => {
+    const el = await mount(
+      Array.from({ length: action === "fits" ? 2 : 35 }, (_, i) => ({
+        id: `edge${i}`,
+        name: `Row ${i}`,
+      })),
+    );
+    const box = document.createElement("div");
+    box.style.cssText =
+      "position:fixed;top:100px;left:100px;width:300px;height:220px;overflow:auto";
+    el.parentElement!.append(box);
+    box.append(el);
+    const key = action === "up" ? "edge30" : "edge0";
+    const handle = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
+    if (action === "up")
+      box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+    const start = handle.getBoundingClientRect();
+    const bounds = box.getBoundingClientRect();
+    const initial = box.scrollTop;
+    handle.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerId: 85,
+        clientX: start.left + 10,
+        clientY: start.top + 10,
+      }),
+    );
+    const send = (type: string, y = action === "up" ? bounds.top + 8 : bounds.bottom - 8) =>
+      document.dispatchEvent(
+        new PointerEvent(type, { pointerId: 85, clientX: start.left + 10, clientY: y }),
+      );
+    send("pointermove");
+    try {
+      if (action === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
+      else
+        await expect
+          .poll(() => (action === "up" ? initial - box.scrollTop : box.scrollTop), {
+            timeout: 1500,
+          })
+          .toBeGreaterThan(100);
+      if (action === "up") {
+        await expect
+          .poll(() => el.items.findIndex((item) => item.id === key), { timeout: 1500 })
+          .toBeLessThan(28);
+        send("pointerup");
+      } else if (action === "leave") send("pointermove", bounds.top + bounds.height / 2);
+      else if (action === "cancel") send("pointercancel");
+      else if (action === "disconnect") el.remove();
+      await el.updateComplete;
+      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+      const ended = box.scrollTop;
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      expect(box.scrollTop).toBe(ended);
+    } finally {
+      send("pointercancel");
+    }
+  },
+);

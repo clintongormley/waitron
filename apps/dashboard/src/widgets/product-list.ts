@@ -1,3 +1,4 @@
+import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
@@ -456,6 +457,9 @@ export class ProductList extends LitElement {
     document.addEventListener("keydown", this.#dragKey, true);
   }
 
+  readonly #edgeScroll = new DragEdgeScroll();
+  #edgeOrigin: Element | null = null;
+
   readonly #moveDrag = (event: PointerEvent): void => {
     const drag = this.#pointerDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
@@ -474,8 +478,20 @@ export class ProductList extends LitElement {
       void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
     }
     this.#pointer = { x: event.clientX, y: event.clientY };
+    if (this.#edgeOrigin === null) {
+      const origin = shownRow(this.#table()!.shadowRoot!, drag.key);
+      if (origin) {
+        this.#edgeScroll.start(origin, this.#pointer, () => this.#trackDrop());
+        this.#edgeOrigin = origin;
+      }
+    }
+    this.#edgeScroll.update(this.#pointer);
+    this.#trackDrop();
+  };
+
+  #trackDrop(): void {
     placeDragGhost(this.renderRoot, this.#pointer);
-    const over = pointerElementsAt(event.clientX, event.clientY).find(
+    const over = pointerElementsAt(this.#pointer.x, this.#pointer.y).find(
       (item): item is HTMLElement =>
         item instanceof HTMLElement && item.matches("tr[data-row-key]"),
     )?.dataset.rowKey;
@@ -484,7 +500,7 @@ export class ProductList extends LitElement {
     this.#target = target;
     this.#hoverOpen(over);
     if (changed) this.#paint();
-  };
+  }
 
   readonly #endDrag = (event: PointerEvent): void => {
     const drag = this.#pointerDrag;
@@ -509,6 +525,8 @@ export class ProductList extends LitElement {
   };
 
   #finishDrag(): void {
+    this.#edgeScroll.stop();
+    this.#edgeOrigin = null;
     const drag = this.#pointerDrag;
     document.removeEventListener("pointermove", this.#moveDrag);
     document.removeEventListener("pointerup", this.#endDrag);

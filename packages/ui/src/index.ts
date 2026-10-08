@@ -117,3 +117,5 @@ export type {
   LeaveCoordinator,
   LeaveReason,
 } from "@waitron/ui-core/unsaved-changes";
+
+export { DragEdgeScroll } from "./drag-edge-scroll.js";

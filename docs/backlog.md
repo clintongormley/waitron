@@ -1520,6 +1520,19 @@ quantities. Cause and real-venue reproduction remain unverified. Inspect the rea
 attributing them to W69 or changing quantity/money handling. Service-status labels, sidebar
 and warning hover contrast investigations remain separate below.
 
+**Held reorder drags scroll at the list edge (A334, 2026-10-08) — BUILT.**
+Products, shared reorder tables, preparation stations and the column chooser use
+one `DragEdgeScroll` helper. A held pointer scrolls the nearest visible scrolling box and refreshes
+the drop target; leaving the edge or ending the gesture stops its frame loop. Columns reorder
+vertically in Customise; the helper also covers horizontal scrolling. Floor and grid placement
+editors remain outside this change.
+
+**A334b: wire the menu structure tree, after lane D's Preview bundle lands — OPEN.**
+Call the shared helper from Menu Structure's pointer drag and refresh its drop target on each
+scroll. Add the up/down, release, Escape, leave-band and fitting-list Chromium cases there.
+The tree owns its drag lifecycle, so this needs a change to `menu-structure-table.ts`; that file
+is reserved by the watcher for Lane D's Preview bundle.
+
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 5 (the till) in #1414; batch 6 audited with no
 stored-setting editors; batch 7 unreserved forms audited; batches 2 and 4b OPEN.** The owner:
