@@ -1639,8 +1639,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   to offer, a shift's end time, the turn-on form's "I have saved this key" box) it stayed blue and
   disabled until filled. The action's size and horizontal position were the same before and after
   the edit in every pair measured; Add table was compared by eye. Left open:
-  - a password manager that fills the profile's current-password field without the field's change
-    event was not tried, so whether Save stays quiet until the person types is unknown;
+  - a password manager filling the profile's current-password field: the owner tried Chrome's
+    password manager on 2026-10-08 and reported that it works well; other password managers are
+    untried;
   - other purchases-screen, staff-screen and roster-screen tests still send made-up create and
     update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`,
     `update-shift`) instead of pressing the form's button; they pass, but never prove the button
