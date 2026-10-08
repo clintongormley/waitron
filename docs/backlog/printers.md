@@ -55,3 +55,14 @@ their full text.
   venue database and runs the agent itself, and wants to confine a refused report, should call
   `claimPrintJobs` and then `reportPrintJob` per job, each report in its own transaction, as
   `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
+
+## An aged batch can print twice
+
+- `packages/printing`, found by #572 and not changed (code, not comments): an aged batch can
+  print twice. When a large batch to a slow printer outlives the one-minute lease, another agent
+  in the venue can re-claim the jobs not yet sent while the first agent still sends every job it
+  pulled; the lease comment in `runtime.ts` now says so. Read from the agent's send loop, not
+  run. In `printers.test.ts`, the case named "a driver error that is NEITHER the UNIQUE NOR the
+  CHECK propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
+  `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
+  reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.

@@ -196,13 +196,54 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
 
 - **An unusable `TiempoEsperaEnvio` is not recorded** anywhere (the raw value is dropped). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
 
+- **Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale** —
+  found by #601 while pruning comments. The quarterly _modelo 303_ keeps its old behaviour, pinned
+  by a test in `vat-return.test.ts`, until the asesor answers `docs/compliance/asesor-questions.md`
+  Q25 (which VAT period a later annulment lands in). No till screen or server route calls
+  `recordVoid` yet.
+  [Detail](backlog/fiscal.md#owner-decision-2026-09-24-a-void-counts-on-the-day-it-is-made-not-the-day-of-the-sale)
+
+- **Test titles still carry claims the comments no longer make** — found by #598 while pruning
+  comments (`packages/core`). No test reaches `settleSale`'s catch that turns a `sale_settlements`
+  unique-key refusal into `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured
+  the earlier check stopping both concurrent-settlement tests first.
+  [Detail](backlog/fiscal.md#test-titles-still-carry-claims-the-comments-no-longer-make-598)
+
+- **Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts` are
+  code, not comments** — found by #592 while pruning comments. `FiscalBackend.pendingCount` has no
+  caller outside the backends and their tests, yet `packages/db/src/schema/sales.ts:29` says it is
+  how the count is read.
+  [Detail](backlog/fiscal.md#two-sql-comments-inside-a-sql-string-in-packagesfiscalsrctestingfake-backendts-are-code-not-comments)
+
+- **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** a failed
+  lookup, when the save reaches its line, still backs the whole batch off, discarding every line's
+  outcome and the reply's receipt code (the CSV, one per submission), which AEAT does not send
+  again. [Detail](backlog/fiscal.md#packagesfiscal-verifactu-code)
+
+- **Two 2026-07-26 specs still call the FNMT seal certificate's export unverified**, which
+  `docs/compliance/getting-to-production.md` §4 closed that day (found by #577).
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
+- **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
+  The done screen treats a non-network status refusal as ready, so an HTTP 503 can announce "The
+  server is ready" early. [Detail](backlog/setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
+
 ### Menus and the catalogue
 
-_Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2._
+_Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
+
+- **The `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64
+  hex characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
+  the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
+  comments-only change.
+
+- **`mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently
+  from run to run** — found by #603 while pruning comments. The comment now says so; the code is
+  unchanged.
+  [Detail](backlog/catalogue.md#mergeallergenmaps-srcderivationts-can-list-a-source-twice-and-order-sources-differently-from-run-to-run)
 
 ### Service periods, opening hours and departments
 
@@ -214,11 +255,56 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere._
 
 ### The till, devices and table service
 
-_Formerly A4._
+_Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
 
 - **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
   find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
   string key, so it cannot carry the amount the collect and table-bill paths now show. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
+
+- **Split-off checks may reach the same path as a held-order edit that changes sent lines** — found
+  by #623 while pruning comments. Nothing tests two `openTab` calls racing on one table or
+  concurrent rounds landing on consecutive line numbers (the sequential versions are in
+  `tabs.test.ts`).
+  [Detail](backlog/till.md#split-off-checks-may-reach-the-same-path-as-a-held-order-edit-that-changes-sent-lines)
+
+- **"resets any leftover drill/active tab on login" still passes with login's own clearing line
+  deleted** — found by #621 while pruning comments. A question the prune moved here from a deleted
+  `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a dish whose diet is
+  still pending review, as `vegan`/`vegetarian` do?
+  [Detail](backlog/till.md#resets-any-leftover-drillactive-tab-on-login-still-passes-with-logins-own-clearing-line-deleted)
+
+- **Test titles repeat claims the branch corrected** — found by #618 while pruning comments
+  (`apps/till` `src/api` + `src/state` + `src/i18n`).
+  [Detail](backlog/till.md#test-titles-repeat-claims-the-branch-corrected-618)
+
+- **Test titles repeat claims the branch corrected** — found by #616 while pruning comments
+  (`apps/till/src/widgets`). A courseless section the server held shows its lines greyed with no
+  fire button (`#fireAction` in `station-queue.ts`, from #131). `GET /api/till` never sends
+  `stripe_on_device`, so the offline-consent toggle cannot appear.
+  [Detail](backlog/till.md#test-titles-repeat-claims-the-branch-corrected-616)
+
+- **The till always mounts the counter screen `embedded`** — found by #614 while pruning comments.
+  In device mode the station screen's `#reload` swallows a `device.unauthorized`, so a device cookie
+  revoked mid-session raises nothing until the next connect.
+  [Detail](backlog/till.md#the-till-always-mounts-the-counter-screen-embedded)
+
+- **Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite
+  `provider.ts:66-83`** — found by #613 while pruning comments. The checker compares tool comments
+  character for character, so repointing them to `PaymentResult` in
+  `packages/payments/src/provider.ts` is not a comments-only change.
+  [Detail](backlog/till.md#two-v8-ignore-start-comments-in-till-salets-finalizecapture-finalizesettle-cite-providerts66-83)
+
+- **A table with no shape is drawn as a rectangle and saved as round on its first edit** — found by
+  #604 while pruning comments. `wt-table-token.ts` draws `shape-${t.shape ?? "rect"}`, while
+  `wt-floor-canvas.ts` marks Round as pressed and sends `shape: t.shape ?? "round"` from
+  `#placementOf`, so dragging, nudging or rotating a shapeless table changes it (read from the code,
+  not run).
+  [Detail](backlog/till.md#a-table-with-no-shape-is-drawn-as-a-rectangle-and-saved-as-round-on-its-first-edit)
+
+- **Seating a booking at a table in a zone that is not a table-tab zone has no bookings test** —
+  found by #574 while pruning comments (`packages/bookings`). The server accepts an empty contact
+  name; only the dashboard form refuses one.
+  [Detail](backlog/till.md#seating-a-booking-at-a-table-in-a-zone-that-is-not-a-table-tab-zone-has-no-bookings-test)
 
 ### Printers, the print agent and receipts
 
@@ -252,13 +338,47 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
 
 - **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no caller in the tree outside its own package's tests** — C70, #866. A refused report still rolls back every job of its batch when the caller's transaction rolls back, so all of them print again (measured 2026-09-29 with a scratch probe). [Detail](backlog/printers.md#runagentonce-packagesprintingsrcruntimets-has-no-caller-in-the-tree-outside-its-own-packages-tests)
 
+- **An aged batch can print twice** — found by #572 while pruning comments (`packages/printing`).
+  When a large batch to a slow printer outlives the one-minute lease, another agent in the venue can
+  re-claim the jobs not yet sent while the first agent still sends every job it pulled; the lease
+  comment in `runtime.ts` now says so. [Detail](backlog/printers.md#an-aged-batch-can-print-twice)
+
 ### Payments and card readers
 
-_Formerly A6, and Track C's payments items._
+_Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backlog/payments.md).
+
+- **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
+  the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
+  `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
+  rows the first resolved. The comment at `listAttempting` now says so. Found by #558 while pruning
+  comments.
+
+- **The two `provider.test.ts` cases named "throws payment.not_found" assert only
+  `rejects.toThrow()`, not the code** — found by #570 while pruning comments
+  (`packages/payments-stripe`). Reversal retry-safety (one persisted id per reversal) is still
+  deferred: #570's review showed two identical `reverseViaStripe` calls get different idempotency
+  keys, so a retried reversal sends a second real refund; the comment at `reverse.ts` says so.
+  [Detail](backlog/payments.md#the-two-providertestts-cases-named-throws-paymentnot_found-assert-only-rejectstothrow-not-the-code)
 
 ### Users, sign-in and the dashboard shell
 
-_Formerly A7, and Track A's dashboard part._
+_Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
+
+- **`date-utils.test.ts` has a test titled as guarding "against a vacuous pass"** — found by #612
+  while pruning comments. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing
+  but `i18n/t.test.ts` (`t.ts` registers `{ en, es }` with the kit), so that test's "registers
+  en-GB" case tests nothing that runs.
+  [Detail](backlog/dashboard.md#date-utilstestts-has-a-test-titled-as-guarding-against-a-vacuous-pass)
+
+- **`reorder.test.ts`'s test names say an out-of-range move "clamps"; `reorder()` ignores it.**
+  Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only change.
+
+- **`setEmail` in `packages/identity/src/staff.ts`, unlike `updatePersonDetails`, never checks the
+  new email against other people's pending emails** — found by #559 while pruning comments.
+  Identity's coverage reads 99.85 statements / 99.75 branches, not 100: the
+  `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554, is
+  reached by no test.
+  [Detail](backlog/dashboard.md#setemail-in-packagesidentitysrcstaffts-unlike-updatepersondetails-never-checks-the-new-email-against-other-peoples-pending-emails)
 
 ### Interface languages
 
@@ -266,15 +386,36 @@ _Formerly entries spread across the old sections, C125 among them._
 
 ### Alerts, logging and diagnostics
 
-_Formerly A5, and the logging part of A9._
+_Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/alerts.md).
+
+- **`redact-secrets.ts` was written against the PostgreSQL connection-string parser** — found by
+  #620 while pruning comments. `pg` is now installed only for `bench/pglite-throughput`; whether a
+  credential-bearing URL can still reach the log is unchecked.
+  [Detail](backlog/alerts.md#redact-secretsts-was-written-against-the-postgresql-connection-string-parser)
 
 ### Working time and staff
 
-_Formerly A10._
+_Formerly A10._ Detail: [backlog/workforce.md](backlog/workforce.md).
+
+- **A shift that runs past midnight (22:00–02:00) is refused as `shift.invalid`** — left open by W22
+  (#1134), found by #1134's review. And an edit keeps the shift's stored offsets, so moving a shift
+  across a summer-time change keeps the old offset. Next action: let the dialog put the end on the
+  next day when it is not after the start, and derive each offset from the venue's time zone for the
+  date.
+  [Detail](backlog/workforce.md#a-shift-that-runs-past-midnight-22000200-is-refused-as-shiftinvalid)
 
 ### Purchasing, recipes, stock and reports
 
-_Formerly entries spread across the old sections._
+_Formerly entries spread across the old sections._ Detail: [backlog/back-office.md](backlog/back-office.md).
+
+- **The recipe routes and the recipe screen are unreached** — found by #615 while pruning comments.
+  Next action: the owner decides whether to delete `recipe-api.ts`, the screen and the client
+  methods, or to remount the routes and route the screen.
+  [Detail](backlog/back-office.md#the-recipe-routes-and-the-recipe-screen-are-unreached)
+
+- **The recipe screen's `#loadRecipe` guard compares product ids**, so choosing A, then B, then A
+  again lets the first A answer apply and turn Save back on while the second A load is still
+  running. Found by #607 (`apps/dashboard/src/screens`), read only, not run.
 
 ### The box: backups, upgrades and recovery
 
@@ -350,9 +491,68 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `packages/media/drizzle/0001_image_references.sql`, so boot refuses such a venue with
   `provisioning.database_ahead`. Left open by C127 (#1036, #1042).
 
+- **`resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the
+  staging folder** — found by #658 while pruning comments. Still open, not fixed, by the owner's
+  choice: `unpackBundleToDir`'s walk and file write go by path, so a folder inside the destination
+  swapped for a symlink during the unpack is followed. The restore itself (`restoreSecrets`) keeps
+  none of `waitron-recovery unpack`'s destination refusals (a symbolic link, another user's folder,
+  not a folder) on the state folder it is given.
+  [Detail](backlog/box.md#resolvesafeentrypath-appsserversrcstate-secretsts-is-unchanged-and-nothing-chmods-the-staging-folder)
+
+- **`apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say** — found by
+  #656 while pruning comments. No production caller sets `skipSecrets` any more, so whether the
+  option should go is open.
+  [Detail](backlog/box.md#appsserversrcerrorsts-still-cites-claudemd-5-for-things-5-does-not-say)
+
+- **`apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp
+  can round a value "past" a bound, which it cannot** — found by #653 while pruning comments. Two
+  notes #653's prune deleted and nothing else recorded: nobody knows why the 5-second busy timeout
+  did not absorb a `database is locked` in the pending-payment sweep; and nothing proves
+  `startServer` itself survives a backup duty that cannot start — only `backup-supervisor.test.ts`
+  covers that, at the supervisor.
+  [Detail](backlog/box.md#appsserverreadmemd-near-line-230-the-waitron_skip_retry_ms-row-says-the-sleep-clamp-can-round-a-value-past-a-bound-which-it-cannot)
+
+- **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there** —
+  found by #561 while pruning comments. The same reason still stands in
+  `packages/provisioning/README.md` and in `docs/developers/conventions-data.md` (the paragraph on
+  `resolveVenueDir`, "an empty directory is the RELATIVE `venue.db`").
+  [Detail](backlog/box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
+
+- **`packages/provisioning/README.md` also says only `ES-common` is implemented** — found by #561
+  while pruning comments. `docs/developers/conventions-data.md` cites
+  `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer does.
+  [Detail](backlog/box.md#packagesprovisioningreadmemd-also-says-only-es-common-is-implemented)
+
+- **`quoteIdent` has no caller outside its own suite** — found by #561 while pruning comments
+  (`packages/provisioning`). The coverage config leaves `src/bin.ts` out with no reason stated any
+  more, which may hide code a test could reach.
+  [Detail](backlog/box.md#quoteident-has-no-caller-outside-its-own-suite)
+
 ### Replication, failover and the cloud
 
-_Formerly _Afterwards_ and _Cloud connection integration_._
+_Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/replication-cloud.md](backlog/replication-cloud.md).
+
+- **A completed provision or adopt operation replayed on a later request still answers 200 without
+  restarting and keeps the setup lock set** — found by #657 while pruning comments. After a refused
+  resend of a half-finished adopt (A50, #685), what the first identity leaves behind on the primary
+  and on this node is still not measured. The standby's reset page does not show this server's
+  machine id, so an operator cannot tell which row on the primary's Servers screen is this server's
+  (left for the owner from A70's review).
+  [Detail](backlog/replication-cloud.md#a-completed-provision-or-adopt-operation-replayed-on-a-later-request-still-answers-200-without-restarting-and-keeps-the-setup-lock-set)
+
+- **`docs/developers/conventions-data.md`'s `busy_timeout` receipt … should carry the date and Node
+  version the deleted comment had** — found by #625 while pruning comments. `adoptFromPrimary`
+  (`adopt.ts`) spreads one adoption across several transactions with file writes between and no
+  commented decision (CLAUDE.md §3), so a failure partway could leave a stamped mirror with no
+  break-glass verifier.
+  [Detail](backlog/replication-cloud.md#docsdevelopersconventions-datamds-busy_timeout-receipt--should-carry-the-date-and-node-version-the-deleted-comment-had)
+
+- **The boot-time fetch is given only the URL … and boot never reads the `superseded` that
+  `reconcileMembershipOnBoot` returns** — found by #617 while pruning comments. `shouldFenceRestart`
+  (`membership-fence.ts`) has no caller outside its test (`git grep`). `setup-operation.ts` (around
+  lines 128–133) may treat a lock written by a different store as a previous boot's, so a live
+  process's lock could be taken over (a belief, not verified).
+  [Detail](backlog/replication-cloud.md#the-boot-time-fetch-is-given-only-the-url--and-boot-never-reads-the-superseded-that-reconcilemembershiponboot-returns)
 
 ### CI, tests and developer tooling
 
@@ -474,6 +674,46 @@ _Formerly B9, and Track C's development-stack and house-rules items._ Detail: [b
 - _Small:_ `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
 
+- **Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say** —
+  found by #624 while pruning comments.
+  [Detail](backlog/ci.md#two-healthtestts-cases--feed-a-clean-pass-so-they-check-less-than-their-titles-say)
+
+- **The venue-service `migrations.test.ts` case titled "… or at commit" asserts no refusal at
+  commit** — found by #611 while pruning comments. A commit-time case, and the title, are a test
+  change.
+  [Detail](backlog/ci.md#the-venue-service-migrationstestts-case-titled--or-at-commit-asserts-no-refusal-at-commit)
+
+- **`.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
+  `.husky/pre-push` beside the same loop; it is not there** — found by #602 while pruning comments.
+  [Detail](backlog/ci.md#githubworkflowsciyml-about-line-283-says-the-three-shell-receipt-sits-in-huskypre-push-beside-the-same-loop-it-is-not-there)
+
+- **The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
+  measured false** — found by #562 and #585 while pruning comments. Four identity schema files and
+  six in `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a
+  pair is a code change, for whoever next changes that package's code.
+  [Detail](backlog/ci.md#the-v8-ignore-reason-never-run-by-vitest-run-on-schema-files-extra-config-functions-was-measured-false)
+
+- **The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media` and `workforce-es`
+  say an unnamed unique constraint reaches the factory's refusal**; drizzle-orm 0.45.2 names an
+  unnamed `unique()` itself, so nothing reaches it
+  (`packages/db/src/testing/schema-conformance.ts`). Found while pruning comments.
+
+- **`packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
+  dynamically**; the comment #585 deleted was the only note that this was meant to be temporary, so
+  making them static imports is a small code follow-up. Found by #585's review in files outside
+  `packages/db/src/schema`, not changed there.
+
+- **In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
+  repeats the first case under another name** (a test change, not a comment one). Found by #589
+  (`packages/db` outside `src/schema`), not changed.
+
+- **One test title in `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes
+  PostgreSQL's error number 23001** — found by #588 while pruning comments. Both layouts database
+  suites create a manager session in `beforeAll`, while `useVenueDb` empties every data table after
+  each test by default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's
+  first test can use that session; they pass today because only the first does.
+  [Detail](backlog/ci.md#one-test-title-in-packageslayoutssrccanvas-storedbtestts-line-144-still-quotes-postgresqls-error-number-23001)
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -530,6 +770,63 @@ _Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/ar
   narrowed by A92 and #1039).** Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps
   its `.sqlite.` infix because the approved slice 3d plan ran it by that name. The
   `provisioning.invalid_identifier` error registry entry remains. [Detail](backlog/architecture.md#small-renames-and-dead-exports-the-sweep-found-and-could-not-make)
+
+- **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
+  Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the root
+  `vitest.config.ts` and `eslint.config.js`; in `scripts/`, the `.sh` files and
+  `write-path-tables.json` are outside the checker and were left. What each pruning pull request
+  found and could not fix is listed under its own area, as "found by #NNN while pruning comments".
+  [Detail](backlog/architecture.md#prune-the-comments-one-package-per-pull-request)
+
+- **`apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
+  condition by construction"** — found by the retroactive Codex reviews of #621–#626 and #629
+  (C3.18.12r) while pruning comments. `apps/server/src/rebuild-first-start.ts` (near line 121, lane
+  A's file) says "The log carries the error's code only", the overclaim #637 corrected in
+  `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
+  [Detail](backlog/architecture.md#appsserverreadmemd-near-line-496-still-says-an-error-line-and-a-503-are-the-same-condition-by-construction)
+
+- **`working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course
+  definition; `fireCourse` calls `requireCourse`** — found by #622 while pruning comments. The
+  lock-ordering and deadlock cases for transfers, merges and split bills went with PostgreSQL and
+  nothing replaced them (one write transaction per venue file is what serialises those writers now).
+  [Detail](backlog/architecture.md#working-orderts-near-requirelivecourse-says-the-fire-verbs-use-the-same-live-course-definition-firecourse-calls-requirecourse)
+
+- **`apps/server` test titles still say an unscreened malformed id becomes an opaque 500, although
+  ids are text columns now** — found by #600 while pruning comments. Nothing the review could find
+  copies `node_membership` from the primary to a standby, so a promoting standby may take
+  `nextStandings`' fallback that appends it with an empty `contactUrl` (`packages/membership`),
+  which `routableServers` then drops.
+  [Detail](backlog/architecture.md#appsserver-test-titles-still-say-an-unscreened-malformed-id-becomes-an-opaque-500-although-ids-are-text-columns-now)
+
+- **Pointers outside `docs/` that #597 made stale** — found by #597 while pruning comments. The fake
+  SumUp client leaves its one-shot switches for a lookup or a refund armed when a checkout before
+  them is refused; no test combines the two.
+  [Detail](backlog/architecture.md#pointers-outside-docs-that-597-made-stale)
+
+- **"Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)" … is too
+  wide** — found by #567 while pruning comments. The same claim stands in
+  `packages/fiscal-verifactu/src/venue-fields.ts`.
+  [Detail](backlog/architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
+
+- **`isLocked` in `venue-lock.ts` reads `.errcode` without a null check**, so a thrown `null` would
+  raise a `TypeError` (the driver throws real errors). `packages/store`, found by #568 and not
+  changed.
+
+- **Nothing now checks at run time that a read returns something other than a Node `Buffer`** —
+  found by #577 while pruning comments (`packages/credentials`). Nothing checks that a caller other
+  than the application cannot read or list the vault; only the encryption protects it.
+  [Detail](backlog/architecture.md#nothing-now-checks-at-run-time-that-a-read-returns-something-other-than-a-node-buffer)
+
+- **The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert** — found by #581 while
+  pruning comments (`packages/scheduler`). Whether to remove these two nested calls, or say why they
+  stay, is open (a code change, not made).
+  [Detail](backlog/architecture.md#the-nested-txtransaction-in-enqueuesuccessor-wraps-one-insert)
+
+- **`decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no
+  digit bound** — found by #579 while pruning comments (`packages/shared`).
+  `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) has only
+  the PostgreSQL raw-read table, not the SQLite one #579's commit message now carries.
+  [Detail](backlog/architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
 
 ### Data protection and legal compliance
 
@@ -6869,633 +7166,6 @@ format. **Before building, ask the labour
 advisor** whether the digital-registro decree is in force and which fields it requires
 ([asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)). The time record cannot be
 edited once written, so its chain and correction paths take the owner's sign-off at land.
-
----
-
-## Track B — infrastructure
-
-The box, the image, the data layer and the machinery: `deploy/`, the Dockerfiles and compose,
-`packages/provisioning`, `packages/migrations`, `packages/db`, `packages/credentials`, the
-print-agent process (`packages/print-agent`, `apps/print-agent`), `apps/server`'s boot, config,
-TLS and backup code, `packages/media`, the module framework, CI and test infra. `packages/sync` and
-`packages/membership` belong here too but their open work is under _Afterwards_.
-
-### B9. CI and test infra
-
-- **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
-  Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
-  §1). Every pruning pull request passes `scripts/comments-only.mjs <base>`; its header states what
-  it refuses and misses. The fiscal packages go under the same gates as any other fiscal change: the
-  golden huella test and the `inmutabilidad` suite pass unedited. Not reached by any package's pull
-  request: `bench/` (about 2,300 comment lines) and the root `vitest.config.ts` and
-  `eslint.config.js`; in `scripts/`, the `.sh` files and `write-path-tables.json` are outside the
-  checker and were left. Landed so far: `workforce` (#555), `payments` (#558), `identity` (#559),
-  `provisioning` (#561), `fiscal-verifactu` (#562), `apps/setup` (#567), `packages/store` (#568),
-  `packages/payments-stripe` (#570), `packages/printing` (#572), `packages/bookings` (#574),
-  `packages/credentials` (#577), `packages/shared` (#579), `packages/scheduler` (#581),
-  `packages/db/src/schema` (#585), the rest of `packages/db` (#589), `packages/fiscal` (#592),
-  `packages/payments-sumup` with `packages/migrations` (#597), `packages/core` (#598), the small
-  packages as one pull request (#600: `apps/print-agent`, `print-agent`, `server-kit`, `tunnel`,
-  `membership`, `sync-enrolment`, `workforce-es`, `purchasing`, `recipes`, `fiscal-none`,
-  `composition`, `diagnostics`, `dashboard-modules`, the `country*` packages, `ui-core` and
-  `dashboard-kit`), `packages/reporting` (#601; the generated `src/dr303-layout.ts` untouched),
-  `scripts/` (#602), `packages/catalogue` (#603), `packages/ui` (#604), `packages/module` (#606),
-  `packages/media` (#609), `packages/venue-service` (#611), `apps/dashboard` (#607, #610, #612),
-  `apps/till` (#614, #616, #618, #621) and `apps/server` in parts (#613, #615, #617, #620, #622,
-  #623, #624, #625, #629, #653, #656, #657, #658). A pruning pull request cannot carry this file (the
-  checker refuses it), so each one's line lands here as a docs-only push after the merge. Found by
-  those pull requests and left for the package that owns each, all still OPEN unless marked DONE:
-  - Found by the retroactive Codex reviews of #621–#626 and #629 (C3.18.12r, 2026-09-25), outside
-    the files their fixes could change or not changeable in a comments-only PR:
-    `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
-    condition by construction", the claim #637 removed from `health.ts` (a duty can go stale between
-    passes: Codex got a 503 with no log line), and #637's review read its list of 503 causes (near
-    line 404) as naming one that answers 200 — read, not run. Test titles:
-    `apps/server/src/spa-api.test.ts`'s two cache cases say hashed versus non-hashed where the rule
-    is the `/assets/` prefix, and `boot.mirror.test.ts`'s opt-in case
-    says "binds 0.0.0.0" while connecting only over loopback. `apps/server/src/rebuild-first-start.ts`
-    (near line 121, lane A's file) says "The log carries the error's code only", the overclaim #637
-    corrected in `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
-    "Empties every table" in
-    `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
-    `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
-    leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
-  - Found by #658 (`apps/server` part h2: the remaining held-back files), not fixable in a
-    comments-only change. `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged,
-    and nothing chmods the staging folder that the archive restore's two entries outside `secrets/`
-    (`manifest.json` and `db.dump`) are checked against; it receives nothing and keeps an existing
-    folder's mode. Still open, not fixed, by the owner's choice: `unpackBundleToDir`'s walk and file
-    write go by path, so a folder inside the destination swapped for a symlink during the unpack is
-    followed. The A41 run-it review reproduced an outside folder being set to 0700 and receiving the
-    secret that way. It needs someone able to write inside the destination. `tightenTlsDir`
-    (`box-secrets.ts`, A52) leaves a linked `tls/` and the folder it points to as found, by the
-    owner's choice, and a link swapped in for the state folder or a folder above it is followed; a
-    folder its owner cannot read is changed by path after an `lstat`, and a link swapped in between
-    the two would be followed. The restore itself (`restoreSecrets`) keeps none of `waitron-recovery
-unpack`'s destination refusals (a symbolic link, another user's folder, not a folder) on the
-    state folder it is given. The lock-file measurement kept in `db-wipe.ts` names no engine version
-    or platform.
-  - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
-    or not fixable in a comments-only change. A completed provision or adopt operation replayed on
-    a later request still answers 200 without restarting and keeps the setup lock set (the Cloud
-    restore's replay does restart). After a refused resend of a half-finished adopt (A50, #685),
-    what the first identity leaves behind on the primary and on this node is still not measured.
-    The standby's reset page does not show this server's machine id, so an operator cannot tell
-    which row on the primary's Servers screen is this server's (left for the owner from A70's
-    review). Removing a standby that "never finished joining" (A61, #708) reads that as
-    `serving-secondary` with no `nodes` row in the primary's database, and a remote standby writes
-    that row in its own database, so the check cannot see a remote standby that finished — none can
-    today (`finish-adoption.ts`).
-    **Still open after A63 (#712):** (i) a removed trust anchor (a machine whose key sits in the
-    receiver's own `nodes` table) can still make up a key for a machine in good standing that is not
-    an anchor, vouch for it, and sign as that machine — unless that machine signed the receiver's
-    held chart and the chart carries the endorsement its signature verifies under, so a standby is
-    not covered, nor a primary the receiver holds no chart signed by (after the former primary's own
-    retirement chart, for one) (stated at `resolveSignerKey`); (ii) boot reconciliation's peer fetch
-    sends no credential (`boot.ts` gives `fetchPeerMembershipDocument` only the URL) and
-    `GET /management-api/membership` refuses a request without one, so in production that path
-    accepts no chart today and the receiver checks above never run there (read, not run); (iii) a
-    cleared machine is refused its own promotion only if its own held chart contains the clearing,
-    and a standby that never finished joining never receives it; (iv) so, of these guards, only
-    those that run where a chart is made or a join is served work in production today: the
-    primary's join refusals (`mirror.standby_removed` for a removed or cleared id,
-    `mirror.membership_full` for a full chart) and the mint's size refusals; (v) a receiver whose
-    held chart predates a removal accepts the removed machine's charts until it learns of the
-    removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather than the primary's
-    reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx answer into that
-    code except a refused login, which it relays as `password.invalid` (C95) — this predates A63,
-    and `mirror.standby_removed` has the same gap; (vii) if A61's removal ever mis-classifies a live
-    standby that an operator later promotes, the old primary refuses the new primary's charts
-    (`signer_removed`) and keeps selling; the refusal is logged at warn and raises no alert. No adopt
-    can finish today (`finish-adoption.ts`), so no such standby exists yet.
-    A56's open items (the "Reset this server" path for a half-finished adopt, #694): (2) An adopt
-    saved before that change carries no proof, so the reset refuses it (`password.invalid`). (3) The
-    proof shows the login the primary accepted at join time, not that the admin is still active
-    there, and the one-time code is not asked again. (4) A join that failed after writing
-    `trading.env` boots the trading branch, where no setup route is mounted, so this reset cannot
-    reach it.
-    Also open from A42's review (#674), read and not run: if `operation.complete()` throws after
-    `execute` has scheduled the restart, the lock is now released while that restart is pending.
-    Stale wording outside f2: "a device with no profile" in `apps/server/src/till-api.test.ts` (near
-    lines 1377–1395) and `apps/till/src/till-app.test.ts` (near line 5765), though a device's
-    profile column is NOT NULL; `config.ts`'s "minted once and reused" for the box certificate, which a
-    restore re-issues; and `errors.ts` describing `setup.already_provisioning` as a persistent-lease
-    refusal, when it mostly comes from the in-memory lock. Test titles carrying history, left
-    because titles are code: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`, and
-    "(SP-1b fiscal gate)" and "(unchanged)" in `setup-api.test.ts`. Read, not run: `cookieDomainFor`
-    (`device-session.ts`) lowercases the request's host but not the configured tenant domain
-    (whether configuration normalises it is unchecked), and `DeviceBinding`'s `deviceProfileId` is
-    typed `string | null` for a column that cannot be null.
-  - Found by #656 (`apps/server` part e2: the backup and restore files), outside its files or not
-    fixable in a comments-only change. `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
-    things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and
-    `restore.unexpected_entry` ("the cold-recovery path (CLAUDE.md §5)"). Test titles that still say
-    "R3" or "rejoin", though rejoin no longer calls `restore.ts` (`rejoin-command.ts` does not import
-    it): `restore.test.ts`'s `validateArtifact / writeValidated (R3 validate-before-wipe split)` and
-    `restore steps (R3 composition)` describes and its three `skipSecrets` "rejoin" cases, and
-    `restore-fiscal-e2e.test.ts`'s "skipSecrets:true (the rejoin shape)" control. No production
-    caller sets `skipSecrets` any more, so whether the option should go is open. **Decided (owner,
-    2026-09-25): leave `keyFingerprint` as it is** — the first 8 hex characters of the recovery
-    key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who can read the
-    status can test a guessed key against it.
-  - Found by #653 (`apps/server` part c2: `boot.ts`, `boot.test.ts`, `config.ts`), outside its
-    files or not fixable in a comments-only change. `apps/server/README.md` (near line 230, the
-    `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it
-    cannot (`sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
-    `minTickMs > maxTickMs`); `config.test.ts`'s test title (near line 572) says "round back down
-    past the floor" where it means "to the floor". The restore question A38 (#669) raised about
-    `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
-    deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
-    `database is locked` in the pending-payment sweep; and nothing proves `startServer` itself
-    survives a backup duty that cannot start — only `backup-supervisor.test.ts` covers that, at the
-    supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
-    list and once in the mode's `stopWork`; sharing one list was declined because it would change
-    the normal shutdown order, which no test pins either.
-    Test titles #653 could not touch in `boot.test.ts` carry the history tags
-    "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
-  - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
-    change. Docs: `docs/developers/conventions-data.md`'s `busy_timeout` receipt, which
-    `recovery-lock.ts` now points at, should carry the date and Node version the deleted comment had
-    (2026-09-24, Node v26.7.0). Tests and code, read not run unless stated: three `adopt.test.ts`
-    titles say "before any mutation", but by then the primary has reserved an identity for the
-    standby and added it to its membership list (the tests assert only on the mirror's own
-    database); `adoptFromPrimary` (`adopt.ts`) spreads one adoption across several transactions with
-    file writes between and no commented decision (CLAUDE.md §3), so a failure partway could leave a
-    stamped mirror with no break-glass verifier; the restore guard's repeated-destination check
-    compares resolved path text, so two names reaching one file through a symlink may pass;
-    `mirror-session.ts`'s keepalive keeps an `isNull(lastSeenAt)` arm on a `not null` column (dead,
-    kept on purpose); `MirrorBundle.wireguardPublicKey` is set by no production caller and read by
-    nothing outside tests; `recovery-race.test.ts`'s header has no "weaker than its name" hedge
-    though CLAUDE.md describes the guard that way. Test titles #625 could not touch:
-    "…even when the retired variable is set" (`backup-config.test.ts`, still sets a `postgres://`
-    URL), "…without copying the obsolete media directory" (`backup-sweep.test.ts`), "(C2b Task 9)"
-    (`mirror-bundle-fetch.test.ts`), "(swap S2)" (`mirror-bundle.test.ts`) and "as a file from before
-    the field existed" (`recovery-state.test.ts`).
-  - Found by #624 (`apps/server` part c1), outside its files or not fixable in a comments-only
-    change. Two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
-    parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass,
-    so they check less than their titles say. Test titles #624 could
-    not touch: "(T12b)" in `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in
-    `boot.reconcile.test.ts`, "(C2)", "(pre-merge review)", "(I1)" and "skipped a tenant" in
-    `health.test.ts`, "the new guard" in `config.test.ts`.
-  - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
-    comments-only change. Split-off checks may reach the same path as a held-order edit that
-    changes sent lines (read, not run). The walk-up concurrent double-pay case in
-    `working-order.pay-and-dispatch.test.ts` replays through the settled branch and never reaches
-    `payWorkingOrder`'s duplicate-key catch; nothing tests two `openTab` calls racing on one table
-    or concurrent rounds landing on consecutive line numbers (the sequential versions are in
-    `tabs.test.ts`); nothing checks that a location or status foreign-key refusal in `tables.ts` is
-    not reported as a zone fault; `setTablePlacement`'s raw read is typed `boolean | null` where the
-    engine returns 1/0/null (it only tests truthiness). The SQL `--` comments inside
-    `listTablesWithState`'s template text still carry "measured 2026-09-22", PostgreSQL's "LATERAL
-    form" and aggregate-pair history and a "KDS-1 §3d" pointer. "A line with no course fires
-    earliest", which #623 cut from `working-order.ts` because a line sent with `hold: true` is held
-    whatever its course, is still in `apps/server/src/kitchen.ts:264` and four
-    `packages/db/src/schema` files (`catalogue.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
-    `orders.ts`). Stale test titles: "lists the node's open orders" in `working-order.test.ts`;
-    "(Task B1, …)" in `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in
-    `tabs.test.ts`; "recordSale UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and
-    "(A1)"-style plan tags.
-  - Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
-    change. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
-    live-course definition; `fireCourse` calls `requireCourse`. `packages/provisioning/src/venue-apply.ts`
-    names a `till.configure` gate for `createDeviceProfile`; the gate is `layout.configure`
-    (`packages/layouts/src/device-profile-store.ts`). `docs/developers/conventions-data.md` names a
-    `print-api.printer-wiring.test.ts` case "refuses another tenant's manager…" that #378 removed.
-    `docs/developers/testing-guide.md` says the concurrent Enable/unpair payments test "locks the
-    reader before deciding"; there are no row locks, the enable waits behind the unpair's write
-    transaction. `apps/server/README.md` sends readers to "the `drain.complete` log line, the
-    `incidents` table" for rejected fiscal records, a path only someone with a terminal can take.
-    Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`; `me-api.ts`'s profile
-    save logs `account_email.send_failed` with the caught error's message. The lock-ordering and
-    deadlock cases for transfers, merges and split bills went with PostgreSQL and nothing replaced
-    them (one write transaction per venue file is what serialises those writers now). Test titles
-    #622 could not touch: "regardless of database date display settings" in `print-api.test.ts`,
-    "(the R-D dedupe)" in `kitchen-print.test.ts`, "(SP-B4 rehome)" in `receipt-print.test.ts`,
-    "(SP-A.2 §16.4)" and "SP-C:" in `sale-till-source.receipt.test.ts`, "old per-taxpayer path"
-    and "path tenant" in `webhook.test.ts`, "(FIX 2 cascade / FIX 4 split)" in
-    `transfer-lines.test.ts`, "(the TS-4 shape)" in `move-merge.test.ts`, "TS-4's move guards" and
-    "TS-2 status" in `split-bill.test.ts`.
-  - Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
-    The review reported that "resets any
-    leftover drill/active tab on login" still passes with login's own clearing line deleted, because
-    logout clears the same state first (run in review, not re-run here). A question the prune moved
-    here from a deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a
-    dish whose diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes
-    known to contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc
-    pointers (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts`
-    titles carry plan and review labels ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8",
-    "(SP-B2.1)"), as do three `session-activity.test.ts` titles ("(C3)").
-  - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
-    `redact-secrets.ts` was written against the PostgreSQL connection-string parser, and `pg` is now
-    installed only for `bench/pglite-throughput`; whether a credential-bearing URL can still reach
-    the log is unchecked. `apps/server/vitest.config.ts`'s `coverage.exclude` lists `scripts/**`,
-    which its `src/**/*.ts` include already leaves out (read only). The adoption-pending entry below
-    still gives PostgreSQL's SQLSTATE 23503 on `nodes_location_id_locations_id_fk` as evidence; this
-    engine reports `FOREIGN KEY constraint failed` and names no constraint. Test titles #620 could
-    not touch: "(design §3b(2))" in `set-table-status.test.ts`, "(owner decision 2026-08-02)" in
-    `workforce-api.test.ts`, "(guard by deletion)" in `seed-sales.test.ts`.
-  - Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
-    comments-only change. Test titles repeat claims the branch corrected:
-    `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
-    sums line totals) and `apps/till/src/api/client.test.ts` "getExpoQueue GETs this node's
-    cross-station pass queue" (the queue is venue-wide and includes placed orders).
-  - Found by #617 (`apps/server` part f1), not fixable in a comments-only change. **Still open**
-    (read, not run): the boot-time fetch is given only the URL (item (ii) of **Still open after A63**
-    in the #657 item above), and boot never reads the `superseded` that
-    `reconcileMembershipOnBoot` returns (`apps/server/src/boot.ts`, where it is called);
-    `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
-    `device-api.ts`'s ticket-item advance route did not enforce the `act-as-kds` capability
-    (resolved by W97, 2026-10-06: it and the kitchen-notice acknowledge route now check the
-    profile's `prepare-orders` action through `assertProfileAction`); `enrol-rate-limit.ts` keeps
-    one global limit whose stated reason (snitun) is gone; `provision-till.test.ts` inserts its
-    tenant with `onConflictDoNothing`, so a second call's new NIF is silently kept out;
-    `provision.ts` stamps the deployment in its own transaction before `applyVenue`, a split with no
-    commented decision (believed to predate #617, not checked); and `setup-operation.ts` (around
-    lines 128–133) may treat a lock written by a different store as a previous boot's, so a live
-    process's lock could be taken over (a belief, not verified). `node-entry.test.ts` fixtures are
-    still PostgreSQL-shaped (a `Failed query` wrapper, code `42703`).
-    Test titles #617 could not touch: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`;
-    "since Task 7" and "this tenant's devices" in `device-api.test.ts`; "(R1 behaviour preserved)"
-    in `membership-mint.test.ts`.
-  - Found by #616 (`apps/till/src/widgets`), not fixable in a comments-only change. Test titles
-    repeat claims the branch corrected: `apps/server/src/working-order.test.ts` "lists the node's open
-    orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
-    held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
-    titles carry task numbers. `css` comments in `apps/till/src/widgets/station-queue.ts` and
-    `screens/till-expo-screen.ts` still call the courseless group "auto-fired". `apps/till/README.md`
-    says the held list is shared across the registers "on a node". Read, not run: a courseless
-    section the server held shows its lines greyed with no fire button (`#fireAction` in
-    `station-queue.ts`, from #131); `GET /api/till` never sends `stripe_on_device`, so the
-    offline-consent toggle cannot appear; `ReaderOption.online` is never set outside tests;
-    `card-grid.ts` passes a `.canExitToCounter=${false}` that `embedded` already makes irrelevant;
-    the tab shell and the supervisor dialog emit events not named `wt-*` (CLAUDE.md §3; not checked
-    whether the rule reaches till widgets).
-  - Found by #615 (`apps/server` part d), outside its files or not fixable in a comments-only
-    change. **The recipe routes and the recipe screen are unreached**: #345 (`f5c8e7b5f`) removed
-    `mountRecipeApi` from `apps/server/src/boot.ts`, nothing outside tests mounts
-    `/management-api/ingredients` or `/management-api/products/:id/recipe`, and
-    `apps/dashboard/src/screens/recipe-screen.ts` is imported by nothing (`git grep`), while its
-    client methods in `apps/dashboard/src/api/client.ts` still call those routes (read, not run).
-    Next action: the owner decides whether to delete `recipe-api.ts`, the screen and the client
-    methods, or to remount the routes and route the screen. Read, not run: `alert.not_found` was
-    documented as never revealing which case applied, but `apps/server/src/alerts-api.ts` answers
-    `authorization.not_permitted` for an incident the session cannot see and `alert.not_found` for
-    a missing id, so a caller can tell a real incident exists (#615 narrowed the comment; the route
-    is unchanged). `mirror.bundle_fetch_failed` was documented as logging its cause; nothing logs
-    it (`mirror-bundle-fetch.ts` discards the caught error) — whether it should is open.
-    `packages/server-kit/src/request-screens.ts` says its screens are the only refusal and an
-    unparseable value is stored; a foreign-key column refuses it (read, not run; #615 narrowed the
-    `till-api.ts` twin). `docs/developers/conventions-ui.md` says the no-secret-in-params rule is
-    stated per code in `apps/server/src/errors.ts`; it is now stated once, in that file's header.
-    Test titles #615 could not touch: "before it reaches Postgres" (two, in
-    `management-api-passkey.test.ts`), "not an opaque 500" and "non-uuid" titles in
-    `management-api-passkey.test.ts`, `catalogue-api.test.ts` and `recipe-api.test.ts`,
-    "option groups, gates, by-id FKs" in `catalogue-api.full-manifest.test.ts` (option groups no
-    longer exist), "(Task 11)" twice in `management-api.canvases.test.ts`, "(Task 7)" in
-    `management-api.accounts-and-receipt-config.test.ts`, "(Task 4)" in
-    `management-api.device-profiles.test.ts`, and "KDS-1", "KDS-2", "FP-2" and "KDS-3" in
-    `management-api.test.ts`.
-  - Found by #614 (`apps/till/src/screens`), not fixable in a comments-only change. Read, not run:
-    the till always mounts the counter screen `embedded` (`apps/till/src/till-app.ts`, the
-    `<till-counter-screen>` in its render), so the screen's own header — its Allergens, Floor,
-    Station, Expo, Schedule and Log out buttons and its allergen toggle — is reached only by the
-    screen's own tests; the floor screen's only mount (`widgets/card-grid.ts`) passes `embedded` and
-    `canExitToCounter=false`, so its standalone header, Back button and that property are likewise
-    test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
-    so a device cookie revoked mid-session raises nothing until the next connect. The screens' `css`
-    templates still carry task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the
-    allergen screen's legal citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing
-    confirms it: the table-order screen's `#lineGross` "same arithmetic the server files with" (the
-    server does not call `grossOf`).
-  - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
-    change. Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
-    `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for
-    character, so repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not
-    a comments-only change. Test titles #613 could not touch: "lost-T2" in
-    `till-sale-integrated.db.test.ts` (a captured card payment whose sale was never filed),
-    "Tasks 5 & 6", "7b", "FP-1, Task 6", "FP-2, Task 4", "SP-A.2 cutover", "Task 12 cutover",
-    "KDS-2/3" and "(Copilot)" in the `till-api*` and `till-config` suites, and 29 titles
-    saying "opaque 500".
-  - Found by #612 (the rest of `apps/dashboard`), not fixable in a comments-only change.
-    `date-utils.test.ts` has a test titled as guarding "against a vacuous pass", but #612's
-    review removed the timezone pin and ran the file under `TZ=UTC`, and all four cases failed on
-    their own. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing but
-    `i18n/t.test.ts` (`t.ts` registers `{ en, es }` with the kit), so that test's "registers en-GB"
-    case tests nothing that runs. The browser project in `apps/dashboard/vitest.config.ts` still
-    excludes `.stryker-tmp`, though the app has no Stryker config. Not restored, by the review's
-    choice: a note that `#sessionPermissions` only guides the screen and every module route is still
-    checked on the server (not traced).
-  - Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
-    change. The demo seed's `HH:MM` `department_hours` rows are gone: Hours (A261 step 5) dropped
-    the table, and `apps/server/scripts/demo-seed/seed-floor.ts` now writes through
-    `replaceWeekHours`, which pads to `HH:MM:SS`. The venue-service `migrations.test.ts` case
-    titled "… or at commit" asserts no refusal at commit, which is now testable because
-    `packages/store/src/node-sqlite-adapter.ts` rolls back a refused commit (since #489); a
-    commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id
-    no longer shows an empty string refused: `unit_id` is plain text.
-  - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
-    `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
-    characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
-    the NUL; closing it needs a migration.
-  - Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only
-    change. `reorder.test.ts`'s test names say an out-of-range move "clamps"; `reorder()` ignores
-    it.
-  - Found by #607 (`apps/dashboard/src/screens`), read only, not run: the recipe screen's
-    `#loadRecipe` guard compares product ids, so choosing A, then B, then A again lets the first A
-    answer apply and turn Save back on while the second A load is still running.
-  - Found by #604 (`packages/ui`), not fixable in a comments-only change. **A table with no shape
-    is drawn as a rectangle and saved as round on its first edit**: `wt-table-token.ts` draws
-    `shape-${t.shape ?? "rect"}`, while `wt-floor-canvas.ts` marks Round as pressed and sends
-    `shape: t.shape ?? "round"` from `#placementOf`, so dragging, nudging or rotating a shapeless
-    table changes it (read from the code, not run). `packages/ui/brand/README.md`'s table omits
-    `public/icon-192.png` and `public/icon-512.png`, which the generator writes.
-    `packages/ui/vitest.config.ts` and `stryker.config.json` still exclude
-    `src/tokens/token-test-helpers.ts`, which moved to `packages/ui-core` in #519 (the
-    entry "`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests" in Track C still
-    names it there too). A reviewer believes the `demo/**` coverage exclusion matches nothing and
-    that `**/ui-core/**` is there because `packages/ui-core` starts with `packages/ui` (CLAUDE.md
-    §4's unanchored-include trap); neither was tested.
-  - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a
-    source twice and order sources differently from run to run**: `recomputeProductDerivations`
-    (`packages/recipes/src/recipes.ts`) feeds it ingredient rows in no fixed order, and #603's
-    review measured, with three or more sources, barley/rye/wheat folded in two orders giving
-    "barley, rye, wheat" and "barley, wheat, rye", and barley/rye/barley giving "barley, barley,
-    rye". The comment now says so; the code is unchanged. Read only, not run: `writeItems`
-    (`src/extras.ts`) and `writeLabels` (`src/options.ts`) each keep a refusal after their insert
-    that looks unreachable now (duplicate and foreign ids are refused earlier and one write runs at
-    a time). `MAX_MODIFIER_INTEGER` (`src/modifier-limits.ts`, 2147483647) and the extras
-    contract's `whole` bound were PostgreSQL's integer maximum and have no stated reason on this
-    engine; the test names "refuses a pick bound above what the column can hold" and "refuses a
-    maxQuantity above what the column can hold" (`src/extra-contract.test.ts`) assume a column
-    limit. `assertRefsExist` (`src/product-modifiers.ts`) still reads lists in sorted key order,
-    which served PostgreSQL's lock ordering only. Four configuration-transfer cases (in
-    `options.test.ts`, `product-modifiers.test.ts`, `extras.test.ts` and
-    `extra-projection.test.ts`) pin an insert order that the importer's
-    `pragma defer_foreign_keys` makes unnecessary for foreign keys — whether to keep pinning it is
-    the owner's call. Test titles a comments-only change cannot touch: `describe("validateContainsTag
-(Task 4)")` and `describe("validateDietOverride (Task 4)")` (`src/dietary.test.ts`), "settles
-    a product id sent in upper case in the database" (`src/product-modifiers.test.ts`, the code
-    settles it now), "rebuilds every lookup index without the tenant" (`src/migrations.test.ts`).
-  - Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
-    `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-    `.husky/pre-push` beside the same loop; it is not there.
-    `docs/developers/modifiers.md` (about lines 469-472) calls the `catalogue-engine-neutral`
-    header paragraph "the receipt" for not checking `pgEnum` in the order and sale files;
-    #602 deleted that paragraph because those columns are now
-    `enumType` (text plus a check). `docs/developers/testing-guide.md` (about line 294) says
-    `scripts/ci-workflow.test.mjs` "had the mechanism right first"; #602's review corrected that
-    file's comment to what testing-guide itself measured (the per-test timer does not fire during
-    a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
-    matches.
-    Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
-    top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
-    decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
-    provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
-    spec §6 step 5).
-  - Found by #601 (`packages/reporting`). **Owner decision 2026-09-24: a void counts on the day it
-    is made, not the day of the sale** (built in #605 for the daily close's VAT, the period VAT
-    summary and top sellers). The quarterly _modelo 303_ keeps its old behaviour, pinned by a test in
-    `vat-return.test.ts`, until the asesor answers `docs/compliance/asesor-questions.md` Q25 (which
-    VAT period a later annulment lands in). No till screen or server route calls `recordVoid` yet.
-    `stableStringify` (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined`
-    hashes differently from the row the database stores (the column drops the key); its comment now
-    states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
-    change: test titles still say "jsonb" (`verify-daily-close-chain.test.ts:70`), "tenant"
-    (`top-sellers.test.ts:501`, `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`,
-    `vat-summary-period.test.ts:128`), "design §3" (`overdue-orders.test.ts:194`), "spec §12"
-    (`top-sellers.test.ts:307`) and "DrizzleQueryError-style" (`record-daily-close.test.ts:342`, not
-    checked). `toDr303Record` (`src/dr303.ts`) does not cross-check a monthly total against a
-    quarterly period code such as "4T"; a test pins that and the one route that builds the file
-    takes both from the same code, so it looks deliberate — worth the owner's eye because it is a
-    tax file. The top-sellers fixtures give most lines no kitchen name, where CLAUDE.md §3 asks all
-    three names to differ (top-sellers never reads that name).
-    `record-daily-close.concurrency.test.ts:60` says "nothing but the write queue keeps the second
-    out"; a reviewer, reading only, thinks the one-close-per-day unique constraint refuses it — not
-    checked. `packages/core/src/errors.ts` names `scripts/errors-reachable.test.ts` without the hedge
-    #601 gave reporting's (the guard matches text).
-  - Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
-    titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns
-    now. Also found by reading only, not run: nothing the review could find copies
-    `node_membership` from the primary to a standby, so a promoting standby may take
-    `nextStandings`' fallback that appends it with an empty `contactUrl` (`packages/membership`),
-    which `routableServers` then drops.
-  - Found by #598 (`packages/core`), not fixable in a comments-only change. Test titles still
-    carry claims the comments no longer make: `incidents.test.ts:463` says orphan raises de-dup
-    "via NULLS NOT DISTINCT" (PostgreSQL wording); `record-void.test.ts:340` and
-    `record-correction.test.ts:443` say an ordering "never leaks an authz error", which #598's
-    review did not bear out (Codex ran both orders: with the lookup first, an unauthorised caller
-    tells a missing sale from an existing one by the error); and `record-sale.test.ts:888`, `:964`
-    and `:1029` carry history ("legacy path unchanged", "additive, no behaviour change"). No test
-    reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal into
-    `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
-    stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
-    `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower
-    (see _Decide whether to implement `sale.number_reused`_). Outside core,
-    `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
-    record hashes" (#598 found the hash covers the totals, not the breakdown).
-  - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
-    comments-only change. Pointers outside `docs/` that #597 made stale: `apps/server/README.md:82`
-    says `packages/migrations/src/apply.ts` carries the lock races, which now live only in #489;
-    `packages/db/src/immutability.sql.md:18` cites `apply.ts:105` for the trigger install, which is
-    now the `installAppendOnlyTriggers` call at line 74; and `.github/workflows/ci.yml:401` says
-    esbuild collapses "all five" migration descriptors, while
-    `grep -rhoE "export const [A-Z_]+_MIGRATIONS\b" packages --include='*.ts' | sort -u` lists 15
-    names on `ca01a7fbd`. `sumupClientForTenant` (`packages/payments-sumup/src/card-provider.ts:50`)
-    still carries "tenant" in its name. The fake SumUp client leaves its one-shot switches for a
-    lookup or a refund armed when a checkout before them is refused; no test combines the two.
-  - Found by #592 (`packages/fiscal`), not fixable in a comments-only change or outside the
-    package. Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts`
-    are code, not comments: one points at `packages/fiscal/src/backend.ts:72` for `total: Decimal`
-    (it is at line 50) and names "Task 14", and one says the breakdown column is NULL only for a
-    void, while the fake's corrections and substitutions leave it NULL too.
-    `FiscalBackend.pendingCount` has no caller outside the backends and their tests, yet
-    `packages/db/src/schema/sales.ts:29` says it is how the count is read.
-    `packages/fiscal-verifactu/src/slot.ts:51`
-    says `validate` runs BEFORE `provisionVenue`, which #592 narrowed in `contribution.ts` to an
-    instruction to the caller, because `apps/server/scripts/cloud-integration-fixture.ts` calls
-    `provisionVenue` without it. `packages/fiscal-verifactu/src/no-regime-scope.test.ts:7` says
-    `packages/fiscal`'s guard forbids ENGLISH regime terms; its list is half Spanish.
-    `no-hardcoded-margin.test.ts` scans only the files directly in `packages/fiscal/src`, not
-    `src/testing/`, and does not say so.
-  - **Shift times are stored in one spelling — DONE (W22, #1134); left open,** found by #1134's
-    review and not taken there: the dashboard's shift dialog
-    (`apps/dashboard/src/widgets/shift-dialog.ts`) builds the end time on the START's day, so a
-    shift that runs past midnight (22:00–02:00) is refused as `shift.invalid` — as it was before
-    #1134. And an edit keeps the shift's stored offsets, so moving a shift across a summer-time
-    change keeps the old offset. Next action: let the dialog put the end on the next day when it
-    is not after the start, and derive each offset from the venue's time zone for the date.
-  - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
-    the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
-    `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
-    rows the first resolved. The comment at `listAttempting` now says so.
-  - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
-    measured false (identity, 2026-09-24, and #562's review). #585 took the reason out of
-    `packages/db/src/schema`; the ignore pairs there stay. Four identity schema files and six in
-    `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is a
-    code change, for whoever next changes that package's code.
-  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media`
-    and `workforce-es` say an unnamed unique constraint reaches the factory's refusal; drizzle-orm
-    0.45.2 names an unnamed `unique()` itself, so nothing reaches it
-    (`packages/db/src/testing/schema-conformance.ts`).
-  - Identity code, found by #559: `setEmail` in `packages/identity/src/staff.ts`,
-    unlike `updatePersonDetails`, never checks the new email against other people's pending
-    emails; `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
-    (`password.invalid`, logged with the reason `unreadable_secret` since C95), like a wrong code.
-    Identity's coverage reads 99.85 statements / 99.75 branches, not 100: the
-    `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554,
-    is reached by no test.
-  - The empty-venue-directory reason #561 deleted from `packages/provisioning` ("an empty value would
-    stand a venue up in the working directory") is false there: measured 2026-09-24 on Node v26.7.0,
-    `openVenueDatabase("")` fails `ENOENT: no such file or directory, mkdir ''`, and a real path as
-    the control created `venue.db` and `node.db`. The same reason still stands in
-    `packages/provisioning/README.md` and in `docs/developers/conventions-data.md` (the paragraph
-    on `resolveVenueDir`, "an empty directory is the RELATIVE `venue.db`"). The test title in
-    `packages/credentials/src/bin.test.ts` that states the empty-folder behaviour still does (a
-    title is code, so a pruning PR cannot rename it).
-  - `packages/provisioning/README.md` also says only `ES-common` is implemented (a `GB-vat` run
-    exits 0 in `cli.test.ts`), and repeats two reasons #561 deleted from the code's comments: that
-    `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
-    reads and writes inside one `withTransaction`, `venue-apply.ts`, and whether a second PROCESS can
-    interleave was not measured) and that the entry point can only be checked through the built
-    bundle (its prompt function runs straight from source). `docs/developers/conventions-data.md`
-    cites `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer
-    does.
-  - `packages/provisioning` code, found by #561 and not changed: `quoteIdent` has no
-    caller outside its own suite, and the `quoteLiteral` re-export in `identifiers.ts` is used only
-    by that suite; the `action.email === undefined` branch in `venue-apply.ts`'s seed-admin cannot
-    run, because the action's `email` is a required string; the coverage config leaves `src/bin.ts`
-    out with no reason stated any more, which may hide code a test could reach; and `cli.test.ts`
-    test titles still say "before connecting" and "before opening a connection", and one title
-    ("rather than opening the working directory") rests on the false reason above.
-  - `packages/fiscal-verifactu` code, found by #562; not changed unless marked:
-    - **`drain.ts`'s Route B lookup (`client.consultar`) — PARTLY DONE (W21, #1130).**
-      - **Open:** a failed lookup, when the save reaches its line, still backs the whole batch off,
-        discarding every line's outcome and the reply's receipt code (the CSV, one per
-        submission), which AEAT does not send again.
-    - The inner try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead: with it
-      removed, the "LOGGER fails" case still passed, because `Promise.allSettled` absorbs the
-      rejection.
-    - Removing `appendToChain`'s nested `tx.transaction` makes no test fail (`chain.test.ts`'s
-      header says so); the protection it gives a losing attempt has no test holding it.
-    - `write-path.e2e.test.ts` (lines 414 and 418) points at `test/fixtures.ts:249-256` for a
-      receipt of one basket hashing differently filed 16th and filed standalone, and at
-      `test/write-path-fixtures.ts:37-44` for `steadyClock`. The receipt is now at
-      `test/fixtures.ts:285-289` and `steadyClock` at `test/write-path-fixtures.ts:27-39`. Correct
-      them only in a change allowed to touch that file.
-  - `apps/setup` code, found by #567. `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`, so a
-    rejected or uncertain fiscal-test banner, and an accepted result, survive leaving that screen and
-    coming back, even after the certificate changes (found by reading, not run; whether that is
-    wanted is undecided); a cloud restore opens the provisioning screen (`#onCloudRestoreAction`)
-    without `#clearProvisionOutcome()`, which the four other ways onto that screen call first, so an
-    earlier attempt's message could show there (found by reading, not run); `AdoptOutcome`'s
-    `breakGlassSecret` is typed as required, but a replayed adopt answers without it
-    (`apps/server/src/setup-api.ts`); the done screen treats a non-network status refusal as ready, so an HTTP 503
-    can announce "The server is ready" early (A324 synthetic 503 probe through the real
-    `SetupApi`, 2026-10-07; the polling rule is unchanged); the mode screen's own text says a live
-    server files real invoices, which a live run on a development box does not; `setup-app.test.ts`
-    has two test titles naming a `SyntaxError` from a non-JSON error body that `apiError` turns into
-    `server.internal`; `events.test.ts` has no case for the restore and fiscal-test dispatchers; the
-    `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
-    `vitest.config.ts` excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
-    `widgets/test-helpers.ts` has no accessibility suite that fails without it; and `connection-screen.ts`'s `connection-continue` event is not named `wt-*`
-    and carries no `detail`.
-  - "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)", which #567
-    deleted from `apps/setup/src/server-fields.ts`, is too wide: with
-    `import "@waitron/fiscal-verifactu";` added there, that guard still passed, since its regime
-    checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
-    `packages/fiscal-verifactu/src/venue-fields.ts`. Prune with those.
-  - `packages/store`, found by #568 and not changed: `isLocked` in `venue-lock.ts` reads `.errcode`
-    without a null check, so a thrown `null` would raise a `TypeError` (the driver throws real
-    errors). Done: the read-routing rule's sentence that a read-only connection does not refuse an
-    `ATTACH` now lives in `docs/developers/conventions-data.md`, and was narrowed on 2026-10-07 by
-    #1337 — #568's probe (Node v26.7.0) found one naming a file that
-    does not exist IS refused there (errcode 14, no file created), while an existing file and
-    `:memory:` attach.
-  - `packages/payments-stripe`, found by #570 and not changed (each a code or config change, not a
-    comment): the two `provider.test.ts` cases named "throws payment.not_found" assert only
-    `rejects.toThrow()`, not the code (CLAUDE.md §4); `tenant-scoping.test.ts` is named for tenant
-    scoping but now guards that no source file opens a bare `.transaction(`; and `vitest.config.ts`
-    leaves `src/stripe-client.ts` out of coverage although #570's review made that wrapper throw and
-    two tests in the normal suite failed, so the normal run does reach it — CLAUDE.md §2 says a gap
-    is never closed by an exclude over code a test could reach. Reversal retry-safety (one persisted
-    id per reversal) is still deferred: #570's review showed two identical `reverseViaStripe` calls
-    get different idempotency keys, so a retried reversal sends a second real refund; the comment
-    at `reverse.ts` says so.
-  - `packages/printing`, found by #572 and not changed (code, not comments): an aged batch can
-    print twice. When a large batch to a slow printer outlives the one-minute lease, another agent
-    in the venue can re-claim the jobs not yet sent while the first agent still sends every job it
-    pulled; the lease comment in `runtime.ts` now says so. Read from the agent's send loop, not
-    run. In `printers.test.ts`, the case named "a driver error that is NEITHER the UNIQUE NOR the
-    CHECK propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
-    `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
-    reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
-  - Found by #585's review in files outside `packages/db/src/schema`, not changed there:
-    `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
-    dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
-    making them static imports is a small code follow-up.
-  - Found by #589 (`packages/db` outside `src/schema`), not changed. In
-    `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
-    repeats the first case under another name (a test change, not a comment one).
-  - `packages/credentials`, found by #577 and not changed. Nothing now checks at run time that a
-    read returns something other than a Node `Buffer` (the runtime case went with the PostgreSQL
-    suite; a 2026-09-22 measurement read `Uint8Array`, `Buffer.isBuffer` false). Nothing checks
-    that a caller other than the application cannot read or list the vault; only the encryption
-    protects it. Test titles ending "— C1" and "(M7)" are old review labels, and
-    `credentials.test.ts`'s fixtures `sk_test_rls`/`whsec_rls` carry a PostgreSQL-era name. The
-    `beforeEach` deletes in the store, cli and rotate suites may be redundant beside `useVenueDb`'s
-    per-test reset (not tried).
-  - Two 2026-07-26 specs still call the FNMT seal certificate's export unverified, which
-    `docs/compliance/getting-to-production.md` §4 closed that day (found by #577).
-  - `packages/bookings`, found by #574 and not changed (code, not comments). Seating a booking at a
-    table in a zone that is not a table-tab zone has no bookings test: the real `openTab` refuses
-    it with `service_zone.mode_incompatible`, the fake core in `src/testing/fake-core.ts` does not,
-    and `routes.ts`'s `STATUS` map has no entry for that code, so it answers 400 by default.
-    Editing a booking that is already seated answers `booking.not_found`, which the dashboard shows
-    as "could not be found". The server accepts an empty contact name; only the dashboard form
-    refuses one. `seatBooking`'s `status = 'booked'` condition on its final update cannot fire
-    while every caller goes through `withTransaction` (read, not run). Test titles in
-    `bookings.test.ts` and `migrations.test.ts` still say "tenant", and `floor.test.ts` inserts
-    `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
-    `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
-    commit message; `docs/developers/testing-guide.md` has no paragraph holding it.
-  - Found by #588 (`packages/layouts`), not fixable in a comments-only change. One test title in
-    `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number
-    23001; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
-    says the error construction typechecks "ONLY because" of one import — #588's review measured the
-    same claim false for printing and layouts. Both layouts database suites create a
-    manager session in `beforeAll`, while `useVenueDb` empties every data table after each test by
-    default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's first test can
-    use that session; they pass today because only the first does.
-  - Found by #581 (`packages/scheduler`). The nested `tx.transaction(...)` in `enqueueSuccessor`
-    wraps one insert, which SQLite backs out by itself when refused, so it changes nothing today;
-    `insertClose` in `packages/reporting/src/record-daily-close.ts` is the same case
-    (`docs/developers/conventions-data.md` has the probe). Whether to remove these two nested calls,
-    or say why they stay, is open (a code change, not made). #587's review also found older comments
-    still describing PostgreSQL's behaviour, left alone there:
-    `packages/store/src/node-sqlite-adapter.test.ts:90` calls keeping the outer transaction usable
-    "the whole point of the savepoint"; a test name in
-    `packages/fiscal-verifactu/src/chain.test.ts:225` says a collision would "poison the whole
-    transaction" (a test title, which a comments-only change cannot touch).
-    The reason "v8 reports phantom uncovered branches" given for excluding
-    barrel `index.ts` files from coverage did not hold in scheduler: with the exclusion removed,
-    both barrels reported 0 branches at 100% and the totals did not move. So scheduler's two barrel
-    excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
-    given in the configs of workforce, credentials, bookings, workforce-es, server-kit,
-    dashboard-kit and fiscal-none (not re-measured there); `payments-sumup` keeps its
-    `src/dashboard/index.ts` exclude with the reason deleted by #597, also not measured. `claimGap`
-    uses an untargeted `.onConflictDoNothing()` on a table with two unique constraints (the `id`
-    primary key and `scheduled_runs_key`); CLAUDE.md §3 asks for a named target there, though `id`
-    is freshly generated (read, not run).
-  - Found by #579 (`packages/shared`). `decimalToCents` refuses an amount over the bound
-    (#583), but `centsToDecimal` itself has no digit bound, so a count past 99999999999999 cents
-    that reaches it by another route is still turned into an amount without refusal.
-    `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) has only
-    the PostgreSQL raw-read table, not the SQLite one #579's commit message now carries. Comments
-    saying drizzle wraps a failed query remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps
-every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `media`,
-    `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the
-    `DrizzleQueryError` entry under _Afterwards_).
 
 ---
 

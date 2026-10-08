@@ -194,6 +194,89 @@ approved.
   database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
   concurrent provisions against a real database, not with the row-level check alone.
 
+## `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the staging folder
+
+- Found by #658 (`apps/server` part h2: the remaining held-back files), not fixable in a
+  comments-only change. `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged,
+  and nothing chmods the staging folder that the archive restore's two entries outside `secrets/`
+  (`manifest.json` and `db.dump`) are checked against; it receives nothing and keeps an existing
+  folder's mode. Still open, not fixed, by the owner's choice: `unpackBundleToDir`'s walk and file
+  write go by path, so a folder inside the destination swapped for a symlink during the unpack is
+  followed. The A41 run-it review reproduced an outside folder being set to 0700 and receiving the
+  secret that way. It needs someone able to write inside the destination. `tightenTlsDir`
+  (`box-secrets.ts`, A52) leaves a linked `tls/` and the folder it points to as found, by the
+  owner's choice, and a link swapped in for the state folder or a folder above it is followed; a
+  folder its owner cannot read is changed by path after an `lstat`, and a link swapped in between
+  the two would be followed. The restore itself (`restoreSecrets`) keeps none of `waitron-recovery
+unpack`'s destination refusals (a symbolic link, another user's folder, not a folder) on the
+  state folder it is given. The lock-file measurement kept in `db-wipe.ts` names no engine version
+  or platform.
+
+## `apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say
+
+- Found by #656 (`apps/server` part e2: the backup and restore files), outside its files or not
+  fixable in a comments-only change. `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
+  things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and
+  `restore.unexpected_entry` ("the cold-recovery path (CLAUDE.md §5)"). Test titles that still say
+  "R3" or "rejoin", though rejoin no longer calls `restore.ts` (`rejoin-command.ts` does not import
+  it): `restore.test.ts`'s `validateArtifact / writeValidated (R3 validate-before-wipe split)` and
+  `restore steps (R3 composition)` describes and its three `skipSecrets` "rejoin" cases, and
+  `restore-fiscal-e2e.test.ts`'s "skipSecrets:true (the rejoin shape)" control. No production
+  caller sets `skipSecrets` any more, so whether the option should go is open. **Decided (owner,
+  2026-09-25): leave `keyFingerprint` as it is** — the first 8 hex characters of the recovery
+  key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who can read the
+  status can test a guessed key against it.
+
+## `apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it cannot
+
+- Found by #653 (`apps/server` part c2: `boot.ts`, `boot.test.ts`, `config.ts`), outside its
+  files or not fixable in a comments-only change. `apps/server/README.md` (near line 230, the
+  `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it
+  cannot (`sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
+  `minTickMs > maxTickMs`); `config.test.ts`'s test title (near line 572) says "round back down
+  past the floor" where it means "to the floor". The restore question A38 (#669) raised about
+  `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
+  deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
+  `database is locked` in the pending-payment sweep; and nothing proves `startServer` itself
+  survives a backup duty that cannot start — only `backup-supervisor.test.ts` covers that, at the
+  supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
+  list and once in the mode's `stopWork`; sharing one list was declined because it would change
+  the normal shutdown order, which no test pins either.
+  Test titles #653 could not touch in `boot.test.ts` carry the history tags
+  "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
+
+## The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there
+
+- The empty-venue-directory reason #561 deleted from `packages/provisioning` ("an empty value would
+  stand a venue up in the working directory") is false there: measured 2026-09-24 on Node v26.7.0,
+  `openVenueDatabase("")` fails `ENOENT: no such file or directory, mkdir ''`, and a real path as
+  the control created `venue.db` and `node.db`. The same reason still stands in
+  `packages/provisioning/README.md` and in `docs/developers/conventions-data.md` (the paragraph
+  on `resolveVenueDir`, "an empty directory is the RELATIVE `venue.db`"). The test title in
+  `packages/credentials/src/bin.test.ts` that states the empty-folder behaviour still does (a
+  title is code, so a pruning PR cannot rename it).
+
+## `packages/provisioning/README.md` also says only `ES-common` is implemented
+
+- `packages/provisioning/README.md` also says only `ES-common` is implemented (a `GB-vat` run
+  exits 0 in `cli.test.ts`), and repeats two reasons #561 deleted from the code's comments: that
+  `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
+  reads and writes inside one `withTransaction`, `venue-apply.ts`, and whether a second PROCESS can
+  interleave was not measured) and that the entry point can only be checked through the built
+  bundle (its prompt function runs straight from source). `docs/developers/conventions-data.md`
+  cites `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer
+  does.
+
+## `quoteIdent` has no caller outside its own suite
+
+- `packages/provisioning` code, found by #561 and not changed: `quoteIdent` has no
+  caller outside its own suite, and the `quoteLiteral` re-export in `identifiers.ts` is used only
+  by that suite; the `action.email === undefined` branch in `venue-apply.ts`'s seed-admin cannot
+  run, because the action's `email` is a required string; the coverage config leaves `src/bin.ts`
+  out with no reason stated any more, which may hide code a test could reach; and `cli.test.ts`
+  test titles still say "before connecting" and "before opening a connection", and one title
+  ("rather than opening the working directory") rests on the false reason above.
+
 ## Decisions and deliberate limits
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not

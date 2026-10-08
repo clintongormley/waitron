@@ -152,6 +152,63 @@ their full text.
   **Next action:** find a failure the empty database still causes without the guard, and name it;
   if there is none, say so in the comment and stop calling the case a guard test.
 
+## Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
+
+- Found by #624 (`apps/server` part c1), outside its files or not fixable in a comments-only
+  change. Two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
+  parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass,
+  so they check less than their titles say. Test titles #624 could
+  not touch: "(T12b)" in `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in
+  `boot.reconcile.test.ts`, "(C2)", "(pre-merge review)", "(I1)" and "skipped a tenant" in
+  `health.test.ts`, "the new guard" in `config.test.ts`.
+
+## The venue-service `migrations.test.ts` case titled "… or at commit" asserts no refusal at commit
+
+- Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
+  change. The venue-service `migrations.test.ts` case
+  titled "… or at commit" asserts no refusal at commit, which is now testable because
+  `packages/store/src/node-sqlite-adapter.ts` rolls back a refused commit (since #489); a
+  commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id
+  no longer shows an empty string refused: `unit_id` is plain text.
+
+## `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in `.husky/pre-push` beside the same loop; it is not there
+
+- Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
+  `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
+  `.husky/pre-push` beside the same loop; it is not there.
+  `docs/developers/modifiers.md` (about lines 469-472) calls the `catalogue-engine-neutral`
+  header paragraph "the receipt" for not checking `pgEnum` in the order and sale files;
+  #602 deleted that paragraph because those columns are now
+  `enumType` (text plus a check). `docs/developers/testing-guide.md` (about line 294) says
+  `scripts/ci-workflow.test.mjs` "had the mechanism right first"; #602's review corrected that
+  file's comment to what testing-guide itself measured (the per-test timer does not fire during
+  a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
+  matches.
+  Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
+  top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
+  decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
+  provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
+  spec §6 step 5).
+
+## The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was measured false
+
+- The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
+  measured false (identity, 2026-09-24, and #562's review). #585 took the reason out of
+  `packages/db/src/schema`; the ignore pairs there stay. Four identity schema files and six in
+  `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is a
+  code change, for whoever next changes that package's code.
+
+## One test title in `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number 23001
+
+- Found by #588 (`packages/layouts`), not fixable in a comments-only change. One test title in
+  `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number
+  23001; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
+  says the error construction typechecks "ONLY because" of one import — #588's review measured the
+  same claim false for printing and layouts. Both layouts database suites create a
+  manager session in `beforeAll`, while `useVenueDb` empties every data table after each test by
+  default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's first test can
+  use that session; they pass today because only the first does.
+
 ## Decisions and deliberate limits
 
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
