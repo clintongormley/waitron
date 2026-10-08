@@ -74,11 +74,12 @@ function deferred() {
 }
 
 /** `leave: false` mounts the screen with no application above it, as a widget test does. */
-async function mount(options: { write?: Promise<void>; leave?: boolean } = {}) {
+async function mount(options: { write?: Promise<void>; leave?: boolean; refuse?: unknown } = {}) {
   const writes: unknown[] = [];
   const record = async (...values: unknown[]) => {
     writes.push(values);
     await options.write;
+    if (options.refuse) throw options.refuse;
   };
   const api = {
     liveData: new LiveData(),
@@ -300,6 +301,21 @@ describe("with no application above the screen", () => {
   });
 });
 
+describe("Edit department refused", () => {
+  it("a refused save leaves Save enabled and primary", async () => {
+    const { screen, writes } = await mount({
+      refuse: { code: "department.name_taken", params: {} },
+    });
+    const modal = await open(screen, "edit-department-d1");
+    await field(screen, "department-name", "Deli");
+    saveButton(screen).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await expect.poll(() => marked(screen)).toEqual(["department-name"]);
+    expect(modal.isConnected).toBe(true);
+    expect(await saveState(screen)).toEqual(ready);
+  });
+});
+
 describe("the Disable confirmation", () => {
   it("is drawn danger, is enabled on open, and still disables", async () => {
     const { screen, writes } = await mount();
@@ -402,6 +418,25 @@ describe.each(nameCells)("the inline $label editor", (item) => {
       (HTMLElement & { error: string }) | undefined;
     expect(input).toBeDefined();
     expect(input!.error).toBe("");
+  });
+
+  it("a refused save leaves Save enabled and primary", async () => {
+    const { screen, writes } = await mount({
+      refuse: {
+        code: item.name === "zoneName" ? "zone.name_taken" : "department.name_taken",
+        params: {},
+      },
+    });
+    await openCell(screen, item);
+    await editCell(screen, item, item.edited);
+    cellButton(screen, `save-${item.action}`)!.click();
+    await expect.poll(() => writes.length).toBe(1);
+    await settleCell(screen);
+    const input = find(screen.shadowRoot!, `[name="${item.name}"]`) as
+      (HTMLElement & { error: string }) | undefined;
+    expect(input).toBeDefined();
+    await expect.poll(() => input!.error).not.toBe("");
+    expect(await cellSaveState(screen, item)).toEqual(ready);
   });
 
   it("with no application above the screen, an edit turns Save blue and Cancel and Escape close it", async () => {
