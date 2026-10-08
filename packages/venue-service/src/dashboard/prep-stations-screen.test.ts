@@ -388,9 +388,7 @@ it.each([
   ["switch-off-upstairs", "in_hours"],
   ["switch-on-retired", "in_hours"],
 ] as const)("keeps station action %s in Stations rather than Routing", async (action, why) => {
-  const next = withUpstairs(why === "in_hours" ? { open: true, why } : { open: false, why }, {
-    today: why === "closed_by_hand" ? "closed" : null,
-  });
+  const next = withUpstairs({ open: true, why });
   next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
   next.routing.stations.push({ id: "retired", name: "Retired", active: false });
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
