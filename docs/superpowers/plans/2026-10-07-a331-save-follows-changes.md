@@ -1935,24 +1935,45 @@ dirty.
   `!this.isConnected`.
 - E: keep the value the scope last committed — the opened value, then each saved value — in a
   field that `disconnectedCallback` does not clear (`#baseline`), and after taking a new scope call
-  `scope.commit(this.#baseline)` so the kept edit compares against it. Where the form clears an
-  opening identity on disconnect and so re-seeds its fields on reconnect (the purchase form's
-  `#identity`, the watcher form's `identity`), stop clearing it there — but the guards that let a
-  departed write or a departed discard answer touch nothing must still hold: the existing
-  "disconnect aborts its question", "removed form cannot submit" and "departed … cannot release"
-  cases stay unedited and green. Where a guard used that identity, give it its own token rather
-  than editing its test.
+  `scope.commit(this.#baseline)` so the kept edit compares against it (`register` takes the current
+  value as its first baseline and `commit` replaces it with a snapshot,
+  `packages/ui/src/unsaved-changes.ts`). The till dialog's `#baseline ??=` works only because that
+  dialog is used once; every form here is reopened, so CLEAR `#baseline` wherever the scope is
+  disposed for any reason other than a disconnect — every reopen or re-seed branch, the `!open`
+  branch, person edit's `#loadPerson` — or a reopened form starts dirty and Discard restores the
+  previous opening's values. Add a case per form: save or discard, reopen, and the form opens
+  quiet with the reopened values.
+- Four forms clear their opening identity on disconnect and so re-seed their fields on reconnect,
+  replacing the edit: purchase (`#identity`), shift dialog (`#identity`), booking form
+  (`#identity`) and the watcher form (`identity`). Stop clearing it there, but keep what it
+  guarded. In purchase and shift, `writeCompletion` drops a departed write by comparing `#opening`,
+  which is only renewed through that identity reset: renew `#opening = {}` in
+  `disconnectedCallback` instead, and ADD a case (neither suite has one) — start a write, take the
+  form out and put it back, complete the write, and it neither commits nor closes the form. Booking
+  already renews `#opening` on disconnect. The watcher creates its scope only inside the re-seed
+  branch (`identity` missing or `watcherId` changed), and `identity` is also the scope's id and
+  `requestLeave`'s departed check: split `willUpdate` into "re-seed when the watcher changes" and a
+  separate `if (!this.scope)` that takes the scope and commits the kept baseline, and give
+  `requestLeave` its own token renewed on disconnect. Its existing "disconnect aborts its
+  question", "removed form cannot submit" and "departed … cannot release" cases stay unedited and
+  green.
 
 **Proof by deletion, per fixed form:** delete the `!this.isConnected` return — R fails; restore.
-Stop committing the kept baseline — E fails; restore. Where a case passes on `main` with no fix,
+Stop committing the kept baseline — E fails; restore. (The detached update R needs comes from the
+scope's `dispose()` on disconnect, which redraws the host; if deleting the return does not fail R,
+the case is not reaching that update — fix the case, not the proof.) Where a case passes on `main` with no fix,
 keep it as the guard and say so in the measurements file; that it is not vacuous is shown by the
 same case failing on a fixed form with its fix deleted.
 
-### Task A397.1 — people (`apps/dashboard/src/widgets/person-edit.ts`, `person-form.ts`) and the variant form (`variant-form.ts`, new `variant-form.unsaved.test.ts`)
+### Task A397.1 — people (`apps/dashboard/src/widgets/person-edit.ts`, `person-form.ts`)
 
-`pnpm --filter @waitron/dashboard exec vitest run src/widgets/person-edit.unsaved.test.ts src/widgets/person-form.unsaved.test.ts src/widgets/variant-form.unsaved.test.ts`, then each form's
-other suites (`person-edit*.test.ts`, `person-form*.test.ts`, `variant-form*.test.ts`,
-`product-editor.unsaved.test.ts` and `product-editor.test.ts` unedited).
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/person-edit.unsaved.test.ts src/widgets/person-form.unsaved.test.ts`, then each form's other suites (`person-edit*.test.ts`,
+`person-form*.test.ts`) and the screen that hosts them (found by grep).
+
+### Task A397.1b — the variant form (`variant-form.ts`, new `variant-form.unsaved.test.ts`)
+
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/variant-form.unsaved.test.ts`, then
+`variant-form*.test.ts`, and `product-editor.unsaved.test.ts` and `product-editor.test.ts` unedited.
 
 ### Task A397.2 — purchases and shifts (`apps/dashboard/src/widgets/purchase-form.ts`, `shift-dialog.ts`)
 
