@@ -3985,25 +3985,32 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      belongs to a location, not a department (`printers.location_id`); departments share one through
      `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
 
-- **A413 — the Devices screen and Add a device (owner, 2026-10-08; in progress in lane E on `fix/devices-screen-add-device`).**
-  1. **Two "Add a device" buttons when there are no devices**: one in the page heading and one in
-     the "No devices yet." box. Show one.
-  2. **After a device joins, ask whether to add another** (owner revised this part, 2026-10-08).
-     Close the waiting dialog and show a compact confirmation: "[device name] has been added."
-     and "Do you want to add another device?" Close ends adding; Add another device resumes
-     waiting with "Waiting for more devices…". The first wait keeps "Waiting for devices…".
-     Both languages. Release this flow's pairing hold while the question shows. Releasing the
-     last hold discards simultaneous pending asks: those devices ask again after Add another
-     device reopens the window. Asks kept live by another hold are offered after reopening.
-  3. **The devices table has no search and no filters.** The shared `wt-data-table` offers both
-     (`searchable`, which the content languages, modifiers and units screens turn on, and column
-     filters); `devices-screen.ts` passes the filter labels but turns neither on. Filter at least by
-     device profile and status.
-  Review follow-up: the profile filter's None choice selects devices whose Profile cell is blank;
-  typing "None" or "Ninguno" in search therefore finds none. The blank cell is unchanged from
-  main `3c508a481` (`#profileName` returns an empty string when there is no matching profile).
-  No wording change is queued. A Pair save completing after disconnect/reopen remains outside
-  this item's scope; its existing unsaved-draft tests remain in place.
+- **A413 — the Devices screen and Add a device — DONE (#1436, 2026-10-08).**
+  The page keeps one heading Add a device action, including when empty, and adds localized search
+  and device-profile/status filters. The owner's 14:05 revision replaces the fading message with
+  a compact confirmation: its heading says the device has been added (or enabled), and its
+  description asks whether to add another. Close or Escape ends adding; the primary Add another
+  device action reopens the waiting dialog with a fresh QR read and "Waiting for more devices…".
+  The first wait says "Waiting for devices…". Both languages are covered.
+  This flow releases its pairing hold while confirming. The real-store probe observed two pending
+  asks become zero when the last hold was released, and remain two with another live hold. A
+  discarded ask must be made again after the window reopens; a kept ask remains available. The
+  reopening read refreshes the list, keeps a newer live snapshot, and applies the same replaced-ask
+  checks as the subscription. A settled Pair form with later delivered edits keeps its draft checks
+  and shows neither waiting nor the confirmation until it closes.
+  Signed-off squash `fde31b09bee9ee68bcfbede8e1fe7b520d3fb17c`; final head
+  `4e6c6992cbc398ec96e525bd29b41ae22855066a`. Completed Claude run-it retry: 165s; three low
+  findings addressed with failing checks before fixes. The earlier revised-flow dispatch returned
+  only pending prose and did not count as a completed review. Focused Chromium: 338 cases;
+  fiscal golden-record/immutability: 20 unchanged cases. Four revised-flow deletion controls failed
+  and the restored five cases passed; the hold assertion was strengthened after its first control
+  survived an earlier fixture release. Final EN/ES, both-theme, measured 390/1280px screenshots were
+  inspected. The normal hook passed in 131s with 5,406 root tests. CI 37779466693, licence 37779466249
+  and CodeQL 37779462439 passed on the final head; dashboard CI passed 9,651 cases with coverage
+  above its thresholds. The merge's own CI is checked separately in the campaign ledger.
+  Remaining limit: the native dialog's accessible name is tested, but actual screen-reader speech
+  is unverified. Unassigned Profile cells stay blank; the None profile filter selects them. No
+  cell-wording change was queued.
 
 - **A414 — device screens on a phone (owner, 2026-10-08; open; no lane yet).**
   1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
@@ -6793,14 +6800,14 @@ approved.
 ### B9. CI and test infra
 
 - **Image smoke's package-index refresh can consume its whole job limit — OPEN (2026-10-08,
-  observed while checking A407's merge; no action queued).** In main run 37771042263, job
+  observed while checking A407's merge; queued as A422 in lane A).** In main run 37771042263, job
   113290522107 entered the AppArmor/BlueZ setup step at 11:35:49 UTC. Its last output at
   11:36:22 was from `apt-get update`, including an ignored `noble InRelease` from
   `azure.archive.ubuntu.com`; it printed nothing else before cancellation at 11:50:57.
   The same step took eleven seconds in successful main run 37767334613. No image build or smoke
   ran in the cancelled job; its log does not establish the network fault. Lane E retained the log
-  and did not rerun it unchanged. **Next action:** queue a scoped change that bounds the package
-  refresh's network waits, with a deliberately stalled command as the timeout control.
+  and did not rerun it unchanged. **Next action:** lane A's A422 bounds and retries the package
+  refresh's network waits, with a deliberately stalled mirror as the timeout control.
 - **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
   watcher/owner 2026-10-08, "active monitoring") — DONE (#1427).** PR #1399's image smoke sat
   46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
