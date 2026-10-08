@@ -1815,6 +1815,73 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
   the same column. Left open by the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
+- **A pending card refund does not refuse joining or unjoining tables, though the bill payments
+  design says it does.** Nobody has yet checked whether either can change what the bill charges.
+  **Next action:** the owner decides whether the code should refuse them or the design should drop
+  them from the list; then a test that tries each during a pending refund.
+  [Detail](backlog/payments.md#a-pending-card-refund-does-not-refuse-joining-or-unjoining-tables-though-the-bill-payments-design-says-it-does)
+
+- **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Still
+  open: whether we may supply the idempotency key, whether reader webhooks are signed, and whether
+  `void` maps onto the refund endpoint. [Detail](backlog/payments.md#the-sumup-solo-experiments)
+
+- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine, and
+  decide how a payment keyed on it and recorded in the till as a manual card tender is matched to
+  the record SumUp keeps with no sale of ours attached — the reconciler's sweep, and whether it can
+  see a manual tender at all, decide it. Replace the design's estimated prices with real quotes.
+  [Detail](backlog/payments.md#the-delis-outage-card-machine)
+
+- **The printer-cradle experiment** (hardware not yet owned). SumUp's OpenAPI has no `print` and no
+  receipt option on a reader checkout, so we can neither request nor suppress a cradle slip. State the
+  failing case first (the cradle stays silent), with a standalone payment as the control. Also unread:
+  `GET /v1.1/receipts/{transaction_id}`, richer than the four fields the adapter keeps.
+
+- **What #329 left open:** adding or adopting a reader does not shut out a provider disconnect at the
+  same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
+  itself, and polling must go through the passive-session controller.
+
+- **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
+  interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
+  raises `payment.pending_outcome_unactionable` for a human.
+  [Detail](backlog/payments.md#the-sumup-reconciler)
+
+- **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
+  caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
+
+- **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
+  auth. Gated on the deli having a Stripe account, which it does not.
+
+- **What M7b2 left open (a manager clearing a stuck card payment, #702).** When the reader poll
+  times out or errors, `collect` cancels the reader action best-effort and fails the row. If that
+  cancel fails and the customer then taps, the money is captured while the local row says `failed`;
+  only reconciliation sees it.
+  [Detail](backlog/payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702)
+
+- **Slice 2 — the handheld NFC/QR link.** Also here: restoring `stripe_on_device` (Tap-to-Pay). NFC
+  (W102, not queued: it needs a real NFC handheld and tag to probe — owner 2026-10-08) and
+  Tap-to-Pay are still open. [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
+
+- **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
+  BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
+  Stripe Checkout adapter that already exists forecloses no cheaper provider later.
+
+- **A guest paying from their own phone** (owner idea 2026-09-18, parked — the surface it needs does
+  not exist). The waiter hands a greeted table a QR code standing for its newly opened tab; the
+  diner scans it, reads the menu, orders, watches what has been served and what is still coming, and
+  settles at the end. The ordering surface itself is parked under _online ordering (SP15)_ and the
+  customer-facing menu. [Detail](backlog/payments.md#a-guest-paying-from-their-own-phone)
+
+- **Routing by BILL SIZE is allowed but is the smallest lever** (owner idea 2026-09-18, arithmetic
+  in the research note). The card mix moves the crossover further than the bill size does, and the
+  deli's own mix is a query once it trades, not a research question.
+  [Detail](backlog/payments.md#routing-by-bill-size-is-allowed-but-is-the-smallest-lever)
+
+- **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
+  built.** Start by reading what the SumUp Solo actually does on a signature-required card (it
+  belongs with the SumUp Solo experiments above), because if the reader owns the whole step there
+  may be nothing for us to build.
+  [Detail](backlog/payments.md#some-card-payments-ask-the-cardholder-to-sign-instead-of-enter-a-pin--open-question-nothing-built)
+
 ### Users, sign-in and the dashboard shell
 
 _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
@@ -1968,6 +2035,9 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   #620 while pruning comments. `pg` is now installed only for `bench/pglite-throughput`; whether a
   credential-bearing URL can still reach the log is unchecked.
   [Detail](backlog/alerts.md#redact-secretsts-was-written-against-the-postgresql-connection-string-parser)
+
+- **Still not built: a standby that has fallen behind** — left open by "Dashboard alerts and the
+  incidents surface" (A5, LANDED #363/#368/#371).
 
 ### Working time and staff
 
@@ -5218,129 +5288,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
   and decides whether the product editor keeps both summaries.
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
-
-### A5. Incidents and notifications
-
-**Dashboard alerts and the incidents surface — LANDED #363/#368/#371.** Still not built: a standby
-that has fallen behind.
-
-### A6. Payments
-
-- **A pending card refund does not refuse joining or unjoining tables, though the bill payments
-  design says it does.** The design's §5.2 list ("each payment, refund, void, quantity change,
-  adjustment, split, transfer, join and unjoin … are refused with `bill.refund_in_progress`",
-  [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md)) names join and
-  unjoin. The run-it review of #851 (2026-09-29) reported that joining a free table to the party
-  and unjoining a table without moving any dishes both succeeded while a card refund of the bill
-  was pending; its probes were temporary and are not in the tree. Nobody has yet checked whether
-  either can change what the bill charges. **Next action:** the owner decides whether the code
-  should refuse them or the design should drop them from the list; then a test that tries each
-  during a pending refund.
-- **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Question
-  4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
-  so the owner chose a separate standalone card machine for the internet-down case
-  ([deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md) §5). Still open: whether we
-  may supply the idempotency key, whether reader webhooks are signed, and whether `void` maps onto
-  the refund endpoint.
-- **The deli's outage card machine** (the deli hardware design §5). Buy the standalone machine, and
-  decide how a payment keyed on it and recorded in the till as a manual card tender is matched to the
-  record SumUp keeps with no sale of ours attached — the reconciler's sweep, and whether it can see a
-  manual tender at all, decide it. Replace the design's estimated prices with real quotes. A barcode
-  scanner only if the deli sells barcoded goods — nothing in the till reads one today.
-- **The printer-cradle experiment** (hardware not yet owned). SumUp's OpenAPI has no `print` and no
-  receipt option on a reader checkout, so we can neither request nor suppress a cradle slip. State the
-  failing case first (the cradle stays silent), with a standalone payment as the control. Also unread:
-  `GET /v1.1/receipts/{transaction_id}`, richer than the four fields the adapter keeps.
-- **What #329 left open:** adding or adopting a reader does not shut out a provider disconnect at the
-  same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
-  itself, and polling must go through the passive-session controller.
-- **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
-  interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
-  raises `payment.pending_outcome_unactionable` for a human. Note: a SumUp refund appears both as a
-  `REFUND` event inside the original transaction (`events` and `transaction_events`, which the
-  refund lookup reads) and as its own item of `type: REFUND` in the transaction history listing;
-  the original's `status` stays `SUCCESSFUL` (read on 2026-09-27 from three refunded transactions).
-- **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
-  caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
-- **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
-  auth. Gated on the deli having a Stripe account, which it does not.
-- **What M7b2 left open (a manager clearing a stuck card payment, #702).**
-  - Stripe Terminal's automatic `resolvePending` sweep is still a no-op, on purpose. During a LIVE
-    collect the row is `attempting` and its PaymentIntent waits for a card, so a sweep that cancels
-    would cancel a payment a customer is about to tap. Only the manager action, which first checks
-    that no attempt is running in this process, asks Stripe, and cancels the PaymentIntent if Stripe
-    still allows it.
-  - SumUp has no permanent lock: its sweep resolves every `attempting` row against SumUp, and fails
-    one SumUp has never heard of after 15 minutes, with an incident. It leaves a row only while SumUp
-    keeps answering PENDING. The manager action refuses a SumUp payment
-    (`payment.resolve_unsupported`).
-  - When the reader poll times out or errors, `collect` cancels the reader action best-effort and
-    fails the row. If that cancel fails and the customer then taps, the money is captured while the
-    local row says `failed`; only reconciliation sees it. Now that a resolver exists, leaving such a
-    row `attempting` would hand it to the manager action instead. That would also lock the order
-    until a manager acts, so it is the owner's call.
-  - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
-    the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
-    three times alone (2026-09-26); its Stripe twin, `stripe-add-reader.test.ts`, was logged failing
-    about one whole-package run in three (2026-09-27). #721 made both wait for the native
-    dialog's `close` event before counting `onClose`. Neither has been re-measured since; on a
-    recurrence, keep the log.
-- **Slice 2 — the handheld NFC/QR link.** Owner decisions 2026-09-18
-  ([2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
-  §2–§3): the waiter carries the reader to the table and settles there; pairing is an NFC sticker, a
-  printed QR sticker, or **a dropdown, which is the fallback that always exists and should be built
-  first**. Readers are SHARED between waiters, so the tap and the scan are for confirming which
-  reader is in your hand, not for speed — a remembered reader is offered, never auto-selected. Web
-  NFC is Chrome-for-Android only; the browser's own QR decoder is not dependable, so decode in JS or
-  WASM. Also here: restoring `stripe_on_device` (Tap-to-Pay). Redsys and
-  bank terminals are parked; Bizum research is under _Later and parked_.
-  _2026-10-07: the printed QR sticker and the dropdown landed with W100 (#1332;
-  see "Devices, profiles and departmental transfers" below). One difference from the decision
-  above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
-  the dropdown moves it to the waiter's device. NFC (W102, not queued: it needs a real NFC handheld and tag to probe — owner 2026-10-08) and
-  Tap-to-Pay are still open._
-- **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
-  BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
-  Stripe Checkout adapter that already exists forecloses no cheaper provider later.
-- **A guest paying from their own phone** (owner idea 2026-09-18, parked — the surface it needs does
-  not exist). The waiter hands a greeted table a QR code standing for its newly opened tab; the diner
-  scans it, reads the menu, orders, watches what has been served and what is still coming, and settles
-  at the end. Two owner decisions were taken while pricing it: **the diner's phone reaches us over the
-  PUBLIC INTERNET** through the venue's cloud instance, not the restaurant's wifi — which is what lets
-  a provider call back to say the money arrived; and **Waitron runs SEVERAL payment providers at
-  once**, routing each payment method and channel to whichever is cheapest for that cell, so this is
-  never a single-vendor choice. The owner's worked example: Mollie for Bizum, SumUp for card-present,
-  the online card case still open. Costs of doing that, to weigh rather than wish away: one merchant
-  account and one settlement reconciliation per provider, and one adapter each to write and keep
-  working. Prices and receipts:
-  [2026-09-18-online-payment-providers-bizum.md](research/2026-09-18-online-payment-providers-bizum.md).
-  The ordering surface itself is parked under _online ordering (SP15)_ and the customer-facing menu.
-- **SumUp's card-present price is a plan choice, not a rate** (owner supplied the table, 2026-09-18).
-  Tarifa Plana (€25/month, 0 % up to €2 500/month of Spanish debit/credit, then 0,79 %) is the plan to
-  assume and beats Stripe Terminal on a Spanish card, so SumUp is **confirmed for the card-present
-  seat**. SumUp's online rate (1,95 % on every plan) keeps it a weak candidate for the guest's own
-  phone.
-- **Routing by BILL SIZE is allowed but is the smallest lever** (owner idea 2026-09-18, arithmetic in
-  the research note). The card mix moves the crossover further than the bill size does, and the deli's
-  own mix is a query once it trades, not a research question. Two things to know before building it:
-  the provider is chosen when the payment page is minted, so the AMOUNT can be routed on and the CARD
-  CLASS cannot; and a refund must return through whichever provider took the payment. So **method
-  first**; the variant that earns its keep is card-present, spending SumUp's Tarifa Plana €2 500
-  monthly allowance first, which needs no second merchant account.
-- **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
-  built.** When a card or its issuer picks signature as the way it proves the person is who they say
-  (the card-scheme term is the Cardholder Verification Method), the payment is only complete once a
-  signature is captured, and the merchant is usually expected to keep it in case the payment is later
-  disputed. Three things to settle before this is a task, none of them verified yet: (1) whether our
-  readers — the SumUp Solo, and Stripe Terminal if it ever comes back — handle the signature entirely
-  on the reader and hand us a finished payment, or whether they hand the signature step back to us to
-  run on the waiter's screen; (2) if it lands on us, WHERE the signature is captured and kept (an
-  on-screen signature pad, or a printed receipt with a signature line the waiter files) and how that
-  record is stored and retrieved for a dispute; and (3) whether the fiscal receipt has to show
-  anything about it — this is a card-scheme rule, separate from the Veri\*Factu invoice record, so
-  confirm the two do not touch before assuming they are independent. Start by reading what the SumUp
-  Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
-  because if the reader owns the whole step there may be nothing for us to build.
 
 ### A7. Users, roles and the dashboard shell
 
