@@ -1521,8 +1521,7 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b built on `feat/save-follows-changes-hardware`
-(pull request pending); batch 4a module forms; batch 5 (the till) in #1414; batch 6 audited with no
+BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 5 (the till) in #1414; batch 6 audited with no
 stored-setting editors; batch 7 unreserved forms audited; batches 2 and 4b OPEN.** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
@@ -1568,7 +1567,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`,
     `update-shift`) instead of pressing the form's button; they pass, but never prove the button
     works.
-- **Batch 3b — BUILT, pull request pending.** Printers, devices, device profiles, payments,
+- **Batch 3b — LANDED in #1415.** Printers, devices, device profiles, payments,
   canvases: the print agent's Edit dialog, a printer page's name and connection editors, the
   calibration wizard, the Bluetooth printer Pair dialog, the Edit device dialog, the device profile
   editor, the card reader's Rename dialog, the bill attestation and the canvas editor (list:
@@ -1591,7 +1590,11 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   attest). Seen and not changed, because this batch does not touch them: the canvas Create and
   Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow to show "A331 look
   canvas (copy)" whole; the printer name dialog is titled "Add a printer" when its button says
-  Enable.
+  Enable. Also for the owner to confirm (rulings named in #1415): the Bluetooth Pair dialog and the
+  bill attestation are gated like a save (both open with every required field empty); a device
+  profile whose only zone was since switched off opens quiet, so its "zones required" message shows
+  after the next real change rather than on an untouched press. The look left a switched-off printer
+  named "A331 look Epson" (the owner's Epson at 192.168.10.81) in the shared demo venue.
 - **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
   booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
   and SumUp Connect/Pair/Try again remain provider operations;
