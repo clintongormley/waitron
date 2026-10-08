@@ -6544,7 +6544,7 @@ approved.
 ### B9. CI and test infra
 
 - **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
-  watcher/owner 2026-10-08, "active monitoring") — DONE (#TBD).** PR #1399's image smoke sat
+  watcher/owner 2026-10-08, "active monitoring") — DONE (#1427).** PR #1399's image smoke sat
   46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
   would have let it run six hours. Every job that had no limit now carries one of twice its longest
   measured run, rounded up to a multiple of 5 (minimum 5), and a job calling a reusable workflow has
