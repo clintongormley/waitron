@@ -788,6 +788,24 @@ Cancel/discard protection and reconnect checks. `wt-input` now forwards an optio
 `step`, tested through the native time control with 900 seconds. Week/date grids, day-copy actions,
 staged parent saves and the nested period flow remain unimplemented; keep Task 13 unchecked.
 
+**Checkpoint 2026-10-08, 16:43: normal-week parent.** This supersedes the prerequisite
+checkpoint's remaining normal-week and nested-flow work. `opening-hours-week` renders seven
+Monday-to-Sunday columns, with each day's copy/clear menu in `service-grid`'s `header-{key}` slot.
+A range edit stages the week's values; one Save sends all seven days, indexed Sunday first.
+The parent owns a draft scope, quiet unchanged Save and the refusal beside the named day.
+Background snapshots keep dirty ranges; a write begun before disconnect cannot mark the
+reconnected draft saved. Creating a period returns to the same range with its times kept and
+the new id selected. Native child cancellation returns without a write. The parent uses the
+opening's identity and connection generation for late replies and departed controls.
+
+Focused browser checks cover these paths, EN/ES discard and reconnect, and six accessibility
+states in both themes. The new file's restricted coverage is 100/100/100/95.48; this is not a
+package-wide result. Normal-week, copy, range, nested period, refusal and native day-menu layouts
+were inspected at measured 390/1280 CSS pixels in both languages and themes. The remaining
+special-date switch/picker, closed-day `[]`, follow-week DELETE and date-column save/refusal
+flow are still Task 13 work. Task 14's Day consumer and Task 12's legacy assertion migration
+also remain; keep both Task 12 and Task 13 unchecked.
+
 ### Task 14: Opening hours — Day tab, and the Departments page
 
 **Files:** modify `opening-hours-screen.ts`, `dashboard/venue-operations-screen.ts`

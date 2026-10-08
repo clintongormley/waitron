@@ -1547,6 +1547,14 @@ form's own checks disable the action; an error that comes back from a request ne
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
 
+The Opening hours normal-week editor stages its seven days before one Save. Each day's menu
+copies its ranges to selected weekdays or clears them locally. A range dialog stages its two
+times and period; New period opens the period editor above it, then returns to the same range.
+Save on the week waits while a child chooser is open. A server refusal that names a day sits in
+that day's header, with the form's generic message immediately above Save; the refusal leaves
+Save available for retry. A venue viewer gets the grid without day menus or Save. The special-date
+and Day consumers are still being built in A366 slice 1.
+
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
 `primary`; undoing the change back to the opened values makes it quiet and disabled again (owner

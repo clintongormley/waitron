@@ -495,7 +495,7 @@ export class ServiceGrid extends LitElement {
     >
       <div class="layout" style=${styleMap({ "--columns": String(this.columns.length) })}>
         <div class="heading"></div>
-        ${this.columns.map((column) => html`<div class="heading">${column.label}</div>`)}
+        ${this.columns.map((column) => html`<div class="heading">${column.label}<slot name=${`header-${column.key}`}></slot></div>`)}
         <div class="times" aria-hidden="true">
           ${hours.map((minute) => html`<span class="hour" style=${styleMap({ top: `${(minute / DAY) * 100}%` })}>${this.#time(minute)}</span>`)}
         </div>

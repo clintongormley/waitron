@@ -2,6 +2,10 @@ import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
   "opening.title": "Opening hours",
+  "opening.copy_day": "Copy this day to…",
+  "opening.clear_day": "Clear",
+  "opening.copy": "Copy",
+  "opening.check_day": "Check this day's time ranges and periods.",
   "opening.range_heading": "Time range",
   "opening.new_period": "New period…",
   "opening.start_required": "Enter a start time.",
@@ -734,6 +738,10 @@ const en = {
 
 const es: Record<keyof typeof en, string> = {
   "opening.title": "Horario de apertura",
+  "opening.copy_day": "Copiar este día a…",
+  "opening.clear_day": "Borrar",
+  "opening.copy": "Copiar",
+  "opening.check_day": "Revisa las franjas horarias y los periodos de este día.",
   "opening.range_heading": "Franja horaria",
   "opening.new_period": "Nuevo periodo…",
   "opening.start_required": "Indica una hora de inicio.",

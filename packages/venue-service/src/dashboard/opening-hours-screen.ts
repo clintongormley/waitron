@@ -11,6 +11,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./period-editor.js";
+import "./opening-hours-week.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { MenuPeriodInput, MenuPeriodUse, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -300,7 +301,9 @@ export class OpeningHoursScreen extends LitElement {
                   this.followUrl();
                 }}
               >
-                <div slot="week"></div>
+                <div slot="week">
+                  ${this.view === "week" && department ? keyed(department.id, html`<opening-hours-week .api=${this.api} .department=${department} .menus=${this.model!.menus} .dayCutover=${this.model!.dayCutover} .readOnly=${this.readOnly}></opening-hours-week>`) : nothing}
+                </div>
                 <div slot="periods">
                   ${this.view === "periods" && department ? this.periods(department) : nothing}
                 </div>
