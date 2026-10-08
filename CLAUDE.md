@@ -229,8 +229,8 @@ called weaker than its name, the topic file lists what it does not see.
   through `draftScopeFor` and `saveActionState` plus an early return in its save handler (owner,
   2026-10-07, A331); the forms that follow it are listed in design-system.md, and nothing guards it
   across screens. A button that is not a save is drawn quiet while it waits for a choice, a
-  selection or a load, and in its own colour once it can act or while its own request is sent
-  (owner, 2026-10-08, A416); its exceptions are in design-system.md → Forms, and nothing guards it
+  selection or a load, or while its row's own state rules it out, and in its own colour once it can
+  act or while its own request is sent (owner, 2026-10-08, A416 and A427); its exceptions are in design-system.md → Forms, and nothing guards it
   across screens. A field's hint is its placeholder. A short explanation is a hint, not a "?"
   button (owner, 2026-10-03); nothing guards that across screens (backlog A237). Every input has a
   semantic `name`, never a generated widget id. The owner's other dated decisions, and the sign-in
