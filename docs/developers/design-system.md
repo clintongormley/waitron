@@ -3032,12 +3032,14 @@ hide the old document while reading its replacement. Changing the dashboard inte
 rebuilds its screen, so that separate operation reads the preview again.
 
 If a tab has an Add or Create action, put it in the `actions` slot for the selected tab. This
-places the action beside the tabs and outside the tab list's accessibility role. At phone width,
-the tabs and a group of actions scroll separately, so the action area stays on screen when the tabs
-scroll. You can style the `tab-row`, `tablist` and `tab-actions` parts to put an action on its own
-line when the strip leaves too little room. Go by the row's own width, not a breakpoint: Printers
-lets `tab-row` wrap, so its action drops under the tabs, at the trailing edge, exactly when tabs and
-action do not fit side by side. Keep actions for other tabs out of sight until their tab is selected.
+places the action at the end of the tab row, outside the tab list's accessibility role, and keeps it
+there on the tabs' line at every width: never let the row wrap the action onto a line of its own
+(owner, 2026-10-08, A424). The tab strip takes the rest of the row and scrolls sideways beside the
+action, ending where the action begins. The action keeps its whole width up to the row less two
+touch targets; a group of actions wider than that scrolls within its own area. A selected tab wider
+than the strip shows its start: in Spanish at a 390 px window, Printers' "Agentes de impresión" tab
+is cut that way beside "Añadir un agente". Keep actions for other tabs out of sight until their tab
+is selected.
 A tab whose list is a tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
 Structure tab puts them in the ⋮ of the menu's own row and of each section the menu owns, and
 nothing in the `actions` slot (the "the Structure tree" cases in
