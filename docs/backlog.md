@@ -358,6 +358,119 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Removing or disabling it until slice 3 lands the replacement is a product call, not a wording one.
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
+- **Live production recovery and continuous complete-server recovery remain open.** The restore
+  choice now includes guided Cloud recovery of a verified test-venue snapshot. The replacement shows
+  the pairing code and approved capture time, then requires an explicit local restore.
+
+- **Open owner call — setup always stores a language on the account.** If the browser sends no
+  language, or one Waitron does not ship, the account gets the venue's language saved as though
+  chosen — so the stored value cannot tell "chose Spanish" from "said nothing", and it does not
+  follow a later change to the venue default. Keep this, or store a language only when the browser
+  asked for one?
+  [Detail](backlog/setup.md#open-owner-call--setup-always-stores-a-language-on-the-account)
+
+- **The configuration preview names what it will copy by database table** — left open by C42
+  (#837). The names come from each module's `configuration-transfer.ts` list; about fifty can
+  arrive. Give them operator words, grouped, or keep the table names.
+  [Detail](backlog/setup.md#the-configuration-preview-names-what-it-will-copy-by-database-table)
+
+- **The Review screen scrolls sideways at 390px** when a value is long (a 56-character email made
+  it 530px wide in English, 537px in Spanish): its `auto 1fr` columns never narrow below the
+  longest value. Left open by C42 (#837).
+
+- **The Cloud restore screen shows capture and expiry times as the server's raw ISO text** in both
+  languages, and the Review screen shows invoice languages as codes. _(C113, #1014: one code now.)_
+  Left open by C42 (#837).
+
+- **The Spanish certificate export steps name Chrome, macOS and Firefox menus from memory**
+  ("Gestionar certificados importados de Windows", "Acceso a Llaveros", "Sus certificados"…), and
+  the FNMT links still open FNMT's English pages. Check them on real Spanish systems with the item
+  below. Left open by C42 (#837).
+
+- **The certificate export help has never been followed on a real machine** — still open after
+  #334. Nobody exported a certificate through Windows', macOS' or Firefox's own certificate store
+  while reading the new guidance, so the instructions are unverified against the thing they
+  describe.
+  [Detail](backlog/setup.md#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
+
+- **Switching setup mode does not clean up what the server already holds** — still open after
+  #334. If someone fills in Demo, Prepare or Live far enough that the server has stored part of
+  that answer and then switches mode, what the server kept is untested — write a test that stages
+  configuration in one mode, switches, and asserts what survives.
+  [Detail](backlog/setup.md#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
+
+- **The setup app's catch-all redirect was not proven by deleting it** — still open after #334.
+  The reviews checked this by running the route tests and the full server suites, not by removing
+  each exclusion one at a time and watching a test fail, and no separate probe confirmed the trading
+  app is untouched by the redirect.
+  [Detail](backlog/setup.md#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
+
+- **A draft carrying a country with no venue-setup pack** — found while bringing `apps/setup` to
+  the coverage bar (2026-09-23), left unfixed. It shows Spain in the country select while the
+  screen holds the other value, so "Check the country." sits beside what looks like a valid choice.
+  [Detail](backlog/setup.md#a-draft-carrying-a-country-with-no-venue-setup-pack)
+
+- **A fiscal test or a provision that answers after the wizard has been removed from the page
+  leaves it stuck when it is put back** — found while bringing `apps/setup` to the coverage bar
+  (2026-09-23), left unfixed. The app mounts the wizard once and never removes it, so this may be
+  unreachable in use.
+  [Detail](backlog/setup.md#a-fiscal-test-or-a-provision-that-answers-after-the-wizard-has-been-removed-from-the-page-leaves-it-stuck-when-it-is-put-back)
+
+- **In Demo, a server refusal of a field Demo hides can only be retried unchanged** — a Demo gap
+  on the setup wizard's venue screen as it stands after C47s (#840), left unfixed. Whether the
+  server ever refuses Demo's fixed series codes is not established.
+  [Detail](backlog/setup.md#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
+
+- **In Demo with a draft country that has no venue-setup pack** — a Demo gap on the setup
+  wizard's venue screen as it stands after C47s (#840), left unfixed. The screen says from the
+  start that Demo's invoice settings have not loaded, even when they have (the unknown country names
+  no filing module to take a description from), and Next only moves focus to that sentence.
+  [Detail](backlog/setup.md#in-demo-with-a-draft-country-that-has-no-venue-setup-pack)
+
+- **In Demo, a local check that fails only on a field Demo hides** — a Demo gap on the setup
+  wizard's venue screen as it stands after C47s (#840), left unfixed. All of this was read in the
+  code, not run; whether a real draft can reach that state has not been tested.
+  [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
+
+- **A refused backup-file input on the backup restore screen gets no red outline — OPEN.** The
+  screen's own styles have no rule for an invalid input (seen in screenshots of the refused state
+  during A151). The recovery key and recovery kit moved to `wt-input` and `wt-textarea` in A178d,
+  which draw their own invalid state (read, not run), so the backup-file input is what is left.
+
+- **A venue's time zone must come from its country pack's list (A166, owner 2026-10-01)** — OPEN.
+  Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
+  emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
+  and creation/provisioning writers refuse a zone not on its country's list.
+  [Detail](backlog/setup.md#a-venues-time-zone-must-come-from-its-country-packs-list-a166-owner-2026-10-01)
+
+- **Remaining "?" buttons that should be hints (A237, owner 2026-10-03)** — OPEN. The rule — a
+  short explanation is the field's hint, and the "?" button is only for one too long for a hint or a
+  field that starts filled in — was applied to the setup wizard's first four screens only, and
+  nothing enforces it. Other screens' "?" buttons were not reviewed against the rule.
+  [Detail](backlog/setup.md#remaining--buttons-that-should-be-hints-a237-owner-2026-10-03)
+
+- **No test covers the setup review screen's value cell's own centring** — left open by A243
+  (W33, #1143). Removing it alone leaves all 31 review-screen tests green, because it changes
+  nothing until a label is taller than its value (a label wrapping onto two lines).
+  [Detail](backlog/setup.md#no-test-covers-the-setup-review-screens-value-cells-own-centring)
+
+- **The demo venue's departments' internal names still follow the seed language.** Left open by
+  W108 (#1276, the demo venue's names and tax ID come from the country pack).
+
+- **Still open from W109-5's Barcelona look (2026-10-07):** product groups and prep stations
+  stay English under Spanish staff-facing dish names (the plan's known limit). Stored practice sales
+  cannot be reprinted or looked up on the till: both look a sale up through its till order, which a
+  practice sale does not have (the look's reading, not checked against the code).
+
+- **The demo's Drinks section labels in Catalan and Galician are drafts awaiting a speaker's
+  check**, like W109-3's text below. Left open by A321 (the demo's included Drinks menu opens onto
+  four sections).
+
+- **The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE;
+  the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** A speaker of each
+  should read it.
+  [Detail](backlog/setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
+
 ### Menus and the catalogue
 
 _Formerly Track A's catalogue and menus part, and the catalogue entries filed under A2._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
@@ -683,12 +796,21 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   person does. Left open by SQLite slice 2.
   [Detail](backlog/dashboard.md#task-1b-554-session-cookies-stored-only-as-hashes)
 
+- **Quantity-display follow-ups found while tracing A313, OPEN, unqueued:** the Top sellers table
+  renders its quantity strings directly (`apps/dashboard/src/widgets/top-sellers-table.ts`), and the
+  till's `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These
+  are readings, not browser reproductions; reproduce them before changing their displays.
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them._
 
 - **The recovery page's Spanish (#650) has not been read by a native speaker.** Left open by SQLite
   slice 2 Task 3a (#566, one process per venue folder; #573; #608).
+
+- **The file pickers' "Choose File / No file chosen" follow the browser's language**, not the
+  chooser; the browser draws them. Left open by C42 (#837, the setup wizard in Spanish and
+  English).
 
 ### Alerts, logging and diagnostics
 
@@ -3889,271 +4011,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
 ### A2. The setup wizard
-
-The restore choice now includes guided Cloud recovery of a verified test-venue snapshot. The
-replacement shows the pairing code and approved capture time, then requires an explicit local
-restore. Live production recovery and continuous complete-server recovery remain open.
-
-**Built:** the wizard (#334) and its corrections plus a first-sign-in passkey offer (#347); restore
-and configuration import working in a real browser (#584); a centred page with the logo, not a
-pop-up (C39, #828); Spanish and English with a language chooser (C42, #837); the form-error rule
-(C47s, #840); a refused dropdown's red outline (A151, #944).
-
-- **Open owner call — setup always stores a language on the account.** If the browser sends no
-  language, or one Waitron does not ship, the account gets the venue's language saved as though
-  chosen — so the stored value cannot tell "chose Spanish" from "said nothing", and it does not
-  follow a later change to the venue default. Keep this, or store a language only when the browser
-  asked for one? Since C42 a language picked in the wizard is sent as the provision's
-  `Accept-Language`, so a choice made there is stored like any other browser answer.
-- **The wizard has no spacing values of its own — DECIDED (owner, 2026-09-29): leave it.** It
-  borrows the pop-up's side spacing (`--wt-modal-inline-margin` and `--wt-modal-inline-padding`, in
-  `apps/setup/src/setup-app.ts`), so a later change to the pop-up's spacing moves the wizard too.
-
-**Left open by C42 (#837):**
-
-- _The configuration preview names what it will copy by database table_ (`products`,
-  `menu_item_variant_overrides`, `print_agents`…) in both languages
-  (`apps/setup/src/screens/configuration-preview-screen.ts`). The names come from each module's
-  `configuration-transfer.ts` list; about fifty can arrive. Give them operator words, grouped, or
-  keep the table names.
-- _The Review screen scrolls sideways at 390px_ when a value is long (a 56-character email made
-  it 530px wide in English, 537px in Spanish): its `auto 1fr` columns never narrow below the
-  longest value.
-- _The Cloud restore screen shows capture and expiry times as the server's raw ISO text_ in both
-  languages, and the Review screen shows invoice languages as codes. _(C113, #1014: one code now.)_
-- _The file pickers' "Choose File / No file chosen" follow the browser's language_, not the
-  chooser; the browser draws them.
-- _The Spanish certificate export steps name Chrome, macOS and Firefox menus from memory_
-  ("Gestionar certificados importados de Windows", "Acceso a Llaveros", "Sus certificados"…), and
-  the FNMT links still open FNMT's English pages. Check them on real Spanish systems with the item
-  below.
-
-**Still open after #334:**
-
-- _The certificate export help has never been followed on a real machine._ Nobody exported a
-  certificate through Windows', macOS' or Firefox's own certificate store while reading the new
-  guidance, so the instructions are unverified against the thing they describe. Fold this into the
-  device walkthrough (item 1 of _What to work on next_) and tick it off per operating system in
-  [ui-review.md](ui-review.md).
-- _Switching setup mode does not clean up what the server already holds._ #334 clears the browser's
-  own record that a certificate import was requested, and nothing more. If someone fills in Demo,
-  Prepare or Live far enough that the server has stored part of that answer and then switches mode,
-  what the server kept is untested — write a test that stages configuration in one mode, switches,
-  and asserts what survives.
-- _The setup app's catch-all redirect was not proven by deleting it._ Unknown setup addresses go
-  to `/` while real files and API routes keep their own responses. The reviews checked this by
-  running the route tests and the full server suites, not by removing each exclusion one at a time
-  and watching a test fail, and no separate probe confirmed the trading app is untouched by the
-  redirect.
-
-**Found while bringing `apps/setup` to the coverage bar (2026-09-23), left unfixed** — each was
-seen in a throwaway test, since deleted, and none has a test pinning it:
-
-- _A draft carrying a country with no venue-setup pack_ (a configuration import can bring one) shows
-  Spain in the country select while the screen holds the other value, so "Check the country." sits
-  beside what looks like a valid choice.
-- _A fiscal test or a provision that answers after the wizard has been removed from the page leaves
-  it stuck when it is put back_: the Run button stays on "Running test…", or the screen stays on
-  "Provisioning…", with no retry. The connection check releases itself in the same case. The app
-  mounts the wizard once and never removes it, so this may be unreachable in use.
-
-**Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
-each says whether it was seen in a run or only read in the code:
-
-- _In Demo, a server refusal of a field Demo hides can only be retried unchanged._ The shell routes
-  a refused `seriesCode`, `rectificativeSeriesCode` or `operationDescription` back to the venue
-  screen whatever the mode (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing).
-  The refusal's sentence shows above Next and pressing Next moves on to the review screen, which
-  sends the same series codes and description again, so the operator has nothing to change if the
-  server refused them. The venue screen's half is pinned by the `shows a Demo refusal of the hidden
-%s above Next, and pressing Next tries again` cases in `apps/setup/src/screens/venue-screen.test.ts`;
-  the move to the review screen (`#onAdvance` in `setup-app.ts`) was read, not run. Whether the
-  server ever refuses Demo's fixed series codes is not established.
-- _In Demo with a draft country that has no venue-setup pack_, the screen says from the start that
-  Demo's invoice settings have not loaded, even when they have (the unknown country names no filing
-  module to take a description from), and Next only moves focus to that sentence. When the draft
-  carries an operation description but no tax ID, a press puts "Enter the tax ID. Choose one or two
-  invoice languages." above Next, ahead of the generic sentence — two fields Demo does not show.
-  _(C113, #1014: the language sentence now reads "Choose the receipt language."; this case was
-  not run again.)_ Seen in a throwaway test on 2026-09-29, since deleted; nothing pins it.
-- _In Demo, a local check that fails only on a field Demo hides_ — for example a draft whose series
-  code equals its refund-invoice series code — shows its message above Next once Next has been
-  pressed, while Next stays enabled (it is disabled only by errors on fields the screen shows).
-  In that example both hidden fields carry the same message, and the message above Next is built
-  from every hidden field's error (the `bottom` list in `render`,
-  `apps/setup/src/screens/venue-screen.ts`), so "Use different codes for ordinary and correction
-  invoices." would appear twice. Every press only runs the focus-the-first-invalid-field step and
-  returns, so the draft is never sent. All of this was read in the code, not run; whether a real
-  draft can reach that state has not been tested.
-
-**A refused backup-file input on the backup restore screen gets no red outline — OPEN.** The
-screen's own styles have no rule for an invalid input (seen in screenshots of the refused state
-during A151). The recovery key and recovery kit moved to `wt-input` and `wt-textarea` in A178d,
-which draw their own invalid state (read, not run), so the backup-file input is what is left.
-
-**A venue's time zone must come from its country pack's list (A166, owner 2026-10-01) — OPEN.** The
-owner: _"in fact this should be chosen from a dropdown, and the options specified in the country
-package, eg Spain has two time zones, one for mainland and one for las canarias"_. Today setup does
-not let anyone choose it: it takes the zone from the province of the venue's address (Spain's pack,
-`packages/country-es/src/spain.ts:180`, gives Las Palmas and Santa Cruz de Tenerife
-`Atlantic/Canary` and every other province `Europe/Madrid`; the UK pack gives `Europe/London`). But
-the column, `locations.time_zone`, is plain text, and provisioning copies whatever it is given
-(`packages/provisioning/src/venue-apply.ts`).
-Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
-emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
-and creation/provisioning writers refuse a zone not on its country's list. A dropdown is needed
-only if a venue could ever need a zone other than
-its province's; for Spain the province decides. (Aside: a Canary venue cannot be set up yet — the
-pack marks the Canary tax territory unsupported.) Slice 3b's station opening hours ignore hours
-when the zone cannot be read, as a last defence
-([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
-A261 step 7's approved plan separately permits a named-zone override before dated history;
-its editor validates named zones and refuses numeric offsets. Importing configuration into an
-existing venue retains its saved zone (`applyPreparedLocation`,
-`apps/server/src/configuration-transfer.ts`); importing venue details is a creation concern,
-not an edit through that applicator.
-
-**A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
-DONE (#1257).** The save's refusal test also asserts `{ field: "color" }` since A281 (#1344).
-
-**Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
-explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
-that starts filled in — was applied to the setup wizard's first four screens only, and nothing
-enforces it. Candidates still showing a "?" for a short explanation: every field on
-`apps/setup/src/screens/connect-screen.ts` (strings `connect.*.help` in
-`apps/setup/src/i18n/strings/start.ts`), and the backup file and the recovery key on the backup
-restore screen (`restore.backup_file_help` and `restore.recovery_key_help` in
-`apps/setup/src/i18n/strings/restore.ts`). The connect screen fills its fields in again from the
-earlier request when the operator comes back to it, which is the rule's "starts filled in"
-exception, so each of its fields needs a judgement rather than a straight swap. Other screens' "?"
-buttons were not reviewed against the rule. A243 removed every "?" button from the setup review
-screen. Separately, the role screen
-(`apps/setup/src/screens/role-screen.ts`), reached from Join or recover, still shows its choices as
-cards with buttons rather than `wt-choice-row` rows. The certificate help page the setup wizard opens
-(`/setup/trust`, drawn by `apps/server/src/trust-page.ts`) still writes the browser's warning as
-“not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
-
-**The setup review screen's "?" buttons (A243, owner 2026-10-03) — DONE (W33, #1143, 2026-10-03).**
-Left open: no test covers the value cell's own centring (`align-self: center` on the value in
-`review-screen.ts`) — removing it alone leaves all 31 review-screen tests green, because it changes
-nothing until a label is taller than its value (a label wrapping onto two lines). The test that
-used to cover it was deleted on the owner's answer to the W33 question; the certificate-row test
-covers only the label's centring.
-
-**The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — DONE
-(W34, #1144).**
-
-**A Demo bar on the till and dashboard (A246, owner 2026-10-03) — DONE in W36 (#1148).**
-
-**The demo venue's names and tax ID come from the country pack (owner 2026-10-05) — DONE in
-W108 (#1276, main 99e986957).** The departments' internal names still follow the
-seed language.
-Left open:
-
-- _A Demo for a country whose pack has no demo values is not refused at the setup route._ The demo
-  seed refuses it (`seedInstalledDemo`, `apps/server/src/demo-seed.ts`), but only after the venue
-  has been provisioned. Only Spain is offered at setup today, and Spain has the values. Refusing it
-  in `parseProvisionPayload` (`apps/server/src/setup-api.ts`) turned the case "keeps the typed tax
-  id, postcode and province when the country has no rules for them" in
-  `apps/server/src/setup-api.country-pack.test.ts` red, because it sends a Demo for a United
-  Kingdom pack with no demo values; that test was left unchanged for the owner to decide.
-  **Owner answer 2026-10-06 (W109 point A):** a country pack carries its own made-up demo
-  identity; there is no form path for a pack without one. The demo-data plan's Task 2 (W109-2,
-  `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) enforces it with a test that
-  every pack offered at setup carries one, not with a route refusal, so that test stays as it is.
-  **Closed by W109-2:** the guard in `apps/server/scripts/demo-seed/data-set.test.ts` fails when a
-  pack in `VENUE_SETUP_COUNTRY_PACKS` has no demo identity, or files with a module that has no
-  default operation description; the setup route only finds those packs.
-
-**The demo seed's data is one data set the country pack names (W109 step 1, Task 1 of
-`docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) — DONE (W109-1, #1315,
-2026-10-06).** What the demo seed writes — menus, option lists, floor, staff, adjustment reasons
-and the staff-facing names — is one data set, `casa-delgado-es`, which Spain's pack names; nothing
-a demo seeds changes.
-
-**A demo's staff-facing names follow the language of the person setting it up, and its practice
-sales are stored under the venue's receipt language (W109-5, Task 5 of the same plan) — DONE
-(#1323, 2026-10-07).** `demoSeedLocale` (`apps/server/src/demo-seed.ts`) reads the setup person's language
-(`admin.locale`) — Spanish when it is Spanish, English otherwise — instead of the receipt language,
-and `seedDemoRestaurant` (`apps/server/scripts/demo-seed/seed.ts`) reads the location's first
-receipt language with `readReceiptLanguage` and hands it to `seedSales`
-(`apps/server/scripts/demo-seed/seed-sales.ts`), so a Barcelona demo set up in Spanish gets Spanish
-staff-facing names and Catalan practice sales. Where a dish has no text in the receipt language, a
-practice sale falls back to the venue's main content language, which `seedSales` reads with
-`readContentLanguages`, as a till sale does (`apps/server/src/working-order.ts`): a Madrid demo with
-Catalan receipts stores the dish's Spanish customer-facing text under the Catalan receipt key rather
-than an empty description.
-
-**A country with no demo data of its own gets the existing demo data in English, and every demo's
-practice sales go through the venue's own fiscal module (W109-2, Task 2 of the same plan) —
-DONE (#1324, 2026-10-07).** A pack's `demo.dataSet` is optional; a pack whose identity names none seeds
-`casa-delgado-es` under its own identity, with English the default content language and English
-staff names (`demoDataSetFor`, `demoLanguagesFor`, `apps/server/scripts/demo-seed/data-set.ts`).
-`seedSales` takes its backend from the composition's fiscal seat (`fiscalSlot(...).makeBackend`)
-instead of building `VerifactuBackend` itself; a Spanish demo's practice sales are pinned row for
-row by `apps/server/scripts/demo-seed/seed-sales.golden.test.ts`, and a United Kingdom venue's
-are ordinary sales with no fiscal record. No real pack reaches the fallback today. Known limits,
-not built: practice sales sit at fixed hours chosen for a Madrid business day, stamped with the
-host's offset; they carry Spain's VAT rates, as every till sale does whatever the country
-(`packages/catalogue/src/vat-rates.ts`); and the guard holds a pack offered for Prepare or Live to
-a demo identity too, because the venue screen has one country list for every mode (the plan's
-reading of the owner's answer A — the alternative is hiding only the Demo choice). Correction to
-the plan's prediction: a fallback demo in an area that requires languages does NOT list them as
-missing when the data set carries text in them — the seed writes the set's own text for every
-enabled language. Measured on a real database with the real migrations, not as a committed test:
-the finish review (2026-10-07) seeded a Barcelona venue with a set that was not Spain's, and got
-English default, `en`, `ca` and `es` enabled, every customer name in all three, and no missing
-translations; the per-task review's earlier run found `ca` and `es` text written and no missing
-translations. The finish review also removed the Catalan text from the
-set: the Catalan texts were listed as missing translations, and the seed still completed.
-**Fallback demo language guard (A315), DONE.** The `data-set.test.ts` case checks every pack
-setup offers against `demoDataSetFor` and `demoLanguagesFor`, including a pack with no named data
-set or administrative areas. It checks the declared languages and each customer-facing text the
-suite enumerates. In a disposable clone, removing Spain's named data set and the drinks menu's
-Catalan text passed the old case and failed the widened case; restoring the text passed. No real
-pack offered at setup uses the fallback today.
-
-**Practice-sale chronology and quantity display (A313), DONE.** Practice sales generated by
-`seedSales` are written in issue-time order, so their invoice numbers rise with that time. In the
-captured three-day Spanish fixture, sorting changes invoice numbers and fiscal chains while each
-sale's payload and attached lines still match the same issue time. The owner authorised regenerating
-that synthetic fixture on 2026-10-07; its whole-row comparison remains, and the core golden huella
-and immutability suites stay unchanged. The order detail dialog shows quantities without needless
-trailing zeros, using the dashboard language's decimal mark: “× 1”, “× 0,5” in Spanish.
-
-Still open from W109-5's Barcelona look (2026-10-07): product groups and prep stations stay English
-under Spanish staff-facing dish names (the plan's known limit). Stored practice sales cannot be
-reprinted or looked up on the till: both look a sale up through its till order, which a practice
-sale does not have (the look's reading, not checked against the code).
-
-Quantity-display follow-ups found while tracing A313, OPEN, unqueued: the Top sellers table renders
-its quantity strings directly (`apps/dashboard/src/widgets/top-sellers-table.ts`), and the till's
-`trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These are
-readings, not browser reproductions; reproduce them before changing their displays.
-
-**A326 DONE: every top-level demo category has its own stored colour.**
-The demo data supplies distinct lowercase `#rrggbb` colours through `createCategory`, including
-all four drink categories. Every country pack's selected or fallback demo data set is checked.
-Products use their category's colour through the existing inheritance path; the seed does not
-set product colours or change prices, VAT, names or practice sales.
-
-**A321 DONE: the demo's included Drinks menu opens onto four sections.**
-Casa Delgado and Menú del Día include Cocktails, Wine and beer, Soft drinks and Coffee inside
-one Drinks folder. Each category routes to the downstairs bar by default; the upstairs bar
-zone keeps its bar routing. The seven drink products and Coffee's two variants retain their
-names, prices, VAT classes and images. The new section labels have English, Spanish, Catalan
-and Galician text. The Catalan and Galician labels are drafts awaiting a speaker's check,
-like W109-3's text below. The unchanged practice-sales golden comparison passes.
-
-**The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the
-text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** Every customer-facing text
-in `casa-delgado-es` (`apps/server/scripts/demo-seed/menu.ts`, `seed-adjustments.ts`,
-`data-sets/casa-delgado-es.ts`) has a Catalan and a Galician value, written by Claude; nothing
-wrote them until Task 4 (W109-4), which now does in the areas that use them. The PR carries the side-by-side table. A speaker of each should
-read it; the drafter was least sure of the Galician "Charcutaría", "Lombo embuchado", "Ventrecha de
-bonito", "Luras á romana", "Polbo á feira", "Café só", "Tortilla de patacas" and the doneness
-choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error en marcar" and
-"Invitació de l'encarregat".
 
 **Content languages per region, for real venues and the demo — owner DECIDED 2026-10-06 ~17:23
 (W109; was "Demo languages per region — owner decision pending") — DONE (W109-4, #1322, 2026-10-07); two

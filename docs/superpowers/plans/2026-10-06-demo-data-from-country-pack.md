@@ -211,7 +211,7 @@ demo data (the only other pack, the United Kingdom's, has no areas, and its star
 English alone). _2026-10-07, as built (W109-2): the seed writes the data set's own text in every
 enabled language, so a required language is listed as missing only when the set has no text in
 it; English is the default by the owner's decision, not because the text is English only. See
-`docs/backlog.md`, W109-2._ Its month of practice sales is recorded like any other demo's,
+`docs/backlog/setup.md`, W109-2._ Its month of practice sales is recorded like any other demo's,
 through the venue's own fiscal module (below). No real pack reaches the fallback today — Spain
 names `casa-delgado-es`, and the United Kingdom carries no identity at all — so only Task 2's tests
 reach it. **A pack with no identity at all cannot offer Demo:** the
@@ -1569,7 +1569,7 @@ still reachable (a Spanish venue with no province requires nothing), so it stays
 - **A fallback demo in an area that requires languages** lists every required language under
   Missing translations, because its text is English only (Task 2). No pack reaches this today.
   _2026-10-07, as built (W109-2): wrong — the seed writes the data set's own text in every enabled
-  language, so only a required language the set lacks is listed; see `docs/backlog.md`, W109-2._
+  language, so only a required language the set lacks is listed; see `docs/backlog/setup.md`, W109-2._
 - Staff-facing names a demo writes in English whatever the staff language — reporting categories
   (`seed-catalogue.ts:113`) and the four kitchen stations (`seed-catalogue.ts:56-67`) — stay as
   they are.
