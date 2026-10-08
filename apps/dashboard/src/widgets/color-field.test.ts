@@ -14,8 +14,10 @@ class ColorFieldHost extends LitElement {
   @property({ attribute: false }) color: string | null = null;
   @property({ attribute: false }) categoryColor: string | null | undefined = undefined;
   @property({ attribute: false }) customEvent: "input" | "change" | undefined = undefined;
+  @property({ attribute: false }) inheritedFrom: "category" | "default" | undefined = undefined;
   override render() {
     return colorField({
+      ...(this.inheritedFrom === undefined ? {} : { inheritedFrom: this.inheritedFrom }),
       ...(this.categoryColor === undefined ? {} : { categoryColor: this.categoryColor }),
       ...(this.customEvent === undefined ? {} : { customEvent: this.customEvent }),
       color: this.color,
@@ -40,7 +42,7 @@ afterEach(cleanupWidgets);
 const mount = (
   color: string | null,
   theme?: "light" | "dark",
-  extra: Partial<Pick<ColorFieldHost, "categoryColor" | "customEvent">> = {},
+  extra: Partial<Pick<ColorFieldHost, "categoryColor" | "customEvent" | "inheritedFrom">> = {},
 ) => mountWidget<ColorFieldHost>("test-color-field-host", { color, ...extra }, theme);
 
 const noneButton = (el: ColorFieldHost) =>
@@ -209,6 +211,18 @@ it("names the no-colour choice by its label and describes it by the colour it th
   expect(getComputedStyle(chip).backgroundColor).toBe("rgb(37, 177, 37)");
   const swatch = el.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!;
   await expect.element(page.elementLocator(swatch)).toHaveAccessibleName("#b12525");
+});
+
+it("names the no-colour choice Use default colour when the colour it takes is the venue default", async () => {
+  const { el } = await mount(null, undefined, {
+    categoryColor: "#25b125",
+    inheritedFrom: "default",
+  });
+  const none = noneButton(el);
+  await expect
+    .element(page.elementLocator(none))
+    .toHaveAccessibleName(t("editor.color_use_default"));
+  await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("#25b125");
 });
 
 it("says inside the no-colour choice, as its description, that the category has no colour", async () => {

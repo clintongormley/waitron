@@ -80,6 +80,9 @@ export async function mountBrowser(overrides: Partial<CatalogueBrowser> = {}) {
       ]),
     createCategory: vi.fn().mockResolvedValue(folder("new", "Juice", "d")),
     updateCategory: vi.fn().mockResolvedValue(folder("d", "Beverages", null)),
+    saveCatalogueDefaultColor: vi
+      .fn()
+      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
   } as unknown as DashboardApi;
   return (
     await mountWidget<CatalogueBrowser>("dashboard-catalogue-browser", {
@@ -1285,6 +1288,68 @@ it("sends nothing when a row's colour chooser is left with Esc or Cancel", async
   (await colorChooser(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(el.api.updateCategory).not.toHaveBeenCalled();
+});
+it.each([
+  ["en-GB", "Colour of All products"],
+  ["es", "Color de Todos los productos"],
+] as const)(
+  "opens the venue default's colour chooser from All products' square, and a swatch saves the default (%s)",
+  async (locale, heading) => {
+    setLocale(locale);
+    const el = await mountBrowser({ defaultColor: "#b12525" });
+    let finish!: (value: { defaultProductVatClass: "general"; defaultColor: string }) => void;
+    vi.mocked(el.api.saveCatalogueDefaultColor).mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    await menuAction(el, "color-root");
+    const form = await colorChooser(el);
+    expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe(heading);
+    expect(
+      form.shadowRoot!.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked"),
+    ).toBe("true");
+    await choose(el, "#256bb1");
+    await form.updateComplete;
+    expect(form.busy).toBe(true);
+    // A second choice while the first is in flight is not sent.
+    form.dispatchEvent(new CustomEvent("wt-choose", { detail: { color: "#25b125" } }));
+    await el.updateComplete;
+    expect(vi.mocked(el.api.saveCatalogueDefaultColor).mock.calls).toStrictEqual([["#256bb1"]]);
+    expect(chooserClosed(el)).toBe(false);
+    finish({ defaultProductVatClass: "general", defaultColor: "#256bb1" });
+    await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+    expect(el.api.updateCategory).not.toHaveBeenCalled();
+  },
+);
+it("sends a null default when No colour is chosen from All products' square", async () => {
+  const el = await mountBrowser({ defaultColor: "#b12525" });
+  await menuAction(el, "color-root");
+  await choose(el, "");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  expect(vi.mocked(el.api.saveCatalogueDefaultColor).mock.calls).toStrictEqual([[null]]);
+});
+it("keeps a refused default colour in the chooser, under it, with the form's message at the end", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.saveCatalogueDefaultColor).mockRejectedValueOnce({
+    code: "category.invalid",
+    params: { field: "color" },
+  });
+  await menuAction(el, "color-root");
+  await choose(el, "#256bb1");
+  const form = await colorChooser(el);
+  await vi.waitFor(() =>
+    expect(form.shadowRoot!.querySelector("#category-color-error")!.textContent!.trim()).toBe(
+      en["editor.field_rejected"],
+    ),
+  );
+  expect(form.shadowRoot!.querySelector('[data-test="form-error"]')!.textContent!.trim()).toBe(
+    en["form.fix_fields"],
+  );
+  expect(form.busy).toBe(false);
+  expect(chooserClosed(el)).toBe(false);
+});
+it("passes the venue default to the list, so All products' square shows it", async () => {
+  const el = await mountBrowser({ defaultColor: "#b12525" });
+  expect(getComputedStyle(await rowChip(el, "root")).backgroundColor).toBe("rgb(177, 37, 37)");
 });
 it("keeps a move made while a category's colour chooser is open: the colour goes alone", async () => {
   const el = await mountBrowser();

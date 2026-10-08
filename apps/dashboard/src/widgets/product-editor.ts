@@ -1189,16 +1189,14 @@ export class ProductEditor extends LitElement {
   }
 
   private renderColor() {
+    const fromCategory = categoryColor(this.draft.primaryCategoryId, this.#categoryNodes, null);
     return html`<div class="group" data-section="color">
       ${colorField({
         color: this.draft.color,
         name: "product-color",
         errorId: "product-color-error",
-        categoryColor: categoryColor(
-          this.draft.primaryCategoryId,
-          this.#categoryNodes,
-          this.defaultColor,
-        ),
+        categoryColor: fromCategory ?? this.defaultColor,
+        inheritedFrom: fromCategory === null && this.defaultColor !== null ? "default" : "category",
         error: this.error("product-color"),
         busy: this.suspended,
         change: (color) => this.change("color", color),

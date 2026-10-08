@@ -115,14 +115,17 @@ export class CatalogueBrowser extends LitElement {
   /** Fills a bounded flex column, with the Products table's rows scrolling under its headings. */
   @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @property({ type: Boolean }) loaded = false;
+  /** The venue's default colour: All products' own, and what an uncoloured product falls back to. */
+  @property({ attribute: false }) defaultColor: string | null = null;
   @state() private search = "";
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
   /** The colour chosen in the open name box; undefined until one is. */
   @state() private nameColor: string | null | undefined = undefined;
-  /** Whose colour the chooser is open for: a category's row, or the name box. */
+  /** Whose colour the chooser is open for: a category's row, the name box, or All products' row. */
   @state() private colorTarget:
-    { kind: "row"; category: CategorySummary } | { kind: "box" } | null = null;
+    { kind: "row"; category: CategorySummary } | { kind: "box" } | { kind: "default" } | null =
+    null;
   @state() private colorBusy = false;
   @state() private colorErrors: Record<string, string> = {};
 
@@ -800,7 +803,8 @@ export class CatalogueBrowser extends LitElement {
     this.colorBusy = true;
     this.colorErrors = {};
     try {
-      await this.api.updateCategory(target.category.id, { color });
+      if (target.kind === "default") await this.api.saveCatalogueDefaultColor(color);
+      else await this.api.updateCategory(target.category.id, { color });
       if (this.colorTarget === target) this.colorTarget = null;
     } catch (error) {
       this.colorErrors = categoryRefusalErrors(error, null);
@@ -810,7 +814,12 @@ export class CatalogueBrowser extends LitElement {
   }
   #colorHeading(renamed: CategorySummary | undefined): string {
     const target = this.colorTarget;
-    const name = target?.kind === "row" ? target.category.name : renamed?.name;
+    const name =
+      target?.kind === "row"
+        ? target.category.name
+        : target?.kind === "default"
+          ? t("folders.all_products")
+          : renamed?.name;
     return name === undefined
       ? t("folders.new_color_heading")
       : t("folders.color_heading").replace("{name}", name);
@@ -884,6 +893,12 @@ export class CatalogueBrowser extends LitElement {
           this.colorErrors = {};
           this.colorTarget = { kind: "row", category };
         }}
+        @root-color=${(event: Event) => {
+          event.stopPropagation();
+          this.colorErrors = {};
+          this.colorTarget = { kind: "default" };
+        }}
+        .defaultColor=${this.defaultColor}
         .nameColor=${boxColor}
         .choosingColor=${this.colorTarget?.kind === "box"}
         @name-color=${(event: Event) => {
@@ -982,7 +997,13 @@ export class CatalogueBrowser extends LitElement {
         .open=${this.colorTarget !== null}
         .busy=${this.colorBusy}
         heading=${this.colorTarget ? this.#colorHeading(renamed) : ""}
-        .color=${this.colorTarget?.kind === "row" ? this.colorTarget.category.color : boxColor}
+        .color=${
+          this.colorTarget?.kind === "row"
+            ? this.colorTarget.category.color
+            : this.colorTarget?.kind === "default"
+              ? this.defaultColor
+              : boxColor
+        }
         .errors=${this.colorErrors}
         @wt-choose=${(event: CustomEvent<{ color: string | null }>) => {
           event.stopPropagation();

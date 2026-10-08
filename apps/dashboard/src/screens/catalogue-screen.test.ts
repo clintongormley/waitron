@@ -3348,6 +3348,59 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   ).toBe("reduced");
 });
 
+it("paints All products' square, an uncategorised product and a new product's inherited colour with the venue default, and repaints them on a live answer", async () => {
+  const liveData = new LiveData();
+  const loose: Product = {
+    ...products[0]!,
+    id: "p2",
+    name: "Agua",
+    categoryId: null,
+    primaryCategoryId: null,
+  };
+  const api = Object.assign(
+    stubApi({
+      getCatalogueSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: "#b12525" }),
+      listProducts: vi
+        .fn()
+        .mockImplementation((id: string) =>
+          Promise.resolve(id === "cat-a" ? [...products, loose] : []),
+        ),
+    }),
+    { liveData },
+  );
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+  await flush(el);
+  const fills = async () => {
+    const root = (await productTable(el)).shadowRoot!;
+    const fill = (selector: string) =>
+      getComputedStyle(root.querySelector<HTMLElement>(selector)!).backgroundColor;
+    return [
+      fill('[data-test="color-root"] [part~="color-swatch"]'),
+      fill('[data-test="color-p2"] [data-test="thumb-placeholder"]'),
+    ];
+  };
+  await expect.poll(fills).toEqual(["rgb(177, 37, 37)", "rgb(177, 37, 37)"]);
+  emit(list(el), "add-product", { categoryId: null });
+  await el.updateComplete;
+  await editor(el).updateComplete;
+  const inherited = () =>
+    getComputedStyle(
+      editor(el).shadowRoot!.querySelector<HTMLElement>('fieldset.color [data-color=""] .chip')!,
+    ).backgroundColor;
+  expect(inherited()).toBe("rgb(177, 37, 37)");
+
+  vi.mocked(api.getCatalogueSettings).mockResolvedValue({
+    defaultProductVatClass: "general",
+    defaultColor: "#256bb1",
+  });
+  liveData.refresh();
+  await expect.poll(fills).toEqual(["rgb(37, 107, 177)", "rgb(37, 107, 177)"]);
+  await editor(el).updateComplete;
+  expect(inherited()).toBe("rgb(37, 107, 177)");
+});
+
 it("reads the venue's default into a new editor without replacing an open draft", async () => {
   const liveData = new LiveData();
   const api = Object.assign(

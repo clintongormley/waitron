@@ -137,6 +137,8 @@ export interface ColorFieldOptions {
    * chip read as its description, or, for null, says as its second line that there is none. Absent,
    * it reads "No colour" and says nothing more. */
   categoryColor?: string | null;
+  /** Where `categoryColor` comes from; "default" names the choice "Use default colour". */
+  inheritedFrom?: "category" | "default";
   busy: boolean;
   error: string;
   /** The custom colour input's `name`. */
@@ -214,7 +216,13 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         }}
       >
         ${fallback?.before ?? nothing}<span id=${labelId}
-          >${inherited === undefined ? t("editor.color_none") : t("editor.color_use_category")}</span
+          >${
+            inherited === undefined
+              ? t("editor.color_none")
+              : options.inheritedFrom === "default"
+                ? t("editor.color_use_default")
+                : t("editor.color_use_category")
+          }</span
         >${fallback?.after ?? nothing}
       </button>
       <div class="swatches">

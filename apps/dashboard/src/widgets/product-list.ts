@@ -59,9 +59,8 @@ import {
 
 export const ROOT_KEY = "root";
 
-/** A category's swatch slot, at a product photo's width; blank where the row has no swatch. */
-const folderFrame = (content: unknown = nothing) =>
-  html`<span part="folder-frame">${content}</span>`;
+/** A category's swatch slot, at a product photo's width. */
+const folderFrame = (content: unknown) => html`<span part="folder-frame">${content}</span>`;
 /** How long a drag must rest on a closed category before it opens. */
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
@@ -1281,7 +1280,20 @@ export class ProductList extends LitElement {
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              >${folderFrame()}<span part="folder-name"
+              >${folderFrame(
+                html`<button
+                  part="swatch-button"
+                  type="button"
+                  data-test="color-root"
+                  aria-label=${t("folders.edit_color").replace("{name}", t("folders.all_products"))}
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    this.#send("root-color", {});
+                  }}
+                >
+                  ${swatchChip(this.defaultColor)}
+                </button>`,
+              )}<span part="folder-name"
                 ><span
                   ><strong>${t("folders.all_products")}</strong
                   ><span part="count" data-test="count-root">${this.#contents(null)}</span></span

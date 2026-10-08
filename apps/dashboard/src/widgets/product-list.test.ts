@@ -4580,6 +4580,48 @@ describe("a category row's leading slot", () => {
         expect(box.querySelector(':scope > [slot="end"]')).toBeNull();
       }),
   );
+
+  it("draws the venue default's swatch in All products' leading slot, outlined while there is none, and its click sends root-color without opening anything", async () => {
+    const { el, root, table } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["root-color", "category-toggle", "drag-items"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    const row = `tr[data-row-key="${ROOT_KEY}"]`;
+    const button = () => root.querySelector<HTMLButtonElement>(`${row} [data-test="color-root"]`)!;
+    const chip = () => button().querySelector<HTMLElement>('[part~="color-swatch"]')!;
+    expect(button().matches('button[part~="swatch-button"]')).toBe(true);
+    expect(button().parentElement!.getAttribute("part")).toBe("folder-frame");
+    expect(button().getAttribute("aria-label")).toBe(
+      t("folders.edit_color").replace("{name}", t("folders.all_products")),
+    );
+    expect(chip().getAttribute("part")).toBe("color-swatch empty");
+    expect(getComputedStyle(chip()).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+
+    el.defaultColor = "#b12525";
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(chip().getAttribute("part")).toBe("color-swatch");
+    expect(getComputedStyle(chip()).backgroundColor).toBe("rgb(177, 37, 37)");
+
+    await userEvent.click(button());
+    await table.updateComplete;
+    expect(sent).toEqual([["root-color", {}]]);
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
+  });
+
+  it("gives All products a swatch the width of a top-level category's, as far from its name, at 1280 px", () =>
+    atWidth(1280, async () => {
+      const { root } = await mountTree();
+      const rootRow = `tr[data-row-key="${ROOT_KEY}"]`;
+      const category = 'tr[data-row-key="folder:d"]';
+      const rootSwatch = rectOf(root, `${rootRow} [data-test="color-root"]`);
+      const categorySwatch = rectOf(root, `${category} [data-test="color-d"]`);
+      expect(rootSwatch.width).toBeGreaterThan(0);
+      expect(rootSwatch.width).toBeCloseTo(categorySwatch.width, 1);
+      const rootGap = rectOf(root, `${rootRow} strong`).left - rootSwatch.left;
+      const categoryGap = rectOf(root, `${category} strong`).left - categorySwatch.left;
+      expect(Math.abs(rootGap - categoryGap)).toBeLessThanOrEqual(0.5);
+    }));
 });
 
 describe("a category whose name wraps", () => {
