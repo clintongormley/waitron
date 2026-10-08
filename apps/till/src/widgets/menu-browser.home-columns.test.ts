@@ -18,6 +18,8 @@ const cases = [360, 390].flatMap((width) =>
         tiles,
         theme,
         handheld: true,
+        cardColumns: undefined as number | undefined,
+        wantedTracks: columns,
       })),
     ),
   ),
@@ -30,12 +32,26 @@ cases.push(
     tiles: "colours" as const,
     theme,
     handheld: false,
+    cardColumns: undefined,
+    wantedTracks: 4,
+  })),
+);
+
+cases.push(
+  ...[360, 390].map((width) => ({
+    width,
+    columns: 3,
+    tiles: "colours" as const,
+    theme: "light" as const,
+    handheld: true,
+    cardColumns: 6,
+    wantedTracks: 2,
   })),
 );
 
 it.each(cases)(
-  "fits $columns columns at $width px ($tiles, $theme, handheld=$handheld)",
-  async ({ width, columns, tiles, theme, handheld }) => {
+  "fits $wantedTracks columns at $width px ($tiles, $theme, handheld=$handheld, cardColumns=$cardColumns)",
+  async ({ width, columns, tiles, theme, handheld, cardColumns, wantedTracks }) => {
     const locale = currentLocale();
     setLocale("es-ES");
     try {
@@ -103,11 +119,11 @@ it.each(cases)(
           menu,
           products,
           handheld,
+          columns: cardColumns,
           store: new WorkingOrderStore(),
         },
         theme,
       );
-      // The deployed body and order screen inset the grid by 24px and 16px per side.
       host.style.width = `${width}px`;
       host.style.boxSizing = "border-box";
       host.style.paddingInline = "calc(var(--wt-space-5) + var(--wt-space-4))";
@@ -118,12 +134,12 @@ it.each(cases)(
           "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'/%3E";
         await image.decode();
       }
-      expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(columns);
+      expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(wantedTracks);
       expect(grid.querySelectorAll(".tile")).toHaveLength(4);
       expect(grid.querySelectorAll("img")).toHaveLength(tiles === "thumbnails" ? 3 : 0);
       for (const tile of grid.querySelectorAll<HTMLElement>(".tile")) {
         const box = tile.getBoundingClientRect();
-        expect(box.width).toBeGreaterThanOrEqual(handheld ? 44 : 104);
+        expect(box.width).toBeGreaterThanOrEqual(handheld && cardColumns === undefined ? 44 : 104);
         expect(box.height).toBeGreaterThanOrEqual(44);
         for (const content of tile.querySelectorAll<HTMLElement>(
           ".name, .price, .kind, wt-icon, img",
@@ -133,8 +149,22 @@ it.each(cases)(
           expect(bounds.right).toBeLessThanOrEqual(box.right);
           expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
         }
-        if (tile.dataset.kind === "product")
+        if (tile.dataset.kind === "product") {
           expect(tile.querySelector(".price")!.textContent).toContain("12,50");
+          const name = tile.querySelector<HTMLElement>(".name")!;
+          const canvas = document.createElement("canvas").getContext("2d")!;
+          canvas.font = getComputedStyle(name).font;
+          const walker = document.createTreeWalker(name, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            for (const match of node.textContent!.matchAll(/\S+/g)) {
+              if (canvas.measureText(match[0]).width > name.clientWidth) continue;
+              const range = document.createRange();
+              range.setStart(node, match.index);
+              range.setEnd(node, match.index + match[0].length);
+              expect(range.getClientRects().length, match[0]).toBe(1);
+            }
+          }
+        }
       }
       expect(grid.querySelector('[data-kind="section"] wt-icon')).not.toBeNull();
       if (width === 360 && columns === 3) await expectNoA11yViolations(host);

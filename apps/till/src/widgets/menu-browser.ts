@@ -145,7 +145,7 @@ export class TillMenuBrowser extends LitElement {
         grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
       }
 
-      .grid[data-device="handheld"] {
+      .grid[data-device="handheld"][data-columns-source="menu"] {
         --home-tile-min: calc(var(--wt-tap-min) * 1.5);
       }
 
@@ -413,6 +413,7 @@ export class TillMenuBrowser extends LitElement {
     return html`<div
       class="grid"
       data-device=${this.handheld ? "handheld" : "till"}
+      data-columns-source=${this.columns === undefined ? "menu" : "card"}
       style=${`--columns: ${this.columns ?? display.columns};`}
     >
       ${content}

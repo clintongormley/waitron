@@ -269,7 +269,8 @@ block's name ("Full menu" or "Shortcuts") in `--wt-font-size-sm` and `--wt-color
 between two 1px `--wt-color-border` lines, as that block's heading. A block with nothing to show is
 not drawn, and then there is no divider. Every grid has up to the menu's column count of tracks,
 fewer where a tile would be narrower than its minimum (`HOME_GRID_COLUMNS`). Handheld tiles use
-`--wt-tap-min * 1.5`; till tiles keep twice `--wt-tap-min` plus `--wt-space-4`. Handheld settings
+`--wt-tap-min * 1.5` when they follow the menu’s column setting; till tiles and canvas cards
+with their own column count keep twice `--wt-tap-min` plus `--wt-space-4`. Handheld settings
 offer 2–3 columns and till settings 4–10. The handheld grid and its preview show three columns at
 360px and 390px. The handheld preview uses `--wt-space-4` side insets to fit inside the dashboard's
 own phone-width padding; narrower grids keep the same reading order. In Colours

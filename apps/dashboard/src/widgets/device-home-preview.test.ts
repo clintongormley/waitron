@@ -307,11 +307,11 @@ describe("dashboard-device-home-preview", () => {
   });
 
   it("shows fewer columns on a narrow screen, in the same reading order", async () => {
-    const handheld = await mount({ document: display("handheld", { columns: 6 }) });
-    await widen(handheld.host, 390);
+    const handheld = await mount({ document: display("handheld", { columns: 3 }) });
+    await widen(handheld.host, 150);
     const structureGrid = (el: DeviceHomePreview) =>
       root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
-    expect(tracks(structureGrid(handheld.el))).toBeLessThan(6);
+    expect(tracks(structureGrid(handheld.el))).toBeLessThan(3);
     expect(readingOrder(handheld.el, "structure")).toEqual(names(tiles(handheld.el, "structure")));
 
     const till = await mount({ document: display("till", { columns: 10 }), device: "till" });

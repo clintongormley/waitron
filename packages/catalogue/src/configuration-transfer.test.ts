@@ -213,8 +213,8 @@ describe("validateCatalogueConfiguration: colours", () => {
 
 describe("validateCatalogueConfiguration: menu display settings", () => {
   it.each([
-    ["handheld_columns", 7],
-    ["till_columns", 5],
+    ["handheld_columns", 4],
+    ["till_columns", 3],
     ["till_columns", "8"],
     ["handheld_tiles", "pictures"],
     ["till_order", "first"],
