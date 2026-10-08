@@ -34,6 +34,13 @@ export interface DepartmentService {
   orderableMenuIds: readonly string[];
   sendableMenuIds: readonly string[];
   endedMenuIds: readonly string[];
+  readonly keepOpen: {
+    periodId: string;
+    periodName: string;
+    endsAt: string;
+    running: boolean;
+    extendedUntil: string | null;
+  } | null;
 }
 
 export interface OpeningHoursModel {
