@@ -167,13 +167,21 @@ describe.each(["light", "dark"] as const)("the schedule form (%s)", (theme) => {
       )!;
       expect(dialog.open).toBe(true);
       const submit = dialog.querySelector<HTMLElement>('[data-test="schedule-submit"]')!;
-      if (refusal !== null) {
-        const [date, time] =
-          state === "schedule occurrence" ? ["2026-10-25", "02:30"] : ["2026-10-08", "08:00"];
-        for (const [name, value] of [
-          ["date", date],
-          ["time", time],
-        ] as const) {
+      if (state !== "schedule form") {
+        // A date alone, for the field errors state: the press then explains the missing time.
+        const entries: (readonly ["date" | "time", string])[] =
+          state === "schedule field errors"
+            ? [["date", "2026-10-08"]]
+            : state === "schedule occurrence"
+              ? [
+                  ["date", "2026-10-25"],
+                  ["time", "02:30"],
+                ]
+              : [
+                  ["date", "2026-10-08"],
+                  ["time", "08:00"],
+                ];
+        for (const [name, value] of entries) {
           const input = dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(
             `[name="${name}"]`,
           )!;
@@ -192,6 +200,10 @@ describe.each(["light", "dark"] as const)("the schedule form (%s)", (theme) => {
           ).not.toBe(""),
         );
       }
+      if (state === "schedule field errors")
+        expect(
+          dialog.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="time"]')!.error,
+        ).toBe("Choose a time.");
       if (state === "schedule occurrence")
         expect(dialog.querySelector('wt-combobox[name="occurrence"]')).not.toBeNull();
       if (state === "schedule overtaken")
@@ -281,4 +293,82 @@ describe.each(["light", "dark"] as const)("the Change time form (%s)", (theme) =
     await settle(el);
     await expectNoA11yViolations(host);
   });
+});
+
+async function mountScheduling(theme: "light" | "dark") {
+  setLocale("en");
+  const api = {
+    getMenuPublications: vi.fn(async () => LISTED),
+    scheduleMenuPublication: vi.fn(),
+    rescheduleMenuPublication: vi.fn(),
+  } as unknown as DashboardApi;
+  const { el, host } = await mountWidget<MenuPublicationsPanel>(
+    "dashboard-menu-publications",
+    { api, menuId: "menu-lunch", menuName: "Lunch Menu", preview: PREVIEW },
+    theme,
+  );
+  await settle(el);
+  return { el, host };
+}
+function scheduleForm(el: MenuPublicationsPanel): HTMLElementTagNameMap["wt-dialog"] {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    'wt-dialog[data-test="schedule-dialog"]',
+  )!;
+}
+async function openSchedule(el: MenuPublicationsPanel): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="schedule-open"]')!.click();
+  await settle(el);
+  await scheduleForm(el).updateComplete;
+}
+async function openMove(el: MenuPublicationsPanel, versionId: string): Promise<void> {
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>(`[data-test="move-${versionId}"]`)!
+    .click();
+  await settle(el);
+  await scheduleForm(el).updateComplete;
+}
+/** What the action looks like and whether a person can press it: the host's state and its inner button's. */
+async function actionState(el: MenuPublicationsPanel) {
+  await el.updateComplete;
+  const button = scheduleForm(el).querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="schedule-submit"]',
+  )!;
+  await button.updateComplete;
+  return {
+    variant: button.variant,
+    disabled: button.disabled,
+    innerDisabled: button.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
+const ready = { variant: "primary", disabled: false, innerDisabled: false };
+async function enter(el: MenuPublicationsPanel, name: "date" | "time", value: string) {
+  const input = scheduleForm(el).querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `wt-input[name="${name}"]`,
+  )!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+  await settle(el);
+}
+
+describe.each(["light", "dark"] as const)("the schedule form's action states (%s)", (theme) => {
+  it.each(["schedule", "move"] as const)("is accessible with the %s action quiet", async (kind) => {
+    const { el, host } = await mountScheduling(theme);
+    if (kind === "schedule") await openSchedule(el);
+    else await openMove(el, "v-lunch-2");
+    expect(await actionState(el)).toEqual(quiet);
+    await expectNoA11yViolations(host);
+  });
+
+  it.each(["schedule", "move"] as const)(
+    "is accessible with the %s action primary after a change",
+    async (kind) => {
+      const { el, host } = await mountScheduling(theme);
+      if (kind === "schedule") await openSchedule(el);
+      else await openMove(el, "v-lunch-2");
+      await enter(el, "date", "2026-10-10");
+      expect(await actionState(el)).toEqual(ready);
+      await expectNoA11yViolations(host);
+    },
+  );
 });

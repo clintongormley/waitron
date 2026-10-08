@@ -641,7 +641,8 @@ describe("scheduling a publication", () => {
     }
     expect(occurrence(el)).toBeNull();
     expect(submitButton(el).textContent!.trim()).toBe("Schedule");
-    expect(submitButton(el).disabled).toBe(false);
+    expect(submitButton(el).disabled).toBe(true);
+    expect(submitButton(el).variant).toBe("secondary");
     expect(await bottom(el)).toBe("");
   });
 
@@ -649,12 +650,18 @@ describe("scheduling a publication", () => {
     const api = stubApi();
     const el = await mount(api, { preview: draftPreview() });
     await openSchedule(el);
+    await enter(el, "time", "12:00");
     await submit(el);
     expect(api.scheduleMenuPublication).not.toHaveBeenCalled();
     expect(field(el, "date").error).toBe("Choose a date.");
-    expect(field(el, "time").error).toBe("Choose a time.");
+    expect(field(el, "time").error).toBe("");
     expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(el.shadowRoot!.activeElement).toBe(field(el, "date"));
+    expect(submitButton(el).disabled).toBe(true);
+    await enter(el, "time", "");
+    expect(field(el, "date").error).toBe("Choose a date.");
+    expect(field(el, "time").error).toBe("Choose a time.");
+    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(submitButton(el).disabled).toBe(true);
     await enter(el, "date", "2026-10-10");
     expect(field(el, "date").error).toBe("");

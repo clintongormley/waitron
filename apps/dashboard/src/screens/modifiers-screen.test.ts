@@ -1121,15 +1121,26 @@ it("keeps a refused save in the form and puts the refusal beside the field it na
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-extra-list"]')!.click();
   await el.updateComplete;
   const form = extraForm(el);
-  const submit = () =>
-    form.dispatchEvent(
-      new CustomEvent("wt-submit", {
-        detail: { value: { ...extraList, items: [] } },
-        bubbles: true,
-        composed: true,
-      }),
+  await form.updateComplete;
+  // An inactive list may be empty, so a name is all this new list needs to reach the server.
+  form
+    .shadowRoot!.querySelector('[name="name"]')!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Breads" }, bubbles: true, composed: true }),
     );
+  form
+    .shadowRoot!.querySelector('[name="active"]')!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+    );
+  await form.updateComplete;
+  const submit = () =>
+    form.shadowRoot!.querySelector<HTMLElement>('wt-modal [data-test="save"]')!.click();
   submit();
+  await vi.waitFor(() => expect(client.createExtraList).toHaveBeenCalledOnce());
+  expect(client.createExtraList).toHaveBeenCalledWith(
+    expect.objectContaining({ name: "Breads", active: false, items: [] }),
+  );
   const message = codeMessage("extras.invalid");
   await vi.waitFor(() => expect(form.fieldErrors.name).toBe(message));
   expect(form.open).toBe(true);

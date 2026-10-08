@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -96,9 +96,8 @@ export class RecipeEditor extends LitElement {
         this.#scope?.commit(fetched);
       }
     }
-    if (this.product && !this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<string[]>({
+    if (this.isConnected && this.product && !this.#scope) {
+      const { coordinator, scope } = draftScopeFor<string[]>(this, {
         id: this,
         current: () => [...this.checked],
         snapshot: (value) => [...value],
@@ -107,6 +106,8 @@ export class RecipeEditor extends LitElement {
           this.checked = new Set(value);
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -122,6 +123,7 @@ export class RecipeEditor extends LitElement {
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.dispatchEvent(
       new CustomEvent<SaveRecipeDetail>("save-recipe", {
         detail: { productId: this.product!.id, ingredientIds: [...this.checked] },
@@ -140,6 +142,7 @@ export class RecipeEditor extends LitElement {
 
   override render() {
     if (this.product === null) return nothing;
+    const saveAction = saveActionState(this.#scope);
     return html`
       <wt-card>
         <div class="list">
@@ -160,9 +163,9 @@ export class RecipeEditor extends LitElement {
             ${t("action.cancel")}
           </wt-button>
           <wt-button
-            variant="primary"
+            variant=${saveAction.variant}
             data-test="confirm"
-            ?disabled=${this.busy}
+            ?disabled=${saveAction.unchanged || this.busy}
             @click=${(e: Event) => this.#confirm(e)}
           >
             ${t("action.save")}

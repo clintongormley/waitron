@@ -1,6 +1,7 @@
 import { sameValue } from "./product-editor-model.js";
 import {
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -229,6 +230,11 @@ export class ExtraListForm extends LitElement {
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -241,9 +247,8 @@ export class ExtraListForm extends LitElement {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<ExtraDraft>({
+    } else if (this.isConnected && !this.#scope) {
+      const { coordinator, scope } = draftScopeFor<ExtraDraft>(this, {
         id: this,
         parent: this.draftParent,
         current: () => this.#comparisonValue(),
@@ -251,6 +256,8 @@ export class ExtraListForm extends LitElement {
         equal: (a, b) => sameValue(this.#canonicalDraft(a), this.#canonicalDraft(b)),
         restore: (value) => this.#restoreDraft(value),
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -710,6 +717,7 @@ export class ExtraListForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.dismissed = new Set(Object.keys(this.serverErrors));
     if (Object.keys(this.#validate()).length) {
@@ -722,7 +730,7 @@ export class ExtraListForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#reportCancel();
   }
 
@@ -981,10 +989,11 @@ export class ExtraListForm extends LitElement {
       ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
     ].join(" ");
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const saveAction = saveActionState(this.#scope);
     return html`<wt-modal
       size="wide"
       .open=${this.open}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${t(this.value ? "extras.edit" : "extras.create")}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
@@ -1083,8 +1092,8 @@ export class ExtraListForm extends LitElement {
         >
         <wt-button
           data-test="save"
-          variant="primary"
-          .disabled=${this.busy || invalid}
+          variant=${saveAction.variant}
+          .disabled=${saveAction.unchanged || this.busy || invalid}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

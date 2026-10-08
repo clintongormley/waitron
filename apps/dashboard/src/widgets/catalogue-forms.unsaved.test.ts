@@ -5,7 +5,12 @@ import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { Unit, UnitInput } from "../api/client.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./unit-form.js";
 import "./category-color-form.js";
 
@@ -218,4 +223,13 @@ it("category colour choices submit immediately and Cancel remains direct without
   cancel(category);
   await expect.poll(() => app.cancelled).toBe(1);
   expect((await question(app)).open).toBe(false);
+});
+it("a Unit put back after a detached update still asks before Cancel discards an edit", async () => {
+  const { app, form } = await mount();
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "name-en", "Edited kilogram");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
 });

@@ -81,6 +81,22 @@ export function cleanupWidgets(): void {
 }
 
 /**
+ * Takes `el` out of the page, lets the update its removal schedules run while it is detached, then
+ * puts it back where it was. Re-adding with no wait in between hides a form that takes a draft
+ * scope during that detached update.
+ */
+export async function reattachAfterDetachedUpdate(
+  el: HTMLElement & { updateComplete: Promise<unknown> },
+): Promise<void> {
+  const parent = el.parentNode!;
+  const next = el.nextSibling;
+  el.remove();
+  await el.updateComplete;
+  parent.insertBefore(el, next);
+  await el.updateComplete;
+}
+
+/**
  * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
  * close in a later task, which a zero-delay timer can run ahead of, so this closes a throwaway
  * dialog and waits for ITS report, queued behind the rest.

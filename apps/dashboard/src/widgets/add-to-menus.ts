@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, draftScopeFor, focusFirstInvalid, saveActionState } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -153,6 +153,11 @@ export class AddToMenus extends LitElement {
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -176,9 +181,8 @@ export class AddToMenus extends LitElement {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<string[]>({
+    } else if (this.isConnected && !this.#scope) {
+      const { coordinator, scope } = draftScopeFor<string[]>(this, {
         id: this,
         current: () => [...this.selected].sort(),
         snapshot: (value) => [...value],
@@ -187,6 +191,8 @@ export class AddToMenus extends LitElement {
           this.selected = new Set(value);
         },
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -236,6 +242,7 @@ export class AddToMenus extends LitElement {
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     const sectionIds = this.#placeIds.filter((id) => this.selected.has(id));
     if (!sectionIds.length) {
@@ -250,7 +257,7 @@ export class AddToMenus extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#emitCancel();
   }
 
@@ -345,10 +352,11 @@ export class AddToMenus extends LitElement {
   override render() {
     const choosing = this.menus !== null && this.loadError === null;
     const failed = this.failures.length > 0 || this.loadError !== null;
+    const addAction = saveActionState(this.#scope);
     return html`<wt-modal
       size="standard"
       .open=${this.open}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${t("add_to_menus.heading").replace("{name}", this.productName)}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
@@ -372,10 +380,10 @@ export class AddToMenus extends LitElement {
         >${
           choosing
             ? html`<wt-button
-                variant="primary"
+                variant=${addAction.variant}
                 data-test="add-to-menus"
                 .loading=${this.busy}
-                .disabled=${this.busy || this.#noneChosen}
+                .disabled=${addAction.unchanged || this.busy || this.#noneChosen}
                 @click=${(event: Event) => this.#confirm(event)}
                 >${t("add_to_menus.confirm")}</wt-button
               >`

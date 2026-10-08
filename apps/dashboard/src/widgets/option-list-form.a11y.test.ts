@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -80,8 +81,15 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
       theme,
     );
     if (state === "invalid") {
+      el.shadowRoot!.querySelector('[name="kitchen-name"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "CK" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!.error,
+      ).not.toBe("");
     }
     if (state === "option-editor") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-label-3"]')!.click();
@@ -97,6 +105,57 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
     // Each named state is scanned in the shape it names.
     expect(names.open).toBe(state === "names-open" || state === "names-error");
     expect(editor.open).toBe(state === "option-editor");
+    await expectNoA11yViolations(host);
+  });
+});
+
+async function mountOpen(value: OptionList | null, theme: "light" | "dark") {
+  const { el, host } = await mountWidget<OptionListForm>(
+    "dashboard-option-list-form",
+    { open: true, languages: { defaultLanguage: "en", languages: ["en", "es"] }, value },
+    theme,
+  );
+  await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  return { el, host };
+}
+/** What Save looks like and whether a person can press it: the host's state and its inner button's. */
+async function saveState(el: OptionListForm) {
+  await el.updateComplete;
+  const save = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-modal [data-test="save"]',
+  )!;
+  await save.updateComplete;
+  return {
+    variant: save.variant,
+    disabled: save.disabled,
+    innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
+const ready = { variant: "primary", disabled: false, innerDisabled: false };
+async function type(el: OptionListForm, name: string, value: string) {
+  const input = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `[name="${name}"]`,
+  )!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+  await el.updateComplete;
+}
+
+describe.each(["light", "dark"] as const)("option list Save states (%s)", (theme) => {
+  it("is accessible with Save quiet, for a stored list and for a new one", async () => {
+    for (const value of [cooked, null]) {
+      const { el, host } = await mountOpen(value, theme);
+      expect(await saveState(el)).toEqual(quiet);
+      await expectNoA11yViolations(host);
+      cleanupWidgets();
+    }
+  });
+
+  it("is accessible with Save primary after an edit", async () => {
+    const { el, host } = await mountOpen(cooked, theme);
+    await type(el, "name", "Doneness");
+    expect(await saveState(el)).toEqual(ready);
     await expectNoA11yViolations(host);
   });
 });

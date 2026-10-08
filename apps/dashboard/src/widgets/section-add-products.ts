@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import { baseStyles, draftScopeFor, saveActionState, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -136,6 +136,11 @@ export class SectionAddProducts extends LitElement {
   #within: ReadonlySet<string> | null = null;
   #scope?: DraftScope<string[]>;
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -147,8 +152,8 @@ export class SectionAddProducts extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
-    if (!this.#scope) {
-      this.#scope = leaveCoordinatorFor(this)?.register<string[]>({
+    if (this.isConnected && !this.#scope) {
+      this.#scope = draftScopeFor<string[]>(this, {
         id: this,
         current: () => [...this.selected].sort(),
         snapshot: (value) => [...value],
@@ -156,7 +161,7 @@ export class SectionAddProducts extends LitElement {
         restore: (value) => {
           this.selected = new Set(value);
         },
-      });
+      }).scope;
     }
     if (changed.has("products") || changed.has("inSection")) {
       const held = new Set(this.inSection);
@@ -219,6 +224,7 @@ export class SectionAddProducts extends LitElement {
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     const productIds = this.#chosen();
     if (productIds.length === 0) {
       this.error = true;
@@ -298,6 +304,7 @@ export class SectionAddProducts extends LitElement {
 
   override render() {
     const count = this.#chosen().length;
+    const addAction = saveActionState(this.#scope);
     return html`<div class="filters">
         <wt-combobox
           class="category"
@@ -346,9 +353,9 @@ export class SectionAddProducts extends LitElement {
       <wt-form-actions>
         <slot name="cancel" slot="cancel"></slot>
         <wt-button
-          variant="primary"
+          variant=${addAction.variant}
           data-test="add"
-          .disabled=${this.busy}
+          .disabled=${addAction.unchanged || this.busy}
           @click=${(event: Event) => this.#confirm(event)}
           >${t("add_products.confirm")}</wt-button
         >

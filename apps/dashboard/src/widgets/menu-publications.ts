@@ -3,8 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  draftScopeFor,
   focusFirstInvalid,
-  leaveCoordinatorFor,
+  saveActionState,
   submitOnEnter,
   type DataTableColumn,
   type DraftScope,
@@ -434,8 +435,7 @@ export class MenuPublicationsPanel extends LitElement {
     this.attempted = false;
     this.scheduleRefusal = null;
     this.#disposeDraft();
-    this.#leave = leaveCoordinatorFor(this);
-    this.#scope = this.#leave?.register<ScheduleDraft>({
+    const { coordinator, scope } = draftScopeFor<ScheduleDraft>(this, {
       id: this,
       current: () => this.#draft(),
       snapshot: (value) => ({ ...value }),
@@ -446,6 +446,8 @@ export class MenuPublicationsPanel extends LitElement {
         this.occurrence = value.occurrence;
       },
     });
+    this.#leave = coordinator;
+    this.#scope = scope;
     this.scheduling = true;
   }
 
@@ -505,6 +507,7 @@ export class MenuPublicationsPanel extends LitElement {
     const preview = this.preview;
     const moving = this.moving;
     if (this.scheduleBusy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.scheduleRefusal = null;
     if (moving === null && preview === null) {
@@ -694,6 +697,7 @@ export class MenuPublicationsPanel extends LitElement {
       ...(marked ? [t("form.fix_fields")] : []),
     ].join(" ");
     const invalid = Object.keys(own).length > 0;
+    const submitAction = saveActionState(this.#scope);
     const repeated = this.repeated;
     const moving = this.moving;
     const zone = this.answer?.timeZone ?? "";
@@ -706,7 +710,7 @@ export class MenuPublicationsPanel extends LitElement {
       }
       .open=${this.scheduling}
       .dismissible=${!this.scheduleBusy}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         if (this.scheduling) this.#scheduleClosed();
@@ -792,10 +796,10 @@ export class MenuPublicationsPanel extends LitElement {
           >${t("action.close")}</wt-button
         >
         <wt-button
-          variant="primary"
+          variant=${submitAction.variant}
           data-test="schedule-submit"
           .loading=${this.scheduleBusy}
-          ?disabled=${invalid}
+          ?disabled=${submitAction.unchanged || invalid}
           @click=${() => void this.#submitSchedule()}
           >${t(
             moving === null ? "menu_publications.schedule_action" : "menu_publications.move_action",

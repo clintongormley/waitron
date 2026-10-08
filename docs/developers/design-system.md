@@ -1545,11 +1545,13 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
   return a form taken out of the page takes a new scope while detached, and once put back it does
   not ask before discarding. The till's party name, invoice recipient, extras picker and station
-  dialogs and the venue-service watcher form do this, each also asking for an update when it is put
-  back (Lit runs none on reconnect); with the return deleted, a reconnect case in each one's `*.unsaved.test.ts`
-  fails. The dashboard forms that take their scope in `willUpdate` (person edit and new person,
-  product editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether
-  they show the fault is untested;
+  dialogs, the venue-service watcher form, and the dashboard's unit, ingredient, extras list, option
+  list and option label forms, recipe editor, Add to menus picker and a section's Add products
+  picker do this, each also asking for an update when it is put back (Lit runs none on reconnect);
+  with the return deleted, a reconnect case in the `*.unsaved.test.ts` that covers it fails. The
+  other dashboard forms that take their scope in `willUpdate` (person edit and new person, product
+  editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether they show
+  the fault is untested;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;
 - return early from the save handler while `saveActionState(scope).unchanged`. `disabled` stops a
@@ -1570,6 +1572,13 @@ These forms follow the rule so far; the others are being brought under it batch 
 and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;
+- batch 2a: the "VAT class for new products" default on Venue settings; the recipe editor and the
+  ingredient form; the unit form, new and existing; the options list and its option window; the
+  extras list; Add to menus after a product is created; a section's Add products; a menu's
+  Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's Move and
+  Delete dialog and the image picker act on what is selected rather than save a draft, so they keep
+  their own rules; the reason for each is in
+  [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
 - batch 3a: the floor plan's table rows and Add table; the service-status rows and Create; the
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your

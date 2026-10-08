@@ -274,10 +274,15 @@ it("reports a cancel when its own dialog is dismissed", async () => {
 });
 
 it.each(["label-customer-name-en", "label-kitchen-name", "label-name"])(
-  "shows an error given for %s beside it, in sight",
+  "shows an error given for %s beside it, in sight, and Save works once anything changes",
   async (key) => {
     const { el } = await mount({ value: rare, errors: { [key]: "Refused." } });
 
+    expect(field(el, key).error).toBe("Refused.");
+    expect(saveOf(el).disabled).toBe(true);
+    expect(saveOf(el).variant).toBe("secondary");
+
+    await toggle(el, "label-available", false);
     expect(field(el, key).error).toBe("Refused.");
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(saveOf(el).disabled).toBe(false);
@@ -320,6 +325,7 @@ it("holds the dialog open against Escape only while it is saving", async () => {
 it("saves on Enter in a field", async () => {
   const { el, host } = await mount({ value: rare });
   const submitted = record(host);
+  await type(el, "label-kitchen-name", "RR");
 
   field(el, "label-name")
     .shadowRoot!.querySelector("input")!
@@ -352,7 +358,9 @@ it("on an invalid submission focuses the name, keeps what was typed and disables
 
 it("re-checks every change after a failed submission, and Save works again once the name is fixed", async () => {
   const { el } = await mount({ value: null });
+  await type(el, "label-kitchen-name", "WD");
   await click(el, "save");
+  expect(field(el, "label-name").error).toBe(t("options.label_name_required"));
 
   await type(el, "label-name", "Rare");
   expect(field(el, "label-name").error).toBe("");
@@ -365,9 +373,11 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
 
-it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
+it("keeps a field's refusal until that field changes, with Save working once anything changes", async () => {
   const { el } = await mount({ value: rare, errors: { "label-kitchen-name": "Too long." } });
-  expect(saveOf(el).disabled).toBe(false);
+  expect(field(el, "label-kitchen-name").error).toBe("Too long.");
+  expect(saveOf(el).disabled).toBe(true);
+  expect(saveOf(el).variant).toBe("secondary");
 
   await type(el, "label-name", "Very rare");
   expect(field(el, "label-kitchen-name").error).toBe("Too long.");
@@ -423,6 +433,10 @@ it("keeps a refusal naming no field in the bottom message alone, leaving Save wo
   const submitted = record(host);
 
   expect(await bottomOf(el)).toBe("Refused.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "label-kitchen-name", "RR");
+  expect(await bottomOf(el)).toBe("Refused.");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 
   await click(el, "save");
@@ -439,9 +453,11 @@ it("shows a refusal naming no field and the generic sentence together when both 
   expect(await bottomOf(el)).toBe(`Refused. ${t("form.fix_fields")}`);
 });
 
-it("starts again when reopened: no messages and Save working", async () => {
+it("starts again when reopened: no messages, Save quiet, and working after an edit", async () => {
   const { el } = await mount({ value: null });
+  await type(el, "label-kitchen-name", "WD");
   await click(el, "save");
+  expect(field(el, "label-name").error).toBe(t("options.label_name_required"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 
   el.open = false;
@@ -449,6 +465,12 @@ it("starts again when reopened: no messages and Save working", async () => {
   el.open = true;
   await el.updateComplete;
 
+  expect(field(el, "label-name").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).variant).toBe("secondary");
+
+  await type(el, "label-name", "Well done");
   expect(field(el, "label-name").error).toBe("");
   expect(await bottomOf(el)).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -136,8 +137,15 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
       theme,
     );
     if (state === "invalid") {
+      el.shadowRoot!.querySelector('[name="kitchen-name"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "XTR" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!.error,
+      ).not.toBe("");
     }
     const names = el.shadowRoot!.querySelector<
       HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
@@ -180,6 +188,10 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
       },
       theme,
     );
+    el.shadowRoot!.querySelector('[name="kitchen-name"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "XTR" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-test="item-0-portion-fixed"]')).not.toBeNull();
@@ -225,6 +237,58 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
     picker.shadowRoot!.querySelector<HTMLElement>("button.trigger")!.click();
     await picker.updateComplete;
     expect(picker.shadowRoot!.querySelector('[aria-disabled="true"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+});
+
+async function mountOpen(value: ExtraList | null, theme: "light" | "dark") {
+  const { el, host } = await mountWidget<ExtraListForm>(
+    "dashboard-extra-list-form",
+    { open: true, languages: { defaultLanguage: "en", languages: ["en", "es"] }, products, value },
+    theme,
+  );
+  await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  return { el, host };
+}
+/** What Save looks like and whether a person can press it: the host's state and its inner button's. */
+async function saveState(el: ExtraListForm) {
+  await el.updateComplete;
+  const save = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-modal [data-test="save"]',
+  )!;
+  await save.updateComplete;
+  return {
+    variant: save.variant,
+    disabled: save.disabled,
+    innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+  };
+}
+const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
+const ready = { variant: "primary", disabled: false, innerDisabled: false };
+/** Types into a `wt-input`'s own input, the way a person does. */
+async function type(el: ExtraListForm, name: string, value: string) {
+  const input = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `[name="${name}"]`,
+  )!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+  await el.updateComplete;
+}
+
+describe.each(["light", "dark"] as const)("extras list Save states (%s)", (theme) => {
+  it("is accessible with Save quiet, for a stored list and for a new one", async () => {
+    for (const value of [addons, null]) {
+      const { el, host } = await mountOpen(value, theme);
+      expect(await saveState(el)).toEqual(quiet);
+      await expectNoA11yViolations(host);
+      cleanupWidgets();
+    }
+  });
+
+  it("is accessible with Save primary after an edit", async () => {
+    const { el, host } = await mountOpen(addons, theme);
+    await type(el, "name", "Extras");
+    expect(await saveState(el)).toEqual(ready);
     await expectNoA11yViolations(host);
   });
 });

@@ -291,6 +291,8 @@ describe("unit-form", () => {
     });
     el.locales = ["en", "es"];
     await el.updateComplete;
+    await chooseOption(precisionBox(el), "1");
+    await el.updateComplete;
 
     const submit = vi.fn();
     el.addEventListener("wt-submit", submit);
@@ -312,6 +314,8 @@ describe("unit-form", () => {
     });
     el.locales = ["en", "es"];
     await el.updateComplete;
+    await chooseOption(precisionBox(el), "1");
+    await el.updateComplete;
 
     const submit = vi.fn();
     el.addEventListener("wt-submit", submit);
@@ -331,11 +335,13 @@ describe("unit-form", () => {
         open: true,
         locales: ["es", "en"],
         value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
-        fieldErrors: unitRefusalErrors({
-          code: "unit.translation_required",
-          params: { field, language: "en" },
-        }),
       });
+      await chooseOption(precisionBox(el), "1");
+      el.fieldErrors = unitRefusalErrors({
+        code: "unit.translation_required",
+        params: { field, language: "en" },
+      });
+      await el.updateComplete;
 
       expect(errorOf(el, `${field}-en`)).toBe(message);
       expect(errorOf(el, `${field}-es`)).toBe("");
@@ -348,11 +354,13 @@ describe("unit-form", () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["es", "en"],
-      fieldErrors: unitRefusalErrors({
-        code: "unit.translation_required",
-        params: { field: "name", language: "fr" },
-      }),
     });
+    await chooseOption(precisionBox(el), "1");
+    el.fieldErrors = unitRefusalErrors({
+      code: "unit.translation_required",
+      params: { field: "name", language: "fr" },
+    });
+    await el.updateComplete;
 
     expect(await bottomOf(el)).toBe(message);
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
@@ -491,10 +499,10 @@ describe("unit-form", () => {
       open: true,
       locales: ["es"],
     });
-    change(el, "name-es", "");
+    change(el, "name-es", "caja");
     await el.updateComplete;
 
-    expect(errorOf(el, "name-es")).toBe("");
+    expect(errorOf(el, "abbreviation-es")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
@@ -522,6 +530,8 @@ describe("unit-form", () => {
       open: true,
       locales: ["es"],
     });
+    await chooseOption(precisionBox(el), "1");
+    await el.updateComplete;
     saveOf(el).click();
     await el.updateComplete;
 
@@ -549,8 +559,10 @@ describe("unit-form", () => {
       open: true,
       locales: ["es"],
       value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
-      fieldErrors: unitRefusalErrors({ code: "unit.precision_invalid", params: {} }),
     });
+    change(el, "name-es", "caja mediana");
+    el.fieldErrors = unitRefusalErrors({ code: "unit.precision_invalid", params: {} });
+    await el.updateComplete;
     expect(precisionBox(el).error).toBe(message);
     expect(saveOf(el).disabled).toBe(false);
 
@@ -589,6 +601,8 @@ describe("unit-form", () => {
     });
     expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
 
+    await chooseOption(precisionBox(el), "1");
+    await el.updateComplete;
     saveOf(el).click();
     await el.updateComplete;
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
@@ -606,19 +620,28 @@ describe("unit-form", () => {
     expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
   });
 
-  it("starts again when reopened: no messages and Save working", async () => {
+  it("starts again when reopened: no messages, Save quiet, and working after an edit", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
       locales: ["es"],
     });
+    await chooseOption(precisionBox(el), "1");
+    await el.updateComplete;
     saveOf(el).click();
     await el.updateComplete;
+    expect(errorOf(el, "name-es")).toBe(t("units.name_required"));
     el.open = false;
     await el.updateComplete;
     el.open = true;
     await el.updateComplete;
 
     expect(errorOf(el, "name-es")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+    expect(saveOf(el).variant).toBe("secondary");
+    change(el, "name-es", "caja");
+    await el.updateComplete;
+    expect(errorOf(el, "abbreviation-es")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });

@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { sameValue } from "./product-editor-model.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -131,7 +137,7 @@ export class IngredientForm extends LitElement {
 
   /** Allergens are seeded into BOTH the live value (`allergens`, what a save emits) and the picker's
    * `declaration` seed (`seedAllergens`); the picker does not emit on seed, so the form must seed its
-   * own live copy too, or an untouched edit would re-save the wrong value. */
+   * own live copy too. */
   override willUpdate(changed: PropertyValues): void {
     const previous = changed.get("ingredient") as Ingredient | null | undefined;
     const reopened =
@@ -157,17 +163,18 @@ export class IngredientForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
       this.#baseline = undefined;
-    } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
+    } else if (this.isConnected && !this.#scope) {
       this.#baseline ??= structuredClone(this.#current());
-      this.#scope = this.#leave?.register<IngredientPatch>({
+      const { coordinator, scope } = draftScopeFor<IngredientPatch>(this, {
         id: this,
         current: () => this.#current(),
         snapshot: (value) => structuredClone(value),
         equal: sameValue,
         restore: (value) => this.#restore(value),
       });
-      this.#scope?.commit(this.#baseline);
+      this.#leave = coordinator;
+      this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
 
@@ -216,6 +223,7 @@ export class IngredientForm extends LitElement {
   #confirm(event: Event): void {
     event.stopPropagation();
     if (!this.isConnected || !this.open || this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.dismissed = new Set([...this.dismissed, ...Object.keys(this.fieldErrors)]);
     if (this.#nameError() !== "") {
@@ -258,6 +266,7 @@ export class IngredientForm extends LitElement {
 
   override render() {
     const invalidName = this.attempted ? this.#nameError() : "";
+    const saveAction = saveActionState(this.#scope);
     const nameError = invalidName || this.#refused("name");
     const bottom = [this.#refused("_form"), nameError === "" ? "" : t("form.fix_fields")]
       .filter((message) => message !== "")
@@ -268,7 +277,7 @@ export class IngredientForm extends LitElement {
         heading=${this.ingredient ? t("ingredient.edit") : t("ingredient.new")}
         .open=${this.open}
         .dismissible=${!this.busy}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         @wt-close=${() => this.#onClose()}
       >
         <wt-input
@@ -308,9 +317,9 @@ export class IngredientForm extends LitElement {
         ></dashboard-allergen-picker>
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
-            variant="primary"
+            variant=${saveAction.variant}
             data-test="confirm"
-            ?disabled=${this.busy || invalidName !== ""}
+            ?disabled=${saveAction.unchanged || this.busy || invalidName !== ""}
             @click=${(e: Event) => this.#confirm(e)}
             >${this.ingredient ? t("action.save") : t("action.create")}</wt-button
           >

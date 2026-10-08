@@ -1,6 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, leaveCoordinatorFor, submitOnEnter, type DraftScope } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  leaveCoordinatorFor,
+  saveActionState,
+  submitOnEnter,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -73,14 +80,14 @@ export class CatalogueSettingsPanel extends LitElement {
         this.readError = "";
         if (pristine && !this.submitting) this.#setSaved(model.defaultProductVatClass);
         if (!this.#scope) {
-          this.#scope = leaveCoordinatorFor(this)?.register({
+          this.#scope = draftScopeFor<string>(this, {
             id: this,
             current: () => this.draft,
             snapshot: (value) => value,
             equal: (a, b) => a === b,
             restore: () => this.#cancel(),
-          });
-          this.#scope?.commit(this.#baseline);
+          }).scope;
+          this.#scope.commit(this.#baseline);
         }
       })
       .catch((error: unknown) => {
@@ -137,6 +144,7 @@ export class CatalogueSettingsPanel extends LitElement {
 
   async #save(): Promise<void> {
     if (!this.model || this.submitting) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.actionError = "";
     this.saved = false;
@@ -168,6 +176,7 @@ export class CatalogueSettingsPanel extends LitElement {
   }
 
   override render() {
+    const saveAction = saveActionState(this.#scope);
     return html`
       ${this.readError ? html`<p class="error" role="alert">${this.readError}</p>` : nothing}
       ${
@@ -202,10 +211,10 @@ export class CatalogueSettingsPanel extends LitElement {
                   >${t("action.cancel")}</wt-button
                 >
                 <wt-button
-                  variant="primary"
+                  variant=${saveAction.variant}
                   data-test="save"
                   ?loading=${this.submitting}
-                  ?disabled=${this.attempted && !this.#valid()}
+                  ?disabled=${saveAction.unchanged || (this.attempted && !this.#valid())}
                   @click=${() => void this.#save()}
                 >
                   ${t("action.save")}</wt-button

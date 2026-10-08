@@ -4,7 +4,12 @@ import { page, userEvent } from "vitest/browser";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { t } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./add-to-menus.js";
 import "./section-add-products.js";
 import type { LeaveReason } from "@waitron/ui";
@@ -136,6 +141,15 @@ it("accepted placements clear only successful destinations before a failed retry
   cancel(form);
   await expect.poll(() => app.cancelled).toBe(1);
   expect((await question(app)).open).toBe(false);
+});
+it("Add to menus put back after a detached update still asks before Cancel discards a pick", async () => {
+  const { app, form } = await mount();
+  await reattachAfterDetachedUpdate(form);
+  await toggle(form, "starter");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
 });
 it("placement menu refresh and ordering leave a retained selection intact", async () => {
   const { app, form } = await mount();
@@ -285,4 +299,13 @@ it("Section success compares submitted membership independently of offered order
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await selectProduct(form, "bread");
   expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("Section Add products put back after a detached update still asks before Cancel discards a pick", async () => {
+  const { app, form } = await mountSection();
+  await reattachAfterDetachedUpdate(form);
+  await selectProduct(form, "soup");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  cancel(form);
+  expect((await sectionQuestion(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
 });
