@@ -2933,9 +2933,13 @@ step removes the repeated Live section, names and links includers beside Publish
 as a red sentence with their prices, and uses Unpublished changes as its heading. Its Clashes
 link now opens Price overrides with that filter selected once, after the rows load, even when
 All prices was remembered; subsequent choices are retained. A350 now places changes to the left
-of the menu on desktop and above it on a phone. The frozen Structure-style tree, grouped View
-links, Hide/Show all, Spanish conflicto wording and failed-refresh count still await
-the bundle's remaining steps.
+of the menu on desktop and above it on a phone. A frozen Structure-style renderer is now prepared
+and tested in isolation: it shares row presentation with Structure, preserves the captured
+document until replacement, and labels translated-name fallbacks. Preview still draws the existing
+card renderer. Connecting the new tree and preserving change navigation, then grouped View links,
+Hide/Show all, Spanish conflicto wording and the failed-refresh count still await the bundle's
+remaining steps. Its standalone screenshots check geometry; their fixture photo is not served,
+so image painting and the final real-screen look remain part of the integration checks.
 The bundle has not landed.
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and
 [implementation plan](superpowers/plans/2026-10-06-w95-menu-preview.md) define a customer-language
