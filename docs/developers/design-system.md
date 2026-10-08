@@ -898,7 +898,8 @@ menu and Add products. Under it the menu's members follow in menu order, with no
 is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
 of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
 section from whichever place it was chosen, and makes that row the current one, whose name is drawn
-bold and underlined with `aria-current="true"`. A product's ⋮ holds "Remove from <list>", naming the
+bold and underlined with `aria-current="true"`. A product's ⋮ holds Edit product, a link to the
+product's page, then "Remove from <list>", naming the
 list that holds it. An included menu's row reads "Menu: <name>" with "Shown as a folder" or
 "Sections shown directly" under it. Its ⋮ holds "Open <name>", a link to that menu's own Structure
 tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
@@ -915,8 +916,8 @@ colour. On an owned row the product slot is a link to the product's Edit dialog 
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
 media in both trees when the tree's box is at most 440px wide. In the Products list the product
-editor remains available through the row's Actions menu; a Menus Structure product row's Actions
-menu holds only Remove, so at that width the tree offers no way to open the product (backlog, A327).
+editor remains available through the row's Actions menu, and a Menus Structure product row's
+Actions menu offers Edit product at every width.
 
 The grips show only in Reorder mode, so a menu is not rearranged by a stray drag while you browse
 it. The tab's toolbar starts with a Reorder icon button (a grip mark, Reordenar in Spanish; "Icon
@@ -2923,8 +2924,10 @@ changed, while an Unavailable one stays listed with an "Unavailable" badge besid
 A variant's Disable and Enable work the same way, on the products list and in the product editor's
 variants section; a disabled variant is hidden behind the list's same Status filter, and in the
 editor until the "Show N disabled" link beside Add variant shows it. A menu's Price overrides tab
-lists no disabled product or size, because disabling one takes it off every menu; its Status
-column is a link to the product's page and never shows Available.
+lists no disabled product or size, because disabling one takes it off every menu. Its Available
+column reads Yes or No from the product's own Available, or a size's own, the flag a till honours,
+and each row's ⋮ holds Edit product, a link to that product's or size's page. The Structure tab's
+product rows show the same Available word, muted like the Type word beside it.
 
 ### Navigation and language controls
 

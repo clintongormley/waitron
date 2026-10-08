@@ -473,8 +473,8 @@ variant again puts it back wherever its product is listed, with no menu price of
 ([product-categories.md](product-categories.md), "Moving and deleting").
 
 A menu's Price overrides tab lists every Active product an active menu's working structure
-reaches, with its Active sizes. A disabled product or size is on no menu, so the tab's Status
-column, which reads Active or Disabled, reads Active on every row. The tab reads `menuPrices`; a
+reaches, with its Active sizes. A disabled product or size is on no menu. The tab's Available
+column reads the product's, or a size's, own Available, the flag a till honours. The tab reads `menuPrices`; a
 menu's offers, and the published document built from them
 (`packages/catalogue/src/menu-document.ts`), come from `listMenuOffers` (both in
 `packages/catalogue/src/operations.ts`), and both leave a disabled product or size out.
