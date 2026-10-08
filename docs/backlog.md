@@ -1668,12 +1668,13 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     confirmation, Add and Edit on the options screen until languages load, Print on an equipment
     label and on a reprint, and two on the till. Owner, 2026-10-08: "b", draw them all quiet the
     same way. A416 did the dashboard ones, and also the profile window's Edit and the backup key's
-    Change the key. **Landed as #1440.** The two till buttons are A417 (lane A). Left open by
-    A416, for the owner: buttons disabled because their row's own state rules them out still keep
-    their colour — Disable on an already-disabled printer and on an inactive service status,
-    Delete on a canvas's last tab, Publish on a menu's Preview while it has clashes, and the product
-    editor's modifier Remove while a window opened from it is still open. Default: leave them;
-    nothing is queued. Also seen in A416's look and not changed: the reprint dialog says there is
+    Change the key. **Landed as #1440.** The two till buttons are A417 (lane A). **Left open by
+    A416, for the owner — decided:** buttons disabled because their row's own state rules them out
+    still kept their colour — Disable on an already-disabled printer and on an inactive service
+    status, Publish on a menu's Preview while it has clashes, and the product editor's modifier
+    Remove while a window opened from it is still open. Owner, 2026-10-08: "a", draw them grey too;
+    A427 does those four. Delete on a canvas's last tab is left as it is, because canvases are
+    being deleted (A182, owner 2026-10-08). Also seen in A416's look and not changed: the reprint dialog says there is
     no active printer while its printer list is still loading;
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
