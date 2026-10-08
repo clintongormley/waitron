@@ -893,6 +893,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   flow. **Next action:** the owner decides whether §10.2's flow replaces §2's copy.
   [Detail](backlog/catalogue.md#copying-some-of-a-sections-products-into-another-section-is-not-built)
 
+- **The Structure tab's Select mode cannot delete sections in bulk (A337)** — Remove from menu stays
+  disabled while a section the menu owns is selected, because such a section is deleted, not
+  removed; each is still deleted from its own row's ⋮. **Next action:** the owner says whether a bulk
+  Delete is wanted.
+
 - **Content languages and the image library (#339, #344) — what is left open.**
   [Operator guide](content-and-images.md). **A new picture consumer has to add a real database
   reference, not just store a filename.** **The online language selector has nothing to select for

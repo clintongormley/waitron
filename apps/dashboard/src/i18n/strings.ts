@@ -4692,7 +4692,7 @@ export const es: Record<StringKey, string> = {
   "menus.collapse": "Ocultar lo que hay en {name}",
   "menus.new_section": "Nueva sección aquí",
   "menus.include_menu": "Incluir una carta",
-  "menus.add_to_menu": "Añadir a este menú",
+  "menus.add_to_menu": "Añadir a esta carta",
   "menus.search_structure": "Buscar en esta carta",
   "menus.move_selected": "Mover a una sección…",
   "menus.move_selected_confirm": "Mover",
