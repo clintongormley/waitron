@@ -5071,6 +5071,61 @@ describe("a colour a row inherits", () => {
     );
   });
 
+  it("keeps an inheriting category's name literal when it holds the source's placeholder", async () => {
+    setLocale("en");
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, color: "#b12525" }, { ...beer, name: "Beer {from}" }, food],
+    });
+    await openRow(el, "folder:d");
+    expect(swatchButton(root, "b").getAttribute("aria-label")).toBe(
+      "Change the colour of Beer {from}, inherited from Drinks",
+    );
+  });
+
+  it("keeps an inheriting product's and variant's names literal when they hold the source's placeholder", async () => {
+    setLocale("en");
+    const { el, root } = await mountTree({
+      categories: [{ ...drinks, color: "#256bb1" }, beer, food],
+      products: [
+        product({
+          id: "cola",
+          name: "Cola {from}",
+          primaryCategoryId: "d",
+          variants: [{ ...bunVariant, name: "Small {from}" }],
+        }),
+      ],
+    });
+    await openRow(el, "folder:d");
+    root.querySelector<HTMLElement>('tr[data-row-key="cola"] .tree-toggle')!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    const link = (id: string) => root.querySelector<HTMLElement>(`[data-test="color-${id}"]`)!;
+    expect(link("cola").getAttribute("aria-label")).toBe(
+      "Edit Cola {from}, colour inherited from Drinks",
+    );
+    expect(link("small").getAttribute("aria-label")).toBe(
+      "Edit Small {from}, colour inherited from Drinks",
+    );
+  });
+
+  it("keeps a category name with a replacement pattern literal when the colour is its own", async () => {
+    setLocale("en");
+    const { root } = await mountTree({
+      categories: [{ ...drinks, name: "$& Co", color: "#b12525" }, beer, food],
+    });
+    expect(swatchButton(root, "d").getAttribute("aria-label")).toBe("Change the colour of $& Co");
+  });
+
+  it("keeps a product name with a replacement pattern literal when the colour is its own", async () => {
+    setLocale("en");
+    const { root } = await mountTree({
+      categories: [],
+      products: [product({ id: "own", name: "$& Co", primaryCategoryId: null, color: "#b12525" })],
+    });
+    expect(
+      root.querySelector<HTMLElement>('[data-test="color-own"]')!.getAttribute("aria-label"),
+    ).toBe("Edit $& Co");
+  });
+
   it("marks a product without a colour of its own as inheriting, and names where its colour comes from", async () => {
     const { el, root } = await mountTree({
       defaultColor: "#777777",

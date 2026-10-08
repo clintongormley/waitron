@@ -24,7 +24,7 @@ import {
 import { categoryPathSearchText, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import { categoryColorSource, isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
-import { productMedia, productMediaStyles } from "./product-media.js";
+import { fillPlaceholders, productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
   holdPageCursor,
@@ -111,7 +111,6 @@ export function acceptsCatalogueDrop(
   );
 }
 
-/** A row's colour, and the name of where it comes from when it is not the row's own. */
 interface ShownColor {
   color: string | null;
   inheritedFrom: string | undefined;
@@ -1421,8 +1420,6 @@ export class ProductList extends LitElement {
     return this.shadowRoot?.querySelector<WtDataTable<ListRow>>("wt-data-table") ?? null;
   }
 
-  /** The colour a row without its own takes from the categories above `categoryId`, and the name
-   * of where it comes from: that category, or All products for the venue default. */
   #inheritedColor(categoryId: string | null): ShownColor {
     const source = categoryColorSource(categoryId, this.#categoryById, this.defaultColor);
     if (source.color === null) return { color: null, inheritedFrom: undefined };
@@ -1445,10 +1442,8 @@ export class ProductList extends LitElement {
         data-test=${`color-${key}`}
         aria-label=${
           inherited
-            ? t("folders.edit_color_inherited")
-                .replace("{name}", () => name)
-                .replace("{from}", () => inheritedFrom)
-            : t("folders.edit_color").replace("{name}", name)
+            ? fillPlaceholders(t("folders.edit_color_inherited"), { name, from: inheritedFrom })
+            : fillPlaceholders(t("folders.edit_color"), { name })
         }
         @click=${(clicked: Event) => {
           clicked.stopPropagation();
