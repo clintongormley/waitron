@@ -1519,6 +1519,55 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   before the redesign.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
+- **What W105b left open (#1248, a disabled device coming back as itself)** — left open by A268
+  (add a device, like adding a printer, owner 2026-10-04). (1) the slow hash check runs only when
+  the cookie names a disabled device, so the response time hints that an id is a disabled device;
+  asks are rate-limited and, outside dev mode, accepted only while Add a device is open.
+  [Detail](backlog/till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
+
+- **What W106 left open (the battery on the Devices list, #1240)** — left open by A268. (a) the
+  relative-time words (W106a, #1272, `wt-relative-time`) show the exact time in the BROWSER's time
+  zone: the relative-time widget receives no venue time zone.
+  [Detail](backlog/till.md#what-w106-left-open-the-battery-on-the-devices-list-1240)
+
+- **What W105 left open (#1235)** — left open by A268. (5) the Devices table's Shows column reads
+  "— no station —" for a screen on a switched-off station, because it looks the name up in the
+  switched-on list; `binding.name` could fill it.
+  [Detail](backlog/till.md#what-w105-left-open-1235)
+
+- **What W104 left open (#1225)** — left open by A268, not acted on. (1) a Pair save that never
+  answers locks both dialogs, because a save carries no time limit
+  (`packages/dashboard-kit/src/request.ts` limits GETs only).
+  [Detail](backlog/till.md#what-w104-left-open-1225)
+
+- **Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN.** It
+  is a per-device setting by the 2026-10-01 decision
+  ([routing design §5.11](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
+  the 2026-10-04 profile model a "Bar till" profile could carry it instead. Needs an owner decision.
+  [Detail](backlog/till.md#does-made-here-belong-to-the-device-or-to-its-profile-a270-owner-2026-10-04--open)
+
+- **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
+  Only dev mode lets a tab act as a separate device, and it names the device by id alone
+  (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
+  whole browser. **Next action:** a short spec for per-tab device secrets and per-tab sign-ins
+  usable in Demo, and reproduce the owner's report first.
+  [Detail](backlog/till.md#each-browser-tab-as-its-own-device-in-demo-too-a271-owner-2026-10-04--open-after-a268)
+
+- **Three refactors of sign-in-adjacent code, and renaming the `seedTill` test fixtures** —
+  deferred in the PR of A238 (a till is a device, #1164).
+
+- **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
+  2026-10-03).** Each top-up or removal of cash from a till device's drawer is a recorded entry:
+  who, how much, why, when (topping up change, paying a supplier, a waiter handing in float cash).
+  The entries replace the two typed totals the daily close takes today (opening float and payouts,
+  `packages/reporting/src/record-daily-close.ts`).
+  [Detail](backlog/till.md#recorded-cash-in-and-out-of-a-tills-drawer-a239--open-needs-a-spec-before-queueing-owner-2026-10-03)
+
+- **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
+  A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs A238
+  (landed as #1164) and A239.
+  [Detail](backlog/till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -1755,6 +1804,13 @@ _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
   opens no drawer; B30 covers only the machine Waitron does not talk to. Left open by service Task
   16 (#981).
 
+- **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
+  An agent told `not_approved` stops and needs resetting on its own setup page
+  (`packages/print-agent/src/agent.ts`, the `not_approved` branch), so its request outlives a shut
+  window instead. **Next action:** find a path, for example an agent that asks again on its own
+  after a refusal, so agents follow the device rule.
+  [Detail](backlog/printers.md#a-print-agent-cannot-be-discarded-when-the-join-window-shuts-a269-owner-2026-10-04--open)
+
 ### Payments and card readers
 
 _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backlog/payments.md).
@@ -1881,6 +1937,10 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
   belongs with the SumUp Solo experiments above), because if the reader owns the whole step there
   may be nothing for us to build.
   [Detail](backlog/payments.md#some-card-payments-ask-the-cardholder-to-sign-instead-of-enter-a-pin--open-question-nothing-built)
+
+- **If demos use multiple tills at once, add a till label to each pending amount so the manager can
+  choose the right one; the current page shows amounts alone.** Left open by A247 (a pretend
+  connected card reader in Demo mode, W38, #1172).
 
 ### Users, sign-in and the dashboard shell
 
@@ -2010,6 +2070,49 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   with an invoice shows its credit note. Left open by C126 (cancelling an order whose invoice was
   issued credits it, #1030).
 
+- **The dashboard shell restyle (#333) has not been checked on hardware.** It was only ever checked
+  in screenshots on a desktop browser; nobody has walked it on the real box or a phone, so the
+  narrow-viewport banner and drawer are unverified. That walk belongs with the display walkthrough
+  in [ui-review.md](ui-review.md).
+
+- **The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN.**
+  Find a collapse-only case that needs the app's correction before changing or retiring that test.
+  [Detail](backlog/dashboard.md#the-older-collapse-only-sidebar-test-still-needs-a-useful-assertion-c35-822--open)
+
+- **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
+  what the section is for and what is in it, opened by the section's header. It was the answer to
+  C35's question about the header of the section you are on; A161 (#979) has since answered that
+  question another way — that header now collapses its section, as every other header does — so
+  whether this page is still wanted, and what would open it, is the owner's call.
+  [Detail](backlog/dashboard.md#every-dashboard-sidebar-section-gets-an-info-page--open-owner-2026-09-29)
+
+- **What C38 left as it was (a generated display name is the first given name and first surname,
+  #827, owner decision 2026-09-28).** Left as they were, from #827's review: unlike the two staff
+  forms, the profile screen keeps a taken-name message beside the display name when a first- or
+  last-name change regenerates that name (`apps/dashboard/src/screens/profile-screen.ts` drops only
+  the changed field's refusal); and the two staff forms turn the refusal into a field message
+  inside the form, where other dashboard forms receive field messages from their parent screen.
+
+- **The purchase VAT line's other fields still use `min-width: 5rem`, which the design-token rule
+  forbids.** Left open by C43 (money in the dashboard shows its currency sign, #830) and its
+  decimal-entry work (A284).
+
+- **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
+  (3) nothing checks that a NEW dashboard table offers the chooser; … (6) the printers screen's
+  view keys (`printers:agents`, `printers:table`, `printers:jobs`) are the only dashboard view keys
+  that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live.
+  [Detail](backlog/dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
+
+- **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
+  open:** three dialogs still draw their own refusal because none has a `wt-form-actions` row in its
+  footer to hand it to. Not looked at on screen after #961's review fixes.
+  [Detail](backlog/dashboard.md#a-forms-refusal-message-sits-at-the-bottom-of-the-form-above-the-buttons-c97-961--left-open)
+
+- **A form in a modal stops at `--wt-form-max-width` (C105, #965) — left open:** a
+  `wt-disclosure`'s heading row (the product editor's Kitchen, Descriptors and Nutrition sections,
+  among others) and a screen's own paragraphs still run the modal's full width.
+  [Detail](backlog/dashboard.md#a-form-in-a-modal-stops-at---wt-form-max-width-c105-965--left-open)
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them._
@@ -2027,6 +2130,12 @@ _Formerly entries spread across the old sections, C125 among them._
   prose. Reproduce in Spanish before deciding their translation scope; this branch changes the
   standard selling tabs only.
 
+- **Restaurant menus are “carta” in the Spanish dashboard, module, setup and till wording** (owner
+  decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
+  `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
+  “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
+  `apps/till/src/i18n/allergen-names.ts`) are not scanned.
+
 ### Alerts, logging and diagnostics
 
 _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/alerts.md).
@@ -2038,6 +2147,13 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 - **Still not built: a standby that has fallen behind** — left open by "Dashboard alerts and the
   incidents surface" (A5, LANDED #363/#368/#371).
+
+- **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
+  Devices list; nothing alerts when a handheld runs low.
+
+- **The alert check that every money slot is marked looks only at slots named `amount`, `captured`
+  and `expected`, so a new money slot under another name is unseen.** Left open by C43 (money in
+  the dashboard shows its currency sign, #830).
 
 ### Working time and staff
 
@@ -5290,218 +5406,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
 ### A7. Users, roles and the dashboard shell
-
-**The dashboard shell restyle (#333) has not been checked on hardware.** It was only ever checked in
-screenshots on a desktop browser; nobody has walked it on the real box or a phone, so the
-narrow-viewport banner and drawer are unverified. That walk belongs with the display walkthrough in
-[ui-review.md](ui-review.md).
-
-- **Restaurant menus are “carta” in the Spanish dashboard, module, setup and till wording** (owner
-  decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
-  `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
-  “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
-  `apps/till/src/i18n/allergen-names.ts`) are not scanned.
-
-- **Dashboard side-menu changes (A325) — DONE.** One headed
-  group opens at a time; search still shows every matching group without changing those choices.
-  Header labels align with page labels, with 16px chevrons at the trailing edge that appear on
-  hover, keyboard focus or a device without hover. Fine-pointer rows use a 32px minimum;
-  coarse-pointer rows retain 44px. The 34ch sidebar has the shared soft shadow and a phone
-  drawer cap of 85vw. The scroll test now exercises opening a lower group while the group
-  above closes. With browser scroll anchoring disabled in that fixture, deleting the app's
-  correction moved the clicked header by 128px and failed; restoring it passed.
-  Touch assertions run in their own Chromium context after a Linux probe showed that
-  disabling a CDP touch override left the touched page without a mouse pointer or hover.
-
-- **The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN.**
-  A325's independent review deleted the app's scroll correction: the new lower-header check
-  failed by 128px, while "keeps the clicked group header … when collapsing …" still passed.
-  The older test and its existing assertions were retained. Find a collapse-only case that
-  needs the app's correction before changing or retiring that test.
-
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — DONE: W104 (#1225), W105
-  (#1235), W106 (#1240), W105a (#1244), W105b (#1248), W105c (#1251), W105d (#1263), W105e (#1266),
-  W105f (#1253), W105g (#1254), W105h (#1258), W105i (#1260), W106a (#1272); the open points each
-  left are listed below.**
-  [Spec](superpowers/specs/2026-10-04-add-a-device-design.md);
-  [plan](superpowers/plans/2026-10-04-add-a-device.md).
-  Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs
-  only when the cookie names a disabled device, so the
-  response time hints that an id is a disabled device; asks are rate-limited and, outside dev mode,
-  accepted only while Add a device is open. (2) Someone holding a copy of a disabled device's
-  current cookie can ask first and so replace that cookie; outside dev mode they still cannot get in
-  without a manager tapping the number. (3) If an ask's response is lost after the server saved it,
-  the browser's next ask joins as a new device and the old row stays disabled. (4) A long name in
-  the waiting list overflows a phone's width. (5) An ask that replaces a waiting one always gets a
-  later `createdAt`, but an ask made when no ask is waiting under its id, whatever ended the
-  previous one (accepting it included, once the device is later disabled), is not forced later.
-  It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
-  unlikely, but nothing in the code rules it out.
-  W105i's open point (#1260: a shift session already open when its device was moved onto a
-  kitchen-screen profile stayed open) is DONE by A298 (#1318; owner 2026-10-06, answer "a"): the move ends
-  every session on the device in the same transaction, as Disable does.
-  Left OPEN by W106 (battery, #1240): (a) the relative-time words (W106a, #1272, `wt-relative-time`)
-  show the exact time in the BROWSER's time zone: the relative-time widget receives no venue time
-  zone. Other dashboard places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not
-  changed: the Devices "Last
-  seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
-  printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
-  queue's Created and Delivered columns; the menu status and preview's "published {time}"
-  (`apps/dashboard/src/widgets/menu-preview.ts`); and the adjustments report's time column
-  (`packages/adjustments/src/dashboard/adjustment-report-screen.ts`). Whether any of them should
-  use `wt-relative-time` is the owner's call. (b) the greying, and the relative words with it,
-  compare the dashboard browser's clock with the server's stamp, so a browser clock far behind
-  shows an old report as current. (c) a report exactly 60 s after the last stored one is not stored
-  (`sightingDue` is strictly more than a minute); the spec says "at least a minute". (d) the till
-  starts reporting from its first draw only, so an app removed from the page and put back does not
-  report until it restarts. (e) test gaps: no battery case for a disabled device; no failing test
-  for the `isConnected` check in the Battery column's update step; "Not reported" sorting last is
-  held only by `wt-data-table`'s own tests. (f) `wt-relative-time`'s words are an inline button
-  smaller than `--wt-tap-min`, under WCAG 2.2 criterion 2.5.8's exception for a target in a
-  sentence (`docs/developers/design-system.md`); whether they should take a 44px hit area instead
-  is the owner's call.
-  Left OPEN by W105: (5) the Devices table's Shows column reads "— no station —" for a screen on a
-  switched-off station, because it looks the name up in the switched-on list; `binding.name` could
-  fill it. Review suggestions #1235 did not take, listed in its description: the edit
-  route checks permission before the device id where revoke checks the id first; its body is the
-  whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
-  `rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
-  Pair repeat some request-body building; seven unread `devices.*` strings.
-  Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
-  save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
-  the Devices page with Back while a Pair save is in flight still sends a deny for that request
-  (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the
-  device is untested; (3) the Add a device and Pair dialogs were looked at only through the browser
-  test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
-  address has not been looked at. (4) a device's knock is refused if the window shut while its body was
-  arriving, but open periods are told apart only by their start time, to the millisecond
-  (`apps/server/src/device-api.ts`), so a shut and reopen within one millisecond would pass.
-- **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
-  A268 discards a waiting device's request when the last Add dialog closes. An agent told
-  `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
-  the `not_approved` branch), so its request outlives a shut window instead. **Next action:** find a
-  path, for example an agent that asks again on its own after a refusal, so agents follow the
-  device rule. Spec: [A268 §4](superpowers/specs/2026-10-04-add-a-device-design.md#4-pairing-on-the-server).
-- **Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN.** It
-  is a per-device setting by the 2026-10-01 decision
-  ([routing design §5.11](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
-  the 2026-10-04 profile model a "Bar till" profile could carry it instead. A268 keeps it on the
-  device. Needs an owner decision.
-- **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
-  Only dev mode lets a tab act as a separate device, and it names the device by id alone
-  (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
-  whole browser. Since #269 and #287 pairing also overwrites the browser-wide device cookie, so a
-  tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
-  lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
-  secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
-- **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
-  Devices list; nothing alerts when a handheld runs low.
-
-- **A till is a device (A238) — DONE: landed as #1164 (main `065354d26`, 2026-10-04); every
-  venue needs a reset.** Follow-ups W56 and W57 are done. Deferred in the PR: three refactors of
-  sign-in-adjacent code, and renaming the `seedTill` test fixtures. Spec:
-  `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`; plan:
-  `docs/superpowers/plans/2026-10-03-till-is-a-device.md`. Pieces 2 and 3 follow it (A239, A240).
-
-- **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
-  2026-10-03).** Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
-  recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
-  in float cash). The entries replace the two typed totals the daily close takes today (opening float
-  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
-  No screen collects cash
-  counts yet; this is where one belongs.
-
-- **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
-  A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
-  open float may take cash on any handheld, and it adds to their float; the waiter settles the float
-  at a till before leaving, entering what they hold, the difference is recorded against them and the
-  cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
-  Cash taken on a handheld whose profile allows cash, with no float, is counted against the
-  handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
-  A238 (landed as #1164) and A239.
-
-- **A pretend printer in Demo mode (A241) — DONE in W37 (#1159).**
-
-- **A pretend connected card reader in Demo mode (A247) — DONE in W38 (#1172); left open:** if
-  demos use multiple tills at once, add a till label to each pending amount so the manager can
-  choose the right one; the current page shows amounts alone.
-
-- **The rest of the Printing rules screen (A242) — SETTLED by A261 (owner, 2026-10-03).** The page
-  is deleted: kitchen ticket printers move to Prep stations, the receipt print mode to Departments
-  and zones, and the cash drawer policy is deleted (opening the drawer by hand always needs
-  `cash.drawer`). Implemented by A261 step 8: the old bookmark replaces itself with Prep stations Tickets when permitted; the retired write routes answer 404.
-
-- **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
-  what the section is for and what is in it, opened by the section's header. It was the answer to
-  C35's question about the header of the section you are on; A161 (#979) has since answered that
-  question another way — that header now collapses its section, as every other header does — so
-  whether this page is still wanted, and what would open it, is the owner's call. If wanted, it
-  needs a spec: brainstorm what each section's page says.
-
-- **A generated display name is the first given name and first surname (C38, #827, owner decision
-  2026-09-28).** Left as they were, from #827's review: unlike the two staff forms, the profile
-  screen keeps a taken-name message beside the display name when a first- or last-name change
-  regenerates that name (`apps/dashboard/src/screens/profile-screen.ts` drops only the changed
-  field's refusal); and the two staff forms turn the refusal into a field message inside the form,
-  where other dashboard forms receive field messages from their parent screen.
-
-- **Money in the dashboard shows its currency sign (C43, #830).** Decimal entry consistency is
-  DONE (A284): shared exact string parsing and display in `ui-core`, consumed by `wt-price-input`
-  and the decimal mode of `wt-input`. Catalogue/product/variant and menu prices, extras prices and
-  portions, purchases (amounts and percentages), adjustment limits, fractional profile logout
-  minutes, till discounts, bill
-  contributions/cash/tips, partial refunds, finding and collecting a debt, measured bill splits,
-  and the cash/weight keypad display use the screen's decimal mark and accept comma or point.
-  Multiple marks and grouping spaces are refused by the form's own checks. The cents conversion
-  and server request contracts are unchanged. `payments-screen.ts` was surveyed: its inputs on this tree
-  are reader names, an attestation note and PIN, with no decimal entry. Browser regressions live
-  beside the shared controls and the purchase, extras, adjustment and till consumers.
-  Left open: (1) the alert check that every money slot is marked looks only at slots named `amount`,
-  `captured` and `expected`, so a new money slot under another name is unseen; (2) the purchase VAT
-  line's other fields still use `min-width: 5rem`, which the design-token rule forbids.
-
-- **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
-  (1) tables inside a dialog or picker offer no chooser, by choice; (2) the servers list
-  (`apps/dashboard/src/screens/servers-screen.ts`) offers no chooser, its one column beside the
-  buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
-  with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser; (4) where a
-  screen keeps its search and filters outside the table (staff, card readers) or the table has none
-  (alerts, venue operations), the Customise icon button sits alone on a row above the table rather than
-  beside those controls — moving a screen's own controls into the table's toolbar would fix it;
-  (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
-  no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
-  roster (`apps/dashboard/src/screens/roster-screen.ts`), the four report tables on the sales screen
-  (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), the overdue table on the overview
-  (`apps/dashboard/src/screens/dashboard-overview-screen.ts`) and the top-sellers table both of
-  those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (6) the printers screen's
-  view keys (`printers:agents`, `printers:table`, `printers:jobs`) are the only dashboard view keys
-  that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live.
-
-- **The sidebar's page search (C46, #836) — left open:** its accessibility case checks the search
-  box and its message only; the sidebar's headers and current page have their own case since A306
-  (`apps/dashboard/src/dashboard-app.a11y.test.ts`, "the desktop sidebar's group headers and current
-  page are accessible at rest and under the pointer"). Two choices are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched as
-  "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
-  sidebar.
-
-- **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
-  open:** three dialogs still draw their own refusal because none has a `wt-form-actions` row in its
-  footer to hand it to: the menus screen's add-products window has its row inside the
-  `section-add-products` component, and `packages/bookings/src/dashboard/booking-form.ts` and
-  `apps/till/src/widgets/supervisor-override-dialog.ts` put bare `wt-button`s in the footer slot. A
-  `wt-form-actions` wrapped in another element inside a dialog's footer would keep its message in
-  the footer; none does today. Not looked at on screen after #961's review fixes.
-
-- **A form in a modal stops at `--wt-form-max-width` (C105, #965) — left open:** a
-  `wt-disclosure`'s heading row (the product editor's Kitchen, Descriptors and Nutrition sections,
-  among others) and a screen's own paragraphs still run the modal's full width; and forms built in
-  `wt-dialog` rather than `wt-modal` (the ingredient form, the till's party name dialog, among
-  others) are held only by the dialog's own 768px limit — whether they should follow the modal's
-  form width is the owner's call.
-
-- **Hints shown as placeholders (C104, #966; C119, #967):** the owner chose on 2026-10-01 to leave as
-  they are the hints cut off in their fields and the fields whose own placeholder shows instead of
-  their hint.
 
 - **Forms explain a failed submission under each field and once at the bottom (C47, #838/#839/#840/
   #841; C48, #892; C54, #853; owner rule 2026-09-28, restated 2026-09-29).**

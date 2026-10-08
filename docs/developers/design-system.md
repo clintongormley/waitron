@@ -495,7 +495,7 @@ height with a fine pointer (A325, owner 2026-10-07). With a coarse pointer they 
 
 Outside the field primitives, `wt-relative-time`'s words are an inline button below `--wt-tap-min`, under criterion 2.5.8's
 exception for a target in a sentence (quoted in its row of the component table); that is the
-implementer's choice and awaits the owner's view (`docs/backlog.md`, W106's open point (f)). `wt-switch`'s `:host` and `.control` and
+implementer's choice and awaits the owner's view (`docs/backlog/till.md`, W106's open point (f)). `wt-switch`'s `:host` and `.control` and
 `wt-price-input`'s unit button take `min-width` and
 `min-height` of `--wt-tap-min`. `wt-button` takes them at its default size and is exactly
 `--wt-tap-min` square with `shape="round"`, but its height depends on `size`: `size="lg"` is at

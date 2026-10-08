@@ -336,6 +336,15 @@ just a green typecheck.
     `apps/print-agent/src/linux-devices.ts`) is a chosen window, not a measured one, and a printer
     unpaired outside the agent resolves as attached for up to 10 seconds.
 
+## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
+
+- **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
+  A268 discards a waiting device's request when the last Add dialog closes. An agent told
+  `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
+  the `not_approved` branch), so its request outlives a shut window instead. **Next action:** find a
+  path, for example an agent that asks again on its own after a refusal, so agents follow the
+  device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-design.md#4-pairing-on-the-server).
+
 ## Decisions and deliberate limits
 
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is

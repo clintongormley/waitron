@@ -124,9 +124,75 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   save on each form tried only with a hand-built event or not at all, and move the ones that close
   to `dismissible`.
 
+## The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN
+
+- **The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN.**
+  A325's independent review deleted the app's scroll correction: the new lower-header check
+  failed by 128px, while "keeps the clicked group header … when collapsing …" still passed.
+  The older test and its existing assertions were retained. Find a collapse-only case that
+  needs the app's correction before changing or retiring that test.
+
+## Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29)
+
+- **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
+  what the section is for and what is in it, opened by the section's header. It was the answer to
+  C35's question about the header of the section you are on; A161 (#979) has since answered that
+  question another way — that header now collapses its section, as every other header does — so
+  whether this page is still wanted, and what would open it, is the owner's call. If wanted, it
+  needs a spec: brainstorm what each section's page says.
+
+## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
+
+- **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
+  (1) tables inside a dialog or picker offer no chooser, by choice; (2) the servers list
+  (`apps/dashboard/src/screens/servers-screen.ts`) offers no chooser, its one column beside the
+  buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
+  with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser; (4) where a
+  screen keeps its search and filters outside the table (staff, card readers) or the table has none
+  (alerts, venue operations), the Customise icon button sits alone on a row above the table rather than
+  beside those controls — moving a screen's own controls into the table's toolbar would fix it;
+  (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
+  no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
+  roster (`apps/dashboard/src/screens/roster-screen.ts`), the four report tables on the sales screen
+  (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), the overdue table on the overview
+  (`apps/dashboard/src/screens/dashboard-overview-screen.ts`) and the top-sellers table both of
+  those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (6) the printers screen's
+  view keys (`printers:agents`, `printers:table`, `printers:jobs`) are the only dashboard view keys
+  that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live.
+
+## A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left open
+
+- **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
+  open:** three dialogs still draw their own refusal because none has a `wt-form-actions` row in its
+  footer to hand it to: the menus screen's add-products window has its row inside the
+  `section-add-products` component, and `packages/bookings/src/dashboard/booking-form.ts` and
+  `apps/till/src/widgets/supervisor-override-dialog.ts` put bare `wt-button`s in the footer slot. A
+  `wt-form-actions` wrapped in another element inside a dialog's footer would keep its message in
+  the footer; none does today. Not looked at on screen after #961's review fixes.
+
+## A form in a modal stops at `--wt-form-max-width` (C105, #965) — left open
+
+- **A form in a modal stops at `--wt-form-max-width` (C105, #965) — left open:** a
+  `wt-disclosure`'s heading row (the product editor's Kitchen, Descriptors and Nutrition sections,
+  among others) and a screen's own paragraphs still run the modal's full width; and forms built in
+  `wt-dialog` rather than `wt-modal` (the ingredient form, the till's party name dialog, among
+  others) are held only by the dialog's own 768px limit — whether they should follow the modal's
+  form width is the owner's call.
+
 ## Decisions and deliberate limits
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'
   across the dashboard"): a Delete label can be stale, because the watcher list does not re-read on
   a watcher's Done marks nor the course list on draft lines, order lines or kitchen items, in which
   case a confirmed Delete switches the row off instead.
+
+- **The sidebar's page search (C46, #836) — left open:** its accessibility case checks the search
+  box and its message only; the sidebar's headers and current page have their own case since A306
+  (`apps/dashboard/src/dashboard-app.a11y.test.ts`, "the desktop sidebar's group headers and current
+  page are accessible at rest and under the pointer"). Two choices are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched as
+  "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
+  sidebar.
+
+- **Hints shown as placeholders (C104, #966; C119, #967):** the owner chose on 2026-10-01 to leave as
+  they are the hints cut off in their fields and the fields whose own placeholder shows instead of
+  their hint.

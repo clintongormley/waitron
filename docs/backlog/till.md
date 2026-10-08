@@ -835,6 +835,95 @@ screen is designed.
   **Until this lands, build no new feature as a canvas card or card setting** — put it in the
   screen itself. Slice 3d already kept its kitchen-group choice off the `expo` card (its P15).
 
+## What W105b left open (#1248, a disabled device coming back as itself)
+
+Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs
+only when the cookie names a disabled device, so the
+response time hints that an id is a disabled device; asks are rate-limited and, outside dev mode,
+accepted only while Add a device is open. (2) Someone holding a copy of a disabled device's
+current cookie can ask first and so replace that cookie; outside dev mode they still cannot get in
+without a manager tapping the number. (3) If an ask's response is lost after the server saved it,
+the browser's next ask joins as a new device and the old row stays disabled. (4) A long name in
+the waiting list overflows a phone's width. (5) An ask that replaces a waiting one always gets a
+later `createdAt`, but an ask made when no ask is waiting under its id, whatever ended the
+previous one (accepting it included, once the device is later disabled), is not forced later.
+It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
+unlikely, but nothing in the code rules it out.
+
+## What W106 left open (the battery on the Devices list, #1240)
+
+Left OPEN by W106 (battery, #1240): (a) the relative-time words (W106a, #1272, `wt-relative-time`)
+show the exact time in the BROWSER's time zone: the relative-time widget receives no venue time
+zone. Other dashboard places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not
+changed: the Devices "Last
+seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
+printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
+queue's Created and Delivered columns; the menu status and preview's "published {time}"
+(`apps/dashboard/src/widgets/menu-preview.ts`); and the adjustments report's time column
+(`packages/adjustments/src/dashboard/adjustment-report-screen.ts`). Whether any of them should
+use `wt-relative-time` is the owner's call.
+
+## What W105 left open (#1235)
+
+Left OPEN by W105: (5) the Devices table's Shows column reads "— no station —" for a screen on a
+switched-off station, because it looks the name up in the switched-on list; `binding.name` could
+fill it. Review suggestions #1235 did not take, listed in its description: the edit
+route checks permission before the device id where revoke checks the id first; its body is the
+whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
+`rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
+Pair repeat some request-body building; seven unread `devices.*` strings.
+
+## What W104 left open (#1225)
+
+Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
+save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
+the Devices page with Back while a Pair save is in flight still sends a deny for that request
+(`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the
+device is untested; (3) the Add a device and Pair dialogs were looked at only through the browser
+test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
+address has not been looked at. (4) a device's knock is refused if the window shut while its body was
+arriving, but open periods are told apart only by their start time, to the millisecond
+(`apps/server/src/device-api.ts`), so a shut and reopen within one millisecond would pass.
+
+## Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN
+
+- **Does "made here" belong to the device or to its profile? (A270, owner 2026-10-04) — OPEN.** It
+  is a per-device setting by the 2026-10-01 decision
+  ([routing design §5.11](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md)); under
+  the 2026-10-04 profile model a "Bar till" profile could carry it instead. A268 keeps it on the
+  device. Needs an owner decision.
+
+## Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268
+
+- **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
+  Only dev mode lets a tab act as a separate device, and it names the device by id alone
+  (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the
+  whole browser. Since #269 and #287 pairing also overwrites the browser-wide device cookie, so a
+  tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
+  lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
+  secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
+
+## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
+
+- **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
+  2026-10-03).** Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
+  recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
+  in float cash). The entries replace the two typed totals the daily close takes today (opening float
+  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (landed as #1164).
+  No screen collects cash
+  counts yet; this is where one belongs.
+
+## Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03)
+
+- **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
+  A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
+  open float may take cash on any handheld, and it adds to their float; the waiter settles the float
+  at a till before leaving, entering what they hold, the difference is recorded against them and the
+  cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
+  Cash taken on a handheld whose profile allows cash, with no float, is counted against the
+  handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
+  A238 (landed as #1164) and A239.
+
 ## Decisions and deliberate limits
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
