@@ -826,6 +826,10 @@ jobs:
           node scripts/setup-litestream.mjs
           node scripts/setup-s3-test-server.mjs
 
+      # Why: testing-guide.md, "The stream tests' CI job gives loopback a normal network's packet size".
+      - name: Give loopback a normal network's packet size
+        run: sudo ip link set dev lo mtu 1500
+
       # Not named "Run the … shard": scripts/ci-workflow.test.mjs would count @waitron/server twice.
       # TMPDIR in memory: in a probe reproducing a main failure, a stall on the runner's disk held one
       # commit for about a second and put a sale past the pause test's 1000 ms bound (testing-guide.md,

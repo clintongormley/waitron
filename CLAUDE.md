@@ -191,6 +191,11 @@ hook, or how tests are scheduled:
   `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text and never reads
   the step's test files. Receipt: [testing-guide.md](docs/developers/testing-guide.md), "In CI their
   temporary files are in memory".
+- **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Cost: the
+  pause test's last restore failed twice in CI, each about 31 s after the stream resumed, just past
+  its 30 s ceiling.
+  Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
 
 **Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
 2026-10-03), and the failure still has to be fixed because CI runs the same checks. The hook's

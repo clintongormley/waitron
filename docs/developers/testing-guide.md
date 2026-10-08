@@ -739,6 +739,45 @@ MD5-only checksums, eleven listening ports and three-second stop before swapping
 command starts with a Waitron checkout's `.bin/litestream` or `.bin/versitygw`
 (`scripts/reap-testcontainers.mjs`, `isTestBinaryProcess`).
 
+## The stream tests' CI job gives loopback a normal network's packet size
+
+`test-server-stream` runs `sudo ip link set dev lo mtu 1500` before the stream loop and pause
+tests, in CI only, pinned by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as text and never
+reads a step's `if:`, so a step an `if:` switches off still passes it. A local run keeps the machine's own loopback.
+
+Why: the pause test's last restore failed twice in CI with `backup.stream_restore_failed`, about
+31 s after the stream resumed (runs 37042034082 and 37690377712); the second run's log recorded
+`abandoned=true` and empty output. A387 (2026-10-08) reproduced it on GitHub's `ubuntu-latest` (kernel
+6.17.0-1022-azure, x86_64, loopback MTU 65536) with Litestream 0.5.17 and versitygw 1.8.0:
+
+- CI's stream shard, looped 173 times, hung once (scratch run 37700080755). The stopped restore's
+  goroutine dump had its page merge waiting inside one backup file's download. That connection had
+  received nothing for 12 s and had nothing queued to read, and no versitygw goroutine was still
+  serving it.
+- A harness that repeats only the moment of failure (Litestream restarting after a frozen-bucket
+  fill and a fold-back, uploading its backlog while restores run back to back) hung in all six
+  jobs of run 37706395290, within one to six cycles. In each, the kernel's `TcpExtTCPRcvQDrop`
+  counter rose by 13 to 59, and `PruneCalled` and `RcvPruned` by the same number. On the stuck
+  connection the restore had nothing left to read, while the server's end held 137 KB to 2.5 MB
+  unsent behind a retransmit timer (in four of the six, versitygw had already closed its end).
+- The same harness, run as long with loopback at MTU 1500, made 1,692 restores with no hang, no
+  receive-queue drop and no retransmit timeout; the slowest restore took 2.3 s. With the default
+  receive buffer raised to 1 MiB instead, it made 1,636 restores without a hang, but still dropped
+  46 to 89 times per job and stalled restores for up to 7.0 s.
+- A Linux container on Docker Desktop (kernel 6.12.76-linuxkit, arm64, MTU 65536) ran the harness
+  for 627 restores without a hang, so whether it hangs depends on the kernel or the machine as well
+  as on the packet size.
+
+The reading: Litestream's restore opens a download for every backup file at once and reads them in
+page order, so most of its connections sit unread with full receive queues. On that runner's
+loopback the receiving kernel then dropped data that arrived inside the window it had advertised.
+The sender treated the drops as losses and backed off, so after the restore drained the connection
+it still waited for the next retransmission (18 s into each of run 37706395290's six
+stalls, the server's retransmit timers had 7.4 to 9.5 s left to run), and the restore passed the probe's 30 s `RESTORE_MS`. A box
+reaches its bucket over a real network, not over loopback; the box's own path was not measured,
+and its restore keeps its two-minute no-progress bound (`RESTORE_STALL_MS`,
+`packages/stream/src/restore.ts`).
+
 ## A sale can wait behind Litestream's own checkpoint
 
 CLAUDE.md §5 states the rule; these are its figures. SQLite writes each change first to a side
