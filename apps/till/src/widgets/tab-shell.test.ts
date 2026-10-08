@@ -776,6 +776,9 @@ describe("till-tab-shell above phone width", () => {
       : leaveOrder.filter(([, selector]) => menu.querySelector(selector) !== null).map(([k]) => k);
   };
 
+  const popoverOpen = (el: TillTabShell) =>
+    menuOf(el)!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
+
   const withLocale = async (locale: string, run: () => Promise<void>) => {
     const original = currentLocale();
     setLocale(locale);
@@ -1100,9 +1103,6 @@ describe("till-tab-shell above phone width", () => {
     );
   });
 
-  const popoverOpen = (el: TillTabShell) =>
-    menuOf(el)!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
-
   it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
     await withLocale("en-GB", () =>
       atViewport(1280, async () => {
@@ -1162,6 +1162,30 @@ describe("till-tab-shell above phone width", () => {
         expect(inMore(fresh).length).toBeLessThan(everything.length);
         expect(inMore(el)).toEqual(inMore(fresh));
         expectOneRow(el);
+      }),
+    );
+  });
+
+  it("refits when the shell redraws between More closing and its toggle event", async () => {
+    await withLocale("en-GB", () =>
+      atViewport(390, async () => {
+        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(el);
+        await userEvent.click(triggerOf(el));
+        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+        await page.viewport(1280, 844);
+        await settle(el);
+        // A tap's click reaches the shell after More has hidden itself, and the redraw this asks
+        // for runs before the popover's toggle event, which comes as a later task.
+        el.addEventListener("click", () => el.requestUpdate(), { once: true });
+        await userEvent.click(menuOf(el)!.querySelector<HTMLElement>(".allergens")!);
+        await settle(el);
+        const { el: fresh } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        await settle(fresh);
+        expect(inMore(fresh).length).toBeLessThan(leaveOrder.length);
+        expect(inMore(el)).toEqual(inMore(fresh));
+        expectOneRow(el);
+        await expectEachActionOnce(el);
       }),
     );
   });

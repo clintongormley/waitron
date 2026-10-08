@@ -43,8 +43,8 @@ const LEAVE_ORDER: readonly BarItem[] = [
   "operator",
 ];
 
-/** Properties whose change can alter the bar's width, so may let items come back. A transfer count
- * is not one: a count changing while More is open must not rebuild the menu under the finger. */
+/** Properties whose change owes a step-back, so may let items come back to the bar. A change of
+ * `transferCount` alone does not owe one. */
 const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "tabs",
   "affordances",
@@ -245,8 +245,8 @@ export class TillTabShell extends LitElement {
     this.#run += 1;
   }
 
-  /** 0: everything on the bar; 1: the name hidden; n: the name hidden and the first n − 1 present
-   * items of `LEAVE_ORDER` in More. */
+  /** With More closed and above phone width: 0, everything on the bar; 1, the name hidden; n, the
+   * name hidden and the first n − 1 present items of `LEAVE_ORDER` in More. */
   @state() private steps = 0;
   #run = 0;
   #stepBackOwed = false;
@@ -256,23 +256,28 @@ export class TillTabShell extends LitElement {
   #observedChooser?: Element;
   #watchedPopup?: Element;
   #shown: ReadonlySet<BarItem> = new Set();
+  #held?: ReadonlySet<BarItem>;
   readonly #onPopupToggle = () => {
-    if (this.#menuOpen()) return;
-    // An open More can hold more than `steps` selects; count up to what it held, so the fit steps
-    // back from what is on screen instead of leaving the bar showing items `steps` no longer moves.
-    if (!this.phone) {
-      const present = this.#present();
-      const covering = Math.max(
-        0,
-        ...present.map((item, i) => (this.#shown.has(item) ? i + 2 : 0)),
-      );
-      if (covering > this.steps) {
-        this.steps = covering;
-        this.#stepBackOwed = true;
-      }
-    }
-    if (this.#stepBackOwed) void this.#fit();
+    this.#release();
+    if (this.#stepBackOwed && !this.#menuOpen()) void this.#fit();
   };
+
+  /** An open More can hold more than `steps` selects; once it has closed, above phone width, raise
+   * `steps` to cover what it held, so closing it moves nothing back before the fit steps back. Runs before every
+   * render as well as on the toggle event, because a render can come between closing and that
+   * event. */
+  #release(): void {
+    const held = this.#held;
+    if (held === undefined || this.#menuOpen()) return;
+    this.#held = undefined;
+    if (this.phone) return;
+    const present = this.#present();
+    const covering = Math.max(0, ...present.map((item, i) => (held.has(item) ? i + 2 : 0)));
+    if (covering > this.steps) {
+      this.steps = covering;
+      this.#stepBackOwed = true;
+    }
+  }
 
   #present(): BarItem[] {
     const has: Record<BarItem, boolean> = {
@@ -289,12 +294,18 @@ export class TillTabShell extends LitElement {
     return LEAVE_ORDER.filter((item) => has[item]);
   }
 
-  /** While More is open nothing leaves it: what it showed stays, whatever `steps` now selects. */
+  /** While More is open no item moves from it to the bar: what it showed stays, whatever `steps`
+   * now selects. */
   #moved(): ReadonlySet<BarItem> {
     const present = this.#present();
     const fitted = this.phone ? present : present.slice(0, Math.max(0, this.steps - 1));
     if (!this.#menuOpen()) return new Set(fitted);
     return new Set(present.filter((item) => fitted.includes(item) || this.#shown.has(item)));
+  }
+
+  override willUpdate(changed: PropertyValues): void {
+    super.willUpdate(changed);
+    this.#release();
   }
 
   override updated(changed: PropertyValues): void {
@@ -529,6 +540,7 @@ export class TillTabShell extends LitElement {
     const hasDrill = this.drillNodes?.length > 0;
     const moved = this.#moved();
     this.#shown = moved;
+    if (this.#menuOpen()) this.#held = moved;
     // Mirrors `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body rendered.
     const activeKey = this.tabs.some((tab) => tab.key === this.activeTabKey)
       ? this.activeTabKey
