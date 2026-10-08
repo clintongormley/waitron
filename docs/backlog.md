@@ -5971,7 +5971,7 @@ approved.
   changed real-binary stream pause and loop suites passed together on 2026-10-03. If the control
   fails again, retain that run's log and inspect the child state before naming another cause.
 - **The stream pause test's last restore failed in CI (runs 37042034082 and 37690377712) — DONE
-  (A387, 2026-10-08).** `test-server-stream` sets loopback's MTU to 1500, under which the
+  (A387, #1398, 2026-10-08).** `test-server-stream` sets loopback's MTU to 1500, under which the
   reproducing harness never hung. Receipt:
   [testing-guide.md](developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
   Left open: a local Linux run keeps the machine's own loopback and can still meet the stall (how
