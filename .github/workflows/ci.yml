@@ -801,8 +801,8 @@ jobs:
   # runner of their own beside the server shards. The loop and pause tests run the pinned
   # Litestream and versitygw as child processes, and the S3 test server's suite runs versitygw in
   # some of its cases; each fails rather than skips in CI without what it runs, so only this job
-  # downloads the two binaries. Downloaded, not cached: the Actions cache is at its budget
-  # (docs/developers/ci-and-gates.md). Its blob joins the shards' in test-server-merge, so the
+  # downloads the two binaries. Downloaded, not cached (docs/developers/ci-and-gates.md says
+  # why). Its blob joins the shards' in test-server-merge, so the
   # coverage gate counts what these tests reach.
   test-server-stream:
     timeout-minutes: 15
@@ -1759,9 +1759,6 @@ jobs:
   # It cannot appear in `ci`'s `needs` — that would be a cycle — so it is the ONE job the
   # "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
   # of `ci` (needs `ci`, `if:` reads `needs.ci.result`) rather than merely absent.
-  #
-  # A fresh runner: it re-does checkout and the buildx setup, and builds the same single platform the
-  # image job's smoke build did minutes earlier in the same run.
   publish:
     needs: [changes, ci]
     # `needs: ci` already enforces GitHub's implicit success(); the explicit `needs.ci.result` keeps

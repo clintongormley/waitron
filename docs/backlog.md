@@ -6546,8 +6546,9 @@ approved.
 - **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
   watcher/owner 2026-10-08, "active monitoring") — DONE (#TBD).** PR #1399's image smoke sat
   46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
-  would have let it run six hours. Every workflow job now carries a limit of twice its longest
-  measured run, rounded up to 5; a case in `scripts/ci-workflow.test.mjs` fails on a job without
+  would have let it run six hours. Every job that had no limit now carries one of twice its longest
+  measured run, rounded up to a multiple of 5 (minimum 5), and a job calling a reusable workflow has
+  none, since github/docs lists no `timeout-minutes` among the keywords such a job takes; a case in `scripts/ci-workflow.test.mjs` fails on a job without
   one; and neither the image smoke's builds nor `publish`'s import or export the `type=gha` layer
   cache, which reused only the layers before `COPY . .`. See
   [ci-and-gates.md](developers/ci-and-gates.md), "Every job has a time limit" and "Neither image

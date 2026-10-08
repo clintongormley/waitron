@@ -761,6 +761,9 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 
+ui's figure is run `37267389722`; `mutation-db`'s are runs `36380351019` and `37267389722`, the
+two weekly runs since the SQLite switch.
+
 The `smoke` figure was measured while the remote layer cache was still in place; its limit is
 checked again without it: the whole `smoke` job took 2.4 and 2.3 minutes in image-nightly runs
 `37757851422` and `37758191291` (commit `642537ead`). The workflows' other jobs already carried their own
@@ -771,7 +774,9 @@ workflow's own jobs carry it.
 
 Guard: the "job time limits" cases in `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
 each workflow as TEXT by indent, so a flow-style job or a `timeout-minutes` written as an expression
-is reported as unbounded, and it does not judge whether the number is a sensible one.
+is reported as unbounded, it does not judge whether the number is a sensible one, and it exempts
+every job with a four-space `uses:`, relying on the called workflow's own jobs, which it reads only
+when that workflow is one of this repository's `.github/workflows/` files.
 
 ### The GHA cache is a shared per-repository budget, evicted least-recently-used
 
@@ -928,7 +933,8 @@ They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usag
 about nine tenths of that day's total in Docker layers; a new entry would compete under least-recently-used eviction
 with the pnpm store and Playwright entries the test jobs restore (see "The GHA cache is a shared
 per-repository budget, evicted least-recently-used" above). An error answer from a release download fails the job with a message
-naming the URL.
+naming the URL. Since A399 (2026-10-08) no workflow exports Docker layers; the layers already
+stored stay until GitHub evicts them (see "Neither image build uses the remote layer cache").
 
 **A change to either installer alone selects `apps/server`**, because both are in
 `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) against it. Checked

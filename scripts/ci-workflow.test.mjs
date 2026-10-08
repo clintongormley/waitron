@@ -1575,7 +1575,8 @@ describe("the workflows' token permissions", () => {
  * (github/docs workflow-syntax.md, `jobs.<job_id>.timeout-minutes`: "Default: 360"). A job that
  * calls a reusable workflow is exempt: `timeout-minutes` is not among the keywords
  * reusing-workflow-configurations.md (main 7b807926d, read 2026-10-08) allows in "the job
- * containing the call", and the called workflow's own jobs are read here like any other.
+ * containing the call"; a called workflow in this repository's .github/workflows/ is read here like
+ * any other, and one in another repository is not read at all.
  * Weaker than its name: it reads TEXT by indent, so a flow-style job, or a `timeout-minutes`
  * written as an expression, is reported as unbounded, and it does not judge whether the number is
  * a sensible one.
@@ -1595,6 +1596,16 @@ describe("the workflows' job time limits", () => {
       "  a:\n    runs-on: x\n    steps:\n      - run: echo\n        timeout-minutes: 5\n",
     );
     expect(jobsWithoutTimeout(text)).toEqual(["a"]);
+  });
+
+  it("reports a one-line flow-style job even when it names a limit", () => {
+    expect(jobsWithoutTimeout(workflow("  a: {runs-on: x, timeout-minutes: 5}\n"))).toEqual(["a"]);
+  });
+
+  it("passes a limit when its line and the job's line carry a comment", () => {
+    expect(
+      jobsWithoutTimeout(workflow("  a: # note\n    runs-on: x\n    timeout-minutes: 5 # why\n")),
+    ).toEqual([]);
   });
 
   it("passes a job that calls a reusable workflow", () => {
