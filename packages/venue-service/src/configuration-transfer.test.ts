@@ -113,6 +113,72 @@ function refusal(field: string) {
   return expect.objectContaining({ code: "setup.request_invalid", params: { field } });
 }
 
+describe("named days in configuration transfer", () => {
+  function namedTables(): Tables {
+    return {
+      special_dates: [
+        {
+          id: "day",
+          location_id: "venue",
+          date: "2026-12-25",
+          name: "Christmas",
+          colour: "red",
+          kind: "holiday",
+          repeat_on: null,
+          own_hours: 0,
+          close_whole_venue: 0,
+        },
+      ],
+    };
+  }
+
+  it.each([
+    ["kind", "other", "special_dates"],
+    ["kind", null, "special_dates"],
+    ["repeat_on", "12-24", "special_dates.repeat_on"],
+    ["repeat_on", true, "special_dates.repeat_on"],
+    ["own_hours", true, "special_dates.own_hours"],
+    ["own_hours", null, "special_dates.own_hours"],
+  ])("refuses named-day %s=%s", (key, value, field) => {
+    const tables = namedTables();
+    tables.special_dates![0]![key as string] = value;
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal(field as string));
+  });
+
+  it("refuses own hours combined with whole-venue closure", () => {
+    const tables = namedTables();
+    Object.assign(tables.special_dates![0]!, { own_hours: 1, close_whole_venue: 1 });
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_dates"));
+  });
+
+  it("refuses station cells on a repeating named day", () => {
+    const tables = validTables();
+    tables.special_dates![0]!.repeat_on = "12-25";
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_date_hours"));
+  });
+
+  it.each([
+    ["2026-12-25", "12-25", "2027-12-25", null],
+    ["2027-12-25", null, "2026-12-25", "12-25"],
+    ["2026-12-25", "12-25", "2028-12-25", "12-25"],
+  ])("refuses colliding occurrences %s/%s and %s/%s", (a, ar, b, br) => {
+    const tables = namedTables();
+    const row = tables.special_dates![0]!;
+    Object.assign(row, { date: a, repeat_on: ar });
+    tables.special_dates!.push({ ...row, id: "other", date: b, repeat_on: br });
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_dates.date"));
+  });
+
+  it("accepts a one-off before the repeat begins and independent venues", () => {
+    const tables = namedTables();
+    const row = tables.special_dates![0]!;
+    Object.assign(row, { date: "2027-12-25", repeat_on: "12-25", own_hours: 1 });
+    tables.special_dates!.push({ ...row, id: "past", date: "2026-12-25", repeat_on: null });
+    tables.special_dates!.push({ ...row, id: "elsewhere", location_id: "other" });
+    expect(() => validateHoursConfiguration(tables)).not.toThrow();
+  });
+});
+
 describe("validateHoursConfiguration", () => {
   it.each(["hours_week_cells", "special_date_hours"] as const)(
     "refuses department-owned %s even when the bundle contains the department",

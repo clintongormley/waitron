@@ -3902,6 +3902,111 @@ describe("opening hours in a configuration transfer", () => {
     return { source, versions, transferred };
   }
 
+  it("round-trips a repeating named day with its kind and own hours", async () => {
+    const source = await applyVenue(planVenue(venue("B44008811"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, (tx) =>
+      saveSpecialDate(
+        tx,
+        { locationId: locationId(source.locationId) },
+        null,
+        {
+          date: "2026-12-25",
+          name: "Own Christmas",
+          kind: "holiday",
+          repeats: true,
+          ownHours: true,
+          closeWholeVenue: false,
+          cells: [],
+        },
+        AT,
+      ),
+    );
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
+    expect(transferred.tables.special_dates).toEqual([
+      expect.objectContaining({
+        kind: "holiday",
+        repeat_on: "12-25",
+        own_hours: 1,
+      }),
+    ]);
+    const target = await applyVenue(planVenue(venue("B44008822"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const imported = await targetSuite.db.execute<{ id: string }>(sql`
+      select id from special_dates where location_id = ${target.locationId}`);
+    const day = await withTransaction(targetSuite.db, (tx) =>
+      readSpecialDate(tx, { locationId: locationId(target.locationId) }, imported.rows[0]!.id),
+    );
+    expect(day).toMatchObject({
+      date: "2026-12-25",
+      name: "Own Christmas",
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+      closeWholeVenue: false,
+    });
+    expect(day.id).not.toBe(transferred.tables.special_dates![0]!.id);
+  });
+
+  it.each(["kind", "repeat_on", "own_hours", "clash"])(
+    "refuses invalid named-day %s before retaining a target venue",
+    async (field) => {
+      const { versions, transferred } = await preparedWithHours("B44009911");
+      const edited = structuredClone(transferred);
+      const row = edited.tables.special_dates![0]!;
+      let errorField = "special_dates";
+      if (field === "kind") row.kind = "other";
+      if (field === "repeat_on") {
+        row.repeat_on = "12-23";
+        errorField = "special_dates.repeat_on";
+      }
+      if (field === "own_hours") {
+        row.own_hours = 1;
+        row.close_whole_venue = 1;
+      }
+      if (field === "clash") {
+        row.repeat_on = "12-24";
+        edited.tables.special_date_hours = edited.tables.special_date_hours!.filter(
+          (cell) => cell.special_date_id !== row.id,
+        );
+        const kept = new Set(edited.tables.special_date_hours.map((cell) => cell.id));
+        edited.tables.special_date_hours_periods = edited.tables.special_date_hours_periods!.filter(
+          (period) => kept.has(period.cell_id),
+        );
+        edited.tables.special_dates!.push({
+          ...row,
+          id: randomUUID(),
+          date: "2027-12-24",
+          repeat_on: null,
+        });
+        errorField = "special_dates.date";
+      }
+      const refusal = { code: "setup.request_invalid", params: { field: errorField } };
+      expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
+        expect.objectContaining(refusal),
+      );
+      await expect(
+        applyVenue(planVenue(venue("B44009922"), ALL_MODULES), {
+          db: targetSuite.db,
+          modules: ALL_MODULES,
+          beforeCommit: (tx, result) =>
+            importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+        }),
+      ).rejects.toMatchObject(refusal);
+      const persisted = await targetSuite.db.execute<{ n: number }>(
+        sql`select count(*) as n from tenants`,
+      );
+      expect(persisted.rows).toEqual([{ n: 0 }]);
+    },
+  );
+
   it("carries station standard weeks and special dates of every kind, with fresh ids that still link up", async () => {
     const { source, versions, transferred } = await preparedWithHours("B44001122");
     expect(transferred.tables).not.toHaveProperty("station_day_states");

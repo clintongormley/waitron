@@ -553,9 +553,10 @@ and refuses (`setup.request_invalid`) a bad kind, a `repeat_on` other than the d
 day, decision 5's clashes and own hours with a whole-venue closure. An export round-trips the three
 columns.
 
-- [ ] Steps: failing tests (an export holding a repeating own-hours day re-imports with
-  `repeat_on` and `own_hours` intact — fails today because the parse call at `:203-210` passes
-  neither; each refusal); watch them fail
+- [ ] Steps: add a real export/import round-trip for a repeating own-hours day, checking
+  `kind`, `repeat_on` and `own_hours` intact. The raw-table transfer already preserves the columns;
+  the new refusal cases must fail before implementation because the validator ignores them.
+  Watch each refusal fail
   (`pnpm --filter @waitron/venue-service exec vitest run --project node src/configuration-transfer.test.ts`
   and `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts`);
   implement; the venue-service node project and the server package; commit
