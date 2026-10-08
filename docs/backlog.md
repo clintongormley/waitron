@@ -631,6 +631,13 @@ component rules harden around the dashboard alone.
   and house bread (0.50), one portion of each at most. `seed-extra-lists.ts` uses the catalogue
   write paths and keeps existing options attachments. Published-offer and attachment-preservation
   cases run through `seedDemoRestaurant`; the practice-sales golden fixture stays unchanged.
+- **A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English
+  abbreviation** (observed during A333, 2026-10-08). On the real Spanish-seeded till, the salad
+  picker reads `1.00 rac`; its queued receipt reads `1.000 rac`, and its queued kitchen ticket
+  reads `1.000 srv`. **Next action:** trace the portion formatting and kitchen-unit language
+  choice in `apps/till/src/widgets/modifier-picker.ts`, `apps/server/src/receipt-lines.ts` and
+  `apps/server/src/kitchen-print.ts`; establish the intended kitchen wording, then test-first
+  localize the affected quantities. No change to those renderers in A333.
 - **Whether a `+ <list>: <label>` sub-line is prominent enough on a kitchen ticket** to replace the
   old `** MEDIUM RARE **` framing has not been put to a real cook.
 - **Clearing the Extras editor's Minimum choices box saves 0** (the save format's own default); the
