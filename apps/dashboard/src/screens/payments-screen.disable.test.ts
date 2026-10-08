@@ -140,6 +140,22 @@ describe("Disable and optional provider unpairing", () => {
     },
   );
 
+  it("rechecks provider capability if it changes after optional unpair was selected", async () => {
+    const api = client();
+    const el = await mount(api);
+    await open(el);
+    await tick(el, true);
+    vi.mocked(api.listPaymentProviders).mockResolvedValue([
+      { providerId: "acme", state: "connected", canUnpair: false },
+    ]);
+    api.liveData!.refresh();
+    await vi.waitFor(() => expect(checkbox(el)).toBeNull());
+    await press(el, "[data-test=confirm-disable]");
+    await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
+    expect(api.disableReader).toHaveBeenCalledExactlyOnceWith("counter");
+    expect(api.unpairReader).not.toHaveBeenCalled();
+  });
+
   it("offers only local Disable when the provider cannot unpair", async () => {
     const api = client([reader], false);
     const el = await mount(api);
