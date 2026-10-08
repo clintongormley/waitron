@@ -903,6 +903,79 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   name in the form and serve the other. Left open by W77 (#1197; W77a #1206).
   [Detail](backlog/catalogue.md#a-name-stored-under-a-regional-code-such-as-en-gb-is-read-by-the-forms-as-the-plain-code-first-then-its-regional-ones)
 
+- **A product literally named `Gin (Double)` and `Gin`'s `Double` variant have the same display
+  label**; saved/imported raw names satisfy the requested scopes. Choose distinct saved names for
+  now. Any future restriction on composed labels needs an owner decision about the naming policy.
+  Left open by A357 (relative variant names, #1381).
+  [Detail](backlog/catalogue.md#a-product-literally-named-gin-double-and-gins-double-variant-have-the-same-display-label)
+
+- **At phone width in a right-to-left layout, a long name in the Products list can run under the
+  pinned Actions column** (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`, measures the
+  room from the left). Found by A330's Codex review and reproduced by it on `main` before #1354. Not
+  fixed; next: a browser test at 390 px with `dir="rtl"` and a long unbroken name. Left open by
+  A330 (variant rows show their photo, #1354).
+
+- **The Price overrides tab's save message comes after the whole table in tab order, so a keyboard
+  user cannot reach Undo from a field within its 5 seconds** (decided as built, not tested with a
+  user). Options: a keyboard shortcut for Undo, or a message that waits while focus stays in the
+  field it saved. Left open by A343 (a menu's Price overrides tab tidied, #1368).
+
+- **In Spanish a range's placeholder reads "8.00 – 12.00" with full stops, and a refused field is
+  drawn about 14 px wider than the others** (seen in #1368's screenshots). A344 removed the "?" and
+  the Resolve column and keeps each price box on screen at 390 px; the wider refused field and the
+  placeholder's full stops were not re-checked. Left open by A343 (#1368).
+  [Detail](backlog/catalogue.md#in-spanish-a-ranges-placeholder-reads-800--1200-with-full-stops-and-a-refused-field-is-drawn-about-14-px-wider-than-the-others)
+
+- **Closing a refusal's message now clears the outcome**, so a later save's "Saved …" message with
+  its Undo can appear where before it stayed hidden — no test covers that case. And when the message
+  closes, keyboard focus is not put back where it was. Next: a test for the first, and return focus
+  to the field the save came from. Left open by A343 (#1368's review).
+  [Detail](backlog/catalogue.md#closing-a-refusals-message-now-clears-the-outcome)
+
+- **A353 — Preview's changes: an "Undo" link that puts one change back to the live version** —
+  owner, 2026-10-07; PARKED, not queued — owner 2026-10-08: take it from here when a lane has room.
+  Its work so far is on a LOCAL branch only — `feat/menu-preview-undo` at `e04b3abe7`, in the
+  worktree `waitron-feat-menu-preview-undo` (no push, no pull request).
+  [Detail](backlog/catalogue.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
+
+- **An imported bundle may carry priced menu rows for a product no menu reaches, and adding the
+  product back to a menu revives those prices** (found in A347's review, believed to predate it).
+  Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
+  reaches. Left open by A347 (a disabled product or size is on no menu, #1392).
+
+- **A bulk Disable of 500 products could not read the count in A347's review** (HTTP 431, because
+  the ids go in the URL), so the dialog says "every menu"; the smallest count that fails was not
+  measured. Left open by A347 (#1392).
+
+- **Deleting a category with its contents says its products come off every menu, with no count.**
+  Left open by A347 (#1392).
+
+- **At a 320px window only "12.50 – 15.00" was measured** in a menu's Price overrides tab. Left
+  open by A346 + A348 (a price this menu sets stands out, an Available column, and Edit product,
+  #1408).
+
+- **`MenuPriceRow.active` and `MenuPriceVariant.active` are always true since A347 (#1392)**, so the
+  dashboard's Inactive branches cannot be reached. Retiring them deletes the tests whose subject is
+  an Inactive row, so it waits for the owner. Left open by A346 + A348 (#1408).
+  [Detail](backlog/catalogue.md#menupricerowactive-and-menupricevariantactive-are-always-true-since-a347-1392)
+
+- **In the real dashboard at a 390px window the table is 358px wide** (read once in the dashboard's
+  test browser; no test pins it). Whether one-word names keep their line there while no field shows
+  a range has not been measured. Options for more room: less page padding on phones, or a shorter
+  Actions heading. Left open by A346 + A348 (#1408).
+  [Detail](backlog/catalogue.md#in-the-real-dashboard-at-a-390px-window-the-table-is-358px-wide)
+
+- **On the Structure tab at 390px the tree's own box scrolls sideways under the pinned ⋮**, by
+  design (`pinned: "end"`); in Spanish Disponible now sits wholly behind it until the tree is
+  scrolled. Letting long names wrap at narrow widths may free the room; not tried. Left open by A346
+  + A348 (#1408).
+  [Detail](backlog/catalogue.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
+
+- **The reveal fix corrects only a row left under the headings.** A row revealed at the bottom edge
+  is not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the
+  bottom (left alone; not measured). Left open by A294 (the Products and Structure trees show drag
+  grips only in a mode, #1300).
+
 ### Service periods, opening hours and departments
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
@@ -2374,6 +2447,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
   category warns about exactly what will go, #1196).
 
+- **When the Add button wraps under the tabs, the tab row's bottom border runs below the button**,
+  so the selected tab's underline sits above the button rather than on the line. Judged from the
+  old 640 px rule's code to have drawn the same shape before #1437; not measured on the old commit.
+  Unqueued. Left open by A408 (seen in its after-look; the Printers screen's Spanish tabs, #1437).
+
 ### Payments and card readers
 
 _Formerly A6, and Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
@@ -2964,6 +3042,15 @@ _Formerly A7, and Track A's dashboard part; part of A9._ Detail: [backlog/dashbo
   **Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs,
   so there is no copy to keep in step.
   [Detail](backlog/dashboard.md#the-dark-logos-colours-are-copies-of-the-dark-themes-a253-2026-10-03-from-a225--open)
+
+- **`wt-relative-time` also keeps disclosure state from `toggle` and has document listeners**
+  (open, untested; A369 review). Next: reproduce open/remove/reinsert, including removal before the
+  opening toggle arrives, before deciding whether it needs the same lifecycle correction. Left open
+  by A369 (removed popovers reset their open state, #1390).
+
+- **Modifiers' Status and Printers' Agent/Printer Status filters still receive column lists built
+  during render** (A370 caller audit, code reading only). Their redraw work was not measured in this
+  item. Next: measure it before deciding whether to retain those lists. Left open by A370 (#1393).
 
 ### Interface languages
 
@@ -3899,6 +3986,10 @@ _Formerly B9, and Track C's development-stack and house-rules items; part of A9.
   `-t` and runs the whole file**; only a bare `--` before it passes it through. **Next action:** add
   it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
 
+- **`menus-screen.test.ts` writes screenshots into `apps/dashboard/src/screens/.superpowers/` on
+  every run** (ignored by git, but in the source tree), the shape A281 fixed for the kitchen screen.
+  Predates A348 (`git blame`: W95, 2026-10-06). Left open by A346 + A348 (#1408).
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -4306,351 +4397,6 @@ _Formerly _Later and parked_._
 ---
 
 ## Track A — UI and application
-
-**The Products and Structure trees show drag grips only in a mode, and a category's colour square
-comes before its name (A294, owner 2026-10-06) — DONE (#1300); left open:** Products' selection
-button is now Select and move, the only state in which its grips show and a row can be dragged, and
-its bar leaves by Done, because a drag there is saved at once; the Structure tab gained a Reorder
-toggle with a Done button, off whenever a menu opens. No tree row draws a folder icon any more (a
-dragged category's or section's picture still does); a category's or section's colour square sits
-in that slot, before its name, and a wrapped category name keeps its grip and square beside its
-first line. At phone width a category's product count, and All products', is hidden. When the
-table reveals a row and the browser's whole-pixel rounding leaves it less than a pixel under the
-sticky headings, the table scrolls it back below them; a row taller than the view that already
-spans it keeps its scroll position (tested with rows of fractional height at a device pixel ratio of 1, and with one 900 px
-row). The Products list's
-unused `units` property is gone (it closes W75's leftover).
-
-- **A303, owner 2026-10-06 — DONE:** colour squares and photos share a `--wt-tap-min` box;
-  both trees hide their media slots at ≤440px. Products counts remain in each row's accessible
-  name while visually hidden. Grips and checkboxes sit before the indentation. Select/Seleccionar
-  opens an action bar below Search; Done returns focus to Select. A product's leading slot shows
-  its photo with an own-or-inherited colour ring, or its colour square; it opens Colour… and
-  Change photo…, which opens the existing editor with the photo field focused. Category and
-  section squares still open their colour picker directly.
-- **A327, owner 2026-10-07 — DONE (#1349; the swatch opens the product's Edit dialog):** a product's
-  leading slot, in the Products list and in the Menus Structure tree, is now one link named
-  "Edit <name>" that opens the product's Edit dialog with its photo field focused; the menu holding
-  Colour… and Change photo… is gone. A product's colour is set in that dialog. The product colour
-  dialog (`product-color-form.ts`), which only that menu opened, is retired with the dashboard
-  client's `setProductColor`.
-  - A358 — DONE: retired `PATCH /management-api/products/:id` and its ownership helper. Product
-    edits use the existing editor save route. Modifier-usage and frozen menu-preview fixtures
-    now save through that editor; their stored-content assertions remain.
-  - A359 — DONE: retired the unused `wt-row-actions` host `disabled` property and custom
-    `trigger` slot and part, with their media-menu tests. The standard icon button, badge slot,
-    popup part and menu actions remain.
-  - Found during A327's look — DONE (A348): at 440px or narrower the Menus Structure tree hides
-    every swatch, and a product row's Actions menu now offers Edit product at every width.
-  - A360 — DONE: the Printers breadcrumb uses `data-own-click`, preserving its pending-name and
-    pending-connection save guards under the real dashboard app. Eight EN/ES and light/dark
-    Chromium cases reproduced an unwanted discard prompt before the opt-out; afterwards they
-    retained the editor without that prompt, displayed the eventual save refusal, and allowed
-    leaving after discarding the retained draft. The five other self-handled links (price-table
-    product, translation-gap product/variant, both menu-preview links and the Menus breadcrumb)
-    were read through their handlers; they request navigation, with no pending-save refusal.
-- **A328, owner 2026-10-07 — DONE (#1350; the category name box keeps the swatch in place):** while a
-  category is renamed or added in the Products tree, its colour square stays in the row's square
-  slot and the name box starts where the name did; the box no longer carries a square at its end.
-  At phone width, where a resting category shows no square, the square shows on the row's first
-  line while the box is open, above the box. `wt-data-table` gained `rowToggleParts`, so the
-  Products list gives only a product's toggle A221's small, muted look; a category's arrow no longer
-  shrinks and greys while it is renamed.
-- **A329, owner 2026-10-07 — DONE (#1352; the variant window names its product):** opened from the
-  product editor, the variant window heads "Add variant to: Coffee" or "Edit variant of: Coffee"
-  ("Añadir variante a: …", "Editar variante de: …"), with the name as typed, saved or not; a dialog
-  heading now wraps a long unbroken name; a variant showing the product's photo shows Remove image
-  greyed out beside Choose image. A362 — DONE: its inner button's accessible description reads
-  "Uses the main product's photo" / "Usa la foto del producto principal"; the separate hidden hint
-  is removed.
-  A361 — DONE: the variant's own page names its product with "Edit variant of: …" / "Editar variante
-  de: …", using the parent's saved staff name; reloading reads a renamed parent again.
-- **A355, owner 2026-10-07 — DONE:** saving or cancelling a variant returns focus to Add variant,
-  the edited row, or its menu, and keeps the product form's scroll offset. Chromium cases at 1280
-  and 390px cover Add, row Edit (including clicks that do not move focus) and menu Edit, Save
-  and Cancel, in EN/ES and both themes; Enter
-  from Add variant after Save opens the next variant.
-- **A356, owner 2026-10-07 — DONE:** Venue settings → Venue details lets you choose the VAT class
-  for new products. When you first set up a venue, Spain's country pack presets Reduced; a pack
-  without a preset uses General. A venue already set up without this setting starts on General
-  until you save a choice.
-  Opening a new product starts with the saved class, and later live updates preserve an edited
-  draft. Existing products keep their class. Both product-create APIs still require an explicit
-  class. The singleton setting belongs to the catalogue module and travels with configuration
-  exports; the rate table and product VAT model are unchanged.
-- **A357, owner 2026-10-07 — DONE (relative variant names):** Seagrams Gin and London Gin
-  can each have Single and Double. Active variants are unique within their own product;
-  active products remain unique among products. Save and configuration-import checks agree.
-  Standalone staff, customer and kitchen lines show `Product (Variant)` using their frozen
-  audience names; pickers, editors and nested top sellers keep relative labels. Variant extras
-  freeze the composed audience pair in their existing name fields. Demo variants use relative
-  names. Long receipt and kitchen pairs wrap at 58 and 80 mm. No stored-name migration or fiscal
-  builder change. See [the plan](superpowers/plans/2026-10-07-relative-variant-names.md).
-  Known edge from the second review: a product literally named `Gin (Double)` and `Gin`'s
-  `Double` variant have the same display label; saved/imported raw names satisfy the requested
-  scopes. A held-group summary combines their displayed quantities, retaining both line ids.
-  Choose distinct saved names for now. Any future restriction on composed labels needs an owner
-  decision about the naming policy; this change adds no such restriction.
-- **A330, owner 2026-10-07 — DONE (#1354; variant rows show their photo):** an opened variant's row
-  in the Products list now draws a photo square in its product's column: the variant's own photo,
-  else its product's, else the same square its product's row shows. The till draws no variant photo today,
-  but the menus it reads give a variant its own photo, else its product's
-  (`packages/catalogue/src/variant-fallback.ts`), and the list follows that rule. The variant's
-  square opens the variant's own editor at its photo, as a click on its row opens its editor. At
-  phone width the square is hidden, as a product's is.
-  - Open, found by A330's Codex review and reproduced by it on `main` before #1354: at phone width
-    in a right-to-left layout, a long name in the Products list can run under the pinned Actions
-    column (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`, measures the room from the
-    left). Not fixed; next: a browser test at 390 px with `dir="rtl"` and a long unbroken name.
-- **A341, owner 2026-10-07 — DONE (#1362, every table's filters on the left):** every `wt-data-table` with a
-  filter column (Products, Units, Modifiers' two lists, Content languages' missing translations,
-  Printers and Print agents, a menu's prices, adjustment reasons) draws the funnel Filters button
-  first in its toolbar, before the search box; the panel opens beside the rows while the table is
-  at least 768 px wide and over the whole screen below that. The trailing "Filters" text button,
-  its floating panel and the `leadingFilters` property are gone. A table taken off the page with
-  that full-screen panel open no longer throws when it next updates. A table 640 px wide or less
-  puts its own search box on a line of its own under its buttons, as Products does, rather than
-  spreading the toolbar over three lines at 390 px.
-  - DONE (A367): the Printers screen's Add action reads "Add an agent" / "Añadir un agente".
-    Chromium checks at 390 px in English and Spanish keep it inside the viewport and clear of
-    every tab, including after resizing from desktop.
-    **A408 DONE** — the Spanish tabs were squeezed into a sideways scroll at some window widths
-    above 640 px (overflowing at 641, 660, 769 and 800 px; not at 720, 768, 1024 or 1280 px). Measured in the full
-    demo dashboard (Chromium, 2026-10-08): at a 641, 660 and 800 px window the Printers screen
-    itself is 561, 580 and 420 px wide (the side menu takes 300 px from a 769 px window), and the
-    Spanish tabs need about 445 px. Two causes. The only rule that moved the Add button under the
-    tabs went by the WINDOW's width (`@media (max-width: 640px)`, then at
-    `apps/dashboard/src/screens/printers-screen.ts:179`), so above a 640 px window the button stayed
-    beside the tabs even where they no longer fitted, squeezing them into a sideways scroll. And `wt-tabs` scrolled the selected
-    tab into view only when its tabs or its selection changed, so a page opened at 1280 px and then
-    narrowed left the Agents tab 38.6 px hidden at 641 px and wholly hidden at 800 px. Now the tab
-    row may always wrap, so the button drops under the tabs whenever tabs and button do not fit the
-    screen's own width (no breakpoint), and `wt-tabs` watches its strip's width and scrolls the
-    selected tab back into view on every change. Tests: `packages/ui/src/components/wt-tabs.test.ts`
-    ("keeps the selected tab in view when its strip narrows, with no ResizeObserver loop", the
-    taken-out-and-put-back, stops-watching and rebuilt-strip cases, and a widen-again control); and
-    "the tab action wraps by the screen's own width" in
-    `apps/dashboard/src/screens/printers-screen.test.ts`, English and Spanish, which keeps the
-    window at 1280 px and narrows only the screen — at 420 px the button is under the tabs and the
-    selected tab in view, at 561 px no tab is cut, at 900 px the button is beside the tabs and the
-    strip does not scroll, a sweep down from 900 px finds the strip never scrolling while the button
-    is beside it, and larger-text and Verdana variants neither squeeze nor overlap. After-look in
-    the demo (English and Spanish, light and dark, 390 px with the side menu closed and open, 641,
-    660, 800, 1024 and 1280 px, and 641/660/800 px resized from 1280 px; shots
-    `~/waitron-campaign-c/a408-shots/after-*`, outside the repository): in Spanish the button sits
-    under the tabs at 641, 660 and 800 px and beside them at 1024 and 1280 px with nothing
-    scrolling; the selected tab was in view in every case (never more than half a pixel past the strip's edge); at 800 px and at 390 px the Spanish strip still
-    scrolls the other tabs out of view, which is accepted. With the side menu open the Spanish
-    button returns beside the tabs from a 984 px window on the Agents tab (983 px on Printers),
-    English from 833/831 px. Whether this clipping predates A367 was not measured on the old
-    commit; read from its diff (`git show 98f34cb3b`), above 640 px A367 changed only the agent
-    button's text and named three `wt-tabs` parts.
-    **Open, unqueued (seen in A408's after-look, #1437):** when the Add button wraps under the
-    tabs, the tab row's bottom border runs below the button, so the selected tab's underline sits
-    above the button rather than on the line. Judged from the old 640 px rule's code to have drawn
-    the same shape before #1437; not measured on the old commit.
-    A menu's prices table showing only a sliver of the price box at 390 px — DONE (A344):
-    the Resolve column is gone and a name wraps under a phone-width cap, so each price box is whole
-    on screen in English and Spanish.
-  - DONE (A368): search follows the toolbar buttons in markup at both widths, so Tab follows
-    the drawn controls at 390 and 1280 px. Products uses the shared `toolbar-search` slot;
-    its English/Spanish cases cover both themes.
-  - DONE (A388, bundled with A370): a no-match Products search survives resizing
-    1280 → 390 → 1280 → 390. The fitting pass returns when the table has no scroll area;
-    the Chromium regression checks the retained search and no-match message and catches uncaught errors.
-  - DONE (A369): Chromium detach/reinsert tests reproduced stale `aria-expanded="true"` in
-    `wt-row-actions`, `wt-combobox` and `wt-help-tooltip` immediately after reinsertion, with native popups closed by
-    removal. Each resets its open state on disconnect. The regressions check closed state on
-    reinsertion, then reopening and Escape dismissal; the tooltip also drops its description.
-    Row actions and the tooltip read the native popup state on a late toggle event: same-task
-    opening/removal tests caught a stale disclosure and a detached tooltip consuming Escape.
-  - Open, untested (A369 review): `wt-relative-time` also keeps disclosure state from `toggle`
-    and has document listeners. Next: reproduce open/remove/reinsert, including removal before
-    the opening toggle arrives, before deciding whether it needs the same lifecycle correction.
-
-- **A390, owner 2026-10-08 — DONE (disclosure animation tests):** every fixed animation
-  sleep in `wt-disclosure.test.ts` is replaced by pausing and seeking real height transitions,
-  then observing the completion handler's cleared animation flag and released height, or by an
-  immediate assertion for a path that does not animate. Growth cases let scheduled animation
-  frames run before changing content. Intermediate heights, rapid toggles, closing focus exclusion,
-  interrupted reopening, validation errors, reduced motion and content growth remain checked.
-  Delaying the final close's animation-frame callback by 1200 ms reproduced `expected false
-  to be true` in the old rapid-toggle case. The same delayed frame passed with the revised case;
-  waiting for completion also passed with the old component. All 35 disclosure cases passed with
-  a 1200 ms delayed observer after each transition capture. No component change was needed
-  for that reproduction. Receipts: `~/waitron-campaign-e/receipts/a390/`.
-
-- **A389, owner 2026-10-08 — DONE (disclosure reopening test):** the Chromium test pauses
-  the real height transitions in the frame that finds them, seeks the collapse and reopening
-  to their midpoints, and checks that reopening starts at the interrupted height and finishes open.
-  In the old test, a 1200 ms busy observer after the 50 ms wait reproduced main CI's
-  `expected 200 to be less than 200`; the paused-transition test passed the same observer probe.
-  The component is unchanged. Receipts are in `~/waitron-campaign-e/receipts/a389/`.
-
-- **A342, owner 2026-10-07 — DONE (#1366, several values in one table filter):** a `wt-data-table` filter
-  declared with `multiple` takes several values, and keeps a row matching any of them; separate
-  filters still all apply, and the Filters badge counts a filter once. Its list keeps the "All …"
-  row first, which clears it. Multi-select: a menu's prices (Section, Main category — a category
-  still keeps the ones inside it), Products' Ordering, Units' Precision, Content languages' Kind.
-  Every two-value filter (each Status, Content languages' Why) and a menu's Price filter stay
-  single. A view a tab saved before this change with a single value for a filter that is now
-  multi-select is dropped, not converted.
-  - Not changed, single-choice dropdowns outside `wt-data-table`: the Add products dialog's
-    Category, the Staff screen's Role and the Orders screen's Status (a server query). Each could
-    take several values later if wanted.
-  - DONE (A370): Units, Products and Content languages retain column lists on unrelated
-    redraws; language and available filter choices still refresh. On the 45-product demo,
-    ten Products redraws invoked the two dropdowns' width-text builder 20 times before
-    and zero times after (Chromium, Node 26.7.0, 2026-10-08).
-  - OPEN (A370 caller audit, code reading only): Modifiers' Status and Printers' Agent/Printer
-    Status filters still receive column lists built during render. Their redraw work was not
-    measured in this item. Next: measure it before deciding whether to retain those lists.
-
-- **A343, owner 2026-10-07 — DONE (#1368, a menu's Price overrides tab tidied):** the two summary
-  sentences above the table are gone; the Price override column, heading and fields, starts at the
-  left; a product's variants stay in the product's own order under every sort, as on Products; and
-  nothing under a field changes height while its price saves. The result ("Saved …", with Undo, or
-  "… not saved") floats at the bottom of the window as a `wt-toast`, which gained an `action` slot
-  for the Undo. A saved price's message goes after 5 seconds, and waits while the pointer or focus
-  is on it; a refusal's stays until closed or replaced, because some refusals are explained nowhere
-  else.
-  - Open (decided as built, not tested with a user): the message comes after the whole table in tab
-    order, so a keyboard user cannot reach Undo from a field within its 5 seconds. Options: a
-    keyboard shortcut for Undo, or a message that waits while focus stays in the field it saved.
-  - Open, seen in #1368's screenshots on code this branch does not change (`wt-price-input`,
-    `#focusField` and the placeholder line are untouched): in Spanish a range's placeholder reads
-    "8.00 – 12.00" with full stops (the field's hint is written as typed, from W89, 53a76dce9a);
-    a refused field is drawn about 14 px wider than the others, pushing its "?" to the right; and at
-    390 wide a refusal's focus scrolls the table only part way sideways, leaving Spanish prices
-    half-hidden behind the pinned Resolve column. (A344 removed the "?" and the Resolve column and keeps each price
-    box on screen at 390 px; the wider refused field and the placeholder's full stops were not
-    re-checked.)
-  - Open, from #1368's review (read, not tested): closing a refusal's message now clears the
-    outcome, so a later save's "Saved …" message with its Undo can appear where before it stayed
-    hidden — the docs say so, but no test covers that case. And when the message closes (its ×, or
-    Undo replacing it), keyboard focus is not put back where it was, unlike the dashboard's alert
-    toast. Next: a test for the first, and return focus to the field the save came from.
-- **A344, owner 2026-10-07 — DONE (#1375, a menu's Price overrides tab shows its clashes):** a red line
-  above the table says how many prices clash and that they must be settled before the menu can be
-  published, counted by the same per-product rule as `clashesOf` (a product without variants once,
-  else each clashing variant). The Price filter offers Overridden only, Not overridden and, while
-  anything clashes, Clashes; a load with a clash starts on Clashes. Under each clashing field a red
-  sentence names every place and its price ("Price set to €2.80 in this menu's sections, €3.00 in
-  Drinks."; a product whose variant clashes names that variant), and it is also the field's hidden
-  hint, so a screen reader hears it on the field. The "?" explanations and the Resolve column are
-  gone. At 390 px a product's name and its note wrap under a cap so each price box is on screen.
-  - Decided as built: a filter choice the person made earlier in the browser tab (the table keeps
-    one for every menu) wins over starting on Clashes; the red line still gives the count. Under
-    Clashes a product that clashes itself stays folded until opened, as the table folds any row
-    that matches a filter in its own right. Once a load has had no clash, a clash that comes back
-    (Undo, a live re-read) does not switch the filter back to Clashes.
-  - Done in A345: the tab now counts and marks clashes the way publishing does (see A345 below).
-- **A345, owner 2026-10-07 — DONE (#1383, a menu with clashes cannot be published, from anywhere):** a
-  probe on a real database found every way to publish or schedule a menu already refused one with
-  clashes (`menu.clashes_unresolved`), and a scheduled edition going live only moves to a stored
-  copy. What the owner saw was the Price overrides tab disagreeing with the publish check both ways:
-  it flagged a product's own price when an Active variant is what sells, and Inactive products and
-  variants, which publishing leaves out, and it missed a product whose every variant is Inactive.
-  The tab now counts with the publish check's own `clashesOf` over the Active products and
-  variants, and marks rows by the same rule, a product's row reading its price field as it stands
-  while it is edited; the published menu's rule is unchanged. The menu editor's heading says
-  "Publishing waits on N clashes" on every tab, as a link to the Price overrides tab everywhere
-  except that tab, and the tab's red line offers
-  "Show clashes", which turns its Price filter to Clashes (`wt-data-table` gained `filterValues` and
-  `chooseFilter` for it).
-  - Decided as built: a product with both a variant that follows its clashing price and a variant
-    whose own price clashes is marked on its own price first, because a price typed there settles
-    one of them; once typed, the mark moves to the variants.
-  - A383, owner 2026-10-08: the Preview bundle uses "conflicto(s)" across Spanish menu-price
-    labels, filters and clash sentences, including the editor heading. English wording stays fixed.
-    Exact Spanish widget and heading checks cover singular and plural wording.
-  - A384, from #1383's review: the Preview bundle drops the heading's stale clash count after
-    a failed live refresh, retaining known publication facts and the existing refresh error.
-    Both-theme browser checks load 2, fail the refresh, then recover with 3.
-- **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
-  2026-10-07: "would it be possible to have an 'Undo' link as well?"; PARKED, not queued — owner
-  2026-10-08: take it from here when a lane has room).** Started in lane D, then parked for A366.
-  Its work so far is on a LOCAL branch only — `feat/menu-preview-undo` at `e04b3abe7`, in the
-  worktree `waitron-feat-menu-preview-undo` (no push, no pull request): the plan, and the scalar
-  and presentation Undo checkpoint. What was left at the park: the rest of its Task 2's controls,
-  the structural Undo commands, and the server and dashboard wiring.
-- **A347, owner 2026-10-07 — DONE (#1392, a disabled product or size is on
-  no menu):** disabling a product takes it off every menu list in the same transaction and clears
-  its prices on every menu, so each menu's next publish leaves it out; a Device Home Page shortcut
-  to it becomes a missing tile, and enabling it again does not put it back on any menu. Disabling a
-  size deletes its price on every menu; enabled again, it follows its product back with no menu
-  price of its own. Every writer does it (`takeOffMenus` for a product and `dropMenuPrices` for a
-  size, `packages/catalogue/src/menu-removal.ts`: the product save and editor, the Products list's
-  Disable, a category deleted with its contents, a variant save); the list writers refuse an Inactive product, the variant-price route refuses a
-  Disabled size, and a configuration import refuses either on a menu (`setup.request_invalid`).
-  `GET /management-api/products/menus` counts the menus the products are on, and the Disable
-  dialogs say "They come off the N menus they are on…" (or "every menu" while the count is
-  unknown), counting only the products picked directly when a category is selected too.
-  - Open, found in A347's review, believed to predate it: an imported bundle may carry priced menu
-    rows for a product no menu reaches, and adding the product back to a menu revives those prices.
-    Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
-    reaches.
-  - Open: a bulk Disable of 500 products could not read the count in A347's review (HTTP 431,
-    because the ids go in the URL), so the dialog says "every menu"; the smallest count that fails
-    was not measured.
-  - Open: deleting a category with its contents says its products come off every menu, with no
-    count.
-  - For A348 — DONE except `#active` (A346 + A348): `viaParent`, the
-    `menu_prices.status_parent_disabled` strings and the "Disabled" row case are gone; `#active` is
-    carried to A348's Open bullet below.
-- **A346 + A348, owner 2026-10-07 — DONE (#1408) (a menu's Price overrides tab: a price this menu sets
-  stands out, an Available column, and Edit product):** a field holding a price this menu sets is
-  drawn bold and upright with a bar in `--wt-color-primary` at its start edge, through
-  `wt-price-input`'s new `overriding` state, and a stored one is named "…, set on this menu"; an
-  inherited price stays the muted italic placeholder. `menuPrices` rows and sizes carry `available`
-  (the product's own, or the size's own), and the tab's Status column is replaced by Available
-  (Yes/No; not searchable, no filter, available first). Each row has a ⋮ in a pinned `actions`
-  column holding Edit product, a link to the product's or size's page. The Structure tab's product
-  rows show the same Available word, muted like Type, and their ⋮ offers Edit product before Remove
-  at every width. At phone width the price field gives up width before a name does while no field
-  shows a range; while one does, the names give up width first, and the field is never narrower
-  than the widest range the table shows, measured in the placeholder's own font, so where the row
-  then does not fit, the table's box scrolls sideways under the pinned ⋮. Measured in the
-  dashboard's test browser on macOS, in English and Spanish, each range whole in its field: with
-  the default font and every field left of the ⋮, "1000.00 – 9999.99" in the table alone at 390px,
-  and inside the dashboard at a 390px window "12.50 – 15.00" in both languages and "1000.00 –
-  9999.99" in English; with the field whole in view once the box is scrolled to it,
-  "12.50 – 15.00" in the table alone at 320px, with the default font and with Verdana (wider, like
-  the Linux font CI draws in), and "1000.00 – 9999.99" inside the dashboard in Spanish. In the
-  table alone with a range shown, "Lemonade" then breaks mid-word at 320px and at 390px (observed,
-  not asserted).
-  - Open: at a 320px window only "12.50 – 15.00" was measured.
-  - Open, for the owner: `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since
-    A347 (#1392), so the dashboard's Inactive branches (`#active` and `activeOffer` in
-    `menu-prices-table.ts`, the `active` conditions in `menu-price-inheritance.ts`) cannot be
-    reached. Retiring them deletes the tests whose subject is an Inactive row, so it waits for the
-    owner.
-  - Open: in the real dashboard at a 390px window the table is 358px wide (read once in the
-    dashboard's test browser; no test pins it). Whether one-word names keep their line there while no field shows a
-    range has not been measured; with the full 390px a longer word such as "Hamburguesa" (about
-    90px, against 76px kept for a name) breaks. Options for more room: less page padding on phones,
-    or a shorter Actions heading.
-  - Open, believed to predate A348: on the Structure tab at 390px the tree's own box scrolls
-    sideways under the pinned ⋮, by design (`pinned: "end"`); in Spanish the Tipo column already
-    sat under Acciones before A348 (measured at the commit before it), and Disponible now sits
-    wholly behind it until the tree is scrolled. Letting long names wrap at narrow widths may free
-    the room; not tried.
-  - Open, predates A348 (`git blame`: W95, 2026-10-06): `menus-screen.test.ts` writes screenshots
-    into `apps/dashboard/src/screens/.superpowers/` on every run (ignored by git, but in the source
-    tree), the shape A281 fixed for the kitchen screen.
-- **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
-  reads `--wt-color-primary-text`.
-- The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
-  not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the bottom
-  (left alone; not measured).
-- A303 supersedes A294's Select and move label and trailing product colour square with the controls
-  described above.
-- Price overrides and departments-and-zones (`apps/dashboard/src/widgets/menu-prices-table.ts`,
-  `packages/venue-service/src/dashboard/venue-operations-screen.ts`) draw no grips, folder icons or
-  product counts, so nothing changed there.
-- The Structure tree's section rows were deliberately not top-aligned: section names do not wrap
-  there, and `apps/dashboard/src/widgets/menu-structure-table.test.ts` deliberately centres the
-  included-menu name and note.
 
 **A menu's prices table puts the Price column straight after the product's name (A302, owner
 2026-10-06) — DONE (#1327):** the columns read Product, Price override, Appears under, Main category,

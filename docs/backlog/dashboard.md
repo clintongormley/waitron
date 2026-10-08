@@ -631,3 +631,9 @@ there is no copy to keep in step.
 - **The "Continue with Google" button follows Google's branding rules (A228, #1078).** Kept
   from the house rather than Google's drawing: the 44px tap height (Google's drawing is 40px; its
   text allows scaling), the full card width and `wt-button`'s corner radius.
+
+From A342 (#1366, several values in one table filter):
+
+- Not changed, single-choice dropdowns outside `wt-data-table`: the Add products dialog's
+  Category, the Staff screen's Role and the Orders screen's Status (a server query). Each could
+  take several values later if wanted.

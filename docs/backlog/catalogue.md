@@ -569,6 +569,69 @@ Product editor keeps a private `text()` helper doing what `languageText` does, a
 `product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
 names; folding them into the one helper was not part of W77a.
 
+## A product literally named `Gin (Double)` and `Gin`'s `Double` variant have the same display label
+
+From A357 (relative variant names, #1381):
+
+Known edge from the second review: a product literally named `Gin (Double)` and `Gin`'s
+`Double` variant have the same display label; saved/imported raw names satisfy the requested
+scopes. A held-group summary combines their displayed quantities, retaining both line ids.
+Choose distinct saved names for now. Any future restriction on composed labels needs an owner
+decision about the naming policy; this change adds no such restriction.
+
+## In Spanish a range's placeholder reads "8.00 – 12.00" with full stops, and a refused field is drawn about 14 px wider than the others
+
+- Open, seen in #1368's screenshots on code this branch does not change (`wt-price-input`,
+  `#focusField` and the placeholder line are untouched): in Spanish a range's placeholder reads
+  "8.00 – 12.00" with full stops (the field's hint is written as typed, from W89, 53a76dce9a);
+  a refused field is drawn about 14 px wider than the others, pushing its "?" to the right; and at
+  390 wide a refusal's focus scrolls the table only part way sideways, leaving Spanish prices
+  half-hidden behind the pinned Resolve column. (A344 removed the "?" and the Resolve column and keeps each price
+  box on screen at 390 px; the wider refused field and the placeholder's full stops were not
+  re-checked.)
+
+## Closing a refusal's message now clears the outcome
+
+- Open, from #1368's review (read, not tested): closing a refusal's message now clears the
+  outcome, so a later save's "Saved …" message with its Undo can appear where before it stayed
+  hidden — the docs say so, but no test covers that case. And when the message closes (its ×, or
+  Undo replacing it), keyboard focus is not put back where it was, unlike the dashboard's alert
+  toast. Next: a test for the first, and return focus to the field the save came from.
+
+## A353 — Preview's changes: an "Undo" link that puts one change back to the live version
+
+- **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
+  2026-10-07: "would it be possible to have an 'Undo' link as well?"; PARKED, not queued — owner
+  2026-10-08: take it from here when a lane has room).** Started in lane D, then parked for A366.
+  Its work so far is on a LOCAL branch only — `feat/menu-preview-undo` at `e04b3abe7`, in the
+  worktree `waitron-feat-menu-preview-undo` (no push, no pull request): the plan, and the scalar
+  and presentation Undo checkpoint. What was left at the park: the rest of its Task 2's controls,
+  the structural Undo commands, and the server and dashboard wiring.
+
+## `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since A347 (#1392)
+
+- Open, for the owner: `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since
+  A347 (#1392), so the dashboard's Inactive branches (`#active` and `activeOffer` in
+  `menu-prices-table.ts`, the `active` conditions in `menu-price-inheritance.ts`) cannot be
+  reached. Retiring them deletes the tests whose subject is an Inactive row, so it waits for the
+  owner.
+
+## In the real dashboard at a 390px window the table is 358px wide
+
+- Open: in the real dashboard at a 390px window the table is 358px wide (read once in the
+  dashboard's test browser; no test pins it). Whether one-word names keep their line there while no field shows a
+  range has not been measured; with the full 390px a longer word such as "Hamburguesa" (about
+  90px, against 76px kept for a name) breaks. Options for more room: less page padding on phones,
+  or a shorter Actions heading.
+
+## On the Structure tab at 390px the tree's own box scrolls sideways under the pinned ⋮
+
+- Open, believed to predate A348: on the Structure tab at 390px the tree's own box scrolls
+  sideways under the pinned ⋮, by design (`pinned: "end"`); in Spanish the Tipo column already
+  sat under Acciones before A348 (measured at the commit before it), and Disponible now sits
+  wholly behind it until the tree is scrolled. Letting long names wrap at narrow widths may free
+  the room; not tried.
+
 ## Decisions and deliberate limits
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
@@ -593,3 +656,23 @@ From "Extras and Options — deliberate limits, and what is left open"
   optional options list is a possible future change, not built.
 - **A variant offers its parent's lists and cannot override them**; a per-variant attachment row
   is a possible later addition.
+
+From A344 (#1375, a menu's Price overrides tab shows its clashes):
+
+- Decided as built: a filter choice the person made earlier in the browser tab (the table keeps
+  one for every menu) wins over starting on Clashes; the red line still gives the count. Under
+  Clashes a product that clashes itself stays folded until opened, as the table folds any row
+  that matches a filter in its own right. Once a load has had no clash, a clash that comes back
+  (Undo, a live re-read) does not switch the filter back to Clashes.
+
+From A345 (#1383, a menu with clashes cannot be published, from anywhere):
+
+- Decided as built: a product with both a variant that follows its clashing price and a variant
+  whose own price clashes is marked on its own price first, because a price typed there settles
+  one of them; once typed, the mark moves to the variants.
+
+From A294 (#1300, the Products and Structure trees show drag grips only in a mode):
+
+- The Structure tree's section rows were deliberately not top-aligned: section names do not wrap
+  there, and `apps/dashboard/src/widgets/menu-structure-table.test.ts` deliberately centres the
+  included-menu name and note.
