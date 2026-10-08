@@ -2,7 +2,14 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, UrlStateController, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  UrlStateController,
+  draftScopeFor,
+  leaveCoordinatorFor,
+  saveActionState,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -296,7 +303,7 @@ export class CanvasEditorScreen extends LitElement {
       this.#editorScope = undefined;
       this.#editorBaseline = undefined;
     } else if (!this.#editorScope) {
-      this.#editorScope = this.#leave?.register<CanvasEntry | null>({
+      this.#editorScope = draftScopeFor<CanvasEntry | null>(this, {
         id: this.#editorId,
         parent: this,
         current: () => this.#editorEntry(),
@@ -308,9 +315,9 @@ export class CanvasEditorScreen extends LitElement {
           this.selection = null;
           this.activeTabIndex = 0;
         },
-      });
-      this.#editorScope?.commit(this.#editorBaseline ?? null);
-      this.#editorScope?.changed();
+      }).scope;
+      this.#editorScope.commit(this.#editorBaseline ?? null);
+      this.#editorScope.changed();
     }
     if (!this.createOpen) {
       this.#createScope?.dispose();
@@ -806,7 +813,7 @@ export class CanvasEditorScreen extends LitElement {
   // ── Save ─────────────────────────────────────────────────────────────────────────────────────────
 
   async #save(): Promise<void> {
-    if (!this.isConnected || this.saving) return;
+    if (!this.isConnected || this.saving || saveActionState(this.#editorScope).unchanged) return;
     const request = this.#editorSession;
     const draft = this.draft;
     if (draft === null) return;
@@ -1032,7 +1039,7 @@ export class CanvasEditorScreen extends LitElement {
       ></wt-input>
       <wt-button
         slot="footer"
-        variant="primary"
+        variant=${saveActionState(this.#duplicateScope, { savableAtOpen: true }).variant}
         data-test="confirm-duplicate"
         ?disabled=${this.duplicating || this.duplicateName.trim() === ""}
         @click=${() => void this.#confirmDuplicate()}
@@ -1295,6 +1302,7 @@ export class CanvasEditorScreen extends LitElement {
     const activeTab = draft?.tabs[this.activeTabIndex] ?? null;
     const selectedCardIndex = this.#selectedCardIndex();
     const panel = draft === null ? nothing : this.#renderPanel(draft, activeTab);
+    const save = saveActionState(this.#editorScope);
     return html`
       <div
         class="editor"
@@ -1318,9 +1326,9 @@ export class CanvasEditorScreen extends LitElement {
               >${t("canvas_editor.cancel")}</wt-button
             >
             <wt-button
-              variant="primary"
+              variant=${save.variant}
               data-test="save"
-              ?disabled=${this.saving}
+              ?disabled=${save.unchanged || this.saving}
               @click=${() => void this.#save()}
               >${t("canvas_editor.save")}</wt-button
             >

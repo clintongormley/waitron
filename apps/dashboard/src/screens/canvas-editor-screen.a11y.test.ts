@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./canvas-editor-screen.js";
 import type { CanvasEditorScreen } from "./canvas-editor-screen.js";
@@ -69,6 +69,27 @@ describe.each(["light", "dark"] as const)("canvas-editor-screen a11y (%s theme)"
       new CustomEvent("select-card", { detail: { index: 0 }, bubbles: true, composed: true }),
     );
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the editor's Save quiet, then ready after an edit, accessibly", async () => {
+    const { el, host } = await mountWidget<CanvasEditorScreen>(
+      "dashboard-canvas-editor-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+    await flush(el);
+    const save =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-basket]")!.click();
+    await el.updateComplete;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
     await expectNoA11yViolations(host);
   });
 });
