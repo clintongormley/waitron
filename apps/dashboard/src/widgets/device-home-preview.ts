@@ -59,8 +59,8 @@ type PreviewIndex = HomeIndex<FrozenOffer>;
 type ShortcutKind = "product" | "section";
 
 const ADD_TILES: { kind: ShortcutKind; label: () => string }[] = [
-  { kind: "product", label: () => t("home.add_products") },
-  { kind: "section", label: () => t("home.add_sections") },
+  { kind: "product", label: () => t("home.add_products_tile") },
+  { kind: "section", label: () => t("home.add_sections_tile") },
 ];
 
 const KEY_STEPS: Record<string, number> = {
@@ -291,17 +291,22 @@ export class DeviceHomePreview extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .grid[data-editing] {
+        row-gap: var(--wt-space-5);
+      }
+
       .shortcut {
         display: grid;
         grid-template-rows: 1fr auto;
-        gap: var(--wt-space-1);
         min-width: 0;
       }
 
       .controls {
         display: flex;
+        align-items: center;
         justify-content: flex-end;
         gap: var(--wt-space-1);
+        height: var(--wt-tap-min);
       }
 
       .grip {
@@ -343,9 +348,12 @@ export class DeviceHomePreview extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      /* The margin stands in for a shortcut's grip strip, so an add tile is as tall as the
+         shortcut tiles beside it rather than the tile and its strip together. */
       wt-button.add {
         width: 100%;
         min-height: calc(var(--wt-tap-min) * 1.5);
+        margin-block-end: var(--wt-tap-min);
       }
 
       wt-button.add::part(button) {
@@ -353,6 +361,17 @@ export class DeviceHomePreview extends LitElement {
         min-height: calc(var(--wt-tap-min) * 1.5);
         padding: var(--wt-space-2);
         border-style: dashed;
+        border-color: var(--wt-color-primary);
+        background: transparent;
+        color: var(--wt-color-primary-text);
+      }
+
+      wt-button.add::part(button):hover:not(:disabled) {
+        border-style: solid;
+      }
+
+      wt-button.add wt-icon {
+        color: var(--wt-color-primary);
       }
 
       .status {
@@ -689,8 +708,14 @@ export class DeviceHomePreview extends LitElement {
     return localizedName(section.names) || section.internalName;
   }
 
-  #grid(content: unknown, display: HomeDisplay): TemplateResult {
-    return html`<div class="grid" style=${`--columns: ${display.columns};`}>${content}</div>`;
+  #grid(content: unknown, display: HomeDisplay, editing = false): TemplateResult {
+    return html`<div
+      class="grid"
+      ?data-editing=${editing}
+      style=${`--columns: ${display.columns};`}
+    >
+      ${content}
+    </div>`;
   }
 
   #productTile(offer: FrozenOffer, mode: HomeTileMode): TemplateResult {
@@ -791,10 +816,10 @@ export class DeviceHomePreview extends LitElement {
       return place === 1 && divider
         ? html`<section data-region=${region} aria-labelledby=${`${region}-divider`}>
             <h2 class="divider" id=${`${region}-divider`}><span>${label}</span></h2>
-            ${this.#grid(cells, display)}
+            ${this.#grid(cells, display, shortcutBlock && editing !== null)}
           </section>`
         : html`<section data-region=${region} aria-label=${label}>
-            ${this.#grid(cells, display)}
+            ${this.#grid(cells, display, shortcutBlock && editing !== null)}
           </section>`;
     })}`;
   }

@@ -152,6 +152,12 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
         theme,
       );
       expect(el.shadowRoot!.querySelectorAll('[data-test^="grip-"]')).toHaveLength(4);
+      expect(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>(".tile[data-state]")].map(
+          (tile) => tile.dataset.state,
+        ),
+      ).toEqual(["missing", "hidden"]);
+      expect(el.shadowRoot!.querySelectorAll("wt-button.add")).toHaveLength(2);
       await expectNoA11yViolations(host);
       el.busy = true;
       await el.updateComplete;

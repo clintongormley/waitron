@@ -666,7 +666,7 @@ describe("the Home page tab's shortcuts", () => {
       const el = await mountHome();
       const previewBox = q(el, '[data-test="home-preview-pane"]')!.getBoundingClientRect();
       const settingsBox = q(el, '[data-test="home-settings"]')!.getBoundingClientRect();
-      return { previewBox, settingsBox };
+      return { el, previewBox, settingsBox };
     }
 
     it("puts the preview on the left and the settings on the right on a wide screen", async () => {
@@ -680,6 +680,29 @@ describe("the Home page tab's shortcuts", () => {
       const { previewBox, settingsBox } = await atWidth(390);
       expect(previewBox.bottom).toBeLessThanOrEqual(settingsBox.top);
       expect(Math.abs(previewBox.left - settingsBox.left)).toBeLessThan(1);
+    });
+
+    const frameOf = (el: MenusScreen) => preview(el)!.shadowRoot!.querySelector(".frame")!;
+
+    it("leaves the till room for all six of its columns 1280 px wide", async () => {
+      const { el } = await atWidth(1280);
+      q<HTMLInputElement>(el, 'input[name="home-device"][value="till"]')!.click();
+      await el.updateComplete;
+      await preview(el)!.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(preview(el)!.device).toBe("till");
+      for (const grid of frameOf(el).querySelectorAll<HTMLElement>(".grid"))
+        expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(6);
+    });
+
+    it("puts the settings just beside the handheld's frame 1280 px wide", async () => {
+      const { el, settingsBox } = await atWidth(1280);
+      expect(preview(el)!.device).toBe("handheld");
+      const gap = parseFloat(getComputedStyle(q(el, ".home-columns")!).columnGap);
+      expect(gap).toBeGreaterThan(0);
+      const frameBox = frameOf(el).getBoundingClientRect();
+      expect(frameBox.right).toBeLessThanOrEqual(settingsBox.left);
+      expect(settingsBox.left - frameBox.right).toBeLessThanOrEqual(gap * 2);
     });
   });
 });

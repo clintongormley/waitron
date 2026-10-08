@@ -419,10 +419,15 @@ export class MenusScreen extends LitElement {
         gap: var(--wt-space-5);
       }
       /* The Preview tab's breakpoint, so both tabs go to two columns at the same width. */
+      /* A handheld's column is no wider than its frame (.frame[data-device="handheld"] in
+         device-home-preview.ts), so the settings sit beside the phone; a till's takes the rest. */
       @container (min-width: 800px) {
         .home-columns {
-          grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+          grid-template-columns: minmax(0, 1fr) calc(var(--wt-tap-min) * 7);
           align-items: start;
+        }
+        .home-columns[data-device="handheld"] {
+          grid-template-columns: minmax(0, calc(var(--wt-tap-min) * 9)) calc(var(--wt-tap-min) * 7);
         }
       }
       .home h2 {
@@ -2428,7 +2433,7 @@ export class MenusScreen extends LitElement {
         : home[device];
     const range = HOME_COLUMN_RANGE[device];
     return html`${error}${loadError}
-      <div class="home-columns">
+      <div class="home-columns" data-device=${device}>
         <section
           class="home-preview"
           data-test="home-preview-pane"

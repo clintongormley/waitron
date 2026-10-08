@@ -950,8 +950,14 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     const { el } = await mount({ shortcuts: LIST });
     const drawn = cells(el);
     expect(drawn.slice(-2)).toEqual([add(el, "product"), add(el, "section")]);
-    expect(add(el, "product").textContent!.trim()).toBe("Add product shortcuts");
-    expect(add(el, "section").textContent!.trim()).toBe("Add section shortcuts");
+    expect(add(el, "product").textContent!.trim()).toBe("Add products");
+    expect(add(el, "section").textContent!.trim()).toBe("Add sections");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(add(el, "product").textContent!.trim()).toBe("Añadir productos");
+    expect(add(el, "section").textContent!.trim()).toBe("Añadir secciones");
+    setLocale("en");
+    await el.updateComplete;
 
     const empty = await mount({ shortcuts: [], document: lunch([], []) });
     expect(regions(empty.el)).toEqual(["search", "shortcuts"]);
@@ -966,6 +972,44 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     const dividing = await mount({ shortcuts: [] });
     expect(regions(dividing.el)).toEqual(["search", "shortcuts", "structure"]);
     expect(divider(dividing.el)).toBe("Full menu");
+  });
+
+  it("keeps each grip strip flush under its tile, and its rows further apart than its columns", async () => {
+    const { el } = await mount({ shortcuts: LIST });
+    for (const cell of cells(el).filter((each) => each.classList.contains("shortcut"))) {
+      const face = cell.firstElementChild!.getBoundingClientRect();
+      const strip = cell.querySelector(".controls")!.getBoundingClientRect();
+      expect(Math.abs(strip.top - face.bottom)).toBeLessThan(0.5);
+    }
+    const editing = getComputedStyle(root(el).querySelector('[data-region="shortcuts"] .grid')!);
+    expect(parseFloat(editing.rowGap)).toBeGreaterThan(parseFloat(editing.columnGap));
+    const menu = getComputedStyle(root(el).querySelector('[data-region="structure"] .grid')!);
+    expect(menu.rowGap).toBe(menu.columnGap);
+  });
+
+  it("draws the add tiles in the primary colour, dashed and unfilled, as tall as a shortcut tile", async () => {
+    const { el } = await mount({ shortcuts: [LEMONADE, HAM] });
+    const token = (name: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      root(el).appendChild(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const primary = token("--wt-color-primary");
+    const primaryText = token("--wt-color-primary-text");
+    const tile = tiles(el, "shortcuts")[0]!.getBoundingClientRect();
+    for (const kind of ["product", "section"] as const) {
+      const button = add(el, kind).shadowRoot!.querySelector("button")!;
+      const style = getComputedStyle(button);
+      expect(style.color).toBe(primaryText);
+      expect(style.borderTopColor).toBe(primary);
+      expect(style.borderTopStyle).toBe("dashed");
+      expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(add(el, kind).querySelector("wt-icon")!).color).toBe(primary);
+      expect(Math.abs(button.getBoundingClientRect().height - tile.height)).toBeLessThan(1);
+    }
   });
 
   it.each([
