@@ -2961,12 +2961,15 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   the language chooser, and a "More" menu with everything else: department transfers, Find a bill,
   Kitchen, Pass, My schedule, Profile, Equipment, Allergens, the operator's name and Log out. The
   menu button shows a count of pending transfers. Above 40rem the bar is unchanged.
-  - **Open, for the owner:** at 1280 px the bar still wraps to two rows in English and three in
-    Spanish (125 and 181 px on the demo counter). The same menu would make it one row there too;
-    not done, because the item kept wider screens unchanged.
-  - **Open, for the owner:** the More menu uses the three-dot icon, which `design-system.md`
-    keeps for a menu of one row's or card's actions. Confirm this use (the design system then gains
-    a line for it), or choose another icon.
+  - **Done by A395:** at 1280 px the bar wrapped to two rows in English and three in Spanish.
+  - **Done by A395:** the More menu used the three-dot icon; it is now the hamburger.
+- **A395 DONE: the till's top bar is one row at every width.** On a phone nothing changed. Wider,
+  the bar moves items into the More menu one at a time, only as many as it needs to stay on one
+  row, in this order: the Waitron name is hidden first, then Allergens, Equipment, Profile, My
+  schedule, Pass, Kitchen, Find a bill, Department transfers (count and button together), and last
+  the operator's name with Log out. Tabs and the language chooser never leave; once everything
+  else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
+  `design-system.md` says which icon means which menu.
 - **A379 DONE: standard till tab titles follow the UI language.** Standard key/title pairs
   Counter, Floor and Order read Mostrador, Sala and Pedido in Spanish; renamed and custom
   tabs keep their stored titles. The service-area selector reserves room for its full label,
