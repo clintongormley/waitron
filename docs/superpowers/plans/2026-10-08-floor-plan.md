@@ -79,16 +79,22 @@ The owner confirms or overrides these when reviewing the plan.
    builder, `packages/db/src/schema/columns.ts:169`), because the order list returns `tables:
    string[]` (`apps/server/src/orders-list.ts:360-365`). The party's `party_tables` rows are deleted
    in the same transaction that closes it.
-5. **Delete is refused (`table.in_use`) while an open party holds the table OR held it earlier
-   and is still open** (moved or split away during the meal), and while an order to it is
-   unpaid or its food is still on its way. Copying the names happens at close, so deleting a table an open party once held would
-   lose it from that party's history.
+5. **Delete always takes the table off the saved plan at once; an open party is tied to it on
+   today's plan, not the saved one** (owner, 2026-10-08, replacing spec §8's "allowed only on a
+   free table"). A table a party sits at stays where it stood on today's plan until the party
+   leaves. The row itself goes for good once nothing ties it: no open party holds it or used it
+   earlier in its meal (the names are copied at close, so the row must last until then), and no
+   order to it is unpaid or has food on its way. That clean-up runs whenever any party closes,
+   the plan is saved or a table is deleted. Until then the table cannot be seated, joined or moved
+   to, and lists leave it out. Its name is free again once it is gone for good — not "at once"
+   as spec §8 says, because a party may still be sitting at it under that name.
 6. **A past booking keeps its table's name when the table is deleted**, not when the booking
    ends: the delete asks every enabled module, through a new module seat, first whether it still
    needs the table (bookings: a `booked` booking from today on refuses with `table.booked`) and
    then to let go of it (bookings copies the name into a new `bookings.table_label`).
-7. **Removing a seated table from the saved plan, or deleting it, is refused** (`table.in_use`),
-   so a party is never left at a table that is not on the map.
+7. **Removing a seated table from the saved plan is allowed** (owner, 2026-10-08): it keeps its
+   place on today's plan until its party leaves, then becomes a spare — the same "occupied tables
+   wait" rule as the reset (spec §6.3).
 8. **Delete acts at once** from the editor, after a confirmation, and is not part of the draft or
    of Undo. Every other editor change is in the draft.
 9. **Plan coordinates are whole grid squares**, `x` and `y` naming the top-left corner of the
@@ -174,15 +180,17 @@ has its test in the task named.
 
 1. **A table still seated from yesterday.** At 07:00, after a 06:00 cutover, a table seated last
    night that a waiter moved keeps its moved place until its tab closes, then returns to the
-   saved plan; a free table moved yesterday is back in place (Tasks 1.2 and 1.11).
+   saved plan; a free table moved yesterday is back in place (Tasks 1.2 and 1.12).
 2. **Swapping two names in one save.** "Terrace 1" and "Terrace 2" renamed to each other in the
-   editor save without a duplicate-name refusal (Task 1.9).
-3. **Deleting a table with history.** A table whose party closed last week, which a delivered
-   order went to, and whose past booking is kept, deletes; its name shows unchanged on that
-   party in the order list, on the delivered order and on the booking (Tasks 1.3, 1.4, 1.6, 1.8).
+   editor save without a duplicate-name refusal (Task 1.10).
+3. **Deleting a table with history, or with a party at it.** A table whose party closed last
+   week, which a delivered order went to, and whose past booking is kept, deletes; its name shows
+   unchanged on that party in the order list, on the delivered order and on the booking. A table
+   deleted while a party sits there stays on the till's map where it stood, can take no new party,
+   and is gone — its name free — once the party leaves (Tasks 1.3, 1.4, 1.6, 1.8, 1.9).
 4. **Two people editing.** A save made from a copy older than the last save is refused with
    `floor_plan.changed` and nothing is written; the editor offers to load the newer plan
-   (Tasks 1.9 and 2.4).
+   (Tasks 1.10 and 2.4).
 5. **A fixed table sent a move anyway.** A move request for a fixed table, sent straight to the
    route, is refused and nothing moves (Task 4.3).
 
@@ -236,18 +244,19 @@ export const floorPlans;           // floor_plans: id, zone_id (unique, FK floor
 export const floorPlanTables;      // floor_plan_tables: id, plan_id (FK), table_id (FK dining_tables), x, y, width, height, shape, rotation; unique (plan_id, table_id)
 export const floorPlanJoins;       // floor_plan_joins: id, plan_id (FK), seats count not null
 export const floorPlanJoinTables;  // floor_plan_join_tables: id, join_id (FK), table_id (FK); unique (join_id, table_id)
-export const floorTodayTables;     // floor_today_tables: id, table_id (FK), business_day day not null, x, y, rotation (nullable), taken_off flag not null default false, spare_placed flag not null default false, seats count (nullable); unique (table_id, business_day)
+export const floorTodayTables;     // floor_today_tables: id, table_id (FK), business_day day not null, x, y, rotation, width, height, shape (all nullable), taken_off flag not null default false, spare_placed flag not null default false, seats count (nullable); unique (table_id, business_day)
 export const floorTodayJoins;      // floor_today_joins: id, business_day day not null, seats count not null; index on business_day
 export const floorTodayJoinTables; // floor_today_join_tables: id, join_id (FK), table_id (FK), before_x, before_y, before_rotation not null; unique (join_id, table_id)
 // dining_tables.fixed: flag not null default false
+// dining_tables.deleted_at: tsString (nullable) — set by Delete while something still ties the table (decision 5)
 // parties.table_names: labelList (nullable)
 ```
 
 Checks, each named `<table>_<what>_ck`: `x` and `y` between 0 and 999; `width` and `height`
 between 1 and 99; `rotation` between 0 and 345 and `rotation % 15 = 0` (on `floor_plan_tables`,
 `floor_today_tables` where not null, and `before_rotation`); `shape` by `enumCheck`; `seats >= 1`
-on both join tables; on `floor_today_tables`, `(x is null) = (y is null)`, and `seats` null or
-`>= 0`.
+on both join tables; on `floor_today_tables`, `(x is null) = (y is null)`, `width`, `height` and
+`shape` all null or all set, and set only with `x`, and `seats` null or `>= 0`.
 
 - [ ] **Step 1: Write the failing tests.** In `floor-plans.test.ts`, set up as
 `dining-tables.test.ts:13-30` does (`useVenueDb({ migrations: [CORE_MIGRATIONS] })`, a tenant, a
@@ -278,9 +287,9 @@ it("accepts a valid plan, join and today's rows and reads them back", async () =
 - [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/db exec vitest run src/schema/floor-plans.test.ts`. Expected: cannot import `./floor-plans.js`.
 
 - [ ] **Step 3: Implement** the schema file with the column vocabulary from `./columns.js` only
-(CLAUDE.md §3), export it, add `fixed` and `table_names`, the seven
+(CLAUDE.md §3), export it, add `fixed`, `deleted_at` and `table_names`, the seven
 `classify(..., "state", STATE)` rows and the four transfer entries. Then generate:
-`pnpm --filter @waitron/db db:generate`. Read the generated SQL: seven `CREATE TABLE`s, two
+`pnpm --filter @waitron/db db:generate`. Read the generated SQL: seven `CREATE TABLE`s, three
 `ALTER TABLE … ADD`, the indexes, and no `__new_` (no rebuild).
 
 - [ ] **Step 4: Run the tests and the guards** —
@@ -301,7 +310,7 @@ it("accepts a valid plan, join and today's rows and reads them back", async () =
 export type PlanShape = "rect" | "round";
 export interface Placement { x: number; y: number; width: number; height: number; shape: PlanShape; rotation: number }
 export interface SavedPosition extends Placement { tableId: string }
-export interface TodayChange { tableId: string; businessDay: string; x: number | null; y: number | null; rotation: number | null; takenOff: boolean; sparePlaced: boolean; seats: number | null }
+export interface TodayChange { tableId: string; businessDay: string; x: number | null; y: number | null; rotation: number | null; width: number | null; height: number | null; shape: PlanShape | null; takenOff: boolean; sparePlaced: boolean; seats: number | null }
 export interface TodayJoinRow { id: string; businessDay: string; seats: number; members: { tableId: string; beforeX: number; beforeY: number; beforeRotation: number }[] }
 export interface TodayTable { tableId: string; placement: Placement | null; seats: number | null; spare: boolean; takenOff: boolean; joinId: string | null; joinSeats: number | null }
 export const NEW_TABLE_SIZE = 8;
@@ -320,7 +329,8 @@ export function resolveTodayPlan(input: {
 Rules: a change or join applies when `isLive`. Of several live changes for one table, the latest
 `businessDay` wins. Placement = saved placement with the change's `x`/`y`/`rotation` laid over
 it; a table with no saved placement is shown only when its live change has `sparePlaced` and
-`x`/`y`, at `NEW_TABLE_SIZE` square `rect`; otherwise `placement` is null and `spare` true.
+`x`/`y`, at the change's `width`, `height` and `shape` when set (a table kept where it stood,
+Task 1.9), else `NEW_TABLE_SIZE` square `rect`; otherwise `placement` is null and `spare` true.
 `takenOff` gives `placement: null`. Seats = the change's `seats` if not null, else the table's.
 A table in a live join carries its `joinId` and `joinSeats`.
 
@@ -330,7 +340,7 @@ A table in a live join carries its `joinId` and `joinSeats`.
 const T1 = "t1", T2 = "t2";
 const saved: SavedPosition[] = [{ tableId: T1, x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 }];
 const base = { businessDay: "2026-10-09", tables: [{ id: T1, seats: 4 }, { id: T2, seats: 2 }], saved, changes: [], joins: [], held: new Set<string>() };
-const change = (over: Partial<TodayChange>): TodayChange => ({ tableId: T1, businessDay: "2026-10-09", x: null, y: null, rotation: null, takenOff: false, sparePlaced: false, seats: null, ...over });
+const change = (over: Partial<TodayChange>): TodayChange => ({ tableId: T1, businessDay: "2026-10-09", x: null, y: null, rotation: null, width: null, height: null, shape: null, takenOff: false, sparePlaced: false, seats: null, ...over });
 
 it("shows the saved plan when nothing changed today, and a table with no position as a spare", () => {
   expect(resolveTodayPlan(base)).toEqual([
@@ -353,6 +363,10 @@ it("keeps yesterday's move on a table still held", () => {
 it("places a spare placed today at the new-table size", () => {
   const [, t2] = resolveTodayPlan({ ...base, changes: [change({ tableId: T2, sparePlaced: true, x: 30, y: 30 })] });
   expect(t2).toMatchObject({ spare: false, placement: { x: 30, y: 30, width: 8, height: 8, shape: "rect", rotation: 0 } });
+});
+it("keeps the size and shape of a table kept where it stood", () => {
+  const [, t2] = resolveTodayPlan({ ...base, changes: [change({ tableId: T2, sparePlaced: true, x: 30, y: 30, width: 4, height: 6, shape: "round" })] });
+  expect(t2.placement).toEqual({ x: 30, y: 30, width: 4, height: 6, shape: "round", rotation: 0 });
 });
 it("unplaces yesterday's placed spare once nobody sits there", () => {
   const [, t2] = resolveTodayPlan({ ...base, changes: [change({ tableId: T2, businessDay: "2026-10-08", sparePlaced: true, x: 30, y: 30 })] });
@@ -379,7 +393,7 @@ it("takes the latest live change when two days' rows apply", () => {
 
 - [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/server exec vitest run src/floor-today.test.ts`. Expected: cannot import `./floor-today.js`.
 - [ ] **Step 3: Implement** the two functions as stated. No database access in this file.
-- [ ] **Step 4: Run** the same command. Expected: PASS, 10 tests.
+- [ ] **Step 4: Run** the same command. Expected: PASS, 11 tests.
 - [ ] **Step 5: Commit.**
 
 ### Task 1.3: A party keeps its table names when it closes
@@ -461,8 +475,8 @@ where value like … )` (and `= … collate nocase`) — add the `parties` join 
 **Interfaces:**
 - Produces: `export async function releaseDeliveries(tx: Transaction, tableId: string, label: string): Promise<void>`
   — one update: every `working_orders` row with `delivery_table_id` = the table gets
-  `delivery_table_id = null, delivery_table_label = label`. It decides nothing; Task 1.8 calls it
-  only after refusing while a delivery to the table is still live.
+  `delivery_table_id = null, delivery_table_label = label`. It decides nothing; `purgeDeletedTables` (Task 1.8) calls it
+  only for a deleted table nothing ties any more, so no live order is ever released.
 
 - [ ] **Step 0: STOP check.** Spec §8 stops the work if a table involved is append-only. Run
 `git grep -n "appendOnly(" -- 'packages/*/src/*classification*.ts'` and confirm `working_orders`,
@@ -508,8 +522,8 @@ against `0117` by eye: only the three added `IS` clauses and the new branch.
   `coalesce(dd.label, wo.delivery_table_label)`)
 - Read, and say in the commit why each needs no change: `department-transfer-api.ts:200`,
   `watch-zones.ts:37-53`, the floor's pending count (`working-order.ts:7015-7024`), the expo queue
-  (`:6652`) — each reads only orders Delete refuses on (Task 1.8), so a released order never
-  reaches it. If one does reach released orders, give it the same fallback.
+  (`:6652`) — each reads only live orders, and the purge (Task 1.8) releases only a table with
+  no live order, so a released order never reaches it. If one does reach released orders, give it the same fallback.
 - Test: `apps/server/src/delivery-release.test.ts` (extend), `packages/db/src/party-table-labels.test.ts` if it exists (else the server test)
 
 - [ ] **Step 1: Write the failing tests** — after `releaseDeliveries` on a settled delivered
@@ -605,11 +619,10 @@ screen's existing "no table" text.
   nothing else calls it once the route changes, `updateTable` writes `active` itself),
   `apps/server/src/management-api.ts` (the DELETE route, `:1806`; deps type `:167` gains
   `tableRemovals?: readonly TableRemoval[]`, default `[]`), `apps/server/src/boot.ts` (the
-  management API mount, `:1541`, passes `enabledTableRemovals(setsToMigrate)`),
-  `apps/server/src/errors.ts` (`table.in_use { tableId }`), `STATUS` (`management-api.ts:251`:
-  `table.in_use: 409`, `table.booked: 409`), `apps/dashboard/src/api/client.ts` (`deactivateTable(id)`
-  sends `PATCH /management-api/tables/:id {active:false}`; new `deleteTable(id)` sends `DELETE`),
-  `apps/dashboard/src/i18n/codes.ts` (`table.in_use`, `table.booked`, EN and ES)
+  management API mount, `:1541`, passes `enabledTableRemovals(setsToMigrate)`), `STATUS`
+  (`management-api.ts:251`: `table.booked: 409`), `apps/dashboard/src/api/client.ts`
+  (`deactivateTable(id)` sends `PATCH /management-api/tables/:id {active:false}`; new
+  `deleteTable(id)` sends `DELETE`), `apps/dashboard/src/i18n/codes.ts` (`table.booked`, EN and ES)
 - Test: `apps/server/src/table-delete.test.ts` (new); `apps/server/src/management-api.test.ts`
 - Existing tests that use `DELETE /management-api/tables/:id` (lines at `main` `25cd6d599`):
   `:1243` and `:1270` pin switching off by DELETE (removed behaviour: change them in the
@@ -620,54 +633,73 @@ screen's existing "no table" text.
 **Interfaces:**
 - Consumes: `TableRemoval` (Task 1.6), `closePartyTables` on every close (Task 1.3),
   `releaseDeliveries` (Task 1.4).
-- Produces: `export async function deleteTable(tx: Transaction, cfg: TillConfig, tableId: string, removals: readonly TableRemoval[], now?: Date): Promise<void>`
+- Produces:
 
-Order inside the one transaction:
-1. The table exists in this venue, else `table.not_found`.
-2. Refuse `table.in_use` when a `party_tables` row of an OPEN party names the table (held, or
-   left earlier while the party is still open).
-3. Refuse `table.in_use` when an order to it is still live: `delivery_table_id` = the table and
-   either `status` is `open` or `placed` (not yet paid), or the floor's pending-delivery test holds
-   (not abandoned, `collected_at` null, has ticket items — the same conditions as
-   `working-order.ts:7015-7023`).
-4. Each removal's `refuse`; then each removal's `release`; then `releaseDeliveries(tx, id, label)`.
-5. Delete the table's `floor_today_join_tables` rows (and any today's join left with fewer than
-   two members, with its members), `floor_today_tables`, `floor_plan_join_tables` (and any saved
-   join left with fewer than two members), `floor_plan_tables`, then the `dining_tables` row.
-6. A foreign-key refusal at that last delete (rows of a module switched off since, or a party
-   closed before slice 1) is rethrown as `table.in_use`, identified by
-   `isRefusal(error, FOREIGN_KEY_VIOLATION)` (`packages/db/src/sql-state.ts:24`; every key into
-   `dining_tables` is `no action`, which this engine refuses with code 787 — measured by the plan
-   review on Node v26.7.0 `node:sqlite`; `restrictRefused` matches only 1811 and would never fire).
+```ts
+export async function deleteTable(tx: Transaction, cfg: TillConfig, tableId: string, removals: readonly TableRemoval[], now?: Date): Promise<void>;
+/** Whether anything still ties the table to service: an open party that holds it or used it earlier
+ *  in its meal, or an order to it that is unpaid or whose food is on its way. */
+export async function tableTied(tx: Transaction, tableId: string): Promise<boolean>;
+/** Removes, for good, every deleted table nothing ties any more. */
+export async function purgeDeletedTables(tx: Transaction, cfg: TillConfig): Promise<void>;
+```
+
+`deleteTable`, in one transaction (decision 5):
+1. The table exists in this venue and is not already deleted, else `table.not_found`.
+2. Each removal's `refuse` (bookings: an upcoming booking, `table.booked`); then each removal's
+   `release`.
+3. Delete its saved position and its saved-join memberships (and any saved join left with fewer
+   than two members, with its members); set `dining_tables.deleted_at`.
+4. `purgeDeletedTables`, which removes it at once when nothing ties it.
+
+`tableTied`: a `party_tables` row of an OPEN party names it (held, or left earlier in the meal);
+or an order names it in `delivery_table_id` and either its `status` is `open` or `placed`, or the
+floor's pending-delivery test holds (not abandoned, `collected_at` null, has ticket items — the
+conditions at `working-order.ts:7015-7023`).
+
+`purgeDeletedTables`: for each table with `deleted_at` set and not `tableTied`:
+`releaseDeliveries(tx, id, label)`; delete its `floor_today_join_tables` rows (and any today's
+join left with fewer than two members, with its members), its `floor_today_tables` rows, then the
+`dining_tables` row. A foreign-key refusal at that last delete (rows of a module switched off since
+it was deleted, or of a party closed before slice 1) leaves the table for a later purge: catch it
+by `isRefusal(error, FOREIGN_KEY_VIOLATION)` (`packages/db/src/sql-state.ts:24`; every key into
+`dining_tables` is `no action`, which this engine refuses with code 787 — measured by the plan
+review on Node v26.7.0 `node:sqlite`; `restrictRefused` matches only 1811 and would never fire) and
+carry on with the next table — a refused statement backs out only itself (CLAUDE.md §3). Any
+other error is rethrown.
 
 - [ ] **Step 1: Write the failing tests:**
 
 ```ts
-it("deletes a free table with history, and its name can be used again at once", async () => {
+it("removes a free table with history at once, and its name can be used again", async () => {
   /* a party seated and finished at it (Task 1.3 released it); a delivered order to it, settled and
      collected; a settled delivered order never collected that had no ticket items; a saved
      position; a saved join of it with two others. deleteTable: the row is gone, both orders keep
      deliveryTableLabel, the saved join now has two members, the position is gone; createTable
      with the same label succeeds */
 });
-it("refuses while a party sits at it", async () => { /* code table.in_use, params {tableId} */ });
-it("refuses while an open party that moved away still has it in its history", async () => { /* … */ });
-it("refuses while an order to it is unpaid", async () => { /* open or placed delivery order */ });
-it("refuses while food is still on its way to it", async () => { /* settled, not collected, with ticket items */ });
-it("refuses while a module refuses, and lets nothing go", async () => {
-  /* a fake TableRemoval whose refuse throws table.booked; release never called; the delivered
-     order still has its link */
+it("takes a seated table off the saved plan at once but keeps the row while the party sits there", async () => {
+  /* seat at t4; deleteTable: no saved position or saved join for t4, deletedAt set, the row
+     remains; finish the party: the row is gone */
+});
+it("keeps a table an open party moved away from until that party closes", async () => { /* … */ });
+it("keeps a table while an order to it is unpaid, and removes it at the next purge once paid and collected", async () => { /* … */ });
+it("refuses while a module refuses, and changes nothing", async () => {
+  /* a fake TableRemoval whose refuse throws table.booked; release never called; the saved position
+     is still there and deletedAt is null */
 });
 it("drops a saved join left with one table", async () => { /* join of t1+t2, delete t2: no join rows remain */ });
-it("answers table.in_use, not a 500, when a row it does not know about still names the table", async () => {
-  /* insert a party_tables row for a CLOSED party by hand (as before slice 1); deleteTable rejects
-     with code table.in_use; caught outside the transaction */
+it("leaves a table something unknown still names for a later purge, without failing", async () => {
+  /* insert a party_tables row for a CLOSED party by hand (as before slice 1); deleteTable resolves;
+     deletedAt set, the row remains; delete the stray row; purgeDeletedTables: the row is gone */
 });
+it("refuses deleting a table already deleted", async () => { /* table.not_found */ });
 ```
 
 and in `management-api.test.ts`: `DELETE /management-api/tables/:id` answers 204 and the table is
-gone from `GET /management-api/tables?includeDisabled=true`; 409 `table.in_use` while seated; 403
-for staff; 401 without a session.
+gone from `GET /management-api/tables?includeDisabled=true` (Task 1.9 hides a deleted table still
+in use; until then assert only a free table); 409 `table.booked` from a refusing removal; 403 for
+staff; 401 without a session.
 
 - [ ] **Step 2: Run and watch them fail** — `pnpm --filter @waitron/server exec vitest run src/table-delete.test.ts`. Expected: `deleteTable` is not exported.
 - [ ] **Step 3: Implement.** Then the dashboard client change and its test (the assertion pinning
@@ -678,7 +710,69 @@ commit).
 Expected: pass.
 - [ ] **Step 5: Commit** (and the separate `Changed test checks (A429 slice 1):` commit).
 
-### Task 1.9: Read and save a zone's saved plan
+### Task 1.9: A deleted table still in use stays where it stands until it is free
+
+**Files:**
+- Create: `apps/server/src/floor-today-store.ts`, `apps/server/src/deleted-table-in-use.test.ts`
+- Modify: `packages/reporting/src/index.ts` (export `businessDayOf`, `business-day.ts:170`);
+  `apps/server/src/tables.ts` (`deleteTable` keeps a held table where it stands before step 3;
+  `listTables`, `:110-136`, leaves out deleted tables, with `includeDisabled` too);
+  `apps/server/src/parties.ts` and `apps/server/src/table-actions.ts` (`closePartyTables`' callers
+  run `purgeDeletedTables` after it); every path that seats, joins or moves a party to a table
+  treats a deleted table as `table.not_found` (`openTab`, `working-order.ts:1201`;
+  `readTargetTable`, `move-bill.ts:225`; `seatTable`, `parties.ts:78`);
+  `listTablesWithState` (`working-order.ts:7027`) leaves out a deleted table unless a party holds
+  it; `report-api.ts:170-172` (`countOpenTables`) leaves out deleted tables;
+  `packages/venue-service/src/operations.ts` (`:225-233`, `:254`, `:311-321`: removal impact and
+  zone switch-off ignore deleted tables); `packages/bookings/src/bookings.ts:60`
+  (`requireActiveTable` refuses a deleted table as it refuses an inactive one)
+
+**Interfaces:**
+- Consumes: `deleteTable`, `purgeDeletedTables` (Task 1.8).
+- Produces:
+
+```ts
+// floor-today-store.ts
+export async function todayBusinessDay(tx: Transaction, cfg: TillConfig, now: Date): Promise<string>; // businessDayOf(now, await readLocationClock(tx, cfg.locationId))
+/** A held table about to lose its saved position keeps it on today's plan until its party leaves. */
+export async function keepWhereItStands(tx: Transaction, cfg: TillConfig, tableId: string, now: Date): Promise<void>;
+```
+
+`keepWhereItStands` does nothing when no party holds the table, or when the table already has a
+live today's row with a position. Otherwise it writes (or updates) today's row for the table with
+`spare_placed = true` and the saved position's `x`, `y`, `rotation`, `width`, `height` and `shape`.
+That row stays live while the party holds the table (the "today" rule), so the table stays where
+it stood; once the party leaves, the row stops applying.
+
+- [ ] **Step 1: Write the failing tests:**
+
+```ts
+it("keeps a deleted, seated table on today's plan where it stood", async () => {
+  /* saved position x 10 y 4, 8×8 round; seat; deleteTable; floorRow(t).today.placement equals
+     the old saved position */
+});
+it("drops it from the till and the tables list once the party leaves", async () => {
+  /* finish: listTablesWithState has no row for it; GET /api/tables has none */
+});
+it("does not list a deleted table still in use on the dashboard", async () => {
+  /* listTables(includeDisabled) leaves it out while the party sits there */
+});
+it.each(["seat", "join", "move guests to", "move a bill to"])(
+  "refuses to %s a deleted table still in use", async (verb) => { /* table.not_found */ });
+it("frees the name once the table is gone for good, not before", async () => {
+  /* while seated: createTable with its label → table.label_taken; after finish → succeeds */
+});
+```
+
+- [ ] **Step 2: Run and watch them fail** — `pnpm --filter @waitron/server exec vitest run src/deleted-table-in-use.test.ts`. Expected: no `today` placement; the deleted table still listed.
+- [ ] **Step 3: Implement.** Find every other reader that should skip a deleted table with
+`git grep -n "diningTables\|dining_tables" -- 'apps/*/src/*.ts' 'packages/*/src/*.ts' ':!*.test.ts'`;
+for each not named above, decide and say in the commit why it may still see deleted rows (a read
+by id of a table an open party holds may; a list a person chooses from may not).
+- [ ] **Step 4: Run** the file and `pnpm --filter @waitron/server exec vitest run src/table-delete.test.ts src/party-table-actions.test.ts src/till-api.tables.test.ts src/report-api.test.ts`, `pnpm --filter @waitron/venue-service exec vitest run src/operations.test.ts`, `pnpm --filter @waitron/bookings exec vitest run`. Expected: pass.
+- [ ] **Step 5: Commit.**
+
+### Task 1.10: Read and save a zone's saved plan
 
 **Files:**
 - Create: `apps/server/src/floor-plan.ts`, `apps/server/src/floor-plan.test.ts`
@@ -702,7 +796,8 @@ export async function readZonePlan(tx: Transaction, cfg: TillConfig, zoneId: str
 export async function saveZonePlan(tx: Transaction, cfg: TillConfig, zoneId: string, input: ZonePlanSave): Promise<{ revision: number; ids: Record<string, string> }>; // ids: key → table id
 ```
 
-`readZonePlan` lists every table of the zone (`zone_id` = zone; until slice 5 also `active`), its
+`readZonePlan` lists every table of the zone that is not deleted (`zone_id` = zone,
+`deleted_at` null; until slice 5 also `active`), its
 seats from `capacity`, placement from `floor_plan_tables`, and the plan's joins; a zone with no
 plan reads `revision: 0, savedAt: null`, every table unplaced.
 
@@ -712,14 +807,15 @@ revision (else `floor_plan.changed`, nothing written); each entry's checks, nami
 non-empty, seats null or a whole number 0–999, placement ranges as Task 1.1's checks, a join has
 two or more distinct keys all in `tables` and seats ≥ 1; an `id` that is not a table of this zone
 is `table.not_found`; a duplicate label within the input or against a table outside the input is
-`table.label_taken { label }`; a table an open party holds whose placement is null is
-`table.in_use`; a table of the zone missing from the input (someone added it since the copy was
+`table.label_taken { label }`; an `id` of a deleted table is `table.not_found`; a table of the
+zone that is not deleted and is missing from the input (someone added it since the copy was
 read) is `floor_plan.changed`. Then write, in this order: every changed label to the row's own
 id (first pass); the new tables (`zone_id` = zone); every changed label to its final value
 (second pass), so neither a swap nor a new table taking a renamed table's old name collides
 (the plan review measured the other order failing with `UNIQUE constraint failed`); `capacity`
 and `fixed`; delete then insert the plan's positions, and its joins and members (nothing outside
-those tables holds a key into them); bump `revision`, set `saved_at`.
+those tables holds a key into them); bump `revision`, set `saved_at`. A held table whose saved position this save removes is first
+kept where it stands (`keepWhereItStands`, Task 1.9; decision 7). Last, `purgeDeletedTables`.
 
 - [ ] **Step 1: Write the failing tests** (`setupPartyVenue`; its tables zone):
 
@@ -755,7 +851,10 @@ it.each([
   ["tables.0.seats", { seats: -1 }],
 ])("refuses %s", async (field, patch) => { /* floor_plan.invalid {field} */ });
 it("refuses a join of one table", async () => { /* joins.0.tableKeys */ });
-it("refuses taking a seated table off the plan", async () => { /* table.in_use */ });
+it("keeps a seated table taken off the plan where it stands today, a spare once the party leaves", async () => {
+  /* seat at t1; save with t1's placement null; floorRow(t1).today.placement is its old position;
+     finish the party: today.spare is true */
+});
 it("refuses a save missing a table of the zone", async () => { /* a table added after the copy: floor_plan.changed */ });
 it("renames T1 to T9 and adds a new T1 in one save", async () => { /* … */ });
 ```
@@ -765,12 +864,12 @@ it("renames T1 to T9 and adds a new T1 in one save", async () => { /* … */ });
 - [ ] **Step 4: Run** the file. Expected: PASS.
 - [ ] **Step 5: Commit.**
 
-### Task 1.10: The saved plan's dashboard routes
+### Task 1.11: The saved plan's dashboard routes
 
 **Files:**
 - Modify: `apps/server/src/management-api.ts` (two routes beside the zone routes, `:1663-1720`;
-  `STATUS`: `floor_plan.changed: 409`, `floor_plan.invalid: 400`, `table.in_use: 409`),
-  `apps/dashboard/src/api/client.ts` (types `FloorPlan`, `FloorPlanSave` mirroring Task 1.9's, and
+  `STATUS`: `floor_plan.changed: 409`, `floor_plan.invalid: 400`),
+  `apps/dashboard/src/api/client.ts` (types `FloorPlan`, `FloorPlanSave` mirroring Task 1.10's, and
   `getFloorPlan(zoneId)`, `saveFloorPlan(zoneId, body)`), `apps/dashboard/src/api/live-queries.ts`
   (`getFloorPlan: ["floor_plans", "floor_plan_tables", "floor_plan_joins", "floor_plan_join_tables", "dining_tables"]`),
   `apps/dashboard/src/i18n/codes.ts` (`floor_plan.changed`, `floor_plan.invalid`, EN and ES)
@@ -796,17 +895,16 @@ it("renames T1 to T9 and adds a new T1 in one save", async () => { /* … */ });
 - [ ] **Step 4: Run** that command, `pnpm exec vitest run scripts/live-subscriptions.test.ts`, and the dashboard client test. Expected: pass.
 - [ ] **Step 5: Commit.**
 
-### Task 1.11: Today's plan in the till's table-state read
+### Task 1.12: Today's plan in the till's table-state read
 
 **Files:**
-- Create: `apps/server/src/floor-today-store.ts`, `apps/server/src/floor-today-state.test.ts`
-- Modify: `apps/server/src/working-order.ts` (`TableState`, `:6845`; `listTablesWithState`,
-  `:6900`), `packages/reporting/src/index.ts` (export `businessDayOf`, `business-day.ts:170`),
+- Create: `apps/server/src/floor-today-state.test.ts`
+- Modify: `apps/server/src/floor-today-store.ts` (created in Task 1.9),
+  `apps/server/src/working-order.ts` (`TableState`, `:6852`; `listTablesWithState`, `:6900`),
   `apps/till/src/api/client.ts` (`TableState`, `:1748`, gains the same field)
 
 **Interfaces:**
-- Consumes: `resolveTodayPlan`, `TodayTable` (Task 1.2); `readLocationClock` and `businessDayOf`
-  from `@waitron/reporting`.
+- Consumes: `resolveTodayPlan`, `TodayTable` (Task 1.2); `todayBusinessDay` (Task 1.9).
 - Produces:
 
 ```ts
@@ -843,7 +941,7 @@ it("lists a zone table with no saved position as a spare", async () => { /* toda
 - [ ] **Step 4: Run** the file and `pnpm --filter @waitron/server exec vitest run src/till-api.tables.test.ts src/working-order.test.ts src/till-api.profile-zones.test.ts`. Whole-shape pins of `TableState` (`toEqual`) gain the `today` key (allowed: adding a key to a whole-shape pin). Expected: pass.
 - [ ] **Step 5: Commit.**
 
-### Task 1.12: Seeds and test helpers write saved plans
+### Task 1.13: Seeds and test helpers write saved plans
 
 **Files:**
 - Modify: `apps/server/scripts/demo-seed/floor.ts` (`DEMO_TABLES`: add a grid placement and
@@ -852,7 +950,7 @@ it("lists a zone table with no saved position as a spare", async () => { /* toda
 - Test: the demo seed's existing test file (find it: `git grep -l seedFloor -- '*.test.ts'`)
 
 **Interfaces:**
-- Consumes: `saveZonePlan` (Task 1.9).
+- Consumes: `saveZonePlan` (Task 1.10).
 
 The grid placement keeps the demo's layout. The old `posX`/`posY` is the table's CENTRE in
 thousandths (`wt-floor-canvas.ts:276-278` draws it with `translate(-50%,-50%)`), and the new `x`/`y`
@@ -910,8 +1008,9 @@ branch.
   exists — add it to `packages/ui` with its two tests).
 - **Task 2.6: The selected table's panel** — name, seats (`wt-number-stepper`), shape, width and
   height, rotation, Fixed in place, its saved joins with Add (which tables, seats) and Remove,
-  Remove from plan, Delete (confirm, then `deleteTable`; `table.in_use` / `table.booked` shown in
-  the panel; on success the table leaves the draft).
+  Remove from plan, Delete (confirm, then `deleteTable`; `table.booked` shown in the panel; on
+  success the table leaves the draft, and when a party sits there the confirmation says it stays
+  on the till until they leave).
 - **Task 2.7: The entry point** — "Edit floor plan" / "Add a floor plan" in the zone row's menu on
   Departments and zones (`venue-operations-screen.ts:1536-1574`), linking to the editor's URL;
   needs `venue.configure` as well as the screen's own permission (hide it otherwise).

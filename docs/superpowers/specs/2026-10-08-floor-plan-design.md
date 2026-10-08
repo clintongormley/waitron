@@ -92,7 +92,8 @@ the details one tap away.
   place, and:
   - **Joins:** the saved joins this table is part of ("with 5 · seats 6"), with Add (which tables,
     how many seats) and Remove. A saved join's tables are all in this zone.
-  - **Remove from plan:** the table becomes a spare.
+  - **Remove from plan:** the table becomes a spare. A table a party sits at keeps its place on
+    today's plan until the party leaves (owner, 2026-10-08).
   - **Delete:** section 8.
 - **New table defaults:** a square of 8 × 8 grid squares, not rotated, movable.
 - **Saving** writes the whole plan, its tables, their positions and its saved joins in one
@@ -199,8 +200,13 @@ undone at the next reset anyway.
 - **Everything about the past reads the copied text**, so a later rename never changes history,
   including a future report by table, and nothing in the past needs the table's row.
 - **Delete** removes the table, its saved positions, its saved joins and its rows in today's plan.
-  It is allowed only on a free table with no upcoming booking assigned to it. Its name can be used
-  again at once. Because nothing in the past points at a table, Disable and Enable go away: a table
+  It is refused only while an upcoming booking is assigned to the table. **Changed by the owner,
+  2026-10-08** (this replaces "allowed only on a free table" and "its name can be used again at
+  once"): an open party is tied to the table on today's plan, not on the saved plan, so Delete
+  always takes the table off the saved plan at once; a table a party sits at stays where it stood
+  on today's plan until the party leaves, and takes no new party. The table is gone for good, and
+  its name free again, once no open party holds it or used it earlier in its meal and no order to
+  it is unpaid or on its way. The plan, decision 5, has the detail. Because nothing in the past points at a table, Disable and Enable go away: a table
   is placed, a spare, or deleted.
 - **Before building**, every reader of a closed party's tables and of `orders.delivery_table_id` is
   listed. Each one either moves to the copied text or is shown to read only open parties. If any of
@@ -282,8 +288,9 @@ Each claim is checked by running something, not by reading.
   tab to close.
 - **Saving:** a save from an older copy is refused; a duplicate name is refused beside its field;
   automatic names number on from the highest in use.
-- **Delete:** a free table goes and its name is reusable; refused with an open tab and with an
-  upcoming booking.
+- **Delete:** a free table goes and its name is reusable; a seated table leaves the saved plan at
+  once, stays on today's plan until its party leaves, then goes and frees its name; refused with
+  an upcoming booking.
 - **History:** renaming a table after its party closed leaves the party's name and a reprinted
   receipt unchanged.
 - **Migration:** the upgrade test, and the foreign-key list and generated SQL above.
