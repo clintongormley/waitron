@@ -1,3 +1,4 @@
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -35,10 +36,8 @@ import {
   orderServiceContexts,
   replaceMenuWeek,
   saveMenuPeriod,
-  setDepartmentAllDayMenu,
-  setDepartmentMenus,
+  updateMenuPeriod,
   setProfileServiceAccess,
-  setZonePeriodMenu,
   workingLineContexts,
   type MenuSlot,
 } from "@waitron/venue-service";
@@ -134,12 +133,6 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
   endsAt,
 });
 
-/**
- * A provisioned venue with Restaurant (Barra, Sala, Terraza) listing Desayunos, Almuerzo, Bebidas
- * and Café, all-day Bebidas, and Deli (Mostrador deli) listing Deli para llevar. With `timetable`,
- * Restaurant runs Mañanas (Desayunos) 09:00–12:00 and Mediodía (Almuerzo) 12:00–16:00 every day,
- * Ana's till has a Restaurant profile starting at Barra.
- */
 async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
   const venue = await applyVenue(
     planVenue(
@@ -234,19 +227,18 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
     );
     const versions = {} as Record<MenuName, string>;
     for (const name of MENUS) versions[name] = await publishWorkingMenu(tx, menus[name]);
-    await setDepartmentMenus(tx, cfg, restaurant, [
-      menus.Desayunos,
-      menus.Almuerzo,
-      menus.Bebidas,
-      menus["Café"],
-    ]);
-    await setDepartmentAllDayMenu(tx, cfg, restaurant, menus.Bebidas);
-    await setDepartmentMenus(tx, cfg, deli, [menus["Deli para llevar"]]);
-    await setDepartmentAllDayMenu(tx, cfg, deli, menus["Deli para llevar"]);
+    await offerMenuThroughZone(tx, cfg, mostrador, menus["Deli para llevar"], {
+      makeDefault: true,
+    });
     if (options.timetable) {
       const period = async (name: string, menu: MenuName) =>
-        (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId: menus[menu], staffMenuIds: [] }))
-          .id;
+        (
+          await saveMenuPeriod(tx, cfg, restaurant, {
+            name,
+            menuId: menus[menu],
+            staffMenuIds: [menus.Bebidas, menus["Café"]],
+          })
+        ).id;
       const mananas = await period("Mañanas", "Desayunos");
       const mediodia = await period("Mediodía", "Almuerzo");
       await replaceMenuWeek(
@@ -259,7 +251,10 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
         })),
         MONDAY_10_00,
       );
-      await setZonePeriodMenu(tx, cfg, barra, mananas, menus["Café"]);
+    } else {
+      await offerMenuThroughZone(tx, cfg, barra, menus.Bebidas, { makeDefault: true });
+      for (const menu of [menus.Desayunos, menus.Almuerzo, menus["Café"]])
+        await offerMenuThroughZone(tx, cfg, barra, menu);
     }
     const [person] = await tx
       .insert(persons)
@@ -359,7 +354,23 @@ const linesOf = (tx: Transaction, workingOrderId: string) =>
     )
     .where(eq(workingOrderLines.workingOrderId, workingOrderId));
 
-describe("ordering stays membership-only while browsing follows the timetable", () => {
+async function replacePeriodMembership(
+  tx: Transaction,
+  cfg: TillConfig,
+  departmentId: string,
+  menuIds: readonly string[],
+) {
+  const periods = await tx
+    .select({ id: menuPeriods.id, menuId: menuPeriods.menuId })
+    .from(menuPeriods)
+    .where(eq(menuPeriods.departmentId, departmentId));
+  for (const period of periods)
+    await updateMenuPeriod(tx, cfg, period.id, {
+      staffMenuIds: menuIds.filter((id) => id !== period.menuId),
+    });
+}
+
+describe("ordering uses period membership while browsing follows the timetable", () => {
   it("prices a Desayunos line at Desayunos's price after its period has ended", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_13_00);
@@ -372,11 +383,11 @@ describe("ordering stays membership-only while browsing follows the timetable", 
     expect(lines).toMatchObject([{ unitPriceGross: 250, menuName: "Desayunos" }]);
   });
 
-  it("sells another department's menu in its own zones once it is on the department's list, and only then", async () => {
+  it("sells another department's menu in its own zones once it is in the department's periods, and only then", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_13_00);
     await withTransaction(suite.db, (tx) =>
-      setDepartmentMenus(tx, v.cfg, v.restaurant, [
+      replacePeriodMembership(tx, v.cfg, v.restaurant, [
         v.menus.Desayunos,
         v.menus.Almuerzo,
         v.menus.Bebidas,
@@ -404,7 +415,7 @@ describe("ordering stays membership-only while browsing follows the timetable", 
     });
 
     await withTransaction(suite.db, (tx) =>
-      setDepartmentMenus(tx, v.cfg, v.restaurant, [
+      replacePeriodMembership(tx, v.cfg, v.restaurant, [
         v.menus.Desayunos,
         v.menus.Almuerzo,
         v.menus.Bebidas,
@@ -421,7 +432,7 @@ describe("ordering stays membership-only while browsing follows the timetable", 
     });
   });
 
-  it("refuses a line asserting a menu the department no longer lists, and leaves the lines already held as they were", async () => {
+  it("refuses a line asserting a menu removed from the department's periods, and leaves the lines already held as they were", async () => {
     const v = await setupVenue({ timetable: false });
     at(MONDAY_10_00);
     const offers = (await send(v, "GET", `/api/service-zones/${v.sala}/offers`)).body as {
@@ -436,7 +447,7 @@ describe("ordering stays membership-only while browsing follows the timetable", 
     ]);
 
     await withTransaction(suite.db, (tx) =>
-      setDepartmentMenus(tx, v.cfg, v.restaurant, [
+      replacePeriodMembership(tx, v.cfg, v.restaurant, [
         v.menus.Almuerzo,
         v.menus.Bebidas,
         v.menus["Café"],
@@ -572,10 +583,10 @@ describe("menu-state follows department service periods", () => {
       service: { open: false, periodName: null },
     });
     expect(answer.body.menus).toEqual([
-      { menuId: v.menus.Desayunos, versionId: v.versions.Desayunos },
-      { menuId: v.menus.Almuerzo, versionId: v.versions.Almuerzo },
-      { menuId: v.menus.Bebidas, versionId: v.versions.Bebidas },
       { menuId: v.menus["Café"], versionId: v.versions["Café"] },
+      { menuId: v.menus.Almuerzo, versionId: v.versions.Almuerzo },
+      { menuId: v.menus.Desayunos, versionId: v.versions.Desayunos },
+      { menuId: v.menus.Bebidas, versionId: v.versions.Bebidas },
     ]);
   });
   it.each([
