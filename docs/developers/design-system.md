@@ -1565,10 +1565,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase, shift, bookings and watcher forms, the product
   editor, the unit form, the menus screen's section and menu details form and an include's Edit
-  dialog do this, each with an edit-first reconnect case; the last four also have a case that
-  reopens on another record after a save and one that saves, is put back and stays quiet
-  (`product-editor`, `catalogue-forms`, `section-details-form` and
-  `include-folder-form.unsaved.test.ts`). The recipe editor
+  dialog do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
   extras picker and station dialogs keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;

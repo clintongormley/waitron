@@ -448,7 +448,6 @@ export class ProductEditor extends LitElement {
   #categoryNodes: ReadonlyMap<string, CategorySummary> = new Map();
 
   #draftScope?: DraftScope<ProductEditorDraft>;
-  /** Survives disconnect, so an edit kept across a put-back still compares against it. */
   #baseline?: ProductEditorDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {

@@ -87,7 +87,6 @@ export class SectionDetailsForm extends LitElement {
   @state() private dismissed = new Set<string>();
   @state() private pickerOpen = false;
   #scope?: DraftScope<SectionInput>;
-  /** Survives disconnect, so an edit kept across a put-back still compares against it. */
   #baseline?: SectionInput;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>

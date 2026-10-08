@@ -1829,10 +1829,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   variant, purchase and shift forms and the bookings form. Each one failed both cases on main (an
   edit made after the form is put back, and one made before it was taken out) and passes with the
   fix; the purchase and shift forms and the bookings form also replaced an edit made before
-  removal with the stored values. DONE for the last two in A397 part 2: the product editor failed
-  both cases before its fix (`product-editor.unsaved.test.ts`), and the unit form, which already
-  asked after being put back, failed only the edit-first case (`catalogue-forms.unsaved.test.ts`);
-  both pass after. Also seen in the purchase and shift forms' tests, not changed and not
+  removal with the stored values. DONE for the seventh in A397 part 2: the product editor failed
+  both cases before its fix (`product-editor.unsaved.test.ts`) and passes after. The same branch
+  closed the unit form's edit-first point under batch 2a. Also seen in the purchase and shift forms' tests, not changed and not
   tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
   neither asks nor closes until focus is back on a field inside the dialog (the tests put it there
   with `focus()`; a click was not tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`,
@@ -1864,7 +1863,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   wait for lane D's A366 slices and batch 4b. Local holiday and watcher forms landed in #1418,
   preparation stations in #1426. Next action: after the relevant A366 slices land, finish batch
   4b and rerun the inventories on the rewritten forms. A396's disabled-zone profile ruling is
-  done in #1428; A397's reconnect work and A231q's future invoice screens remain separate tasks.
+  done in #1428; A231q's future invoice screens remain a separate task.
 
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected

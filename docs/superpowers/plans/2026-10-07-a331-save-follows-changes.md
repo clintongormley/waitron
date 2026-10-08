@@ -2054,7 +2054,7 @@ menus screen suites that host the two menus forms (found by grep).
 `design-system.md` → Forms: rewrite (not just append to) the sentence saying the product editor
 does not yet take a scope only while connected (~1558-1560) and the unit-form and menus sentences
 (~1567-1570); the four forms join the list that keeps an edit made before removal. `docs/backlog.md`:
-mark #1414's point (2) under batch 5 (~line 1820) done for the product editor and the unit form, batch 2a's "Left open"
+mark #1414's point (2) under batch 5 (~line 1820) done for the product editor (the unit form was not among the seven forms #1414 named; its edit-first point is batch 2a's), batch 2a's "Left open"
 note done for the unit form (say which other batch 2a forms remain untried for Case E), and batch
 2b's (#1424) edit-first point done for the two menus forms. Changed test checks (if any) in
 `~/waitron-campaign-c/item-a397-2-changed-tests.md` and the PR. No visual change, so no screenshots.

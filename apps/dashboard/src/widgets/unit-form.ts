@@ -78,7 +78,6 @@ export class UnitForm extends LitElement {
   @state() private precisionUsageUnavailable = false;
   #usageGeneration = 0;
   #scope?: DraftScope<UnitDraft>;
-  /** Survives disconnect, so an edit kept across a put-back still compares against it. */
   #baseline?: UnitDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
