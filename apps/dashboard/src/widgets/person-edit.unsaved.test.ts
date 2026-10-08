@@ -6,7 +6,12 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { PersonSummary } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./person-edit.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -214,4 +219,61 @@ it("standalone Edit staff Cancel reports once after its native delayed close", a
   await closeReportsDelivered();
   expect(closes).toBe(1);
   expect(form.open).toBe(false);
+});
+function emailField(form: HTMLElement) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "[data-test=edit-email]",
+  )!;
+}
+async function saveButton(form: HTMLElementTagNameMap["dashboard-person-edit"]) {
+  await form.updateComplete;
+  const save = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=save]",
+  )!;
+  await save.updateComplete;
+  return { variant: save.variant, disabled: save.disabled };
+}
+it("Edit staff put back after a detached update still asks before Escape discards an edit", async () => {
+  const { app, form } = await mount();
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "email", "new@example.com");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("Edit staff keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, form } = await mount();
+  await edit(form, "email", "new@example.com");
+  await reattachAfterDetachedUpdate(form);
+  expect(emailField(form).value).toBe("new@example.com");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("Edit staff reopened after a put-back edit was discarded opens quiet with the person's values", async () => {
+  const { app, form } = await mount();
+  await edit(form, "email", "new@example.com");
+  await reattachAfterDetachedUpdate(form);
+  cancel(form);
+  const q = await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+  await expect.poll(() => app.closes).toBe(1);
+  await closeReportsDelivered();
+  app.person = { ...person, personId: "p2", email: "bea@example.com" };
+  app.requestUpdate();
+  await app.updateComplete;
+  form.open = true;
+  await form.updateComplete;
+  expect(emailField(form).value).toBe("bea@example.com");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect((await saveButton(form)).disabled).toBe(true);
+  await edit(form, "telephone", "+44 20");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await edit(form, "telephone", "");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });
