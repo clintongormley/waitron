@@ -74,7 +74,11 @@ instead of three, and for configuration pages that are only about configuration.
 | Normal week | A department's seven days. |
 | Named day | A date with a name: a public holiday, or one of the venue's own days. It may have its own hours. |
 | Prep station | Where a dish is made. It has no hours to set. |
-| Monitor | A kind of live screen a device runs: today a prep station monitor or a pass monitor. |
+| Kitchen display | A screen on a kitchen or pass wall that runs one working screen, with buttons: a station screen (start, ready, done) or a pass screen (Fire, Ready, Away, Done). Or it runs a monitor. |
+| Monitor | A view-only screen with no buttons, such as a wall screen showing the pass queue. Today: the pass monitor. |
+
+_(2026-10-08: "Kitchen display" added and "Monitor" narrowed to view-only screens, from the owner's
+answers to the slice 5 plan; the earlier entry called every kitchen screen a monitor. See §9.4.)_
 
 A terrace that closes earlier than the bar is a **zone**, not a department: as a department its
 tabs could only reach the bar's till by transfer, its staff would be walled off, and its periods
@@ -235,7 +239,7 @@ Watchers tabs go.
 - **Stations:** station, the printers its tickets print on, "Shown on" (the devices whose monitors
   show it, a read-out), and a link to Opening hours for when it gets orders. Edit, Make default and
   Disable are in the ⋮ menu. Editing a station sets its name, its printers and "Show the rest of
-  the order".
+  the order". _(2026-10-08: "monitors" here means §9.4's revised kitchen screens and monitors.)_
 - **Routing:** the grid of #1363, with section 8's period choices in a cell. The "Where is this
   made?" tester goes (owner, 2026-10-07): the grid lays out every answer, and the station-closed
   explanations it gave no longer arise. The one thing only the tester showed is how extras are
@@ -248,15 +252,32 @@ Watchers tabs go.
 
 ### 9.4 Device profiles and devices
 
-Watchers go. A **device profile** says which monitors its devices may run and what each may show:
+_(2026-10-08: revised to the owner's answers to the slice 5 plan,
+[2026-10-08-a366-slice-5-monitors.md](../plans/2026-10-08-a366-slice-5-monitors.md), which holds
+the detail. The earlier text called every kitchen screen a monitor, kept them to one kind of
+device, and made "Run the pass" a profile action.)_
 
-- **Prep station monitor:** which stations.
-- **Pass monitor:** which stations and which zones. Firing, Ready and Away are a profile action,
-  "Run the pass".
+Watchers go. A **device profile** says which kitchen screens its devices may run and what each may
+show:
 
-A **device** picks its profile, then its monitor, then its stations and zones within what the
-profile allows. Today a device binds exactly one station or watcher; it now binds a monitor and a
-set of stations and zones. Floor plan and sales monitors are later work.
+- **Station screen** (a working screen; buttons to start, ready and finish dishes): which stations.
+- **Pass screen** (a working screen; Done on each dish, and Fire, Ready and Away): which stations
+  and which zones. Whether Fire, Ready and Away show is a setting of the profile's screens, "Run
+  the pass"; the server keeps checking the action each one takes (taking orders, preparing,
+  handing over).
+- **Pass monitor** (view-only, no buttons): which stations and which zones. Kitchen displays only.
+
+**Any device can run a station or pass screen.** A kitchen display runs exactly one kitchen screen,
+with nobody signed in: the device is the one acting. A till's or handheld's choice narrows its
+Station and Pass screens, and the person signed in acts. Done marks belong to the device, with the
+person when someone is signed in. A kitchen display may later allow a sign-in that lapses only
+after a long idle time (owner, 2026-10-08; in the backlog).
+
+A **device** picks its profile, then its kitchen screen, then its stations and zones within what
+the profile allows. Narrowing a profile is allowed: its devices narrow with it, the dashboard says
+which devices changed, and a device shows "This station is no longer available: Deli" where the
+removed one was. Today a device binds exactly one station or watcher. Floor plan and sales monitors
+are later work.
 
 ## 10. Live controls
 
@@ -303,6 +324,7 @@ Each slice is its own plan and pull request, in this order:
 4. **Prep stations.** Station hours and fallbacks removed; worked-out times in the Week view;
    period choices in routing cells; combined tickets on shared printers; the Stations page slimmed.
 5. **Monitors.** Device profiles' monitors and the device's choice; watchers retired.
+   _(2026-10-08: superseded in its words by §9.4's revised model: kitchen screens and monitors.)_
 6. **Departments.** The list, the Settings and Zones tabs, "How orders start", the service settings
    in the same words for both; the tree table and old tabs removed.
 7. **Receipts per department**, with translated subtitle and footer.
@@ -319,6 +341,9 @@ Each slice is its own plan and pull request, in this order:
 1. Live controls go to the till and kitchen display only (section 10).
 2. A watcher printer that followed one zone (a "Terrace runner" printer) has no replacement:
    combined tickets are set on stations, which have no zone filter. Monitors keep the zone filter
-   for screens.
+   for screens. _(2026-10-08: pass screens and pass monitors both keep it; see §9.4's revised
+   model.)_
 3. Today a watcher keeps its own "Done" marks (`watcher_item_marks`); a pass monitor keeps that
-   behaviour, per device.
+   behaviour, per device. _(2026-10-08: superseded by §9.4's revised model: the Done marks are
+   the pass screen's, per device, with the person when someone is signed in; a pass monitor has
+   none.)_
