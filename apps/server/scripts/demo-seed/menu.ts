@@ -74,6 +74,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Charcuterie", es: "Charcutería", ca: "Xarcuteria", gl: "Charcutaría" },
     station: "kitchen",
+    color: "#f2b6c6",
     products: [
       {
         customerName: {
@@ -152,6 +153,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Cheeses", es: "Quesos", ca: "Formatges", gl: "Queixos" },
     station: "kitchen",
+    color: "#f5da83",
     products: [
       {
         customerName: {
@@ -218,6 +220,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Conserves", es: "Conservas", ca: "Conserves", gl: "Conservas" },
     station: "kitchen",
+    color: "#b5d6a7",
     products: [
       {
         customerName: {
@@ -272,6 +275,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Tapas", es: "Tapas", ca: "Tapes", gl: "Tapas" },
     station: "kitchen",
+    color: "#ffa987",
     products: [
       {
         customerName: {
@@ -356,6 +360,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Sharing plates", es: "Raciones", ca: "Racions", gl: "Racións" },
     station: "kitchen",
+    color: "#b9c5ef",
     products: [
       {
         customerName: {
@@ -417,6 +422,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
       gl: "Pratos principais",
     },
     station: "kitchen",
+    color: "#d9b6e6",
     products: [
       {
         customerName: {
@@ -475,6 +481,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Desserts", es: "Postres", ca: "Postres", gl: "Sobremesas" },
     station: "kitchen",
+    color: "#f1bcb3",
     products: [
       {
         customerName: {
@@ -530,6 +537,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Cocktails", es: "Cócteles", ca: "Còctels", gl: "Cócteles" },
     station: "bar",
+    color: "#9fd5cb",
     products: [
       {
         customerName: { en: "Negroni", es: "Negroni", ca: "Negroni", gl: "Negroni" },
@@ -543,6 +551,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Wine and beer", es: "Vino y cerveza", ca: "Vi i cervesa", gl: "Viño e cervexa" },
     station: "bar",
+    color: "#dfc395",
     products: [
       {
         customerName: {
@@ -575,6 +584,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Soft drinks", es: "Refrescos", ca: "Refrescos", gl: "Refrescos" },
     station: "bar",
+    color: "#add7ef",
     products: [
       {
         customerName: {
@@ -617,6 +627,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
   {
     name: { en: "Coffee", es: "Café", ca: "Cafè", gl: "Café" },
     station: "bar",
+    color: "#d2c0ad",
     products: [
       {
         customerName: { en: "Coffee", es: "Café", ca: "Cafè", gl: "Café" },
@@ -695,6 +706,7 @@ export const MENU_DEL_DIA: Catalogue = {
     {
       name: { en: "Starters", es: "Primeros", ca: "Primers", gl: "Primeiros" },
       station: "kitchen",
+      color: "#c7df92",
       products: [
         {
           customerName: {
@@ -753,6 +765,7 @@ export const MENU_DEL_DIA: Catalogue = {
       name: { en: "Mains", es: "Segundos", ca: "Segons", gl: "Segundos" },
       categoryName: "Lunch mains",
       station: "kitchen",
+      color: "#c6cbed",
       products: [
         {
           customerName: {

@@ -62,6 +62,7 @@ export interface SeedCategory<L extends string = string> {
   /** The reporting category's name, when it cannot be the English section name: categories with
    * one parent must not share a name, while two menus may each have a section called the same. */
   categoryName?: string;
+  color: string;
   station: "kitchen" | "bar" | "deli" | null;
   products: SeedProduct<L>[];
 }

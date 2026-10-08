@@ -38,6 +38,30 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 });
 
 describe("seedCatalogues", () => {
+  it("stores a distinct colour on every top-level demo category", async () => {
+    const { locationId } = await provisionVenue();
+    const rows = await withTransaction(suite.db, async (tx) => {
+      await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      return (
+        await tx.execute<{ name: string; color: string | null }>(sql`
+        select c.name, d.color from categories c
+        join category_details d on d.category_id = c.id
+        where d.parent_id is null
+      `)
+      ).rows;
+    });
+    const expected = Object.values({
+      restaurant: CASA_DELGADO_ES.menus.restaurant,
+      deli: CASA_DELGADO_ES.menus.deli,
+      lunch: CASA_DELGADO_ES.menus.lunch,
+    }).flatMap((menu) =>
+      menu.categories.map((category) => category.categoryName ?? category.name.en),
+    );
+    expect(rows.map((row) => row.name).sort()).toEqual(expected.sort());
+    for (const row of rows) expect(row.color, row.name).toMatch(/^#[0-9a-f]{6}$/);
+    expect(new Set(rows.map((row) => row.color)).size).toBe(rows.length);
+  });
+
   it("includes Drinks as a folder in both restaurant menus", async () => {
     const { locationId } = await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
