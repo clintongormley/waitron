@@ -3411,22 +3411,6 @@ _Formerly B9, and Track C's development-stack and house-rules items; part of A9.
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
   A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
 
-- **The Dockerfile's `bounded()` does not retry an `apt-get update` that cannot connect**, because
-  apt prints "Failed to fetch" and still exits 0 (measured in the A422 probes; apt's own
-  `Acquire::Retries=3` still applies); `APT::Update::Error-Mode=any` would make it fail and be
-  retried, at the cost of failing on any one broken index. Left open by A422 (#1442); queued as A431
-  (campaign lane A, 2026-10-08).
-
-- **`deploy/waitron.sh` (its `apt_get update` / `install` calls for Docker, curl and qrencode) and
-  `bench/sqlite-failover/src/probes/linux-binaries.ts` (`CA_DOCKERFILE`) run apt with no outer
-  limit**; the rule and its guards cover only the workflows and `deploy/Dockerfile`. Left open by
-  A422 (#1442); queued as A431 (campaign lane A, 2026-10-08).
-
-- **Comments in `.github/workflows/ci.yml` (the Chromium install, "restore `--with-deps`") and
-  `mutation.yml` suggest restoring `playwright install --with-deps`**, which runs apt with no outer
-  limit and which neither guard reads. Left open by A422 (#1442); queued as A431 (campaign lane A,
-  2026-10-08).
-
 - **Both image jobs still run `docker/setup-buildx-action`**, whose only stated reason was the
   cache export #1427 removed. Whether the builds still need it (for example for `load: true` or the
   print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no

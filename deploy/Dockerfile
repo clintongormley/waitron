@@ -69,12 +69,13 @@ FROM node:26-slim AS print-agent
 # python3-minimal goes in alone and first, so the packages it adds to the base image can be listed:
 # their Debian copyright files ship in /app/third-party/python3-minimal (deploy/third-party/README.md).
 # apt's own read timeout did not end a wait on a mirror sending a byte every 5 s, so each apt-get runs
-# under an outer limit, and one that stalls or exits non-zero is retried
+# under an outer limit, and one that stalls or exits non-zero is retried; `APT::Update::Error-Mode "any"`
+# makes an update that cannot fetch exit non-zero
 # (docs/developers/ci-and-gates.md, "Every apt wait is bounded"). 300 s, not CI's 60-90 s, because
 # `waitron.sh install <ref>` builds this same file on the box, for a branch or commit, over whatever
 # link the box has. The apt setting is removed again so the image ships none.
 RUN set -eux; \
-  printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+  printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'APT::Update::Error-Mode "any";' \
     > /etc/apt/apt.conf.d/99bounded-waits; \
   bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
   bounded apt-get update; \
@@ -142,7 +143,7 @@ ARG WAITRON_BUILD_ID
 
 # libcap2-bin is here for the setcap below. apt-get is bounded as in the print-agent stage.
 RUN set -eux; \
-  printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+  printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'APT::Update::Error-Mode "any";' \
     > /etc/apt/apt.conf.d/99bounded-waits; \
   bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
   bounded apt-get update; \

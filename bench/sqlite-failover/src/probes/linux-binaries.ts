@@ -22,7 +22,13 @@ const RIG = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BASE_IMAGE = "node:26-slim";
 const CA_DOCKERFILE = [
   `FROM ${BASE_IMAGE}`,
-  `RUN set -eux; apt-get update; apt-get install -y --no-install-recommends ca-certificates; rm -rf /var/lib/apt/lists/*`,
+  `RUN set -eux; \\`,
+  `  printf '%s\\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'APT::Update::Error-Mode "any";' \\`,
+  `    > /etc/apt/apt.conf.d/99bounded-waits; \\`,
+  `  bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \\`,
+  `  bounded apt-get update; \\`,
+  `  bounded apt-get install -y --no-install-recommends ca-certificates; \\`,
+  `  rm -rf /var/lib/apt/lists/* /etc/apt/apt.conf.d/99bounded-waits`,
   ``,
 ].join("\n");
 const PLATFORMS = [
@@ -153,7 +159,7 @@ async function main(): Promise<void> {
       const image = `${RUN_ID}-ca:${tag}`;
       docker(["build", "--platform", platform, "--label", LABEL, "-t", image, "-"], {
         input: CA_DOCKERFILE,
-        timeoutMs: 900_000,
+        timeoutMs: 2_100_000,
       });
       try {
         const full = inside(platform, image, network, "full");
