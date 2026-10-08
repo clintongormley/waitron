@@ -4,7 +4,12 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import type { Shift } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./shift-dialog.js";
 
 const shift: Shift = {
@@ -237,4 +242,82 @@ it("a completed shift save cancels a pending discard question", async () => {
   expect(app.closes).toBe(1);
   expect(form.open).toBe(false);
   expect(unload()).toBe(false);
+});
+
+function roleInput(form: HTMLElement) {
+  return form
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=shift-role]")!
+    .shadowRoot!.querySelector("input")!;
+}
+function roleValue(form: HTMLElement) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "[data-test=shift-role]",
+  )!.value;
+}
+async function saveButton(form: HTMLElementTagNameMap["dashboard-shift-dialog"]) {
+  await form.updateComplete;
+  const save =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  await save.updateComplete;
+  return { variant: save.variant, disabled: save.disabled };
+}
+it("a shift put back after a detached update still asks before Escape discards an edit", async () => {
+  const { app, form } = await mount();
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "role", "kitchen");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("a shift keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, form } = await mount();
+  await edit(form, "role", "kitchen");
+  await reattachAfterDetachedUpdate(form);
+  expect(roleValue(form)).toBe("kitchen");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
+  roleInput(form).focus();
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("a shift put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  await edit(form, "role", "kitchen");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  const completeWrite = form.writeCompletion();
+  await edit(form, "role", "terrace");
+  expect(completeWrite()).toBe(false);
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "role", "kitchen");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("a shift reopened on another shift after a put-back save opens quiet with that shift", async () => {
+  const { app, form } = await mount();
+  await edit(form, "role", "kitchen");
+  await reattachAfterDetachedUpdate(form);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  expect(form.writeCompletion()()).toBe(true);
+  expect(form.open).toBe(false);
+  await closeReportsDelivered();
+  form.shift = { ...shift, id: "s2", role: "terrace" };
+  form.open = true;
+  await form.updateComplete;
+  expect(roleValue(form)).toBe("terrace");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect((await saveButton(form)).disabled).toBe(true);
+});
+it("a shift write that started before the dialog was taken out and put back neither saves nor closes it", async () => {
+  const { app, form } = await mount();
+  await edit(form, "role", "kitchen");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  const completeWrite = form.writeCompletion();
+  await reattachAfterDetachedUpdate(form);
+  expect(completeWrite()).toBe(false);
+  expect(form.open).toBe(true);
+  expect(roleValue(form)).toBe("kitchen");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
 });
