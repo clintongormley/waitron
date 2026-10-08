@@ -6,6 +6,7 @@ import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  floorZones,
   kitchenStations,
   locations,
   tenants,
@@ -63,7 +64,9 @@ import {
   specialDateHoursPeriods,
   specialDates,
 } from "./schema/hours.js";
-import { departments } from "./schema/service.js";
+import { departments, zoneServicePolicies } from "./schema/service.js";
+import { menuDayTimetables, menuSlots } from "./schema/menus.js";
+import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -3420,4 +3423,195 @@ describe("named-day response and colour", () => {
       await withTransaction(db, (tx) => renameSpecialDate(tx, f.cfg, saved.id, "Dinner")),
     ).toEqual({ ...edited, name: "Dinner" });
   });
+});
+
+describe("named-day own-hours switching", () => {
+  async function setup() {
+    const f = await fixture();
+    const other = await fixture();
+    const seeded = await withTransaction(db, async (tx) => {
+      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const lunch = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
+        name: "Lunch",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
+      for (const [cfg, departmentId, periodId] of [
+        [f.cfg, f.departmentIds.restaurant, lunch.id],
+        [
+          other.cfg,
+          other.departmentIds.restaurant,
+          (
+            await saveMenuPeriod(tx, other.cfg, other.departmentIds.restaurant, {
+              name: "Other lunch",
+              menuId: menu!.id,
+              staffMenuIds: [],
+            })
+          ).id,
+        ],
+      ] as const) {
+        await replaceMenuWeek(
+          tx,
+          cfg,
+          departmentId,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            slots: weekday === 5 ? [{ periodId, startsAt: "12:00", endsAt: "15:00" }] : [],
+          })),
+          AT,
+        );
+        const [zone] = await tx
+          .insert(floorZones)
+          .values({ locationId: cfg.locationId, name: "Terrace" })
+          .returning();
+        await tx
+          .insert(zoneServicePolicies)
+          .values({ locationId: cfg.locationId, zoneId: zone!.id, departmentId });
+        await tx.insert(zoneClosedTimes).values([
+          { zoneId: zone!.id, weekday: 5, startsAt: "13:00:00", endsAt: "14:00:00" },
+          { zoneId: zone!.id, weekday: 1, startsAt: "10:00:00", endsAt: "11:00:00" },
+        ]);
+      }
+      return { lunch };
+    });
+    return { f, other, ...seeded };
+  }
+
+  async function snapshot(id: string) {
+    return withTransaction(db, async (tx) => {
+      const days = await tx
+        .select()
+        .from(menuDayTimetables)
+        .where(eq(menuDayTimetables.specialDateId, id));
+      const slots =
+        days.length === 0
+          ? []
+          : await tx
+              .select()
+              .from(menuSlots)
+              .where(
+                inArray(
+                  menuSlots.timetableId,
+                  days.map((d) => d.id),
+                ),
+              );
+      const closures = await tx
+        .select()
+        .from(zoneClosedTimes)
+        .where(eq(zoneClosedTimes.specialDateId, id));
+      return { days, slots, closures };
+    });
+  }
+
+  it("copies only the stored weekday and location when own hours are enabled", async () => {
+    const { f, lunch } = await setup();
+    const day = await saveDate(f, null, specialInput({ ownHours: true }));
+    const rows = await snapshot(day.id);
+    expect(rows.days.map((d) => [d.departmentId, d.weekday, d.specialDateId])).toEqual([
+      [f.departmentIds.restaurant, null, day.id],
+    ]);
+    expect(rows.slots.map((s) => [s.departmentId, s.periodId, s.startsAt, s.endsAt])).toEqual([
+      [f.departmentIds.restaurant, lunch.id, "12:00:00", "15:00:00"],
+    ]);
+    expect(rows.closures.map((c) => [c.weekday, c.specialDateId, c.startsAt, c.endsAt])).toEqual([
+      [null, day.id, "13:00:00", "14:00:00"],
+    ]);
+    const [policy] = await db
+      .select()
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, rows.closures[0]!.zoneId));
+    expect(policy!.locationId).toBe(f.cfg.locationId);
+  });
+
+  it("copies on an off-to-on update and leaves the standard week intact", async () => {
+    const { f } = await setup();
+    const day = await saveDate(f, null, specialInput());
+    expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
+    const before = await db.select().from(menuSlots);
+    await saveDate(f, day.id, specialInput({ ownHours: true }));
+    expect((await snapshot(day.id)).slots).toHaveLength(1);
+    expect(
+      (await db.select().from(menuSlots)).filter((s) => before.some((b) => b.id === s.id)),
+    ).toEqual(before);
+  });
+
+  it("removes all dated department and zone rows when own hours are disabled", async () => {
+    const { f } = await setup();
+    const day = await saveDate(f, null, specialInput({ ownHours: true }));
+    await withTransaction(db, async (tx) => {
+      await saveSpecialDateMenus(tx, f.cfg, day.id, f.departmentIds.deli, [], AT);
+      const [zone] = await tx
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.locationId, f.cfg.locationId));
+      await tx.insert(zoneClosedTimes).values({
+        zoneId: zone!.zoneId,
+        specialDateId: day.id,
+        startsAt: "15:00:00",
+        endsAt: "16:00:00",
+      });
+    });
+    const before = await snapshot(day.id);
+    expect(before.days).toHaveLength(2);
+    expect(before.slots).toHaveLength(1);
+    expect(before.closures).toHaveLength(2);
+    await saveDate(f, day.id, specialInput({ ownHours: false }));
+    expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
+    expect(
+      await db
+        .select()
+        .from(zoneClosedTimes)
+        .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
+        .where(
+          and(eq(zoneClosedTimes.weekday, 5), eq(zoneServicePolicies.locationId, f.cfg.locationId)),
+        ),
+    ).toHaveLength(1);
+  });
+
+  it("keeps dated edits and row identities when own hours remain on", async () => {
+    const { f, lunch } = await setup();
+    const day = await saveDate(f, null, specialInput({ ownHours: true }));
+    await withTransaction(db, (tx) =>
+      saveSpecialDateMenus(
+        tx,
+        f.cfg,
+        day.id,
+        f.departmentIds.restaurant,
+        [{ periodId: lunch.id, startsAt: "16:00", endsAt: "18:00" }],
+        AT,
+      ),
+    );
+    const before = await snapshot(day.id);
+    await saveDate(f, day.id, specialInput({ ownHours: true, name: "Renamed" }));
+    expect(await snapshot(day.id)).toEqual(before);
+  });
+
+  it("rolls back copied rows and the flag when a participant refuses the save", async () => {
+    const { f } = await setup();
+    const day = await saveDate(f, null, specialInput());
+    await expect(
+      withTransaction(db, (tx) =>
+        saveSpecialDate(tx, f.cfg, day.id, specialInput({ ownHours: true }), AT, [
+          {
+            async copy() {},
+            async beforeDelete() {},
+            async afterChange(tx) {
+              const rows = await tx
+                .select()
+                .from(menuDayTimetables)
+                .where(eq(menuDayTimetables.specialDateId, day.id));
+              expect(rows).toHaveLength(1);
+              throw new Error("participant refusal");
+            },
+          },
+        ]),
+      ),
+    ).rejects.toThrow("participant refusal");
+    expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
+    expect((await readSpecialDateAt(f, day.id)).ownHours).toBe(false);
+  });
+
+  async function readSpecialDateAt(f: Fixture, id: string) {
+    return withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, id));
+  }
 });

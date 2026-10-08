@@ -15,6 +15,7 @@ import { readCalendarDays, readHoursModel, replaceWeekHours, saveSpecialDate } f
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { hoursWeekCells, specialDateHours, specialDates } from "./schema/hours.js";
+import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
@@ -204,14 +205,28 @@ describe("station-hours calendar follows department service periods", () => {
           .update(specialDates)
           .set({ ownHours: !closeWholeVenue })
           .where(eq(specialDates.id, special.id));
-        await saveSpecialDateMenus(
-          tx,
-          f.cfg,
-          special.id,
-          f.department,
-          [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }],
-          at,
-        );
+        if (closeWholeVenue) {
+          const [day] = await tx
+            .insert(menuDayTimetables)
+            .values({ departmentId: f.department, specialDateId: special.id })
+            .returning();
+          await tx.insert(menuSlots).values({
+            timetableId: day!.id,
+            departmentId: f.department,
+            periodId: f.period,
+            startsAt: "10:00:00",
+            endsAt: "14:00:00",
+          });
+        } else {
+          await saveSpecialDateMenus(
+            tx,
+            f.cfg,
+            special.id,
+            f.department,
+            [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }],
+            at,
+          );
+        }
       }
     });
     expect(await tones(f.cfg, "2026-10-20")).toEqual({ calendar: ["blue"], model: ["blue"] });

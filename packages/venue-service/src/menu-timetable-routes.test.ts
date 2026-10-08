@@ -104,7 +104,14 @@ async function routed() {
         tx,
         cfg,
         null,
-        { date: "2030-12-25", name: "Navidad", colour: "red", closeWholeVenue: false, cells: [] },
+        {
+          date: "2030-12-25",
+          name: "Navidad",
+          colour: "red",
+          closeWholeVenue: false,
+          ownHours: true,
+          cells: [],
+        },
         new Date(),
       )
     ).id;
@@ -261,7 +268,18 @@ describe("the opening-hours routes", () => {
       }),
       404,
     );
-    await answers(await r.send("DELETE", dateTimetable, r.manager), 204);
+    await answers(await r.send("DELETE", dateTimetable, r.manager), 404);
+    await answers(
+      await r.send("PUT", `/special-dates/${r.christmas}`, r.manager, {
+        date: "2030-12-25",
+        name: "Navidad",
+        colour: "red",
+        closeWholeVenue: false,
+        ownHours: false,
+        cells: [],
+      }),
+      200,
+    );
     await answers(await r.send("DELETE", `/menu-periods/${mediodia.id}`, r.manager), 204);
     model = await r.model();
     expect(restaurantOf(model, r).dates).toEqual([]);
@@ -357,7 +375,6 @@ describe("the opening-hours routes", () => {
       ["DELETE", `/menu-periods/${r.mananas}`, undefined],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: week([]) }],
       ["PUT", `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { slots: [] }],
-      ["DELETE", `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, undefined],
     ];
     for (const [method, path, body] of writes) {
       const response = await r.send(method, path, r.supervisor, body);
@@ -467,7 +484,6 @@ describe("the opening-hours routes", () => {
       ["DELETE", "/menu-periods/x"],
       ["PUT", "/departments/x/menu-week"],
       ["PUT", `/special-dates/x/menu-timetables/${r.restaurant}`],
-      ["DELETE", `/special-dates/${r.christmas}/menu-timetables/x`],
     ] as const) {
       const response = await r.send(method, path, r.manager, method === "DELETE" ? undefined : {});
       expect(response.status, `${method} ${path}`).toBe(400);
@@ -713,4 +729,25 @@ it("reports offset placement refusals on the submitted field and retains the com
     },
   );
   expect(await r.model()).toEqual(before);
+});
+
+it("refuses dated writes on a day keeping the week and no longer offers per-department clearing", async () => {
+  const r = await routed();
+  await answers(
+    await r.send("PUT", `/special-dates/${r.christmas}`, r.manager, {
+      date: "2030-12-25",
+      name: "Navidad",
+      colour: "red",
+      closeWholeVenue: false,
+      ownHours: false,
+      cells: [],
+    }),
+    200,
+  );
+  const path = `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`;
+  await answers(await r.send("PUT", path, r.manager, { slots: [] }), 409, {
+    code: "special_date.keeps_week",
+    params: { specialDateId: r.christmas },
+  });
+  await answers(await r.send("DELETE", path, r.manager), 404);
 });

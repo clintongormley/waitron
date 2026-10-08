@@ -31,14 +31,12 @@ describe("OpeningHoursApi", () => {
     await api.deletePeriod("p/1");
     await api.saveWeek("d/1", [{ weekday: 1, slots: [slot] }]);
     await api.saveDateMenus("s/1", "d/1", [slot]);
-    await api.clearDateMenus("s/1", "d/1");
     expect(request.mock.calls).toEqual([
       [`${base}/departments/d%2F1/menu-periods`, "POST", input],
       [`${base}/menu-periods/p%2F1`, "PATCH", input],
       [`${base}/menu-periods/p%2F1`, "DELETE"],
       [`${base}/departments/d%2F1/menu-week`, "PUT", { days: [{ weekday: 1, slots: [slot] }] }],
       [`${base}/special-dates/s%2F1/menu-timetables/d%2F1`, "PUT", { slots: [slot] }],
-      [`${base}/special-dates/s%2F1/menu-timetables/d%2F1`, "DELETE"],
     ]);
   });
 

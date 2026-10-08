@@ -150,26 +150,13 @@ it("stages Closed all day and saves an empty override even when the weekday is e
     },
   ]);
 });
-it("stages Follow the normal week and deletes the override on Save", async () => {
-  const writes: unknown[] = [];
-  const week = await mount(true, async (url, method, body) => {
-    writes.push({ url, method, body });
-  });
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
-  await week.updateComplete;
-  expect(writes).toEqual([]);
+it("keeps the dated editor but offers no per-department way to follow the normal week", async () => {
+  const week = await mount(true);
+  expect(week.shadowRoot!.querySelector("[data-test=follow-week]")).toBeNull();
   expect(grid(week).columns[0]!.slots).toEqual([
-    { periodId: "p1", startsAt: "10:00", endsAt: "14:00" },
+    { periodId: "p1", startsAt: "12:00", endsAt: "16:00" },
   ]);
-  save(week).click();
-  await expect.poll(() => writes.length).toBe(1);
-  expect(writes).toEqual([
-    {
-      url: "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
-      method: "DELETE",
-      body: undefined,
-    },
-  ]);
+  expect(save(week).disabled).toBe(true);
 });
 it("marks a refused date's slots beside its header and permits a retry", async () => {
   let attempts = 0;
@@ -241,9 +228,6 @@ it("keeps a date unchanged when its inherited weekday is already empty until Clo
   await week.updateComplete;
   expect(save(week).disabled).toBe(false);
   expect(save(week).variant).toBe("primary");
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
-  await week.updateComplete;
-  expect(save(week).disabled).toBe(true);
 });
 it("ignores controls from a departed special-date picker", async () => {
   await mount();
@@ -359,3 +343,28 @@ it("adds a date range through the shared dialog without changing its weekday", a
     },
   });
 });
+
+it.each([
+  ["en", "This named day keeps the normal week. Give it its own hours first."],
+  ["es", "Este día especial sigue la semana normal. Dale primero su propio horario."],
+] as const)(
+  "explains the named-day refusal in %s and keeps retry available",
+  async (locale, message) => {
+    setLocale(locale);
+    const week = await mount(true, async () => {
+      throw { code: "special_date.keeps_week", params: { specialDateId: "s/1" } };
+    });
+    week.shadowRoot!.querySelector<HTMLElement>("[data-test=close-date]")!.click();
+    await week.updateComplete;
+    save(week).click();
+    await expect
+      .poll(
+        () =>
+          week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+            "wt-form-actions",
+          )!.error,
+      )
+      .toBe(message);
+    expect(save(week).disabled).toBe(false);
+  },
+);

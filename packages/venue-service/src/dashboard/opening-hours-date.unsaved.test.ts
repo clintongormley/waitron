@@ -129,11 +129,16 @@ describe.each(["en", "es"])("Special-date draft (%s)", (locale) => {
     await expect.poll(() => picker.value).toBe("s2");
     expect(unload()).toBe(false);
   });
-  it.each(["before", "after"])("counts a follow-week edit made %s reconnect", async (when) => {
+  it.each(["before", "after"])("counts a range edit made %s reconnect", async (when) => {
     setLocale(locale);
     const { screen, week } = await mount();
     if (when === "before")
-      week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+      emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+        columnKey: "1",
+        index: 0,
+        startsAt: "12:00",
+        endsAt: "17:00",
+      });
     await week.updateComplete;
     const parent = screen.parentNode!;
     screen.remove();
@@ -143,7 +148,12 @@ describe.each(["en", "es"])("Special-date draft (%s)", (locale) => {
     await screen.updateComplete;
     await week.updateComplete;
     if (when === "after")
-      week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+      emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+        columnKey: "1",
+        index: 0,
+        startsAt: "12:00",
+        endsAt: "17:00",
+      });
     await week.updateComplete;
     expect(unload()).toBe(true);
     emit(screen.shadowRoot!.querySelector("[name=weekMode]")!, "wt-change", { value: "week" });
@@ -218,7 +228,7 @@ describe.each(["en", "es"])("Retained date save contract (%s)", (locale) => {
   });
 });
 
-it("an inherited date becomes clean again after drafted ranges are returned to Follow", async () => {
+it("discarding an inherited date restores its clean draft", async () => {
   setLocale("en");
   const { screen } = await mount();
   emit(screen.shadowRoot!.querySelector("[name=specialDateId]")!, "wt-change", { value: "s2" });
@@ -253,17 +263,22 @@ it("an inherited date becomes clean again after drafted ranges are returned to F
   dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
   await week.updateComplete;
   expect(unload()).toBe(true);
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
-  await week.updateComplete;
-  expect(unload()).toBe(false);
+  emit(screen.shadowRoot!.querySelector("[name=specialDateId]")!, "wt-change", { value: "s1" });
+  await choose("discard");
+  await expect.poll(() => unload()).toBe(false);
   expect(app.writes).toEqual([]);
 });
 
-it("a saved date stays dirty on Follow until its original own ranges are restored", async () => {
+it("a saved date stays dirty until its original own ranges are restored", async () => {
   setLocale("en");
   const { week } = await mount();
   expect(unload()).toBe(false);
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+    columnKey: "1",
+    index: 0,
+    startsAt: "12:00",
+    endsAt: "17:00",
+  });
   await week.updateComplete;
   expect(unload()).toBe(true);
   emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
