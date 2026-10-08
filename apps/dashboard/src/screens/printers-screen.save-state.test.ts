@@ -634,6 +634,26 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
     expect(api.deactivatePrinter).not.toHaveBeenCalled();
   });
+
+  it("a printer page's wizard, opened after an added printer's wizard was closed unsaved, opens with Save quiet", async () => {
+    const { el, api } = await addFromDiscovery(unregistered);
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    expect(api.deactivatePrinter).not.toHaveBeenCalled();
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull());
+    const disclosure = q<HTMLElementTagNameMap["wt-disclosure"]>(
+      el,
+      "[data-test=printer-section-calibration]",
+    )!;
+    await disclosure.updateComplete;
+    disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=calibrate-printer-details]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=calibration-step-1]")).not.toBeNull());
+    await go(el, "calibration-next");
+    expect(await state(el, "save-printer-p1")).toEqual(quiet);
+  });
 });
 
 const bluetoothDevice: DiscoveredPrinter = {

@@ -335,13 +335,18 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=attest-bill-payment-bp-1]")!.click();
     await flush(el);
+    const record = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-bill-attest]")!;
+    expect(record.getAttribute("variant")).toBe("secondary");
+    expect(record.hasAttribute("disabled")).toBe(true);
     await expectNoA11yViolations(host);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=bill-attest-note]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "Provider confirmed" } }),
     );
     await flush(el);
+    expect(record.getAttribute("variant")).toBe("primary");
+    expect(record.hasAttribute("disabled")).toBe(false);
     await expectNoA11yViolations(host);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-bill-attest]")!.click();
+    record.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });
