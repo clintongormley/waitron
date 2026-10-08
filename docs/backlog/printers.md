@@ -438,13 +438,13 @@ just a green typecheck.
   manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
   is (owner, 2026-10-02).
 
-- **One receipt language per location (C113, owner 2026-09-30) — DONE (#1014).** A receipt prints
+- **One receipt language per location (C113, owner 2026-09-30, #1014).** A receipt prints
   in ONE language, never two, with no choice when the original prints, and dish names print as they
   were saved. The language is the first entry of the location's saved list
   (`locations.invoice_locales`); **in Catalonia it is fixed to Catalan**
   ([regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).
 
-- **A copy can be printed in another receipt language (C114) — DONE (#1022).** A copy is offered
+- **A copy can be printed in another receipt language (C114, #1022).** A copy is offered
   in every receipt language the pack has, even in Catalonia: a product choice, which includes
   Spanish, the customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
   [regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).

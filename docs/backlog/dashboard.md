@@ -639,12 +639,6 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
     when it OPENS — one handed to it while it is already open leaves Save as it was (believed
     unreachable, from reading only: the list's own Save sits behind the open window) — and it stays active
     for the whole time that window is open, even once the refused field is edited back;
-  - on the autumn clock-change day, the Change time form can no longer move a scheduled menu
-    version to the other copy of the same repeated local time (the other 02:30) in one step. The
-    form opens on the stored date and time, so an untouched press now does nothing, where it used
-    to bring up the server's "which 02:30" choice, and typing another time and then the stored one
-    back is no change. After a real edit to a repeated time the choice still appears, so the other
-    02:30 is reached only by two moves through another time. Owner, 2026-10-08: keep it as built.
 
   Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form
   unchanged and after one edit; the catalogue default also after a save; the extras list, the
@@ -885,6 +879,14 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   mid-word.
 
 ## Decisions and deliberate limits
+
+- **Change time at a repeated local time (A331 batch 2a, owner 2026-10-08).**
+  On the autumn clock-change day, the Change time form can no longer move a scheduled menu
+  version to the other copy of the same repeated local time (the other 02:30) in one step. The
+  form opens on the stored date and time, so an untouched press now does nothing, where it used
+  to bring up the server's "which 02:30" choice, and typing another time and then the stored one
+  back is no change. After a real edit to a repeated time the choice still appears, so the other
+  02:30 is reached only by two moves through another time. Owner, 2026-10-08: keep it as built.
 
 - Left open by the owner's choice (W110, #1255, "One word for 'switched off, kept for the record'
   across the dashboard"): a Delete label can be stale, because the watcher list does not re-read on

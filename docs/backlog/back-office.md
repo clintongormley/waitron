@@ -35,14 +35,18 @@ their full text.
 
 **A supplier credit note cannot be entered through the dashboard — OPEN, unqueued.** A negative
 gross total on the purchase-invoice routes is a supplier credit note and is accepted and stored by
-design (owner ruling 2026-09-21; task N1). The dashboard form's `inRange(this.total, 0, Infinity)`
+design (see the supplier credit note decision below). The dashboard form's
+`inRange(this.total, 0, Infinity)`
 (`apps/dashboard/src/widgets/purchase-form.ts`) refuses one, so the form refuses the very document
 the ruling calls legitimate. Nobody has decided whether the form should be relaxed or the credit
 note should become its own document type.
 
 ## Decisions and deliberate limits
 
-**Sales: the category report names each category by its full path — DONE (W73, #1212).** Because
+- **A negative purchase-invoice total is a supplier credit note (owner 2026-09-21, task N1).**
+  The purchase-invoice routes accept and store a negative gross total by design.
+
+**Sales: the category report names each category by its full path (W73, #1212).** Because
 every row carries its whole path, a very deep tree prints far more lines than before (the
 deep-tree case in `apps/server/src/category-sales-page.test.ts`, at 58mm and 203dpi, went from about
 1,000 lines to about 14,500, measured 2026-10-05), and its print preview is cut short; the owner

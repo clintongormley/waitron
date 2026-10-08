@@ -437,8 +437,6 @@ screen is designed.
     to another group starts with no percentage history. B11b's venue limit on a bill's total
     discount can ask for a manager's PIN; this per-reason cap is unchanged. **Next action:**
     decide whether the per-line cap should see bill discounts.
-  - **Settled (owner, 2026-09-30):** part of a weighed line stays refused for a give-away or a
-    discount (`adjustment.weighed_partial`); staff discount the whole line instead.
   - For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
     (B11g) but the till's cancel dialog still says only that it comes off the bill, because the
     till cannot see whether the HOLD ticket was queued. **Next action:** decide whether the till
@@ -1178,7 +1176,11 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
-**What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
+- **Part of a weighed line stays refused (Task 11, owner 2026-09-30).** Part of a weighed line
+  stays refused for a give-away or a discount (`adjustment.weighed_partial`); staff discount the
+  whole line instead.
+
+**What the till shows the NEXT operator when the previous one's request answers late; no
 change (owner decision 2026-09-23; PR #536).** The ticket belongs to the TILL, not to the operator
 who started it, so a late result shown on that device after a change of operator is right; the
 payment belongs to the table, so no payment is lost.

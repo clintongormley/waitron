@@ -5079,6 +5079,8 @@ Update it in the change that makes it stale (CLAUDE.md §6, _Docs_). In particul
   Take the finished piece out of _What to work on next_ and the _What's built_ "Remaining" column
   too, and do not add a receipt paragraph. **This is state, not history; the git log is the
   history.**
+- **A decision a comment or doc cites moves to its area's `## Decisions and deliberate limits`
+  instead of being deleted, and entries there are never deleted for being finished.**
 - **A new entry goes under its area in _Open work, by area_.** One that runs past four lines keeps
   its title, its status and one to three of its own sentences here, with a `[Detail]` link; its
   whole text goes under a `##` heading of the same title in the area's file under
