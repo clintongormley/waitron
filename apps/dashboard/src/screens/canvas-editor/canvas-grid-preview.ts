@@ -5,6 +5,7 @@ import { t } from "../../i18n/t.js";
 import type { StringKey } from "../../i18n/strings.js";
 import { EDITOR_ROW_HEIGHT, type CardInstance, type TabDef } from "./card-contracts.js";
 import { cardPreview } from "./card-preview.js";
+import { DRAG_THRESHOLD_PX, capturePointer, releasePointer } from "../../widgets/pointer-drag.js";
 
 /**
  * The placeholder-tile grid, drawn at the till renderer's geometry (`apps/till/src/widgets/card-grid.ts`):
@@ -12,26 +13,6 @@ import { cardPreview } from "./card-preview.js";
  * intents and never mutates the tab. rowSpan is visible only because the interactive grid pins
  * `grid-auto-rows` to {@link EDITOR_ROW_HEIGHT}; the thumbnail keeps content-sized rows.
  */
-
-const DRAG_THRESHOLD_PX = 5;
-
-/** `setPointerCapture` is best-effort: on a synthetic pointer (unit tests) it throws, and losing it
- * only means a real drag stops tracking once the pointer leaves the tile. */
-function capturePointer(el: Element, pointerId: number): void {
-  try {
-    el.setPointerCapture(pointerId);
-  } catch {
-    /* no active pointer (synthetic event) — the listeners on the element still fire */
-  }
-}
-function releasePointer(el: Element, pointerId: number): void {
-  try {
-    if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
-  } catch {
-    /* nothing captured */
-  }
-}
-
 @customElement("canvas-grid-preview")
 export class CanvasGridPreview extends LitElement {
   @property({ attribute: false }) tab: TabDef | null = null;

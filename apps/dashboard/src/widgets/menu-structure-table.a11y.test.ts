@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
-import type { CategorySummary, MenuHome, MenuStructureNode, Product } from "../api/client.js";
+import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { t } from "../i18n/t.js";
 
@@ -247,62 +247,4 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     await table.updateComplete;
     await expectNoA11yViolations(host);
   });
-
-  it.each([1280, 390])(
-    "renders accessibly with the Device Home Page open, a missing shortcut included, at %i px",
-    async (width) => {
-      const before = { width: window.innerWidth, height: window.innerHeight };
-      const home: MenuHome = {
-        homeSectionId: "s-home",
-        shortcuts: [
-          {
-            memberId: "t-burger",
-            position: 0,
-            ref: { kind: "product", productId: "p-burger" },
-            missingName: null,
-            name: "Burger",
-            reachable: true,
-          },
-          {
-            memberId: "t-drinks",
-            position: 1,
-            ref: { kind: "section", sectionId: "s-drinks" },
-            missingName: null,
-            name: "Drinks",
-            reachable: true,
-          },
-          {
-            memberId: "t-chips",
-            position: 2,
-            ref: { kind: "product", productId: "p-chips" },
-            missingName: "Chips",
-            name: "Chips",
-            reachable: false,
-          },
-        ],
-        handheld: { columns: 3, tiles: "colours", order: "home_first" },
-        till: { columns: 6, tiles: "colours", order: "home_first" },
-      };
-      try {
-        await page.viewport(width, 900);
-        const { el, host } = await mountWidget<MenuStructureTable>(
-          "dashboard-menu-structure-table",
-          { nodes, products, menuName: "Lunch Menu", home },
-          theme,
-        );
-        const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        for (let round = 0; round < 3; round++) await table.updateComplete;
-        table
-          .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="home"] .row-activate')!
-          .click();
-        await table.updateComplete;
-        expect(
-          table.shadowRoot!.querySelector('tr[data-row-key="home/t-chips"]')!.textContent,
-        ).toContain("Chips");
-        await expectNoA11yViolations(host);
-      } finally {
-        await page.viewport(before.width, before.height);
-      }
-    },
-  );
 });

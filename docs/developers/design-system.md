@@ -280,6 +280,20 @@ Colours mode, or neutral. A section tile always has a second line under its name
 on the till "Nothing matches the filter" for one a diet filter emptied — so a section and a product
 differ without colour; its image, when shown, takes the folder icon's place.
 
+**A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
+The tab is one column, the preview first, until its box is 800px wide, then two: the preview on
+the left, the device choice and display settings on the right. In the preview's home view each
+shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a ⋮ holding Remove shortcut.
+On the grip, the arrow keys move the shortcut one position, Up and Down included, and a drag moves
+it among the shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu
+no longer reaches and one the menu reaches but a device would not show (an empty section, a product
+with no price) are both dashed, muted tiles; the first reads "Missing: <name>", the second "Not
+shown on devices". After the last shortcut come two dashed add tiles, Add products and Add
+sections, drawn even when there are none, so an empty shortcut block shows in the dashboard but
+never on a device. Each opens a window whose one multi-select list offers the active products, or
+the sections, the menu reaches that are not already shortcuts, and one Add adds every choice in the
+order chosen. The Structure tab shows no shortcuts.
+
 **Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",
 so you can distinguish it from a section with the same name.
@@ -897,13 +911,7 @@ Any table, flat or a tree, answers `filterValues(key)` and takes a filter choice
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
 `apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is the
-menu's Device Home Page (W93): no grip (in Reorder mode, below, only the grip's blank space), closed
-at first, with "No shortcuts yet." under its name while it has none. Its ⋮ holds Add a product
-shortcut and Add a section shortcut; each opens a window whose one dropdown offers what the menu
-reaches and is not already a shortcut, and choosing adds it at once. Its children are the shortcuts
-in order, each with a grip in Reorder mode, no colour square or photo, and a ⋮ holding Remove
-shortcut; one whose target the menu no longer reaches reads "Missing: <name>", its kind "No longer
-available". The menu's own row, "Menu: <name>", comes next. It has no grip (in Reorder mode, only
+menu's own row, "Menu: <name>". It has no grip (in Reorder mode, only
 the grip's blank space) and cannot be closed, and its ⋮ holds the adds: New section here, Include a
 menu and Add products. Under it the menu's members follow in menu order, with no sort. A row's key
 is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
@@ -919,10 +927,10 @@ and photo, each following the included menu until it is changed; and "Remove fro
 rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in
 Reorder mode each keeps an unseen grip-sized space. Only an owned row has a grip.
 In Reorder mode, put every grip in one leading column before the tree arrow and indentation.
-Reserve that column on the menu's, Home's and read-only rows. Keep the arrow and media slot inside
+Reserve that column on the menu's and read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
-holds a section's colour square, a product's colour square or photo, or nothing on the Home and
-menu rows. A photo has a ring in the product's own colour, falling back to its category's inherited
+holds a section's colour square, a product's colour square or photo, or nothing on the menu's
+row. A photo has a ring in the product's own colour, falling back to its category's inherited
 colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
@@ -946,14 +954,15 @@ member. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
 `menu-structure-table.a11y.test.ts` beside it, and the "the Structure tree" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`.
 
-Hold a dragged row near the visible top or bottom edge to reach rows outside the current view.
-`DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box across
-shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
+Hold a dragged row or tile near the visible top or bottom edge to reach rows outside the current
+view. `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box
+across shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
 scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
 Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, preparation
-stations and the Customise column list use this helper. Shared reorder tables and preparation
-stations keep the moves already made when a drag is cancelled, as they do on pointer cancellation;
-Products and Menu Structure apply their move only on release.
+stations, the Customise column list and the Home page tab's shortcut preview use this helper. Shared
+reorder tables and preparation stations keep the moves already made when a drag is cancelled, as
+they do on pointer cancellation; Products, Menu Structure and the shortcut preview apply their move
+only on release.
 
 ### Remembered, searchable, filterable tables
 
@@ -1564,8 +1573,9 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   page takes a new scope while detached, and once put back it does not ask before discarding an
   edit made after that. The till's party name, invoice recipient, extras picker and station
   dialogs, the venue-service watcher form, the dashboard's unit, ingredient, extras list, option
-  list and option label forms, recipe editor, Add to menus picker and a section's Add products
-  picker, the menus screen's section and menu details form and an include's Edit dialog, the staff
+  list and option label forms, recipe editor, Add to menus picker, a section's Add products picker
+  and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
+  include's Edit dialog, the staff
   edit and new person forms, the variant, purchase and shift forms, the bookings form and the
   product editor do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
@@ -1576,8 +1586,8 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase, shift, bookings and watcher forms, the product
-  editor, the unit form, the menus screen's section and menu details form and an include's Edit
-  dialog do this, each with an edit-first reconnect case. The recipe editor
+  editor, the unit form, the menus screen's section and menu details form, an include's Edit
+  dialog and the Home page tab's shortcut picker do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
   extras picker and station dialogs keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
@@ -1654,7 +1664,8 @@ and nothing guards it across screens:
   edit (one form, `dashboard-section-details-form`, mounted twice); and an include's Edit dialog.
   The screen's other windows, the menu price fields and Publish act at once, confirm an operation or
   only show, so they have no Save to gate, except the Add products window and the publication
-  schedule, which are batch 2a's; the list is in
+  schedule, which are batch 2a's, and the Home page tab's shortcut window, whose Add follows the rule
+  since A336; the list is in
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a

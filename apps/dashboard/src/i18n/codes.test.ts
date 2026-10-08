@@ -251,12 +251,12 @@ it("has English and Spanish copy for each Device Home Page code", () => {
 });
 
 it.each(["en", "es"])(
-  "names the Device Home Page in a refused shortcut as the Structure tab's row does (%s)",
+  "names the Device Home Page in a refused shortcut as the Home page tab's order choice does (%s)",
   (language) => {
     setLocale(language);
-    expect(codeMessage("menu.shortcut_unreachable", language).toLowerCase()).toContain(
-      t("home.row").toLowerCase(),
-    );
+    const name = language === "en" ? "device home page" : "página de inicio del dispositivo";
+    expect(t("home.order_home_first").toLowerCase()).toContain(name);
+    expect(codeMessage("menu.shortcut_unreachable", language).toLowerCase()).toContain(name);
   },
 );
 

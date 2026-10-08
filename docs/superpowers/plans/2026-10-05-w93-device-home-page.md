@@ -1358,6 +1358,9 @@ declare global {
 
 ### Task 6: The Structure tree's Device Home Page row
 
+_(2026-10-08, A336: this row, its shortcut rows and their strings were removed; shortcuts are edited in
+the Home page tab's preview. See the dated A336 note in the W93 spec.)_
+
 **Files:**
 - Modify: `apps/dashboard/src/widgets/menu-structure-table.ts` (rows `:43-61`, properties `:217-229`, drag `:346-504`, `#rows` `:539-569`, `#nameCell` `:593-643`, `#swatch` `:646-678`, `#menuItems` `:710-733`, `#actionsCell` `:735-744`, `#columns` `:746-767`, `render` `:769-794`)
 - Modify: `apps/dashboard/src/api/client.ts` (beside `:1830-1833`), `apps/dashboard/src/api/live-queries.ts` (beside `:190-192`), `apps/dashboard/src/i18n/strings.ts`

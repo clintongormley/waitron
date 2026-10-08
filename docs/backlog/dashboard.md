@@ -663,11 +663,12 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   form (new and rename) and the section form (new and edit), which are one form mounted twice, and
   an include's Edit dialog. Each opens quiet, turns blue on the first edit, goes quiet again when
   the opened values are typed back or a save is committed with it still open, and sends nothing
-  when an untouched Save is pressed. Not a save, so not gated: Add a shortcut, Include a menu, the
+  when an untouched Save is pressed. Not a save, so not gated: Include a menu, the
   home display's slider and radios and the menu price fields write at once; Delete section and
   Publish confirm an operation; the rest open a form or only show (list:
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b)).
-  The Add products window and the publication schedule do save; they are batch 2a's.
+  The Add products window and the publication schedule do save; they are batch 2a's. The Home
+  page tab's shortcut window also saves: its Add follows the rule since A336.
   Test checks that pressed or asserted on an untouched form now edit first or expect Save
   disabled; each is listed in its commit message. Looked at on 2026-10-08 in 33 screenshots of the forms mounted with
   test data (each unchanged, after one edit, and changed but blocked — an emptied required name
