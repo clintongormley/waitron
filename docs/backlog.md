@@ -2700,7 +2700,7 @@ controls and preview, and the till's home at a phone's width and on the counter 
 use "carta".
 Left open:
 
-- **A339 — DONE (2026-10-08).** Handheld settings offer 2–3 columns and till settings 4–10, retaining defaults 3 and 6. The handheld home grid uses a 66 px tile minimum; its dashboard preview also uses a 16 px side inset. Chromium cases at 360/390 px exercise two/three tracks, 44 px tap targets, long names, decoded thumbnails and axe in both themes. Real demo phone and preview captures were inspected in EN/ES and both themes; a 1024 px till was inspected at four columns. Existing save, refusal, device/menu switch and shared-read assertions use distinct in-range handheld values.
+- **A339 is implemented on `fix/home-column-ranges` (2026-10-08), awaiting one transfer-test coordination ruling.** Handheld settings offer 2–3 columns and till settings 4–10, retaining defaults 3 and 6. Chromium phone/preview/slider cases and the retained dashboard save/refusal/late-response checks pass (four files, 468 cases). The unchanged `packages/catalogue/src/configuration-transfer.test.ts:217` still expects till column count 5 to be refused; running that file gives one failure and 53 passes. The queue forbids transfer-file edits, so changing only that spec-driven boundary fixture awaits a coordination exception. Branch review is underway; push, current-head CI and landing remain pending.
 - The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
   the menu shares the screen with the order: from 720 px wide the table order screen gives it three
   fifths (`apps/till/src/screens/till-table-order-screen.ts`), and on the demo counter at 1280 px
