@@ -477,7 +477,10 @@ function shAptGaps(script: string): string[] {
     gaps.push('apt_get() does not run apt-get under "$limit" <n>, limit from gtimeout or timeout');
   }
   for (const { line, text } of commands) {
-    const masked = text.replace(/"(?!\$\w+")[^"]*"|'[^']*'/g, '""');
+    const masked = text.replace(
+      /("\$\w+")|"[^"]*"|'[^']*'/g,
+      (_quoted, variable?: string) => variable ?? '""',
+    );
     for (const call of masked.matchAll(/\bapt-get\b/g)) {
       const command =
         masked
@@ -521,6 +524,12 @@ describe("waitron.sh's apt waits", () => {
     expect(shAptGaps(quoted)).toEqual([]);
   });
 
+  it("passes a limit given its time as a quoted variable, as deploy/waitron.sh does", () => {
+    expect(
+      shAptGaps(script.replace('"$limit" 300 env apt-get', '"$limit" "$seconds" env apt-get')),
+    ).toEqual([]);
+  });
+
   it.each([
     [
       "a direct apt-get call",
@@ -547,6 +556,14 @@ describe("waitron.sh's apt waits", () => {
       [
         'line 4 runs apt-get in apt_get() but not under "$limit" <n>: as_root "$limit" 300 env ' +
           'apt-get -o Acquire::Retries=3 "$@"; apt-get update',
+      ],
+    ],
+    [
+      "an apt-get after a separator between the limit and the call",
+      script.replace('"$limit" 300 env apt-get', '"$limit" "$seconds" true; env apt-get'),
+      [
+        'line 4 runs apt-get in apt_get() but not under "$limit" <n>: as_root "$limit" ' +
+          '"$seconds" true; env apt-get -o Acquire::Retries=3 "$@"',
       ],
     ],
     [
