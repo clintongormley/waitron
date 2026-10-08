@@ -629,15 +629,77 @@ describe("routing cells in a staged import", () => {
       sql`select count(*) as count from routing_cells`,
     );
     expect(cells.rows[0]!.count).toBe(0);
+  });
 
+  it("refuses a switched-on zone in a switched-off department when no routing cell names it, and writes nothing", async () => {
+    const { bundle, versions } = await exported();
+    const comedor = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
+    expect(comedor.active).toBe(1);
+    const terraza = bundle.tables.floor_zones!.find((row) => row.name === "Terraza")!;
     const withoutCell: ConfigurationBundle = {
-      ...switchedOff,
+      ...bundle,
       tables: {
-        ...switchedOff.tables,
-        routing_cells: switchedOff.tables.routing_cells!.filter((row) => row.zone_id === null),
+        ...bundle.tables,
+        departments: bundle.tables.departments!.map((row) =>
+          row === comedor ? { ...row, active: 0 } : row,
+        ),
+        routing_cells: bundle.tables.routing_cells!.filter((row) => row.zone_id === null),
       },
     };
-    const accepted = await staged(withoutCell, versions);
+    const zoneRefused = await staged(withoutCell, versions);
+    const zoneRefusal = await zoneRefused.result.then(
+      () => expect.fail("the bundle was accepted"),
+      (error: unknown) => error,
+    );
+    const refusal = {
+      code: "zone.department_inactive",
+      params: {
+        zoneId: terraza.id,
+        zoneName: "Terraza",
+        departmentId: comedor.id,
+        departmentName: "Comedor",
+      },
+    };
+    expect(zoneRefusal).toMatchObject({ code: refusal.code });
+    expect((zoneRefusal as { params: unknown }).params).toEqual(refusal.params);
+    expect(await readdir(zoneRefused.stateDir)).toEqual([]);
+
+    const request = venue("B24681364");
+    await expect(
+      applyVenue(planVenue(request, ALL_MODULES), {
+        db: target.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, created) =>
+          importConfigurationTables(
+            tx,
+            withoutCell,
+            { locationId: created.locationId },
+            ALL_MODULES,
+            versions,
+          ),
+      }),
+    ).rejects.toMatchObject(refusal);
+    const tenants = await target.db.execute<{ count: number }>(
+      sql`select count(*) as count from tenants where tax_id = ${request.taxId}`,
+    );
+    expect(tenants.rows[0]!.count).toBe(0);
+
+    const comedorZones = new Set(
+      withoutCell.tables
+        .zone_service_policies!.filter((row) => row.department_id === comedor.id)
+        .map((row) => row.zone_id),
+    );
+    expect(comedorZones.has(terraza.id)).toBe(true);
+    const zonesOff: ConfigurationBundle = {
+      ...withoutCell,
+      tables: {
+        ...withoutCell.tables,
+        floor_zones: withoutCell.tables.floor_zones!.map((row) =>
+          comedorZones.has(row.id) ? { ...row, active: 0 } : row,
+        ),
+      },
+    };
+    const accepted = await staged(zonesOff, versions);
     await expect(accepted.result).resolves.toMatchObject({ counts: { routing_cells: 1 } });
   });
 

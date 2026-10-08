@@ -2906,6 +2906,68 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     },
   );
 
+  it.each([
+    [
+      "en-GB",
+      "The export has the zone “Terraza” active, but its department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.",
+    ],
+    [
+      "es-ES",
+      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+    ],
+  ] as const)(
+    "names a switched-on zone whose department is switched off (%s)",
+    async (locale, sentence) => {
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            stageConfiguration: vi.fn().mockRejectedValue({
+              code: "zone.department_inactive",
+              params: {
+                zoneId: "z-1",
+                zoneName: "Terraza",
+                departmentId: "d-1",
+                departmentName: "Comedor",
+              },
+              status: 400,
+            }),
+          }),
+        );
+        setLocale(locale);
+        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+        expect(readDraft(el).configurationImport).toBeUndefined();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each([
+    [{ zoneId: "z-1" }],
+    [{ zoneId: "z-1", zoneName: "Terraza", departmentId: "d-1" }],
+    [{ zoneId: "z-1", departmentId: "d-1", departmentName: "Comedor" }],
+    [{ zoneId: "z-1", zoneName: "", departmentName: "Comedor" }],
+    [{ zoneId: "z-1", zoneName: "Terraza", departmentName: "" }],
+  ])(
+    "falls back to the could-not-open sentence for a zone refusal missing a name (%o)",
+    async (params) => {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "zone.department_inactive", params, status: 400 }),
+        }),
+      );
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+        "The configuration export could not be opened. Check the file and passphrase.",
+      );
+    },
+  );
+
   it("falls back to the could-not-open sentence for a duplicate refusal carrying no name", async () => {
     const el = await mountSetupApp(
       stubApi({

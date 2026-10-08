@@ -64,7 +64,13 @@ declare module "@waitron/shared" {
       reason?: "overlap" | "clock_skips";
     };
     "zone.name_taken": { name: string };
-    "zone.department_inactive": { zoneId: string };
+    /** An import's refusal adds the department and each name the export holds. */
+    "zone.department_inactive": {
+      zoneId: string;
+      zoneName?: string;
+      departmentId?: string;
+      departmentName?: string;
+    };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };
     "service_zone.mode_incompatible": {

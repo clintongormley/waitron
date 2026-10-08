@@ -5784,11 +5784,21 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       refuses it with the routing grid's own `service_zone.not_found`, naming the zone, the
       department and the row (each name only where the export holds one), and the setup app's import screen says which choice it is and how to
       fix it, in English and Spanish.
-      Open, for the owner (from #1403's review): the import answers this refusal 400, the
-      boundary's default, while the grid's save answers the same code 404 — settling it means a
-      `service_zone.not_found` row in `PROVISION_STATUS` (`apps/server/src/setup-api.ts`), left
-      out while #1399 changes that file. And the import still accepts an active zone in a
-      switched-off department when no routing cell names it; only the cell is refused.
+      Still open: the import answers this refusal 400, the boundary's default, while the grid's
+      save answers the same code 404. The owner answered on 2026-10-08 that every API answers a
+      refusal by one rule based on what it means; the campaign's A394 (low priority, not yet a
+      backlog entry) audits the statuses against that rule.
+    - **Done by A393 (#1425; owner answer "Yes, refuse it", 2026-10-08): a configuration import refuses a
+      switched-on zone in a switched-off department**, whether or not a routing cell names it,
+      with the zone's own `zone.department_inactive`, naming the zone and the department (each name
+      only where the export holds one), answered 400; the dashboard's saves answer the same code
+      409 (`packages/venue-service/src/routes.ts`, `apps/server/src/management-api.ts`), which
+      A394's audit covers too. A zone's or department's `active` flag other than 0 or 1 is refused
+      (`setup.request_invalid`, naming `floor_zones.active` or `departments.active`), and a row
+      without the flag is read as switched on, as storage keeps it. The check runs after the routing one, so a
+      bundle that also has a routing cell on that zone still gets A374's message naming the row.
+      The setup app's import screen names the zone and the department and how to fix it, in
+      English and Spanish.
     [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
     Changes needing another fiscal/geographic context or
     history removal use a separately approved setup/reset instead. Later
