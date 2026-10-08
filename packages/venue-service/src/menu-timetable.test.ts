@@ -840,7 +840,8 @@ describe("the menu a zone starts on", () => {
     const offers = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.sala, { at: madrid(MONDAY, "10:00") }),
     );
-    expect(offers.defaultMenuId).toBe(v.menus.Almuerzo);
+    expect(offers.defaultMenuId).toBeNull();
+    expect(offers.menus.every((menu) => !menu.orderable && !menu.isDefault)).toBe(true);
   });
 });
 
@@ -1708,15 +1709,15 @@ describe("the calendar participant", () => {
 });
 
 describe("the offers a zone lists at an instant", () => {
-  it("marks the timetable's default, giving way to the first served menu when it is unpublished", async () => {
+  it("marks the running period's default, ignoring old zone overrides and falling back within its menus", async () => {
     const v = await timed();
     await scoped((tx) => setZonePeriodMenu(tx, v.cfg, v.barra, v.periods.mananas, v.menus.Café));
     const at = madrid(MONDAY, "10:00");
     const offers = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { at }));
-    expect(Object.keys(offers).sort()).toEqual(["defaultMenuId", "menus", "offers"]);
-    expect(offers.defaultMenuId).toBe(v.menus.Café);
+    expect(Object.keys(offers).sort()).toEqual(["defaultMenuId", "menus", "offers", "service"]);
+    expect(offers.defaultMenuId).toBe(v.menus.Desayunos);
     expect(offers.menus.filter((menu) => menu.isDefault).map((menu) => menu.id)).toEqual([
-      v.menus.Café,
+      v.menus.Desayunos,
     ]);
     const without = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at, withDefault: false }),
@@ -1725,20 +1726,16 @@ describe("the offers a zone lists at an instant", () => {
     expect(without.menus.some((menu) => menu.isDefault)).toBe(false);
     expect(without.menus.map((menu) => menu.id)).toEqual(offers.menus.map((menu) => menu.id));
 
-    const unpublished = await timed({ unpublished: ["Café"] });
+    const unpublished = await timed({ unpublished: ["Desayunos"] });
     await scoped((tx) =>
-      setZonePeriodMenu(
-        tx,
-        unpublished.cfg,
-        unpublished.barra,
-        unpublished.periods.mananas,
-        unpublished.menus.Café,
-      ),
+      updateMenuPeriod(tx, unpublished.cfg, unpublished.periods.mananas, {
+        staffMenuIds: [unpublished.menus.Bebidas],
+      }),
     );
     const fallback = await scoped((tx) =>
       listZoneOffers(tx, unpublished.cfg, unpublished.barra, { at }),
     );
-    expect(fallback.defaultMenuId).toBe(unpublished.menus.Desayunos);
+    expect(fallback.defaultMenuId).toBe(unpublished.menus.Bebidas);
   });
 
   it("resolves the default among the menus a caller already found served", async () => {
@@ -1764,8 +1761,6 @@ describe("statements", () => {
       prepared.mockRestore();
       return texts;
     });
-  const TIMETABLE_TABLES =
-    /"(menu_periods|menu_slots|menu_day_timetables|zone_period_menus|zone_all_day_menus)"/;
 
   /** Twenty one-hour slots over Sunday and Monday, alternating the five Restaurant periods. */
   const twentySlots = (p: Timed["periods"]) => {
@@ -2215,6 +2210,98 @@ describe("department service periods", () => {
   type ServiceVenue = Awaited<ReturnType<typeof serviceVenue>>;
   const read = (v: ServiceVenue, date: string, time: string) =>
     scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(date, time)));
+
+  it("keeps all period menus once while marking the running customer and staff menus orderable", async () => {
+    const v = await serviceVenue();
+    const result = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
+    );
+    expect(result.service).toEqual({ open: true, periodName: "Lunch" });
+    expect(result.defaultMenuId).toBe(v.menus.Almuerzo);
+    expect(
+      result.menus
+        .map(({ id, audience, orderable, isDefault }) => ({
+          id,
+          audience,
+          orderable,
+          isDefault,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    ).toEqual(
+      [
+        { id: v.menus.Almuerzo, audience: "customer", orderable: true, isDefault: true },
+        { id: v.menus.Bebidas, audience: "staff", orderable: true, isDefault: false },
+        { id: v.menus.Café, audience: "staff", orderable: true, isDefault: false },
+        { id: v.menus.Cena, audience: "customer", orderable: false, isDefault: false },
+      ].sort((a, b) => a.id.localeCompare(b.id)),
+    );
+    const afternoon = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "14:00") }),
+    );
+    expect(afternoon.service).toEqual({ open: true, periodName: "Afternoon" });
+    expect(afternoon.menus.find((menu) => menu.id === v.menus.Café)).toMatchObject({
+      audience: "customer",
+      orderable: true,
+      isDefault: true,
+    });
+    expect(afternoon.menus.filter((menu) => menu.orderable).map((menu) => menu.id)).toEqual([
+      v.menus.Café,
+    ]);
+  });
+
+  it("falls back only to a served menu of the running period when its customer menu is unpublished", async () => {
+    const v = await timed({ unpublished: ["Desayunos"] });
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] }),
+    );
+    const result = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "10:00") }),
+    );
+    expect(result.defaultMenuId).toBe(v.menus.Bebidas);
+    expect(result.menus.filter((menu) => menu.isDefault).map((menu) => menu.id)).toEqual([
+      v.menus.Bebidas,
+    ]);
+    expect(result.menus.find((menu) => menu.id === v.menus.Almuerzo)).toMatchObject({
+      isDefault: false,
+      orderable: false,
+    });
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [] }));
+    const unserved = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "10:00") }),
+    );
+    expect(unserved.service.open).toBe(true);
+    expect(unserved.defaultMenuId).toBeNull();
+    expect(unserved.menus).toHaveLength(4);
+    expect(unserved.menus.every((menu) => !menu.orderable && !menu.isDefault)).toBe(true);
+  });
+
+  it("keeps period menus for a stored basket when closed, with none orderable and no default", async () => {
+    const v = await serviceVenue();
+    const result = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "20:00") }),
+    );
+    expect(result.service).toEqual({ open: false, periodName: null });
+    expect(result.defaultMenuId).toBeNull();
+    expect(result.menus.map((menu) => menu.id).sort()).toEqual(
+      [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena].sort(),
+    );
+    expect(result.menus.every((menu) => !menu.orderable && !menu.isDefault)).toBe(true);
+  });
+
+  it("marks every period menu orderable when the venue clock cannot be read", async () => {
+    const v = await serviceVenue();
+    await db
+      .update(locations)
+      .set({ timeZone: "Unreadable/Clock" })
+      .where(eq(locations.id, v.locationId));
+    const result = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "20:00") }),
+    );
+    expect(result.service).toEqual({ open: true, periodName: null });
+    expect(result.menus).toHaveLength(4);
+    expect(result.menus.every((menu) => menu.orderable)).toBe(true);
+    expect(result.defaultMenuId).toBeNull();
+  });
 
   it("reads opening hours with period colours, ordered staff menus, all seven days and explicit closed dates", async () => {
     const v = await serviceVenue();
