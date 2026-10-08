@@ -1039,6 +1039,16 @@ unused `units` property is gone (it closes W75's leftover).
     and has document listeners. Next: reproduce open/remove/reinsert, including removal before
     the opening toggle arrives, before deciding whether it needs the same lifecycle correction.
 
+- **A390, owner 2026-10-08 — DONE (disclosure animation tests):** every fixed animation
+  sleep in `wt-disclosure.test.ts` is replaced by pausing and seeking real height transitions,
+  then observing the component's completion handler, or by an immediate assertion for a path
+  that does not animate. Intermediate heights, rapid toggles, closing focus exclusion,
+  interrupted reopening, validation errors, reduced motion and content growth remain checked.
+  Delaying the final close's animation-frame callback by 1200 ms reproduced `expected false
+  to be true` in the old rapid-toggle case. The same delayed frame passed with the revised case;
+  waiting for completion also passed with the old component. No component change was needed
+  for that reproduction. Receipts: `~/waitron-campaign-e/receipts/a390/`.
+
 - **A389, owner 2026-10-08 — DONE (disclosure reopening test):** the Chromium test pauses
   the real height transitions in the frame that finds them, seeks the collapse and reopening
   to their midpoints, and checks that reopening starts at the interrupted height and finishes open.
