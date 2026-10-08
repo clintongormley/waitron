@@ -6868,11 +6868,11 @@ approved.
   diff of a rebased push named only main's file. See
   [ci-and-gates.md](developers/ci-and-gates.md), "The pre-push hook" and "After a rebase, the
   old-tip..new-tip diff can leave out the branch's own changes".
-  **Open point (owner, no action queued):** the hook trusts the checkout's own `origin/main`. In
-  #1421's Codex review, an unsigned commit placed by hand on a local `origin/main` that the real
-  remote lacked passed the hook's sign-off check. Licence.yml's `dco` job still checks every pull
-  request's commits, but it does not run on a direct push to `main`, where the hook is the only
-  sign-off check.
+  **Follow-up — DONE (A411).** The hook trusted the checkout's own `origin/main`: in #1421's Codex
+  review, an unsigned commit placed by hand on a local `origin/main` that the real remote lacked
+  passed it. The hook now refreshes `origin/main` from the remote first and, when it cannot,
+  checks every commit in the push range; licence.yml's `dco` job now runs on every push to `main`
+  as well as on pull requests.
 - **The `ci` step passes only when every needed job succeeded or was skipped, and prints each
   result (A274, owner 2026-10-06) — DONE (#1283).**
 - **A job GitHub never acquired a runner for may still let `ci` pass (A274 follow-up) — DONE

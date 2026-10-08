@@ -30,29 +30,42 @@ caps package concurrency at two. Direct package commands retain their Vitest tim
 The pre-push hook (`.husky/pre-push`) checks sign-offs, runs
 `pnpm install --frozen-lockfile`, `format:check`, lint and the root guards with coverage, then
 `typecheck` over changed packages and their dependents. `scripts/changed-packages.mjs` resolves
-the scope for both the hook and CI. The sign-off check leaves out commits already reachable from
-the local `origin/main`, when there is one. For a ref the remote already has, the typecheck scope is
+the scope for both the hook and CI. Before anything else the hook refreshes `origin/main` from the
+remote, with a 20-second limit (`WAITRON_PRE_PUSH_FETCH_SECONDS`, which exists so a test can
+shorten it). When that works, the sign-off check leaves out commits already on `origin/main`. When
+it fails (no remote, no network, no `main` there, or the limit), the hook says so and checks every
+commit in the push range, so a failed refresh can only widen the check. The typecheck scope below
+reads whatever `origin/main` the checkout has either way. For a ref the remote already has, the typecheck scope is
 what the push changes since the remote's old tip, plus the branch's own changes since its merge base
 with `origin/main` when that merge base exists and differs from the old tip. A new ref is scoped
 from its merge base with `origin/main`. Package tests and coverage run in CI; the root guards stay
 local because they check the machinery that decides what runs. CI also runs mutation testing and
 `bundle-smoke`.
 
-### A rebased feature push can include main commits in the sign-off check
+### Why the sign-off check leaves out main's commits, and why only a refreshed main
 
-An existing remote ref makes the hook use its remote tip as the range base
-(`.husky/pre-push`). After you rebase a feature onto newer main, that range can include main
-commits alongside your feature commits. Check the two ranges separately before trying to repair
-your feature's sign-offs.
-
+An existing remote ref makes the hook use its remote tip as the range base. After a rebase onto
+newer main, that range holds main's commits as well as the branch's, and main has one commit with
+no sign-off, so before A392 (#1421) such a push was refused for a commit that was not its own.
 Measured 2026-10-08 for A231p part 1, candidate
 `dccc28a1575993028aba265d5932eeb7e3f6a116`: `scripts/check-signoff.sh` passed the 34 commits
 from main `dd8510d005843474daedcd61b95625b7ad4cf7dd` to that candidate. It failed the 67-commit
 push range from old remote tip `8adba929fde4faa3256412bf2d7d0c5269aab419`, naming only
 main's A376 squash `6797bc03a8c5770718a6fdc1efca7fdd397c6092`. `git show -s --format=%B`
 for that squash contained no `Signed-off-by` trailer. The normal push stopped before installation,
-formatting, lint, root coverage or types. This receipt identifies the blocker; it supplies no
-hook bypass or correction.
+formatting, lint, root coverage or types.
+
+The hook used to trust the checkout's own `origin/main`. In #1421's review, an unsigned commit put
+by hand on a local `origin/main` that the remote lacked passed the hook; the refresh (A411) closes
+that, and `scripts/pre-push.test.mjs` holds the case.
+
+Licence.yml's `dco` job checks every pull request's commits, and since A411 every push to `main`
+too, from the push's previous tip to its new one. That run is the one that sees a direct push to
+`main` (documentation goes that way) made with the hook skipped, and the squash commit GitHub
+writes when a pull request merges, which no hook ever sees: `6797bc03a` reached `main` unsigned
+that way. A push that creates `main` (its previous tip is all zeros), and one whose previous tip
+the checkout does not have, name no range the job can list, and each fails rather than passing
+unchecked; `scripts/check-signoff.test.mjs` runs the step against both.
 
 ### What `bundle-smoke` does NOT cover: the three front-end bundles
 
