@@ -32,12 +32,15 @@ their full text.
   2026-10-08; in progress; campaign lane D).** `apps/dashboard/src/screens/payments-screen.ts`.
   1. **Providers and Readers become two tabs**, laid out like Print agents and Printers. The screen
      opens on Readers when the venue has at least one reader, and on Providers when it has none
-     (read as "added to Waitron", online or not — confirm with the owner if that matters).
+     (added to Waitron, including disabled or offline readers). Implemented locally on
+     `feat/card-payments-controls`; not landed. The first successful reader list chooses the
+     default; tab links and later choices survive live refreshes. Providers remain available
+     while that read is pending or failed. Both panels stay mounted when switching tabs.
   2. **"Default for devices" becomes "In use by", listing device names.** Implemented locally
      on `feat/card-payments-controls`; not landed. The reader list includes each active device's
      explicit choice, otherwise its profile default, and the screen shortens a long list to
      "Bar till, Terrace till +3" with the full list in its title. The current holder stays separate.
-     Tabs, Disconnect and Disable below remain open; this item lands together in one PR.
+     Disconnect and Disable below remain open; this item lands together in one PR.
   3. **Disconnect asks the way other screens do, and checks first.** It shows "Tap again to
      disconnect" (`payments.disconnect_confirm`), unlike the other screens' confirm steps (the
      Devices screen's button, for one, turns into "Disable this device?"). The refusal "Disable

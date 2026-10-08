@@ -10,9 +10,11 @@ import type {
 } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
+import { setLocale } from "../i18n/t.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("en"));
 
 registerCatalogue({
   en: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
@@ -120,6 +122,30 @@ async function flush(el: PaymentsScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (theme) => {
+  it.each([
+    ["en", "providers"],
+    ["en", "readers"],
+    ["es-ES", "providers"],
+    ["es-ES", "readers"],
+  ])("renders the %s %s tab accessibly", async (locale, view) => {
+    setLocale(locale);
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      { api: stubApi(), panels: PANELS },
+      theme,
+    );
+    await flush(el);
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    await tabs.updateComplete;
+    tabs.shadowRoot!.querySelector<HTMLElement>(`[data-key=${view}]`)!.click();
+    await flush(el);
+    await tabs.updateComplete;
+    expect(
+      tabs.shadowRoot!.querySelector<HTMLElement>("[role=tab][aria-selected=true]")?.dataset.key,
+    ).toBe(view);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the providers and readers accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
       "dashboard-payments-screen",

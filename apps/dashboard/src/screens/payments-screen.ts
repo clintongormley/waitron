@@ -8,6 +8,7 @@ import {
   draftScopeFor,
   leaveCoordinatorFor,
   saveActionState,
+  UrlStateController,
   type DataTableColumn,
   type WtDialog,
   type DraftScope,
@@ -21,6 +22,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-tabs.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
 import {
@@ -43,6 +45,7 @@ import type {
   StuckBillPaymentRow,
   StuckBillRefundRow,
 } from "../api/client.js";
+import { dashboardPath } from "../navigation.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -314,6 +317,24 @@ export class PaymentsScreen extends LitElement {
 
   @state() private providers?: PaymentProviderRow[];
   @state() private readers?: ReaderRow[];
+  @state() private view: "providers" | "readers" | null = null;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "payments") return;
+      const view = this.#url.read("view");
+      this.view =
+        view === "providers" || view === "readers"
+          ? view
+          : this.readers === undefined
+            ? null
+            : this.readers.length > 0
+              ? "readers"
+              : "providers";
+      if (this.view) this.#url.write({ view: this.view }, true);
+    },
+    dashboardPath,
+  );
   @state() private holders = new Map<string, ReaderHolderRow>();
   /** The reader whose equipment label is open. */
   @state() private labelReader: ReaderRow | null = null;
@@ -530,6 +551,11 @@ export class PaymentsScreen extends LitElement {
       this.#listQueries
         .watch("listReaders", [], (readers) => {
           this.readers = readers;
+          if (this.view === null) {
+            this.view = readers.length > 0 ? "readers" : "providers";
+            if (this.#url.read("dashboard") === "payments")
+              this.#url.write({ view: this.view }, true);
+          }
           // A status may ask the provider itself, so a background refresh asks again only when the
           // set of active readers changed.
           const ids = JSON.stringify(
@@ -1830,61 +1856,77 @@ export class PaymentsScreen extends LitElement {
           : nothing
       }
       ${this.#renderStuck()} ${this.#renderBillRecovery()}
-
-      <h2>${t("payments.providers_heading")}</h2>
-      ${
-        this.providers === undefined
-          ? nothing
-          : this.providers.length === 0
-            ? html`<p>${t("payments.no_providers")}</p>`
-            : html`<ul class="providers">
-                ${this.providers.map((provider) => this.#renderProvider(provider))}
-              </ul>`
-      }
-
-      <h2>${t("payments.readers_heading")}</h2>
-      <div class="reader-tools">
-        <wt-combobox
-          name="reader-status-filter"
-          label=${t("payments.reader_col_status")}
-          search="auto"
-          .options=${[
-            { value: "active", label: t("payments.filter_active") },
-            { value: "disabled", label: t("payments.filter_disabled") },
-            { value: "all", label: t("payments.filter_all") },
-          ]}
-          .value=${this.readerFilter}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            this.readerFilter = event.detail.value;
-          }}
-        ></wt-combobox>
-        <wt-button
-          variant="secondary"
-          data-test="refresh-readers"
-          ?disabled=${this.refreshing || this.busy}
-          @click=${() => void this.#loadStatuses(this.readers ?? [])}
-          >${t("payments.refresh")}</wt-button
-        >
-      </div>
-      <wt-data-table
-        noMatchesMessage=${tableNoMatches()}
-        aria-label=${t("payments.readers_heading")}
-        viewKey="waitron.payments.readers.table"
-        customiseColumnsLabel=${t("table.customise_columns")}
-        customiseLabel=${t("table.customise")}
-        restoreColumnsLabel=${t("table.restore_columns")}
-        doneLabel=${t("table.done")}
-        moveColumnLabel=${t("table.move_column")}
-        showColumnLabel=${t("table.show_column")}
-        hideColumnLabel=${t("table.hide_column")}
-        alwaysShownColumnLabel=${t("table.column_always_shown")}
-        lastShownColumnLabel=${t("table.column_last_shown")}
-        columnPositionLabel=${t("table.column_position")}
-        .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
-        .columns=${this.#readerColumns()}
-        .rowKey=${(reader: ReaderRow) => reader.id}
-        .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
-      ></wt-data-table>
+      <wt-tabs
+        label=${t("payments.title")}
+        .value=${this.view ?? "providers"}
+        .items=${[
+          { key: "providers", label: t("payments.providers_heading") },
+          { key: "readers", label: t("payments.readers_heading") },
+        ]}
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+          if (event.target !== event.currentTarget) return;
+          const view = event.detail.value;
+          if (view !== "providers" && view !== "readers") return;
+          this.view = view;
+          this.#url.write({ dashboard: "payments", view });
+        }}
+      >
+        <section slot="providers">
+          ${
+            this.providers === undefined
+              ? nothing
+              : this.providers.length === 0
+                ? html`<p>${t("payments.no_providers")}</p>`
+                : html`<ul class="providers">
+                    ${this.providers.map((provider) => this.#renderProvider(provider))}
+                  </ul>`
+          }
+        </section>
+        <section slot="readers">
+          <div class="reader-tools">
+            <wt-combobox
+              name="reader-status-filter"
+              label=${t("payments.reader_col_status")}
+              search="auto"
+              .options=${[
+                { value: "active", label: t("payments.filter_active") },
+                { value: "disabled", label: t("payments.filter_disabled") },
+                { value: "all", label: t("payments.filter_all") },
+              ]}
+              .value=${this.readerFilter}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                this.readerFilter = event.detail.value;
+              }}
+            ></wt-combobox>
+            <wt-button
+              variant="secondary"
+              data-test="refresh-readers"
+              ?disabled=${this.refreshing || this.busy}
+              @click=${() => void this.#loadStatuses(this.readers ?? [])}
+              >${t("payments.refresh")}</wt-button
+            >
+          </div>
+          <wt-data-table
+            noMatchesMessage=${tableNoMatches()}
+            aria-label=${t("payments.readers_heading")}
+            viewKey="waitron.payments.readers.table"
+            customiseColumnsLabel=${t("table.customise_columns")}
+            customiseLabel=${t("table.customise")}
+            restoreColumnsLabel=${t("table.restore_columns")}
+            doneLabel=${t("table.done")}
+            moveColumnLabel=${t("table.move_column")}
+            showColumnLabel=${t("table.show_column")}
+            hideColumnLabel=${t("table.hide_column")}
+            alwaysShownColumnLabel=${t("table.column_always_shown")}
+            lastShownColumnLabel=${t("table.column_last_shown")}
+            columnPositionLabel=${t("table.column_position")}
+            .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
+            .columns=${this.#readerColumns()}
+            .rowKey=${(reader: ReaderRow) => reader.id}
+            .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
+          ></wt-data-table>
+        </section>
+      </wt-tabs>
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderResolveDialog()}
       ${keyed(this.billAction, this.#renderBillDialog())}
