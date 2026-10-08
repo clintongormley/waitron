@@ -238,14 +238,15 @@ sits, so one dialog shows the whole picture.
 - **Variants:** archiving a product archives every variant. A variant can be archived on its own. No
   save brings an archived variant back.
 - **The server refuses every write to an archived product or variant** with `product.archived`:
-  switching it on, editing it, and adding it to a menu, an extras list or a home-screen shortcut.
-  Today it can be added to an extras list. The paths to close, from the 2026-10-08 inventory:
+  switching it on, editing it, and adding it to an extras list, which today is allowed. Adding one
+  to a menu or a home-screen shortcut is already refused, with `menu_section.membership_invalid`
+  (`checkRef`, `packages/catalogue/src/section-members.ts`), and keeps that code. The paths to close, from the 2026-10-08 inventory:
   `patchProduct` (`packages/catalogue/src/operations.ts`), `writeProductVariants`
   (`packages/catalogue/src/variants.ts`), the product editor save
   (`PUT /management-api/products/:id/editor`), the product update route, and the extras-list save
   (`packages/catalogue/src/extras.ts`). The dashboard's three Enable actions are removed.
-- **Removed when archived:** its places in menu drafts (as today) and in extras lists (new; the dialog
-  counts them). Its recipe, options and routing rules stay, for the read-only view.
+- **Removed when archived:** its places in menu drafts (as today) and in extras lists (new; the
+  dialog says so in its warning rather than counting them, which would need a new read). Its recipe, options and routing rules stay, for the read-only view.
 - **The sold-out switch** is left as it was. Every reader that sells a product requires it to be on
   AND available, so an archived product never sells whatever the switch says; the read-only view does
   not show the switch.
