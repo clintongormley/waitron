@@ -2023,6 +2023,14 @@ export class DashboardApi {
     return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "PUT", input);
   }
 
+  saveCatalogueDefaultColor(color: string | null): Promise<CatalogueSettings> {
+    return this.#request<CatalogueSettings>(
+      "/management-api/catalogue-settings/default-color",
+      "PUT",
+      { color },
+    );
+  }
+
   getContentLanguages(): Promise<ContentLanguages> {
     return this.#request<ContentLanguages>("/api/content-languages", "GET");
   }

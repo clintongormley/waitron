@@ -1150,3 +1150,15 @@ it("reads and saves the new-product default through the catalogue settings route
     ["/management-api/catalogue-settings", "PUT", input],
   ]);
 });
+
+it("saves the venue default colour through its own catalogue settings route", async () => {
+  const config = { defaultProductVatClass: "reduced" as const, defaultColor: "#b12525" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(config));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.saveCatalogueDefaultColor("#b12525")).toEqual(config);
+  expect(await api.saveCatalogueDefaultColor(null)).toEqual(config);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/catalogue-settings/default-color", "PUT", { color: "#b12525" }],
+    ["/management-api/catalogue-settings/default-color", "PUT", { color: null }],
+  ]);
+});

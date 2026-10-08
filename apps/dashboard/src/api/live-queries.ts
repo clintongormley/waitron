@@ -2,6 +2,7 @@ import type { ResourceQuery } from "@waitron/dashboard-kit";
 import type { DashboardApi, MenuReadPart } from "./client.js";
 
 const MENU_PUBLICATION_READS = [
+  "catalogue_settings",
   "catalogues",
   "categories",
   "category_details",
