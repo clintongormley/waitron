@@ -2512,6 +2512,21 @@ export class DashboardApi {
       to,
     });
   }
+  /** Answers the destination list in its new order. */
+  moveSectionMembersInto(
+    listId: string,
+    members: { listId: string; memberId: string }[],
+    position?: number,
+  ): Promise<SectionMember[]> {
+    return this.#request(
+      `/management-api/sections/${listId}/members/move-in`,
+      "POST",
+      position === undefined ? { members } : { members, position },
+    );
+  }
+  removeSectionMembers(members: { listId: string; memberId: string }[]): Promise<void> {
+    return this.#request("/management-api/section-members/remove", "POST", { members });
+  }
 
   setIncludeFolder(
     listId: string,

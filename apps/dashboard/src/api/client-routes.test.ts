@@ -859,6 +859,29 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("moves several members into one list and removes several, sending a position only when given", async () => {
+    const member = { id: "m1", position: 0, ref: { kind: "product", productId: "p1" } };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([member]))
+      .mockResolvedValueOnce(jsonResponse([member]))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const members = [
+      { listId: "s1", memberId: "m1" },
+      { listId: "s2", memberId: "m2" },
+    ];
+
+    await expect(api.moveSectionMembersInto("root", members, 0)).resolves.toEqual([member]);
+    await expect(api.moveSectionMembersInto("root", members)).resolves.toEqual([member]);
+    await expect(api.removeSectionMembers(members)).resolves.toBeUndefined();
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/sections/root/members/move-in", "POST", { members, position: 0 }],
+      ["/management-api/sections/root/members/move-in", "POST", { members }],
+      ["/management-api/section-members/remove", "POST", { members }],
+    ]);
+  });
+
   it("sets how one include shows its menu and returns the answer", async () => {
     const folder = { showAsFolder: true, overrides: { names: { es: "Copas" }, color: "#aabbcc" } };
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(folder));
