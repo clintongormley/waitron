@@ -403,14 +403,30 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // existence nor its kind.
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
       const stationId = device.stationId;
-      const station = await withTransaction(deps.db, async (tx) => ({
-        id: stationId,
-        queue: await listStationQueue(tx, stationId),
-        notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, stationId),
-        printersDown: (
-          await stationPrintersDown(tx, deps.cfg.locationId, new Date(), stationId)
-        ).map(({ printerId, printerName, since }) => ({ printerId, printerName, since })),
-      }));
+      const cfg = requestCfg(deps.cfg, device);
+      const station = await withTransaction(deps.db, async (tx) => {
+        const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date());
+        const state = states.get(stationId);
+        if (state === undefined) throw new AppError("station.not_found", { stationId });
+        const destination = state.sendsTo === null ? undefined : states.get(state.sendsTo);
+        return {
+          id: stationId,
+          name: state.name,
+          today: {
+            open: state.open,
+            isDefault: state.isDefault,
+            byHand: state.byHand,
+            sendsTo:
+              destination === undefined ? null : { id: state.sendsTo, name: destination.name },
+            why: state.why,
+          },
+          queue: await listStationQueue(tx, stationId),
+          notices: await VENUE_SERVICE.listStationNotices(tx, cfg, stationId),
+          printersDown: (await stationPrintersDown(tx, cfg.locationId, new Date(), stationId)).map(
+            ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
+          ),
+        };
+      });
       return c.json({ station });
     }),
   );

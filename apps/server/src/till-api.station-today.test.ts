@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { kitchenStations, ticketItems, locations, devices, withTransaction } from "@waitron/db";
+import {
+  kitchenStations,
+  ticketItems,
+  locations,
+  devices,
+  deviceProfiles,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -21,6 +28,10 @@ import {
   stationDayStates,
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
+import { mountDeviceApi } from "./device-api.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -334,5 +345,226 @@ describe("the till's station day", () => {
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, String(placed.json.tabId))),
     ).toEqual([{ stationId: bar }]);
+  });
+});
+
+describe("the kitchen display's station day", () => {
+  let deviceCookie: string;
+  let profileId: string;
+  let deviceId: string;
+  const path = () => `/api/device/stations/${grill}/today`;
+  const authorizedClose = () => ({ ...close(), authorizer: { personId: manager, pin: "1234" } });
+  const deviceCall = (method: string, route: string, body?: unknown, cookie = deviceCookie) =>
+    call(method, route, body, cookie);
+
+  beforeEach(async () => {
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({
+        name: "Kitchen controls",
+        formFactor: "kds",
+        capabilities: ["prepare-orders"],
+      })
+      .returning({ id: deviceProfiles.id });
+    profileId = profile!.id;
+    const enrolled = await enrolDeviceForTest(suite.db, v.cfg, {
+      name: "Grill display",
+      profileId,
+      stationId: grill,
+    });
+    deviceId = enrolled.deviceId;
+    deviceCookie = `${DEVICE_COOKIE}=${deviceId}.${enrolled.token}`;
+    mountDeviceApi(
+      app,
+      {
+        db: suite.db,
+        cfg: v.cfg,
+        secureCookies: false,
+        pairingMode: createPairingMode(),
+      },
+      () => {},
+    );
+  });
+
+  it("closes its station with a manager PIN and reports the destination and reason", async () => {
+    expect((await deviceCall("PUT", path(), authorizedClose())).status).toBe(204);
+    expect(await rows()).toEqual([
+      expect.objectContaining({ stationId: grill, open: false, sendsToStationId: bar }),
+    ]);
+    const answer = await deviceCall("GET", "/api/device/station");
+    expect(answer.status).toBe(200);
+    expect(answer.json.station).toMatchObject({
+      id: grill,
+      name: "Grill",
+      today: {
+        open: false,
+        isDefault: false,
+        byHand: "closed",
+        sendsTo: { id: bar, name: "Bar" },
+        why: "closed_by_hand",
+      },
+    });
+  });
+  it("reopens its station with a manager PIN and clears the destination", async () => {
+    await inTx(v, (tx) => setStationToday(tx, v.cfg, grill, "closed", new Date(), bar));
+    expect(
+      (
+        await deviceCall("PUT", path(), {
+          state: "open",
+          authorizer: { personId: manager, pin: "1234" },
+        })
+      ).status,
+    ).toBe(204);
+    expect(await rows()).toEqual([]);
+    const answer = await deviceCall("GET", "/api/device/station");
+    expect(answer.json.station).toMatchObject({
+      name: "Grill",
+      today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" },
+    });
+  });
+  it("shows an assigned station switched off since enrollment", async () => {
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, grill));
+    const answer = await deviceCall("GET", "/api/device/station");
+    expect(answer.status).toBe(200);
+    expect(answer.json.station).toMatchObject({
+      id: grill,
+      name: "Grill",
+      today: {
+        open: false,
+        isDefault: false,
+        byHand: null,
+        sendsTo: null,
+        why: "switched_off",
+      },
+    });
+  });
+  it("reads only open destinations and managers without needing a staff session", async () => {
+    const answer = await deviceCall("GET", path());
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({
+      destinations: [
+        { id: bar, name: "Bar", isDefault: true },
+        { id: pastry, name: "Pastry", isDefault: false },
+      ],
+      authorizers: [{ personId: manager, displayName: "Administradora" }],
+    });
+  });
+  it.each([undefined, null])(
+    "requires an authorizer (%j) even with a manager session",
+    async (authorizer) => {
+      const answer = await deviceCall(
+        "PUT",
+        path(),
+        { ...close(), authorizer },
+        `${deviceCookie}; ${managerCookie}`,
+      );
+      expect(answer.status).toBe(403);
+      expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
+      expect(await rows()).toEqual([]);
+    },
+  );
+  it("refuses a correct staff PIN without writing a close", async () => {
+    const answer = await deviceCall("PUT", path(), {
+      ...close(),
+      authorizer: { personId: staff, pin: "5555" },
+    });
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await rows()).toEqual([]);
+  });
+  it.each(["GET", "PUT"])("refuses another station for %s", async (method) => {
+    const answer = await deviceCall(
+      method,
+      `/api/device/stations/${bar}/today`,
+      method === "PUT" ? authorizedClose() : undefined,
+    );
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({
+      code: "device.forbidden_station",
+      params: { stationId: bar },
+    });
+    expect(await rows()).toEqual([]);
+  });
+  it.each(["GET", "PUT"])("requires prepare-orders for %s", async (method) => {
+    await suite.db
+      .update(deviceProfiles)
+      .set({ capabilities: [] })
+      .where(eq(deviceProfiles.id, profileId));
+    const answer = await deviceCall(
+      method,
+      path(),
+      method === "PUT" ? authorizedClose() : undefined,
+    );
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({
+      code: "device.forbidden_action",
+      params: { action: "prepare-orders" },
+    });
+    expect(await rows()).toEqual([]);
+  });
+  it.each(["GET", "PUT"])("requires a live device cookie for %s", async (method) => {
+    const body = method === "PUT" ? authorizedClose() : undefined;
+    const absent = await deviceCall(method, path(), body, "");
+    expect(absent.status).toBe(401);
+    expect(absent.json).toMatchObject({ code: "device.unauthorized" });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    const revoked = await deviceCall(method, path(), body);
+    expect(revoked.status).toBe(401);
+    expect(revoked.json).toMatchObject({ code: "device.unauthorized" });
+    expect(await rows()).toEqual([]);
+  });
+  it("shares the device's override PIN limit with a signed-in till", async () => {
+    for (let i = 0; i < 4; i++) {
+      const answer = await deviceCall("PUT", path(), {
+        ...close(),
+        authorizer: { personId: manager, pin: "9999" },
+      });
+      expect(answer.status).toBe(401);
+      expect(answer.json).toMatchObject({ code: "pin.invalid" });
+    }
+    const blocked = await deviceCall("PUT", path(), authorizedClose());
+    expect(blocked.status).toBe(429);
+    expect(blocked.json).toMatchObject({ code: "pin.throttled" });
+    const login = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, {
+        deviceId,
+        personId: staff,
+        pin: "5555",
+      }),
+    );
+    const till = await call(
+      "PUT",
+      today(),
+      {
+        ...close(),
+        override: { personId: manager, pin: "1234" },
+      },
+      `${SESSION_COOKIE}=${login.token}`,
+    );
+    expect(till.status).toBe(429);
+    expect(till.json).toMatchObject({ code: "pin.throttled" });
+    expect(await rows()).toEqual([]);
+  });
+  it("refuses an incomplete PIN credential as pin.invalid", async () => {
+    const answer = await deviceCall("PUT", path(), {
+      state: "open",
+      authorizer: { personId: manager },
+    });
+    expect(answer.status).toBe(401);
+    expect(answer.json).toMatchObject({ code: "pin.invalid" });
+    expect(await rows()).toEqual([]);
+  });
+  it.each([
+    { state: "invalid" },
+    { state: "closed", sendsToStationId: null },
+    { state: "open", authorizer: [] },
+  ])("rejects malformed input %j", async (body) => {
+    const answer = await deviceCall("PUT", path(), body);
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({ code: "management.request_invalid" });
+    expect(await rows()).toEqual([]);
   });
 });

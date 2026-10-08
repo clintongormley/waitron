@@ -1265,7 +1265,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   today's close/open writes. Identity accepts the module permission and authorises a manager PIN
   without a session under the wrong-PIN limit. The till now reads destinations and authorizers,
   closes or opens a station with a manager permission or PIN, and reports today's state. The
-  kitchen display request path, extension request paths and visible controls remain to build.
+  kitchen display reads its station's name and today's state, and closes or opens that station
+  with a manager PIN, under its profile's preparation permission and the shared PIN limit.
+  Extension request paths and visible controls remain to build.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows

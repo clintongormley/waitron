@@ -1,6 +1,11 @@
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
-import { authorize, listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
+import {
+  authorize,
+  authorizeByPin,
+  listActivePersonsWithPermission,
+  type PinThrottle,
+} from "@waitron/identity";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
@@ -8,6 +13,7 @@ import { invalid } from "./bill-allocation.js";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { assertProfileAction, requireDevice } from "./device-session.js";
 import { requestCfg } from "./request-config.js";
 import { overridePinAttempts, parseOverrideField, type Run, type TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
@@ -25,6 +31,62 @@ export function mountStationTodayApi(
   run: Run,
   pinThrottle: PinThrottle,
 ): void {
+  app.get("/api/device/stations/:stationId/today", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice(deps, c);
+      assertProfileAction(device, "prepare-orders");
+      const id = stationId(c.req.param("stationId"));
+      if (id !== device.stationId)
+        throw new AppError("device.forbidden_station", { stationId: id });
+      const cfg = requestCfg(deps.cfg, device);
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
+          const authorizers = await listActivePersonsWithPermission(tx, "venue_service.manage");
+          return { destinations, authorizers };
+        }),
+      );
+    }),
+  );
+  app.put("/api/device/stations/:stationId/today", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice(deps, c);
+      assertProfileAction(device, "prepare-orders");
+      const id = stationId(c.req.param("stationId"));
+      if (id !== device.stationId)
+        throw new AppError("device.forbidden_station", { stationId: id });
+      const cfg = requestCfg(deps.cfg, device);
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      if (body.state !== "open" && body.state !== "closed") throw invalid("state");
+      const state = body.state;
+      let destination: string | undefined;
+      if (state === "closed") {
+        if (typeof body.sendsToStationId !== "string" || !isUuid(body.sendsToStationId))
+          throw invalid("sendsToStationId");
+        destination = body.sendsToStationId.toLowerCase();
+      }
+      const authorizer = parseOverrideField(body.authorizer);
+      if (authorizer === undefined)
+        throw new AppError("authorization.not_permitted", { permission: "venue_service.manage" });
+      const attempts = overridePinAttempts(pinThrottle, device.deviceId);
+      await withPinCheckAhead(deps.db, authorizer, attempts, (checked) =>
+        withTransaction(deps.db, async (tx) => {
+          await authorizeByPin(
+            tx,
+            {
+              permission: "venue_service.manage",
+              override: withCheck(authorizer, checked)!,
+            },
+            attempts,
+          );
+          if (state === "closed")
+            await VENUE_SERVICE.closeStationForToday(tx, cfg, id, destination!, new Date());
+          else await VENUE_SERVICE.openStationForToday(tx, cfg, id, new Date());
+        }),
+      );
+      return c.body(null, 204);
+    }),
+  );
   app.get("/api/service-day/authorizers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
