@@ -1558,7 +1558,8 @@ receipt was recorded; do not treat its complete main run as green.
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two
 venue-service forms and the till's profile dialog) in #1418; batch 5 (the till) in #1414; batch 6 audited with no
-stored-setting editors; batch 7 unreserved forms audited; batch 2a landed as #1422; batches 2b and 4b OPEN.** The owner:
+stored-setting editors; batch 7 unreserved forms audited; batch 2a landed as #1422; batch 2b
+(the menus screen) built on `feat/save-follows-changes-menus`; batch 4b OPEN.** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
@@ -1618,11 +1619,25 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   unsaved: measured 2026-10-08 on the unit form, the same before and after this batch's fix; the
   other forms were not tried, and the recipe editor clears its choice on removal by design. It
   matters only if a screen ever moves an open form.
-- **Batch 2b — OPEN, waits for lane D's menus Preview work (`feat/preview-a349-a350-a351-a352`) to
-  land.** The menus screen's own forms (`menus-screen.ts`), the section and menu details form and the
-  include dialog. Only the menus screen opens the last two, so gating them changes
-  `menus-screen.test.ts`, which lane D's branch also changes. Their design is in the plan's Task
-  2a.7.
+- **Batch 2b — BUILT, not yet landed (A331-2b, 2026-10-08).** The menus screen: the menu details
+  form (new and rename) and the section form (new and edit), which are one form mounted twice, and
+  an include's Edit dialog. Each opens quiet, turns blue on the first edit, goes quiet again when
+  the opened values are typed back or a save is committed with it still open, and sends nothing
+  when an untouched Save is pressed. Not a save, so not gated: Add a shortcut, Include a menu, the
+  home display's slider and radios and the menu price fields write at once; Delete section and
+  Publish confirm an operation; the rest open a form or only show (list:
+  [the Batch 2b table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b)).
+  Test checks that pressed or asserted on an untouched form were changed to edit first; each is
+  listed in its commit message. Looked at on 2026-10-08 in 33 screenshots of the forms mounted with
+  test data (each unchanged, after one edit, and changed but blocked — an emptied required name
+  for the details form, busy for the include — at 1280px light English and 390px dark Spanish,
+  plus an Edit section refused, fixed and saved), kept outside the repository in
+  `~/waitron-campaign-c/a331-2b-shots/`: no defect found. Left open: both forms keep their fields
+  when taken out of the page and put back, and take what they then hold as the new starting point.
+  Run on the branch on 2026-10-08 (a throwaway case: edit, remove, re-add): the edit was still in
+  the field, Save was quiet, and Cancel closed the form without asking. The same open point as the
+  watcher form's in batch 4c; main was not run. It matters only if the menus screen ever moves an
+  open form.
 - **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
   floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
   flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
