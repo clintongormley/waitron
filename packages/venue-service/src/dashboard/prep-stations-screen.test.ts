@@ -320,6 +320,14 @@ async function settle(el: PrepStationsScreen) {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
 }
+async function editSaveField(el: PrepStationsScreen, field: HTMLElement, value: string | string[]) {
+  field.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: typeof value === "string" ? { value } : { values: value, value: value[0] },
+    }),
+  );
+  await settle(el);
+}
 const q = (el: PrepStationsScreen, s: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(s) ??
   el
@@ -449,7 +457,7 @@ it("Settings retains disabled station fallback editing without enabling the stat
   expect(a.updateStation).not.toHaveBeenCalled();
 });
 
-it("Settings confirms a retained disabled fallback without rewriting its unchanged mapping", async () => {
+it("Settings keeps a retained disabled fallback quiet without rewriting its unchanged mapping", async () => {
   setLocale("en");
   const next = withUpstairs(
     { open: false, why: "out_of_hours" },
@@ -463,19 +471,17 @@ it("Settings confirms a retained disabled fallback without rewriting its unchang
   const el = await mount(a);
   const combo = await openSettingsFallback(el);
   expect(combo.value).toBe("old");
-  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+  const save = settingsQ(
+    el,
+    '[data-test="save-settings-cell"]',
+  ) as HTMLElementTagNameMap["wt-button"];
+  expect(save.variant).toBe("secondary");
+  expect(save.disabled).toBe(true);
+  save.click();
   await settle(el);
-  expect(settingsQ(el, '[data-test="settings-fallback-confirmation"]')!.textContent).toContain(
-    "Old bar",
-  );
   expect(a.setStationFallback).not.toHaveBeenCalled();
-  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
-  await settle(el);
-  expect(a.setStationFallback).not.toHaveBeenCalled();
-  expect(settingsQ(el, '[data-test="settings-choice"]')).toBeNull();
-  expect(settingsQ(el, '[data-test="edit-settings-fallback-upstairs"]')!.textContent).toContain(
-    "Old bar",
-  );
+  expect(settingsQ(el, '[data-test="settings-fallback-confirmation"]')).toBeNull();
+  expect((settingsQ(el, '[data-test="settings-choice"]') as WtCombobox).value).toBe("old");
 });
 
 it("Settings fallback retains the localized search prompt and empty-choice placeholder", async () => {
@@ -1526,6 +1532,7 @@ it("does not create an unnamed station", async () => {
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
+  await editSaveField(el, q(el, 'wt-input[name="displayOrder"]')!, "2");
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   expect(a.createStation).not.toHaveBeenCalled();
@@ -1587,10 +1594,16 @@ it("creates a station with its name, order and thresholds when Enter is pressed 
 });
 
 it("renames a station when Enter is pressed in its name field", async () => {
-  const a = api();
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      stations: view.stations.map((station) => ({ ...station, name: "Before" })),
+    }),
+  });
   const el = await mount(a);
   q(el, '[data-test="rename-bar"]')!.click();
   await settle(el);
+  await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Bar");
   q(el, 'wt-input[name="stationName"]')!
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(
@@ -1646,10 +1659,17 @@ it("guards repeated Enter rename saves while a station write is pending and allo
     reject = fail;
   });
   const updateStation = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined);
-  const a = api({ updateStation });
+  const a = api({
+    updateStation,
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      stations: view.stations.map((station) => ({ ...station, name: "Before" })),
+    }),
+  });
   const el = await mount(a);
   q(el, '[data-test="rename-bar"]')!.click();
   await settle(el);
+  await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Bar");
   const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
   const enter = () =>
     input.dispatchEvent(
@@ -1927,14 +1947,17 @@ it.each([
     setLocale("en");
     const next = withUpstairs(
       sourceOpen ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" },
-      { fallbackStationId: null },
+      { fallbackStationId: choice ? null : "bar" },
     );
     next.routing.stationTimes[0] = {
       ...next.routing.stationTimes[0]!,
       status: targetOpen ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" },
       closedSendsTo: destination || null,
     };
-    const a = api({ load: vi.fn().mockResolvedValue(next), setStationFallback: vi.fn() });
+    const a = api({
+      load: vi.fn().mockResolvedValue(next),
+      setStationFallback: vi.fn(),
+    });
     const el = await mount(a);
     const combo = (await openSettingsFallback(el)) as HTMLElement & {
       options: { value: string; label: string }[];
@@ -3183,6 +3206,7 @@ it("keeps a refused station name editable, marks duplicates and validates a corr
   expect(action).not.toBeNull();
   action!.click();
   await settle(el);
+  await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Renamed upstairs");
   q(el, '[data-test="save-station-name"]')!.click();
   await settle(el);
   expect(q(el, '[data-test="station-rename"]')).not.toBeNull();
@@ -3325,6 +3349,7 @@ it("keeps a general rename refusal below the field and permits retry", async () 
   });
   healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!.click();
   await settle(el);
+  await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Renamed upstairs");
   q(el, '[data-test="save-station-name"]')!.click();
   await settle(el);
   expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
@@ -3588,6 +3613,7 @@ it("Tickets closes after the write succeeds even if its following refresh fails"
   const { el, table } = await mountTickets({ load });
   ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
   await settle(el);
+  await editSaveField(el, ticketQ(table, '[data-test="station-printers-bar"]')!, ["next"]);
   ticketQ(table, '[data-test="save-printers-bar"]')!.click();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded."),
@@ -3626,6 +3652,7 @@ it("Tickets keeps a failed selection editable while reporting a general refusal 
   });
   ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
   await settle(el);
+  await editSaveField(el, ticketQ(table, '[data-test="station-printers-bar"]')!, ["next"]);
   ticketQ(table, '[data-test="save-printers-bar"]')!.click();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("The change could not be saved."),
@@ -3702,6 +3729,7 @@ it.each([
       expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+      await editSaveField(el, combo, ["next"]);
       ticketQ(table, '[data-test="save-printers-bar"]')!.click();
       await vi.waitFor(() => expect(combo.error).not.toBe(""));
       expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(width);
@@ -4027,9 +4055,10 @@ it("Watchers closes its printer editor after a successful write even when refres
   const load = vi.fn().mockResolvedValueOnce(ticketView).mockRejectedValue(new Error("offline"));
   const { el, a } = await mountWatcherPrinters({ load });
   await openWatcherPrinters(el);
+  await editSaveField(el, q(el, '[data-test="watcher-printers-pass"]')!, ["watcher", "next"]);
   q(el, '[data-test="save-watcher-printers-pass"]')!.click();
   await settle(el);
-  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["watcher"]);
+  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["watcher", "next"]);
   expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
   expect(el.shadowRoot!.textContent).toContain("could not be loaded");
 });
@@ -4082,6 +4111,7 @@ it.each([
         path: `__screenshots__/look/watcher-printers-${locale}-${theme}-${width}-picker.png`,
       });
       await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+      await editSaveField(el, combo, ["watcher", "next"]);
       q(el, '[data-test="save-watcher-printers-pass"]')!.click();
       await settle(el);
       expect(
@@ -4363,7 +4393,14 @@ it("Watchers Rename validates empty names and retains a retryable duplicate-name
 });
 it("Watchers service zones refuses an empty explicit set and allows every zone instead", async () => {
   const save = vi.fn();
-  const { el } = await mountWatcherPrinters({ updateWatcher: save });
+  const initial = structuredClone(ticketView);
+  initial.zones = [{ id: "terrace", name: "Terrace", active: true }];
+  initial.watchers[0]!.everyZone = false;
+  initial.watchers[0]!.zoneIds = ["terrace"];
+  const { el } = await mountWatcherPrinters({
+    updateWatcher: save,
+    load: vi.fn().mockResolvedValue(initial),
+  });
   const combo = await openWatcherCell(el, "zones");
   chooseWatcherCell(combo, []);
   await settle(el);
@@ -4521,6 +4558,7 @@ it.each([
       });
       await page.elementLocator(watcherTableQ(el, '[data-test="rename-watcher-pass"]')!).click();
       await settle(el);
+      await editSaveField(el, q(el, '[data-test="watcher-rename-name"]')!, "Expo");
       q(el, '[data-test="save-watcher-name"]')!.click();
       await settle(el);
       expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe(
@@ -4796,7 +4834,14 @@ it.each([
   "Watchers %s classifies %s/%s without losing a retryable draft",
   async (field, code, errorField, expectedField, expectedSummary) => {
     const save = vi.fn().mockRejectedValue({ code, params: { field: errorField } });
-    const { el } = await mountWatcherPrinters({ updateWatcher: save });
+    const initial = structuredClone(ticketView);
+    initial.zones = [{ id: "terrace", name: "Terrace", active: true }];
+    initial.watchers[0]!.everyZone = false;
+    initial.watchers[0]!.zoneIds = ["terrace"];
+    const { el } = await mountWatcherPrinters({
+      updateWatcher: save,
+      load: vi.fn().mockResolvedValue(initial),
+    });
     const combo = await openWatcherCell(el, field);
     chooseWatcherCell(combo, field === "pass" ? ["no"] : ["__every__"]);
     await settle(el);
@@ -5500,6 +5545,8 @@ it.each(["rename", "remove"] as const)(
     expect(q(el, '[role="alert"]')!.textContent).toContain("Rename that watcher first");
     q(el, `[data-test="${next}-watcher-runner"]`)!.click();
     await settle(el);
+    if (next === "rename")
+      await editSaveField(el, q(el, '[data-test="watcher-rename-name"]')!, "Expo");
     q(
       el,
       next === "rename"
@@ -6778,3 +6825,301 @@ it.each(["up", "leave", "cancel", "disconnect", "fits"])(
     }
   },
 );
+
+describe("Save follows changes", () => {
+  const modes = [
+    "create",
+    "rename",
+    "printers",
+    "watcher-name",
+    "watcher-printers",
+    "watcher-pass",
+    "watcher-follows",
+    "watcher-zones",
+    "rest",
+    "timing",
+    "fallback",
+  ] as const;
+  type Mode = (typeof modes)[number];
+  async function openSave(mode: Mode, overrides: Partial<PrepStationsApi> = {}) {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    const a = api({
+      load: vi.fn().mockResolvedValue({
+        ...ticketView,
+        zones: [{ id: "terrace", name: "Terrace", active: true }],
+      }),
+      updateWatcher: vi.fn(),
+      setStationPrinters: vi.fn(),
+      setWatcherPrinters: vi.fn(),
+      setStationFallback: vi.fn(),
+      ...overrides,
+    });
+    const el = await mount(a);
+    await settle(el);
+    const query = (selector: string) =>
+      q(el, selector) ??
+      ticketQ(q(el, '[data-test="tickets-table"]')!, selector) ??
+      settingsQ(el, selector);
+    const info = {
+      create: ["new-station", "save-station", 'wt-input[name="name"]', "", "New station"],
+      rename: ["rename-bar", "save-station-name", 'wt-input[name="stationName"]', "Bar", "New bar"],
+      printers: [
+        "edit-printers-bar",
+        "save-printers-bar",
+        '[data-test="station-printers-bar"]',
+        ["old"],
+        ["next"],
+      ],
+      "watcher-name": [
+        "rename-watcher-pass",
+        "save-watcher-name",
+        '[data-test="watcher-rename-name"]',
+        "Pass",
+        "New pass",
+      ],
+      "watcher-printers": [
+        "edit-watcher-printers-pass",
+        "save-watcher-printers-pass",
+        '[data-test="watcher-printers-pass"]',
+        ["watcher"],
+        ["next"],
+      ],
+      "watcher-pass": [
+        "edit-watcher-pass-pass",
+        "save-watcher-cell",
+        '[data-test="watcher-cell-input"]',
+        ["yes"],
+        ["no"],
+      ],
+      "watcher-follows": [
+        "edit-watcher-follows-pass",
+        "save-watcher-cell",
+        '[data-test="watcher-cell-input"]',
+        ["bar"],
+        ["__every__"],
+      ],
+      "watcher-zones": [
+        "edit-watcher-zones-pass",
+        "save-watcher-cell",
+        '[data-test="watcher-cell-input"]',
+        ["__every__"],
+        ["terrace"],
+      ],
+      rest: [
+        "edit-settings-rest-bar",
+        "save-settings-cell",
+        '[data-test="settings-choice"]',
+        "no",
+        "yes",
+      ],
+      timing: [
+        "edit-settings-warmAfterMinutes-bar",
+        "save-settings-cell",
+        '[data-test="settings-minutes"]',
+        "",
+        "6",
+      ],
+      fallback: [
+        "edit-settings-fallback-upstairs",
+        "save-settings-cell",
+        '[data-test="settings-choice"]',
+        "",
+        "bar",
+      ],
+    } as const;
+    const [trigger, save, field, initial, changed] = info[mode];
+    query(`[data-test="${trigger}"]`)!.click();
+    await settle(el);
+    const button = () => query(`[data-test="${save}"]`) as HTMLElementTagNameMap["wt-button"];
+    const edit = async (value: string | readonly string[]) => {
+      query(field)!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: typeof value === "string" ? { value } : { values: [...value], value: value[0] },
+        }),
+      );
+      await settle(el);
+    };
+    return { el, a, button, edit, initial, changed, query };
+  }
+  async function state(button: HTMLElementTagNameMap["wt-button"], dirty: boolean) {
+    await button.updateComplete;
+    expect(button.variant).toBe(dirty ? "primary" : "secondary");
+    expect(button.disabled).toBe(!dirty);
+    expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(!dirty);
+  }
+  it.each(modes)("%s opens quiet, enables after editing and quiets after undo", async (mode) => {
+    const form = await openSave(mode);
+    await state(form.button(), false);
+    await form.edit(form.changed);
+    await state(form.button(), true);
+    await form.edit(form.initial);
+    await state(form.button(), false);
+  });
+  it.each(modes)(
+    "%s ignores an untouched host click without a write or validation",
+    async (mode) => {
+      const { el, a, button, query } = await openSave(mode);
+      button().click();
+      await settle(el);
+      for (const write of [
+        a.createStation,
+        a.updateStation,
+        a.updateWatcher,
+        a.setStationPrinters,
+        a.setWatcherPrinters,
+        a.setStationFallback,
+      ])
+        expect(write).not.toHaveBeenCalled();
+      expect(query('[data-test="settings-fallback-confirmation"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      expect(button().isConnected).toBe(true);
+    },
+  );
+  it("New station disables a changed invalid draft until its local checks pass", async () => {
+    const form = await openSave("create");
+    await form.edit("New station");
+    form
+      .query('wt-input[name="warmAfterMinutes"]')!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "20" } }));
+    await settle(form.el);
+    form.button().click();
+    await settle(form.el);
+    expect(form.a.createStation).not.toHaveBeenCalled();
+    expect(form.button().variant).toBe("primary");
+    expect(form.button().disabled).toBe(true);
+    form
+      .query('wt-input[name="displayOrder"]')!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2" } }));
+    await settle(form.el);
+    expect(form.button().disabled).toBe(true);
+    form
+      .query('wt-input[name="warmAfterMinutes"]')!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "6" } }));
+    await settle(form.el);
+    await state(form.button(), true);
+  });
+  it("New station keeps its validation summary until both invalid fields are fixed", async () => {
+    setLocale("en");
+    const form = await openSave("create");
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
+    form.button().click();
+    await settle(form.el);
+    expect(form.query('[data-field-error="name"]')).not.toBeNull();
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    await form.edit("New station");
+    expect(form.query('[data-field-error="name"]')).toBeNull();
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    expect(form.query("wt-modal")!.textContent).toContain(
+      "Correct the highlighted fields to continue.",
+    );
+    expect(form.button().disabled).toBe(true);
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "15");
+    expect(form.query('[role="alert"]')).toBeNull();
+    await state(form.button(), true);
+    expect(form.a.createStation).not.toHaveBeenCalled();
+  });
+  it("New station explains a field broken again after a validation attempt", async () => {
+    setLocale("en");
+    const form = await openSave("create");
+    await form.edit("New station");
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
+    form.button().click();
+    await settle(form.el);
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "15");
+    await state(form.button(), true);
+    await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
+    expect(form.button().variant).toBe("primary");
+    expect(form.button().disabled).toBe(true);
+    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    expect(form.query("wt-modal")!.textContent).toContain(
+      "Correct the highlighted fields to continue.",
+    );
+    expect(form.a.createStation).not.toHaveBeenCalled();
+  });
+  it.each(["rename", "watcher-name"] as const)("%s compares trimmed names", async (mode) => {
+    const form = await openSave(mode);
+    await form.edit(` ${form.initial as string} `);
+    await state(form.button(), false);
+    form.button().click();
+    await settle(form.el);
+    expect(form.a.updateStation).not.toHaveBeenCalled();
+    expect(form.a.updateWatcher).not.toHaveBeenCalled();
+  });
+  it("an explicit default minute value is a change from inheritance, then numeric spelling is ignored", async () => {
+    const server = structuredClone(ticketView);
+    server.stations[0]!.timingOverrides.warmAfterMinutes = 5;
+    const form = await openSave("timing", { load: vi.fn().mockResolvedValue(server) });
+    await form.edit("05");
+    await state(form.button(), false);
+    await form.edit("");
+    await state(form.button(), true);
+  });
+  it.each([
+    "rename",
+    "printers",
+    "watcher-name",
+    "watcher-printers",
+    "watcher-pass",
+    "rest",
+    "timing",
+  ] as const)("%s stays primary during a write and retryable after refusal", async (mode) => {
+    let refuse!: (error: unknown) => void;
+    const write = new Promise<void>((_resolve, reject) => {
+      refuse = reject;
+    });
+    const save = vi.fn(() => write);
+    const form = await openSave(mode, {
+      updateStation: save,
+      updateWatcher: save,
+      setStationPrinters: save,
+      setWatcherPrinters: save,
+    });
+    await form.edit(form.changed);
+    form.button().click();
+    await settle(form.el);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(form.button().variant).toBe("primary");
+    expect(form.button().disabled).toBe(true);
+    refuse({ code: "server.internal" });
+    await settle(form.el);
+    await state(form.button(), true);
+    form.button().click();
+    await settle(form.el);
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+  it("station printer comparison ignores the saved membership order", async () => {
+    const saved = {
+      ...ticketView,
+      stationPrinters: [
+        { stationId: "bar", printerId: "old" },
+        { stationId: "bar", printerId: "next" },
+      ],
+    };
+    const form = await openSave("printers", { load: vi.fn().mockResolvedValue(saved) });
+    await form.edit(["next", "old"]);
+    await state(form.button(), false);
+    form.button().click();
+    await settle(form.el);
+    expect(form.a.setStationPrinters).not.toHaveBeenCalled();
+  });
+  it("a standalone station rename preserves newer input after committing the submitted name", async () => {
+    let complete!: () => void;
+    const write = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    const save = vi.fn(() => write);
+    const form = await openSave("rename", { updateStation: save });
+    await form.edit("Submitted name");
+    form.button().click();
+    await settle(form.el);
+    await form.edit("Newer name");
+    complete();
+    await settle(form.el);
+    expect(save).toHaveBeenCalledExactlyOnceWith("bar", { name: "Submitted name" });
+    expect((form.query('wt-input[name="stationName"]') as WtInput).value).toBe("Newer name");
+    await state(form.button(), true);
+    await form.edit("Submitted name");
+    await state(form.button(), false);
+  });
+});

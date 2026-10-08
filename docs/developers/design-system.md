@@ -1637,6 +1637,13 @@ their existing validation and retry behavior. See the
 [Batch 4a classifications](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4a--module-forms-lane-e-a331-4a)
 for each provider call path.
 
+Preparation stations' screen-owned Save editors follow the rule too (A331 batch 4d): New and
+Rename station, station printers, watcher Rename/follows/zones/pass/printers, and Settings
+rest/fallback/timing. An unchanged Settings fallback opens no confirmation; an edited fallback
+keeps its two presses. Routing Confirm and station service operations remain actions;
+[the inventory](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4d--prep-stations-lane-e-a331-4d)
+names their handlers. The delegated watcher form remains covered by batch 4c.
+
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
 credentials; Import stages configuration for provisioning; reset and restore controls run recovery

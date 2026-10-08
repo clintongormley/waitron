@@ -266,6 +266,10 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
         .shadowRoot!.querySelector<HTMLElement>('[data-test="rename-watcher-pass"]')!
         .click();
       await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="watcher-rename-name"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "Expo" } }),
+      );
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher-name"]')!.click();
       await vi.waitFor(() =>
         expect(
@@ -484,6 +488,10 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       settingsQ('[data-test="edit-settings-fallback-bar"]').click();
       await el.updateComplete;
       if (state === "fallback-confirmation") {
+        settingsQ('[data-test="settings-choice"]').dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "" } }),
+        );
+        await el.updateComplete;
         settingsQ('[data-test="save-settings-cell"]').click();
         await el.updateComplete;
         expect(settingsQ('[data-test="settings-fallback-confirmation"]')).not.toBeNull();
