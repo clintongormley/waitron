@@ -1608,7 +1608,12 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     destination is chosen, and kept its blue look while it was disabled (owner, 2026-10-08: "Fix
     it" — A409 draws it quiet while it waits, see design-system.md → Forms); Delete is pressed with its
     default choice of what happens to the contents; the image picker acts the moment an image is
-    chosen or removed. Gating Change unit would change only how it looks;
+    chosen or removed. Gating Change unit would change only how it looks. **Left open by A409
+    (#1433), for the owner:** other buttons that are not saves still keep their colour while
+    disabled and waiting — the Products browser's toolbar Delete, the options/extras Delete
+    confirmation, Add and Edit on the options screen until languages load, Print on an equipment
+    label and on a reprint, and two on the till. Whether they should all be drawn quiet the same
+    way is not decided; none is queued;
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal with the window's Save quiet until something in the window
     changes (the list hands the refusal to the window, `option-list-form.ts`). A refusal still
