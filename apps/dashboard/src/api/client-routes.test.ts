@@ -879,6 +879,7 @@ describe("DashboardApi routes", () => {
       override: null,
       effectivePrice: "3.00",
       active: true,
+      available: true,
       variants: [],
     };
     const fetchImpl = vi

@@ -242,6 +242,7 @@ function api(state: State): DashboardApi {
         override: "1.80",
         effectivePrice: "1.80",
         active: true,
+        available: true,
         variants: [],
       },
     ]),

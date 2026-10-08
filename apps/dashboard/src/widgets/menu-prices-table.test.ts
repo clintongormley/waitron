@@ -1,5 +1,5 @@
 import { combinedFixture } from "./test-helpers.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
@@ -73,6 +73,7 @@ const burger: MenuPriceRow = {
   override: null,
   effectivePrice: "12.00",
   active: true,
+  available: true,
   variants: [],
 };
 const lemonade: MenuPriceRow = {
@@ -95,9 +96,10 @@ const lemonade: MenuPriceRow = {
   override: "2.50",
   effectivePrice: "2.50",
   active: true,
+  available: true,
   variants: [
-    { variantId: "v-small", price: null, active: true },
-    { variantId: "v-large", price: "3.75", active: true },
+    { variantId: "v-small", price: null, active: true, available: true },
+    { variantId: "v-large", price: "3.75", active: true, available: true },
   ],
 };
 const lager: MenuPriceRow = {
@@ -110,6 +112,7 @@ const lager: MenuPriceRow = {
   override: null,
   effectivePrice: "2.00",
   active: true,
+  available: true,
   variants: [],
 };
 
@@ -166,6 +169,18 @@ function cell(el: MenuPricesTable, key: string, rowKey: string): HTMLElement {
   const index = headers(el).indexOf(key);
   expect(index, key).toBeGreaterThanOrEqual(0);
   return row(el, rowKey)!.children[index] as HTMLElement;
+}
+
+/** A shown row's pinned row-menu cell, which has no sort key for `cell` to find it by. */
+function pinnedCell(el: MenuPricesTable, rowKey: string): HTMLElement {
+  return row(el, rowKey)!.querySelector<HTMLElement>('td[data-pinned="end"]')!;
+}
+
+/** A shown row's "Edit product" link, in its row menu. */
+function editLink(el: MenuPricesTable, rowKey: string): HTMLAnchorElement {
+  return pinnedCell(el, rowKey).querySelector<HTMLAnchorElement>(
+    `a[data-test="edit-product-${rowKey}"]`,
+  )!;
 }
 
 /** The text of one column's cell in each shown row, in order. */
@@ -578,14 +593,14 @@ it("counts a product whose only price on this menu is a variant's as overridden,
         ...lemonade,
         override: null,
         variants: [
-          { variantId: "v-small", price: null, active: true },
-          { variantId: "v-large", price: "4.25", active: true },
+          { variantId: "v-small", price: null, active: true, available: true },
+          { variantId: "v-large", price: "4.25", active: true, available: true },
         ],
       },
       {
         ...lager,
         combined: combinedFixture("p-lager", "2.00", [{ variantId: "v-small", price: null }]),
-        variants: [{ variantId: "v-small", price: null, active: true }],
+        variants: [{ variantId: "v-small", price: null, active: true, available: true }],
       },
       burger,
     ],
@@ -830,8 +845,8 @@ it("sends only the field committed, with the price stored when it was sent, what
       ...lemonade,
       override: "2.60",
       variants: [
-        { variantId: "v-small", price: "1.00", active: true },
-        { variantId: "v-large", price: "3.75", active: true },
+        { variantId: "v-small", price: "1.00", active: true, available: true },
+        { variantId: "v-large", price: "3.75", active: true, available: true },
       ],
     },
     lager,
@@ -1128,7 +1143,7 @@ it("names a size the product list does not hold as missing, in its row and its f
   await table(el).updateComplete;
   expect(visibleText(cell(el, "name", "mi-lemonade:v-large"))).toBe(t("members.missing"));
   expect(override(el, "mi-lemonade:v-large").label).toBe(
-    t("menu_prices.override_label").replace("{name}", `Lemonade — ${t("members.missing")}`),
+    t("menu_prices.override_label_set").replace("{name}", `Lemonade — ${t("members.missing")}`),
   );
   expect(override(el, "mi-lemonade:v-large").placeholder).toBe("3.40");
 });
@@ -1872,10 +1887,11 @@ describe("variants", () => {
     override: "13.00",
     effectivePrice: "13.00",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-glass", price: "7.00", active: true },
-      { variantId: "v-bottle", price: null, active: true },
-      { variantId: "v-carafe", price: "15.00", active: true },
+      { variantId: "v-glass", price: "7.00", active: true, available: true },
+      { variantId: "v-bottle", price: null, active: true, available: true },
+      { variantId: "v-carafe", price: "15.00", active: true, available: true },
     ],
   };
   /** Its only menu price is a variant's. */
@@ -1899,9 +1915,10 @@ describe("variants", () => {
     override: null,
     effectivePrice: "4.00",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-juice-small", price: "3.50", active: true },
-      { variantId: "v-juice-large", price: null, active: true },
+      { variantId: "v-juice-small", price: "3.50", active: true, available: true },
+      { variantId: "v-juice-large", price: null, active: true, available: true },
     ],
   };
   const tea: MenuPriceRow = {
@@ -1921,7 +1938,8 @@ describe("variants", () => {
     override: null,
     effectivePrice: "2.00",
     active: true,
-    variants: [{ variantId: "v-pot", price: "2.40", active: true }],
+    available: true,
+    variants: [{ variantId: "v-pot", price: "2.40", active: true, available: true }],
   };
   /** No menu price anywhere. */
   const cider: MenuPriceRow = {
@@ -1944,9 +1962,10 @@ describe("variants", () => {
     override: null,
     effectivePrice: "4.00",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-pint", price: null, active: true },
-      { variantId: "v-half", price: null, active: true },
+      { variantId: "v-pint", price: null, active: true, available: true },
+      { variantId: "v-half", price: null, active: true, available: true },
     ],
   };
   const steak: MenuPriceRow = {
@@ -2076,8 +2095,8 @@ describe("variants", () => {
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "5.0", active: true },
-            { variantId: "v-juice-large", price: null, active: true },
+            { variantId: "v-juice-small", price: "5.0", active: true, available: true },
+            { variantId: "v-juice-large", price: null, active: true, available: true },
           ],
         },
       ],
@@ -2134,9 +2153,10 @@ describe("variants", () => {
       override: null,
       effectivePrice: "6.00",
       active: true,
+      available: true,
       variants: [
-        { variantId: "v-zeta", price: null, active: true },
-        { variantId: "v-alpha", price: null, active: true },
+        { variantId: "v-zeta", price: null, active: true, available: true },
+        { variantId: "v-alpha", price: null, active: true, available: true },
       ],
     };
     const el = await mount({ rows: [pizza, burger], products: [pizzaProduct] });
@@ -2244,7 +2264,7 @@ describe("variants", () => {
     ]);
   });
 
-  it("offers Appears under, Main category and Status in the column chooser, all shown, and keeps the choice under the menu prices key alone", async () => {
+  it("offers Appears under, Main category and Available in the column chooser, all shown, and keeps the choice under the menu prices key alone", async () => {
     // A choice under either of this table's old keys, or an order under the last one, is not read.
     localStorage.setItem("waitron.menus.prices:columns", JSON.stringify({ category: false }));
     localStorage.setItem(
@@ -2266,9 +2286,9 @@ describe("variants", () => {
     expect(choices).toEqual([
       ["placements", true],
       ["category", true],
-      ["status", true],
+      ["available", true],
     ]);
-    expect(headers(el)).toEqual(["name", "override", "placements", "category", "status"]);
+    expect(headers(el)).toEqual(["name", "override", "placements", "category", "available", ""]);
     box(el, "category").click();
     await table(el).updateComplete;
     expect(headers(el)).not.toContain("category");
@@ -2276,10 +2296,10 @@ describe("variants", () => {
       category: false,
     });
     const again = await mountVariants();
-    expect(headers(again)).toEqual(["name", "override", "placements", "status"]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "available", ""]);
     table(again).shadowRoot.querySelector<HTMLElement>("[data-restore-columns]")!.click();
     await table(again).updateComplete;
-    expect(headers(again)).toEqual(["name", "override", "placements", "category", "status"]);
+    expect(headers(again)).toEqual(["name", "override", "placements", "category", "available", ""]);
   });
 
   it.each(["en-GB", "es-ES"])(
@@ -2301,8 +2321,8 @@ describe("variants", () => {
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "1000.00", active: true },
-            { variantId: "v-juice-large", price: "9999.99", active: true },
+            { variantId: "v-juice-small", price: "1000.00", active: true, available: true },
+            { variantId: "v-juice-large", price: "9999.99", active: true, available: true },
           ],
         };
         const el = await mount({ rows: [wide], products });
@@ -2320,6 +2340,28 @@ describe("variants", () => {
       }
     },
   );
+
+  it("fits the longest range placeholder whole inside the field in a larger, wider font, beyond phone width", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    onTestFinished(() => page.viewport(width, height));
+    await page.viewport(1280, 800);
+    await vi.waitFor(() => expect(window.innerWidth).toBe(1280));
+    const el = await mount({ rows: [rangedRow("1000.00", "9999.99")] });
+    const host = el.parentElement!;
+    const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+    expect(family).not.toBe("");
+    host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+    host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
+    // Connected again once the font is set, as a table drawn in that font from the start would be.
+    el.remove();
+    host.append(el);
+    expect(textFit(override(el, "mi-ranged")).shown).toBe("1000.00 – 9999.99");
+    await vi.waitFor(() => {
+      const fit = textFit(override(el, "mi-ranged"));
+      expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    });
+  });
 });
 
 it("sends the product's field and a size's field as two saves, one field each, on leaving each", async () => {
@@ -2458,6 +2500,21 @@ it.each(["en-GB", "es-ES"])(
         const field = override(el, key).getBoundingClientRect();
         expect(field.left, key).toBeGreaterThanOrEqual(scroller.left - 0.5);
         expect(field.right, key).toBeLessThanOrEqual(scroller.right + 0.5);
+        const pinned = pinnedCell(el, key);
+        expect(field.right, `${key} against the row menu`).toBeLessThanOrEqual(
+          pinned.getBoundingClientRect().left + 0.5,
+        );
+        const trigger = pinned
+          .querySelector("wt-row-actions")!
+          .shadowRoot!.querySelector("button")!
+          .getBoundingClientRect();
+        expect(trigger.left, key).toBeGreaterThanOrEqual(0);
+        expect(trigger.right, key).toBeLessThanOrEqual(window.innerWidth);
+        const hit = table(el).shadowRoot.elementFromPoint(
+          trigger.left + trigger.width / 2,
+          trigger.top + trigger.height / 2,
+        );
+        expect(hit !== null && pinned.contains(hit), `${key} ⋮ covered`).toBe(true);
       }
       for (const key of ["mi-lager", "mi-lemonade", "mi-lemonade:v-small"]) {
         const sentence = cell(el, "override", key).querySelector("[part~=clash]")!;
@@ -2478,6 +2535,298 @@ it.each(["en-GB", "es-ES"])(
     }
   },
 );
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+/** The line boxes a node's text is drawn across: a word broken mid-way spans two. */
+function linesOf(node: Element): number {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return range.getClientRects().length;
+}
+
+/** At a phone's width, 390 px unless given, once the row menu's column has been measured into
+ * --actions-width; with `font` named first in the page's font family when given. */
+async function atPhoneWidth(
+  locale: string,
+  props: Partial<MenuPricesTable> = {},
+  viewport = 390,
+  font = "",
+): Promise<MenuPricesTable> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  setLocale(locale);
+  onTestFinished(async () => {
+    setLocale("es-ES");
+    await page.viewport(width, height);
+  });
+  await page.viewport(viewport, 844);
+  await vi.waitFor(() => expect(window.innerWidth).toBe(viewport));
+  const el = await mount(props);
+  if (font !== "") {
+    // Connected again once the font is set, as a table drawn in that font from the start would be.
+    const host = el.parentElement!;
+    const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+    expect(family).not.toBe("");
+    host.style.setProperty("--wt-font-family", `${font}, ${family}`);
+    el.style.removeProperty("--actions-width");
+    el.remove();
+    host.append(el);
+  }
+  await vi.waitFor(() => expect(el.style.getPropertyValue("--actions-width")).not.toBe(""));
+  await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
+  await frame();
+  await frame();
+  return el;
+}
+
+it.each(["en-GB", "es-ES"])(
+  "keeps ordinary one-word names whole beside the row menu at phone width while no field shows a range, with each field wholly left of it (%s)",
+  async (locale) => {
+    const el = await atPhoneWidth(locale);
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    await frame();
+    const names: [string, string][] = [
+      ["mi-burger", '[part="name"]'],
+      ["mi-lemonade", '[part="name"]'],
+      ["mi-lemonade:v-small", '[part="variant-name"]'],
+      ["mi-lemonade:v-large", '[part="variant-name"]'],
+    ];
+    for (const [key, selector] of names) {
+      const name = row(el, key)!.querySelector(selector)!;
+      expect(text(name), key).toMatch(/^(Burger|Lemonade|Small|Large)$/);
+      expect(linesOf(name), `${key} "${text(name)}" ${name.getBoundingClientRect().width}px`).toBe(
+        1,
+      );
+      expect(override(el, key).getBoundingClientRect().right, key).toBeLessThanOrEqual(
+        pinnedCell(el, key).getBoundingClientRect().left + 0.5,
+      );
+    }
+    const root = document.documentElement;
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "fits a typical range placeholder whole inside the field at phone width (%s)",
+  async (locale) => {
+    const ranged: MenuPriceRow = {
+      ...lemonade,
+      menuItemId: "mi-ranged",
+      override: null,
+      combined: combinedFixture(
+        "p-lemonade",
+        "12.50",
+        [
+          { variantId: "v-small", price: "12.50" },
+          { variantId: "v-large", price: "15.00" },
+        ],
+        null,
+        "12.50",
+        { "v-small": "12.50", "v-large": "15.00" },
+      ),
+      variants: [
+        { variantId: "v-small", price: "12.50", active: true, available: true },
+        { variantId: "v-large", price: "15.00", active: true, available: true },
+      ],
+    };
+    const el = await atPhoneWidth(locale, { rows: [ranged] });
+    const input = override(el, "mi-ranged").shadowRoot!.querySelector("input")!;
+    expect(input.placeholder).toMatch(/^12[.,]50 – 15[.,]00$/);
+    const style = getComputedStyle(input);
+    const context = document.createElement("canvas").getContext("2d")!;
+    context.font = getComputedStyle(input, "::placeholder").font;
+    const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
+    expect(override(el, "mi-ranged").getBoundingClientRect().right).toBeLessThanOrEqual(
+      pinnedCell(el, "mi-ranged").getBoundingClientRect().left + 0.5,
+    );
+  },
+);
+
+/** A product row with two sizes priced `low` and `high`, so its empty field shows the range. */
+function rangedRow(low: string, high: string): MenuPriceRow {
+  return {
+    ...lemonade,
+    menuItemId: "mi-ranged",
+    override: null,
+    combined: combinedFixture(
+      "p-lemonade",
+      low,
+      [
+        { variantId: "v-small", price: low },
+        { variantId: "v-large", price: high },
+      ],
+      null,
+      low,
+      { "v-small": low, "v-large": high },
+    ),
+    variants: [
+      { variantId: "v-small", price: low, active: true, available: true },
+      { variantId: "v-large", price: high, active: true, available: true },
+    ],
+  };
+}
+
+/** The width a field's text needs, its placeholder's when it is empty, against the input's
+ * content box. */
+function textFit(field: HTMLElementTagNameMap["wt-price-input"]) {
+  const input = field.shadowRoot!.querySelector("input")!;
+  const style = getComputedStyle(input);
+  const context = document.createElement("canvas").getContext("2d")!;
+  context.font = getComputedStyle(input, input.value === "" ? "::placeholder" : null).font;
+  const shown = input.value === "" ? input.placeholder : input.value;
+  return {
+    shown,
+    needed: context.measureText(shown).width,
+    room: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+  };
+}
+
+/** Scrolls the table's box from its start until the row's field ends at the pinned row menu. */
+async function scrollClearOfMenu(el: MenuPricesTable, key: string): Promise<HTMLElement> {
+  const scroller = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
+  scroller.scrollLeft = 0;
+  await frame();
+  const under =
+    override(el, key).getBoundingClientRect().right -
+    pinnedCell(el, key).getBoundingClientRect().left;
+  scroller.scrollLeft = Math.max(0, Math.ceil(under));
+  await frame();
+  return scroller;
+}
+
+/** Asserts the row's ⋮ is on screen and is what a tap at its centre reaches. */
+function expectMenuReachable(el: MenuPricesTable, key: string): void {
+  const pinned = pinnedCell(el, key);
+  const trigger = pinned
+    .querySelector("wt-row-actions")!
+    .shadowRoot!.querySelector("button")!
+    .getBoundingClientRect();
+  expect(trigger.left, key).toBeGreaterThanOrEqual(0);
+  expect(trigger.right, key).toBeLessThanOrEqual(window.innerWidth);
+  expect(
+    paintsTopmost(pinned, trigger.left + trigger.width / 2, trigger.top + trigger.height / 2),
+    `${key} ⋮ covered`,
+  ).toBe(true);
+}
+
+// Where `fits` is false the field may start under the pinned row menu, the table's box scrolling
+// sideways under it: once scrolled until the field ends at the menu, the whole field is in view.
+it.each([
+  ["en-GB", 320, "12.50", "15.00", "", false],
+  ["es-ES", 320, "12.50", "15.00", "", false],
+  ["en-GB", 390, "1000.00", "9999.99", "", true],
+  ["es-ES", 390, "1000.00", "9999.99", "", true],
+  ["en-GB", 320, "12.50", "15.00", "Verdana", false],
+  ["es-ES", 320, "12.50", "15.00", "Verdana", false],
+  ["es-ES", 390, "1000.00", "9999.99", "Verdana", true],
+])(
+  "shows a range placeholder whole in the field, left of the row menu, at phone width (%s, %i px, %s – %s, font %s)",
+  async (locale, viewport, low, high, font, fits) => {
+    const el = await atPhoneWidth(locale, { rows: [rangedRow(low, high)] }, viewport, font);
+    toggleOf(el, "mi-ranged")!.click();
+    await table(el).updateComplete;
+    await frame();
+    await frame();
+    const keys = ["mi-ranged", "mi-ranged:v-small", "mi-ranged:v-large"];
+    // As typed into the field, with a point whatever the language.
+    expect(textFit(override(el, "mi-ranged")).shown).toBe(`${low} – ${high}`);
+    for (const key of keys) {
+      const fit = textFit(override(el, key));
+      expect(fit.needed, `${key} ${JSON.stringify(fit)}`).toBeLessThanOrEqual(fit.room);
+      expectMenuReachable(el, key);
+    }
+    for (const key of keys) {
+      const scroller = fits ? null : await scrollClearOfMenu(el, key);
+      const field = override(el, key).getBoundingClientRect();
+      const menu = pinnedCell(el, key).getBoundingClientRect();
+      expect(field.right, key).toBeLessThanOrEqual(menu.left + 0.5);
+      if (scroller !== null)
+        expect(field.left, key).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().left);
+      expect(menu.right, key).toBeLessThanOrEqual(window.innerWidth);
+      expectMenuReachable(el, key);
+    }
+  },
+);
+
+async function typeAndDraw(el: MenuPricesTable, key: string, value: string) {
+  await typeIn(el, key, value);
+  await table(el).updateComplete;
+  await frame();
+}
+
+it.each(["", "Verdana"])(
+  "widens a field whose stored price is cleared, so the range it then shows is whole at 320 px (font %s)",
+  async (font) => {
+    const el = await atPhoneWidth(
+      "es-ES",
+      { rows: [{ ...rangedRow("12.50", "15.00"), override: "13.00" }] },
+      320,
+      font,
+    );
+    const stored = override(el, "mi-ranged").getBoundingClientRect().width;
+    await typeAndDraw(el, "mi-ranged", "");
+    const fit = textFit(override(el, "mi-ranged"));
+    expect(fit.shown).toBe("12.50 – 15.00");
+    expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    expect(override(el, "mi-ranged").getBoundingClientRect().width).toBeGreaterThan(stored);
+  },
+);
+
+it("keeps a field that shows a range as wide while a price is typed into it at 320 px", async () => {
+  const el = await atPhoneWidth("es-ES", { rows: [rangedRow("12.50", "15.00")] }, 320);
+  const width = () => override(el, "mi-ranged").getBoundingClientRect().width;
+  const empty = width();
+  await typeAndDraw(el, "mi-ranged", "1");
+  expect(width()).toBe(empty);
+});
+
+it.each(["en-GB", "es-ES"])(
+  "shows a single stored price whole in the field at 320 px (%s)",
+  async (locale) => {
+    const el = await atPhoneWidth(locale, { rows: [{ ...burger, override: "9999.99" }] }, 320);
+    const field = override(el, "mi-burger");
+    const fit = textFit(field);
+    expect(fit.shown).toBe(locale === "es-ES" ? "9999,99" : "9999.99");
+    expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    const menu = pinnedCell(el, "mi-burger").getBoundingClientRect();
+    expect(field.getBoundingClientRect().right).toBeLessThanOrEqual(menu.left + 0.5);
+    expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
+  },
+);
+
+it("measures the row menu's column when the table resizes, and not on each keystroke in a price field", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  const measured = vi.spyOn(Element.prototype, "getBoundingClientRect");
+  try {
+    const el = await mount();
+    const heading = table(el).shadowRoot.querySelector('thead th[data-pinned="end"]')!;
+    const measures = () => measured.mock.contexts.filter((node) => node === heading).length;
+    // The measurement the first draw's resize asks for, a frame later, is let through first.
+    let settled = measures();
+    for (let quiet = 0; quiet < 3;) {
+      await frame();
+      quiet = measures() === settled ? quiet + 1 : 0;
+      settled = measures();
+    }
+    for (const value of ["2", "2.", "2.8", "2.80"]) {
+      await typeIn(el, "mi-burger", value);
+      await table(el).updateComplete;
+    }
+    await frame();
+    await frame();
+    expect(override(el, "mi-burger").value).toBe("2.80");
+    expect(measures()).toBe(settled);
+    await page.viewport(390, 800);
+    await vi.waitFor(() => expect(measures()).toBeGreaterThan(settled));
+  } finally {
+    measured.mockRestore();
+    await page.viewport(width, height);
+  }
+});
+
 it.each(["product", "size"])(
   "drops the clash sentence while a valid unsaved price fills a clashing %s row, and shows it again for text that is no price and on Escape",
   async (kind) => {
@@ -2546,9 +2895,14 @@ it("offers one labelled price override field per product and per size, the inher
     await table(el).updateComplete;
     const want = [
       ["mi-burger", "Price override for Burger", "", "12.00"],
-      ["mi-lemonade", "Price override for Lemonade", "2.50", "3.00 – 3.75"],
+      ["mi-lemonade", "Price override for Lemonade, set on this menu", "2.50", "3.00 – 3.75"],
       ["mi-lemonade:v-small", "Price override for Lemonade — Small", "", "2.50"],
-      ["mi-lemonade:v-large", "Price override for Lemonade — Large", "3.75", "3.40"],
+      [
+        "mi-lemonade:v-large",
+        "Price override for Lemonade — Large, set on this menu",
+        "3.75",
+        "3.40",
+      ],
       ["mi-lager", "Price override for Lager", "", "2.00"],
     ];
     for (const [key, label, value, placeholder] of want) {
@@ -2565,6 +2919,99 @@ it("offers one labelled price override field per product and per size, the inher
     expect(hintOf(override(el, "mi-lemonade"))).toBe(
       "Leave it empty to use the inherited prices, €3.00 – €3.75.",
     );
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+const plainLabel = (name: string) => t("menu_prices.override_label").replace("{name}", name);
+const setLabel = (name: string) => t("menu_prices.override_label_set").replace("{name}", name);
+const innerLabel = (field: HTMLElement) =>
+  field.shadowRoot!.querySelector("input")!.getAttribute("aria-label");
+
+it("marks a price this menu sets as overriding and names it set on this menu; an inherited one is neither", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const want: [string, string, boolean][] = [
+    ["mi-lemonade", "Lemonade", true],
+    ["mi-lemonade:v-large", "Lemonade — Large", true],
+    ["mi-burger", "Burger", false],
+    ["mi-lemonade:v-small", "Lemonade — Small", false],
+  ];
+  for (const [key, name, set] of want) {
+    const field = override(el, key);
+    await field.updateComplete;
+    const label = set ? setLabel(name) : plainLabel(name);
+    expect([field.overriding, field.label, innerLabel(field)], key).toEqual([set, label, label]);
+  }
+});
+
+it("a price typed into an inherited field is drawn as set but named plainly until it is stored; Escape, malformed text and a cleared field put the look back", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-burger", "4.00");
+  expect([override(el, "mi-burger").overriding, override(el, "mi-burger").label]).toEqual([
+    true,
+    plainLabel("Burger"),
+  ]);
+  await press(el, "mi-burger", "Escape");
+  expect([override(el, "mi-burger").overriding, override(el, "mi-burger").label]).toEqual([
+    false,
+    plainLabel("Burger"),
+  ]);
+  await typeIn(el, "mi-burger", "abc");
+  expect(override(el, "mi-burger").overriding).toBe(false);
+  await typeIn(el, "mi-lemonade", "");
+  expect([override(el, "mi-lemonade").overriding, override(el, "mi-lemonade").label]).toEqual([
+    false,
+    setLabel("Lemonade"),
+  ]);
+  el.rows = [{ ...burger, override: "4.00" }, lemonade, lager];
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").label).toBe(setLabel("Burger"));
+});
+
+/** A keystroke as the browser delivers it: the field's own value changes before the table hears. */
+async function keyIn(el: MenuPricesTable, key: string, value: string) {
+  const input = override(el, key).shadowRoot!.querySelector("input")!;
+  input.value = value;
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  await table(el).updateComplete;
+  await override(el, key).updateComplete;
+}
+
+it("typing into the field itself turns the set look on and off as the text starts and stops holding a price", async () => {
+  const el = await mount();
+  await keyIn(el, "mi-burger", "4.00");
+  expect(override(el, "mi-burger").overriding).toBe(true);
+  await keyIn(el, "mi-burger", "");
+  expect(override(el, "mi-burger").overriding).toBe(false);
+  await keyIn(el, "mi-burger", "5.00");
+  expect(override(el, "mi-burger").overriding).toBe(true);
+});
+
+it("a refused well-formed price stays marked set while its error shows", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-burger", "4.00");
+  await press(el, "mi-burger", "Enter");
+  el.refusals = { "mi-burger": "Refused here" };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  const field = override(el, "mi-burger");
+  expect([field.error, field.overriding, field.label]).toEqual([
+    "Refused here",
+    true,
+    plainLabel("Burger"),
+  ]);
+});
+
+it("names a set price in English and in Spanish", async () => {
+  expect(setLabel("Lemonade")).toBe("Precio propio de Lemonade, fijado en esta carta");
+  setLocale("en-GB");
+  try {
+    expect(setLabel("Lemonade")).toBe("Price override for Lemonade, set on this menu");
   } finally {
     setLocale("es-ES");
   }
@@ -3052,63 +3499,7 @@ it("marks an Inactive size's clash on neither its own row nor its product's, as 
   expect(el.shadowRoot!.querySelector('[data-test="clash-message"]')).toBeNull();
 });
 
-it("shows each row's own Active state as a link to its product page, a size by its own id", async () => {
-  setLocale("en-GB");
-  try {
-    const el = await mount({
-      rows: [burger, { ...lemonade, active: false }, { ...lager, active: true }],
-    });
-    toggleOf(el, "mi-lemonade")!.click();
-    await table(el).updateComplete;
-    const link = (key: string) =>
-      cell(el, "status", key).querySelector<HTMLAnchorElement>("a[part~=status-link]")!;
-    expect([text(link("mi-burger")), link("mi-burger").getAttribute("href")]).toEqual([
-      "Active",
-      "/manage/catalogue/product/p-burger",
-    ]);
-    expect(link("mi-burger").getAttribute("aria-label")).toBe("Active: open Burger's product page");
-    expect(text(link("mi-lemonade"))).toBe("Disabled");
-    // An Active size of a disabled product is Disabled, and says why.
-    expect(text(link("mi-lemonade:v-small"))).toBe("Disabled");
-    expect(link("mi-lemonade:v-small").getAttribute("href")).toBe(
-      "/manage/catalogue/product/v-small",
-    );
-    expect(visibleText(cell(el, "status", "mi-lemonade:v-small"))).toBe(
-      "Disabled its product is disabled",
-    );
-  } finally {
-    setLocale("es-ES");
-  }
-});
-
-it("in Spanish, words a product's status by the product and a size's by the variant", async () => {
-  setLocale("es-ES");
-  const el = await mount({
-    rows: [burger, { ...lemonade, active: false }],
-  });
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  const link = (key: string) =>
-    cell(el, "status", key).querySelector<HTMLAnchorElement>("a[part~=status-link]")!;
-  expect(text(link("mi-burger"))).toBe("Activo");
-  expect(text(link("mi-lemonade"))).toBe("Deshabilitado");
-  expect(visibleText(cell(el, "status", "mi-lemonade:v-small"))).toBe(
-    "Deshabilitada su producto está deshabilitado",
-  );
-  try {
-    // An Active size of an Active product.
-    const own = await mount({ rows: [lemonade] });
-    toggleOf(own, "mi-lemonade")!.click();
-    await table(own).updateComplete;
-    expect(
-      text(cell(own, "status", "mi-lemonade:v-small").querySelector("a[part~=status-link]")),
-    ).toBe("Activa");
-  } finally {
-    setLocale("es-ES");
-  }
-});
-
-it("reads a disabled size as Disabled under an Active product, and keeps it out of the product's range", async () => {
+it("keeps a disabled size under an Active product out of the product's range", async () => {
   const el = await mount({
     rows: [
       {
@@ -3119,9 +3510,6 @@ it("reads a disabled size as Disabled under an Active product, and keeps it out 
   });
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
-  expect(text(cell(el, "status", "mi-lemonade:v-large").querySelector("a"))).toBe(
-    t("product.variant_disabled_badge"),
-  );
   expect(override(el, "mi-lemonade").placeholder).toBe("3.00");
 });
 
@@ -3129,7 +3517,7 @@ it("opens the product page in the dashboard on a plain click, and leaves a modif
   const el = await mount();
   const heard = vi.fn();
   document.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
-  const link = cell(el, "status", "mi-burger").querySelector<HTMLAnchorElement>("a")!;
+  const link = editLink(el, "mi-burger");
   const plain = new MouseEvent("click", {
     bubbles: true,
     composed: true,
@@ -3152,25 +3540,266 @@ it("opens the product page in the dashboard on a plain click, and leaves a modif
   expect(heard).toHaveBeenCalledOnce();
 });
 
-it("opens a size's own page from its status link", async () => {
+it("opens a size's own page from its row menu's Edit product", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   const heard = vi.fn();
   el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
-  cell(el, "status", "mi-lemonade:v-small")
-    .querySelector<HTMLAnchorElement>("a")!
-    .dispatchEvent(
-      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, button: 0 }),
-    );
+  editLink(el, "mi-lemonade:v-small").dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, button: 0 }),
+  );
   expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "v-small" });
 });
 
-it("keeps Active apart from Available: a sold-out Active product reads Active", async () => {
-  // `MenuPriceRow` carries no Available; the read lists a sold-out product as Active (Task 1).
-  const el = await mount({ rows: [{ ...burger, active: true }] });
-  expect(text(cell(el, "status", "mi-burger").querySelector("a"))).toBe(t("product.active_badge"));
-  expect(text(cell(el, "status", "mi-burger"))).not.toContain(t("product.unavailable_badge"));
+it("puts Edit product in each row's ⋮, in a pinned actions column, and opens the product, or a size's own page, by click and by keyboard", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const columns = (table(el) as Table & { columns: { key: string; pinned?: string }[] }).columns;
+  expect(columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
+  expect(headers(el).at(-1)).toBe("");
+  const labels: Record<string, string> = {
+    "mi-burger": "Acciones: Burger",
+    "mi-lemonade": "Acciones: Lemonade",
+    "mi-lemonade:v-small": "Acciones: Lemonade — Small",
+    "mi-lemonade:v-large": "Acciones: Lemonade — Large",
+    "mi-lager": "Acciones: Lager",
+  };
+  const pages: Record<string, string> = {
+    "mi-burger": "p-burger",
+    "mi-lemonade": "p-lemonade",
+    "mi-lemonade:v-small": "v-small",
+    "mi-lemonade:v-large": "v-large",
+    "mi-lager": "p-lager",
+  };
+  expect([...shown(el)].sort()).toEqual(Object.keys(labels).sort());
+  for (const key of shown(el)) {
+    const menus = pinnedCell(el, key).querySelectorAll("wt-row-actions");
+    expect(menus.length, key).toBe(1);
+    expect(menus[0]!.getAttribute("label"), key).toBe(labels[key]);
+    expect(menus[0]!.getAttribute("data-test"), key).toBe(`actions-${key}`);
+    const link = editLink(el, key);
+    expect(text(link), key).toBe(t("product.edit"));
+    expect(link.getAttribute("href"), key).toBe(`/manage/catalogue/product/${pages[key]}`);
+  }
+
+  const heard = vi.fn();
+  el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
+  const plain = new MouseEvent("click", {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    button: 0,
+  });
+  editLink(el, "mi-burger").dispatchEvent(plain);
+  expect(plain.defaultPrevented).toBe(true);
+  expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
+  const link = editLink(el, "mi-burger");
+  // Stop the browser following it inside the test page.
+  link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+  link.dispatchEvent(
+    new MouseEvent("click", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      button: 0,
+      metaKey: true,
+    }),
+  );
+  expect(heard).toHaveBeenCalledOnce();
+
+  heard.mockClear();
+  const menu = pinnedCell(el, "mi-lemonade:v-large").querySelector("wt-row-actions")!;
+  menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+  );
+  await userEvent.keyboard("{Tab}");
+  const large = editLink(el, "mi-lemonade:v-large");
+  expect(large.matches(":focus")).toBe(true);
+  await userEvent.keyboard("{Enter}");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "v-large" });
+});
+
+it("keeps the row menu last and pinned when a remembered column order and choice name only the other columns", async () => {
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:column-order",
+    JSON.stringify(["status", "category", "placements", "override"]),
+  );
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:columns",
+    JSON.stringify({ category: false, status: false }),
+  );
+  const el = await mount();
+  expect(headers(el)).not.toContain("category");
+  expect(headers(el).at(-1)).toBe("");
+  for (const key of shown(el)) {
+    const pinned = pinnedCell(el, key);
+    expect(pinned, key).toBe(row(el, key)!.lastElementChild);
+    expect(editLink(el, key), key).not.toBeNull();
+  }
+});
+
+it.each([
+  ["en-GB", "Yes", "No"],
+  ["es-ES", "Sí", "No"],
+])(
+  "shows Available as Yes or No for a product and for a size, each by its own flag (%s)",
+  async (locale, yes, no) => {
+    setLocale(locale);
+    try {
+      const el = await mount({
+        rows: [
+          { ...burger, available: false },
+          {
+            ...lemonade,
+            available: true,
+            variants: [
+              { ...lemonade.variants[0]!, available: false },
+              { ...lemonade.variants[1]!, available: true },
+            ],
+          },
+        ],
+      });
+      toggleOf(el, "mi-lemonade")!.click();
+      await table(el).updateComplete;
+      expect([t("menus.available_yes"), t("menus.available_no")]).toEqual([yes, no]);
+      const keys = ["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
+      expect(keys.map((key) => text(cell(el, "available", key)))).toEqual([no, yes, no, yes]);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("shows a sold-out size as No under an available product, and an available size as Yes under a sold-out one", async () => {
+  const el = await mount({
+    rows: [
+      {
+        ...lemonade,
+        available: false,
+        variants: [
+          { ...lemonade.variants[0]!, available: true },
+          { ...lemonade.variants[1]!, available: false },
+        ],
+      },
+    ],
+  });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  expect(column(el, "available")).toEqual([
+    t("menus.available_no"),
+    t("menus.available_yes"),
+    t("menus.available_no"),
+  ]);
+});
+
+it("has no Status column: Available takes its place, before the row menu", async () => {
+  const el = await mount();
+  expect(headers(el)).not.toContain("status");
+  expect(headers(el).slice(-2)).toEqual(["available", ""]);
+  const heading = table(el).shadowRoot.querySelector('[data-sort="available"]')!.closest("th")!;
+  expect(text(heading)).toContain(t("editor.available"));
+  const filters = table(el).shadowRoot;
+  expect(filters.querySelector('wt-combobox[data-filter="category"]')).not.toBeNull();
+  expect(filters.querySelector('[data-filter="available"]')).toBeNull();
+  expect(filters.querySelector('[data-section="available"]')).toBeNull();
+});
+
+it("does not match a row by its Available value in a search", async () => {
+  const el = await mount({ rows: [{ ...lager, available: false }] });
+  await search(el, "lager");
+  expect(shown(el)).toEqual(["mi-lager"]);
+  // Available sorts an unavailable row as 1; nothing else the row shows holds a 1.
+  await search(el, "1");
+  expect(shown(el)).toEqual([]);
+  expect(text(table(el).shadowRoot.querySelector(".empty .message"))).toBe(
+    tableNoMatches(currentLocale()),
+  );
+});
+
+it.each(["es-ES", "en-GB"])(
+  "does not match a row by its Available word, Yes or No, in a search (%s)",
+  async (locale) => {
+    setLocale(locale);
+    try {
+      // No name, category, section or price here holds either word.
+      const el = await mount({ rows: [{ ...lager, available: false }, burger] });
+      await search(el, "lager");
+      expect(shown(el)).toEqual(["mi-lager"]);
+      await search(el, "burger");
+      expect(shown(el)).toEqual(["mi-burger"]);
+      for (const word of [t("menus.available_no"), t("menus.available_yes")]) {
+        await search(el, word);
+        expect(shown(el), word).toEqual([]);
+      }
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("sorts by Available, available first and then sold out, and keeps each product's sizes in the catalogue's order", async () => {
+  const el = await mount({
+    rows: [
+      { ...burger, available: false },
+      {
+        ...lemonade,
+        available: true,
+        variants: [
+          { ...lemonade.variants[0]!, available: false },
+          { ...lemonade.variants[1]!, available: true },
+        ],
+      },
+      lager,
+    ],
+  });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await sortBy(el, "available");
+  expect(shown(el)).toEqual([
+    "mi-lemonade",
+    "mi-lemonade:v-small",
+    "mi-lemonade:v-large",
+    "mi-lager",
+    "mi-burger",
+  ]);
+  expect(column(el, "available")).toEqual(
+    [true, false, true, true, false].map((yes) =>
+      t(yes ? "menus.available_yes" : "menus.available_no"),
+    ),
+  );
+  await sortBy(el, "available");
+  expect(shown(el)).toEqual([
+    "mi-burger",
+    "mi-lemonade",
+    "mi-lemonade:v-small",
+    "mi-lemonade:v-large",
+    "mi-lager",
+  ]);
+});
+
+it("draws Available when a remembered column choice and order still name the old Status column", async () => {
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:columns",
+    JSON.stringify({ status: false }),
+  );
+  localStorage.setItem(
+    "waitron.menus.menu-prices.table:column-order",
+    JSON.stringify(["status", "category", "placements", "override"]),
+  );
+  const el = await mount();
+  expect(headers(el)).toContain("available");
+  expect(headers(el)).not.toContain("status");
+  expect(column(el, "available")).toEqual(shown(el).map(() => t("menus.available_yes")));
+});
+
+it("a sold-out product reads No in Available", async () => {
+  const el = await mount({ rows: [{ ...burger, active: true, available: false }] });
+  expect(text(cell(el, "available", "mi-burger"))).toBe(t("menus.available_no"));
+  expect(text(cell(el, "available", "mi-burger"))).not.toContain(t("product.active_badge"));
 });
 
 it("uses the server's variant price and fallback even when the catalogue differs", async () => {
@@ -3250,8 +3879,8 @@ it.each(["en-GB", "es-ES"])(
         ...lemonade,
         override: "4.00",
         variants: [
-          { variantId: "v-small", price: null, active: true },
-          { variantId: "v-large", price: "14.00", active: true },
+          { variantId: "v-small", price: null, active: true, available: true },
+          { variantId: "v-large", price: "14.00", active: true, available: true },
         ],
         combined: {
           ...lemonade.combined,
@@ -3311,7 +3940,7 @@ describe("without a switch of the menu's own", () => {
     const choosable = [
       ...table(el).shadowRoot.querySelectorAll<HTMLInputElement>("input[data-column]"),
     ].map((box) => box.dataset.column);
-    expect(choosable).toContain("status");
+    expect(choosable).toContain("available");
     expect(choosable).not.toContain("active");
   });
 
@@ -3369,7 +3998,7 @@ it("puts the prices table's Filters before its search, beside the rows on a wide
   await expectFiltersFirst(async () => table(await mount()), cleanupWidgets);
 });
 
-it("draws no help tooltip and no row menu, and has no actions column, on a load holding a product clash and a size clash", async () => {
+it("draws no help tooltip, and one row menu per drawn row in a pinned actions column, on a load holding a product clash and a size clash", async () => {
   const el = await allPrices(await mount({ rows: [clashRow(lager), variantClashRow()] }));
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -3383,9 +4012,12 @@ it("draws no help tooltip and no row menu, and has no actions column, on a load 
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
   expect(root.querySelectorAll("wt-help-tooltip").length).toBe(0);
-  expect(root.querySelectorAll("wt-row-actions").length).toBe(0);
-  const keys = (table(el) as Table & { columns: { key: string }[] }).columns.map(({ key }) => key);
-  expect(keys).not.toContain("actions");
+  expect(root.querySelectorAll("wt-row-actions").length).toBe(shown(el).length);
+  for (const key of shown(el)) {
+    expect(pinnedCell(el, key).querySelectorAll("wt-row-actions").length, key).toBe(1);
+  }
+  const columns = (table(el) as Table & { columns: { key: string; pinned?: string }[] }).columns;
+  expect(columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
 });
 
 describe("the clash message and the Clashes filter", () => {
@@ -3414,8 +4046,8 @@ describe("the clash message and the Clashes filter", () => {
         ],
       },
       variants: [
-        { variantId: "v-small", price: null, active: true },
-        { variantId: "v-large", price: null, active: true },
+        { variantId: "v-small", price: null, active: true, available: true },
+        { variantId: "v-large", price: null, active: true, available: true },
       ],
     } as MenuPriceRow;
   }
@@ -3790,12 +4422,18 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
       override: null,
       effectivePrice: "3.00",
       active,
+      available: true,
       combined: {
         productId: `p-${id}`,
         price,
         variants: sizes.map(({ variantId, price }) => ({ variantId, price })),
       },
-      variants: sizes.map(({ variantId, active }) => ({ variantId, price: null, active })),
+      variants: sizes.map(({ variantId, active }) => ({
+        variantId,
+        price: null,
+        active,
+        available: true,
+      })),
     } as MenuPriceRow;
   }
   const shapes = {

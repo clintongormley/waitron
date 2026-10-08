@@ -155,8 +155,8 @@ sizes, `product.variant_not_found` (404); an item of another menu, or one this m
 
 `GET /management-api/catalogues/:id/prices` gives one row per Active product reached by the
 working structure, including sold-out products. An inactive menu gives no rows. Each row is
-`{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, active, variants }`,
-with `active` the product's own Active state, so always true.
+`{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, active, available, variants }`,
+with `active` the product's own Active state, so always true, and `available` its own Available.
 `override` is this menu's saved price, which may be null. `combined` explains the resulting price,
 including each variant's. Each setting is either decided, with its `value`, `source` and
 `otherwise`, or a clash with its `candidates`. A source
@@ -171,8 +171,8 @@ source records whether it was decided at the size or product level. For example,
 to €3.00 and Casa Delgado includes only Drinks' beer, Casa charges €3.00. If Casa also places that
 beer in its own Specials at the product's €2.80, the two values clash. Setting Casa's own beer
 price to €3.00 resolves it. `variants` keeps the menu's size prices as
-`{ variantId, price, active }`, one per Active size, with `price` null where this menu sets none and
-`active` the size's own Active state, so always true; `combined.variants` explains each one's
+`{ variantId, price, active, available }`, one per Active size, with `price` null where this menu sets none,
+`active` the size's own Active state, so always true, and `available` the size's own Available; `combined.variants` explains each one's
 result.
 
 `GET /management-api/catalogues/:id/status` gives `{ state: "unpublished", clashes }`, or

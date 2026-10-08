@@ -942,10 +942,8 @@ unused `units` property is gone (it closes W75's leftover).
   - A359 — DONE: retired the unused `wt-row-actions` host `disabled` property and custom
     `trigger` slot and part, with their media-menu tests. The standard icon button, badge slot,
     popup part and menu actions remain.
-  - Open, found during A327's look and believed to predate it (the base hid the swatch at the same
-    width): at 440px or narrower the Menus Structure tree hides every swatch, and a product row's
-    Actions menu holds only "Remove from <section>", so on a phone that tree offers no way to open
-    the product. The Products list's Actions menu still offers Edit.
+  - Found during A327's look — DONE (A348): at 440px or narrower the Menus Structure tree hides
+    every swatch, and a product row's Actions menu now offers Edit product at every width.
   - A360 — DONE: the Printers breadcrumb uses `data-own-click`, preserving its pending-name and
     pending-connection save guards under the real dashboard app. Eight EN/ES and light/dark
     Chromium cases reproduced an unwanted discard prompt before the opt-out; afterwards they
@@ -1148,9 +1146,49 @@ unused `units` property is gone (it closes W75's leftover).
     was not measured.
   - Open: deleting a category with its contents says its products come off every menu, with no
     count.
-  - Open, for A348: the Price overrides widget still handles disabled rows `menuPrices` no longer
-    sends (`viaParent` and `#active` in `apps/dashboard/src/widgets/menu-prices-table.ts`, the
-    `menu_prices.status_parent_disabled` strings, and the test case asserting a "Disabled" row).
+  - For A348 — DONE except `#active` (A346 + A348): `viaParent`, the
+    `menu_prices.status_parent_disabled` strings and the "Disabled" row case are gone; `#active` is
+    carried to A348's Open bullet below.
+- **A346 + A348, owner 2026-10-07 — DONE (a menu's Price overrides tab: a price this menu sets
+  stands out, an Available column, and Edit product):** a field holding a price this menu sets is
+  drawn bold and upright with a bar in `--wt-color-primary` at its start edge, through
+  `wt-price-input`'s new `overriding` state, and a stored one is named "…, set on this menu"; an
+  inherited price stays the muted italic placeholder. `menuPrices` rows and sizes carry `available`
+  (the product's own, or the size's own), and the tab's Status column is replaced by Available
+  (Yes/No; not searchable, no filter, available first). Each row has a ⋮ in a pinned `actions`
+  column holding Edit product, a link to the product's or size's page. The Structure tab's product
+  rows show the same Available word, muted like Type, and their ⋮ offers Edit product before Remove
+  at every width. At phone width the price field gives up width before a name does while no field
+  shows a range; while one does, the names give up width first, and the field is never narrower
+  than the widest range the table shows, measured in the placeholder's own font, so where the row
+  then does not fit, the table's box scrolls sideways under the pinned ⋮. Measured in the
+  dashboard's test browser on macOS, in English and Spanish, each range whole in its field: with
+  the default font and every field left of the ⋮, "1000.00 – 9999.99" in the table alone at 390px,
+  and inside the dashboard at a 390px window "12.50 – 15.00" in both languages and "1000.00 –
+  9999.99" in English; with the field whole in view once the box is scrolled to it,
+  "12.50 – 15.00" in the table alone at 320px, with the default font and with Verdana (wider, like
+  the Linux font CI draws in), and "1000.00 – 9999.99" inside the dashboard in Spanish. In the
+  table alone with a range shown, "Lemonade" then breaks mid-word at 320px and at 390px (observed,
+  not asserted).
+  - Open: at a 320px window only "12.50 – 15.00" was measured.
+  - Open, for the owner: `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since
+    A347 (#1392), so the dashboard's Inactive branches (`#active` and `activeOffer` in
+    `menu-prices-table.ts`, the `active` conditions in `menu-price-inheritance.ts`) cannot be
+    reached. Retiring them deletes the tests whose subject is an Inactive row, so it waits for the
+    owner.
+  - Open: in the real dashboard at a 390px window the table is 358px wide (read once in the
+    dashboard's test browser; no test pins it). Whether one-word names keep their line there while no field shows a
+    range has not been measured; with the full 390px a longer word such as "Hamburguesa" (about
+    90px, against 76px kept for a name) breaks. Options for more room: less page padding on phones,
+    or a shorter Actions heading.
+  - Open, believed to predate A348: on the Structure tab at 390px the tree's own box scrolls
+    sideways under the pinned ⋮, by design (`pinned: "end"`); in Spanish the Tipo column already
+    sat under Acciones before A348 (measured at the commit before it), and Disponible now sits
+    wholly behind it until the tree is scrolled. Letting long names wrap at narrow widths may free
+    the room; not tried.
+  - Open, predates A348 (`git blame`: W95, 2026-10-06): `menus-screen.test.ts` writes screenshots
+    into `apps/dashboard/src/screens/.superpowers/` on every run (ignored by git, but in the source
+    tree), the shape A281 fixed for the kitchen screen.
 - **Products maker-link contrast on a focused row, found during A303 — DONE (A306, #1336):** the link
   reads `--wt-color-primary-text`.
 - The reveal fix corrects only a row left under the headings. A row revealed at the bottom edge is
@@ -2592,7 +2630,7 @@ owner 2026-10-04).**
 2026-10-05; owner 2026-10-04).** Not checked:
 the tab on the running dev stack — the product page opening from a Status link, a real save and
 the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
-only).
+only). (2026-10-08, A348: the Status link is gone; a row's ⋮ Edit product opens the product instead.)
 W95's implementation now uses Price override / Precio propio for Preview clashes.
 Left open, raised in #1239's review and not taken: a size with its own price decides whether
 its clash comes from its product by matching the two clashes, which can be misread in a

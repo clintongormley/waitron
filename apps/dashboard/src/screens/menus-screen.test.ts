@@ -37,6 +37,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
+import type { DashboardApp } from "../dashboard-app.js";
 import type { CustomerMenu } from "../widgets/customer-menu.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
 import { registerIcons } from "@waitron/ui";
@@ -257,6 +258,7 @@ function lunchPrices(): MenuPriceRow[] {
       override: null,
       effectivePrice: "12.00",
       active: true,
+      available: true,
       variants: [],
     },
     {
@@ -279,9 +281,10 @@ function lunchPrices(): MenuPriceRow[] {
       override: "2.50",
       effectivePrice: "2.50",
       active: true,
+      available: true,
       variants: [
-        { variantId: "v-small", price: null, active: true },
-        { variantId: "v-large", price: "3.75", active: true },
+        { variantId: "v-small", price: null, active: true, available: true },
+        { variantId: "v-large", price: "3.75", active: true, available: true },
       ],
     },
     {
@@ -294,6 +297,7 @@ function lunchPrices(): MenuPriceRow[] {
       override: null,
       effectivePrice: "2.00",
       active: true,
+      available: true,
       variants: [],
     },
   ];
@@ -4084,6 +4088,63 @@ describe("the Structure tree", () => {
     }
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "at 390 px a product row's ⋮ shows Edit product wholly on screen, and choosing it asks for that product's editor (%s)",
+    async (locale) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const before = currentLocale();
+      setLocale(locale);
+      onTestFinished(() => setLocale(before));
+      await page.viewport(390, 844);
+      onTestFinished(() => page.viewport(width, height));
+      const el = await mountLunch();
+      await settleStructure(el);
+      expect(window.innerWidth).toBe(390);
+      expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      const menu = inStructure<HTMLElementTagNameMap["wt-row-actions"]>(
+        el,
+        '[data-test="actions-m-burger"]',
+      )!;
+      menu.scrollIntoView({ block: "center" });
+      menu.show();
+      await vi.waitFor(() =>
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+      );
+      const link = inStructure<HTMLAnchorElement>(el, '[data-test="edit-product-m-burger"]')!;
+      expect(link.textContent!.trim()).toBe(t("product.edit"));
+      expect(link.getAttribute("href")).toBe("/manage/catalogue/product/p-burger");
+      await vi.waitFor(() => {
+        const at = link.getBoundingClientRect();
+        expect(at.width).toBeGreaterThan(0);
+        expect(at.left).toBeGreaterThanOrEqual(0);
+        expect(at.right).toBeLessThanOrEqual(window.innerWidth);
+        expect(at.top).toBeGreaterThanOrEqual(0);
+        expect(at.bottom).toBeLessThanOrEqual(window.innerHeight);
+      });
+      const at = link.getBoundingClientRect();
+      // The point lands in the screen's shadow trees, so walk the hit back to the link.
+      const deepest = (root: Document | ShadowRoot, x: number, y: number): Element | null => {
+        const found = root.elementFromPoint(x, y);
+        if (found?.shadowRoot && found.shadowRoot !== root) {
+          const inner = deepest(found.shadowRoot, x, y);
+          if (inner && inner !== found) return inner;
+        }
+        return found;
+      };
+      const target = deepest(document, at.x + at.width / 2, at.y + at.height / 2);
+      expect(target !== null && link.contains(target), "Edit product is covered").toBe(true);
+      expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+
+      const heard: unknown[] = [];
+      const listen = (event: Event) => heard.push((event as CustomEvent).detail);
+      document.addEventListener("wt-edit-product", listen);
+      onTestFinished(() => document.removeEventListener("wt-edit-product", listen));
+      link.click();
+      expect(heard).toEqual([{ productId: "p-burger" }]);
+    },
+  );
+
   it("keeps the open sections and the current one through a refresh that leaves them in place", async () => {
     const live = new LiveData();
     const client = api({ liveData: live });
@@ -4284,6 +4345,162 @@ async function mountPrices(client: Api = api()) {
   await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));
   return el;
 }
+
+// Where `fits` is false the field may start under the pinned row menu, the table's box scrolling
+// sideways under it: once scrolled until the field ends at the menu, the whole field is in view.
+it.each([
+  ["en-GB", "12.50", "15.00", "", true],
+  ["es-ES", "12.50", "15.00", "", true],
+  ["en-GB", "1000.00", "9999.99", "", true],
+  ["es-ES", "1000.00", "9999.99", "", false],
+  ["es-ES", "1000.00", "9999.99", "Verdana", false],
+])(
+  "shows Lemonade's range placeholder whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s, font %s)",
+  async (locale, low, high, font, fits) => {
+    await import("../dashboard-app.js");
+    registerIcons(DASHBOARD_ICONS);
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const before = currentLocale();
+    onTestFinished(async () => {
+      setLocale(before);
+      await page.viewport(width, height);
+    });
+    await page.viewport(390, 844);
+    history.replaceState(null, "", PRICES_PATH);
+    const rows = lunchPrices();
+    rows[1] = {
+      ...rows[1]!,
+      override: null,
+      combined: combinedFixture(
+        "p-lemonade",
+        low,
+        [
+          { variantId: "v-small", price: low },
+          { variantId: "v-large", price: high },
+        ],
+        null,
+        low,
+        { "v-small": low, "v-large": high },
+      ),
+      variants: [
+        { variantId: "v-small", price: low, active: true, available: true },
+        { variantId: "v-large", price: high, active: true, available: true },
+      ],
+    };
+    const client = api({
+      getMenuPrices: vi.fn().mockResolvedValue(rows),
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        role: "manager",
+        locale,
+        venueLocale: locale,
+        sessionDefault: locale,
+        venueName: "Venue",
+        permissions: ["product.manage"],
+        modules: [],
+      }),
+      getLocales: async () => ({
+        locales: [
+          { code: "en-GB", label: "English" },
+          { code: "es-ES", label: "Español" },
+        ],
+        venueDefault: locale,
+        loginDefault: locale,
+        venueName: "Venue",
+        onboardingIntent: "prepare",
+      }),
+      listAlerts: async () => ({ visible: false, alerts: [] }),
+      getGoogleConfig: async () => ({ configured: false }),
+      passkeySignals: async () => ({
+        rpId: "localhost",
+        userId: "cDE",
+        credentialIds: [],
+        name: "ada@example.com",
+        displayName: "Ada",
+      }),
+    });
+    const { el: app, host } = await mountWidget<DashboardApp>(
+      "dashboard-app",
+      { api: client },
+      "light",
+    );
+    if (font !== "") {
+      const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+      expect(family).not.toBe("");
+      host.style.setProperty("--wt-font-family", `${font}, ${family}`);
+    }
+    const screen = () =>
+      app.shadowRoot!.querySelector<MenusScreen>("dashboard-menus-screen") ?? undefined;
+    await vi.waitFor(() => expect(screen() && prices(screen()!)?.rows.length).toBe(3));
+    const widget = prices(screen()!);
+    await vi.waitFor(() => expect(widget.style.getPropertyValue("--actions-width")).not.toBe(""));
+    const grid = widget.shadowRoot!.querySelector("wt-data-table")!;
+    await vi.waitFor(() => expect(grid.hasAttribute("narrow")).toBe(true));
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(window.innerWidth).toBe(390);
+    expect(currentLocale()).toBe(locale);
+    const rowOf = (key: string) =>
+      grid.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"]`)!;
+    rowOf("mi-lemonade").querySelector<HTMLElement>("button.tree-toggle")!.click();
+    await vi.waitFor(() => expect(rowOf("mi-lemonade:v-large")).not.toBeNull());
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const input = (key: string) =>
+      rowOf(key).querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
+    // As typed into the field, with a point whatever the language.
+    expect(input("mi-lemonade").placeholder).toBe(`${low} – ${high}`);
+    for (const key of [
+      "mi-burger",
+      "mi-lemonade",
+      "mi-lemonade:v-small",
+      "mi-lemonade:v-large",
+      "mi-lager",
+    ]) {
+      const field = input(key);
+      const shown = field.value === "" ? field.placeholder : field.value;
+      const style = getComputedStyle(field);
+      const context = document.createElement("canvas").getContext("2d")!;
+      context.font = getComputedStyle(field, field.value === "" ? "::placeholder" : null).font;
+      const fit = {
+        key,
+        shown,
+        needed: context.measureText(shown).width,
+        room: field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+      };
+      expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+      const fieldOf = () => rowOf(key).querySelector("wt-price-input")!.getBoundingClientRect();
+      const menuOf = () =>
+        rowOf(key).querySelector('td[data-pinned="end"]')!.getBoundingClientRect();
+      const scroller = grid.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+      if (!fits) {
+        scroller.scrollLeft = 0;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        scroller.scrollLeft = Math.max(0, Math.ceil(fieldOf().right - menuOf().left));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expect(fieldOf().left, key).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().left);
+      }
+      const menu = menuOf();
+      expect(fieldOf().right, key).toBeLessThanOrEqual(menu.left + 0.5);
+      expect(menu.right, key).toBeLessThanOrEqual(window.innerWidth);
+      rowOf(key).scrollIntoView({ block: "center", inline: "nearest" });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const trigger = rowOf(key)
+        .querySelector("wt-row-actions")!
+        .shadowRoot!.querySelector("button")!
+        .getBoundingClientRect();
+      const hit = grid.shadowRoot!.elementFromPoint(
+        trigger.left + trigger.width / 2,
+        trigger.top + trigger.height / 2,
+      );
+      expect(
+        hit !== null && rowOf(key).querySelector('td[data-pinned="end"]')!.contains(hit),
+        `${key} ⋮ covered`,
+      ).toBe(true);
+      scroller.scrollLeft = 0;
+    }
+  },
+);
 
 async function chooseTab(el: MenusScreen, key: string): Promise<void> {
   const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;

@@ -332,12 +332,15 @@ it("offers Edit and Delete on an owned section and Remove on a product, naming t
   expect(edits).toEqual([{ sectionId: "s-drinks", path: ["m-drinks"] }]);
   expect(deletes).toEqual([{ sectionId: "s-drinks", path: ["m-drinks"] }]);
 
-  expect(menuItems(el, "m-burger")).toEqual(["remove-m-burger"]);
+  expect(menuItems(el, "m-burger")).toEqual(["edit-product-m-burger", "remove-m-burger"]);
   expect(item(el, "remove-m-burger").textContent!.trim()).toBe(
     t("members.remove_from").replace("{list}", "Lunch Menu"),
   );
   await toggle(el, "m-drinks");
-  expect(menuItems(el, "m-drinks/m-lemonade")).toEqual(["remove-m-drinks/m-lemonade"]);
+  expect(menuItems(el, "m-drinks/m-lemonade")).toEqual([
+    "edit-product-m-drinks/m-lemonade",
+    "remove-m-drinks/m-lemonade",
+  ]);
   expect(item(el, "remove-m-drinks/m-lemonade").textContent!.trim()).toBe(
     t("members.remove_from").replace("{list}", "Drinks"),
   );
@@ -2070,5 +2073,147 @@ describe("Structure product media", () => {
     expect(media!.getAttribute("href")).toBe("/manage/catalogue/product/p-burger?field=image");
     media!.focus();
     expect(table(el).shadowRoot!.activeElement).toBe(media);
+  });
+});
+
+describe("a product row's Available and Edit product", () => {
+  /** Burger is available and Lemonade is sold out, so a row reading the wrong product fails. */
+  const flagged: Product[] = [
+    product("p-lager", "Lager"),
+    { ...product("p-lemonade", "Lemonade"), available: false },
+    product("p-burger", "Burger", "burger.webp"),
+    product("p-rioja", "Rioja"),
+  ];
+  const shortcutHome: MenuHome = {
+    homeSectionId: "s-home",
+    shortcuts: [
+      {
+        memberId: "t-burger",
+        position: 0,
+        ref: { kind: "product", productId: "p-burger" },
+        missingName: null,
+        name: "Burger",
+        reachable: true,
+      },
+    ],
+    handheld: { columns: 3, tiles: "colours", order: "home_first" },
+    till: { columns: 6, tiles: "colours", order: "home_first" },
+  };
+
+  /** The text of a row's cell under the Available heading. */
+  function availableOf(el: MenuStructureTable, key: string): string {
+    const heads = all(el, "thead th").map((th) => th.textContent!.trim());
+    const index = heads.indexOf(t("editor.available"));
+    expect(index, heads.join("|")).toBeGreaterThanOrEqual(0);
+    const cells = [...row(el, key)!.children];
+    expect(cells.length, key).toBe(heads.length);
+    return cells[index]!.textContent!.trim();
+  }
+
+  it("shows Available on product rows only, each by its own product's flag", async () => {
+    const el = await mount({ products: flagged, home: shortcutHome });
+    await toggle(el, "m-drinks");
+    await toggle(el, "home");
+    const columns = (table(el) as unknown as { columns: { key: string }[] }).columns;
+    expect(columns.map((column) => column.key)).toEqual(["name", "kind", "available", "actions"]);
+    expect(availableOf(el, "m-burger")).toBe(t("menus.available_yes"));
+    expect(availableOf(el, "m-drinks/m-lemonade")).toBe(t("menus.available_no"));
+    expect(availableOf(el, "m-drinks/m-lager")).toBe(t("menus.available_yes"));
+    for (const key of ["root", "home", "home/t-burger", "m-drinks", "m-drinks/m-beer"])
+      expect(availableOf(el, key), key).toBe("");
+  });
+
+  it("draws Available in the muted colour of the Type word beside it", async () => {
+    const el = await mount();
+    el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    const burger = row(el, "m-burger")!;
+    const kind = burger.querySelector('[data-test="kind"]')!;
+    const available = burger.querySelector('[data-test="available"]')!;
+    expect(getComputedStyle(kind).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(available).color).toBe(getComputedStyle(kind).color);
+  });
+
+  it("shows Available on an included menu's product rows, which keep having no menu", async () => {
+    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+    await toggle(el, "included-wine");
+    expect(availableOf(el, "included-wine/wine-lager")).toBe(t("menus.available_yes"));
+    expect(inTable(el, '[data-test="actions-included-wine/wine-lager"]')).toBeNull();
+    const parts = (key: string) =>
+      row(el, key)!.querySelector('[data-test="available"]')!.getAttribute("part")!.split(" ");
+    expect(parts("included-wine/wine-lager")).toEqual(["available", "read-only"]);
+    expect(parts("m-burger")).toEqual(["available"]);
+  });
+
+  it("shows no Available for a product the list does not hold", async () => {
+    const el = await mount({ nodes: [productNode("m-ghost", "p-ghost")] });
+    expect(availableOf(el, "m-ghost")).toBe("");
+  });
+
+  it("offers Edit product first in a product row's ⋮, and opens that product by click", async () => {
+    const el = await mount();
+    expect(menuItems(el, "m-burger")).toEqual(["edit-product-m-burger", "remove-m-burger"]);
+    const link = item(el, "edit-product-m-burger");
+    expect(link.tagName).toBe("A");
+    expect(link.textContent!.trim()).toBe(t("product.edit"));
+    expect(link.getAttribute("href")).toBe("/manage/catalogue/product/p-burger");
+    await toggle(el, "m-drinks");
+    expect(menuItems(el, "m-drinks/m-lemonade")).toEqual([
+      "edit-product-m-drinks/m-lemonade",
+      "remove-m-drinks/m-lemonade",
+    ]);
+    expect(item(el, "edit-product-m-drinks/m-lemonade").getAttribute("href")).toBe(
+      "/manage/catalogue/product/p-lemonade",
+    );
+
+    const heard = vi.fn();
+    el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
+    const plain = new MouseEvent("click", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      button: 0,
+    });
+    link.dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(true);
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
+    // Stop the browser following it inside the test page.
+    link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    link.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        button: 0,
+        metaKey: true,
+      }),
+    );
+    expect(heard).toHaveBeenCalledOnce();
+  });
+
+  it("opens a product row's Edit product by keyboard", async () => {
+    const el = await mount();
+    const heard = vi.fn();
+    el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
+    const menu = inTable(el, '[data-test="actions-m-burger"]')!;
+    menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(popupOpen(el, "m-burger")).toBe(true));
+    await userEvent.keyboard("{Tab}");
+    expect(item(el, "edit-product-m-burger").matches(":focus")).toBe(true);
+    await userEvent.keyboard("{Enter}");
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
+  });
+
+  it("offers no Edit product for a product the list does not hold, and keeps it while busy", async () => {
+    const el = await mount({
+      nodes: [productNode("m-ghost", "p-ghost"), productNode("m-burger", "p-burger")],
+      busy: true,
+    });
+    expect(menuItems(el, "m-ghost")).toEqual(["remove-m-ghost"]);
+    const heard = vi.fn();
+    el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
+    const plain = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
+    item(el, "edit-product-m-burger").dispatchEvent(plain);
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
   });
 });

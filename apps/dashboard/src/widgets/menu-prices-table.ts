@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-price-input.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   followsClash,
   productInherited,
@@ -34,7 +35,6 @@ import type {
   Product,
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { productStatusName } from "../i18n/domain.js";
 import { leftToBrowser } from "../navigation.js";
 import {
   byLabel,
@@ -77,6 +77,10 @@ const parentPriceOf = (draft: string | undefined): ParentPrice => {
 /** By amount, so "2.5" typed over a stored "2.50" is no change. */
 const samePrice = (a: string | null, b: string | null): boolean =>
   a === null || b === null ? a === b : stringToCents(a) === stringToCents(b);
+
+/** What changes the table's rows or columns, after which the row menu's column is measured again;
+ * otherwise only a resize of the table measures it. */
+const RESHAPES = ["rows", "products", "sections", "categories", "loading", "failed"];
 
 /** A table row: an Active product the menu reaches, or one of its Active sizes, drawn under it. */
 interface Line {
@@ -141,22 +145,28 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
         .replace("{low}", format(span.low))
         .replace("{high}", format(span.high));
 
+/** As typed into a price field, which draws no sign. */
+const placeholderOf = (span: Span): string => spanText(span, (amount) => amount);
+
 /**
  * One menu's price overrides: a row per Active product the menu reaches, with its Active sizes
- * under it, each showing its Active state and a field for the price this menu sets for it. A field
- * asks for its own save on Enter or on leaving it, through `wt-price-save`; the host performs the
- * writes and says which are out (`saving`), which were refused for the price typed (`refusals`) and
- * the outcome of the last save (`outcome`), which floats over the page: a save for 5 s, with its
- * Undo; a refusal until it is closed or another outcome replaces it, as it may be said nowhere else.
+ * under it, each showing whether it is Available and a field for the price this menu sets for it.
+ * A field asks for its own save on Enter or on leaving it, through `wt-price-save`; the host
+ * performs the writes and says which are out (`saving`), which were refused for the price typed
+ * (`refusals`) and the outcome of the last save (`outcome`), which floats over the page: a save for
+ * 5 s, with its Undo; a refusal until it is closed or another outcome replaces it, as it may be
+ * said nowhere else.
  */
 @customElement("dashboard-menu-prices-table")
 export class MenuPricesTable extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      /* A field's width counts its padding, --wt-space-3 on each side, as well as its text. */
       :host {
         display: block;
         container-type: inline-size;
+        --range-field-width: calc(var(--range-text-width, 0px) + 2 * var(--wt-space-3));
       }
       .error {
         margin-block: 0;
@@ -199,26 +209,19 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(price-note) {
         font-size: var(--wt-font-size-sm);
       }
-      /* Wide enough that a range placeholder shows whole rather than clipped into one price. Its
-         positioned box holds the field's hidden hint, which otherwise escapes the table's scroller
-         and widens the page. Its end margin clears the outcome message floating at the bottom,
-         whose height is measured into --outcome-height because a long sentence wraps it. */
+      /* Wide enough that a range placeholder shows whole rather than clipped into one price: the
+         widest range the table shows is measured, in the placeholder's own font, into
+         --range-text-width. Phone width sizes it below. Its positioned box holds the field's hidden
+         hint, which otherwise escapes the table's scroller and widens the page. Its end margin
+         clears the outcome message floating at the bottom, whose height is measured into
+         --outcome-height because a long sentence wraps it. */
       wt-data-table::part(override-field) {
         position: relative;
-        --wt-price-field-width: var(--wt-price-range-field-width);
+        --wt-price-field-width: max(var(--wt-price-range-field-width), var(--range-field-width));
         scroll-margin-block-end: max(
           var(--wt-tap-min) + 2 * var(--wt-space-2),
           var(--outcome-height, 0px) + var(--wt-space-3)
         );
-      }
-      wt-data-table::part(status-link) {
-        display: inline-flex;
-        align-items: center;
-        min-height: var(--wt-tap-min);
-        color: var(--wt-color-primary);
-      }
-      wt-data-table::part(status-note) {
-        font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(clash) {
         color: var(--wt-color-danger);
@@ -246,23 +249,54 @@ export class MenuPricesTable extends LitElement {
         block-size: calc(var(--outcome-height, 0px) + var(--wt-space-3));
       }
       /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
-         the note under it, is capped at the room the price column leaves beside the cell's padding
-         and the tree's toggle. A size's name is indented one tree step further. */
+         the note under it, is capped at the room the price column and the pinned row-menu column
+         leave beside the cell's padding and the tree's toggle. The row-menu column is as wide as
+         its heading in the current language, so its width is measured into --actions-width. While
+         no field shows a range, the price field gives up width first, down to the base field's. A
+         size's name is indented one tree step further. */
       @container (max-width: 30rem) {
         wt-data-table {
-          --price-column: calc(
-            var(--wt-price-range-field-width) + var(--wt-space-4) + 2 * var(--wt-space-3)
+          --name-and-field-room: calc(
+            100cqi - var(--actions-width, var(--wt-tap-min)) - 4 *
+              var(--wt-space-3) - var(--tree-arrow-width) - var(--wt-space-4)
           );
-          --name-room: calc(
-            100cqi - var(--price-column) - 2 * var(--wt-space-3) - var(--wt-tap-min)
+          --name-floor: var(--wt-tap-min);
+          --narrow-price-field-width: clamp(
+            var(--wt-price-field-width),
+            var(--name-and-field-room) - var(--wt-tap-min) - var(--wt-space-6),
+            var(--wt-price-range-field-width)
           );
+          --name-room: calc(var(--name-and-field-room) - var(--narrow-price-field-width));
+        }
+        /* While a field shows a range, the names give up width first, down to --wt-space-6 or to
+           the width the column's heading, measured into --name-heading-width, holds them at anyway.
+           The pinned cell may cover part of the price cell's end padding. The field is never
+           narrower than the range it shows: where the row then does not fit, the table scrolls
+           sideways under the pinned cell. */
+        wt-data-table.ranges {
+          --name-floor: max(
+            var(--wt-space-6),
+            var(--name-heading-width, 0px) - var(--tree-arrow-width)
+          );
+          --narrow-price-field-width: max(
+            var(--range-field-width),
+            clamp(
+              var(--wt-price-field-width),
+              var(--name-and-field-room) + var(--wt-space-2) - var(--name-floor),
+              var(--wt-price-range-field-width)
+            )
+          );
+        }
+        wt-data-table::part(override-field) {
+          --wt-price-field-width: var(--narrow-price-field-width);
         }
         wt-data-table::part(name-box) {
           display: block;
-          max-inline-size: max(var(--wt-tap-min), var(--name-room));
+          max-inline-size: max(var(--name-floor), var(--name-room));
         }
         wt-data-table::part(variant-name) {
-          max-inline-size: max(var(--wt-tap-min), var(--name-room) - var(--wt-space-2));
+          padding-inline-start: var(--wt-space-3);
+          max-inline-size: calc(max(var(--name-floor), var(--name-room)) - var(--wt-space-2));
         }
       }
       @media (max-width: 48rem) {
@@ -446,10 +480,64 @@ export class MenuPricesTable extends LitElement {
   /** Watched, not only measured on each outcome, so a narrower window that wraps the message onto
    * another row still keeps a field clear of it. */
   readonly #outcomeSize = new ResizeObserver(() => this.#fitOutcome());
+  /** The table resizes when the window does and when a redraw changes its columns' words. Measured
+   * a frame later, never inside the observer's callback, which the names' new widths would
+   * re-trigger. */
+  readonly #tableSize = new ResizeObserver(() => {
+    cancelAnimationFrame(this.#actionsFrame);
+    this.#actionsFrame = requestAnimationFrame(() => this.#fitActions());
+  });
+  #actionsFrame = 0;
   #outcomeFitted: Promise<void> = Promise.resolve();
 
   #toast(): WtToast {
     return this.renderRoot.querySelector("wt-toast")!;
+  }
+
+  #fitActions(): void {
+    const head = this.#table()?.shadowRoot?.querySelector("thead");
+    this.#measureInto("--actions-width", head?.querySelector('th[data-pinned="end"]'));
+    this.#measureInto("--name-heading-width", head?.querySelector('[part="tree-heading"]'));
+    this.#fitRanges();
+  }
+
+  /** The ranges the fields show now, as their placeholders read; set on each draw. */
+  #ranges: string[] = [];
+  /** The ranges --range-text-width was last measured for, joined. */
+  #measuredRanges = "";
+  #canvas: CanvasRenderingContext2D | null = null;
+
+  /** Measured in a field's own placeholder font, as fonts differ between machines; a field not
+   * holding a price is chosen, whose placeholder is not drawn bold. */
+  #fitRanges(): void {
+    if (this.#ranges.length === 0) {
+      this.#measuredRanges = "";
+      this.style.removeProperty("--range-text-width");
+      return;
+    }
+    const fields = this.#table()?.shadowRoot;
+    const input = (
+      fields?.querySelector("wt-price-input:not([overriding])") ??
+      fields?.querySelector("wt-price-input")
+    )?.shadowRoot?.querySelector("input");
+    if (!input) return;
+    this.#measuredRanges = this.#ranges.join("\n");
+    const style = getComputedStyle(input, "::placeholder");
+    const context = (this.#canvas ??= document.createElement("canvas").getContext("2d")!);
+    context.font = style.font;
+    context.letterSpacing = style.letterSpacing;
+    const widest = Math.max(...this.#ranges.map((range) => context.measureText(range).width));
+    // A pixel to spare, as a box's reported width (`clientWidth`) is rounded to a whole pixel.
+    const width = `${Math.ceil(widest) + 1}px`;
+    if (this.style.getPropertyValue("--range-text-width") !== width)
+      this.style.setProperty("--range-text-width", width);
+  }
+
+  #measureInto(property: string, node: Element | null | undefined): void {
+    const width = node ? `${node.getBoundingClientRect().width}px` : "";
+    if (this.style.getPropertyValue(property) === width) return;
+    if (width === "") this.style.removeProperty(property);
+    else this.style.setProperty(property, width);
   }
 
   #fitOutcome(): void {
@@ -468,16 +556,20 @@ export class MenuPricesTable extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated) this.#outcomeSize.observe(this.#toast());
+    if (!this.hasUpdated) return;
+    this.#outcomeSize.observe(this.#toast());
+    this.#tableSize.observe(this.#table()!);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#outcomeSize.disconnect();
+    this.#tableSize.disconnect();
   }
 
   protected override firstUpdated(): void {
     this.#outcomeSize.observe(this.#toast());
+    this.#tableSize.observe(this.#table()!);
   }
 
   /** Resolves once the outcome message's new height is measured too. */
@@ -489,7 +581,13 @@ export class MenuPricesTable extends LitElement {
 
   protected override updated(changed: PropertyValues): void {
     const table = this.#table();
-    if (table !== null) void table.updateComplete.then(() => this.#readFilter());
+    const reshaped = RESHAPES.some((name) => changed.has(name));
+    if (table !== null)
+      void table.updateComplete.then(() => {
+        this.#readFilter();
+        if (reshaped) this.#fitActions();
+        else if (this.#ranges.join("\n") !== this.#measuredRanges) this.#fitRanges();
+      });
     if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
     // The cells read these, and the table redraws only when its own properties change.
     if (
@@ -688,23 +786,26 @@ export class MenuPricesTable extends LitElement {
     return variant ? `${item.name} — ${this.#variantName(variant.variantId)}` : item.name;
   }
 
-  #status(line: Line) {
-    const active = this.#active(line);
+  #availableCell({ item, variant }: Line) {
+    const available = variant ? variant.available : item.available;
+    return html`<span part="available" data-test="available"
+      >${t(available ? "menus.available_yes" : "menus.available_no")}</span
+    >`;
+  }
+
+  #actionsCell(line: Line) {
     const id = line.variant?.variantId ?? line.item.productId;
-    const word = productStatusName(active, line.variant !== null);
-    const viaParent = line.variant !== null && line.variant.active && !line.item.active;
-    return html`<a
-        part="status-link"
-        data-active=${active ? "true" : "false"}
+    return html`<wt-row-actions
+      align="end"
+      data-test=${`actions-${keyOf(line)}`}
+      label=${`${t("members.actions")}: ${this.#lineName(line)}`}
+      ><a
+        data-test=${`edit-product-${keyOf(line)}`}
         href=${`/manage/catalogue/product/${encodeURIComponent(id)}`}
-        aria-label=${`${word}: ${t("menu_prices.open_product").replace("{name}", this.#lineName(line))}`}
         @click=${(event: MouseEvent) => this.#openProduct(event, id)}
-        >${word}</a
-      >${
-        viaParent
-          ? html` <span part="muted status-note">${t("menu_prices.status_parent_disabled")}</span>`
-          : nothing
-      }`;
+        >${t("product.edit")}</a
+      ></wt-row-actions
+    >`;
   }
 
   /** A product opens in the dashboard's own catalogue screen; a held modifier key keeps the
@@ -713,6 +814,18 @@ export class MenuPricesTable extends LitElement {
     if (leftToBrowser(event)) return;
     event.preventDefault();
     this.#emit("wt-edit-product", { productId });
+  }
+
+  /** Whether the row inherits a range and either has no stored price or has had it cleared, so
+   * typing into an unpriced field does not narrow it under the cursor. */
+  #showsRange(line: Line): boolean {
+    const inherited = this.#inherited(line);
+    return (
+      (this.#stored(line) === null || this.drafts.get(keyOf(line)) === "") &&
+      this.#clash(line) === null &&
+      inherited.state !== "clash" &&
+      !oneAmount(inherited)
+    );
   }
 
   #overrideCell(line: Line) {
@@ -730,13 +843,14 @@ export class MenuPricesTable extends LitElement {
       placeholder = t("menu_prices.clash_placeholder");
       hint = clash === "own" ? sentence : t("menu_prices.override_help_clash");
     } else {
-      // As typed into a price field, which draws no sign.
-      placeholder = spanText(inherited, (amount) => amount);
+      placeholder = placeholderOf(inherited);
       hint = oneAmount(inherited)
         ? t("menu_prices.override_help").replace("{price}", priceText(inherited.low))
         : t("menu_prices.override_help_range").replace("{range}", spanText(inherited));
     }
     const sizesSetOne = variant === null && item.override === null && pricesASize(item);
+    const labelKey =
+      this.#stored(line) !== null ? "menu_prices.override_label_set" : "menu_prices.override_label";
     return html`<span part="price-cell"
       ><wt-price-input
         part="override-field"
@@ -745,7 +859,8 @@ export class MenuPricesTable extends LitElement {
         hide-label
         fixed-unit
         locale=${currentLocale()}
-        label=${t("menu_prices.override_label").replace("{name}", this.#lineName(line))}
+        label=${t(labelKey).replace("{name}", this.#lineName(line))}
+        ?overriding=${this.#holds(line, this.drafts.get(key))}
         .value=${live(this.drafts.get(key) ?? this.#stored(line) ?? "")}
         .error=${this.#error(key)}
         placeholder=${placeholder}
@@ -1014,12 +1129,20 @@ export class MenuPricesTable extends LitElement {
         },
       },
       {
-        key: "status",
-        label: t("product.status"),
+        key: "available",
+        label: t("editor.available"),
         choosable: "shown",
-        sortValue: (line) => (this.#active(line) ? 0 : 1),
-        searchValue: (line) => productStatusName(this.#active(line), line.variant !== null),
-        cell: (line) => this.#status(line),
+        sortValue: (line) => ((line.variant ?? line.item).available ? 0 : 1),
+        // Not searchable: a search for "no" would match every unavailable row.
+        searchValue: () => "",
+        cell: (line) => this.#availableCell(line),
+      },
+      {
+        key: "actions",
+        label: t("members.actions"),
+        align: "end",
+        pinned: "end",
+        cell: (line) => this.#actionsCell(line),
       },
     ];
   }
@@ -1049,7 +1172,18 @@ export class MenuPricesTable extends LitElement {
   }
 
   override render() {
+    this.#ranges = [
+      ...new Set(
+        this.#lines.flatMap((line) => {
+          const inherited = this.#inherited(line);
+          return this.#showsRange(line) && inherited.state === "price"
+            ? [placeholderOf(inherited)]
+            : [];
+        }),
+      ),
+    ];
     return html`${this.#clashMessage()}<wt-data-table
+        class=${this.#ranges.length > 0 ? "ranges" : ""}
         @wt-filter-change=${() => this.#readFilter()}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}

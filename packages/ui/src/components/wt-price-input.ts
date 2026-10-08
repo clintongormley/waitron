@@ -134,6 +134,22 @@ export class WtPriceInput extends LitElement {
       button.unit:disabled {
         ${disabledStyles}
       }
+
+      .field[data-overriding] .field-control {
+        font-weight: var(--wt-font-weight-bold);
+        font-style: normal;
+      }
+
+      .field[data-overriding]:not([data-disabled])::before {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        inline-size: var(--wt-field-line-width-active);
+        background: var(--wt-color-primary);
+        border-start-start-radius: var(--wt-radius-md);
+        pointer-events: none;
+      }
     `,
   ];
 
@@ -147,6 +163,8 @@ export class WtPriceInput extends LitElement {
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, reflect: true }) invalid = false;
+  /** Marks a field holding its own value rather than the fallback its placeholder shows. */
+  @property({ type: Boolean, reflect: true }) overriding = false;
   /** Names the field by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property({ type: Boolean, attribute: "fixed-unit" }) fixedUnit = false;
@@ -258,6 +276,7 @@ export class WtPriceInput extends LitElement {
         })}
         ?data-invalid=${invalid}
         ?data-disabled=${this.disabled}
+        ?data-overriding=${this.overriding}
         ?data-compact=${!showLabel}
       >
         ${fixed ? label : nothing}<span class="amount-box ${currency?.side ?? ""}"

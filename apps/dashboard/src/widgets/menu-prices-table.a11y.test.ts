@@ -41,6 +41,7 @@ const rows: MenuPriceRow[] = [
     override: null,
     effectivePrice: "12.00",
     active: true,
+    available: true,
     variants: [],
   },
   {
@@ -63,9 +64,10 @@ const rows: MenuPriceRow[] = [
     override: "2.50",
     effectivePrice: "2.50",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-small", price: null, active: true },
-      { variantId: "v-large", price: "3.75", active: true },
+      { variantId: "v-small", price: null, active: true, available: true },
+      { variantId: "v-large", price: "3.75", active: true, available: true },
     ],
   },
 ];
@@ -120,18 +122,45 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     const keys = ["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
     for (const key of keys) {
       const tr = root.querySelector(`tr[data-row-key="${key}"]`)!;
-      expect(tr.querySelector("a[part~=status-link]"), key).not.toBeNull();
       expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
+      expect(tr.querySelector('td[data-pinned="end"] wt-row-actions'), key).not.toBeNull();
     }
     expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="clash"]')).not.toBeNull();
     // The filter is off Clashes, so the red line offers to put it back.
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector('[data-test="show-clashes"]')).not.toBeNull(),
     );
-    // An Active size of an Inactive product says why it reads Inactive, muted.
-    expect(
-      root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="status-note"]'),
-    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible open row menu", async () => {
+    const { el, host } = await mount(theme, {});
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      'tr[data-row-key="mi-burger"] td[data-pinned="end"] wt-row-actions',
+    )!;
+    menu.show();
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    expect(menu.querySelector('a[data-test="edit-product-mi-burger"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws a set price bold and upright and an inherited one as a muted italic placeholder", async () => {
+    const { el, host } = await mount(theme, {});
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const input = (key: string) =>
+      table
+        .shadowRoot!.querySelector(`wt-price-input[data-row="${key}"]`)!
+        .shadowRoot!.querySelector("input")!;
+    const set = input("mi-lemonade");
+    const inherited = input("mi-burger");
+    expect(Number(getComputedStyle(set).fontWeight)).toBeGreaterThan(
+      Number(getComputedStyle(inherited).fontWeight),
+    );
+    expect(getComputedStyle(inherited, "::placeholder").fontStyle).toBe("italic");
+    expect(getComputedStyle(set).fontStyle).toBe("normal");
     await expectNoA11yViolations(host);
   });
 

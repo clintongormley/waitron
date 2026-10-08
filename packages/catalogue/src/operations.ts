@@ -511,6 +511,7 @@ async function offerRowsOn(
           kitchenName: products.kitchenName,
           ordering: products.ordering,
           active: products.active,
+          available: products.available,
           ...offerLineColumns,
         })
         .from(menuItems)
@@ -712,6 +713,7 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
         effectivePrice: combinedOffer.unitPrice,
         combined: combinedOffer.combined,
         active: row.active,
+        available: row.available,
         variants: variantsByItem.get(row.id) ?? [],
       };
     });

@@ -812,6 +812,64 @@ test("the amount paints its value from the field-value token", async () => {
   expect(getComputedStyle(field(el).input).color).toBe("rgb(31, 32, 33)");
 });
 
+test("an overriding field draws its value bold and upright, with a primary bar at its start, from tokens", async () => {
+  const el = await mount('<wt-price-input label="Price" value="2.50" overriding></wt-price-input>');
+  host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  // 800, not 700: a hardcoded `bold` also computes to 700, so 700 could not tell the token from it.
+  host.style.setProperty("--wt-font-weight-bold", "800");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  const { field: box, input } = field(el);
+  expect(el.hasAttribute("overriding")).toBe(true);
+  expect(box.hasAttribute("data-overriding")).toBe(true);
+  expect(getComputedStyle(input).fontWeight).toBe("800");
+  expect(getComputedStyle(input).fontStyle).toBe("normal");
+  const bar = getComputedStyle(box, "::before");
+  expect(bar.backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(bar.width).toBe("3px");
+  expect(bar.position).toBe("absolute");
+  expect(box.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(parseFloat(bar.height)).toBeCloseTo(box.getBoundingClientRect().height, 1);
+});
+
+test("an overriding field keeps its value upright inside italic text, where an ordinary field's value turns italic", async () => {
+  const el = await mount(
+    '<wt-price-input label="Set" value="2.50" overriding></wt-price-input><wt-price-input label="Plain" value="3.00"></wt-price-input>',
+  );
+  host.style.fontStyle = "italic";
+  const plain = host.querySelector<WtPriceInput>('wt-price-input[label="Plain"]')!;
+  await plain.updateComplete;
+  expect(getComputedStyle(field(plain).input).fontStyle).toBe("italic");
+  expect(getComputedStyle(field(el).input).fontStyle).toBe("normal");
+});
+
+test("a field that is not overriding draws no bar and its placeholder muted and italic, its value at the inherited weight", async () => {
+  const el = await mount('<wt-price-input label="Price" placeholder="3.00"></wt-price-input>');
+  const { field: box, input } = field(el);
+  expect(box.hasAttribute("data-overriding")).toBe(false);
+  expect(getComputedStyle(box, "::before").content).toBe("none");
+  expect(getComputedStyle(input, "::placeholder").fontStyle).toBe("italic");
+  // The control takes `font: inherit` (packages/ui-core/src/field-styles.ts:73).
+  expect(getComputedStyle(input).fontWeight).toBe(getComputedStyle(el).fontWeight);
+});
+
+test("overriding follows the property, and a disabled overriding field draws no bar", async () => {
+  const el = (await mount(
+    '<wt-price-input label="Price" value="2.50"></wt-price-input>',
+  )) as WtPriceInput;
+  el.overriding = true;
+  await el.updateComplete;
+  expect(el.hasAttribute("overriding")).toBe(true);
+  expect(field(el).field.hasAttribute("data-overriding")).toBe(true);
+  el.disabled = true;
+  await el.updateComplete;
+  expect(getComputedStyle(field(el).field, "::before").content).toBe("none");
+  el.disabled = false;
+  el.overriding = false;
+  await el.updateComplete;
+  expect(el.hasAttribute("overriding")).toBe(false);
+  expect(field(el).field.hasAttribute("data-overriding")).toBe(false);
+});
+
 test("focusing the amount draws the focus line and label colour, and no focus ring on the amount", async () => {
   const el = await mount('<wt-price-input label="Price" unit="kg"></wt-price-input>');
   host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
