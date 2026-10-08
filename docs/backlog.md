@@ -2970,6 +2970,11 @@ checked against `main` unless said.** Screenshots: `~/waitron-campaign-c/a310-sh
   the operator's name with Log out. Tabs and the language chooser never leave; once everything
   else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
   `design-system.md` says which icon means which menu.
+  - **Open, for the owner:** because items leave strictly in that order, a wide item can take
+    narrower ones with it. In screenshots of the demo counter in Spanish at 1024 px, and in both
+    languages at 800 px, the transfer count and its button do not fit, so Find a bill, Kitchen and
+    Pass are in More too, though the bar has empty room for some of them. Option: after the bar fits, bring back any item that left earlier and now fits, so the
+    order is no longer strict. Not done; the screenshots are in the A395 pull request.
 - **A379 DONE: standard till tab titles follow the UI language.** Standard key/title pairs
   Counter, Floor and Order read Mostrador, Sala and Pedido in Spanish; renamed and custom
   tabs keep their stored titles. The service-area selector reserves room for its full label,
