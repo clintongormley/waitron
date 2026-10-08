@@ -1596,8 +1596,9 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   list and option label forms, recipe editor, Add to menus picker, a section's Add products picker
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
-  edit and new person forms, the variant, purchase and shift forms, the bookings form and the
-  product editor do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
+  edit and new person forms, the variant, purchase and shift forms, the bookings form, the
+  product editor and the Departments and zones editor window (which takes its scope in `updated()`)
+  do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
   scope last committed — the opened value, then each saved value — in a field the disconnect does
@@ -1607,7 +1608,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase, shift, bookings and watcher forms, the product
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
-  dialog and the Home page tab's shortcut picker do this, each with an edit-first reconnect case. The recipe editor
+  dialog, the Home page tab's shortcut picker and the Departments and zones editor window do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
   extras picker and station dialogs keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
@@ -1648,7 +1649,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   canvas editor's Delete on a canvas's last tab (canvases are being retired, A182). Nothing guards it
   across screens.
 
-These forms follow the rule so far; the others are being brought under it batch by batch
+These forms follow the rule
 ([backlog](../backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07) A331,
 [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),
 and nothing guards it across screens:
@@ -1754,11 +1755,11 @@ editor have no staged primary Save to gate. The print agent's setup button label
 connection and enrolment, including with its saved address after denial, so it remains available
 without an edit. Recovery Retry also performs an operation. The
 [Batch 7 audit](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7--remaining-forms-and-string-pages-lane-e-a331-7)
-lists the call paths and the reserved forms still awaiting their owning batches.
+lists the call paths and the forms it left to their owning batches.
 The 2026-10-08 [Batch 7b follow-up](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7b--revisit-the-landed-reservations-lane-e-a331-7b)
 revisited the hardware, till, menus and invoice foundation after landing and found no additional
-staged Save editor. Service-period forms remain reserved until the A366 slices land and batch
-4b follows them.
+staged Save editor. Batch 4b audited the service-period forms after A366 slice 1; a re-check
+after A366 slice 7 is in the backlog (A331).
 
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.

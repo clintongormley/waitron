@@ -619,7 +619,8 @@ adopt `draftScopeFor` / `saveActionState` test-first where its owning batch has 
 - Venue-service batch 4b / `feat/service-periods-slice-1`: all `packages/venue-service/`, including
   hours/date/holiday/menu-slot editors, watcher, service settings, venue operations, timetable
   and preparation-station forms. (2026-10-08: the local holiday editor and the watcher form were
-  done in Batch 4c below.)
+  done in Batch 4c below.) (2026-10-08: the rest was audited, and Departments and zones gated,
+  in Batch 4b below.)
 - Parked invoice part 1, [#1399](https://github.com/clintongormley/waitron/pull/1399):
   `apps/server/src/configuration-transfer*`, `apps/server/src/setup-api.ts`,
   `packages/db/src/configuration-transfer.ts`, `apps/till/src/i18n/codes*`, and print-agent
@@ -1875,7 +1876,8 @@ timetable forms in `packages/venue-service`; lane D's A366 slices rewrite them a
 batch 4b follows those landings. The local holiday and watcher editors already
 landed in #1418, and preparation stations in #1426. This audit does not claim to
 cover lane D's unlanded tree, future invoice screens or reconnect defects being
-worked by lane C's A397.
+worked by lane C's A397. (2026-10-08: the rest was audited, and Departments and zones gated, in
+Batch 4b below.)
 
 **Checks and limits.** Run unchanged focused suites, not a package-wide gate.
 The exact commands and outputs are retained in the local receipts. All commands

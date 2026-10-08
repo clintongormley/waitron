@@ -3436,13 +3436,14 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   unverified. If it recurs, capture the current scroll/limit, pointer position, drag state and
   visible box before attributing it to the scroll helper.
 
-- **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)** — PARTLY
-  BUILT; batch 4b OPEN. **Batch 4b — OPEN.** The venue-service screens other branches are
-  changing: hours, the menu timetable and venue operations (after `feat/service-periods-slice-1`).
-  **Still reserved:** hours/date/slot, service settings, venue operations and timetable forms wait
-  for lane D's A366 slices and batch 4b. Next action: after the relevant A366 slices land, finish
-  batch 4b and rerun the inventories on the rewritten forms.
+- **Re-check the venue-service screens for the save rule once after A366 slice 7 (A331, owner
+  2026-10-08)** — OPEN. Each A366 slice builds the rule into the forms it creates or rewrites;
+  after slice 7 lands, run A331 batch 4b's audit once more over
+  `packages/venue-service/src/dashboard/` and gate any form a slice missed.
   [Detail](backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07)
+
+- **The Departments and zones inline name editors put Save before Cancel**, while the screen's
+  editor window puts Cancel first, as `design-system.md` → Forms asks. Left open by A331 batch 4b.
 
 - **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
   The native status colour fields show an ellipsis instead of the full label in the inspected
