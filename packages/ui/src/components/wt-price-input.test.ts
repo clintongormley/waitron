@@ -828,6 +828,17 @@ test("an overriding field draws its value bold and upright, with a primary bar a
   expect(bar.width).toBe("3px");
 });
 
+test("an overriding field keeps its value upright inside italic text, where an ordinary field's value turns italic", async () => {
+  const el = await mount(
+    '<wt-price-input label="Set" value="2.50" overriding></wt-price-input><wt-price-input label="Plain" value="3.00"></wt-price-input>',
+  );
+  host.style.fontStyle = "italic";
+  const plain = host.querySelector<WtPriceInput>('wt-price-input[label="Plain"]')!;
+  await plain.updateComplete;
+  expect(getComputedStyle(field(plain).input).fontStyle).toBe("italic");
+  expect(getComputedStyle(field(el).input).fontStyle).toBe("normal");
+});
+
 // A control: it passes before the change too, and must still pass after it.
 test("a field that is not overriding draws no bar and its placeholder muted and italic, its value at the inherited weight", async () => {
   const el = await mount('<wt-price-input label="Price" placeholder="3.00"></wt-price-input>');
