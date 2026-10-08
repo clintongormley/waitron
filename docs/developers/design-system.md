@@ -1592,9 +1592,15 @@ written per screen (one stated exception, the till's profile dialog, is in the b
 - the Products browser's Move and Delete dialog draws its confirm `secondary` while it waits for a
   destination or for the folder summary, or after the summary failed, and its own variant once it
   can act; while it is working (`loading`) it keeps its own variant (owner, 2026-10-08, A409).
-  Change unit and the image picker are `secondary` throughout. This is not yet a rule across
-  screens: elsewhere an action that waits for a choice or a load can keep its colour while
-  disabled (the same browser's toolbar Delete is one), and nothing guards it.
+  Change unit and the image picker are `secondary` throughout. The owner made this the rule for the
+  whole dashboard (2026-10-08, A416): a button that is not a save is drawn `secondary` while it
+  waits for a choice, a selection or a load, and its own variant once it can act, keeping its own
+  variant while its own action is being sent. A416 brought these under it: the Products browser's
+  toolbar Delete, the options/extras Delete confirmation, Print on an equipment label and on a
+  reprint, the profile window's Edit, and the backup key's Change the key. Not covered: a button
+  disabled only while a request is being sent, an action blocked by its own field checks, and the
+  sign-in screens. The options screen's Add and Edit were left `primary`: they are disabled only
+  while the languages are unread, and neither is on screen then. Nothing guards it across screens.
 
 These forms follow the rule so far; the others are being brought under it batch by batch
 ([backlog](../backlog.md) A331, [plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md)),

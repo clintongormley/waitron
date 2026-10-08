@@ -1651,11 +1651,13 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     it" — A409 draws it quiet while it waits, see design-system.md → Forms); Delete is pressed with its
     default choice of what happens to the contents; the image picker acts the moment an image is
     chosen or removed. Gating Change unit would change only how it looks. **Left open by A409
-    (#1433), for the owner:** other buttons that are not saves still keep their colour while
-    disabled and waiting — the Products browser's toolbar Delete, the options/extras Delete
+    (#1433), for the owner — decided:** other buttons that are not saves still kept their colour
+    while disabled and waiting — the Products browser's toolbar Delete, the options/extras Delete
     confirmation, Add and Edit on the options screen until languages load, Print on an equipment
-    label and on a reprint, and two on the till. Whether they should all be drawn quiet the same
-    way is not decided; none is queued;
+    label and on a reprint, and two on the till. Owner, 2026-10-08: "b", draw them all quiet the
+    same way. A416 did the dashboard ones, except Add and Edit on the options screen: neither can be
+    seen until the languages have loaded, so neither was changed. The two till buttons are A417
+    (lane A);
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
     window with Save active, and pressing it untouched gives the option back to the list, which
