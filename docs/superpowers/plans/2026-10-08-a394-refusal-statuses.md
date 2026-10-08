@@ -1433,7 +1433,10 @@ ingredient ids unchecked, and with an EMPTY list an unknown product falls throug
 (`packages/recipes/src/ingredients.ts`) does not read the update's row count. Products are never
 hard-deleted (no `delete(products)` outside tests), so a 404 on the recipe read cannot meet a
 product the dashboard listed a moment earlier. The dashboard reads these refusals by code only
-(`recipe-screen.ts` `#showReadError` / `codeOf`). Existence only, the thing the foreign key holds —
+(`recipe-screen.ts` `#showReadError` / `codeOf`). Neither these routes nor the recipe screen is
+reachable today: `mountRecipeApi` is mounted only by tests and `recipe-screen.ts` is imported by
+nothing (#345; `docs/backlog.md`, "The recipe routes and the recipe screen are unreached"), so these
+answers are what the tests, and any future remount, see. Existence only, the thing the foreign key holds —
 never "active": an inactive ingredient stays usable in a recipe, and a variant's recipe read keeps
 answering `[]` (`recipes.test.ts`, the variant case).
 

@@ -478,10 +478,11 @@ it("tells a person whose variant can no longer be used to refresh the page and t
   );
 });
 
-it("says an ingredient that no longer exists needs a refresh, not the generic message, in English and Spanish", () => {
-  expect(codeMessage("ingredient.not_found", "en")).not.toBe("Something went wrong, try again");
-  expect(codeMessage("ingredient.not_found", "es")).not.toBe("Algo salió mal, inténtalo de nuevo");
+it("says an ingredient that no longer exists needs a refresh, in English and Spanish", () => {
   expect(codeMessage("ingredient.not_found", "en")).toBe(
     "This ingredient no longer exists. Refresh the page and try again.",
+  );
+  expect(codeMessage("ingredient.not_found", "es")).toBe(
+    "Este ingrediente ya no existe. Actualiza la página y vuelve a intentarlo.",
   );
 });
