@@ -133,6 +133,18 @@ import type {
   TranslationGapReason,
 } from "@waitron/catalogue/src/content-translation-report-types.js";
 export type { LanguageTranslationGaps, TranslationGap, TranslationGapKind, TranslationGapReason };
+import type {
+  TranslationBatch,
+  TranslationPage,
+  TranslationRef,
+  TranslationTarget,
+} from "@waitron/catalogue/src/content-translation-types.js";
+export type { TranslationBatch, TranslationPage, TranslationRef, TranslationTarget };
+export interface TranslationQuery {
+  after?: string;
+  targets?: TranslationRef[];
+}
+
 import type { MenuPriceRow, MenuPriceVariant } from "@waitron/catalogue/src/menu-types.js";
 export type { MenuPriceRow, MenuPriceVariant };
 import type {
@@ -2044,6 +2056,31 @@ export class DashboardApi {
     return this.#request<LanguageTranslationGaps[]>(
       "/management-api/content-translation-gaps",
       "GET",
+    );
+  }
+
+  getContentTranslationTargets(
+    language: string,
+    query: TranslationQuery,
+  ): Promise<TranslationPage> {
+    const params = new URLSearchParams();
+    if (query.after !== undefined) params.append("after", query.after);
+    for (const ref of query.targets ?? []) params.append("target", `${ref.kind}:${ref.id}`);
+    const suffix = params.size ? `?${params}` : "";
+    return this.#request(
+      `/management-api/content-translations/${encodeURIComponent(language)}${suffix}`,
+      "GET",
+    );
+  }
+
+  saveContentTranslations(
+    language: string,
+    batch: TranslationBatch,
+  ): Promise<{ saved: TranslationTarget[] }> {
+    return this.#request(
+      `/management-api/content-translations/${encodeURIComponent(language)}`,
+      "PUT",
+      batch,
     );
   }
 

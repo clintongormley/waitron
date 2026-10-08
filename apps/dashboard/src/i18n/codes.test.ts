@@ -495,3 +495,14 @@ it("says a location that no longer exists needs a refresh, in English and Spanis
     "Este local ya no existe. Actualiza la página y vuelve a intentarlo.",
   );
 });
+
+it.each([
+  "content.translation_stale",
+  "content.translation_unavailable",
+  "content.translation_batch_invalid",
+  "content.translation_refused",
+])("has actionable English and Spanish copy for %s", (code) => {
+  for (const language of ["en", "es"]) {
+    expect(codeMessage(code, language)).not.toBe(codeMessage("unmapped", language));
+  }
+});

@@ -192,6 +192,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a default from your enabled languages and remove any duplicates.",
     es: "Elige un idioma predeterminado entre los disponibles y elimina los duplicados.",
   },
+  "content.translation_stale": {
+    en: "These names or their language settings changed. Review the latest values before saving again.",
+    es: "Estos nombres o su configuración de idiomas han cambiado. Revisa los valores actuales antes de volver a guardar.",
+  },
+  "content.translation_unavailable": {
+    en: "An edited item is no longer available here. Review the latest items before saving again.",
+    es: "Un elemento editado ya no está disponible aquí. Revisa los elementos actuales antes de volver a guardar.",
+  },
+  "content.translation_batch_invalid": {
+    en: "Check the edited names and save up to 100 items at a time. Each name can use up to 4 KiB and the whole request up to 256 KiB.",
+    es: "Revisa los nombres editados y guarda hasta 100 elementos cada vez. Cada nombre puede ocupar hasta 4 KiB y la solicitud completa hasta 256 KiB.",
+  },
+  "content.translation_refused": {
+    en: "Check the marked name before saving again.",
+    es: "Revisa el nombre señalado antes de volver a guardar.",
+  },
   "content.translation_invalid": {
     en: "Enter text for each translation.",
     es: "Introduce texto para cada traducción.",

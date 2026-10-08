@@ -103,11 +103,11 @@ unrelated names and other aggregate fields are excluded.
 
 **Interfaces:** Mount `GET`/`PUT /management-api/content-translations/:language`; GET accepts `after` or repeated `target=kind:id`. Client methods: `getContentTranslationTargets(language: string, query: TranslationQuery): Promise<TranslationPage>` and `saveContentTranslations(language: string, batch: TranslationBatch): Promise<{saved: TranslationTarget[]}>`; `TranslationQuery` is Task 1's query type.
 
-- [ ] Write authenticated nine-kind success/rollback cases, manager success controls beside missing/expired/staff permission refusals; assert permission/session rechecked inside `gated`. Reject unknown fields/kinds, duplicates, nulls, invalid tokens/language/cursor and 0/101 targets. Test GET 50 succeeds/51 refuses and PUT 100 succeeds/101 refuses, 4096/4097 UTF-8 bytes per text, 262144/262145 actual body bytes, absent/false Content-Length and chunked input. Assert domain cause and target/field/language survive client transport.
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/content-translations-api.test.ts`; `pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts src/api/live-queries.test.ts`.
-- [ ] Bound raw body bytes before JSON parsing, including streamed bodies, in this route. Reuse `gated` exactly once; no nested transaction. Keep gap GET unchanged. Dependencies include content_languages, products, option_lists/labels, extra_lists, sections, section_members, **menu_details**, catalogues and units. Audit shipped subscription resources; add no guard exemptions. Add localized stale/unavailable/invalid/refused wording; show preserved domain cause for validation failures.
-- [ ] GREEN: repeat both commands and `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts -t 'missing-translations report|content languages'`.
-- [ ] `git commit -s -m "feat: expose authenticated translation target and batch routes"`. Checkpoint: complete API.
+- [x] Write authenticated nine-kind success/rollback cases, manager success controls beside missing/expired/staff permission refusals; assert permission/session rechecked inside `gated`. Reject unknown fields/kinds, duplicates, nulls, invalid tokens/language/cursor and 0/101 targets. Test GET 50 succeeds/51 refuses and PUT 100 succeeds/101 refuses, 4096/4097 UTF-8 bytes per text, 262144/262145 actual body bytes, absent/false Content-Length and chunked input. Assert domain cause and target/field/language survive client transport.
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/content-translations-api.test.ts`; `pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts src/api/live-queries.test.ts`.
+- [x] Bound raw body bytes before JSON parsing, including streamed bodies, in this route. Reuse `gated` exactly once; no nested transaction. Keep gap GET unchanged. Dependencies include content_languages, products, option_lists/labels, extra_lists, sections, section_members, **menu_details**, catalogues and units. Audit shipped subscription resources; add no guard exemptions. Add localized stale/unavailable/invalid/refused wording; show preserved domain cause for validation failures.
+- [x] GREEN: repeat both commands and `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts -t 'missing-translations report|content languages'`.
+- [x] `git commit -s -m "feat: expose authenticated translation target and batch routes"`. Checkpoint: complete API.
 
 ## Task 5: Staged modal, filters, pages and drafts
 
@@ -174,3 +174,17 @@ Five installed safeguard removals failed as expected (four controls produced ass
 removal refused the valid joint save); restored suites passed 111 cases. Restricted source
 coverage 99.56/97.5/100/100 is not package or CI coverage. Existing assertions remain unchanged.
 The authenticated route, staged dialog and Tasks 4–8 remain unbuilt.
+
+
+Task 4 local checkpoint (2026-10-08): authenticated selected-language GET/PUT routes,
+dashboard transport, ten live dependencies (including menu_details) and EN/ES refusal wording
+are built. Route tests exercise all nine kinds, atomic refusal, equivalent retry, queued/upload-time
+manager checks, GET 50/51, PUT 100/101, 4096/4097 text bytes and 262144/262145 actual body bytes
+with absent or false Content-Length and streamed chunks. The client preserves validation cause,
+target, field and language; displaying the cause beside staged fields remains Task 5.
+The staged dialog, live review, unsaved protection and consumer/visual acceptance remain Tasks 5–7.
+Task 4 receipts: repaired installed-base RED51; final route53/dashboard338/domain111,
+unchanged report/language3, root102 and unedited fiscal20 cases passed. Scoped types/lint/format
+passed. Restricted route coverage is 100/100/100/100 (55 statements, 30 branches, 12 functions,
+51 lines), not package or CI coverage. Three installed removals failed their assertions;
+restored route53 passed. No existing behavioral assertion changed; no visible UI changed.

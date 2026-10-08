@@ -439,3 +439,43 @@ it("subscribes catalogue defaults to their stored settings", async () => {
   expect(query.dependencies).toEqual([{ type: "catalogue_settings" }]);
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
 });
+
+it.each([
+  "content_languages",
+  "products",
+  "option_lists",
+  "option_labels",
+  "extra_lists",
+  "sections",
+  "section_members",
+  "menu_details",
+  "catalogues",
+  "units",
+])("refreshes translation targets passively when %s changes", async (type) => {
+  const calls: RequestInit[] = [];
+  const api = new DashboardApi("", async (_path, init) => {
+    calls.push(init);
+    return new Response(
+      JSON.stringify({
+        language: "en",
+        config: { defaultLanguage: "es", languages: ["es", "en"] },
+        required: [],
+        rows: [],
+        next: null,
+        total: 0,
+      }),
+    );
+  });
+  const observed = api.liveData.observe(
+    dashboardQuery(api, "getContentTranslationTargets", ["en", {}]),
+    () => {},
+  );
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+    api.liveData.invalidate([{ type, id: "changed-elsewhere" }]);
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+    expect(new Headers(calls[1]!.headers).get("x-waitron-live")).toBe("1");
+  } finally {
+    observed.unsubscribe();
+  }
+});
