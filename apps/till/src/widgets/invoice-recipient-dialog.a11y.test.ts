@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import "./invoice-recipient-dialog.js";
 import type { TillInvoiceRecipientDialog } from "./invoice-recipient-dialog.js";
 
@@ -35,6 +35,9 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
         await el.updateComplete;
         el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
         await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(
+          t("form.fix_fields"),
+        );
       }
       await expectNoA11yViolations(host);
     },

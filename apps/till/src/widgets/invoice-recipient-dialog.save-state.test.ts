@@ -27,7 +27,6 @@ function field(el: TillInvoiceRecipientDialog, name: string) {
 function bottom(el: TillInvoiceRecipientDialog) {
   return el.shadowRoot!.querySelector("wt-form-actions")!;
 }
-/** What Save looks like and whether a person can press it: the host's state and its inner button's. */
 async function saveState(el: TillInvoiceRecipientDialog) {
   await el.updateComplete;
   const save = saveButton(el);
