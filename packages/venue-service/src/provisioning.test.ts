@@ -291,14 +291,12 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
             (select count(*) from special_date_hours) as date_cells,
             (select count(*) from special_date_hours_periods) as date_periods`)
       ).rows[0];
-    const departmentId = async () =>
-      (
-        await db.execute<{ id: string }>(sql`
-          select id from departments where location_id = ${locationId} and is_default = 1`)
-      ).rows[0]!.id;
-
     await runSeed();
-    const subject = { kind: "department" as const, id: await departmentId() };
+    const [station] = await db
+      .insert(kitchenStations)
+      .values({ locationId, name: "Pass" })
+      .returning();
+    const subject = { kind: "station" as const, id: station!.id };
     expect(await db.transaction((tx) => readWeekHours(tx, cfg, subject))).toEqual(
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,

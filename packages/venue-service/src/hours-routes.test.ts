@@ -90,6 +90,7 @@ interface Fixture {
   bar: HoursSubject;
   kitchen: HoursSubject;
   otherDepartment: HoursSubject;
+  departmentIds: { restaurant: string; deli: string };
   otherDateId: string;
   manager: string;
   supervisor: string;
@@ -115,7 +116,7 @@ async function fixture(): Promise<Fixture> {
       defaultServiceMode: "table_tab",
       isDefault,
     });
-    const [restaurant, deli, otherDepartment] = await tx
+    const [restaurant, deli] = await tx
       .insert(departments)
       .values([
         department(location!.id, "Restaurant", true),
@@ -145,6 +146,14 @@ async function fixture(): Promise<Fixture> {
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
     const cfg = { locationId: locationId(location!.id) };
+    const [restaurantStation, deliStation, foreignStation] = await tx
+      .insert(kitchenStations)
+      .values([
+        { locationId: location!.id, name: "Pass", displayOrder: 2 },
+        { locationId: location!.id, name: "Grill", displayOrder: 3 },
+        { locationId: other!.id, name: "Other pass" },
+      ])
+      .returning();
     const [calendarMenu] = await tx
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
@@ -166,11 +175,12 @@ async function fixture(): Promise<Fixture> {
     );
     return {
       cfg: { locationId: locationId(location!.id) },
-      restaurant: { kind: "department" as const, id: restaurant!.id },
-      deli: { kind: "department" as const, id: deli!.id },
+      departmentIds: { restaurant: restaurant!.id, deli: deli!.id },
+      restaurant: { kind: "station" as const, id: restaurantStation!.id },
+      deli: { kind: "station" as const, id: deliStation!.id },
       bar: { kind: "station" as const, id: bar!.id },
       kitchen: { kind: "station" as const, id: kitchen!.id },
-      otherDepartment: { kind: "department" as const, id: otherDepartment!.id },
+      otherDepartment: { kind: "station" as const, id: foreignStation!.id },
       otherDateId: otherDate.id,
       manager: await person("manager"),
       supervisor: await person("supervisor"),
@@ -283,6 +293,8 @@ describe("reading Hours", () => {
       subjects: [
         { ...fx.kitchen, name: "Kitchen", active: true, isDefault: true },
         { ...fx.bar, name: "Bar", active: true, isDefault: false },
+        { ...fx.restaurant, name: "Pass", active: true, isDefault: false },
+        { ...fx.deli, name: "Grill", active: true, isDefault: false },
       ],
       week: [
         { subject: fx.kitchen, days: unset },
@@ -293,6 +305,8 @@ describe("reading Hours", () => {
             cell: weekday === 2 ? periods(lunch) : closed,
           })),
         },
+        { subject: fx.restaurant, days: unset },
+        { subject: fx.deli, days: unset },
       ],
       days: [
         { date: "2030-10-14", specialDate: null, holidays: [], tone: "standard" },
@@ -385,12 +399,12 @@ describe("reading Hours", () => {
       await replaceMenuWeek(
         tx,
         fx.cfg,
-        fx.restaurant.id,
+        fx.departmentIds.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         new Date(),
       );
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(tx, fx.cfg, fx.deli.id, {
+      const period = await saveMenuPeriod(tx, fx.cfg, fx.departmentIds.deli, {
         name: "Deli",
         menuId: menu!.id,
         staffMenuIds: [],
@@ -398,7 +412,7 @@ describe("reading Hours", () => {
       await replaceMenuWeek(
         tx,
         fx.cfg,
-        fx.deli.id,
+        fx.departmentIds.deli,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
           slots: weekday === 1 ? [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }] : [],
@@ -409,13 +423,16 @@ describe("reading Hours", () => {
     });
     const special = await createDate(fx, input({ date: "2030-10-14", colour: "green", cells: [] }));
     await withTransaction(db, (tx) =>
-      saveSpecialDateMenus(tx, fx.cfg, special.id, fx.deli.id, [], new Date()),
+      saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date()),
     );
     const model = (await (
       await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-15", fx.manager)
     ).json()) as HoursModel;
     expect(model.days.map((day) => day.tone)).toEqual(["closed", "closed"]);
-    await db.update(departments).set({ active: false }).where(eq(departments.id, fx.restaurant.id));
+    await db
+      .update(departments)
+      .set({ active: false })
+      .where(eq(departments.id, fx.departmentIds.restaurant));
     const deli = await withTransaction(db, (tx) =>
       readHoursModel(tx, fx.cfg, "2030-10-14", "2030-10-15", new Date()),
     );
@@ -424,7 +441,7 @@ describe("reading Hours", () => {
       replaceMenuWeek(
         tx,
         fx.cfg,
-        fx.deli.id,
+        fx.departmentIds.deli,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
           slots:
@@ -985,5 +1002,42 @@ describe("Hours when the venue's clock changes", () => {
     const after = await model(fx, at);
     expect(await barStatus(fx, at)).toEqual({ open: true, why: "in_hours" });
     expect(after).toEqual({ ...before, dayCutover: "02:00" });
+  });
+});
+
+describe("station-only Hours request boundary", () => {
+  it("refuses a department week at subject.kind and keeps the page's station weeks unset", async () => {
+    const fx = await fixture();
+    await refused(
+      await send(fx, "PUT", "/hours/week", fx.manager, {
+        subject: { kind: "department", id: fx.departmentIds.restaurant },
+        days: week(),
+      }),
+      400,
+      { code: "hours.invalid", params: { field: "subject.kind" } },
+    );
+    expect(await storedWeek(fx, fx.restaurant)).toEqual(unsetWeek());
+  });
+  it("refuses a department special-date cell at its kind without creating a named date", async () => {
+    const fx = await fixture();
+    await refused(
+      await send(
+        fx,
+        "POST",
+        "/special-dates",
+        fx.manager,
+        input({
+          cells: [
+            {
+              subject: { kind: "department", id: fx.departmentIds.restaurant },
+              cell: { mode: "closed", periods: [] },
+            },
+          ],
+        }),
+      ),
+      400,
+      { code: "hours.invalid", params: { field: "cells.0.subject.kind" } },
+    );
+    expect(await venueDates(fx)).toEqual([]);
   });
 });

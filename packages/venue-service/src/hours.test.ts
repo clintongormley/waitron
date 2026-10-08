@@ -84,6 +84,7 @@ interface Fixture {
   bar: HoursSubject;
   kitchen: HoursSubject;
   otherDepartment: HoursSubject;
+  departmentIds: { restaurant: string; deli: string };
   otherStation: HoursSubject;
 }
 
@@ -115,7 +116,7 @@ async function fixture(): Promise<Fixture> {
       defaultServiceMode: "table_tab",
       isDefault,
     });
-    const [restaurant, deli, otherDepartment] = await tx
+    const [restaurant, deli] = await tx
       .insert(departments)
       .values([
         department(location!.id, "Restaurant", true),
@@ -129,6 +130,14 @@ async function fixture(): Promise<Fixture> {
         { locationId: location!.id, name: "Bar" },
         { locationId: location!.id, name: "Kitchen", isDefault: true },
         { locationId: other!.id, name: "Other bar" },
+      ])
+      .returning();
+    const [restaurantStation, deliStation, foreignStation] = await tx
+      .insert(kitchenStations)
+      .values([
+        { locationId: location!.id, name: "Pass" },
+        { locationId: location!.id, name: "Grill" },
+        { locationId: other!.id, name: "Other pass" },
       ])
       .returning();
     const [calendarMenu] = await tx
@@ -152,11 +161,12 @@ async function fixture(): Promise<Fixture> {
     );
     return {
       cfg,
-      restaurant: { kind: "department", id: restaurant!.id },
-      deli: { kind: "department", id: deli!.id },
+      departmentIds: { restaurant: restaurant!.id, deli: deli!.id },
+      restaurant: { kind: "station", id: restaurantStation!.id },
+      deli: { kind: "station", id: deliStation!.id },
       bar: { kind: "station", id: bar!.id },
       kitchen: { kind: "station", id: kitchen!.id },
-      otherDepartment: { kind: "department", id: otherDepartment!.id },
+      otherDepartment: { kind: "station", id: foreignStation!.id },
       otherStation: { kind: "station", id: otherStation!.id },
     };
   });
@@ -336,11 +346,7 @@ describe("the standard week", () => {
   });
 
   const refusals: [string, (f: Fixture) => { subject?: HoursSubject; days: unknown }, string][] = [
-    [
-      "another venue's department",
-      (f) => ({ subject: f.otherDepartment, days: week() }),
-      "subject",
-    ],
+    ["another venue's station", (f) => ({ subject: f.otherDepartment, days: week() }), "subject"],
     ["another venue's station", (f) => ({ subject: f.otherStation, days: week() }), "subject"],
     [
       "a subject of an unknown kind",
@@ -1199,12 +1205,16 @@ async function addSubjects(f: Fixture) {
         defaultServiceMode: "table_tab",
       })
       .returning();
-    const [grill] = await tx
+    const [terraceStation, grill] = await tx
       .insert(kitchenStations)
-      .values({ locationId: f.cfg.locationId, name: `Grill ${randomUUID()}` })
+      .values([
+        { locationId: f.cfg.locationId, name: "Terrace pass" },
+        { locationId: f.cfg.locationId, name: `Grill ${randomUUID()}` },
+      ])
       .returning();
     return {
-      terrace: { kind: "department", id: terrace!.id } as HoursSubject,
+      terraceDepartment: { kind: "department", id: terrace!.id } as HoursSubject,
+      terrace: { kind: "station", id: terraceStation!.id } as HoursSubject,
       grill: { kind: "station", id: grill!.id } as HoursSubject,
     };
   });
@@ -1419,7 +1429,7 @@ describe("one subject's hours on one opening date", () => {
 });
 
 describe("closing the whole venue on a date", () => {
-  it("closes every department and non-default station, new ones included, and keeps the default open", async () => {
+  it("closes every non-default station, new ones included, and keeps the default open", async () => {
     const f = await fixture();
     await save(f, f.deli, week({ 5: periods(period("10:00", "14:00")) }));
     const evening = period("18:00", "22:00");
@@ -1470,12 +1480,12 @@ describe("the calendar's Closed colour", () => {
     const f = await fixture();
     const deliPeriod = await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const restaurantPeriod = await saveMenuPeriod(tx, f.cfg, f.restaurant.id, {
+      const restaurantPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
         name: "Lunch",
         menuId: menu!.id,
         staffMenuIds: [],
       });
-      const deliPeriod = await saveMenuPeriod(tx, f.cfg, f.deli.id, {
+      const deliPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.deli, {
         name: "Deli",
         menuId: menu!.id,
         staffMenuIds: [],
@@ -1483,7 +1493,7 @@ describe("the calendar's Closed colour", () => {
       await replaceMenuWeek(
         tx,
         f.cfg,
-        f.restaurant.id,
+        f.departmentIds.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
           slots:
@@ -1517,14 +1527,14 @@ describe("the calendar's Closed colour", () => {
             tx,
             f.cfg,
             special.id,
-            f.deli.id,
+            f.departmentIds.deli,
             [{ periodId: deliPeriod.id, startsAt: "10:00", endsAt: "14:00" }],
             AT,
           ),
         );
       expect(await tone(f, date)).toBe(open ? colour : "closed");
     }
-    const { terrace } = await addSubjects(f);
+    const { terraceDepartment: terrace } = await addSubjects(f);
     expect(await tone(f, "2026-10-21")).toBe("closed");
     await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
@@ -1713,7 +1723,7 @@ describe("holiday facts beside the calendar", () => {
 });
 
 describe("duplicating a special date", () => {
-  it("copies the name, colour and every cell to each target under new ids, an inactive department's included", async () => {
+  it("copies the name, colour and every cell to each target under new ids, an inactive station's included", async () => {
     const f = await fixture();
     const lunch = period("12:00", "15:00");
     const dinner = period("19:00", "23:00");
@@ -1729,7 +1739,9 @@ describe("duplicating a special date", () => {
         ],
       }),
     );
-    await setDepartmentActive(f.deli, false);
+    await withTransaction(db, (tx) =>
+      tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.deli.id)),
+    );
     const sourceBefore = await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, source.id));
 
     const copies = await duplicate(f, source.id, ["2026-10-23", "2026-10-30"]);
@@ -1761,7 +1773,7 @@ describe("duplicating a special date", () => {
           periodIds.add(id);
         }
       const rows = await dateRows(copy.id);
-      expect(rows.cells.some((cell) => cell.departmentId === f.deli.id)).toBe(true);
+      expect(rows.cells.some((cell) => cell.stationId === f.deli.id)).toBe(true);
     }
     expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, source.id))).toEqual(
       sourceBefore,
@@ -1807,7 +1819,7 @@ describe("duplicating a special date", () => {
       source: "standard",
       cell: { mode: "periods", periods: [sunday] },
     });
-    expect((await dateRows(copy!.id)).cells.map((cell) => cell.departmentId)).toEqual([f.deli.id]);
+    expect((await dateRows(copy!.id)).cells.map((cell) => cell.stationId)).toEqual([f.deli.id]);
   });
 
   const zone = "Europe/Madrid";
