@@ -435,8 +435,7 @@ it("stores image-library bytes in the database without a separate image volume",
 
 /**
  * sharp is a native addon with a shared library beside it, and esbuild does not refuse to bundle
- * it. Without `--external:sharp` the build exits 0 and the bundle cannot even be loaded: bundled
- * sharp declares `createRequire` a second time beside the banner `scripts/bundle-node.mjs` adds.
+ * it. Keep it external so its native library stays beside the server bundle.
  *
  * Every Node bundle is built by `scripts/bundle-node.mjs`, and the flag is taken from that
  * script's own argument builder. The rest reads package.json TEXT: it sees a workspace script that
@@ -793,5 +792,35 @@ describe("the print-agent image carries the copyright files of python3-minimal a
     expect(IMAGE_SMOKE).toContain(
       "test -s /app/third-party/python3-minimal/python3-minimal/copyright",
     );
+  });
+});
+
+describe("the invoice renderer's bundled font", () => {
+  it("ships the same font beside the bundle and records its licence and source hash", () => {
+    const font = readFileSync(`${ROOT}apps/server/src/assets/invoice-noto-sans.ttf`);
+    const provenance = read("deploy/third-party/noto-sans/README.md");
+    expect(provenance).toContain(createHash("sha256").update(font).digest("hex"));
+    expect(read("deploy/third-party/noto-sans/OFL.txt")).toContain(
+      "SIL OPEN FONT LICENSE Version 1.1",
+    );
+    expect(DOCKERFILE).toContain("/src/apps/server/dist/assets/ /app/assets/");
+    expect(IMAGE_SMOKE).toContain("test -s /app/assets/invoice-noto-sans.ttf");
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/noto-sans/OFL.txt");
+    expect(read("apps/server/scripts/copy-migrations.mjs")).toContain('join(distDir, "assets")');
+    expect(noticeSection("Noto Sans")).toContain("noto-sans/OFL.txt");
+  });
+});
+
+describe("the invoice raster encoder's CUPS attribution", () => {
+  it("ships the adapted raster source notices with the Apache licence", () => {
+    const notices = read("deploy/third-party/cups-raster/NOTICES.txt");
+    expect(notices).toContain("Copyright © 2020-2024 by OpenPrinting.");
+    expect(notices).toContain("Copyright 2007-2019 by Apple Inc.");
+    expect(notices).toContain("Copyright 1997-2006 by Easy Software Products.");
+    expect(notices).toContain("Apache License");
+    expect(read("deploy/third-party/licenses/Apache-2.0.txt")).toContain("Version 2.0");
+    expect(noticeSection("CUPS raster encoding")).toContain("cups-raster/NOTICES.txt");
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/cups-raster/NOTICES.txt");
+    expect(DOCKERFILE).toContain("/src/deploy/third-party/ /app/third-party/");
   });
 });

@@ -13,6 +13,9 @@ import {
   saleSettlements,
   tenders,
   invoiceSeries,
+  invoiceDeliveries,
+  receiptReprints,
+  tenants,
   workingOrders,
   tenantReceipts,
   withTransaction,
@@ -31,7 +34,14 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { createPrinter, textGrid, updatePrinter } from "@waitron/printing";
+import { createPrinter, enqueuePrintJob, textGrid, updatePrinter } from "@waitron/printing";
+import { recordSale } from "@waitron/core";
+import { createOpenOrder } from "./working-order.js";
+import {
+  claimInvoiceDelivery,
+  reportInvoiceDelivery,
+  reserveInvoiceDelivery,
+} from "./invoice-delivery.js";
 import { departmentSalePolicies, departments, routingCells } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -40,6 +50,8 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  workingOrderId as brandWorkingOrderId,
+  jobOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -56,6 +68,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { DRAWER_KICK } from "./receipt-print.js";
+import { reprintOrderReceipt } from "./orders-reprint.js";
 import {
   commandNames,
   decodeTicket,
@@ -734,6 +747,123 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
 });
 
 describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
+  it.each(["failed", "unknown"] as const)(
+    "enrolls a synthetic full invoice's %s original retry with the authenticated staff member",
+    async (status) => {
+      const { cfg, operatorId } = await setupVenue();
+      const printerId = await makePrinter(cfg);
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const cookie = await login(app, cfg, operatorId);
+      const orderId = randomUUID();
+      const original = await withTransaction(suite.db, async (tx) => {
+        await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+        const [series] = await tx
+          .select()
+          .from(invoiceSeries)
+          .where(eq(invoiceSeries.purpose, "full"));
+        await createOpenOrder(
+          tx,
+          { ...cfg, origin: jobOrigin("operator_script") },
+          orderId,
+          [],
+          null,
+        );
+        const sale = await recordSale(tx, backend, {
+          origin: jobOrigin("operator_script"),
+          nodeId: cfg.nodeId,
+          seriesId: brandSeriesId(series!.id),
+          workingOrderId: brandWorkingOrderId(orderId),
+          locale: LOCALE,
+          invoiceLocales: [LOCALE],
+          counterparty: { taxId: "12345678Z", legalName: "Cliente", countryCode: "ES" },
+          recipientAddress: "Calle Cliente 9, Madrid",
+          total: "1.00",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Coffee",
+              descriptions: { "es-ES": "Café" },
+              quantity: "1",
+              unitPrice: "1.00",
+              vatRate: "0",
+              lineTotal: "1.00",
+            },
+          ],
+          clock,
+          settlement: { kind: "deferred" },
+          operatorId,
+        });
+        const job = await enqueuePrintJob(
+          tx,
+          printCfg(cfg),
+          printerId,
+          new Uint8Array([27, 64]),
+          "document",
+          { saleId: sale.saleId, receiptCopy: false },
+        );
+        if (status === "unknown") {
+          const delivery = await reserveInvoiceDelivery(tx, sale.saleId, {
+            requestKey: job.jobId,
+            personId: operatorId,
+            medium: "receipt",
+            printJobId: job.jobId,
+          });
+          await tx
+            .update(invoiceDeliveries)
+            .set({ status: "sending", claimedAt: new Date(Date.now() - 61000).toISOString() })
+            .where(eq(invoiceDeliveries.id, delivery.id));
+        }
+        await tx
+          .update(printJobs)
+          .set({
+            status: status === "failed" ? "failed" : "printing",
+            attempts: status === "failed" ? 5 : 1,
+          })
+          .where(eq(printJobs.id, job.jobId));
+        return { ...job, saleId: sale.saleId };
+      });
+      const retry = () =>
+        app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST", headers: { cookie } });
+      const responses = await Promise.all([retry(), retry()]);
+      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+      const { jobId } = (await responses.find((response) => response.status === 200)!.json()) as {
+        jobId: string;
+      };
+      const [delivery] = await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.printJobId, jobId));
+      expect(delivery).toMatchObject({
+        saleId: original.saleId,
+        printJobId: jobId,
+        personId: operatorId,
+        medium: "receipt",
+        designation: "original",
+        status: "queued",
+        generation: status === "failed" ? 1 : 2,
+      });
+      if (status === "unknown") {
+        const [expired] = await suite.db
+          .select()
+          .from(invoiceDeliveries)
+          .where(eq(invoiceDeliveries.printJobId, original.jobId));
+        expect(expired).toMatchObject({ status: "unknown", failureCode: "timeout" });
+      }
+      const jobs = await suite.db.select().from(printJobs);
+      expect(jobs).toHaveLength(2);
+      expect(jobs.find((job) => job.id === jobId)).toMatchObject({
+        payload: new Uint8Array([27, 64]),
+        printerId,
+        resendOf: original.jobId,
+        receiptCopy: false,
+      });
+      expect(await saleCount(cfg)).toBe(1);
+      expect(await registroCount(cfg)).toBe(1);
+      expect(await drawerOpensFor(cfg)).toEqual([]);
+    },
+  );
+
   it("resends exhausted originals with the same bytes and printer without refiling or opening the drawer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
@@ -2601,5 +2731,259 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     });
     expect(await jobs()).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+});
+
+describe("explicit F1 receipt delivery enrollment", () => {
+  async function issued() {
+    const { cfg, each, operatorId, supervisorId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, supervisorId);
+    const orderId = randomUUID();
+    const sale = await withTransaction(suite.db, async (tx) => {
+      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      const [series] = await tx
+        .select()
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.purpose, "full"));
+      const scope = await tx.execute<{ zone_id: string }>(
+        sql`select zone_id from zone_service_policies where location_id = ${cfg.locationId} limit 1`,
+      );
+      await createOpenOrder(
+        tx,
+        { ...cfg, origin: jobOrigin("operator_script") },
+        orderId,
+        [{ menuItemId: each.menuItemId, quantity: "1" }],
+        null,
+        { zoneId: scope.rows[0]!.zone_id },
+      );
+      return recordSale(tx, backend, {
+        origin: jobOrigin("operator_script"),
+        nodeId: cfg.nodeId,
+        seriesId: brandSeriesId(series!.id),
+        workingOrderId: brandWorkingOrderId(orderId),
+        locale: LOCALE,
+        invoiceLocales: [LOCALE],
+        counterparty: { taxId: "12345678Z", legalName: "Cliente", countryCode: "ES" },
+        recipientAddress: "Calle Cliente 9, Madrid",
+        total: "1.50",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Coffee",
+            descriptions: { "es-ES": "Café" },
+            quantity: "1",
+            unitPrice: "1.50",
+            vatRate: "21",
+            lineTotal: "1.50",
+          },
+        ],
+        clock,
+        settlement: { kind: "deferred" },
+        operatorId,
+      });
+    });
+    const post = (action: "receipt" | "reprint") =>
+      app.request(`/api/sales/${orderId}/${action}`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: "{}",
+      });
+    const email = () =>
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, {
+          requestKey: randomUUID(),
+          personId: operatorId,
+          medium: "email",
+          recipient: "synthetic@example.test",
+          consent: {
+            statementVersion: "1",
+            language: LOCALE,
+            recordedAt: new Date().toISOString(),
+            personId: operatorId,
+            contactEmail: "venue@example.test",
+          },
+        }),
+      );
+    return { cfg, printerId, sale, orderId, post, email, supervisorId };
+  }
+
+  it("enrolls the explicit original once with the requesting staff member, preserving invoice and drawer", async () => {
+    const { cfg, printerId, sale, post, supervisorId } = await issued();
+    const invoices = await suite.db.select().from(sales);
+    const fiscal = await suite.db.select().from(registrosFacturacion);
+    const responses = await Promise.all([post("receipt"), post("receipt")]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(1);
+    const [delivery] = await suite.db.select().from(invoiceDeliveries);
+    expect(delivery).toMatchObject({
+      saleId: sale.saleId,
+      printJobId: jobs[0]!.id,
+      requestKey: jobs[0]!.id,
+      personId: supervisorId,
+      medium: "receipt",
+      designation: "original",
+      status: "queued",
+      generation: 1,
+    });
+    expect(jobs[0]).toMatchObject({
+      saleId: sale.saleId,
+      printerId,
+      receiptCopy: false,
+      kind: "document",
+    });
+    expect(decodeTicket(jobs[0]!.payload)).not.toContain("DUPLICADO");
+    expect(await suite.db.select().from(sales)).toEqual(invoices);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it.each(["queued", "sent"] as const)(
+    "refuses an unmarked paper original after an email is %s without leaving a job",
+    async (status) => {
+      const { post, email } = await issued();
+      const delivery = await email();
+      if (status === "sent")
+        await withTransaction(suite.db, async (tx) => {
+          const claim = await claimInvoiceDelivery(tx, delivery.id, "synthetic-worker");
+          await reportInvoiceDelivery(tx, claim!, { status: "sent" });
+        });
+      const res = await post("receipt");
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: {
+          code:
+            status === "queued" ? "invoice_delivery.active" : "invoice_delivery.receipt_invalid",
+        },
+      });
+      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
+    },
+  );
+
+  it("enrolls a marked paper copy after completed email with the requesting staff member", async () => {
+    const { post, email, sale, supervisorId } = await issued();
+    const original = await email();
+    await withTransaction(suite.db, async (tx) => {
+      const claim = await claimInvoiceDelivery(tx, original.id, "synthetic-worker");
+      await reportInvoiceDelivery(tx, claim!, { status: "sent" });
+    });
+    expect((await post("reprint")).status).toBe(200);
+    const [job] = await suite.db.select().from(printJobs);
+    const deliveries = await suite.db.select().from(invoiceDeliveries);
+    expect(deliveries).toHaveLength(2);
+    expect(deliveries.find((row) => row.printJobId === job!.id)).toMatchObject({
+      saleId: sale.saleId,
+      personId: supervisorId,
+      designation: "duplicate",
+      medium: "receipt",
+      status: "queued",
+      generation: 2,
+    });
+    expect(job).toMatchObject({ receiptCopy: true, kind: "document" });
+    expect(decodeTicket(job!.payload)).toContain("DUPLICADO");
+    const second = await post("reprint");
+    expect(second.status).toBe(409);
+    expect(await second.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
+    expect(await suite.db.select().from(printJobs)).toHaveLength(1);
+  });
+
+  it("refuses a marked copy while an email original is queued", async () => {
+    const { post, email } = await issued();
+    await email();
+    const res = await post("reprint");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+  });
+
+  it("enrolls a dashboard copy with its audit actor after completed email", async () => {
+    const { cfg, printerId, email, sale, orderId, supervisorId } = await issued();
+    const original = await email();
+    await withTransaction(suite.db, async (tx) => {
+      const claim = await claimInvoiceDelivery(tx, original.id, "synthetic-worker");
+      await reportInvoiceDelivery(tx, claim!, { status: "sent" });
+    });
+    const { jobId } = await withTransaction(suite.db, (tx) =>
+      reprintOrderReceipt(tx, { backend, till: cfg }, orderId, printerId, supervisorId),
+    );
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, jobId));
+    expect(delivery).toMatchObject({
+      saleId: sale.saleId,
+      personId: supervisorId,
+      designation: "duplicate",
+      medium: "receipt",
+      status: "queued",
+    });
+    const [audit] = await suite.db.select().from(receiptReprints);
+    expect(audit).toMatchObject({ saleId: sale.saleId, personId: supervisorId, printJobId: jobId });
+  });
+
+  it("rolls back a dashboard copy and its audit while the email original is active", async () => {
+    const { cfg, printerId, email, orderId, supervisorId } = await issued();
+    await email();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reprintOrderReceipt(tx, { backend, till: cfg }, orderId, printerId, supervisorId),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.active" });
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(receiptReprints)).toEqual([]);
+  });
+
+  it("expires a silent email attempt before reserving the requested paper original", async () => {
+    const { post, email, sale } = await issued();
+    const original = await email();
+    await withTransaction(suite.db, async (tx) => {
+      const claim = await claimInvoiceDelivery(tx, original.id, "synthetic-worker");
+      expect(claim).toBeDefined();
+      await tx
+        .update(invoiceDeliveries)
+        .set({ claimedAt: new Date(Date.now() - 61000).toISOString() })
+        .where(eq(invoiceDeliveries.id, original.id));
+    });
+    expect((await post("receipt")).status).toBe(200);
+    const deliveries = await suite.db.select().from(invoiceDeliveries);
+    expect(deliveries).toHaveLength(2);
+    expect(deliveries.find((row) => row.id === original.id)).toMatchObject({
+      status: "unknown",
+      failureCode: "timeout",
+    });
+    expect(deliveries.find((row) => row.medium === "receipt")).toMatchObject({
+      saleId: sale.saleId,
+      designation: "original",
+      status: "queued",
+      generation: 2,
+    });
+  });
+
+  it("keeps an F2 explicit receipt outside invoice delivery tracking", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
+    expect(await suite.db.select().from(printJobs)).toHaveLength(1);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+  });
+
+  it("queues no delivery when the explicit original has no active printer", async () => {
+    const { cfg, post } = await issued();
+    await configureReceipt(cfg, { printerId: null });
+    expect((await post("receipt")).status).toBe(200);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
   });
 });

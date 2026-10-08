@@ -114,7 +114,7 @@ jobs:
           load: true
           tags: waitron-print-agent:ci
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
-          cache-from: type=gha
+          # Reuse this runner's builder cache without downloading remote print-agent layers.
           cache-to: type=gha,mode=max,ignore-error=true
 
       # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
@@ -221,6 +221,16 @@ jobs:
           docker exec "$app" sh -c 'test -s /app/third-party/iosevka/LICENSE.md \
             && grep -q "SIL Open Font License" /app/third-party/iosevka/LICENSE.md \
             && grep -q "^## Iosevka" /app/third-party/README.md'
+
+      - name: The image carries the invoice font and its licence
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          docker exec "$app" sh -c 'test -s /app/assets/invoice-noto-sans.ttf \
+            && test -s /app/third-party/noto-sans/OFL.txt \
+            && test -s /app/third-party/cups-raster/NOTICES.txt \
+            && grep -q "SIL OPEN FONT LICENSE Version 1.1" /app/third-party/noto-sans/OFL.txt \
+            && grep -q "^## Noto Sans" /app/third-party/README.md'
 
       - name: The image carries the licence of the font the Google button is drawn in
         run: |

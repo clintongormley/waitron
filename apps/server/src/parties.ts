@@ -12,7 +12,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { StagedInvoiceDelivery, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import {
   AppError,
@@ -35,6 +35,7 @@ export interface PartyBill {
   workingOrderId: string;
   revision: number;
   invoiceType: "F1" | "F2";
+  invoiceDelivery?: StagedInvoiceDelivery;
   recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
   /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
   partyId: string;
@@ -413,6 +414,7 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
             id: workingOrders.id,
             revision: workingOrders.revision,
             invoiceType: workingOrders.invoiceType,
+            invoiceDelivery: workingOrders.invoiceDelivery,
             taxId: workingOrders.recipientTaxId,
             legalName: workingOrders.recipientLegalName,
             address: workingOrders.recipientAddress,
@@ -458,6 +460,7 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
       workingOrderId: bill.workingOrderId,
       revision: choice.revision,
       invoiceType: choice.invoiceType,
+      ...(choice.invoiceDelivery === null ? {} : { invoiceDelivery: choice.invoiceDelivery }),
       recipient:
         choice.taxId !== null &&
         choice.legalName !== null &&
@@ -498,6 +501,7 @@ export type FamilyBill = Omit<
   | "amountDue"
   | "revision"
   | "invoiceType"
+  | "invoiceDelivery"
   | "recipient"
 > & {
   lines: number;

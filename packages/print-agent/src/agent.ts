@@ -190,14 +190,19 @@ export function createAgent(opts: AgentOptions): Agent {
       outcome = { status: "done" };
       status = { ...status, lastJobAt: host.now() };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message =
+        job.invoiceClaim === undefined
+          ? error instanceof Error
+            ? error.message
+            : String(error)
+          : "transport_failed";
       outcome = { status: "failed", error: message };
       status = { ...status, lastError: message };
       failed = true;
     }
+    if (job.invoiceClaim !== undefined) outcome = { ...outcome, invoiceClaim: job.invoiceClaim };
     const sent = await client.report(current, token, job.id, outcome);
     if (!sent.ok) {
-      // Dropped on purpose: the server's claim lease reclaims an unreported job (at-least-once).
       host.log.warn("report dropped", { job: job.id, failure: sent.failure });
     }
     return failed;

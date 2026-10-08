@@ -1,3 +1,5 @@
+import { recordSale } from "@waitron/core";
+import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -9,6 +11,10 @@ import {
   devices,
   diningTables,
   drawerOpens,
+  invoiceDeliveries,
+  invoiceSeries,
+  pagePrinters,
+  workingOrders,
   nowIso,
   partyTables,
   kitchenStations,
@@ -35,7 +41,7 @@ import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -52,18 +58,26 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   deviceOrigin,
+  workingOrderId as brandWorkingOrderId,
   jobOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
-import { collectOrder, printSaleReceipt, recordTillSale, reprintSale } from "./till-sale.js";
+import {
+  collectOrder,
+  printSaleReceipt,
+  readSettledTicket,
+  recordTillSale,
+  reprintSale,
+} from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { takeBillPayment } from "./bill-payments.js";
 import {
   DRAWER_KICK,
   enqueueReceiptReprint,
+  enqueueSaleReceipt,
   resolvePaymentSlipPrinter,
   resolveReceiptPrinter,
 } from "./receipt-print.js";
@@ -2164,5 +2178,372 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(pictures(reprint!).slice(1)).toEqual([[16, 2, LOGO_BITS]]);
     expect(topBlock(reprint!)).toContain("Tel. 910000000");
     expect(topBlock(reprint!)).not.toContain("Calle Mayor 1");
+  });
+});
+
+describe("automatic F1 receipt delivery enrollment", () => {
+  async function issued(mode: "auto" | "on_request" | "never", attributed = true, full = true) {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode, printerId });
+    return withTransaction(suite.db, async (tx) => {
+      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      const [operator] = await tx.select({ id: persons.id }).from(persons);
+      const [series] = await tx
+        .select()
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.purpose, full ? "full" : "standard"));
+      const orderId = randomUUID();
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [{ menuItemId: each.menuItemId, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+      const sale = await recordSale(tx, backend, {
+        origin: cfg.origin,
+        nodeId: cfg.nodeId,
+        seriesId: brandSeriesId(series!.id),
+        workingOrderId: brandWorkingOrderId(orderId),
+        locale: LOCALE,
+        invoiceLocales: [LOCALE],
+        counterparty: full ? { taxId: "12345678Z", legalName: "Cliente", countryCode: "ES" } : null,
+        recipientAddress: full ? "Calle Cliente 9, Madrid" : null,
+        total: "1.50",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Agua mineral",
+            descriptions: { "es-ES": "Agua mineral" },
+            quantity: "1",
+            unitPrice: "1.50",
+            vatRate: "21",
+            lineTotal: "1.50",
+          },
+        ],
+        clock,
+        settlement: { kind: "deferred" },
+        ...(attributed ? { operatorId: operator!.id } : {}),
+      });
+      const ticket = await readSettledTicket(backend, tx, cfg, orderId);
+      return {
+        cfg,
+        printerId,
+        saleId: sale.saleId,
+        orderId,
+        zoneId,
+        ticket,
+        personId: operator!.id,
+      };
+    });
+  }
+
+  it.each(["auto", "on_request", "never"] as const)(
+    "enrolls the automatic original with its recorded issuer under %s policy",
+    async (mode) => {
+      const { cfg, printerId, saleId, ticket, personId } = await issued(mode);
+      const invoices = await suite.db.select().from(sales);
+      const fiscal = await suite.db.select().from(registrosFacturacion);
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      const jobs = await suite.db.select().from(printJobs);
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]).toMatchObject({ saleId, printerId, receiptCopy: false, kind: "document" });
+      expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+        expect.objectContaining({
+          saleId,
+          printJobId: jobs[0]!.id,
+          personId,
+          medium: "receipt",
+          designation: "original",
+          status: "queued",
+          generation: 1,
+        }),
+      ]);
+      expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).not.toContain("DUPLICADO");
+      expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+      expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
+      expect(await suite.db.select().from(sales)).toEqual(invoices);
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+      expect(await suite.db.select().from(drawerOpens)).toEqual([]);
+    },
+  );
+
+  it.each(["email", "a4"] as const)(
+    "queues the saved %s original without a receipt and replays its reservation after completion",
+    async (medium) => {
+      const { cfg, saleId, orderId, ticket, personId } = await issued("auto");
+      const pagePrinterId = randomUUID();
+      const consent = {
+        statementVersion: "invoice-email-v1",
+        language: LOCALE,
+        recordedAt: "2026-10-07T17:00:00.000Z",
+        personId,
+        contactEmail: "venue@example.test",
+        contactPhone: "910000000",
+      };
+      await withTransaction(suite.db, async (tx) => {
+        await tx.insert(pagePrinters).values({
+          id: pagePrinterId,
+          locationId: cfg.locationId,
+          name: "Invoice A4",
+          host: "127.0.0.1",
+          port: 631,
+          resourcePath: "/ipp/print",
+          documentFormat: "application/pdf",
+          supportedFormats: ["application/pdf"],
+          media: "iso_a4_210x297mm",
+          resolutionDpi: 300,
+        });
+        await tx
+          .update(workingOrders)
+          .set({
+            invoiceDelivery:
+              medium === "email"
+                ? { medium, recipient: "customer@example.test", consent }
+                : { medium, pagePrinterId },
+          })
+          .where(eq(workingOrders.id, orderId));
+      });
+      const invoices = await suite.db.select().from(sales);
+      const fiscal = await suite.db.select().from(registrosFacturacion);
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      const deliveries = await suite.db.select().from(invoiceDeliveries);
+      expect(deliveries).toEqual([
+        expect.objectContaining({
+          saleId,
+          medium,
+          personId,
+          designation: "original",
+          status: "queued",
+          generation: 1,
+          printJobId: null,
+          ...(medium === "email"
+            ? { recipient: "customer@example.test", consent, pagePrinterId: null }
+            : { recipient: null, consent: null, pagePrinterId }),
+        }),
+      ]);
+      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(drawerOpens)).toEqual([]);
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .update(invoiceDeliveries)
+          .set({ status: "sent" })
+          .where(eq(invoiceDeliveries.id, deliveries[0]!.id)),
+      );
+      const completed = await suite.db.select().from(invoiceDeliveries);
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      expect(await suite.db.select().from(invoiceDeliveries)).toEqual(completed);
+      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(sales)).toEqual(invoices);
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
+    },
+  );
+
+  it("uses the recorded consent staff for an unattributed synthetic email invoice", async () => {
+    const { cfg, saleId, orderId, ticket, personId } = await issued("auto", false);
+    const consent = {
+      statementVersion: "invoice-email-v1",
+      language: LOCALE,
+      recordedAt: "2026-10-07T17:00:00.000Z",
+      personId,
+      contactEmail: "venue@example.test",
+    };
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: { medium: "email", recipient: "customer@example.test", consent },
+        })
+        .where(eq(workingOrders.id, orderId)),
+    );
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+      expect.objectContaining({
+        saleId,
+        medium: "email",
+        personId,
+        consent,
+        designation: "original",
+      }),
+    ]);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+  });
+
+  it("refuses unattributed A4 issuance rather than inventing an operator", async () => {
+    const { cfg, saleId, orderId, ticket } = await issued("auto", false);
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: { medium: "a4", pagePrinterId: randomUUID() },
+        })
+        .where(eq(workingOrders.id, orderId)),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId)),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "operatorId" },
+    });
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+  });
+
+  it("keeps a prepaid collection ticket separate from an emailed invoice", async () => {
+    const { cfg, saleId, orderId, zoneId, ticket, personId } = await issued("auto");
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`update department_sale_policies
+        set paid_when = 'prepay', collection_number = 'numbered'
+        where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})`);
+      await tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "email",
+            recipient: "customer@example.test",
+            consent: {
+              statementVersion: "invoice-email-v1",
+              language: LOCALE,
+              recordedAt: "2026-10-07T17:00:00.000Z",
+              personId,
+              contactEmail: "venue@example.test",
+            },
+          },
+        })
+        .where(eq(workingOrders.id, orderId));
+      await enqueueSaleReceipt(tx, cfg, ticket, saleId);
+    });
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ kind: "document", saleId: null });
+    const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
+    expect(text).toContain(String(ticket.orderNumber));
+    expect(text).not.toContain("FACTURA");
+    expect(text).not.toContain("TOTAL");
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+      expect.objectContaining({ saleId, medium: "email", status: "queued" }),
+    ]);
+  });
+
+  it("keeps a saved receipt choice on the paper-original path", async () => {
+    const { cfg, saleId, orderId, ticket } = await issued("never");
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ invoiceDelivery: { medium: "receipt" } })
+        .where(eq(workingOrders.id, orderId));
+      await enqueueSaleReceipt(tx, cfg, ticket, saleId);
+    });
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ saleId, receiptCopy: false });
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+      expect.objectContaining({ saleId, medium: "receipt", printJobId: jobs[0]!.id }),
+    ]);
+  });
+
+  it("does not interpret a synthetic F2's stale email draft as a full-invoice delivery", async () => {
+    const { cfg, saleId, orderId, ticket, personId } = await issued("auto", true, false);
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "email",
+            recipient: "customer@example.test",
+            consent: {
+              statementVersion: "invoice-email-v1",
+              language: LOCALE,
+              recordedAt: "2026-10-07T17:00:00.000Z",
+              personId,
+              contactEmail: "venue@example.test",
+            },
+          },
+        })
+        .where(eq(workingOrders.id, orderId));
+      await enqueueSaleReceipt(tx, cfg, ticket, saleId);
+    });
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ saleId, receiptCopy: false });
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+  });
+
+  it("refuses a competing email after an automatic paper original", async () => {
+    const { cfg, saleId, ticket, personId } = await issued("auto");
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, saleId, {
+          requestKey: randomUUID(),
+          personId,
+          medium: "email",
+          recipient: "synthetic@example.test",
+          consent: {
+            statementVersion: "1",
+            language: LOCALE,
+            recordedAt: new Date().toISOString(),
+            personId,
+            contactEmail: "venue@example.test",
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.active" });
+    expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
+  });
+
+  it("leaves no paper job when an email original already reserves delivery", async () => {
+    const { cfg, saleId, ticket, personId } = await issued("auto");
+    await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, saleId, {
+        requestKey: randomUUID(),
+        personId,
+        medium: "email",
+        recipient: "synthetic@example.test",
+        consent: {
+          statementVersion: "1",
+          language: LOCALE,
+          recordedAt: new Date().toISOString(),
+          personId,
+          contactEmail: "venue@example.test",
+        },
+      }),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId)),
+    ).rejects.toMatchObject({ code: "invoice_delivery.active" });
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
+  });
+
+  it("preserves an unattributed sale's paper original without inventing a staff identity", async () => {
+    const { cfg, saleId, ticket } = await issued("never", false);
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    expect(await suite.db.select().from(printJobs)).toEqual([
+      expect.objectContaining({ saleId, receiptCopy: false }),
+    ]);
+    const [job] = await suite.db.select().from(printJobs);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+      expect.objectContaining({ saleId, printJobId: job!.id, personId: null, status: "queued" }),
+    ]);
+    expect((await suite.db.select().from(sales))[0]!.operatorId).toBeNull();
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    expect(await suite.db.select().from(printJobs)).toHaveLength(1);
+    expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
+  });
+
+  it("queues no delivery for an automatic original without an active receipt printer", async () => {
+    const { cfg, printerId, saleId, ticket } = await issued("auto");
+    await withTransaction(suite.db, (tx) => deactivatePrinter(tx, printCfg(cfg), printerId));
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
   });
 });

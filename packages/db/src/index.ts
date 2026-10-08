@@ -66,7 +66,12 @@ export type { Tenant } from "./read-tenant.js";
 export { nodes } from "./schema/nodes.js";
 export { originChecks, saleSourceColumn, sourceColumn } from "./schema/origin.js";
 export { invoiceSeries } from "./schema/series.js";
-export { workingOrderLines, workingOrders, workingOrderStatus } from "./schema/orders.js";
+export {
+  workingOrderLines,
+  workingOrders,
+  workingOrderStatus,
+  type StagedInvoiceDelivery,
+} from "./schema/orders.js";
 export { orderAmendmentKind, orderAmendments } from "./schema/order-amendments.js";
 export { appendOrderAmendment } from "./append-order-amendment.js";
 export type { AppendAmendmentInput } from "./append-order-amendment.js";
@@ -277,3 +282,11 @@ export { CORE_CHANGE_SOURCES } from "./classification.js";
 // rows over are `withTransaction`'s own two steps, and a caller doing either itself would take the
 // changes away from the listeners or announce a change that has not committed.
 export { subscribeToChanges } from "./change-log.js";
+export {
+  invoiceDeliveries,
+  invoiceDeliveryMedium,
+  invoiceDeliveryDesignation,
+  invoiceDeliveryStatus,
+  type InvoiceEmailConsent,
+} from "./schema/invoice-deliveries.js";
+export { pagePrinters, pagePrinterFormat, pagePrinterMedia } from "./schema/page-printers.js";

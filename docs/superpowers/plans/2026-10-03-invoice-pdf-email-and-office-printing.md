@@ -4,7 +4,9 @@
 
 **Dated owner override.** Read the [historical A231d design](../specs/2026-10-03-invoice-pdf-email-and-office-printing-design.md), but apply the 2026-10-07 answers in [backlog A231d](../../backlog.md) and [asesor Q44](../../compliance/asesor-questions.md#q44-sending-a-full-invoice-as-a-pdf-by-email-or-on-a4--the-owners-interim-answers-added-2026-10-07) wherever they differ. These are interim product decisions awaiting the tax adviser's confirmation, not a claim of legal compliance. Preserve the historical spec. Refer to the existing [Q45 receipts and questions](../../compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07) for the structured business regime; do not infer an enablement date or add legal conclusions here.
 
-**One build, both deliveries.** Keep one build branch, coherent task commits signed off with `git commit -s`, and one final PR containing email and A4. Tasks 4 and 5 may be implemented in either order; neither lands separately. Task 6 needs both. Execution needs no design reapproval; final full-branch review and owner review still apply.
+**Owner split, 2026-10-07.** The owner prioritised UI work and authorised the completed foundation as A231p part 1. Part 1 keeps public F1 issuance disabled and ends `needs-owner-review`, with two run-it reviews and a convention review. A231q completes the remaining work after part 1 lands and the queued UI items finish. This supersedes the earlier requirement to put both complete deliveries in one PR.
+
+**Part 2 still owes:** the live wizard Email screen/client, required accepted test and provisioning credential sealing; the dashboard SMTP editor and restore checks (Task 3); office-printer discovery, registration/reactivation, location selection, claim/renewal and transient IPP transport (Task 5); delivery choices/status and send-again/download screens, withdrawal actions and their permission, draft and accessibility checks (Tasks 4 and 6); and the remaining integration, built-image rendering, box measurements and physical output checks (Tasks 1 and 7). The queued schema, receipt adapter and email worker in part 1 do not complete office-printer transport or any delivery screen. Physical printing still requires owner presence or arrangement. Public F1 remains disabled until the separate enablement gates are met.
 
 ## 0. Reconcile the starting point
 
@@ -72,6 +74,16 @@
   - (d) With owner presence or arrangement, on the box itself in the built image, time one raster page at 300 and at 600 dots per inch and record the server's peak memory while drawing each. The historical design's Mac shapes-only measurement is not a box/text measurement. If drawing outlines through `sharp` does not work there, switch to the printing package's bitmap font drawn at twice its size (`packages/printing/src/raster-text.ts`), and say so in the PR. If box access is unavailable, record the measurement as pending for owner review.
 - **Coverage.** The renderers and encoders are ordinary source and hold the server's 98/98/98/95 coverage bar.
 
+**2026-10-07 bundle checkpoint:** the owner approved the `__waitronCreateRequire` alias and
+the two pinned banner expectation changes. A new real bundle-load case failed before the
+fix with the duplicate import and passed after it, exercising the entry's own import and
+the CommonJS shim. Focused bundler/image/scope/timeout guards passed 431 cases; all four
+shared-bundler consumers built, and Node syntax checks passed for their 12 output bundles.
+The standalone invoice renderer bundle generated a 12,353-byte PDF and 300/600 dpi PNGs
+byte-identical to the existing source-rendered fixtures, with both QRs decoded to the filed
+link. This closes the banner-name issue; bundled-server rendering inside the built image,
+box measurements and physical printer checks remain open.
+
 ## 2. Record delivery metadata, retaining no document bytes
 
 **Inspect/change:** new `packages/db/src/schema/invoice-deliveries.ts` and its generated core migration, `packages/db/src/index.ts` and `classification.ts`, the bill's staged delivery choice in `packages/db/src/schema/orders.ts`, and new server delivery/attempt helpers. Read `sales.ts` without changing the immutable invoice snapshot. The receipt adapter uses `receipt-print.ts`, `print-api.ts`, and the existing outbox/runtime.
@@ -83,7 +95,7 @@
   - At most one logical attempt for a sale is active (`queued` or `sending`), including across media. A scheduled automatic retry remains `queued` with a due time, reserving that slot; its prior attempt's failure is history. In one transaction, concurrent/replayed requests reuse the existing active delivery for the same request key or refuse a conflicting request with a named code. A retry after completion cannot enqueue another original; it produces a duplicate or refuses the original-only action. Check existing receipt jobs before reserving a new attempt, so older A231 originals are not treated as undelivered merely because they lack new metadata.
   - Claims carry a fresh unpredictable per-attempt token, generation and holder, with a 60-second lease. Before expiry a second worker/agent cannot claim. On timeout or restart, mark an in-flight attempt `unknown` and invalidate its token before offering Retry original; do not silently replay an uncertain send. Retain its attempt identity/outcome metadata for audit. A new explicit retry increments the generation, creates a fresh claim token and remains original unless completion was already recorded.
   - Duplicate reports are idempotent. A report needs the delivery, generation, token and holder, including from the same agent after reclaim. A late report is authenticated against the recorded attempt identity. If an expired attempt is still the latest attempt and no retry has been reserved, its late success resolves `unknown` to `sent`; a late failure keeps `unknown`. Once a retry has been reserved, an older report records only a sanitised historical outcome: it cannot change the current attempt, cancel the retry, consume its attempt count or complete its delivery. Test late success and late failure before retry, during a newer attempt, and after its result. Serialise late completion and retry reservation in one transaction: completion first means a later action is duplicate; retry first preserves its original designation and generation.
-  - Reuse A231 receipt-original jobs, retries and handover as the receipt transport. Audit and correlate their claims/reports with invoice attempt tokens at the server/agent boundary before projecting status. `reportPrintJob` currently checks agent id only (`packages/printing/src/runtime.ts`); do not trust that as a per-attempt guard. Fence stale F1 reports before updating the job/delivery, and end eligibility for a superseded F1 job before a cross-medium retry, without changing ordinary kitchen/drawer semantics. No parallel receipt delivery loop and no second handover snapshot. Software invalidation cannot recall bytes already sent: `unknown` stays visible, and an explicit original retry can produce another physical print/email under the owner's rule.
+  - Reuse A231 receipt-original jobs, retries and handover as the receipt transport. Audit and correlate their claims/reports with invoice attempt tokens at the server/agent boundary before projecting status. `reportPrintJob` refuses correlated invoice jobs and checks only the agent id for ordinary jobs (`packages/printing/src/runtime.ts`); correlated receipts use the token-aware `apps/server/src/invoice-print.ts` adapter. Fence stale F1 reports before updating the job/delivery, and end eligibility for a superseded F1 job before a cross-medium retry, without changing ordinary kitchen/drawer semantics. No parallel receipt delivery loop and no second handover snapshot. Software invalidation cannot recall bytes already sent: `unknown` stays visible, and an explicit original retry can produce another physical print/email under the owner's rule.
 - **Schema rules:**
   - Classify delivery/attempt metadata as `state`, with the mutable queue reason; freeze recipient/consent values per recorded attempt rather than updating an earlier snapshot. Add no `invoice_documents` append-only declaration.
   - State in the commit why these rows are in the core set: they deliver existing core invoices across the three media. Follow the module boundary rules; no fiscal-module SQL is added.
@@ -92,6 +104,155 @@
   - `print_jobs` and `print_agents` are currently `state` (`packages/db/src/classification.ts:113,129`); declare receipt-job/agent correlation keys in the schema rather than assuming they are local. Recheck classifications if the base changes; no FK may cross between `local` and `state`/`ledger`.
 - **Guard suites.** Run `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`, `scripts/behavioural-triggers.test.ts`, `scripts/classification-complete.test.ts`, `scripts/two-file-foreign-keys.test.ts`, `scripts/migrations-match-schema.test.ts`, `scripts/migration-upgrade.test.ts` and `inmutabilidad`. Measure and state the upgrade effect in the PR.
 - **Error codes.** Name new codes after the domain concept, `invoice_delivery.*`, after checking the registry for siblings. Add the alert code's area claim and its English and Spanish wording (`scripts/alert-codes.test.ts`, `scripts/errors-reachable.test.ts`).
+
+**Implementation checkpoint, 2026-10-07.** Task 2's correlated receipt pull/result boundary now
+uses the real print agent/client and the demo printer. Generic local claim/report paths leave
+these correlated jobs to the adapter. Its tests cover due-time eligibility, lost claims,
+authenticated latest/historical outcomes, same-agent receipt retries, ordinary job controls
+and claim rollback. For enrolled receipts, the pull projects confirmed unpairing and
+unavailable-Bluetooth endings in the same transaction. Queued receipts become failed;
+handed-out receipts become unknown and keep their claim hash for authenticated late results.
+The API tests cover printer reactivation without replay, the other-agent printable control,
+completed originals and late success before and after a newer attempt. The till original-retry
+and management resend routes now enroll F1 retry jobs with the authenticated staff member,
+preserving the existing bytes, printer and resend chain. Synthetic HTTP tests cover failed
+and expired original retries, current/historical claim fencing, a conflicting email attempt,
+completed-original refusal, copy resends and transactional rollback. Existing F2 retry and
+drawer assertions are retained. The explicit till original/copy actions and dashboard copy
+helper now enroll newly rendered F1 jobs with the requesting staff member; the job, delivery
+and dashboard copy audit share the caller's transaction. Synthetic cases cover replayed
+original requests, a paper duplicate after completed email, active-email refusal with no
+job/audit left behind, expired-email original retry and the F2/no-printer controls. Eight
+independent deletions fail the intended case beside a valid passing control. The automatic
+receipt hook now enrolls F1 originals with the operator recorded on the sale, including under
+`on_request` and `never` receipt policies. Synthetic cases cover original replay, cross-medium
+refusal and rollback, absent printers and sales with no recorded operator. Receipt delivery
+metadata now allows an absent issuing operator, without inventing staff attribution; email
+and A4 metadata still require a staff identity. Synthetic tests cover unattributed receipt
+reservation/replay, automatic enrollment and token-checked print completion, plus refusal
+of unattributed email/A4 rows. The schema-conformance and stepwise upgrade checks passed
+with generated core migration 0119. Trading boot now marks inherited receipt and email
+claims unknown before starting the pretend printer or mounting the print-agent routes,
+independently of fiscal drain recovery. Synthetic real-boot cases cover fresh claims,
+ordinary printable jobs, authenticated late email success/failure, and a read-only mirror
+that leaves the inherited receipt claim unchanged. Bill staging, A4 references and
+transport/retry workers remain. No Task 2 completion claim.
+
+**2026-10-07 email-attempt checkpoint.** Certain email refusals now reserve a new
+metadata generation with the prior recipient, consent and designation. Due times use the
+four approved gaps; claim counts carry across automatic retries and stop at five. An
+explicit retry starts a new count. The previous refusal and claim hash stay recorded;
+repeated or historical reports cannot reserve another automatic retry. The worker pass
+commits its claim, reads through an injected projection in a separate transaction, closes
+that transaction before transport, and records the outcome with the claim identity. It
+expires abandoned claims and derives the duplicate marker from delivery metadata. Synthetic
+database cases use an injected sender and a stored-sale projection of the issue time; they
+cover another real sale committing during a held send, competing passes, due eligibility,
+late outcomes and sanitised throws.
+
+**2026-10-07 sender/loop checkpoint.** The routed sender reads the stored mail settings
+before each send and closes that read transaction before SMTP. A real local SMTP fixture
+sends through two successive stored gateways with one sender, then removes the credential
+and observes a certain failure without another message. The standalone loop checks primary
+status on each iteration, contains pass failures and waits for a pending send's report before
+returning after a stop signal. Database cases cover an idle stop, an already-stopped worker,
+secondary-to-primary gating, a held send and recovery after a pass failure. Independent
+deletions of the primary/stop/error guards, credential refresh and unconfigured refusal fail
+their intended cases beside passing controls. Boot's start/stop composition remains pending.
+This does not complete Tasks 2 or 4.
+
+**2026-10-07 stored-document checkpoint.** `readInvoiceDocument` reads the sale,
+line snapshots, saved receipt grouping/header, payments and adjustments through the
+caller's transaction. It opens no transaction itself and performs no rendering or
+transport. Synthetic tests exercise a no-regime invoice without a working order or
+filed receipt, weighted parent/extra lines, a paid discounted bill, the saved operation
+date, current optional receipt trim, and filed issuer facts after taxpayer edits.
+The no-regime case uses the existing current-taxpayer fallback and the stored VAT
+breakdown; the filed case retains its recorded issuer and QR. Cash/card settlements
+without an order, missing gross-line snapshots, a missing fallback taxpayer, simplified
+invoices and unknown sale ids have focused cases. The projection's eight tests pass;
+focused coverage of that file is 100% statements/functions/lines and 97.05% branches.
+The pending boot composition must call this reader after the worker's claim commits,
+then close its projection transaction before sending. This does not complete Tasks 2 or 4.
+
+**2026-10-07 boot composition checkpoint.** Trading boot now starts the routed
+email worker after inherited-claim recovery. Each pass checks the held singleton role;
+read-only mirrors start no email worker. The projection uses `readInvoiceDocument`.
+The failed-start undo is registered immediately after the worker starts, and both
+that undo and normal close abort and join the worker before the store closes.
+Real local SMTP cases exercise a queued duplicate with the stored invoice and sender
+facts, normal shutdown during a held acceptance, and a later startup failure during
+a held acceptance. Local-secondary and mirror cases leave queued email unchanged.
+This connects the worker to boot; bill staging, SMTP setup/settings, delivery UI,
+A4 references and transport remain. It does not complete Tasks 2 or 4.
+
+**2026-10-07 A4 destination checkpoint.** Separate `page_printers` rows now store the
+IPP endpoint, selected PDF/PWG/URF format, advertised formats, media and resolution.
+Delivery metadata references that table; receipt-printer enums and payloads are unchanged.
+For a new delivery action, the reservation helper refuses a receipt-printer id, a disabled
+page printer or one outside the sale node's location before writing metadata. A replay returns
+the reserved row even if the destination was subsequently disabled. Configuration transfer preserves the saved
+capabilities, remaps the location and id, and imports the printer disabled with a reconnect
+notice. Synthetic database cases exercise these paths. Generated migrations 0120 and 0121
+add the column before adding its restrictive key; core schema conformance and stepwise
+upgrade checks passed. Bill staging, location printer selection, registration/reactivation
+routes, A4 claim/renewal/transport and delivery UI remain open. This is no Task 2/5 completion
+claim.
+
+**2026-10-07 bill staging checkpoint.** `setOrderInvoiceChoice` now stores an optional
+receipt, email or A4 choice in the bill's revision transaction. Email staging requires
+staff-recorded consent for the current statement version, an allowed invoice language,
+and the same venue contact shown with that statement. It stamps staff identity and time
+from the server context rather than taking either from the request. The stored contact
+survives later contact edits; a stale revision leaves the saved snapshot unchanged.
+A4 staging requires an active page printer in the bill's location. Null means no explicit
+choice; saving F2 without a delivery clears the draft. Generated migration 0122 adds the
+JSON column, and custom migration 0123 includes it in each transition's fixed-column list.
+Focused database cases cover revision-free edits, settlement and both handover states,
+alongside a valid pre-issuance revision advance. HTTP forwarding and server-context
+composition, bill read projections, issuance reservation and automatic-receipt suppression
+remain pending. This is an internal staging checkpoint, not a completed Task 2/4.
+
+**2026-10-07 HTTP context checkpoint.** The invoice-choice route forwards `delivery` and
+supplies the authenticated staff member and server clock to the staging writer. Trading boot
+resolves invoice-mail availability for each email choice through the existing current-settings
+resolver. Real boot cases cover demo capture, prepare capture, development capture, configured
+live SMTP and an unconfigured live refusal. The bill-list projection returns an explicit saved
+draft; absent drafts leave the optional field absent. HTTP cases cover explicit null, authenticated
+attribution despite client-forged values, SMTP removal without restart, and active-local A4
+selection versus disabled, absent or other-location printers. No issuance or public F1 gate
+changed. Issuance reservation, receipt suppression, SMTP setup/settings, printer registration,
+location selection and delivery UI remain pending.
+
+**2026-10-07 paid-issuance checkpoint.** The existing automatic sale-receipt hook now
+reserves a saved email/A4 original against the sale id and returns before fiscal receipt
+printing. It keeps collection-ticket enqueue before that choice. Its per-sale issuance key
+replays the same metadata after both queued and completed states. Synthetic paid-bill tests
+exercise reservation in the issuance transaction, rollback of the sale/number/payment and
+reservation together, and replay without a second delivery. An accepted A4 choice survives
+printer disablement before captured-bill completion, so this configuration change does not
+refuse issuance; fresh requests still check active destinations. Task 5 must report a queued
+A4 delivery whose destination is disabled without sending it. Receipt tests cover a separate
+prepaid collection ticket, explicit paper choice, an unattributed email's recorded consent
+staff, refusal of an unattributed A4 fixture, and a synthetic F2's stale draft. Public F1
+refusals remain closed. The unpaid-issuance function still has its existing F1 refusal and
+has not been wired to this helper; no claim that every issuance path has been integrated.
+SMTP setup/settings, office registration/transport, delivery UI and final integration
+remain. This does not complete Tasks 2 or 4.
+
+**2026-10-07 unpaid-issuance checkpoint.** `issueUnpaidInvoice` now calls the same
+saved-choice reservation helper after its existing sale/header/label writes, within the
+caller's transaction. Its public F1 refusal remains before selection and issuance. Eight
+new database cases exercise email/A4 consent and issuer attribution, accepted A4 disablement,
+rollback, paper/absent choices and stale F2 drafts, plus the actual F1 refusal for email/A4.
+Only invoice selection is replaced for synthetic F1 fixtures; the gate, database and core
+invoice writer are real. The focused unpaid/collection/bill/receipt/cancellation run passed
+316 cases, and the unedited golden/immutability suites passed 20. In an independently installed
+candidate, deleting the reservation hook failed three cases beside five passing controls;
+deleting the F1 gate failed two beside six, and deleting the shared full-invoice check failed
+the stale-F2 case beside seven. Restoring the candidate passed all eight. This closes the
+internal unpaid hook, not Tasks 2 or 4; SMTP setup/settings, office registration/transport,
+delivery UI, image/box measurements and physical checks remain.
 
 ## 3. Set up email for a live venue, without a terminal
 
@@ -117,7 +278,48 @@
 
 **Look at it.** Open the wizard's Email step and the dashboard card in both themes, at 1280 and 390 px wide, in English and Spanish.
 
+**2026-10-07 SMTP settings server checkpoint.** The trading boot mounts GET/PUT
+`/management-api/email/settings` and POST `/management-api/email/settings/test`, each requiring
+`system.manage`. Settings changes are sealed under the existing `email.smtp` purpose; demo and
+prepare changes/tests are refused. Reads omit URL credentials and query values. Structured
+server/port/encryption/user/password/sender inputs build either implicit TLS or required STARTTLS.
+The test message goes to the authenticated person's address, outside the database transaction,
+and returns acceptance or a refusal/timeout code without saving the proposed settings.
+The focused boot/email run passed 179 cases; the unedited fiscal suites passed 20, and the two
+error-code guards passed 34. A focused report for the two new source modules meets the existing
+coverage thresholds. Nine independently installed mutations each failed an intended assertion
+beside valid controls, including removing required STARTTLS, accepting an untrusted certificate,
+changing the recipient, exposing the password, and moving SMTP under a write transaction.
+Restoring that candidate passed all 55 settings/test-message cases. The first helper RED run
+waited for a connection its stub never opened and was stopped; the corrected run produced three
+intended failures. Its SMTP stub also needed an explicit STARTTLS refusal instead of a generic
+success reply. Neither result is used as evidence of production failure. Live setup/provisioning,
+the dashboard editor, restore checks and all browser/visual checks in this task remain pending.
+
+**2026-10-07 wizard SMTP test route checkpoint.** `mountSetup` now registers
+POST `/setup-api/email-test`. A Live request carries structured `email` settings and
+`venue.admin.email`; the handler normalises the administrator's address and ignores a separate
+caller-supplied recipient. It invokes the shared bounded sender without database dependencies.
+The 21 new route cases first failed with 404 and then passed. Real TLS SMTP fixtures cover
+acceptance, recipient/data refusals, a lost acknowledgement and an unanswered exchange;
+responses and captured logs omit proposed settings and the fixture's secret refusal text.
+The default sender refuses a plaintext server when STARTTLS is required. The related six-file
+run passed 381 cases. This endpoint does not yet provide the wizard screen or seal credentials
+at provisioning; those, the dashboard editor and restore checks remain pending.
+
 ## 4. Email the PDF
+
+**2026-10-07 transport checkpoint.** `resolveInvoiceEmailDelivery` applies the mode rules below
+without changing account-mail routing. `createInvoiceEmailSender` renders transient PDF bytes,
+returns sanitised SMTP outcomes, and cancels its owned socket at the 30-second deadline.
+Local TCP SMTP fixtures exercise accepted readable original/duplicate attachments, recipient
+and DATA refusal, lost acknowledgement and an unanswered final reply. Implicit TLS fixtures
+exercise certificate refusal and test-trusted acceptance. An English-locale fixture preserves
+the existing `receiptLabelsFor` Spanish fixed-word fallback; no receipt language was added.
+Eight independent deletions fail the intended cases beside valid controls. The helpers still
+need the worker, metadata retry scheduling and issuance/UI integration described below;
+no Task 4 completion claim.
+
 
 **Inspect/change:**
 
@@ -231,7 +433,7 @@
 - what is reported when the tray is empty;
 - what is reported when the printer is switched off mid-job.
 
-Write what the printer reported into the PR and `docs/backlog.md`. Use the historical design's HP format receipt to scope this exercise; PWG Raster still needs the independent reader and `ippeveprinter` checks. Without owner presence/arrangement and printer access, leave physical output unverified, name the pending checks in the final `needs-owner-review` handoff and do not call the build ready to land. Do not print real paper autonomously.
+Write what the printer reported into the PR and `docs/backlog.md`. Use the historical design's HP format receipt to scope this exercise; Repeat the independent reader and `ippeveprinter` checks through the production transport once Task 5 wires it in. Task 1's source-code encoders passed those checks on 2026-10-07; the backlog records their scope. Without owner presence/arrangement and printer access, leave physical output unverified, name the pending checks in the final `needs-owner-review` handoff and do not call the build ready to land. Do not print real paper autonomously.
 
 ## 6. Send or print again, from the till and the dashboard
 
@@ -261,4 +463,4 @@ Write what the printer reported into the PR and `docs/backlog.md`. Use the histo
    - Read the base-to-tip prose claims for the retired behaviours: "office printers are not supported", "email is account email only", and "SMTP needs a terminal" (`apps/server/README.md`'s `waitron-credentials set --purpose email.smtp` instructions stay true but are no longer the only way).
    - Read the backlog's A3 entry "Printing A4 invoices on an office printer" and its "virtual PDF printer" line, and the item "A venue preparing to go live sends real email through SMTP", and mark what this build settles. That item stays open (decision 7): this build sends a prepare venue's invoice email through a mail server when one is set, and adds no way to set one there.
    - Update `docs/backlog.md` in the same change.
-3. **Final review and handoff.** After both email and A4 are implemented on this one branch, run `finish-branch` for the final full-branch review, one PR and current-head CI. The queue requires the full review path: two run-it reviews through the Claude seat, each in its own throwaway candidate checkout, plus a convention review. Inspect completed findings and fix them in the feature worktree. Reuse completed approvals across later rebases as the runner requires. Finish at `needs-owner-review`, with the PR link, check results and any pending HP/box measurements. Do not merge. Q44/Q45 adviser confirmation and A231's public enablement remain outside this build; do not describe owner interim choices or synthetic F1 tests as compliance approval.
+3. **Final review and handoff.** For each authorised part, run `finish-branch` for full-branch review and current-head CI. Part 1 lists the unfinished work above in its PR; part 2 completes it before the final delivery handoff. The queue requires the full review path: two run-it reviews through the Claude seat, each in its own throwaway candidate checkout, plus a convention review. Inspect completed findings and fix them in the feature worktree. Reuse completed approvals across later rebases as the runner requires. Finish at `needs-owner-review`, with the PR link, check results and any pending HP/box measurements. Do not merge. Q44/Q45 adviser confirmation and A231's public enablement remain outside this build; do not describe owner interim choices or synthetic F1 tests as compliance approval.

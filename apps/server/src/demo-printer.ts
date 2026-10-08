@@ -11,7 +11,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
-import { claimPrintJobs, reportPrintJob } from "@waitron/printing";
+import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
 
 export const DEMO_PRINTER_KEY = "WAITRON-DEMO-PRINTER";
 const DEMO_AGENT_TOKEN_HASH = "waitron-demo-printer-disabled";
@@ -169,7 +169,7 @@ export async function deliverDemoPrinterJobs(
   identity: DemoPrinterIdentity,
 ): Promise<number> {
   const jobs = await withTransaction(db, (tx) =>
-    claimPrintJobs(tx, identity.agentId, {
+    claimInvoicePrintJobs(tx, identity.agentId, {
       locationId,
       visibleKeys: [DEMO_PRINTER_KEY],
       printerId: identity.printerId,
@@ -177,9 +177,10 @@ export async function deliverDemoPrinterJobs(
   );
   for (const job of jobs) {
     await withTransaction(db, (tx) =>
-      reportPrintJob(tx, {
+      reportInvoicePrintJob(tx, {
         agentId: identity.agentId,
         jobId: job.id,
+        invoiceClaim: job.invoiceClaim,
         outcome: { status: "done" },
       }),
     );

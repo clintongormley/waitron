@@ -1,6 +1,7 @@
 import { withTransaction, type Database } from "@waitron/db";
 import { tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { credentialField } from "./credentials.js";
+import type { OnboardingIntent } from "./trading-config.js";
 
 export type EmailDelivery =
   | { mode: "smtp" | "local_capture"; smtp: { url: string; from: string } }
@@ -31,4 +32,15 @@ export async function resolveEmailDelivery(
   }
   if (practiceMode) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   return { mode: "unconfigured" };
+}
+
+export async function resolveInvoiceEmailDelivery(
+  db: Database,
+  ring: KeyRing,
+  config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean },
+): Promise<EmailDelivery> {
+  if (config.devMode || config.onboardingIntent === "demo") {
+    return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
+  }
+  return resolveEmailDelivery(db, ring, config.onboardingIntent === "prepare");
 }

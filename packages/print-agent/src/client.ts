@@ -72,6 +72,8 @@ export interface JoinReply {
   verificationNumber: string;
 }
 
+export type InvoicePrintClaim = { deliveryId: string; generation: number; token: string };
+
 export interface WireJob {
   id: string;
   printerId: string;
@@ -81,6 +83,7 @@ export interface WireJob {
   /** USB serial or Bluetooth MAC; the host resolves it to a device path. */
   localKey: string | null;
   payload: Uint8Array;
+  invoiceClaim?: InvoicePrintClaim;
 }
 
 export interface PullReply {
@@ -92,7 +95,9 @@ export interface PullReply {
   bluetoothCommands?: BluetoothCommand[];
 }
 
-export type JobOutcome = { status: "done" } | { status: "failed"; error: string };
+export type JobOutcome = ({ status: "done" } | { status: "failed"; error: string }) & {
+  invoiceClaim?: InvoicePrintClaim;
+};
 
 export interface AgentClient {
   probeNode(url: string): Promise<Result<NodeProbe>>;
@@ -234,6 +239,32 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
     ) {
       return undefined;
     }
+    let invoiceClaim: InvoicePrintClaim | undefined;
+    if (e.invoiceClaim !== undefined) {
+      if (
+        typeof e.invoiceClaim !== "object" ||
+        e.invoiceClaim === null ||
+        Array.isArray(e.invoiceClaim)
+      )
+        return undefined;
+      const claim = e.invoiceClaim as Record<string, unknown>;
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (
+        typeof claim.deliveryId !== "string" ||
+        !uuid.test(claim.deliveryId) ||
+        typeof claim.token !== "string" ||
+        !uuid.test(claim.token) ||
+        typeof claim.generation !== "number" ||
+        !Number.isSafeInteger(claim.generation) ||
+        claim.generation < 1
+      )
+        return undefined;
+      invoiceClaim = {
+        deliveryId: claim.deliveryId,
+        generation: claim.generation,
+        token: claim.token,
+      };
+    }
     jobs.push({
       id: e.id,
       printerId: e.printerId,
@@ -242,6 +273,7 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
       port: typeof e.port === "number" ? e.port : null,
       localKey: typeof e.localKey === "string" ? e.localKey : null,
       payload: new Uint8Array(Buffer.from(e.payload, "base64")),
+      ...(invoiceClaim === undefined ? {} : { invoiceClaim }),
     });
   }
   const discoveryUntil = typeof b.discoveryUntil === "number" ? b.discoveryUntil : null;

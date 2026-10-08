@@ -22,6 +22,8 @@ import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
+import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
+import { expireInvoiceDeliveryClaims, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptAddress } from "./venue-address.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
@@ -196,7 +198,7 @@ async function resolvePrinterAndReceipt(
   return { printer, receiptBytes };
 }
 
-/** The optional receipt policy does not suppress an F1 original. */
+/** Receipt policy applies to F2; an F1 follows its saved original delivery choice. */
 export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: OriginConfig,
@@ -205,7 +207,7 @@ export async function enqueueSaleReceipt(
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   const [sale] = await tx
-    .select({ workingOrderId: sales.workingOrderId })
+    .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
     .from(sales)
     .where(eq(sales.id, saleId));
   const context = sale?.workingOrderId
@@ -214,11 +216,12 @@ export async function enqueueSaleReceipt(
   if (context?.serviceMode === "prepay") {
     await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
   }
+  if (await reserveStagedInvoiceDelivery(tx, saleId)) return;
   const mode = context
     ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
     : "auto";
   if (ticket.invoiceType !== "F1" && mode !== "auto") return;
-  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers);
+  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? null);
 }
 
 /** A collection number is a separate document, never a fiscal receipt or a drawer command. */
@@ -257,10 +260,11 @@ export async function enqueueReceiptReprint(
   ticket: TillSaleResult,
   saleId: string,
   language?: string,
+  personId?: string,
 ): Promise<void> {
   const printer = await resolveReceiptPrinter(tx, cfg.origin);
   if (printer === undefined) return;
-  await enqueueReceiptCopy(tx, cfg, ticket, saleId, printer, language);
+  await enqueueReceiptCopy(tx, cfg, ticket, saleId, printer, language, personId);
 }
 
 /** A receipt copy is a document job; the cash drawer has its own audited job. */
@@ -271,12 +275,32 @@ export async function enqueueReceiptCopy(
   saleId: string,
   printer: { id: string } & EscSetting,
   language?: string,
+  personId?: string,
 ): Promise<{ jobId: string } | undefined> {
   const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, true, printer, language);
   if (bytes === undefined) return undefined;
-  return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", {
+  const job = await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", {
     saleId,
     receiptCopy: true,
+  });
+  await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId);
+  return job;
+}
+
+async function enrollExplicitInvoiceReceipt(
+  tx: Transaction,
+  ticket: TillSaleResult,
+  saleId: string,
+  jobId: string,
+  personId: string | null | undefined,
+): Promise<void> {
+  if (ticket.invoiceType !== "F1" || personId === undefined) return;
+  await expireInvoiceDeliveryClaims(tx);
+  await reserveInvoiceDelivery(tx, saleId, {
+    requestKey: jobId,
+    personId,
+    medium: "receipt",
+    printJobId: jobId,
   });
 }
 
@@ -371,6 +395,7 @@ export async function enqueueOriginalReceipt(
   ticket: TillSaleResult,
   saleId: string,
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
+  personId?: string | null,
 ): Promise<void> {
   if (ticket.invoiceType === "F1") {
     const [original] = await tx
@@ -383,7 +408,7 @@ export async function enqueueOriginalReceipt(
   }
   const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false, printers);
   if (resolved === undefined) return;
-  await enqueuePrintJob(
+  const job = await enqueuePrintJob(
     tx,
     printConfig(cfg),
     resolved.printer.id,
@@ -391,6 +416,7 @@ export async function enqueueOriginalReceipt(
     "document",
     { saleId, receiptCopy: false },
   );
+  await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId);
 }
 
 async function enqueueBillDrawer(

@@ -65,7 +65,8 @@ import {
   resolveDeviceReaderId,
   SimulatorPaymentProvider,
 } from "@waitron/payments";
-import { resendPrintJob } from "@waitron/printing";
+import { resendInvoicePrintJob } from "./invoice-print.js";
+import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -250,6 +251,7 @@ export interface TillApiDeps {
   onboardingIntent?: OnboardingIntent;
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
+  invoiceEmailAvailable?: () => Promise<boolean>;
 }
 
 async function resolveHttpOrderZone(
@@ -438,6 +440,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.taxpayer_domicile_missing": 409,
   "invoice.recipient_invalid": 400,
   "invoice.choice_locked": 409,
+  "invoice_delivery.active": 409,
+  "invoice_delivery.receipt_invalid": 409,
+  "invoice_delivery.email_unavailable": 409,
+  "invoice_delivery.printer_invalid": 409,
   "sale.voided": 409,
   "sale.already_settled": 409,
   "working_order.not_settled": 409,
@@ -1716,6 +1722,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         revision?: unknown;
         invoiceType: "F1" | "F2";
+        delivery?: unknown;
         recipient: {
           taxId: string;
           legalName: string;
@@ -1723,11 +1730,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           countryCode: string;
         } | null;
       }>(c);
-      const revision = await setOrderInvoiceChoice(deps.db, deps.backend, cfg, id, {
-        revision: requireRevision(body.revision),
-        invoiceType: body.invoiceType,
-        recipient: body.recipient,
-      });
+      const delivery = body.delivery;
+      const emailAvailable =
+        delivery !== null &&
+        typeof delivery === "object" &&
+        "medium" in delivery &&
+        delivery.medium === "email"
+          ? (await deps.invoiceEmailAvailable?.()) === true
+          : false;
+      const revision = await setOrderInvoiceChoice(
+        deps.db,
+        deps.backend,
+        cfg,
+        id,
+        {
+          revision: requireRevision(body.revision),
+          invoiceType: body.invoiceType,
+          recipient: body.recipient,
+          delivery,
+        },
+        { personId: session.personId, emailAvailable, now: deps.clock.now().instant },
+      );
       return c.json({ revision });
     }),
   );
@@ -2022,11 +2045,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .where(eq(sales.workingOrderId, id));
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
+        await expireInvoiceDeliveryClaims(tx);
         const original = await readOriginalReceiptPrint(tx, sale.id);
         if (original.status === "not_queued") throw new AppError("print_job.not_found", { id });
         if (!original.canRetry)
           throw new AppError("print_job.not_resendable", { id: original.jobId });
-        return resendPrintJob(tx, original.jobId);
+        return resendInvoicePrintJob(tx, original.jobId, session.personId);
       });
       return c.json(result);
     }),
@@ -2043,7 +2067,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const id = requireUuidId(c.req.param("id"), "working_order.not_found");
         await gateZones(deps, session, [{ orderId: id }]);
         if (action === "receipt")
-          await printSaleReceipt({ db: deps.db, backend: deps.backend }, cfg, id, false);
+          await printSaleReceipt(
+            { db: deps.db, backend: deps.backend },
+            cfg,
+            id,
+            false,
+            undefined,
+            session.personId,
+          );
         else await printSalePaymentSlip(deps.db, cfg, id);
         return c.body(null, 200);
       }),
@@ -2061,7 +2092,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (language !== undefined && typeof language !== "string") {
         throw new AppError("management.request_invalid", { field: "language" });
       }
-      await reprintSale({ db: deps.db, backend: deps.backend }, cfg, id, language);
+      await reprintSale(
+        { db: deps.db, backend: deps.backend },
+        cfg,
+        id,
+        language,
+        session.personId,
+      );
       return c.body(null, 200);
     }),
   );

@@ -1,10 +1,11 @@
 import crypto, { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
+import { setImmediate as yieldTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -18,9 +19,12 @@ import {
   saleSettlements,
   sales,
   invoiceSeries,
+  invoiceDeliveries,
+  pagePrinters,
   locations,
   tenders,
   tenants,
+  tenantReceipts,
   triggerRaised,
   withTransaction,
   workingOrderLines,
@@ -92,9 +96,9 @@ import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
-// The bill payment guards at the level of the functions each route calls: the writers with no
-// route of their own, the orderings a route cannot show, and the payment slip of a bill paid by
-// several cards. The acceptance tests over HTTP are in `bill-payments-api.test.ts`.
+// The retained fixture runs synchronous work across cases; let the venue watchdog tick between them.
+afterEach(() => yieldTurn());
+
 const LOCALE = "es-ES";
 const OPERATOR = "cccccccc-0000-4000-8000-000000000001";
 
@@ -1899,6 +1903,500 @@ describe("the invoice at full payment", () => {
       expect(
         await inTx((tx) => tx.select().from(sales).where(eq(sales.workingOrderId, billId))),
       ).toEqual([]);
+    },
+  );
+
+  it("stages email delivery with server-stamped consent under the bill revision", async () => {
+    const billId = await tabWith("Caña");
+    const [originalContact] = await inTx((tx) => tx.select().from(tenantReceipts));
+    try {
+      await inTx((tx) =>
+        tx
+          .insert(tenantReceipts)
+          .values({ receipt: { email: "venue@example.test", phone: "910000000" } })
+          .onConflictDoUpdate({
+            target: tenantReceipts.id,
+            set: { receipt: { email: "venue@example.test", phone: "910000000" } },
+          }),
+      );
+      const request = {
+        revision: 0,
+        invoiceType: "F1" as const,
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+        delivery: {
+          medium: "email",
+          recipient: " customer@example.test ",
+          consent: {
+            accepted: true,
+            statementVersion: "invoice-email-v1",
+            language: "es-ES",
+            contactEmail: "venue@example.test",
+            contactPhone: "910000000",
+            personId: "forged",
+            recordedAt: "1900-01-01",
+          },
+        },
+      };
+      expect(
+        await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, {
+          personId: OPERATOR,
+          emailAvailable: true,
+          now: new Date("2026-10-07T17:00:00Z"),
+        }),
+      ).toBe(1);
+      const [saved] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      expect(saved!.invoiceDelivery).toEqual({
+        medium: "email",
+        recipient: "customer@example.test",
+        consent: {
+          statementVersion: "invoice-email-v1",
+          language: "es-ES",
+          contactEmail: "venue@example.test",
+          contactPhone: "910000000",
+          personId: OPERATOR,
+          recordedAt: "2026-10-07T17:00:00.000Z",
+        },
+      });
+      await inTx((tx) => tx.update(tenantReceipts).set({ receipt: { email: "new@example.test" } }));
+      await expect(
+        setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
+          ...request,
+          delivery: { medium: "receipt" },
+        }),
+      ).rejects.toMatchObject({
+        code: "working_order.out_of_date",
+        params: { workingOrderId: billId, revision: 1 },
+      });
+      const [reloaded] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      expect(reloaded!.invoiceDelivery).toEqual(saved!.invoiceDelivery);
+      await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
+        revision: 1,
+        invoiceType: "F2",
+        recipient: null,
+      });
+      const [cleared] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      expect(cleared).toMatchObject({ revision: 2, invoiceType: "F2", invoiceDelivery: null });
+    } finally {
+      if (originalContact === undefined) await inTx((tx) => tx.delete(tenantReceipts));
+      else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: originalContact.receipt }));
+    }
+  });
+
+  it.each([
+    [null, "delivery"],
+    [[], "delivery"],
+    [{ medium: "fax" }, "delivery.medium"],
+    [{ medium: 1 }, "delivery.medium"],
+    [{ medium: "a4", pagePrinterId: null }, "delivery.pagePrinterId"],
+    [{ medium: "email", recipient: "bad", consent: {} }, "delivery.recipient"],
+    [{ medium: "email", recipient: "valid@example.test", consent: null }, "delivery.consent"],
+    [
+      { medium: "email", recipient: "valid@example.test", consent: { accepted: false } },
+      "delivery.consent",
+    ],
+    [
+      {
+        medium: "email",
+        recipient: "valid@example.test",
+        consent: { accepted: true, statementVersion: "old", language: "es-ES" },
+      },
+      "delivery.consent",
+    ],
+  ])("refuses malformed staged delivery %j without advancing the bill", async (delivery, field) => {
+    const billId = await tabWith("Caña");
+    const request = {
+      revision: 0,
+      invoiceType: "F1" as const,
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+      delivery,
+    };
+    await expect(
+      setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, {
+        personId: OPERATOR,
+        emailAvailable: true,
+      }),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field } });
+    const [saved] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
+  });
+
+  it("refuses staged email when no mail transport is available", async () => {
+    const billId = await tabWith("Caña");
+    const [originalContact] = await inTx((tx) => tx.select().from(tenantReceipts));
+    try {
+      await inTx((tx) =>
+        tx
+          .insert(tenantReceipts)
+          .values({ receipt: { email: "venue@example.test", phone: "910000000" } })
+          .onConflictDoUpdate({
+            target: tenantReceipts.id,
+            set: { receipt: { email: "venue@example.test", phone: "910000000" } },
+          }),
+      );
+      const request = {
+        revision: 0,
+        invoiceType: "F1" as const,
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+        delivery: {
+          medium: "email",
+          recipient: "valid@example.test",
+          consent: {
+            accepted: true,
+            statementVersion: "invoice-email-v1",
+            language: "es-ES",
+            contactEmail: "venue@example.test",
+            contactPhone: "910000000",
+          },
+        },
+      };
+      await expect(
+        setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, {
+          personId: OPERATOR,
+          emailAvailable: false,
+        }),
+      ).rejects.toMatchObject({ code: "invoice_delivery.email_unavailable", params: {} });
+    } finally {
+      if (originalContact === undefined) await inTx((tx) => tx.delete(tenantReceipts));
+      else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: originalContact.receipt }));
+    }
+  });
+
+  it("stages a receipt explicitly without email consent", async () => {
+    const billId = await tabWith("Caña");
+    const request = {
+      revision: 0,
+      invoiceType: "F1" as const,
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+      delivery: { medium: "receipt" },
+    };
+    await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request);
+    const [saved] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(saved!.invoiceDelivery).toEqual({ medium: "receipt" });
+  });
+
+  it.each(["active", "disabled", "other-location", "missing"] as const)(
+    "stages only an active local A4 destination: %s",
+    async (kind) => {
+      const billId = await tabWith("Caña");
+      const otherLocationId = randomUUID();
+      if (kind === "other-location")
+        await inTx((tx) =>
+          tx.insert(locations).values({
+            id: otherLocationId,
+            name: "Other",
+            invoiceLocales: ["es-ES"],
+            operationDescription: "Restaurant",
+          }),
+        );
+      const pagePrinterId = randomUUID();
+      if (kind !== "missing")
+        await inTx((tx) =>
+          tx.insert(pagePrinters).values({
+            id: pagePrinterId,
+            locationId: kind === "other-location" ? otherLocationId : venue.cfg.locationId,
+            name: "Office",
+            host: pagePrinterId,
+            port: 631,
+            resourcePath: "/ipp/print",
+            documentFormat: "application/pdf",
+            supportedFormats: ["application/pdf"],
+            media: "iso_a4_210x297mm",
+            resolutionDpi: 300,
+            active: kind !== "disabled",
+          }),
+        );
+      const request = {
+        revision: 0,
+        invoiceType: "F1" as const,
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+        delivery: { medium: "a4", pagePrinterId },
+      };
+      if (kind === "active") {
+        expect(await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request)).toBe(1);
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(saved!.invoiceDelivery).toEqual({ medium: "a4", pagePrinterId });
+      } else {
+        await expect(
+          setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request),
+        ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid", params: {} });
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
+      }
+    },
+  );
+
+  it.each([
+    [null, "es-ES", "venue@example.test", "invoice_delivery.email_unavailable"],
+    ["", "es-ES", "venue@example.test", "invoice_delivery.email_unavailable"],
+    ["malformed", "es-ES", "venue@example.test", "invoice_delivery.email_unavailable"],
+    ["venue@example.test", "en-GB", "venue@example.test", "management.request_invalid"],
+    ["new@example.test", "es-ES", "venue@example.test", "management.request_invalid"],
+  ])(
+    "refuses unavailable or changed consent contact/language %j %s",
+    async (email, language, contactEmail, code) => {
+      const billId = await tabWith("Caña");
+      const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
+      try {
+        await inTx((tx) =>
+          tx
+            .insert(tenantReceipts)
+            .values({ receipt: email === null ? {} : { email } })
+            .onConflictDoUpdate({
+              target: tenantReceipts.id,
+              set: { receipt: email === null ? {} : { email } },
+            }),
+        );
+        const request = {
+          revision: 0,
+          invoiceType: "F1" as const,
+          recipient: {
+            taxId: "B12345674",
+            legalName: "Cliente SL",
+            address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+            countryCode: "ES",
+          },
+          delivery: {
+            medium: "email",
+            recipient: "valid@example.test",
+            consent: {
+              accepted: true,
+              statementVersion: "invoice-email-v1",
+              language,
+              contactEmail,
+            },
+          },
+        };
+        await expect(
+          setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, {
+            personId: OPERATOR,
+            emailAvailable: true,
+          }),
+        ).rejects.toMatchObject({
+          code,
+          params: code === "management.request_invalid" ? { field: "delivery.consent" } : {},
+        });
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
+      } finally {
+        if (original === undefined) await inTx((tx) => tx.delete(tenantReceipts));
+        else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: original.receipt }));
+      }
+    },
+  );
+
+  it.each(["email", "a4"])("refuses %s delivery for a simplified bill", async (medium) => {
+    const billId = await tabWith("Caña");
+    await expect(
+      setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
+        revision: 0,
+        invoiceType: "F2",
+        recipient: null,
+        delivery: { medium },
+      }),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "delivery.medium" },
+    });
+    const [saved] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
+  });
+
+  it.each(["email", "a4", "disabled-a4"] as const)(
+    "associates the staged %s original with paid-bill issuance and rolls it back with the sale",
+    async (kind) => {
+      const medium = kind === "email" ? "email" : "a4";
+      const billId = await tabWith("Caña");
+      const [originalContact] = await inTx((tx) => tx.select().from(tenantReceipts));
+      const pagePrinterId = randomUUID();
+      try {
+        await inTx(async (tx) => {
+          await tx
+            .insert(tenantReceipts)
+            .values({ receipt: { email: "venue@example.test" } })
+            .onConflictDoUpdate({
+              target: tenantReceipts.id,
+              set: { receipt: { email: "venue@example.test" } },
+            });
+          await tx.insert(pagePrinters).values({
+            id: pagePrinterId,
+            locationId: venue.cfg.locationId,
+            name: "Invoice",
+            host: pagePrinterId,
+            port: 631,
+            resourcePath: "/ipp/print",
+            documentFormat: "application/pdf",
+            supportedFormats: ["application/pdf"],
+            media: "iso_a4_210x297mm",
+            resolutionDpi: 300,
+          });
+        });
+        await setOrderInvoiceChoice(
+          suite.db,
+          backend,
+          venue.cfg,
+          billId,
+          {
+            revision: 0,
+            invoiceType: "F1",
+            recipient: {
+              taxId: "B12345674",
+              legalName: "Cliente SL",
+              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              countryCode: "ES",
+            },
+            delivery:
+              medium === "email"
+                ? {
+                    medium,
+                    recipient: "customer@example.test",
+                    consent: {
+                      accepted: true,
+                      statementVersion: "invoice-email-v1",
+                      language: LOCALE,
+                      contactEmail: "venue@example.test",
+                    },
+                  }
+                : { medium, pagePrinterId },
+          },
+          { personId: OPERATOR, emailAvailable: true, now: new Date("2026-10-07T17:00:00Z") },
+        );
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        if (kind === "disabled-a4") {
+          await inTx((tx) =>
+            tx
+              .update(pagePrinters)
+              .set({ active: false })
+              .where(eq(pagePrinters.id, pagePrinterId)),
+          );
+        }
+        const paymentId = await insertPayment(billId, { applied: 300 });
+        const before = await inTx(async (tx) => ({
+          sales: await tx.select().from(sales),
+          series: await tx.select().from(invoiceSeries),
+          deliveries: await tx.select().from(invoiceDeliveries),
+          jobs: await tx.select().from(printJobs),
+          payment: await tx.select().from(billPayments).where(eq(billPayments.id, paymentId)),
+        }));
+        const rollback = new Error("synthetic rollback after issue");
+        await expect(
+          inTx(async (tx) => {
+            const result = await completeBillPayment(
+              tx,
+              fiscal(),
+              venue.cfg,
+              paymentId,
+              new Date(),
+            );
+            expect(result.invoice).toMatchObject({ invoiceType: "F1" });
+            const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+            const rows = await tx
+              .select()
+              .from(invoiceDeliveries)
+              .where(eq(invoiceDeliveries.saleId, sale!.id));
+            expect(rows).toEqual([
+              expect.objectContaining({
+                saleId: sale!.id,
+                medium,
+                status: "queued",
+                designation: "original",
+                personId: OPERATOR,
+                ...(medium === "email"
+                  ? {
+                      recipient: "customer@example.test",
+                      consent:
+                        saved!.invoiceDelivery!.medium === "email"
+                          ? saved!.invoiceDelivery!.consent
+                          : null,
+                    }
+                  : { pagePrinterId }),
+              }),
+            ]);
+            expect(await tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))).toEqual(
+              [],
+            );
+            throw rollback;
+          }),
+        ).rejects.toBe(rollback);
+        expect(
+          await inTx(async (tx) => ({
+            sales: await tx.select().from(sales),
+            series: await tx.select().from(invoiceSeries),
+            deliveries: await tx.select().from(invoiceDeliveries),
+            jobs: await tx.select().from(printJobs),
+            payment: await tx.select().from(billPayments).where(eq(billPayments.id, paymentId)),
+          })),
+        ).toEqual(before);
+        const result = await inTx((tx) =>
+          completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date()),
+        );
+        expect(result.invoice).toMatchObject({ invoiceType: "F1", total: "3.00" });
+        const [sale] = await inTx((tx) =>
+          tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
+        );
+        const deliveries = await inTx((tx) =>
+          tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.saleId, sale!.id)),
+        );
+        expect(deliveries).toHaveLength(1);
+        expect(deliveries[0]).toMatchObject({ medium, status: "queued", designation: "original" });
+        await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+        expect(
+          await inTx((tx) =>
+            tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.saleId, sale!.id)),
+          ),
+        ).toEqual(deliveries);
+        expect(
+          await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
+        ).toEqual([]);
+      } finally {
+        if (originalContact === undefined) await inTx((tx) => tx.delete(tenantReceipts));
+        else
+          await inTx((tx) => tx.update(tenantReceipts).set({ receipt: originalContact.receipt }));
+      }
     },
   );
 

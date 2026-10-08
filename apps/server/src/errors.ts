@@ -19,6 +19,12 @@ import type { AllocationPreview } from "./bill-allocation.js";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "invoice_delivery.email_unavailable": Record<string, never>;
+    "invoice_delivery.printer_invalid": Record<string, never>;
+    "invoice_delivery.receipt_invalid": Record<string, never>;
+    "invoice_delivery.active": Record<string, never>;
+    "invoice_delivery.not_found": Record<string, never>;
+    "invoice_delivery.full_invoice_required": Record<string, never>;
     "venue.detail_invalid": { field: string; reason: string };
     "venue.detail_read_only": { field: string };
     "venue.detail_locked": {
@@ -55,6 +61,8 @@ declare module "@waitron/shared" {
     "account_action.rate_limited": Record<string, never>;
     /** The local capture inbox was requested while email uses SMTP or is not configured. */
     "email.test_inbox_unavailable": Record<string, never>;
+    "email.settings_invalid": { field: string };
+    "email.settings_not_allowed": Record<string, never>;
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
     /**

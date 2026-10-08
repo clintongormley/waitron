@@ -124,6 +124,10 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { configureDemoPrinter, startDemoPrinterLoop } from "./demo-printer.js";
+import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
+import { readInvoiceDocument } from "./invoice-document.js";
+import { createRoutedInvoiceEmailSender } from "./invoice-email.js";
+import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -132,8 +136,9 @@ import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
-import { resolveEmailDelivery } from "./email-delivery.js";
+import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
+import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
@@ -1420,6 +1425,8 @@ async function bootServer(
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
+      invoiceEmailAvailable: async () =>
+        (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured",
     },
     log,
   );
@@ -1444,10 +1451,28 @@ async function bootServer(
     log,
   );
   let demoPrinterLoop: { stop(): Promise<void> } | undefined;
+  const invoiceEmailController = new AbortController();
+  let invoiceEmailLoop: Promise<void> | undefined;
   // The operational surface (print agents, devices, pairing, card readers) is not mounted on a
   // read-only node at all, so even its safe-verb reads are absent, not merely its writes refused.
   // Un-mounting at boot rather than gating per request is deliberate; see read-only-gate.ts's header.
   if (!fencedOrMirror) {
+    await withTransaction(db, (tx) => expireInvoiceDeliveryClaims(tx, now(), true));
+    invoiceEmailLoop = runInvoiceEmailLoop({
+      db,
+      holder: till.nodeId,
+      now,
+      signal: invoiceEmailController.signal,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      readDocument: (tx, delivery) => readInvoiceDocument(tillBackend, tx, till, delivery.saleId),
+      send: createRoutedInvoiceEmailSender({ db, ring, config }),
+      onError: (error) =>
+        log("error", "invoice_delivery.email_failed", { errorCode: codeOf(error) }),
+    });
+    undoOnFailure.push(async () => {
+      invoiceEmailController.abort();
+      await invoiceEmailLoop;
+    });
     const demoPrinter = await configureDemoPrinter(db, till.locationId, till.practiceMode === true);
     if (demoPrinter !== null) {
       demoPrinterLoop = startDemoPrinterLoop(db, till.locationId, demoPrinter, 500, (error) =>
@@ -1560,6 +1585,7 @@ async function bootServer(
       log,
     );
   }
+  mountEmailSettingsApi(app, { db, ring, config }, log);
   mountEmailInboxApi(
     app,
     {
@@ -2154,7 +2180,9 @@ async function bootServer(
       stopWork: async () => {
         controller.abort();
         cloudController.abort();
+        invoiceEmailController.abort();
         await closeAll([
+          () => invoiceEmailLoop,
           () => cloudWorker,
           () => cloudSnapshots,
           unsubscribeFromChanges,

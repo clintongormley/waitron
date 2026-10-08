@@ -1,3 +1,4 @@
+import type { InvoiceEmailConsent } from "./invoice-deliveries.js";
 import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
@@ -35,6 +36,11 @@ export const workingOrderStatus = enumType([
   "settled",
   "abandoned",
 ]);
+
+export type StagedInvoiceDelivery =
+  | { medium: "receipt" }
+  | { medium: "a4"; pagePrinterId: string }
+  | { medium: "email"; recipient: string; consent: InvoiceEmailConsent };
 
 /**
  * A working order is MUTABLE — the deliberate opposite of `sales`. Lines are
@@ -89,6 +95,8 @@ export const workingOrders = table(
     recipientLegalName: label("recipient_legal_name"),
     recipientAddress: label("recipient_address"),
     recipientCountryCode: label("recipient_country_code"),
+    // Null means no explicit delivery choice has been staged.
+    invoiceDelivery: json<StagedInvoiceDelivery>("invoice_delivery"),
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),

@@ -18,7 +18,7 @@ export function esbuildArgs(entry, outfile) {
     "--target=node24",
     ...BUNDLE_EXTERNALS.map((name) => `--external:${name}`),
     `--outfile=${outfile}`,
-    "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    "--banner:js=import { createRequire as __waitronCreateRequire } from 'node:module'; const require = __waitronCreateRequire(import.meta.url);",
     `--metafile=${outfile}.meta.json`,
   ];
 }

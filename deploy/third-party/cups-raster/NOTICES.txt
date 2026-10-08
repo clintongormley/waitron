@@ -1,0 +1,19 @@
+CUPS raster stream adaptation
+
+The grey raster page headers and modified PackBits encoder in
+apps/server/src/invoice-raster-encode.ts are adapted from
+OpenPrinting CUPS v2.4.10, cups/raster-stream.c:
+https://github.com/OpenPrinting/cups/blob/v2.4.10/cups/raster-stream.c
+
+Copyright © 2020-2024 by OpenPrinting.
+Copyright 2007-2019 by Apple Inc.
+Copyright 1997-2006 by Easy Software Products.
+
+Licensed under the Apache License, Version 2.0. You may obtain a copy at
+https://www.apache.org/licenses/LICENSE-2.0
+The licence ships alongside this notice as ../licenses/Apache-2.0.txt.
+
+Waitron adapts the page-header serialization and row compression to
+TypeScript for one-channel, 8-bit grey A4 pages at 300 or 600 dpi.
+CUPS is used as a development reference; this adaptation adds no CUPS
+runtime daemon or native library to the image.

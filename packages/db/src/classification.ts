@@ -110,6 +110,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "each watcher's own Done marks, live service in flight; copied to a standby, never drained back",
   ),
   classify("printers", "state", STATE),
+  classify("page_printers", "state", STATE),
   classify("print_agents", "state", STATE),
   classify("canvases", "state", STATE),
   classify("tenant_themes", "state", STATE),
@@ -127,6 +128,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "hash-chained order amendments in flight; copied to a standby, never drained back",
   ),
   classify("print_jobs", "state", STATE),
+  classify(
+    "invoice_deliveries",
+    "state",
+    "mutable delivery queue for issued core invoices; copied to a standby, never drained back",
+  ),
   classify(
     "kitchen_print_job_lines",
     "state",

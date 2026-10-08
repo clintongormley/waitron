@@ -2,7 +2,7 @@
 
 The box image carries software written by others under their own licences. This folder is
 copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream,
-the Iosevka font printed text is drawn from, the Moby template the print agent's AppArmor
+the Iosevka font receipt text is drawn from, the Noto Sans invoice font, the Moby template the print agent's AppArmor
 profile is copied from, the Material Symbols icons the web apps carry, the Google Sans font and
 Google's "G" on the dashboard's Sign in with Google button, and npm packages bundled into the
 server and web apps. The print-agent image, built by the same `deploy/Dockerfile`, has its own
@@ -18,9 +18,9 @@ their emitted JavaScript chunks. The generator (`scripts/npm-bundle-notices.mjs`
 installed package's licence and notice files into the generated text, grouped by name and version.
 The image build fails when a bundled package has no local notice and no pinned fallback.
 
-The published tarballs of the QR generator, Nodable entities, Drizzle ORM and three internal AWS
-SDK packages lack a root licence file. Their exact
-name-and-version fallback files live in `npm-fallback/`. The QR generator text comes from its
+For packages without local licence files, exact name-and-version fallback files live in
+`npm-fallback/`. These include the invoice renderer's brotli, dfa and fontkit dependencies,
+beside the QR generator, Nodable entities, Drizzle ORM and internal AWS SDK packages. The QR generator text comes from its
 upstream tag at commit `83b7e8fe3fddd3b0368dbafd6ce56995bd25e3c8`.
 The Nodable text comes from its matching upstream `val-parsers` tag. The AWS SDK and Drizzle package
 manifests state Apache-2.0; their fallback files reproduce `licenses/Apache-2.0.txt`.
@@ -86,6 +86,19 @@ files says so beside the paths.
 
 - `licenses/Apache-2.0.txt` is that licence.
 
+## CUPS raster encoding
+
+The server's PWG and Apple Raster encoders adapt CUPS's page headers and row compression
+for grey A4 pages. `cups-raster/NOTICES.txt` names the upstream source and its copyright holders;
+`licenses/Apache-2.0.txt` carries the licence. Both ship under `/app/third-party/`.
+
+## Noto Sans
+
+The server embeds Noto Sans in invoice PDFs and draws its glyph outlines for invoice raster pages.
+The font is shipped at `/app/assets/invoice-noto-sans.ttf` under the SIL Open Font License, Version 1.1.
+`noto-sans/OFL.txt` is its unmodified upstream copyright and licence notice.
+`noto-sans/README.md` records the pinned font source, checksums and build paths.
+
 ## Google Sans
 
 The dashboard web app, served from `/app/web/dashboard/` in the image, carries the font Google
@@ -126,7 +139,7 @@ package has no copyright file.
 
 ## Iosevka Term Bold
 
-The server draws the text of every printout as pictures, from a table of letter pictures derived
+Receipt-printer text is drawn as pictures, from a table of letter pictures derived
 from the font Iosevka Term Bold, release 34.9.0, Copyright (c) 2015-2026, Renzhi Li (aka. Belleve
 Invis). The image carries no Iosevka font file, only that table, which is compiled into the server. The
 font and the table derived from it are licensed under the SIL Open Font License, Version 1.1.
