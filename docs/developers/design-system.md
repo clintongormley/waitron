@@ -948,22 +948,28 @@ rows show and opens the sections above a match, and the Available column has a Y
 section or an included menu answers neither, so it stays only on the way to a match. There is no
 filter on Type: its three values are already told apart by the folder frame and the arrow. While a
 search or filter hides rows, ArrowUp and ArrowDown move a member past the next sibling that is
-drawn, never past a hidden one.
+drawn, never past a hidden one. The search clears when another menu opens or the menu empties.
 
 Beside Reorder is a Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
-mode every row the menu owns has a box (rows inside an included menu have none), and a bar under the
-toolbar shows how many are selected with three buttons: **Move to section…**, **Remove from menu**
-and Done, which leaves the mode and puts focus back on Select. The selection clears when the mode
-turns off, the search or a filter changes, another menu opens, or a bulk change succeeds. Only the
-outermost selected rows are acted on: a row inside a selected section travels with it. Remove from
-menu asks first, naming how many items leave their sections and listing each with the list it
-leaves; it stays quiet and disabled while a section the menu owns is selected, with a line saying a
+mode every row the menu owns has a box named "<name>, in <list>" (rows inside an included menu have
+none), and a bar under the toolbar shows how many rows are ticked with three buttons: **Move to
+section…**, **Remove from menu** and Done, which leaves the mode and puts focus back on Select.
+Select and Done cannot be pressed while a change is being saved. While a search or filter is on, a section
+shown only because something inside it matches has no box, so Select all never ticks a section whose
+hidden rows would go with it; a section whose own name matches keeps its box, and none has one under
+the Available filter, which no section answers. The selection clears when the mode turns off, the
+search or a filter changes, another menu opens, or a bulk change succeeds; a live update drops a
+ticked row it takes away, from the selection and from an open confirm or dialog, which closes once
+nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
+travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
+the confirm and the dialog count what is sent. Remove from menu asks first, naming how many items
+leave their sections and listing each with the list it leaves; it stays quiet and disabled while a section the menu owns is selected, with a line saying a
 section is deleted from its own row's ⋮, because a section the menu owns is deleted, never removed.
 Move to section… opens a dialog with one required destination: "Top level" first, then every section
 the menu owns, by its path joined with " › ", leaving out each selected section and every section
 below it; never a list inside an included menu. Its Move action is quiet until a destination is
-chosen, and closing it with one chosen asks first (`draftScopeFor`,
-`menus-screen.structure-move.unsaved.test.ts`). Both send one request: `POST
+chosen, and again if a live update takes the chosen one away; closing it with one chosen asks
+first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Both send one request: `POST
 /management-api/section-members/remove` and `POST /management-api/sections/:id/members/move-in`,
 which moves the member rows themselves, so a moved product keeps the menu's price for it and an
 included menu keeps its folder setting (`moveMembersInto`, `packages/catalogue/src/sections.ts`).
@@ -1396,7 +1402,9 @@ The `wt-data-table` Filters button, the Products Select button and the Structure
 Reorder and Select buttons each take the `icon-button` class from `iconButtonStyles` (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
 least `--wt-tap-min` each way, with the toolbar's border and surface, and pressed —
 `--wt-color-primary` border, `--wt-color-surface-lifted` fill, `--wt-color-primary-text` icon —
-while the button's `aria-pressed` or `aria-expanded` is `true`. Its name is its `aria-label`. An
+while the button's `aria-pressed` or `aria-expanded` is `true`; disabled, it is drawn at
+`--wt-opacity-disabled` with the default cursor, as the Structure tab's Select is while a change is
+being saved. Its name is its `aria-label`. An
 `aria-hidden` `.icon-tooltip` inside it repeats that name on one line under the button, from its leading edge, on keyboard focus,
 and on hover where the primary pointer can hover (a touch screen leaves a tapped button in
 `:hover`), drawn above a sticky table's headings. It stays shown while the pointer is on the tooltip
