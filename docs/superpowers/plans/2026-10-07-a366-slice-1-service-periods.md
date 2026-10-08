@@ -704,7 +704,7 @@ Delete); "Add a period". The dialog (`period-editor.ts`, `wt-modal`): name (requ
 menus (the customer menu not offered); refusals under the field they name; a draft scope.
 `menu_period.in_use` shows as one sentence.
 
-- [ ] Steps: failing tests (periods render; create, edit, delete call the client and refresh; a
+- [x] Steps: failing tests (periods render; create, edit, delete call the client and refresh; a
 refusal lands under its field; the unsaved dialog asks; axe in both themes); watch them fail;
 implement; pass; look in both themes and at phone width; commit
 `feat(venue-service): Opening hours screen with periods (A366)`.
@@ -750,6 +750,18 @@ their new consumers exist. Week and Day content remain
 Tasks 13 and 14. Leave Task 12 unchecked until its remaining work and verification finish.
 
 ---
+
+**Checkpoint 2026-10-08 — Task 12 retirement complete locally.** The old Menu timetable screen,
+client and slot editor, their six browser test files and their unused strings/model types/query key
+are removed. The week parser now requires the business-day callback already supplied by the writer;
+its old civil-day fallback and neighbouring-date helpers are removed. The retained weekday shape,
+field-path, day-body and name checks still run. Opening hours retains the original department history,
+Spanish title/actions, menu-only dirty comparison, dated-override comparison and clean deletion
+Cancel/native Escape checks. The unchanged token guard passes once deleted files leave Git's index.
+Two parser safeguard removals fail the selected assertions in an installed disposable checkout;
+restoration passes the parser/service-day suites. The legacy Week/date and named-period mappings,
+and this retirement's per-file inventory, remain in the lane receipts for the final PR.
+Task 15 and final branch review, CI and landing remain.
 
 ### Task 13: Opening hours — Week tab
 

@@ -65,17 +65,6 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "locations",
   ],
-  "menu-timetable": [
-    "menu_periods",
-    "menu_day_timetables",
-    "menu_slots",
-    "special_dates",
-    "departments",
-    "floor_zones",
-    "zone_service_policies",
-    "catalogues",
-    "locations",
-  ],
   operations: [
     "departments",
     "zone_service_policies",
