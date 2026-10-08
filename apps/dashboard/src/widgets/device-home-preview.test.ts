@@ -1395,7 +1395,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
           const ended = box.scrollTop;
           for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
           expect(box.scrollTop).toBe(ended);
-          if (end !== "leave") expect(events).toEqual([]);
+          expect(events).toEqual([]);
         } finally {
           send("pointercancel");
           restoreFrames();

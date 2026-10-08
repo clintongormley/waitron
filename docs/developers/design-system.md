@@ -954,9 +954,9 @@ member. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
 `menu-structure-table.a11y.test.ts` beside it, and the "the Structure tree" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`.
 
-Hold a dragged row near the visible top or bottom edge to reach rows outside the current view.
-`DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box across
-shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
+Hold a dragged row or tile near the visible top or bottom edge to reach rows outside the current
+view. `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box
+across shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
 scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
 Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, preparation
 stations, the Customise column list and the Home page tab's shortcut preview use this helper. Shared

@@ -601,8 +601,8 @@ export class DeviceHomePreview extends LitElement {
     return ids.indexOf(memberId) < ids.indexOf(press.memberId) ? "before" : "after";
   }
 
-  /** A shortcut's face and the name it is known by: the device's tile, a dashed one when the
-   * menu no longer reaches its target, or a muted one when it does but a device draws nothing. */
+  /** A shortcut's face and the name it is known by: the device's tile, or a dashed, muted
+   * one when the menu no longer reaches its target or a device would draw nothing. */
   #shortcutFace(
     tile: HomeTile,
     index: PreviewIndex,
