@@ -17,6 +17,8 @@ const RESTAURANT = "d-restaurant";
 const DELI = "d-deli";
 const KITCHEN = "k-kitchen"; // the default station
 const BAR = "k-bar";
+const PASS = "k-pass";
+const GRILL = "k-grill";
 const CHRISTMAS = "sd-christmas";
 
 const weekCell = (owner: Row, weekday: number, mode: string, id = randomUUID()): Row => ({
@@ -45,15 +47,13 @@ function openWeek(owner: Row, opensAt: string, closesAt: string): { cells: Row[]
 }
 
 /**
- * A bundle the validator accepts: the restaurant opens 12:00–01:00 every day, the deli's week is
- * Closed, all day or periods, the bar has no hours set, and Christmas closes the restaurant, gives
- * the bar a lunch and keeps a retained Closed cell for the default station.
+ * Pass and Grill carry the two scheduled weeks; Bar is unset and Kitchen is the default.
  */
 function validTables(): Tables {
-  const restaurant = openWeek({ department_id: RESTAURANT }, "12:00:00", "01:00:00");
+  const restaurant = openWeek({ station_id: PASS }, "12:00:00", "01:00:00");
   const deliCells = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
     weekCell(
-      { department_id: DELI },
+      { station_id: GRILL },
       weekday,
       weekday === 0 ? "closed" : weekday === 6 ? "all_day" : "periods",
     ),
@@ -73,6 +73,8 @@ function validTables(): Tables {
     kitchen_stations: [
       { id: KITCHEN, is_default: 1 },
       { id: BAR, is_default: 0 },
+      { id: PASS, is_default: 0 },
+      { id: GRILL, is_default: 0 },
     ],
     hours_week_cells: [...restaurant.cells, ...deliCells],
     hours_week_periods: [...restaurant.periods, ...deliPeriods],
@@ -90,8 +92,8 @@ function validTables(): Tables {
       {
         id: "sdh-restaurant",
         special_date_id: CHRISTMAS,
-        department_id: RESTAURANT,
-        station_id: null,
+        department_id: null,
+        station_id: PASS,
         mode: "closed",
       },
       { ...barLunch, station_id: BAR, mode: "periods" },
@@ -112,6 +114,34 @@ function refusal(field: string) {
 }
 
 describe("validateHoursConfiguration", () => {
+  it.each(["hours_week_cells", "special_date_hours"] as const)(
+    "refuses department-owned %s even when the bundle contains the department",
+    (table) => {
+      const tables = validTables();
+      const bar = openWeek({ station_id: BAR }, "09:00:00", "17:00:00");
+      tables.hours_week_cells = bar.cells;
+      tables.hours_week_periods = bar.periods;
+      tables.special_date_hours = [
+        {
+          id: "bar-date",
+          special_date_id: CHRISTMAS,
+          department_id: null,
+          station_id: BAR,
+          mode: "closed",
+        },
+      ];
+      tables.special_date_hours_periods = [];
+      expect(() => validateHoursConfiguration(tables)).not.toThrow();
+      for (const owned of tables[table]!) {
+        owned.department_id = RESTAURANT;
+        owned.station_id = null;
+      }
+      expect(() => validateHoursConfiguration(tables)).toThrowError(
+        refusal(`${table}.department_id`),
+      );
+    },
+  );
+
   it("is run by the venue-service transfer's validate callback, with the export's date and zone", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
     const badTime = validTables();
@@ -184,13 +214,13 @@ describe("validateHoursConfiguration", () => {
     ],
     [
       "a cell with both owners",
-      (t) => (t.hours_week_cells![0]!.station_id = BAR),
+      (t) => (t.hours_week_cells![0]!.department_id = RESTAURANT),
       "hours_week_cells.department_id",
     ],
     [
       "a cell with no owner",
-      (t) => (t.hours_week_cells![0]!.department_id = null),
-      "hours_week_cells.department_id",
+      (t) => (t.hours_week_cells![0]!.station_id = null),
+      "hours_week_cells.station_id",
     ],
     [
       "a department outside the bundle",
@@ -229,7 +259,7 @@ describe("validateHoursConfiguration", () => {
       "two overlapping periods in one day",
       (t) => {
         const deliMonday = t.hours_week_cells!.find(
-          (row) => row.department_id === DELI && row.weekday === 1,
+          (row) => row.station_id === GRILL && row.weekday === 1,
         )!;
         t.hours_week_periods!.find(
           (row) => row.cell_id === deliMonday.id && row.position === 1,
@@ -241,7 +271,7 @@ describe("validateHoursConfiguration", () => {
       "Saturday's late hours running into Sunday's",
       (t) => {
         const sunday = t.hours_week_cells!.find(
-          (row) => row.department_id === RESTAURANT && row.weekday === 0,
+          (row) => row.station_id === PASS && row.weekday === 0,
         )!;
         t.hours_week_periods!.find((row) => row.cell_id === sunday.id)!.opens_at = "00:30:00";
       },
@@ -281,7 +311,7 @@ describe("validateHoursConfiguration", () => {
     [
       "two cells for one subject on a date",
       (t) => t.special_date_hours!.push({ ...t.special_date_hours![0]!, id: "sdh-copy" }),
-      "special_date_hours.department_id",
+      "special_date_hours.station_id",
     ],
     [
       "a date cell for a station outside the bundle",
@@ -307,8 +337,8 @@ describe("validateHoursConfiguration", () => {
         t.special_date_hours!.push({
           id: "sdh-deli",
           special_date_id: CHRISTMAS,
-          department_id: DELI,
-          station_id: null,
+          department_id: null,
+          station_id: GRILL,
           mode: "periods",
         });
         // 26 December 2026 is a Saturday, when the deli is open all day.

@@ -3777,10 +3777,6 @@ describe("opening hours in a configuration transfer", () => {
     });
     return withTransaction(db, async (tx) => {
       const weeks: Record<string, unknown> = {};
-      for (const [name, id] of venue.departments)
-        weeks[`department:${name}`] = (
-          await readWeekHours(tx, venue.cfg, { kind: "department", id })
-        ).map((day) => ({ weekday: day.weekday, cell: withoutIds(day.cell) }));
       for (const [name, id] of venue.stations)
         weeks[`station:${name}`] = (
           await readWeekHours(tx, venue.cfg, { kind: "station", id })
@@ -3820,11 +3816,15 @@ describe("opening hours in a configuration transfer", () => {
         tradingName: "Deli",
         defaultServiceMode: "prepay",
       });
-      await tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Bar" });
+      await tx.insert(kitchenStations).values([
+        { locationId: source.locationId, name: "Bar" },
+        { locationId: source.locationId, name: "Pass" },
+        { locationId: source.locationId, name: "Grill" },
+      ]);
     });
-    const { cfg, departments: dept, stations } = await named(suite.db, source);
-    const restaurant = { kind: "department" as const, id: dept.get("Prepared")! };
-    const deli = { kind: "department" as const, id: dept.get("Deli")! };
+    const { cfg, stations } = await named(suite.db, source);
+    const restaurant = { kind: "station" as const, id: stations.get("Pass")! };
+    const deli = { kind: "station" as const, id: stations.get("Grill")! };
     const bar = { kind: "station" as const, id: stations.get("Bar")! };
     await withTransaction(suite.db, async (tx) => {
       // Closed on Monday; lunch and a dinner running past midnight on the other days.
@@ -3902,7 +3902,7 @@ describe("opening hours in a configuration transfer", () => {
     return { source, versions, transferred };
   }
 
-  it("carries the standard weeks and special dates of every kind, with fresh ids that still link up", async () => {
+  it("carries station standard weeks and special dates of every kind, with fresh ids that still link up", async () => {
     const { source, versions, transferred } = await preparedWithHours("B44001122");
     expect(transferred.tables).not.toHaveProperty("station_day_states");
     expect(transferred.tables.hours_week_periods).toContainEqual(
@@ -4046,8 +4046,11 @@ describe("opening hours in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const { cfg, departments: dept } = await named(suite.db, source);
-    const restaurant = { kind: "department" as const, id: dept.get("Prepared")! };
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Pass" }),
+    );
+    const { cfg, stations } = await named(suite.db, source);
+    const restaurant = { kind: "station" as const, id: stations.get("Pass")! };
     await withTransaction(suite.db, async (tx) => {
       await replaceWeekHours(
         tx,
@@ -4118,6 +4121,42 @@ describe("opening hours in a configuration transfer", () => {
     expect(expected.dates.map((date) => date.date)).toEqual(["2026-09-25"]);
     expect(await hoursByName(targetSuite.db, target)).toEqual(expected);
   });
+
+  it.each(["hours_week_cells", "special_date_hours"] as const)(
+    "refuses a department-owned %s import before writing the venue",
+    async (table) => {
+      const suffix = table === "hours_week_cells" ? "66" : "77";
+      const { versions, transferred } = await preparedWithHours(`B4400${suffix}11`);
+      const edited = structuredClone(transferred);
+      const rows = edited.tables[table]!;
+      const stationId = rows[0]!.station_id;
+      const departmentId = edited.tables.departments![0]!.id;
+      for (const row of rows)
+        if (row.station_id === stationId) {
+          row.station_id = null;
+          row.department_id = departmentId;
+        }
+      const refusal = {
+        code: "setup.request_invalid",
+        params: { field: `${table}.department_id` },
+      };
+      expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
+        expect.objectContaining(refusal),
+      );
+      const target = venue(`B4400${suffix}22`);
+      await expect(
+        applyVenue(planVenue(target, ALL_MODULES), {
+          db: targetSuite.db,
+          modules: ALL_MODULES,
+          beforeCommit: (tx, result) =>
+            importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+        }),
+      ).rejects.toMatchObject(refusal);
+      const persisted = await targetSuite.db.execute<{ tenants: number }>(sql`
+        select cast(count(*) as int) as tenants from tenants where tax_id = ${target.taxId}`);
+      expect(persisted.rows).toEqual([{ tenants: 0 }]);
+    },
+  );
 
   it("refuses an edited bundle whose hours a save would refuse, and writes no venue", async () => {
     const { versions, transferred } = await preparedWithHours("B44003311");
