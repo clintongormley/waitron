@@ -347,7 +347,7 @@ it("a repeating 29 February falls only in leap years", () => {
 
 ---
 
-### Task 2: Migration 0034 — named-day columns and zone closed times (add only)
+### Task 2: Migration 0035 — named-day columns and zone closed times (add only)
 
 **Files:**
 - Modify: `packages/venue-service/src/schema/hours.ts` (`specialDates :85-109`), a new
@@ -355,7 +355,7 @@ it("a repeating 29 February falls only in leap years", () => {
   `migrations.test.ts` (`TABLES`), `scripts/schema-constraints.test.ts`,
   `apps/server/src/testing/clear-provision-fixture.ts` (add `zone_closed_times` before
   `zone_service_policies :32`)
-- Create (generated): `packages/venue-service/drizzle/0034_*.sql`, its snapshot, journal entry
+- Create (generated): `packages/venue-service/drizzle/0035_*.sql`, its snapshot, journal entry
 
 **Interfaces — produces:**
 - `specialDates.kind`: `enumType(NAMED_DAY_KINDS)("kind").notNull().default("working_day")`,
@@ -1115,7 +1115,7 @@ rule for the rewritten editor.
 
 ---
 
-### Task 27: Migration 0035 — named days lose their colour; local holidays go
+### Task 27: Migration 0036 — named days lose their colour; local holidays go
 
 **Files:**
 - Modify: `schema/hours.ts` (`specialDates`: drop `colour`; add `special_dates_kind_ck`
@@ -1128,7 +1128,7 @@ rule for the rewritten editor.
   `apps/server/src/testing/clear-provision-fixture.ts` (`local_holidays :8` goes); fixtures in
   `apps/server/src/configuration-transfer.test.ts` that send a special date's `colour` (for
   example `:4287`) drop it — a fixture change
-- Create (generated): `drizzle/0035_*.sql`, snapshot, journal entry
+- Create (generated): `drizzle/0036_*.sql`, snapshot, journal entry
 
 The rebuild adds no column. Before generating, list the foreign keys pointing at `special_dates`:
 at S1 they are `special_date_hours_date_fk` and `menu_day_timetables_date_fk`, both on delete
@@ -1198,22 +1198,28 @@ Run `/finish-branch` with this worktree and this plan. The branch touches risk t
 one on this plan's checklist, one told to set the checklist aside and test what it does not name.
 The pull request's first line: **"venue reset needed"**. Do not merge; the owner lands it.
 
-## Facts that come from slice 1's unbuilt tasks
+## Start-up recheck against landed slice 1 and A432
 
-Re-check each when slice 1 lands, before Task 1:
+Checked 2026-10-09 against `685a6074b152eeb904a66cfac9f83e8f432196ab` (slice 1)
+and `e70b68915607a1a0f3b1861bc003197c3636ed5c` (A432), the implementation branch's base.
+The original S1 citations above remain historical; find assertions by their text.
 
-- **Slice 1 Task 12 (partial):** the Menu timetable screen, client and slot editor still exist at
-  `79bffeca9`; this plan assumes slice 1 deletes them. `apps/dashboard/src/navigation.ts`'s
-  `opening-hours` children are taken as `{ view, department }` (slice 1 plan, Task 12).
-- **Slice 1 Task 13 (partial):** the special-date switch, its picker, "Closed all day" and
-  "Follow the normal week" are not built; this plan's Task 22 replaces them and its Task 7 retires
-  the `DELETE` route they would call. `opening-hours-week.ts`'s save and refusal flow and
-  `range-dialog.ts` (which Task 17 reuses) are as built at `79bffeca9`.
-- **Slice 1 Task 14 (not started):** the Day tab (one column per active department, ‹ ›, slice
-  1's decision 9 note) is planned, not built; this plan's Task 23 adds zones to it. The Departments
-  page's links to Opening hours are slice 1's and untouched here.
-- **Slice 1 Task 15 (not started):** the rewritten `conventions-data.md` sections, any
-  `design-system.md` entry for Opening hours and `public-holidays.md:4`'s new wording are slice
-  1's; this plan's Task 29 edits on top of them.
-- **Numbers:** migrations `0034` and `0035` assume slice 1 ends at `0033_aromatic_slapstick`.
-  Line numbers marked S1 move if slice 1 changes those files again.
+- The menu timetable screen, client and slot editor are retired. Navigation declares
+  `opening-hours: { view, department }` in `apps/dashboard/src/navigation.ts`.
+- `opening-hours-screen.ts` now selects a special date; `opening-hours-week.ts` implements
+  its dated ranges and Follow the normal week flow through `clearDateMenus`. Tasks 7 and 22
+  retire and replace these landed flows. `range-dialog.ts` is present for Task 17.
+- `opening-hours-day.ts` implements the department Day view. Task 23 adds zones to it.
+- The service-period sections in `conventions-data.md` and Opening hours entries in
+  `design-system.md` have landed. `public-holidays.md` still describes Station hours and
+  local holidays; Task 29 changes these current claims and retains historical pointers.
+- A432 added `0034_period_end_offset.sql`. Tasks 2 and 27 now propose 0035 and 0036;
+  generate the actual next numbers, and regenerate on a collision after rebase.
+- A432 added selection/sending state and signed period offsets. Tasks 3, 5–7 and 9 must retain
+  offset placement validation when replacing date resolution or writing/importing named days.
+  Tasks 10–14 add zone state alongside the existing selection and sending fields, preserving
+  cutoff refusal tests and the pricing path's static-only reads. Zone closed times remain an
+  independent refusal; positive period grace never overrides a zone closure (decision 13).
+
+The queue's 2026-10-05 test-change decision governs changed assertions, and its authorisation
+for finish-branch and land-branch replaces the historical "owner lands it" instruction above.
