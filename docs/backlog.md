@@ -1033,6 +1033,13 @@ unused `units` property is gone (it closes W75's leftover).
     and has document listeners. Next: reproduce open/remove/reinsert, including removal before
     the opening toggle arrives, before deciding whether it needs the same lifecycle correction.
 
+- **A389, owner 2026-10-08 — DONE (disclosure reopening test):** the Chromium test pauses
+  the real height transitions in the frame that finds them, seeks the collapse and reopening
+  to their midpoints, and checks that reopening starts at the interrupted height and finishes open.
+  In the old test, a 1200 ms busy observer after the 50 ms wait reproduced main CI's
+  `expected 200 to be less than 200`; the paused-transition test passed the same observer probe.
+  The component is unchanged. Receipts are in `~/waitron-campaign-e/receipts/a389/`.
+
 - **A342, owner 2026-10-07 — DONE (#1366, several values in one table filter):** a `wt-data-table` filter
   declared with `multiple` takes several values, and keeps a row matching any of them; separate
   filters still all apply, and the Filters badge counts a filter once. Its list keeps the "All …"
