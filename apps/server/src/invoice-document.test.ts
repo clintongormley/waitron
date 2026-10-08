@@ -146,7 +146,7 @@ describe("stored invoice document projection", () => {
     });
     expect(document.result.lines).toEqual([
       {
-        descriptions: { "es-ES": "Ración guardada" },
+        descriptions: { "es-ES": "Carne guardada (Ración guardada)" },
         optionSnapshots: [],
         quantity: "0.25",
         unitName: { "es-ES": "kg" },
