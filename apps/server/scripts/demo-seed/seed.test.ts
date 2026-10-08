@@ -427,13 +427,13 @@ describe("seedDemoRestaurant", () => {
         join categories c on c.id = r.category_id
         join floor_zones z on z.id = r.zone_id
         join kitchen_stations s on s.id = r.station_id
-        where c.name = 'Drinks'
+        where c.name = 'Cocktails'
         order by z.name`);
       const { rows: cocktailCells } = await tx.execute<{ station_name: string }>(sql`
         select s.name as station_name from routing_cells r
         join categories c on c.id = r.category_id and r.zone_id is null
         join kitchen_stations s on s.id = r.station_id
-        where c.name = 'Drinks'`);
+        where c.name = 'Cocktails'`);
       const published = await menuStatus(
         tx,
         menus.map((menu) => menu.id),

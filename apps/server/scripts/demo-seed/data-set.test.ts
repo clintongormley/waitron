@@ -58,7 +58,15 @@ function customerTexts(set: DemoDataSet): [string, Text][] {
 /** Catalan or Galician values this data set writes the same as in Spanish or English: proper names,
  * a dish known by its own name, and words both languages spell alike. */
 const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = {
-  ca: ["Negroni", "Crema catalana", "Torta del Casar (per kg)", "Conserves", "Postres", "rac"],
+  ca: [
+    "Negroni",
+    "Crema catalana",
+    "Torta del Casar (per kg)",
+    "Conserves",
+    "Postres",
+    "Refrescos",
+    "rac",
+  ],
   gl: [
     "Negroni",
     "Torta del Casar (por kg)",
@@ -73,7 +81,8 @@ const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = 
     "Conservas",
     "Tapas",
     "Segundos",
-    "Bebidas",
+    "Cócteles",
+    "Refrescos",
     "Carta de bebidas",
     "Café",
     "ración",
@@ -83,6 +92,29 @@ const SAME_AS_SPANISH_OR_ENGLISH: Readonly<Record<string, readonly string[]>> = 
 };
 
 describe("demo data sets", () => {
+  it("gives every country pack four bar sections with the original drink products", () => {
+    for (const pack of COUNTRY_PACKS.filter((pack) => pack.demo !== undefined)) {
+      const set = demoDataSetFor(pack.demo!);
+      const sections = set.menus.restaurant.categories.filter(
+        (category) => category.station === "bar",
+      );
+      expect(
+        sections.map((section) => [section.name, section.products.map((product) => product.image)]),
+      ).toEqual([
+        [{ en: "Cocktails", es: "Cócteles", ca: "Còctels", gl: "Cócteles" }, ["negroni.png"]],
+        [
+          { en: "Wine and beer", es: "Vino y cerveza", ca: "Vi i cervesa", gl: "Viño e cervexa" },
+          ["vino-tinto.png", "cana-cerveza.png"],
+        ],
+        [
+          { en: "Soft drinks", es: "Refrescos", ca: "Refrescos", gl: "Refrescos" },
+          ["refresco-cola.png", "agua-mineral.png", "zumo-naranja.png"],
+        ],
+        [{ en: "Coffee", es: "Café", ca: "Cafè", gl: "Café" }, ["cafe-solo.png"]],
+      ]);
+    }
+  });
+
   it("resolves every country pack's demo data set", () => {
     const named = COUNTRY_PACKS.flatMap((pack) => {
       const id = pack.demo?.dataSet;

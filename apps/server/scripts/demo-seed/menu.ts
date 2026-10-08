@@ -528,7 +528,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
     ],
   },
   {
-    name: { en: "Drinks", es: "Bebidas", ca: "Begudes", gl: "Bebidas" },
+    name: { en: "Cocktails", es: "Cócteles", ca: "Còctels", gl: "Cócteles" },
     station: "bar",
     products: [
       {
@@ -538,6 +538,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
         vatClass: "general",
         image: "negroni.png",
       },
+    ],
+  },
+  {
+    name: { en: "Wine and beer", es: "Vino y cerveza", ca: "Vi i cervesa", gl: "Viño e cervexa" },
+    station: "bar",
+    products: [
       {
         customerName: {
           en: "Glass of house red",
@@ -564,6 +570,12 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
         vatClass: "general",
         image: "cana-cerveza.png",
       },
+    ],
+  },
+  {
+    name: { en: "Soft drinks", es: "Refrescos", ca: "Refrescos", gl: "Refrescos" },
+    station: "bar",
+    products: [
       {
         customerName: {
           en: "Cola soft drink",
@@ -576,6 +588,36 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
         vatClass: "general",
         image: "refresco-cola.png",
       },
+      {
+        customerName: {
+          en: "Bottled mineral water",
+          es: "Agua mineral",
+          ca: "Aigua mineral",
+          gl: "Auga mineral",
+        },
+        pricingUnit: "each",
+        unitPrice: "1.80",
+        vatClass: "reduced",
+        image: "agua-mineral.png",
+      },
+      {
+        customerName: {
+          en: "Orange juice",
+          es: "Zumo de naranja",
+          ca: "Suc de taronja",
+          gl: "Zume de laranxa",
+        },
+        pricingUnit: "each",
+        unitPrice: "2.90",
+        vatClass: "general",
+        image: "zumo-naranja.png",
+      },
+    ],
+  },
+  {
+    name: { en: "Coffee", es: "Café", ca: "Cafè", gl: "Café" },
+    station: "bar",
+    products: [
       {
         customerName: { en: "Coffee", es: "Café", ca: "Cafè", gl: "Café" },
         staffName: "Café",
@@ -611,30 +653,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES: SeedCategory<CasaDelgadoLanguage>[] = [
         unitPrice: "1.60",
         vatClass: "general",
         image: "cafe-solo.png",
-      },
-      {
-        customerName: {
-          en: "Bottled mineral water",
-          es: "Agua mineral",
-          ca: "Aigua mineral",
-          gl: "Auga mineral",
-        },
-        pricingUnit: "each",
-        unitPrice: "1.80",
-        vatClass: "reduced",
-        image: "agua-mineral.png",
-      },
-      {
-        customerName: {
-          en: "Orange juice",
-          es: "Zumo de naranja",
-          ca: "Suc de taronja",
-          gl: "Zume de laranxa",
-        },
-        pricingUnit: "each",
-        unitPrice: "2.90",
-        vatClass: "general",
-        image: "zumo-naranja.png",
       },
     ],
   },
