@@ -7035,6 +7035,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   [Spec](superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
+  Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
+  in two pull requests — monitors after slice 1, watcher printers retired after slice 4 — with its
+  open decisions for the owner at its top.
 - **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
   implemented through A261.** The first department is named after the venue; the
   four-value service style splits into separate settings, and a tab no longer needs a table; hours
