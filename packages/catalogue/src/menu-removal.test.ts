@@ -378,8 +378,8 @@ describe("an Inactive product cannot be added to a menu list", () => {
 });
 
 /**
- * {@link removalFixture} with a second size of Tortilla, Whole, priced on both menus beside Half:
- * every size of both products then holds a price row on Tapas and on Terrace.
+ * {@link removalFixture} with a second variant of Tortilla, Whole, priced on both menus beside Half:
+ * every variant of both products then holds a price row on Tapas and on Terrace.
  */
 async function variantFixture() {
   const r = await removalFixture();
@@ -458,7 +458,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
   ];
 
   it.each(ways)(
-    "%s: both its rows go, every other size keeps its own, and both published menus read changed",
+    "%s: both its rows go, every other variant keeps its own, and both published menus read changed",
     async (_, makeInactive) => {
       const r = await variantFixture();
       expect(await menusPricing(r.tortillaHalf)).toEqual(bothMenus(r));
@@ -478,11 +478,11 @@ describe("a variant made Inactive loses its price on every menu", () => {
 
   it("is left out of each menu's prices, and comes back to both, with no price of its own, when made Active again", async () => {
     const r = await variantFixture();
-    const sizesPriced = async (menuId: string) =>
+    const variantsPriced = async (menuId: string) =>
       (await app((tx) => menuPrices(tx, menuId)))
         .find((row) => row.productId === r.tortilla)!
         .variants.map(({ variantId, price, active }) => ({ variantId, price, active }));
-    const sizesOffered = async (menuId: string) =>
+    const variantsOffered = async (menuId: string) =>
       (await app((tx) => listMenuOffers(tx, [menuId])))
         .find((offer) => offer.productId === r.tortilla)!
         .variants.map(({ id, menuPrice }) => ({ id, menuPrice }));
@@ -493,10 +493,10 @@ describe("a variant made Inactive loses its price on every menu", () => {
       await setProductVariants(tx, r.tortilla, [whole!], "en");
     });
     for (const menuId of [r.tapas, r.terrace]) {
-      expect(await sizesPriced(menuId)).toEqual([
+      expect(await variantsPriced(menuId)).toEqual([
         { variantId: r.tortillaWhole, price: "6.00", active: true },
       ]);
-      expect(await sizesOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
+      expect(await variantsOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
     }
 
     await app(async (tx) => {
@@ -510,11 +510,11 @@ describe("a variant made Inactive loses its price on every menu", () => {
     });
 
     for (const menuId of [r.tapas, r.terrace]) {
-      expect(await sizesPriced(menuId)).toEqual([
+      expect(await variantsPriced(menuId)).toEqual([
         { variantId: r.tortillaWhole, price: "6.00", active: true },
         { variantId: r.tortillaHalf, price: null, active: true },
       ]);
-      expect(await sizesOffered(menuId)).toEqual([
+      expect(await variantsOffered(menuId)).toEqual([
         { id: r.tortillaWhole, menuPrice: "6.00" },
         { id: r.tortillaHalf, menuPrice: null },
       ]);

@@ -857,7 +857,7 @@ describe("a menu's prices", () => {
       [f.large, true],
       [small, false],
     ]);
-    // A sold-out size does not make the product read sold out.
+    // A sold-out variant does not make the product read sold out.
     expect(row!.available).toBe(true);
   });
 
@@ -919,7 +919,7 @@ describe("a menu's prices", () => {
       f.large,
       small,
     ]);
-    // Dinner sets nothing for any size, and lists no Inactive Jug either.
+    // Dinner sets nothing for any variant, and lists no Inactive Jug either.
     expect(dinnerRow!.variants).toEqual([
       { variantId: f.large, price: null, active: true, available: true },
       { variantId: small, price: null, active: true, available: true },

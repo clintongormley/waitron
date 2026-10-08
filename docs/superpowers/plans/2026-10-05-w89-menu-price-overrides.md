@@ -1,5 +1,8 @@
 # One editable price override per menu row (W89) — implementation plan
 
+> Naming update, 2026-10-08 (A354): current menu-price code calls product variants “variants”;
+> the old `size` names below record the names used when this plan was written.
+
 > 2026-10-07, A357: the full variant names in this historical plan are superseded by relative names. Standalone lines pair the product and variant; see [Products](../../developers/products.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development`

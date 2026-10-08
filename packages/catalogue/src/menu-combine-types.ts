@@ -16,7 +16,7 @@ export interface CombinedOffer {
   price: Setting<Decimal>;
   variants: {
     variantId: string;
-    price: Setting<Decimal> & { level: "size" | "product" };
+    price: Setting<Decimal> & { level: "variant" | "product" };
   }[];
 }
 export interface CombineInput {

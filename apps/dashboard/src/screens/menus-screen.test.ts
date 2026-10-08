@@ -4542,7 +4542,7 @@ async function commitPrice(el: MenusScreen, key: string, value: string): Promise
   await el.updateComplete;
 }
 
-/** Opens a product's sizes in the prices table. */
+/** Opens a product's variants in the prices table. */
 async function expandPrices(el: MenusScreen, key: string): Promise<void> {
   const table = prices(el).shadowRoot!.querySelector<Table>("wt-data-table")!;
   await table.updateComplete;
@@ -4622,7 +4622,7 @@ it("reads another menu's prices when the person opens it", async () => {
   await vi.waitFor(() => expect(prices(el).rows).toEqual([]));
 });
 
-it("writes each field on its own, a product's through its menu item and a size's through its own route, reading the prices again after each", async () => {
+it("writes each field on its own, a product's through its menu item and a variant's through its own route, reading the prices again after each", async () => {
   const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
   const el = await mountPrices(client);
   await expandPrices(el, "mi-lemonade");
@@ -4641,7 +4641,7 @@ it("writes each field on its own, a product's through its menu item and a size's
   await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
 });
 
-it("writes a product without sizes through its menu item alone", async () => {
+it("writes a product without variants through its menu item alone", async () => {
   const client = api();
   const el = await mountPrices(client);
   await commitPrice(el, "mi-burger", "11.00");
@@ -4652,7 +4652,7 @@ it("writes a product without sizes through its menu item alone", async () => {
   expect(client.setMenuVariantPrice).not.toHaveBeenCalled();
 });
 
-it("writes only the product's price when only its field changed on a product with sizes", async () => {
+it("writes only the product's price when only its field changed on a product with variants", async () => {
   const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
   const el = await mountPrices(client);
   await commitPrice(el, "mi-lemonade", "2.60");
@@ -4664,7 +4664,7 @@ it("writes only the product's price when only its field changed on a product wit
   expect(writeCalls(client)).toEqual(["updateMenuItem"]);
 });
 
-it("writes only that size's price when only a size's field changed, then reads the prices again", async () => {
+it("writes only that variant's price when only a variant's field changed, then reads the prices again", async () => {
   const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
   const el = await mountPrices(client);
   await expandPrices(el, "mi-lemonade");
@@ -4958,7 +4958,7 @@ it("reports beside the Structure tab a save refused after Back left the Price ov
   expect(prices(el).outcome).toBeNull();
 });
 
-it("puts a size's refused price under that size's field, writing nothing else and reading no prices", async () => {
+it("puts a variant's refused price under that variant's field, writing nothing else and reading no prices", async () => {
   const client = api({
     listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
     setMenuVariantPrice: vi
@@ -4984,7 +4984,7 @@ it("puts a size's refused price under that size's field, writing nothing else an
   expect(client.getMenuPrices.mock.calls.length).toBe(reads);
 });
 
-it("names the product and its size beside the list when a size's refusal lands after the person left its menu", async () => {
+it("names the product and its variant beside the list when a variant's refusal lands after the person left its menu", async () => {
   const pending = deferred<void>();
   const client = api({
     listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),

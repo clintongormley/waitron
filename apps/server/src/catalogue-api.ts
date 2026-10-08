@@ -354,9 +354,9 @@ const runCreateProduct = createErrorBoundary(
   { ...STATUS, "catalogue.not_found": 400 },
   "catalogue.failed",
 );
-// The single-size route names its size in the path, so an unknown one is a 404; the whole-list
-// PUT names sizes in its body, and an unknown one there stays a 400.
-const runSize = createErrorBoundary(
+// The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
+// PUT names variants in its body, and an unknown one there stays a 400.
+const runVariant = createErrorBoundary(
   { ...STATUS, "product.variant_not_found": 404 },
   "catalogue.failed",
 );
@@ -1164,7 +1164,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.patch("/management-api/catalogues/:id/items/:itemId/variants/:variantId", (c) =>
-    runSize(c, log, async () => {
+    runVariant(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");

@@ -1834,7 +1834,7 @@ describe("till-menu-browser", () => {
     });
 
     it("keeps a product with only some variants sold out orderable, beside one with all sold out, greyed", async () => {
-      const size = (id: string, available: boolean) => ({
+      const variant = (id: string, available: boolean) => ({
         ...sellingValuesOf(cafe),
         id,
         name: id,
@@ -1843,9 +1843,9 @@ describe("till-menu-browser", () => {
         available,
       });
       const mixed = product("tinto", "Tinto", {
-        variants: [size("125", false), size("175", true)],
+        variants: [variant("125", false), variant("175", true)],
       });
-      const allGone = product("cava", "Cava", { variants: [size("copa", false)] });
+      const allGone = product("cava", "Cava", { variants: [variant("copa", false)] });
       const { el, store } = await mount({
         menu: lunch({ structure: { members: [member("cafe"), member("tinto"), member("cava")] } }),
         products: [cafe, mixed, allGone],

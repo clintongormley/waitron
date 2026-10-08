@@ -308,7 +308,7 @@ it.each([
   { locale: "en-GB", sign: "€", range: "€3.00 – €3.75" },
   { locale: "es-ES", sign: "€", range: "3,00\u00a0€ – 3,75\u00a0€" },
 ])(
-  "gives every row's field, a size's too, the locale $locale, drawing the euro sign in it, and names the range in the hint the way $locale writes it",
+  "gives every row's field, a variant's too, the locale $locale, drawing the euro sign in it, and names the range in the hint the way $locale writes it",
   async ({ locale, sign, range }) => {
     setLocale(locale);
     try {
@@ -352,7 +352,7 @@ it("lists each product once with its price override, and where it appears by the
   expect(column(el, "category")).toEqual(["Principales", "Bebidas", "Bebidas › Cerveza"]);
   const keys = ["mi-burger", "mi-lemonade", "mi-lager"];
   expect(keys.map((key) => override(el, key).value)).toEqual(["", "2.50", ""]);
-  // Lemonade left blank would charge its sizes' prices: 3.00 for the small, following the
+  // Lemonade left blank would charge its variants' prices: 3.00 for the small, following the
   // product's own price, and the large's 3.75 on this menu.
   expect(keys.map((key) => override(el, key).placeholder)).toEqual([
     "12.00",
@@ -374,9 +374,9 @@ it("puts each placement on its own line and paints the notes muted, through the 
     placements[0]!.getBoundingClientRect().top,
   );
   expect(getComputedStyle(lemonadeRow.querySelector("[part~=note]")!).color).toBe(muted);
-  const sizesNote = cell(el, "override", "mi-lemonade").querySelector("[part~=muted]")!;
-  expect(text(sizesNote)).toBe(t("menu_prices.variant_overrides"));
-  expect(getComputedStyle(sizesNote).color).toBe(muted);
+  const variantsNote = cell(el, "override", "mi-lemonade").querySelector("[part~=muted]")!;
+  expect(text(variantsNote)).toBe(t("menu_prices.variant_overrides"));
+  expect(getComputedStyle(variantsNote).color).toBe(muted);
   expect(muted).not.toBe(getComputedStyle(row(el, "mi-burger")!).color);
 });
 
@@ -727,7 +727,7 @@ it.each(["es-ES", "en"])(
   },
 );
 
-it("edits each row's price in its own field, a size following the price typed for its product, and each Enter sends that field alone", async () => {
+it("edits each row's price in its own field, a variant following the price typed for its product, and each Enter sends that field alone", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -817,7 +817,7 @@ it("sends nothing for Enter on a field nobody changed, reading an emptied field 
   expect(heard).not.toHaveBeenCalled();
 });
 
-it("compares by amount, so 2.5 typed over 2.50 sends nothing, and keeps each size's typed text on that size when the sizes are read back in another order", async () => {
+it("compares by amount, so 2.5 typed over 2.50 sends nothing, and keeps each variant's typed text on that variant when the variants are read back in another order", async () => {
   const reversed = { ...lemonade, variants: [...lemonade.variants].reverse() };
   const el = await mount({ rows: [burger, reversed, lager] });
   toggleOf(el, "mi-lemonade")!.click();
@@ -866,7 +866,7 @@ it("sends only the field committed, with the price stored when it was sent, what
   expect(override(el, "mi-lemonade:v-small").value).toBe("1.00");
 });
 
-it("sends the product's field alone when only its price changed on a product with sizes", async () => {
+it("sends the product's field alone when only its price changed on a product with variants", async () => {
   const el = await mount();
   const heard = priceSaves(el);
   await typeIn(el, "mi-lemonade", "2.60");
@@ -881,7 +881,7 @@ it("sends the product's field alone when only its price changed on a product wit
   });
 });
 
-it("sends a size's field alone when only that size's price changed", async () => {
+it("sends a variant's field alone when only that variant's price changed", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -936,7 +936,7 @@ it.each(["-1", "2.555", "abc", "007"])(
   },
 );
 
-it("refuses a size's malformed price beside that size's field alone", async () => {
+it("refuses a variant's malformed price beside that variant's field alone", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -1052,7 +1052,7 @@ it("shows a hidden field's refusal again only when the host refuses that field a
   expect(override(el, "mi-lemonade").error).toBe("Refused again");
 });
 
-it("moves focus to a size's field when a refusal naming it arrives, from another row's field", async () => {
+it("moves focus to a variant's field when a refusal naming it arrives, from another row's field", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -1064,7 +1064,7 @@ it("moves focus to a size's field when a refusal naming it arrives, from another
   expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input"));
 });
 
-it("opens a collapsed product to show and focus its size's field when a refusal naming that size arrives, which the outcome message also says", async () => {
+it("opens a collapsed product to show and focus its variant's field when a refusal naming that variant arrives, which the outcome message also says", async () => {
   setLocale("en-GB");
   try {
     const el = await mount();
@@ -1137,7 +1137,7 @@ it("shows a stored price read again while the field holds nothing typed", async 
   expect(override(el, "mi-lemonade").value).toBe("2.60");
 });
 
-it("names a size the product list does not hold as missing, in its row and its field's label", async () => {
+it("names a variant the product list does not hold as missing, in its row and its field's label", async () => {
   const el = await mount({ products: [] });
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -1235,7 +1235,7 @@ it("redraws the table for a keystroke only when it changes what the table shows"
   await table(el).updateComplete;
   expect(override(el, "mi-burger").value).toBe("115");
   expect(draws).not.toHaveBeenCalled();
-  // A size following its product shows the product's typed price.
+  // A variant following its product shows the product's typed price.
   await userEvent.fill(lemonade, "3.20");
   await el.updateComplete;
   await table(el).updateComplete;
@@ -1256,7 +1256,7 @@ it("puts the stored price back on Escape after typing that redrew nothing", asyn
   }
 });
 
-it("saves a size's field alone, and a size following its product hints the product's typed price", async () => {
+it("saves a variant's field alone, and a variant following its product hints the product's typed price", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -1277,7 +1277,7 @@ it("saves a size's field alone, and a size following its product hints the produ
   });
 });
 
-it("shows the price typed for a product as a following size's placeholder, and the inherited one once emptied", async () => {
+it("shows the price typed for a product as a following variant's placeholder, and the inherited one once emptied", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -1775,7 +1775,7 @@ it("keeps a price changed since its refusal once nothing says it was refused", a
   expect(override(el, "mi-burger").value).toBe("11.50");
 });
 
-it("treats an unfinished product price as no change for its sizes' hints", async () => {
+it("treats an unfinished product price as no change for its variants' hints", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -2364,7 +2364,7 @@ describe("variants", () => {
   });
 });
 
-it("sends the product's field and a size's field as two saves, one field each, on leaving each", async () => {
+it("sends the product's field and a variant's field as two saves, one field each, on leaving each", async () => {
   const el = await mount({ rows: [lemonade] });
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -2417,14 +2417,14 @@ const clashPrice = {
 function clashRow(source = lager, price = clashPrice): MenuPriceRow {
   return { ...source, combined: { ...source.combined, price } };
 }
-/** Lemonade at its own 2.50, its small size's sources disagreeing at size level. */
+/** Lemonade at its own 2.50, its small variant's sources disagreeing at variant level. */
 function variantClashRow(price = clashPrice): MenuPriceRow {
   return {
     ...lemonade,
     combined: {
       ...lemonade.combined,
       variants: lemonade.combined.variants.map((v, at) =>
-        at === 0 ? { ...v, price: { ...price, level: "size" } } : v,
+        at === 0 ? { ...v, price: { ...price, level: "variant" } } : v,
       ),
     },
   } as MenuPriceRow;
@@ -2446,12 +2446,12 @@ function clashPriceIn(menuName: string): MenuPriceRow["combined"]["price"] {
 const clashSentences = {
   "en-GB": {
     prices: "Price set to €3.00 in this menu's sections, €3.50 in Drinks.",
-    sizes: "Variant prices disagree. Small: €3.00 in this menu's sections, €3.50 in Drinks.",
+    variants: "Variant prices disagree. Small: €3.00 in this menu's sections, €3.50 in Drinks.",
     undecided: "Price set to €3.00 in this menu's sections, no single price in Drinks.",
   },
   "es-ES": {
     prices: "Precio fijado: 3,00 € en las secciones de esta carta, 3,50 € en Drinks.",
-    sizes:
+    variants:
       "Los precios de las variantes discrepan. Small: 3,00 € en las secciones de esta carta, 3,50 € en Drinks.",
     undecided:
       "Precio fijado: 3,00 € en las secciones de esta carta, sin un precio único en Drinks.",
@@ -2466,7 +2466,7 @@ const undecidedPrice = {
 } as unknown as MenuPriceRow["combined"]["price"];
 
 it.each(["en-GB", "es-ES"])(
-  "shows a product's and a size's price field whole inside the table's visible box at phone width, and the page does not scroll sideways (%s)",
+  "shows a product's and a variant's price field whole inside the table's visible box at phone width, and the page does not scroll sideways (%s)",
   async (locale) => {
     const width = window.innerWidth,
       height = window.innerHeight;
@@ -2475,7 +2475,7 @@ it.each(["en-GB", "es-ES"])(
       await page.viewport(390, 800);
       await vi.waitFor(() => expect(window.innerWidth).toBe(390));
       const long = "Cerveza artesana de trigo sin filtrar";
-      const longSize = "Media pinta de limonada natural";
+      const longVariant = "Media pinta de limonada natural";
       const menuName = "Carta de bebidas de la terraza de verano";
       const price = clashPriceIn(menuName);
       const el = await mount({
@@ -2483,7 +2483,7 @@ it.each(["en-GB", "es-ES"])(
         products: [
           {
             ...lemonadeProduct,
-            variants: [variant("v-small", longSize, null), variant("v-large", "Large", "3.40")],
+            variants: [variant("v-small", longVariant, null), variant("v-large", "Large", "3.40")],
           } as unknown as Product,
         ],
       });
@@ -2491,7 +2491,7 @@ it.each(["en-GB", "es-ES"])(
       await table(el).updateComplete;
       expect(text(row(el, "mi-lager")!.querySelector('[part="name"]'))).toBe(long);
       expect(text(row(el, "mi-lemonade:v-small")!.querySelector('[part="variant-name"]'))).toBe(
-        longSize,
+        longVariant,
       );
       const scroller = table(el)
         .shadowRoot.querySelector<HTMLElement>(".scroll")!
@@ -2644,7 +2644,7 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-/** A product row with two sizes priced `low` and `high`, so its empty field shows the range. */
+/** A product row with two variants priced `low` and `high`, so its empty field shows the range. */
 function rangedRow(low: string, high: string): MenuPriceRow {
   return {
     ...lemonade,
@@ -2827,12 +2827,12 @@ it("measures the row menu's column when the table resizes, and not on each keyst
   }
 });
 
-it.each(["product", "size"])(
+it.each(["product", "variant"])(
   "drops the clash sentence while a valid unsaved price fills a clashing %s row, and shows it again for text that is no price and on Escape",
   async (kind) => {
     const el = await mount({ rows: [kind === "product" ? clashRow(lager) : variantClashRow()] });
     const key = kind === "product" ? "mi-lager" : "mi-lemonade:v-small";
-    if (kind === "size") {
+    if (kind === "variant") {
       toggleOf(el, "mi-lemonade")!.click();
       await table(el).updateComplete;
     }
@@ -2887,7 +2887,7 @@ it.each(["", "-1", "abc"])(
   },
 );
 
-it("offers one labelled price override field per product and per size, the inherited price as a blank one's placeholder", async () => {
+it("offers one labelled price override field per product and per variant, the inherited price as a blank one's placeholder", async () => {
   setLocale("en-GB");
   try {
     const el = await mount();
@@ -3037,10 +3037,10 @@ it("shows a clash honestly: no price in the field, a red sentence under it namin
 });
 
 it.each([
-  ["en-GB", clashSentences["en-GB"].sizes],
-  ["es-ES", clashSentences["es-ES"].sizes],
+  ["en-GB", clashSentences["en-GB"].variants],
+  ["es-ES", clashSentences["es-ES"].variants],
 ])(
-  "sends a product row whose only clash is a size's to that size, offering no price of its own (%s)",
+  "sends a product row whose only clash is a variant's to that variant, offering no price of its own (%s)",
   async (locale, words) => {
     setLocale(locale);
     try {
@@ -3052,7 +3052,7 @@ it.each([
       expect(text(cell(el, "override", "mi-lemonade").querySelector("[part~=clash]"))).toBe(words);
       toggleOf(el, "mi-lemonade")!.click();
       await table(el).updateComplete;
-      // The size itself is the one offered a price.
+      // The variant itself is the one offered a price.
       expect(override(el, "mi-lemonade:v-small").placeholder).toBe(
         t("menu_prices.clash_placeholder"),
       );
@@ -3090,7 +3090,7 @@ describe.each(["en-GB", "es-ES"] as const)("the clash spelled out (%s)", (locale
     expect(hintOf(override(el, "mi-lager"))).not.toBe(words.prices);
   });
 
-  it("names each place's price for a clashing size, and drops it while a price is typed", async () => {
+  it("names each place's price for a clashing variant, and drops it while a price is typed", async () => {
     const el = await mount({ rows: [variantClashRow()] });
     toggleOf(el, "mi-lemonade")!.click();
     await table(el).updateComplete;
@@ -3101,9 +3101,9 @@ describe.each(["en-GB", "es-ES"] as const)("the clash spelled out (%s)", (locale
     expect(hintOf(override(el, "mi-lemonade:v-small"))).not.toBe(words.prices);
   });
 
-  it("names each clashing size and its places' prices on its product's row", async () => {
+  it("names each clashing variant and its places' prices on its product's row", async () => {
     const el = await mount({ rows: [variantClashRow()] });
-    await expectClashSentence(el, "mi-lemonade", words.sizes);
+    await expectClashSentence(el, "mi-lemonade", words.variants);
   });
 
   it("says where no single price was decided", async () => {
@@ -3133,7 +3133,7 @@ it("drops a product's clash sentence once this menu's saved price decides it, an
   expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
 });
 
-it("marks a product whose saved price settled the clash a following size charges once its field is emptied, so the clash shows with the product closed", async () => {
+it("marks a product whose saved price settled the clash a following variant charges once its field is emptied, so the clash shows with the product closed", async () => {
   const settled = {
     state: "decided",
     value: "2.20",
@@ -3178,7 +3178,7 @@ it("drops a product's clash sentence while a price is typed for it, and not for 
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
 });
 
-it("drops a size's clash sentence once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
+it("drops a variant's clash sentence once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
   const source = variantClashRow();
   const resolved = {
     ...source,
@@ -3193,7 +3193,7 @@ it("drops a size's clash sentence once this menu's saved price decides it, and s
                 value: "3.20",
                 source: { kind: "own" },
                 otherwise: clashPrice,
-                level: "size",
+                level: "variant",
               },
             }
           : v,
@@ -3221,8 +3221,8 @@ it("names its variants' clash on a product whose own clashing price is never sol
       },
     ],
   });
-  // Its own price is never sold: each Active size's price comes from its size's own sources.
-  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].sizes);
+  // Its own price is never sold: each Active variant's price comes from its variant's own sources.
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].variants);
   expect(override(el, "mi-lemonade").placeholder).toBe("—");
   await allPrices(el);
   toggleOf(el, "mi-lemonade")!.click();
@@ -3230,11 +3230,11 @@ it("names its variants' clash on a product whose own clashing price is never sol
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
   await typeIn(el, "mi-lemonade", "2.80");
   await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].sizes);
+  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].variants);
   expect(override(el, "mi-lemonade").placeholder).toBe("—");
 });
 
-it("shows a size following its clashing product the price typed for the product, and the clash again once that field is emptied", async () => {
+it("shows a variant following its clashing product the price typed for the product, and the clash again once that field is emptied", async () => {
   setLocale("en-GB");
   try {
     const source = {
@@ -3251,18 +3251,18 @@ it("shows a size following its clashing product the price typed for the product,
     const el = await mount({ rows: [source] });
     toggleOf(el, "mi-lemonade")!.click();
     await table(el).updateComplete;
-    const size = "mi-lemonade:v-small";
-    expect(override(el, size).placeholder).toBe("Set a price");
-    expect(clashMarker(el, size)).toBe(clashSentences["en-GB"].prices);
+    const variant = "mi-lemonade:v-small";
+    expect(override(el, variant).placeholder).toBe("Set a price");
+    expect(clashMarker(el, variant)).toBe(clashSentences["en-GB"].prices);
     await typeIn(el, "mi-lemonade", "2.80");
     await table(el).updateComplete;
-    expect(override(el, size).placeholder).toBe("2.80");
-    expect(hintOf(override(el, size))).toBe("Leave it empty to use the inherited price, €2.80.");
-    expect(clashMarker(el, size)).toBe("");
+    expect(override(el, variant).placeholder).toBe("2.80");
+    expect(hintOf(override(el, variant))).toBe("Leave it empty to use the inherited price, €2.80.");
+    expect(clashMarker(el, variant)).toBe("");
     await typeIn(el, "mi-lemonade", "");
     await table(el).updateComplete;
-    expect(override(el, size).placeholder).toBe("Set a price");
-    expect(clashMarker(el, size)).toBe(clashSentences["en-GB"].prices);
+    expect(override(el, variant).placeholder).toBe("Set a price");
+    expect(clashMarker(el, variant)).toBe(clashSentences["en-GB"].prices);
   } finally {
     setLocale("es-ES");
   }
@@ -3477,7 +3477,7 @@ it("widens a field's end margin when a narrower window wraps the outcome message
   }
 });
 
-it("marks an Inactive size's clash on neither its own row nor its product's, as publishing leaves the size out", async () => {
+it("marks an Inactive variant's clash on neither its own row nor its product's, as publishing leaves the variant out", async () => {
   const row = variantClashRow();
   const el = await allPrices(
     await mount({
@@ -3499,7 +3499,7 @@ it("marks an Inactive size's clash on neither its own row nor its product's, as 
   expect(el.shadowRoot!.querySelector('[data-test="clash-message"]')).toBeNull();
 });
 
-it("keeps a disabled size under an Active product out of the product's range", async () => {
+it("keeps a disabled variant under an Active product out of the product's range", async () => {
   const el = await mount({
     rows: [
       {
@@ -3540,7 +3540,7 @@ it("opens the product page in the dashboard on a plain click, and leaves a modif
   expect(heard).toHaveBeenCalledOnce();
 });
 
-it("opens a size's own page from its row menu's Edit product", async () => {
+it("opens a variant's own page from its row menu's Edit product", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -3552,7 +3552,7 @@ it("opens a size's own page from its row menu's Edit product", async () => {
   expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "v-small" });
 });
 
-it("puts Edit product in each row's ⋮, in a pinned actions column, and opens the product, or a size's own page, by click and by keyboard", async () => {
+it("puts Edit product in each row's ⋮, in a pinned actions column, and opens the product, or a variant's own page, by click and by keyboard", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -3646,7 +3646,7 @@ it.each([
   ["en-GB", "Yes", "No"],
   ["es-ES", "Sí", "No"],
 ])(
-  "shows Available as Yes or No for a product and for a size, each by its own flag (%s)",
+  "shows Available as Yes or No for a product and for a variant, each by its own flag (%s)",
   async (locale, yes, no) => {
     setLocale(locale);
     try {
@@ -3674,7 +3674,7 @@ it.each([
   },
 );
 
-it("shows a sold-out size as No under an available product, and an available size as Yes under a sold-out one", async () => {
+it("shows a sold-out variant as No under an available product, and an available variant as Yes under a sold-out one", async () => {
   const el = await mount({
     rows: [
       {
@@ -3741,7 +3741,7 @@ it.each(["es-ES", "en-GB"])(
   },
 );
 
-it("sorts by Available, available first and then sold out, and keeps each product's sizes in the catalogue's order", async () => {
+it("sorts by Available, available first and then sold out, and keeps each product's variants in the catalogue's order", async () => {
   const el = await mount({
     rows: [
       { ...burger, available: false },
@@ -3814,7 +3814,7 @@ it("uses the server's variant price and fallback even when the catalogue differs
           value: "8.00",
           source: drinksSource,
           otherwise: null,
-          level: "size",
+          level: "variant",
         },
       })),
     },
@@ -3828,7 +3828,7 @@ it("uses the server's variant price and fallback even when the catalogue differs
   await table(el).updateComplete;
   expect(override(el, "mi-lemonade:v-small").placeholder).toBe("8.00");
 });
-it("gives a size following its product this menu's price as its placeholder, and the product the range its sizes would take", async () => {
+it("gives a variant following its product this menu's price as its placeholder, and the product the range its variants would take", async () => {
   const el = await mount({ rows: [lemonade] });
   table(el)
     .shadowRoot.querySelector<HTMLButtonElement>(
@@ -3871,7 +3871,7 @@ it("names the included menu's price, not the product's own, as what a blank fiel
 });
 
 it.each(["en-GB", "es-ES"])(
-  "shows a product's own price in its field, and, without one, says its menu prices are on its sizes (%s)",
+  "shows a product's own price in its field, and, without one, says its menu prices are on its variants (%s)",
   async (locale) => {
     setLocale(locale);
     try {
@@ -3982,7 +3982,7 @@ describe("without a switch of the menu's own", () => {
     ]);
   });
 
-  it("counts a size's own price toward the product's inherited range", async () => {
+  it("counts a variant's own price toward the product's inherited range", async () => {
     const el = await mount({ rows: [lemonade] });
     // The large's 3.75 on this menu is above the 3.00 the small inherits with the product blank.
     expect(hintOf(override(el, "mi-lemonade"))).toBe(
@@ -3998,7 +3998,7 @@ it("puts the prices table's Filters before its search, beside the rows on a wide
   await expectFiltersFirst(async () => table(await mount()), cleanupWidgets);
 });
 
-it("draws no help tooltip, and one row menu per drawn row in a pinned actions column, on a load holding a product clash and a size clash", async () => {
+it("draws no help tooltip, and one row menu per drawn row in a pinned actions column, on a load holding a product clash and a variant clash", async () => {
   const el = await allPrices(await mount({ rows: [clashRow(lager), variantClashRow()] }));
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
@@ -4030,7 +4030,7 @@ describe("the clash message and the Clashes filter", () => {
       price: { state: "decided", value: "2.20", source: { kind: "own" }, otherwise: clashPrice },
     } as MenuPriceRow["combined"],
   };
-  /** Lemonade with no price of this menu's own, its clash followed by both its sizes, as
+  /** Lemonade with no price of this menu's own, its clash followed by both its variants, as
    * `combineOffer` builds it. */
   function followedClashRow(): MenuPriceRow {
     const followed = { ...clashPrice, level: "product" };
@@ -4079,7 +4079,7 @@ describe("the clash message and the Clashes filter", () => {
       start: ["mi-lemonade"],
     },
     {
-      kind: "a size clash on one variant",
+      kind: "a variant clash on one variant",
       rows: () => [burger, variantClashRow()],
       count: 1,
       start: ["mi-lemonade"],
@@ -4116,13 +4116,13 @@ describe("the clash message and the Clashes filter", () => {
     },
   );
 
-  it("under Clashes keeps a size clash's product and, opened, only its clashing size", async () => {
+  it("under Clashes keeps a variant clash's product and, opened, only its clashing variant", async () => {
     const el = await mount({ rows: [burger, variantClashRow()] });
     await expand(el, "mi-lemonade");
     expect(shown(el)).toEqual(["mi-lemonade", "mi-lemonade:v-small"]);
   });
 
-  it("under Clashes keeps both sizes that follow their product's clash, once it is opened", async () => {
+  it("under Clashes keeps both variants that follow their product's clash, once it is opened", async () => {
     const el = await mount({ rows: [burger, followedClashRow()] });
     await expand(el, "mi-lemonade");
     expect(shown(el)).toEqual(["mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"]);
@@ -4422,12 +4422,12 @@ describe("the clash message and the Clashes filter", () => {
 });
 
 describe("the clash count, marks and Clashes filter read what publishing refuses", () => {
-  const decidedSize = (value: string) => ({
+  const decidedVariant = (value: string) => ({
     state: "decided",
     value,
     source: { kind: "product" },
     otherwise: null,
-    level: "size",
+    level: "variant",
   });
   const decidedPrice = {
     state: "decided",
@@ -4435,11 +4435,11 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     source: { kind: "product" },
     otherwise: null,
   };
-  /** A product this menu sets no price for, each size's combined price as given. */
+  /** A product this menu sets no price for, each variant's combined price as given. */
   function shapeRow(
     id: string,
     price: unknown,
-    sizes: { variantId: string; active: boolean; price: unknown }[],
+    variants: { variantId: string; active: boolean; price: unknown }[],
     active = true,
   ): MenuPriceRow {
     return {
@@ -4455,9 +4455,9 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
       combined: {
         productId: `p-${id}`,
         price,
-        variants: sizes.map(({ variantId, price }) => ({ variantId, price })),
+        variants: variants.map(({ variantId, price }) => ({ variantId, price })),
       },
-      variants: sizes.map(({ variantId, active }) => ({
+      variants: variants.map(({ variantId, active }) => ({
         variantId,
         price: null,
         active,
@@ -4470,18 +4470,18 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     ii: () => variantClashRow(),
     iii: () =>
       shapeRow("cola", clashPrice, [
-        { variantId: "v-c1", active: true, price: decidedSize("2.00") },
-        { variantId: "v-c2", active: true, price: decidedSize("2.40") },
+        { variantId: "v-c1", active: true, price: decidedVariant("2.00") },
+        { variantId: "v-c2", active: true, price: decidedVariant("2.40") },
       ]),
     iv: () => clashRow({ ...lager, menuItemId: "mi-cider", productId: "p-cider" }, clashPrice),
     v: () =>
       shapeRow("tonic", decidedPrice, [
-        { variantId: "v-t1", active: false, price: { ...clashPrice, level: "size" } },
-        { variantId: "v-t2", active: true, price: decidedSize("2.00") },
+        { variantId: "v-t1", active: false, price: { ...clashPrice, level: "variant" } },
+        { variantId: "v-t2", active: true, price: decidedVariant("2.00") },
       ]),
     vi: () =>
       shapeRow("juice", clashPrice, [
-        { variantId: "v-j1", active: false, price: decidedSize("2.00") },
+        { variantId: "v-j1", active: false, price: decidedVariant("2.00") },
       ]),
   };
   const inactiveCider = () => ({ ...shapes.iv(), active: false });
@@ -4538,7 +4538,7 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     });
   });
 
-  it("(ii) an Active size's clash: counted, its product and size marked and under Clashes", async () => {
+  it("(ii) an Active variant's clash: counted, its product and variant marked and under Clashes", async () => {
     await check([burger, shapes.ii()], {
       count: 1,
       marked: ["mi-lemonade", "mi-lemonade:v-small"],
@@ -4546,7 +4546,7 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     });
   });
 
-  it("(iii) a product whose own price clashes but every Active size is priced at size level: nothing", async () => {
+  it("(iii) a product whose own price clashes but every Active variant is priced at variant level: nothing", async () => {
     await check([burger, shapes.iii()], { count: 0, marked: [], underClashes: [] });
   });
 
@@ -4554,11 +4554,11 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     await check([burger, inactiveCider()], { count: 0, marked: [], underClashes: [] });
   });
 
-  it("(v) an Inactive size's clash under an Active product: nothing", async () => {
+  it("(v) an Inactive variant's clash under an Active product: nothing", async () => {
     await check([burger, shapes.v()], { count: 0, marked: [], underClashes: [] });
   });
 
-  it("(vi) a product whose every size is Inactive and whose own price clashes: counted and marked on its own price", async () => {
+  it("(vi) a product whose every variant is Inactive and whose own price clashes: counted and marked on its own price", async () => {
     await check([burger, shapes.vi()], {
       count: 1,
       marked: ["mi-juice"],

@@ -684,7 +684,7 @@ async function offersOn(
 
 /**
  * Every product the menu reaches, once each in `listMenuOffers`' order, with its own price, its
- * combined decisions and its Active sizes. Sold-out ones are listed.
+ * combined decisions and its Active variants. Sold-out ones are listed.
  */
 export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
   const rootSectionId = await requireMenuRoot(tx, menuId);

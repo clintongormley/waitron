@@ -43,7 +43,7 @@ route and 400 on another: `service_zone.not_found` for `GET /api/service-zones/:
 and for a zone a body names. A boundary (`createErrorBoundary`,
 `packages/server-kit/src/error-boundary.ts`) answers the status its table gives a code, and 400
 for a code its table leaves out; a route that needs another status for one code gets a second
-boundary over a spread of the table, as `runSize` in `apps/server/src/catalogue-api.ts` does.
+boundary over a spread of the table, as `runVariant` in `apps/server/src/catalogue-api.ts` does.
 On 2026-10-08 `git grep -E 'status (===|!==) ?[0-9]{3}'` over the client trees found three
 status reads: the till's 403 check (`department-transfer-monitor.ts`), the setup app's 404 read as
 "already set up" (`setup-app.ts`) and the menus screen's `!== 200`; refusals are told apart by

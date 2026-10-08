@@ -1,5 +1,8 @@
 # A394 — refusal statuses by one rule: the audit and its follow-ups
 
+> Naming update, 2026-10-08 (A354): current menu-price code calls product variants “variants”;
+> the old `size` names below record the names used when this plan was written.
+
 The audit was read, not run (2026-10-08). The owner's rule is in `docs/developers/conventions-data.md` → "A refusal's HTTP status says what was wrong". Each follow-up below is one pull request. Appendices A–C keep the per-route rows the three readers recorded.
 
 

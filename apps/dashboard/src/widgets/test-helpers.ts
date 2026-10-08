@@ -377,7 +377,7 @@ export function combinedFixture(
         variantId: v.variantId,
         price: {
           ...(v.price === null ? fallback : decided(v.price as Decimal, "own", fallback)),
-          level: v.price !== null || catalogue !== null ? "size" : "product",
+          level: v.price !== null || catalogue !== null ? "variant" : "product",
         },
       };
     }),

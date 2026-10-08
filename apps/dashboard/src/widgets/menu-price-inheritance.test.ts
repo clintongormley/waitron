@@ -5,8 +5,8 @@ import type { MenuPriceRow, Setting } from "../api/client.js";
 import {
   followsClash,
   productInherited,
-  sizeClash,
-  sizesInheritedFrom,
+  variantClash,
+  variantsInheritedFrom,
   variantInherited,
   variantInheritedFrom,
   withoutOwn,
@@ -198,13 +198,13 @@ const productClash = lemonadeOn({}, { price: "3.50" });
 /** This menu's own 2.50 sits over that clash. */
 const ownOverClash = lemonadeOn({ price: "2.50" }, { price: "3.50" });
 /** Small's own 2.20 sits over that clash. */
-const sizeOwnOverClash = lemonadeOn({ variants: { "v-small": "2.20" } }, { price: "3.50" });
+const variantOwnOverClash = lemonadeOn({ variants: { "v-small": "2.20" } }, { price: "3.50" });
 /** Small's own 2.20 sits over its product's own 2.50. */
-const sizeOwnOverParent = lemonadeOn({ price: "2.50", variants: { "v-small": "2.20" } }, {});
+const variantOwnOverParent = lemonadeOn({ price: "2.50", variants: { "v-small": "2.20" } }, {});
 /** Large's own price clashes (3.40 here, 3.90 on Drinks); the product's price is decided. */
-const sizeLevelClash = lemonadeOn({ price: "2.50" }, { variants: { "v-large": "3.90" } });
+const variantLevelClash = lemonadeOn({ price: "2.50" }, { variants: { "v-large": "3.90" } });
 
-const sizeOf = (row: MenuPriceRow, variantId: string) =>
+const variantOf = (row: MenuPriceRow, variantId: string) =>
   row.combined.variants.find((v) => v.variantId === variantId)!.price;
 
 function withInactive(row: MenuPriceRow, ...variantIds: string[]): MenuPriceRow {
@@ -220,29 +220,32 @@ describe("the clash rows", () => {
   it("have the shapes combineOffer gives", () => {
     expect(lagerClash.combined.price.state).toBe("clash");
     expect(productClash.combined.price.state).toBe("clash");
-    expect(sizeOf(productClash, "v-small")).toMatchObject({ state: "clash", level: "product" });
-    expect(sizeOf(productClash, "v-large")).toMatchObject({ state: "decided", value: "3.40" });
+    expect(variantOf(productClash, "v-small")).toMatchObject({ state: "clash", level: "product" });
+    expect(variantOf(productClash, "v-large")).toMatchObject({ state: "decided", value: "3.40" });
     expect(ownOverClash.combined.price).toMatchObject({
       state: "decided",
       value: "2.50",
       source: { kind: "own" },
       otherwise: { state: "clash" },
     });
-    expect(sizeOf(sizeOwnOverClash, "v-small")).toMatchObject({
+    expect(variantOf(variantOwnOverClash, "v-small")).toMatchObject({
       state: "decided",
       value: "2.20",
       source: { kind: "own" },
       otherwise: { state: "clash" },
-      level: "size",
+      level: "variant",
     });
-    expect(sizeOf(sizeOwnOverParent, "v-small")).toMatchObject({
+    expect(variantOf(variantOwnOverParent, "v-small")).toMatchObject({
       value: "2.20",
       source: { kind: "own" },
       otherwise: { state: "decided", value: "2.50", source: { kind: "parent" } },
-      level: "size",
+      level: "variant",
     });
-    expect(sizeLevelClash.combined.price.state).toBe("decided");
-    expect(sizeOf(sizeLevelClash, "v-large")).toMatchObject({ state: "clash", level: "size" });
+    expect(variantLevelClash.combined.price.state).toBe("decided");
+    expect(variantOf(variantLevelClash, "v-large")).toMatchObject({
+      state: "clash",
+      level: "variant",
+    });
   });
 });
 
@@ -250,19 +253,19 @@ describe("productInherited", () => {
   it.each([
     ["burger, with no override", burger, range("12.00")],
     ["steak, past its own 18.00", steak, range("20.00")],
-    ["lemonade, a following size and a size's own price", lemonade, range("3.00", "3.75")],
-    ["wine, counting each size's own price", wine, range("7.00", "15.00")],
-    ["juice, a size's own price and a catalogue size price", juice, range("3.50", "5.00")],
-    ["cider, a catalogue size price and a following size", cider, range("4.00", "4.50")],
+    ["lemonade, a following variant and a variant's own price", lemonade, range("3.00", "3.75")],
+    ["wine, counting each variant's own price", wine, range("7.00", "15.00")],
+    ["juice, a variant's own price and a catalogue variant price", juice, range("3.50", "5.00")],
+    ["cider, a catalogue variant price and a following variant", cider, range("4.00", "4.50")],
   ])("%s", (_, row, expected) => {
     expect(productInherited(row)).toEqual(expected);
   });
 
-  it("leaves an Inactive size out of the range", () => {
+  it("leaves an Inactive variant out of the range", () => {
     expect(productInherited(withInactive(lemonade, "v-large"))).toEqual(range("3.00"));
   });
 
-  it("gives the product's own inherited price when it has no Active size", () => {
+  it("gives the product's own inherited price when it has no Active variant", () => {
     const allInactive = withInactive(lemonade, "v-small", "v-large");
     expect(productInherited(allInactive)).toEqual(range("3.00"));
     const noOwn = {
@@ -272,11 +275,11 @@ describe("productInherited", () => {
     expect(productInherited(noOwn)).toEqual(range("3.00"));
   });
 
-  it("is a clash when a product without sizes clashes", () => {
+  it("is a clash when a product without variants clashes", () => {
     expect(productInherited(lagerClash)).toEqual(CLASH);
   });
 
-  it("is a clash when the product's price clashes and a size follows it", () => {
+  it("is a clash when the product's price clashes and a variant follows it", () => {
     expect(productInherited(productClash)).toEqual(CLASH);
   });
 
@@ -284,16 +287,16 @@ describe("productInherited", () => {
     expect(productInherited(ownOverClash)).toEqual(CLASH);
   });
 
-  it("counts a size's own price over a clashing product", () => {
-    expect(productInherited(sizeOwnOverClash)).toEqual(range("2.20", "3.40"));
+  it("counts a variant's own price over a clashing product", () => {
+    expect(productInherited(variantOwnOverClash)).toEqual(range("2.20", "3.40"));
   });
 
-  it("is a clash when an Active size's own price clashes", () => {
-    expect(productInherited(sizeLevelClash)).toEqual(CLASH);
+  it("is a clash when an Active variant's own price clashes", () => {
+    expect(productInherited(variantLevelClash)).toEqual(CLASH);
   });
 
-  it("leaves an Inactive size's clash off the product", () => {
-    const row = withInactive(sizeLevelClash, "v-large");
+  it("leaves an Inactive variant's clash off the product", () => {
+    const row = withInactive(variantLevelClash, "v-large");
     expect(productInherited(row)).toEqual(range("3.00"));
     expect(variantInherited(row, "v-large", undefined)).toEqual(CLASH);
   });
@@ -304,13 +307,13 @@ describe("variantInherited", () => {
     ["the product's saved menu price while its field is untouched", "v-small", undefined, "2.50"],
     ["the price typed in the product's field", "v-small", "2.80", "2.80"],
     ["the product's inherited price once its field is emptied", "v-small", null, "3.00"],
-    ["a size's catalogue price, past its own override", "v-large", undefined, "3.40"],
+    ["a variant's catalogue price, past its own override", "v-large", undefined, "3.40"],
   ] as const)("gives %s", (_, variantId, parent, expected) => {
     expect(variantInherited(lemonade, variantId, parent)).toEqual(range(expected));
   });
 
-  it("is a clash when the size's own setting clashes", () => {
-    expect(variantInherited(sizeLevelClash, "v-large", undefined)).toEqual(CLASH);
+  it("is a clash when the variant's own setting clashes", () => {
+    expect(variantInherited(variantLevelClash, "v-large", undefined)).toEqual(CLASH);
   });
 
   it("follows a clashing product price until a price is typed for the product", () => {
@@ -324,38 +327,38 @@ describe("variantInherited", () => {
     expect(variantInherited(ownOverClash, "v-small", null)).toEqual(CLASH);
   });
 
-  it("past a size's own price, follows its product", () => {
-    expect(variantInherited(sizeOwnOverParent, "v-small", undefined)).toEqual(range("2.50"));
-    expect(variantInherited(sizeOwnOverParent, "v-small", "2.80")).toEqual(range("2.80"));
-    expect(variantInherited(sizeOwnOverParent, "v-small", null)).toEqual(range("3.00"));
+  it("past a variant's own price, follows its product", () => {
+    expect(variantInherited(variantOwnOverParent, "v-small", undefined)).toEqual(range("2.50"));
+    expect(variantInherited(variantOwnOverParent, "v-small", "2.80")).toEqual(range("2.80"));
+    expect(variantInherited(variantOwnOverParent, "v-small", null)).toEqual(range("3.00"));
   });
 
-  it("past a size's own price over its product's clash, follows the price typed for the product", () => {
-    expect(variantInherited(sizeOwnOverClash, "v-small", "2.80")).toEqual(range("2.80"));
-    expect(variantInherited(sizeOwnOverClash, "v-small", undefined)).toEqual(CLASH);
-    expect(variantInherited(sizeOwnOverClash, "v-small", null)).toEqual(CLASH);
+  it("past a variant's own price over its product's clash, follows the price typed for the product", () => {
+    expect(variantInherited(variantOwnOverClash, "v-small", "2.80")).toEqual(range("2.80"));
+    expect(variantInherited(variantOwnOverClash, "v-small", undefined)).toEqual(CLASH);
+    expect(variantInherited(variantOwnOverClash, "v-small", null)).toEqual(CLASH);
     // What the menu charges once 2.80 is saved for the product and Small's own price cleared.
-    expect(sizeOf(lemonadeOn({ price: "2.80" }, { price: "3.50" }), "v-small")).toMatchObject({
+    expect(variantOf(lemonadeOn({ price: "2.80" }, { price: "3.50" }), "v-small")).toMatchObject({
       state: "decided",
       value: "2.80",
       source: { kind: "parent" },
     });
   });
 
-  it("past a size's own price over the size's own clash, stays a clash whatever the product's field holds", () => {
+  it("past a variant's own price over the variant's own clash, stays a clash whatever the product's field holds", () => {
     const drinks = { price: "3.50", variants: { "v-large": "3.90" } };
     const row = lemonadeOn({ variants: { "v-large": "3.60" } }, drinks);
     expect(variantInherited(row, "v-large", "2.80")).toEqual(CLASH);
     expect(variantInherited(row, "v-large", undefined)).toEqual(CLASH);
-    expect(sizeOf(lemonadeOn({ price: "2.80" }, drinks), "v-large")).toMatchObject({
+    expect(variantOf(lemonadeOn({ price: "2.80" }, drinks), "v-large")).toMatchObject({
       state: "clash",
-      level: "size",
+      level: "variant",
     });
   });
 });
 
 describe("variantInheritedFrom", () => {
-  it("gives a following size the product's price as its field reads now", () => {
+  it("gives a following variant the product's price as its field reads now", () => {
     expect(variantInheritedFrom(lemonade, "v-small", undefined)).toEqual({
       setting: lemonade.combined.price,
       follows: true,
@@ -375,25 +378,25 @@ describe("variantInheritedFrom", () => {
     });
   });
 
-  it("gives a size that does not follow its product its setting past its own override", () => {
+  it("gives a variant that does not follow its product its setting past its own override", () => {
     expect(variantInheritedFrom(lemonade, "v-large", undefined)).toEqual({
-      setting: withoutOwn(sizeOf(lemonade, "v-large")),
+      setting: withoutOwn(variantOf(lemonade, "v-large")),
       follows: false,
     });
-    expect(variantInheritedFrom(sizeLevelClash, "v-large", "2.80")).toEqual({
-      setting: sizeOf(sizeLevelClash, "v-large"),
+    expect(variantInheritedFrom(variantLevelClash, "v-large", "2.80")).toEqual({
+      setting: variantOf(variantLevelClash, "v-large"),
       follows: false,
     });
   });
 
-  it("gives a size with its own price over its product's clash that clash, following the product", () => {
-    expect(variantInheritedFrom(sizeOwnOverClash, "v-small", undefined)).toEqual({
-      setting: sizeOwnOverClash.combined.price,
+  it("gives a variant with its own price over its product's clash that clash, following the product", () => {
+    expect(variantInheritedFrom(variantOwnOverClash, "v-small", undefined)).toEqual({
+      setting: variantOwnOverClash.combined.price,
       follows: true,
     });
   });
 
-  it("gives a size following a clashing product the clash", () => {
+  it("gives a variant following a clashing product the clash", () => {
     expect(variantInheritedFrom(productClash, "v-small", undefined)).toEqual({
       setting: productClash.combined.price,
       follows: true,
@@ -401,32 +404,32 @@ describe("variantInheritedFrom", () => {
   });
 });
 
-describe("sizesInheritedFrom", () => {
-  it("gives each Active size its own price on this menu, else the setting it inherits with the product left blank", () => {
-    expect(sizesInheritedFrom(withInactive(wine, "v-carafe"))).toEqual([
-      { variantId: "v-glass", setting: sizeOf(wine, "v-glass"), follows: false },
+describe("variantsInheritedFrom", () => {
+  it("gives each Active variant its own price on this menu, else the setting it inherits with the product left blank", () => {
+    expect(variantsInheritedFrom(withInactive(wine, "v-carafe"))).toEqual([
+      { variantId: "v-glass", setting: variantOf(wine, "v-glass"), follows: false },
       { variantId: "v-bottle", setting: withoutOwn(wine.combined.price), follows: true },
     ]);
   });
 
-  it("is empty for a product with no Active size", () => {
-    expect(sizesInheritedFrom(withInactive(lemonade, "v-small", "v-large"))).toEqual([]);
+  it("is empty for a product with no Active variant", () => {
+    expect(variantsInheritedFrom(withInactive(lemonade, "v-small", "v-large"))).toEqual([]);
   });
 });
 
 describe("followsClash", () => {
-  it("is true when an Active size with no price of its own follows the product's clash", () => {
+  it("is true when an Active variant with no price of its own follows the product's clash", () => {
     expect(followsClash(productClash)).toBe(true);
   });
 
-  it("is false once that size is Inactive", () => {
+  it("is false once that variant is Inactive", () => {
     expect(followsClash(withInactive(productClash, "v-small"))).toBe(false);
   });
 
-  it("is false when the size has this menu's own price", () => {
+  it("is false when the variant has this menu's own price", () => {
     const ownSmall: MenuPriceRow = {
-      ...sizeOwnOverClash,
-      variants: sizeOwnOverClash.variants.map((v) =>
+      ...variantOwnOverClash,
+      variants: variantOwnOverClash.variants.map((v) =>
         v.variantId === "v-small" ? { ...v, price: "2.20" } : v,
       ),
     };
@@ -438,38 +441,38 @@ describe("followsClash", () => {
   });
 });
 
-describe("sizeClash", () => {
-  it("is true when an Active size clashes at size level and no Active size follows a product clash", () => {
-    expect(sizeClash(sizeLevelClash)).toBe(true);
+describe("variantClash", () => {
+  it("is true when an Active variant clashes at variant level and no Active variant follows a product clash", () => {
+    expect(variantClash(variantLevelClash)).toBe(true);
   });
 
-  it("is false when the clash is the product's own, carried by a size that follows it", () => {
-    expect(sizeClash(productClash)).toBe(false);
+  it("is false when the clash is the product's own, carried by a variant that follows it", () => {
+    expect(variantClash(productClash)).toBe(false);
   });
 
-  it("beside a size-level clash, is false while an Active size follows the product's clash, and true once that size is Inactive", () => {
+  it("beside a variant-level clash, is false while an Active variant follows the product's clash, and true once that variant is Inactive", () => {
     const both = lemonadeOn({}, { price: "3.50", variants: { "v-large": "3.90" } });
     expect(both.combined.price.state).toBe("clash");
-    expect(sizeClash(withInactive(both, "v-small"))).toBe(true);
-    expect(sizeClash(both)).toBe(false);
+    expect(variantClash(withInactive(both, "v-small"))).toBe(true);
+    expect(variantClash(both)).toBe(false);
   });
 
-  it("is false when the clashing size is Inactive", () => {
-    expect(sizeClash(withInactive(sizeLevelClash, "v-large"))).toBe(false);
+  it("is false when the clashing variant is Inactive", () => {
+    expect(variantClash(withInactive(variantLevelClash, "v-large"))).toBe(false);
   });
 
-  it("is false when no size clashes", () => {
-    expect(sizeClash(lemonade)).toBe(false);
+  it("is false when no variant clashes", () => {
+    expect(variantClash(lemonade)).toBe(false);
   });
 
   it("counts a price typed for a clashing product as deciding it, past an emptied one", () => {
     const drinks = { price: "3.50", variants: { "v-large": "3.90" } };
     const row = lemonadeOn({}, drinks);
-    expect(sizeClash(row)).toBe(false);
-    expect(sizeClash(row, "2.80")).toBe(true);
-    expect(sizeClash(row, null)).toBe(false);
-    expect(sizeClash(lemonadeOn({ price: "2.80" }, drinks))).toBe(true);
-    expect(sizeClash(lemonadeOn({ price: "2.80" }, drinks), null)).toBe(false);
+    expect(variantClash(row)).toBe(false);
+    expect(variantClash(row, "2.80")).toBe(true);
+    expect(variantClash(row, null)).toBe(false);
+    expect(variantClash(lemonadeOn({ price: "2.80" }, drinks))).toBe(true);
+    expect(variantClash(lemonadeOn({ price: "2.80" }, drinks), null)).toBe(false);
   });
 });
 
@@ -493,8 +496,8 @@ describe("withoutOwn", () => {
     expect(withoutOwn(bare)).toBe(bare);
   });
 
-  it("keeps a size that follows its product, with its product's saved price", () => {
-    const following = sizeOf(lemonade, "v-small");
+  it("keeps a variant that follows its product, with its product's saved price", () => {
+    const following = variantOf(lemonade, "v-small");
     expect(following).toMatchObject({ value: "2.50", source: { kind: "parent" } });
     expect(withoutOwn(following)).toBe(following);
   });

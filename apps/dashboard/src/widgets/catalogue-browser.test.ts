@@ -1060,7 +1060,7 @@ it("searches folder paths and product variant names", async () => {
       ...PRODUCTS,
       {
         ...PRODUCTS[0]!,
-        id: "sized",
+        id: "with-variants",
         name: "Coffee",
         variants: [
           {
@@ -1079,9 +1079,9 @@ it("searches folder paths and product variant names", async () => {
     ],
   });
   await typeSearch(el, "drinks");
-  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "sized", "cola"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:b", "with-variants", "cola"]);
   await typeSearch(el, "cup");
-  expect(await rowKeys(el)).toEqual(["folder:d", "sized"]);
+  expect(await rowKeys(el)).toEqual(["folder:d", "with-variants"]);
 });
 it("opens and closes a category from its row, and says which it will do", async () => {
   const el = await mountBrowser();
