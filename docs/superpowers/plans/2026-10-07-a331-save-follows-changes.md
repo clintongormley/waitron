@@ -1751,3 +1751,76 @@ except `menus-screen.test.ts` ~2071 (explained in 2b.1b) and ~7920 (added to 2b.
 either form's `*.unsaved.test.ts` or `menu-details.unsaved.test.ts`. The probe was reverted. Because
 it bound `disabled` and the early return together, it does not say which task each failure falls
 in; the split above is from reading.
+
+## Batch 4d — prep stations (Lane E, A331-4d)
+
+Branch `feat/save-follows-changes-prep-stations`. Limit implementation to
+`packages/venue-service/src/dashboard/prep-stations-screen.ts` and its tests, plus the A331 backlog
+and Forms status. No migration. Leave hours, menu timetable, venue operations, watcher-form and
+local-holidays-editor alone. Obtain one fresh-context review of this appendix before implementation.
+
+**Action inventory** (screen line numbers at planning, 2026-10-08):
+
+| Normal Save | Handler / draft scope |
+| --- | --- |
+| New station | `#saveStation` (:1336) / `#stationScope` |
+| Station Rename | `#saveStationName` (:1226) / `#renameScope` |
+| Tickets station printers | `#saveStationPrinters` (:1806) / `#printerScope` |
+| Watcher Rename | `#saveWatcherName` (:2836) / `#watcherRenameScope` |
+| Watcher follows, zones, pass | `#saveWatcherCell` (:2172) / `#watcherCellScope` |
+| Watcher printers | `#saveWatcherPrinters` (:1999) / `#watcherPrinterScope` |
+| Settings rest, fallback, warm/overdue/forgotten minutes | `#saveSettingsCell` (:2354) / `#settingsScope` |
+
+Watcher Create/Edit delegates Save to `watcher-form` (already gated, :228/:246 there); preserve
+`#saveWatcher`'s `commitSubmitted` and close/refresh behavior. None of the screen-owned saves needs
+`savableAtOpen`. Routing choice/preview/Confirm (`#saveCell`, :1016), Make default, reorder,
+watcher Enable/Delete/Disable, and station Today/Open/Close/Back to schedule/Enable are operations.
+The station-action fallback and switch-off dialog (`#saveStationAction`, :1755) uses Confirm,
+including conditional fallback write before deactivation; preserve its scope and confirmation rules.
+Settings fallback **is** a normal Save: retain its two presses and reset confirmation on a new choice.
+
+- [ ] **Test first.** Read the TDD skill and current house/UI/testing rules. Extend
+  `prep-stations-screen.test.ts` with a Save-state group: exercise every table mode standalone and under a
+  `LeaveController`. Watch failures before implementation: untouched Save is secondary with its
+  host and native button disabled; host click and Enter cause no validation, confirmation or write; edit enables
+  primary, undo restores quiet. Cover trimmed names, order-independent sets, normalized minutes,
+  inherited empty minutes versus an explicit default, changed invalid input, retry after refusal,
+  busy primary/disabled, reopening and detach/reconnect. Keep operations available without an edit.
+- [ ] **Wire the seven scopes.** Replace their registrations in `#syncStationDrafts`,
+  `#syncWatcherInlineDrafts`, `#syncPrinterDraft`, `#syncSettingsDraft` with `draftScopeFor`;
+  preserve snapshots, equality, restore and identity. Prevent detached registration and request an
+  update on reconnect. Bind each Save's variant and disabled state with `saveActionState`, keeping
+  busy/read-only/own-validation checks; return unchanged before validation/errors in all seven Save handlers, including
+  `#saveStation`, `#saveStationName`, `#saveWatcherName`, **and** Settings fallback's click wrapper, before it sets `confirming`. Keep leave decisions on
+  coordinator presence, never scope presence: audit `#leavePrinters`, `#leaveSettings`,
+  `#leaveWatcherInline`, `#beforeStationClose`, `#beforeWatcherRenameClose` and modal bindings.
+- [ ] **New station validation.** After a changed invalid submission, keep Save primary/disabled
+  until the draft passes its local checks; server refusals alone remain retryable. Test a retained
+  Add/Rename editor disconnected and reattached without reopening, then edit and request leave:
+  detached updates must not register a standalone scope before the application reconnects.
+- [ ] **Preserve asynchronous behavior.** Retain Cancel/Escape/backdrop/tab/replacement decisions,
+  pending-write locks, identity checks and inert stale controls/answers. Commit submitted values,
+  keeping newer input dirty in editors that accept it during a write; Settings blocks such input.
+  Keep successful-close-before-refresh and read/action error separation. Run existing pending,
+  refusal, stale and newer-input cases; remove the gate as a negative control, observe failure,
+  then restore it and watch the focused cases pass.
+- [ ] **Inventory changed test checks.** Temporarily throw at each unchanged return and run the
+  suites below; restore returns and classify every failure. Record `file:line`, before/after and why
+  in the ledger and PR. Known candidates: main `.test.ts:452` (unchanged retained fallback now stays
+  quiet/open without confirmation or write), `:1524` (edit another field before testing missing
+  name), `.settings.test.ts:404` (change rest before testing refusal), `.a11y.test.ts:261/:269`
+  (edit before invalid/rename refusal). Keep their remaining assertions; any unrelated failure is
+  a regression, not permission to weaken a check.
+- [ ] **Verify and look.** Run
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen src/dashboard/watcher-form src/dashboard/routing-grid`
+  (all six existing screen suites plus the new suite and delegated/confirmation consumers), then
+  `pnpm --filter @waitron/venue-service typecheck`. Read test counts and unhandled errors. Extend
+  axe coverage for quiet/changed modes in both themes; LOOK at each Save mode and fallback's second
+  press in light/dark, EN/ES, desktop/390px through
+  `wa-wt demo waitron-feat-save-follows-changes-prep-stations`. Run golden huella and immutability
+  unedited: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
+- [ ] **Finish implementation.** Update A331 backlog and Forms' implemented-form list; signed-off
+  commits, announce readiness for `finish-branch`. Use one Claude whole-branch run-it review after
+  its initial rebase in an installed throwaway candidate checkout; read completed findings and fix
+  them. Push through the normal hook once; require current-head CI, including selected package
+  coverage. Preserve other appendices on rebase. Land only with owner authorization.
