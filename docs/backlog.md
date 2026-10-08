@@ -1626,7 +1626,10 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   Switch with the current profile still chosen never reached the server before either: the app
   closed the dialog. Holiday Remove and Forget stay red confirmations and the holiday area saves on
   choice; [the Batch 4c table](superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4c--the-venue-service-forms-nobody-else-is-changing-and-the-tills-profile-dialog-lane-c-a331-4c)
-  gives the call path for each.
+  gives the call path for each. Looked at on 2026-10-08 in 13 screenshots of the forms mounted with
+  test data in Chromium (each unchanged and after one edit at 1280px, light, English; the watcher
+  form and the profile dialog also at 390px, dark, Spanish), kept outside the repository in
+  `~/waitron-campaign-c/a331-4c-shots/`: no defect found.
 - **Batch 5 — LANDED in #1414 (A331-5).** The till's five forms that save an edit: the party name dialog,
   the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
   when it edits a line, and the station dialog's Make at. Adding a dish never waits for a change
