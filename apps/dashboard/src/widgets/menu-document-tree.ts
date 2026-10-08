@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -8,7 +8,12 @@ import {
   resolveMenuText,
   type MenuView,
 } from "@waitron/catalogue/src/customer-menu-presentation.js";
-import type { DocumentMember, MenuDocument } from "@waitron/catalogue/src/menu-document-types.js";
+import type {
+  DocumentMember,
+  MenuDocument,
+  MenuTarget,
+} from "@waitron/catalogue/src/menu-document-types.js";
+import { indexMenuOccurrences } from "@waitron/catalogue/src/menu-navigation.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { productMedia, productMediaFrame, productMediaStyles } from "./product-media.js";
@@ -42,6 +47,10 @@ export class MenuDocumentTree extends LitElement {
         );
         overflow-wrap: anywhere;
       }
+      wt-data-table::part(target) {
+        background: var(--wt-color-surface-lifted);
+        outline: var(--wt-focus-ring);
+      }
       wt-data-table::part(kind),
       wt-data-table::part(note) {
         color: var(--wt-color-text-muted);
@@ -60,11 +69,85 @@ export class MenuDocumentTree extends LitElement {
   };
   #snapshot: MenuDocument | null = null;
   #generation = 0;
+  @state() private highlightedKey: string | null = null;
+  #clearHighlight = (event: Event) => {
+    if (
+      event
+        .composedPath()
+        .some(
+          (node) =>
+            node instanceof Element &&
+            node.getAttribute("aria-current") === "true" &&
+            node.getRootNode() === this.shadowRoot?.querySelector("wt-data-table")?.shadowRoot,
+        )
+    )
+      return;
+    this.highlightedKey = null;
+  };
+
+  override connectedCallback() {
+    super.connectedCallback();
+    window.document.addEventListener("click", this.#clearHighlight, true);
+  }
+
+  override disconnectedCallback() {
+    window.document.removeEventListener("click", this.#clearHighlight, true);
+    super.disconnectedCallback();
+  }
+
+  async reveal(target: MenuTarget): Promise<boolean> {
+    const document = this.document;
+    const inspectionKey = this.inspectionKey;
+    await this.updateComplete;
+    if (
+      this.document !== document ||
+      this.inspectionKey !== inspectionKey ||
+      this.#snapshot === null ||
+      target.kind === "home"
+    )
+      return false;
+    const occurrences = indexMenuOccurrences(this.#snapshot);
+    const pathMatches = (ids: string[]) =>
+      target.kind !== "title" &&
+      ids.length === target.sectionIds.length &&
+      ids.every((id, i) => id === target.sectionIds[i]);
+    const exists =
+      target.kind === "title"
+        ? target.menuId === this.#snapshot.menuId
+        : target.kind === "list" && target.sectionIds.length === 0
+          ? true
+          : occurrences.some(({ target: occurrence }) =>
+              occurrence.kind === "product"
+                ? target.kind === "product" &&
+                  pathMatches(occurrence.sectionIds) &&
+                  occurrence.menuItemId === target.menuItemId &&
+                  occurrence.productId === target.productId
+                : occurrence.kind === "section" &&
+                  (target.kind === "section" || target.kind === "list") &&
+                  pathMatches(occurrence.sectionIds),
+            );
+    if (!exists) return false;
+    const key =
+      target.kind === "title"
+        ? "root"
+        : target.kind === "product"
+          ? [...target.sectionIds, target.menuItemId].join("/")
+          : target.sectionIds.length === 0
+            ? "root"
+            : target.sectionIds.join("/");
+    this.highlightedKey = key;
+    await this.updateComplete;
+    if (this.document !== document || this.inspectionKey !== inspectionKey) return false;
+    const table = this.shadowRoot!.querySelector("wt-data-table")!;
+    await table.revealRow(key);
+    return this.document === document && this.inspectionKey === inspectionKey;
+  }
 
   protected override willUpdate(changed: PropertyValues<this>) {
     if (changed.has("document") || changed.has("inspectionKey")) {
       this.#snapshot = this.document === null ? null : structuredClone(this.document);
       this.#generation++;
+      this.highlightedKey = null;
     }
   }
 
@@ -86,7 +169,9 @@ export class MenuDocumentTree extends LitElement {
     const member = row.member;
     if (member === null)
       return html`<span part="folder-cell"
-        >${folderFrame()}<span part="name-stack folder-stack"
+        >${folderFrame()}<span
+          part=${row.key === this.highlightedKey ? "name-stack folder-stack target" : "name-stack folder-stack"}
+          aria-current=${row.key === this.highlightedKey ? "true" : nothing}
           ><span data-test="root-name">${this.#snapshot!.menuName}</span
           >${this.#snapshot!.root.members.length === 0 ? html`<span part="note">${t("menus.structure_empty")}</span>` : nothing}</span
         ></span
@@ -94,7 +179,8 @@ export class MenuDocumentTree extends LitElement {
     const offer = member.kind === "product" ? this.#snapshot!.offers[member.menuItemId] : undefined;
     const text = this.#text(member);
     const stack = html`<span
-      part=${member.kind === "section" ? "name-stack folder-stack" : "name-stack"}
+      part=${`${member.kind === "section" ? "name-stack folder-stack" : "name-stack"}${row.key === this.highlightedKey ? " target" : ""}`}
+      aria-current=${row.key === this.highlightedKey ? "true" : nothing}
     >
       <span data-test="name">${text.text}</span>
       ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage)}</span>` : nothing}

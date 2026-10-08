@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
+import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
 import type { MenuDocument } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -339,9 +340,154 @@ it.each(
         .getBoundingClientRect();
       expect(name.right).toBeLessThanOrEqual(tr.getBoundingClientRect().right);
     }
+    expect(
+      await el.reveal({
+        kind: "product",
+        sectionIds: ["drinks", "beer"],
+        menuItemId: "mi",
+        productId: "lager",
+        field: { kind: "summary" },
+      }),
+    ).toBe(true);
+    expect(row(el, "drinks/beer/mi")!.querySelector('[aria-current="true"]')).not.toBeNull();
     await page.screenshot({
       element: el,
-      path: `.superpowers/a350-tree/${locale}-${theme}-${width}.png`,
+      path: `.superpowers/a350-reveal/${locale}-${theme}-${width}.png`,
     });
   },
 );
+
+const lagerTarget: MenuTarget = {
+  kind: "product",
+  sectionIds: ["drinks", "beer"],
+  menuItemId: "mi",
+  productId: "lager",
+  field: { kind: "description", language: "en" },
+};
+
+it("reveals the exact nested occurrence, scrolls it clear of the header and keeps focus on the invoking link", async () => {
+  const document = fixture();
+  document.root.members.unshift(
+    ...Array.from({ length: 30 }, (_, i) => documentSection(`other-${i}`, `Other ${i}`, [])),
+  );
+  const el = await mount(document);
+  const scroll = table(el).shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  scroll.style.maxHeight = "240px";
+  const link = window.document.createElement("a");
+  link.href = "#view";
+  link.textContent = "View";
+  window.document.body.append(link);
+  try {
+    link.focus();
+    expect(row(el, "drinks/beer/mi")).toBeNull();
+    expect(await el.reveal(lagerTarget)).toBe(true);
+    await settle(el);
+    const target = row(el, "drinks/beer/mi")!;
+    expect(target.textContent).toContain("Counter lager");
+    expect(target.querySelector('[aria-current="true"]')).not.toBeNull();
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+    const headings = table(el).shadowRoot!.querySelector("thead")!.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
+    expect(rect.top).toBeGreaterThanOrEqual(headings.bottom - 1);
+    expect(rect.bottom).toBeLessThanOrEqual(scroll.getBoundingClientRect().bottom + 1);
+    expect(window.document.activeElement).toBe(link);
+  } finally {
+    link.remove();
+  }
+});
+
+it("moves the mark between product, section, list and menu targets and clears it on a click elsewhere", async () => {
+  const el = await mount();
+  expect(await el.reveal(lagerTarget)).toBe(true);
+  expect(row(el, "drinks/beer/mi")!.querySelector('[aria-current="true"]')).not.toBeNull();
+  expect(
+    await el.reveal({ kind: "section", sectionIds: ["drinks"], field: { kind: "image" } }),
+  ).toBe(true);
+  await settle(el);
+  expect(row(el, "drinks")!.querySelector('[aria-current="true"]')).not.toBeNull();
+  expect(row(el, "drinks/beer/mi")!.querySelector("[aria-current]")).toBeNull();
+  expect(await el.reveal({ kind: "list", sectionIds: ["drinks", "beer"] })).toBe(true);
+  expect(row(el, "drinks/beer")!.querySelector('[aria-current="true"]')).not.toBeNull();
+  expect(await el.reveal({ kind: "title", menuId: el.document!.menuId })).toBe(true);
+  expect(row(el, "root")!.querySelector('[aria-current="true"]')).not.toBeNull();
+  row(el, "root")!.querySelector<HTMLElement>('[aria-current="true"]')!.click();
+  await settle(el);
+  expect(row(el, "root")!.querySelector('[aria-current="true"]')).not.toBeNull();
+  window.document.body.click();
+  await settle(el);
+  expect(table(el).shadowRoot!.querySelector("[aria-current]")).toBeNull();
+});
+
+it("refuses stale paths, another product in the same slot and targets outside this frozen menu", async () => {
+  const el = await mount();
+  for (const target of [
+    { ...lagerTarget, productId: "different" },
+    { ...lagerTarget, sectionIds: ["beer", "drinks"] },
+    { kind: "section", sectionIds: ["missing"], field: { kind: "summary" } },
+    { kind: "section", sectionIds: [], field: { kind: "summary" } },
+    { kind: "title", menuId: "other-menu" },
+    { kind: "home", device: "till", field: "columns" },
+  ] as MenuTarget[])
+    expect(await el.reveal(target)).toBe(false);
+  expect(shown(el)).toEqual(["root", "drinks", "juice"]);
+  expect(table(el).shadowRoot!.querySelector("[aria-current]")).toBeNull();
+});
+
+it("keeps a revealed mark through content-language changes and drops it for a replacement preview", async () => {
+  const el = await mount();
+  await el.reveal(lagerTarget);
+  el.view = { kind: "customer", language: "en" };
+  await settle(el);
+  expect(row(el, "drinks/beer/mi")!.textContent).toContain("Cold beer");
+  expect(row(el, "drinks/beer/mi")!.querySelector('[aria-current="true"]')).not.toBeNull();
+  el.inspectionKey = "new-preview";
+  await settle(el);
+  expect(shown(el)).toEqual(["root", "drinks", "juice"]);
+  expect(table(el).shadowRoot!.querySelector("[aria-current]")).toBeNull();
+});
+
+it("paints the revealed name with the shared focus outline", async () => {
+  const el = await mount(fixture(), "light");
+  await el.reveal(lagerTarget);
+  const marker = row(el, "drinks/beer/mi")!.querySelector<HTMLElement>('[aria-current="true"]')!;
+  expect(getComputedStyle(marker).outlineStyle).toBe("solid");
+  expect(getComputedStyle(marker).outlineWidth).toBe("2px");
+  expect(getComputedStyle(marker).outlineColor).toBe("rgb(31, 111, 235)");
+});
+
+it("reveals the named occurrence of a repeated subtree rather than the first matching product", async () => {
+  const document = fixture();
+  const drinks = document.root.members[0]!;
+  if (drinks.kind !== "section") throw new Error("Fixture needs a section");
+  document.root.members.push(documentSection("terrace", "Terrace", [structuredClone(drinks)]));
+  const el = await mount(document);
+  expect(await el.reveal({ ...lagerTarget, sectionIds: ["terrace", "drinks", "beer"] })).toBe(true);
+  expect(row(el, "terrace/drinks/beer/mi")!.querySelector('[aria-current="true"]')).not.toBeNull();
+  expect(row(el, "drinks/beer/mi")).toBeNull();
+});
+
+it("abandons a reveal when its captured preview is replaced before the render completes", async () => {
+  const el = await mount();
+  const pending = el.reveal(lagerTarget);
+  el.inspectionKey = "replaced-before-reveal";
+  await settle(el);
+  expect(await pending).toBe(false);
+  expect(shown(el)).toEqual(["root", "drinks", "juice"]);
+  expect(table(el).shadowRoot!.querySelector("[aria-current]")).toBeNull();
+});
+
+it("clears the mark for an outside control even when that control stops its click bubbling", async () => {
+  const el = await mount();
+  await el.reveal(lagerTarget);
+  const button = document.createElement("button");
+  button.textContent = "Outside";
+  button.addEventListener("click", (event) => event.stopPropagation());
+  document.body.append(button);
+  try {
+    button.click();
+    await settle(el);
+    expect(table(el).shadowRoot!.querySelector("[aria-current]")).toBeNull();
+  } finally {
+    button.remove();
+  }
+});

@@ -2935,8 +2935,10 @@ link now opens Price overrides with that filter selected once, after the rows lo
 All prices was remembered; subsequent choices are retained. A350 now places changes to the left
 of the menu on desktop and above it on a phone. A frozen Structure-style renderer is now prepared
 and tested in isolation: it shares row presentation with Structure, preserves the captured
-document until replacement, and labels translated-name fallbacks. Preview still draws the existing
-card renderer. Connecting the new tree and preserving change navigation, then grouped View links,
+document until replacement, and labels translated-name fallbacks. Its standalone change navigation
+now opens collapsed ancestors, scrolls and marks the exact occurrence without taking keyboard
+focus, and clears the mark on an outside click. Replacement previews discard old reveals.
+Preview still draws the existing card renderer. Connecting the new tree, then grouped View links,
 Hide/Show all, Spanish conflicto wording and the failed-refresh count still await the bundle's
 remaining steps. Its standalone screenshots check geometry; their fixture photo is not served,
 so image painting and the final real-screen look remain part of the integration checks.

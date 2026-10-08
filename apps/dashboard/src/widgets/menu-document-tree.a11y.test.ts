@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("frozen menu tree (%s)", (theme) => {
-  it.each(["closed", "expanded", "fallback", "empty"] as const)(
+  it.each(["closed", "expanded", "fallback", "empty", "revealed"] as const)(
     "draws %s accessibly",
     async (state) => {
       await page.viewport(1280, 900);
@@ -55,6 +55,18 @@ describe.each(["light", "dark"] as const)("frozen menu tree (%s)", (theme) => {
       }
       if (state === "fallback")
         expect(table.shadowRoot!.textContent).toContain("Staff name fallback");
+      if (state === "revealed") {
+        expect(
+          await el.reveal({
+            kind: "product",
+            sectionIds: ["drinks"],
+            menuItemId: "mi",
+            productId: "lager",
+            field: { kind: "summary" },
+          }),
+        ).toBe(true);
+        expect(table.shadowRoot!.querySelector('[aria-current="true"]')).not.toBeNull();
+      }
       await expectNoA11yViolations(host);
     },
   );
