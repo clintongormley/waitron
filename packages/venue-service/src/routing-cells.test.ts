@@ -526,8 +526,8 @@ describe("setRoutingCell / clearRoutingCell", () => {
       .select({ id: departments.id })
       .from(departments)
       .where(eq(departments.locationId, f.cfg.locationId));
-    // deactivateDepartment switches the department's zones off too, so no product path leaves an
-    // active zone in a switched-off department; an import bundle can still carry one.
+    // deactivateDepartment switches the department's zones off too, so this writes the state
+    // directly.
     await db.update(departments).set({ active: false }).where(eq(departments.id, dining!.id));
     const address: CellAddress = {
       row: { kind: "category", categoryId: f.drinks },

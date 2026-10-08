@@ -5255,11 +5255,12 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       extra each one offers there (`extraMoves`)**, whatever the change; only products under the
       changed row, and the extras those products offer, can move, and a change to one zone's cell moves
       products in that zone only. The preview before A261-4 looped the same way.
-    - DONE (A374, this change): the owner answered "refuse, and say which choice and why"
-      (2026-10-07). `validateRoutingConfiguration`
-      (`packages/venue-service/src/configuration-transfer.ts`) refuses a routing cell on a zone in
-      a switched-off department with the grid's own `service_zone.not_found`, naming the zone, the
-      department and the row, and the setup app's import screen says so in English and Spanish.
+    - **Done by A374 (owner answer "refuse, and say which choice and why", 2026-10-07): a
+      configuration import refuses a routing cell on a zone in a switched-off department.**
+      `validateRoutingConfiguration` (`packages/venue-service/src/configuration-transfer.ts`)
+      refuses it with the routing grid's own `service_zone.not_found`, naming the zone, the
+      department and the row (each name only where the export holds one), and the setup app's import screen says which choice it is and how to
+      fix it, in English and Spanish.
     [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
     Changes needing another fiscal/geographic context or
     history removal use a separately approved setup/reset instead. Later

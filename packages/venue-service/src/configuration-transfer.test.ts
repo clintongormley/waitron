@@ -1321,9 +1321,13 @@ describe("validateRoutingConfiguration", () => {
   });
 
   describe("a cell for a zone whose department is switched off", () => {
-    const inside = { zoneId: INSIDE, zone: "Inside", departmentId: DELI, department: "Deli" };
-    const refusalFor = (spec: CellSpec) => {
-      const tables = routingTables();
+    const inside = {
+      zoneId: INSIDE,
+      zoneName: "Inside",
+      departmentId: DELI,
+      departmentName: "Deli",
+    };
+    const refusalFor = (spec: CellSpec, tables = routingTables()) => {
       tables.routing_cells!.push(cell(spec));
       try {
         validateRoutingConfiguration(tables);
@@ -1342,6 +1346,35 @@ describe("validateRoutingConfiguration", () => {
       const error = refusalFor({ ...spec, zone: INSIDE, station: KITCHEN });
       expect(error).toMatchObject({ code: "service_zone.not_found" });
       expect((error as { params: unknown }).params).toEqual({ ...inside, ...row });
+    });
+
+    it.each([
+      ["no zone or department name", undefined, undefined],
+      ["empty zone and department names", "", ""],
+      ["a non-text zone and department name", 7, null],
+    ])("leaves out a name the bundle does not hold as text (%s)", (_, zoneName, departmentName) => {
+      const tables = routingTables();
+      const zone = tables.floor_zones!.find((row) => row.id === INSIDE)!;
+      const department = tables.departments!.find((row) => row.id === DELI)!;
+      if (zoneName === undefined) delete zone.name;
+      else zone.name = zoneName;
+      if (departmentName === undefined) delete department.name;
+      else department.name = departmentName;
+      delete tables.categories![0]!.name;
+      const refusal = refusalFor({ category: DRINKS, zone: INSIDE, station: KITCHEN }, tables);
+      expect(refusal).toMatchObject({ code: "service_zone.not_found" });
+      expect((refusal as { params: unknown }).params).toEqual({
+        zoneId: INSIDE,
+        departmentId: DELI,
+        row: "category",
+      });
+    });
+
+    it("leaves out a product name the bundle does not hold", () => {
+      const tables = routingTables();
+      delete tables.products!.find((row) => row.id === MOJITO)!.name;
+      const error = refusalFor({ product: MOJITO, zone: INSIDE, station: KITCHEN }, tables);
+      expect((error as { params: unknown }).params).toEqual({ ...inside, row: "product" });
     });
 
     it("accepts the same cells once the department is switched on", () => {

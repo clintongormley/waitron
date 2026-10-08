@@ -56,6 +56,12 @@ function ids(rows: readonly Row[] | undefined): Set<unknown> {
   return new Set((rows ?? []).map((row) => row.id));
 }
 
+/** A row's name as `{ [key]: name }`, or nothing when the bundle's row holds no non-empty text. */
+function nameOf<K extends string>(key: K, row: Row | undefined): { [P in K]?: string } {
+  const name = row?.name;
+  return (typeof name === "string" && name !== "" ? { [key]: name } : {}) as { [P in K]?: string };
+}
+
 /** The venue's calendar date when the bundle was made; `null` when it cannot be read. */
 function exportDate(bundle: { readonly createdAt: Date; readonly timeZone: string } | undefined) {
   if (bundle === undefined) return null;
@@ -476,7 +482,7 @@ function validateDepartmentTransfers(tables: Tables): void {
  * second cell at one coordinate, a variant or a product, category, zone or station the bundle does
  * not hold, and a zone that is switched off or has no service configuration. A zone whose
  * department is switched off is refused with the grid's own `service_zone.not_found`, its params
- * naming the zone, the department and the row so the import screen can say which choice to fix.
+ * carrying the zone and department ids, the row, and each name the export holds as non-empty text.
  */
 export function validateRoutingConfiguration(tables: Tables): void {
   const categories = ids(tables.categories);
@@ -534,13 +540,13 @@ export function validateRoutingConfiguration(tables: Tables): void {
     if (department === undefined || department.active === 1) continue;
     throw new AppError("service_zone.not_found", {
       zoneId: String(zone),
-      zone: String(zoneRows.get(zone)!.name),
+      ...nameOf("zoneName", zoneRows.get(zone)),
       departmentId: String(departmentId),
-      department: String(department.name),
+      ...nameOf("departmentName", department),
       ...(category !== null
-        ? { row: "category" as const, name: String(categoryRows.get(category)!.name) }
+        ? { row: "category" as const, ...nameOf("name", categoryRows.get(category)) }
         : product !== null
-          ? { row: "product" as const, name: String(productRows.get(product)!.name) }
+          ? { row: "product" as const, ...nameOf("name", productRows.get(product)) }
           : { row: noCategory ? ("no_category" as const) : ("all" as const) }),
     });
   }

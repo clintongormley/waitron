@@ -31,12 +31,15 @@ declare module "@waitron/shared" {
     "department.not_found": { departmentId: string };
     "department.last_active": { departmentId: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };
-    /** An import names the zone, its switched-off department and the routing row it refused. */
+    /**
+     * An import's refusal adds the zone's switched-off department, the routing row it refused, and
+     * each name the export holds.
+     */
     "service_zone.not_found": {
       zoneId: string;
-      zone?: string;
+      zoneName?: string;
       departmentId?: string;
-      department?: string;
+      departmentName?: string;
       row?: "category" | "product" | "no_category" | "all";
       name?: string;
     };

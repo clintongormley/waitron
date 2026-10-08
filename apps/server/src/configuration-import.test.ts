@@ -595,9 +595,9 @@ describe("routing cells in a staged import", () => {
       code: "service_zone.not_found",
       params: {
         zoneId: terraza.id,
-        zone: "Terraza",
+        zoneName: "Terraza",
         departmentId: comedor.id,
-        department: "Comedor",
+        departmentName: "Comedor",
         row: "product",
         name: "Mojito",
       },
