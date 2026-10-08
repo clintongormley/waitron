@@ -414,58 +414,48 @@ describe("the department menu routes", () => {
   const zoneAllDay = (zoneId: string) =>
     `/management-api/venue-service/zones/${zoneId}/all-day-menu`;
 
-  it("set the list and both all-day defaults for a manager who manages venue service, and refuse anyone else", async () => {
-    const r = await routed();
-    const writes: [string, unknown][] = [
-      [departmentMenus(r.restaurant), { menuIds: [r.bebidas.id, r.desayunos.id] }],
-      [departmentAllDay(r.restaurant), { menuId: r.bebidas.id }],
-      [zoneAllDay(r.barra), { menuId: r.desayunos.id }],
-    ];
-    for (const [path, body] of writes) expect((await r.send(r.staff, path, body)).status).toBe(403);
-    expect(await scoped((tx) => listDepartmentMenus(tx, r.cfg))).toEqual(
-      expect.arrayContaining([{ departmentId: r.restaurant, menuIds: [], allDayMenuId: null }]),
-    );
-    for (const [path, body] of writes)
-      expect((await r.send(r.manager, path, body)).status).toBe(204);
-    expect(await servedIds(r, r.sala)).toEqual([r.bebidas.id, r.desayunos.id]);
-    expect(await defaultOf(r, r.sala)).toBe(r.bebidas.id);
-    expect(await defaultOf(r, r.barra)).toBe(r.desayunos.id);
+  const snapshot = (r: Awaited<ReturnType<typeof routed>>) =>
+    scoped(async (tx) => ({
+      departments: await listDepartmentMenus(tx, r.cfg),
+      zones: (await tx.execute(sql`select * from zone_all_day_menus order by zone_id`)).rows,
+    }));
 
-    expect((await r.send(r.manager, zoneAllDay(r.barra), { menuId: null })).status).toBe(204);
-    expect((await r.send(r.manager, departmentAllDay(r.restaurant), { menuId: null })).status).toBe(
-      204,
-    );
+  it("refuses retired list and default writes for staff and managers without changing rows", async () => {
+    const r = await routed();
+    const before = await snapshot(r);
+    for (const cookie of [r.staff, r.manager]) {
+      for (const [path, body] of [
+        [departmentMenus(r.restaurant), { menuIds: [r.bebidas.id, r.desayunos.id] }],
+        [departmentAllDay(r.restaurant), { menuId: r.bebidas.id }],
+        [zoneAllDay(r.barra), { menuId: r.desayunos.id }],
+        [zoneAllDay(r.barra), { menuId: null }],
+        [departmentAllDay(r.restaurant), { menuId: null }],
+      ] as const) {
+        expect((await r.send(cookie, path, body)).status).toBe(404);
+        expect(await snapshot(r)).toEqual(before);
+      }
+    }
+    expect(await servedIds(r, r.sala)).toEqual([]);
+    expect(await defaultOf(r, r.sala)).toBeNull();
     expect(await defaultOf(r, r.barra)).toBeNull();
   });
 
-  it("answer 404 for a menu outside the list and 409 for removing one in use, with their params", async () => {
+  it("answers 404 for retired routes even when a menu is outside the old list or in use", async () => {
     const r = await routed();
     await restaurantWithDefault(r);
-    const notFound = await r.send(r.manager, zoneAllDay(r.mostrador), { menuId: r.bebidas.id });
-    expect(notFound.status).toBe(404);
-    expect(await notFound.json()).toEqual({
-      error: {
-        code: "department_menu.not_found",
-        params: { departmentId: r.deli, menuId: r.bebidas.id },
-      },
-    });
-    const inUse = await r.send(r.manager, departmentMenus(r.restaurant), {
-      menuIds: [r.desayunos.id],
-    });
-    expect(inUse.status).toBe(409);
-    expect(await inUse.json()).toEqual({
-      error: {
-        code: "department_menu.in_use",
-        params: {
-          departmentId: r.restaurant,
-          menuId: r.bebidas.id,
-          uses: [{ kind: "department_all_day" }],
-        },
-      },
-    });
+    const before = await snapshot(r);
+    expect(
+      (await r.send(r.manager, zoneAllDay(r.mostrador), { menuId: r.bebidas.id })).status,
+    ).toBe(404);
+    expect(await snapshot(r)).toEqual(before);
+    expect(
+      (await r.send(r.manager, departmentMenus(r.restaurant), { menuIds: [r.desayunos.id] }))
+        .status,
+    ).toBe(404);
+    expect(await snapshot(r)).toEqual(before);
   });
 
-  it("clear an inactive zone's override through the zone route, which lets the menu go", async () => {
+  it("does not clear an inactive zone's override through a retired route", async () => {
     const r = await routed();
     await restaurantWithDefault(r);
     await scoped(async (tx) => {
@@ -473,26 +463,30 @@ describe("the department menu routes", () => {
       await setZoneAllDayMenu(tx, r.cfg, r.barra, r.bebidas.id);
       await deactivateServiceZone(tx, r.cfg, r.barra);
     });
+    const before = await snapshot(r);
     const remaining = { menuIds: [r.desayunos.id, r.deliParaLlevar.id] };
-    expect((await r.send(r.manager, departmentMenus(r.restaurant), remaining)).status).toBe(409);
-    expect((await r.send(r.manager, zoneAllDay(r.barra), { menuId: null })).status).toBe(204);
-    expect((await r.send(r.manager, departmentMenus(r.restaurant), remaining)).status).toBe(204);
+    expect((await r.send(r.manager, departmentMenus(r.restaurant), remaining)).status).toBe(404);
+    expect(await snapshot(r)).toEqual(before);
+    expect((await r.send(r.manager, zoneAllDay(r.barra), { menuId: null })).status).toBe(404);
+    expect(await snapshot(r)).toEqual(before);
+    expect((await r.send(r.manager, departmentMenus(r.restaurant), remaining)).status).toBe(404);
+    expect(await snapshot(r)).toEqual(before);
   });
 
-  it("refuse a malformed body naming the field", async () => {
+  it("answers 404 for malformed bodies on retired routes without changing rows", async () => {
     const r = await routed();
-    for (const [path, body, field] of [
-      [departmentMenus(r.restaurant), { menuIds: [r.bebidas.id, r.bebidas.id] }, "menuIds"],
-      [departmentMenus(r.restaurant), { menuIds: ["not-a-uuid"] }, "menuIds"],
-      [departmentMenus(r.restaurant), {}, "menuIds"],
-      [departmentAllDay(r.restaurant), {}, "menuId"],
-      [zoneAllDay(r.barra), { menuId: "not-a-uuid" }, "menuId"],
+    const before = await snapshot(r);
+    for (const [path, body] of [
+      [departmentMenus(r.restaurant), { menuIds: [r.bebidas.id, r.bebidas.id] }],
+      [departmentMenus(r.restaurant), { menuIds: ["not-a-uuid"] }],
+      [departmentMenus(r.restaurant), {}],
+      [departmentAllDay(r.restaurant), {}],
+      [zoneAllDay(r.barra), { menuId: "not-a-uuid" }],
     ] as const) {
-      const refused = await r.send(r.manager, path, body);
-      expect(refused.status, `${path} ${JSON.stringify(body)}`).toBe(400);
-      expect(await refused.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field } },
-      });
+      expect((await r.send(r.manager, path, body)).status, `${path} ${JSON.stringify(body)}`).toBe(
+        404,
+      );
+      expect(await snapshot(r)).toEqual(before);
     }
   });
 });
