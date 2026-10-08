@@ -7339,19 +7339,19 @@ describe("the Home page tab", () => {
 
   it("chooses Handheld or Till, each with its own controls", async () => {
     const home = menuHome();
-    home.handheld = { columns: 4, tiles: "thumbnails", order: "home_first" };
+    home.handheld = { columns: 3, tiles: "thumbnails", order: "home_first" };
     home.till = { columns: 9, tiles: "colours", order: "menu_first" };
     const el = await mountHome(api({ getMenuHome: vi.fn().mockResolvedValue(home) }));
     expect(radio(el, "home-device", "handheld").checked).toBe(true);
     expect(radio(el, "home-device", "till").checked).toBe(false);
-    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([2, 6, 4]);
+    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([2, 3, 3]);
     expect(slider(el).label).toBe(t("home.columns"));
     expect(radio(el, "home-tiles", "thumbnails").checked).toBe(true);
     expect(radio(el, "home-order", "home_first").checked).toBe(true);
     await vi.waitFor(() => expect(preview(el)).not.toBeNull());
     expect(preview(el)!.device).toBe("handheld");
     await choose(el, "home-device", "till");
-    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([6, 10, 9]);
+    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([4, 10, 9]);
     expect(radio(el, "home-tiles", "colours").checked).toBe(true);
     expect(radio(el, "home-order", "menu_first").checked).toBe(true);
     expect(preview(el)!.device).toBe("till");
@@ -7363,7 +7363,9 @@ describe("the Home page tab", () => {
       const before = currentLocale();
       setLocale(locale);
       onTestFinished(() => setLocale(before));
-      const client = api();
+      const home = menuHome();
+      home.handheld = { ...home.handheld, columns: 2 };
+      const client = api({ getMenuHome: vi.fn().mockResolvedValue(home) });
       const el = await mountHome(client);
       const note = () => slider(el).nextElementSibling as HTMLElement;
       expect(note().dataset.test).toBe("columns-note");
@@ -7372,10 +7374,10 @@ describe("the Home page tab", () => {
       await preview(el)!.updateComplete;
       const frame = () => preview(el)!.shadowRoot!.querySelector<HTMLElement>(".frame")!;
       const phone = frame().getBoundingClientRect().width;
-      await slide(el, 6);
+      await slide(el, 3);
       await vi.waitFor(() =>
         expect(client.setHomeDisplay).toHaveBeenCalledWith("menu-lunch", "handheld", {
-          columns: 6,
+          columns: 3,
         }),
       );
       await preview(el)!.updateComplete;
