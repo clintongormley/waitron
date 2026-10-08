@@ -1,5 +1,5 @@
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
-export { authorize } from "./authorize.js";
+export { authorize, authorizeByPin } from "./authorize.js";
 export { checkPin, verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
 export type { PinAttempts } from "./credential.js";
 export type { SecretCheck } from "./secret-check.js";

@@ -708,7 +708,7 @@ export async function authorizeByPin(
 `authorizeByPin` uses `verifyThrottledCredential` (`packages/identity/src/credential.ts:83`, M) and
 `roleHasPermission`, as `authorize`'s override branch does (`authorize.ts:62-69`, M).
 
-- [ ] Steps: failing tests (a manager's PIN for `venue_service.manage` — registered as a
+- [x] Steps: failing tests (a manager's PIN for `venue_service.manage` — registered as a
   **literal**, `registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "manager" }])`,
   as `packages/identity/src/permissions.test.ts:131` (M) registers `booking.manage`, never by
   importing `VENUE_SERVICE_PERMISSIONS`: `@waitron/venue-service` depends on `@waitron/identity`

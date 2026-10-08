@@ -45,7 +45,7 @@ export async function withPinCheckAhead<T>(
  */
 export async function overrideToCheck<T extends { personId: string; pin: string }>(
   db: Database,
-  authz: { sessionId: string; permission: Permission },
+  authz: { sessionId: string; permission: Permission | (string & {}) },
   override: T | undefined,
   checkedAnyway = false,
 ): Promise<T | undefined> {
