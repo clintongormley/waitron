@@ -637,7 +637,36 @@ describe("routing cells in a staged import", () => {
         routing_cells: switchedOff.tables.routing_cells!.filter((row) => row.zone_id === null),
       },
     };
-    const accepted = await staged(withoutCell, versions);
+    const zoneRefused = await staged(withoutCell, versions);
+    const zoneRefusal = await zoneRefused.result.then(
+      () => expect.fail("the bundle was accepted"),
+      (error: unknown) => error,
+    );
+    expect(zoneRefusal).toMatchObject({ code: "zone.department_inactive" });
+    expect((zoneRefusal as { params: unknown }).params).toEqual({
+      zoneId: terraza.id,
+      zoneName: "Terraza",
+      departmentId: comedor.id,
+      departmentName: "Comedor",
+    });
+    expect(await readdir(zoneRefused.stateDir)).toEqual([]);
+
+    const comedorZones = new Set(
+      withoutCell.tables
+        .zone_service_policies!.filter((row) => row.department_id === comedor.id)
+        .map((row) => row.zone_id),
+    );
+    expect(comedorZones.has(terraza.id)).toBe(true);
+    const zonesOff: ConfigurationBundle = {
+      ...withoutCell,
+      tables: {
+        ...withoutCell.tables,
+        floor_zones: withoutCell.tables.floor_zones!.map((row) =>
+          comedorZones.has(row.id) ? { ...row, active: 0 } : row,
+        ),
+      },
+    };
+    const accepted = await staged(zonesOff, versions);
     await expect(accepted.result).resolves.toMatchObject({ counts: { routing_cells: 1 } });
   });
 

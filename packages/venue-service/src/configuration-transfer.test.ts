@@ -1484,6 +1484,7 @@ describe("validateRoutingConfiguration", () => {
   it("is run by the venue-service transfer's validate callback", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
     const tables = routingTables();
+    tables.departments!.find((row) => row.id === DELI)!.active = 1;
     expect(() => validate(tables)).not.toThrow();
     tables.routing_cells!.push(cell({ product: LARGE, station: BAR }));
     expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));

@@ -352,6 +352,11 @@ function describeConfigurationRefusal(error: unknown): Message {
     const message = describeDepartmentOff(params);
     if (message !== undefined) return message;
   }
+  if (code === "zone.department_inactive") {
+    const { zoneName: zone, departmentName: department } = params ?? {};
+    if (isName(zone) && isName(department))
+      return sayWith("shell.configuration.zone_department_off", { zone, department });
+  }
   if (
     code === "setup.request_invalid" &&
     typeof params?.field === "string" &&

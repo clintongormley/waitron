@@ -5768,8 +5768,14 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       Open, for the owner (from #1403's review): the import answers this refusal 400, the
       boundary's default, while the grid's save answers the same code 404 — settling it means a
       `service_zone.not_found` row in `PROVISION_STATUS` (`apps/server/src/setup-api.ts`), left
-      out while #1399 changes that file. And the import still accepts an active zone in a
-      switched-off department when no routing cell names it; only the cell is refused.
+      out while #1399 changes that file.
+    - **Done by A393 (owner answer "Yes, refuse it", 2026-10-08): a configuration import refuses a
+      switched-on zone in a switched-off department**, whether or not a routing cell names it,
+      with the zone's own `zone.department_inactive`, naming the zone and the department (each name
+      only where the export holds one), answered 400. The check runs after the routing one, so a
+      bundle that also has a routing cell on that zone still gets A374's message naming the row.
+      The setup app's import screen names the zone and the department and how to fix it, in
+      English and Spanish.
     [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
     Changes needing another fiscal/geographic context or
     history removal use a separately approved setup/reset instead. Later

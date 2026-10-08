@@ -1236,6 +1236,11 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         row: "all",
       },
     ],
+    [
+      "zone.department_inactive",
+      400,
+      { zoneId: "z", zoneName: "Terraza", departmentId: "d", departmentName: "Comedor" },
+    ],
   ] as const)(
     "maps a staged configuration's %s, thrown at import, to %i",
     async (code, status, params) => {
