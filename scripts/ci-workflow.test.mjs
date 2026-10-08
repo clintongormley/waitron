@@ -1426,6 +1426,32 @@ function jobsWithoutPermissions(text) {
   return uncovered;
 }
 
+/** The ids of one workflow's jobs that run without a positive whole-number `timeout-minutes`. */
+function jobsWithoutTimeout(text) {
+  const workflowLines = text.split("\n");
+  const jobsKey = workflowLines.indexOf("jobs:");
+  if (jobsKey === -1) throw new Error("workflow has no top-level `jobs:` key");
+  const unbounded = [];
+  let current;
+  const close = () => {
+    if (current !== undefined && !current.bounded && !current.callsWorkflow)
+      unbounded.push(current.id);
+  };
+  for (const line of workflowLines.slice(jobsKey + 1)) {
+    const id = /^ {2}([^\s#][^:]*):/.exec(line)?.[1];
+    if (id !== undefined) {
+      close();
+      current = { id, bounded: false, callsWorkflow: false };
+    } else if (current !== undefined) {
+      if (/^ {4}timeout-minutes: [1-9]\d*\s*(#.*)?$/.test(line)) current.bounded = true;
+      if (/^ {4}uses:/.test(line)) current.callsWorkflow = true;
+    }
+  }
+  if (current === undefined) throw new Error("workflow has no jobs under `jobs:`");
+  close();
+  return unbounded;
+}
+
 /**
  * Each step under a `steps:` key, with its `name:` and the first line or `|`/`>` block of its
  * `run:`, shell comments cut.
@@ -1540,6 +1566,67 @@ describe("the workflows' token permissions", () => {
     expect(
       uncovered,
       "give the workflow a top-level `permissions:` block (contents: read), or the job its own",
+    ).toEqual([]);
+  });
+});
+
+/**
+ * Every job carries its own `timeout-minutes`; without one GitHub cancels it only after 360 minutes
+ * (github/docs workflow-syntax.md, `jobs.<job_id>.timeout-minutes`: "Default: 360"). A job that
+ * calls a reusable workflow is exempt: `timeout-minutes` is not among the keywords
+ * reusing-workflow-configurations.md (main 7b807926d, read 2026-10-08) allows in "the job
+ * containing the call"; a called workflow in this repository's .github/workflows/ is read here like
+ * any other, and one in another repository is not read at all.
+ * Weaker than its name: it reads TEXT by indent, so a flow-style job, or a `timeout-minutes`
+ * written as an expression, is reported as unbounded, and it does not judge whether the number is
+ * a sensible one.
+ */
+describe("the workflows' job time limits", () => {
+  const workflow = (jobs) => `on: push\njobs:\n${jobs}`;
+
+  it("passes a job with a limit and reports one without", () => {
+    expect(jobsWithoutTimeout(workflow("  a:\n    runs-on: x\n    timeout-minutes: 5\n"))).toEqual(
+      [],
+    );
+    expect(jobsWithoutTimeout(workflow("  a:\n    runs-on: x\n    steps: []\n"))).toEqual(["a"]);
+  });
+
+  it("does not count a step's own limit as the job's", () => {
+    const text = workflow(
+      "  a:\n    runs-on: x\n    steps:\n      - run: echo\n        timeout-minutes: 5\n",
+    );
+    expect(jobsWithoutTimeout(text)).toEqual(["a"]);
+  });
+
+  it("reports a one-line flow-style job even when it names a limit", () => {
+    expect(jobsWithoutTimeout(workflow("  a: {runs-on: x, timeout-minutes: 5}\n"))).toEqual(["a"]);
+  });
+
+  it("passes a limit when its line and the job's line carry a comment", () => {
+    expect(
+      jobsWithoutTimeout(workflow("  a: # note\n    runs-on: x\n    timeout-minutes: 5 # why\n")),
+    ).toEqual([]);
+  });
+
+  it("passes a job that calls a reusable workflow", () => {
+    const text = workflow("  a:\n    uses: ./.github/workflows/other.yml\n    secrets: inherit\n");
+    expect(jobsWithoutTimeout(text)).toEqual([]);
+  });
+
+  it.each([["0"], ["2.5"], ["${{ inputs.minutes }}"], ["-5"]])("reports a limit of %j", (value) => {
+    const text = workflow(`  a:\n    runs-on: x\n    timeout-minutes: ${value}\n`);
+    expect(jobsWithoutTimeout(text)).toEqual(["a"]);
+  });
+
+  it("give every job a time limit", () => {
+    const unbounded = workflowFiles.flatMap((name) =>
+      jobsWithoutTimeout(readFileSync(join(workflowsDir, name), "utf8")).map(
+        (job) => `${name}: ${job}`,
+      ),
+    );
+    expect(
+      unbounded,
+      "give each job `timeout-minutes:` at four-space indent, set from its measured durations",
     ).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@ jobs:
   licence-integrity:
     name: LICENSE is unmodified Elastic License 2.0
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - name: Verify LICENSE byte-for-byte
@@ -35,6 +36,7 @@ jobs:
     name: Every commit is signed off
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
