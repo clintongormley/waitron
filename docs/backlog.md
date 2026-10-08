@@ -1707,6 +1707,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A414 — device screens on a phone (owner, 2026-10-08; open; campaign lane A, after A366-1
   lands).** [Detail](backlog/till.md#a414--device-screens-on-a-phone)
 
+- **A kitchen display with someone signed in, logged out only after a long idle time** (owner,
+  2026-10-08, answering the A366 slice 5 plan; open; not numbered yet). The owner: "kitchen
+  displays can have a login, but i would not expect them to log off automatically, or at least
+  only after an extended logout time (eg 30 minutes)". Today nobody can sign in on one. Left out
+  of slice 5 as too large for it.
+  [Detail](backlog/till.md#a-kitchen-display-with-someone-signed-in-logged-out-only-after-a-long-idle-time)
+
 - `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
   party).
 

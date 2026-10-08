@@ -264,6 +264,32 @@ screen is designed.
     of ours covering the page — not told apart. If it recurs, attach over USB before restarting
     Chrome: take a screenshot through the debugger and ask `elementFromPoint` what is on top.
 
+## A kitchen display with someone signed in, logged out only after a long idle time
+
+- **Owner, 2026-10-08, answering decisions 4 and 5 of the
+  [A366 slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md):** "kitchen
+  displays can have a login, but i would not expect them to log off automatically, or at least
+  only after an extended logout time (eg 30 minutes)". With nobody signed in, the device is the one
+  acting; with someone signed in, that person is recorded.
+- **Why it is not small.** A kitchen display is built today as a screen nobody signs in on: the
+  server refuses its sign-in (`refuseKitchenSignIn`, `apps/server/src/till-api.ts`); the profile
+  stores no idle logout for it (`validateInactivityTimeout` returns none for `kds`,
+  `packages/layouts/src/device-profile.ts`) and the profile editor hides the setting
+  (`#shownFields`, `apps/dashboard/src/screens/device-profiles-screen.ts`); the till boots it
+  straight into its screen with no lock screen and never runs the idle timer on it
+  (`apps/till/src/till-app.ts`, `apps/till/src/session-activity.ts`); and a kitchen display
+  profile has no list of who may sign in, and only the actions a shared screen may hold
+  (`SHARED_DISPLAY_ACTIONS`, `packages/layouts/src/device-profile.ts`).
+- **What it needs:** a way to sign in on the kitchen display's screen without hiding the queue;
+  the sign-in route allowing it; who may sign in (the profile's admission list); the existing
+  "Auto-logout after (minutes)" setting offered for a kitchen display profile, with "never"
+  allowed; and, with someone signed in, which actions the person's permissions add.
+- **What slice 5 leaves ready.** Its Done route records the signed-in person when there is one
+  (`signedInPersonOn`), so a kitchen display's Done marks name the person once one can sign in.
+  Its Fire records the device; with someone signed in it should record the person instead. Slice
+  3's plan makes a kitchen display's "Close for today" take a manager's PIN because nobody is
+  signed in; a signed-in manager could skip it.
+
 ## Splitting a held line's quantity on the till takes one request per unit
 
 - **Splitting a held line's quantity on the till takes one request per unit.** Splitting a

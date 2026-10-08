@@ -13,14 +13,16 @@ their full text.
   a name with one customer menu plus staff-only menus, a department's day is time ranges each given
   a period, and the till sells only the current period's menus. Zones can be closed for part of
   their department's time; prep stations lose their hours and fallbacks; routing cells can name
-  periods; a printer shared by stations prints one combined ticket; watchers become monitors on
-  device profiles; receipts move to departments with translated text.
+  periods; a printer shared by stations prints one combined ticket; watchers become kitchen
+  screens and monitors on device profiles; receipts move to departments with translated text.
   [Spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
   Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
-  in two pull requests — monitors after slice 1, watcher printers retired after slice 4 — with its
-  open decisions for the owner at its top.
+  in two pull requests — kitchen screens and monitors after slice 1, watcher printers retired
+  after slice 4. Revised 2026-10-08 to the owner's answers (any device may run a station or pass
+  screen; a kitchen display's screen has buttons; a monitor has none), with the decisions the
+  revision added listed at its end.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
   in two pull requests — each department's receipt with translated subtitle and footer after
   slice 1, the department page's Receipt tab after slice 6 — with its open decisions at its top.
