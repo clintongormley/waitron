@@ -272,3 +272,36 @@ it("uses the runtime name for Valencian outside English and Spanish", () => {
 it("retains matching of a legacy malformed regional key", () => {
   expect(resolveContentText({ "en-invalid!": "Legacy", fr: "French" }, "en", "fr")).toBe("Legacy");
 });
+
+it.each(["ca-valencia", "ca-Latn-ES-valencia", "ca-AD-valencia", "ca-ES-fonipa-valencia"])(
+  "keeps the Valencian variant in %s",
+  (tag) => {
+    expect(contentLanguageCode(tag)).toBe("ca-ES-valencia");
+    expect(
+      resolveContentText(
+        { ca: "Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" },
+        tag,
+        "es",
+      ),
+    ).toBe("Valencian");
+    expect(
+      resolveEnabledContentText(
+        { ca: "Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" },
+        tag,
+        { defaultLanguage: "es", languages: ["ca", "ca-ES-valencia", "es"] },
+      ),
+    ).toBe("Valencian");
+  },
+);
+it("matches a Valencian map stored with another valid variant tag", () => {
+  expect(
+    resolveContentText(
+      { "ca-valencia": "Valencian", ca: "Catalan", es: "Spanish" },
+      "ca-ES-valencia",
+      "es",
+    ),
+  ).toBe("Valencian");
+  expect(resolveContentText({ "ca-valencia": "Valencian", es: "Spanish" }, "ca", "es")).toBe(
+    "Spanish",
+  );
+});

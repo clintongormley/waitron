@@ -66,7 +66,8 @@ export function contentLanguageCode(value: string): string {
   let language: string;
   try {
     const locale = new Intl.Locale(value);
-    if (locale.baseName === VALENCIAN) return VALENCIAN;
+    if (locale.language === "ca" && locale.baseName.split("-").includes("valencia"))
+      return VALENCIAN;
     language = locale.language;
   } catch {
     throw new AppError("content.language_invalid", {});
@@ -115,11 +116,10 @@ export function resolveContentText(
       language,
       ...Object.keys(translations)
         .filter((key) => {
-          if (!key.startsWith(`${language}-`)) return false;
           try {
             return contentLanguageCode(key) === language;
           } catch {
-            return true;
+            return key.startsWith(`${language}-`);
           }
         })
         .sort(),

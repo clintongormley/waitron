@@ -245,3 +245,29 @@ describe("Valencian customer menu", () => {
     ).toEqual({ text: "Spanish", origin: "default", language: "es", missingRequested: true });
   });
 });
+
+it("keeps a Catalan request missing when the menu holds only Valencian", () => {
+  expect(
+    resolveMenuText(
+      { "ca-ES-valencia": "Valencian", es: "Spanish" },
+      "Staff",
+      { kind: "customer", language: "ca" },
+      { defaultLanguage: "es", languages: ["ca", "ca-ES-valencia", "es"] },
+    ),
+  ).toEqual({ text: "Spanish", origin: "default", language: "es", missingRequested: true });
+});
+it("reports an alternate Valencian request with the stored variant key", () => {
+  expect(
+    resolveMenuText(
+      { ca: "Catalan", "ca-ES-valencia": "Valencian", es: "Spanish" },
+      "Staff",
+      { kind: "customer", language: "ca-valencia" },
+      { defaultLanguage: "es", languages: ["ca", "ca-ES-valencia", "es"] },
+    ),
+  ).toEqual({
+    text: "Valencian",
+    origin: "requested",
+    language: "ca-ES-valencia",
+    missingRequested: false,
+  });
+});

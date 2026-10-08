@@ -647,3 +647,17 @@ it("retains deletion of legacy malformed regional keys when their language is ed
     withLanguageText({ "en-invalid!": "Legacy", "en-GB": "Regional" }, "en", "English"),
   ).toEqual({ en: "English" });
 });
+
+it("replaces alternate Valencian keys without deleting Catalan", () => {
+  expect(
+    withLanguageText(
+      {
+        ca: "Catalan",
+        "ca-valencia": "Old Valencian",
+        "ca-Latn-ES-valencia": "Regional Valencian",
+      },
+      "ca-ES-valencia",
+      "New Valencian",
+    ),
+  ).toEqual({ ca: "Catalan", "ca-ES-valencia": "New Valencian" });
+});

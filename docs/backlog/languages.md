@@ -24,6 +24,12 @@ their full text.
     produced and checked, and what shows when one is missing; whether Valencian is its own
     interface language or a variant; and an order of work that keeps `main` green.
 
+- **Content-language names outside English and Spanish (A419 review, 2026-10-08):** when you add
+  these interface languages, give Valencian its own translated display name and check the picker.
+  The review probe returned the raw `ca-ES-valencia` code in Galician and the compound
+  `Català (Espanya, valencià)` in Catalan from `languageDisplayName`; A419 supplies the English and
+  Spanish names. Keep this with the parked interface work.
+
 ## The payment slip was left alone
 
 - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,

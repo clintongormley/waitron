@@ -20,13 +20,7 @@ function textInLanguage(
   locale: string,
 ): { text: string; language: string } | null {
   const language = contentLanguageCode(locale);
-  const keys = [
-    locale,
-    language,
-    ...Object.keys(map)
-      .filter((key) => key.startsWith(`${language}-`))
-      .sort(),
-  ];
+  const keys = [locale, language, ...Object.keys(map).sort()];
   for (const key of keys) {
     if (!Object.hasOwn(map, key)) continue;
     const text = resolveContentText({ [key]: map[key]! }, locale, locale);

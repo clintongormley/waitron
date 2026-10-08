@@ -46,11 +46,10 @@ export function withLanguageText(
 ): Record<string, string> {
   const others = Object.entries(value).filter(([key]) => {
     if (key === locale) return false;
-    if (!key.startsWith(`${locale}-`)) return true;
     try {
       return contentLanguageCode(key) !== locale;
     } catch {
-      return false;
+      return !key.startsWith(`${locale}-`);
     }
   });
   return { ...Object.fromEntries(others), [locale]: text };
