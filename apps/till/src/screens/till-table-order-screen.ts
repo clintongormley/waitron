@@ -2822,6 +2822,7 @@ export class TillTableOrderScreen extends LitElement {
       </div>`;
     if (!this.menus.some((menu) => menu.orderable))
       return html`<div class="grid-region">
+        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId)}
         <p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>
       </div>`;
     return html`<div class="grid-region">

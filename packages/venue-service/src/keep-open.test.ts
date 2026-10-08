@@ -12,7 +12,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import {
+  replaceMenuWeek,
+  resolveDepartmentService,
+  saveMenuPeriod,
+  updateMenuPeriod,
+} from "./menu-timetable.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { specialDates } from "./schema/hours.js";
@@ -80,7 +85,7 @@ async function fixture(options: { afternoon?: boolean; spring?: boolean } = {}) 
       })),
       at("12:00"),
     );
-    return { cfg, departmentId, zoneId: zone!.id, lunch, afternoon };
+    return { cfg, departmentId, zoneId: zone!.id, lunch, afternoon, menuId: menu.id };
   });
 }
 const rows = (f: Awaited<ReturnType<typeof fixture>>) =>
@@ -294,3 +299,22 @@ it("permits shortening an extension above its scheduled end, but never into the 
   });
   expect(await rows(f)).toEqual(before);
 });
+
+it.each([
+  { offset: -15, time: "14:44", orderable: true, sendable: true },
+  { offset: -15, time: "14:45", orderable: false, sendable: false },
+  { offset: 15, time: "15:00", orderable: false, sendable: true },
+  { offset: 15, time: "15:15", orderable: false, sendable: false },
+])(
+  "measures offset $offset at $time from the extended end",
+  async ({ offset, time, orderable, sendable }) => {
+    const f = await fixture();
+    await run((tx) => updateMenuPeriod(tx, f.cfg, f.lunch, { endOffsetMinutes: offset }));
+    await run((tx) =>
+      keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: "15:00" }, at("13:00")),
+    );
+    const state = await run((tx) => resolveDepartmentService(tx, f.cfg, f.departmentId, at(time)));
+    expect(state.orderableMenuIds).toEqual(orderable ? [f.menuId] : []);
+    expect(state.sendableMenuIds).toEqual(sendable ? [f.menuId] : []);
+  },
+);
