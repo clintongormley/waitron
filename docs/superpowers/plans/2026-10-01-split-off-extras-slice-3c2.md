@@ -1864,3 +1864,7 @@ no device (`apps/server/src/till-api.ts:783`, `:1826`, `:2063`, read at `dcc6a3a
 first decided at a release is never made here and gets its station's ticket, as 3c-1's T8 rules.
 3c-1's T12 and T13 were read in the amended 3c-1 plan in the
 main checkout on 2026-10-01 (at `e5ba24d55` with that file modified, not yet committed).
+
+
+2026-10-08: A333 seeds optional sides on Pollo asado. The demo-extras limitation stated above
+is superseded; see [products.md](../../products.md) for the current example.

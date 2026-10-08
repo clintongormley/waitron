@@ -9,7 +9,13 @@ import { and, eq, sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listAccessibleCatalogues, listAvailableProducts, menuItems } from "@waitron/catalogue";
+import {
+  listAccessibleCatalogues,
+  listAvailableProducts,
+  menuItems,
+  readLiveDocuments,
+  documentOffers,
+} from "@waitron/catalogue";
 import { zoneServicePolicies } from "@waitron/venue-service";
 import { computeDailyClose } from "@waitron/reporting";
 import {
@@ -66,6 +72,33 @@ function tillConfigFor(venue: Venue): OriginConfig {
 }
 
 describe("demo seed end-to-end", () => {
+  it("keeps the chicken's existing options when attaching its optional extras", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
+      dataSet: {
+        ...CASA_DELGADO_ES,
+        productOptionLists: [
+          {
+            productImage: "pollo-asado.png",
+            lists: CASA_DELGADO_ES.productOptionLists[0]!.lists,
+          },
+        ],
+      },
+    });
+    const { products } = await withTransaction(suite.db, (tx) =>
+      listAvailableProducts(tx, venue.locationId),
+    );
+    const chicken = products.find((product) => product.name === "Pollo asado")!;
+    expect(chicken.offeredModifiers.map((list) => [list.kind, list.name])).toEqual([
+      ["options", "Punto"],
+      ["extras", "Guarniciones"],
+    ]);
+  });
+
   it("seeds a venue whose reports, menus, media, and mixed order all compose", async () => {
     const venue = await provisionVenue();
     const start = Date.now();
@@ -88,6 +121,13 @@ describe("demo seed end-to-end", () => {
     const read = await withTransaction(suite.db, async (tx) => {
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
+      const documents = await readLiveDocuments(
+        tx,
+        menus.map((menu) => menu.id),
+      );
+      const publishedOffers = [...documents.values()].flatMap(({ document }) =>
+        documentOffers(document),
+      );
       const { rows: imageRows } = await tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,
       );
@@ -99,7 +139,7 @@ describe("demo seed end-to-end", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
       });
-      return { menus, products, image: imageRows[0]?.image ?? null, close };
+      return { menus, products, publishedOffers, image: imageRows[0]?.image ?? null, close };
     });
 
     expect(read.close.vat.byRate.length).toBeGreaterThan(0);
@@ -117,6 +157,45 @@ describe("demo seed end-to-end", () => {
     expect(read.menus[0]!.isDefault).toBe(true);
     const menuDelDia = read.menus.find((m) => m.name === "Menú del Día")!;
     expect(menuDelDia.isDefault).toBe(false);
+
+    const chickens = [
+      read.products.find((product) => product.name === "Pollo asado")!,
+      read.publishedOffers.find((offer) => offer.name === "Pollo asado")!,
+    ];
+    for (const chicken of chickens) {
+      expect(chicken.offeredModifiers).toHaveLength(1);
+      expect(chicken.offeredModifiers[0]).toMatchObject({
+        kind: "extras",
+        name: "Guarniciones",
+        customerName: { en: "Choose your sides", es: "Elige tus acompañamientos" },
+        kitchenName: "GUARNICIÓN POLLO",
+        minPicks: 0,
+        maxPicks: 3,
+        items: [
+          {
+            name: "Padrón peppers",
+            price: "2.00",
+            portion: "1.000",
+            maxQuantity: 1,
+            preselected: false,
+          },
+          {
+            name: "Mixed salad",
+            price: "1.50",
+            portion: "1.000",
+            maxQuantity: 1,
+            preselected: false,
+          },
+          {
+            name: "House bread",
+            price: "0.50",
+            portion: "1.000",
+            maxQuantity: 1,
+            preselected: false,
+          },
+        ],
+      });
+    }
 
     const casaProducts = read.products.filter((p) => p.catalogueName === "Casa Delgado");
     const diaProducts = read.products.filter((p) => p.catalogueName === "Menú del Día");

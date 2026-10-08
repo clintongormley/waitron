@@ -90,8 +90,6 @@ describe("seedOptionLists", () => {
     expect(attachments.get(steakId)).toEqual([{ kind: "options", id: cooked.id }]);
     expect(attachments.get(coffeeId)).toBeUndefined();
 
-    // The list reaches the field a till reads. It is the ONLY thing the steak offers — the demo
-    // seeds no extras list and nothing else attaches to this dish.
     const steak = available.find((product) => product.name === "Solomillo")!;
     expect(steak.offeredModifiers).toHaveLength(1);
     expect(steak.offeredModifiers[0]).toMatchObject({

@@ -1,5 +1,11 @@
 import type { DemoDataSet } from "../data-set.js";
-import { CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA, PRODUCT_OPTION_LISTS } from "../menu.js";
+import {
+  CASA_DELGADO,
+  DELI_TAKEAWAY,
+  MENU_DEL_DIA,
+  PRODUCT_OPTION_LISTS,
+  PRODUCT_EXTRA_LISTS,
+} from "../menu.js";
 import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "../floor.js";
 import { DEMO_STAFF } from "../staff.js";
 import { DEMO_ADJUSTMENT_REASONS } from "../seed-adjustments.js";
@@ -23,6 +29,7 @@ export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
     },
   },
   productOptionLists: PRODUCT_OPTION_LISTS,
+  productExtraLists: PRODUCT_EXTRA_LISTS,
   floor: {
     zones: DEMO_ZONES,
     tables: DEMO_TABLES,

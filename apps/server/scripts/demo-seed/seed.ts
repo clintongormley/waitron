@@ -19,6 +19,7 @@ import { seedWatchers } from "./seed-watchers.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
 import { seedMedia } from "./seed-media.js";
+import { seedExtraLists } from "./seed-extra-lists.js";
 import { seedOptionLists } from "./seed-option-lists.js";
 import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
@@ -68,12 +69,13 @@ export async function seedDemoRestaurant(
     );
     await routeToDemoPrinter(tx, locationId, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
+    await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
     await seedFloor(tx, { locationId, locale, departmentTradingNames, dataSet, menuIds });
     await seedWatchers(tx, { locationId, locale, dataSet, stationIds });
     await seedStaff(tx, { dataSet });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
     await seedMedia(tx, { productsByImage });
-    // Published last, so each live version holds the option lists and photos above (D17).
+    // Publish after modifiers and media so each version freezes their seeded values.
     for (const menuId of Object.values(menuIds)) {
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");

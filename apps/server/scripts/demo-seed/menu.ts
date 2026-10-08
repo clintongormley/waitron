@@ -3,7 +3,12 @@
 // image to product id. The VAT classes are mixed on purpose, so one basket's per-rate breakdown is
 // non-trivial.
 
-import type { SeedCatalogue, SeedCategory, SeedProductOptionLists } from "./data-set.js";
+import type {
+  SeedCatalogue,
+  SeedCategory,
+  SeedProductOptionLists,
+  SeedProductExtraLists,
+} from "./data-set.js";
 import type { CasaDelgadoLanguage } from "./data-sets/casa-delgado-es.js";
 
 type Catalogue = SeedCatalogue<CasaDelgadoLanguage>;
@@ -64,6 +69,31 @@ export const PRODUCT_OPTION_LISTS: SeedProductOptionLists<CasaDelgadoLanguage>[]
             },
             kitchenName: "MUY HECHO",
           },
+        ],
+      },
+    ],
+  },
+];
+
+export const PRODUCT_EXTRA_LISTS: SeedProductExtraLists<CasaDelgadoLanguage>[] = [
+  {
+    productImage: "pollo-asado.png",
+    lists: [
+      {
+        name: "Guarniciones",
+        customerName: {
+          en: "Choose your sides",
+          es: "Elige tus acompañamientos",
+          ca: "Tria els teus acompanyaments",
+          gl: "Escolle os teus acompañamentos",
+        },
+        kitchenName: "GUARNICIÓN POLLO",
+        minPicks: 0,
+        maxPicks: 3,
+        items: [
+          { productImage: "pimientos-de-padron.png", price: "2.00", portion: "1", maxQuantity: 1 },
+          { productImage: "ensalada-mixta.png", price: "1.50", portion: "1", maxQuantity: 1 },
+          { productImage: "pan-de-la-casa.png", price: "0.50", portion: "1", maxQuantity: 1 },
         ],
       },
     ],

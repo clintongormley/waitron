@@ -192,6 +192,8 @@ a separate kitchen name and direct dietary declarations; the Mixed salad has a c
 Delgado and Menú del Día include a **Drinks** menu as a folder. Drinks prices Caña at 3.00 instead
 of its product price of 2.80; both including menus inherit that price. Menú del Día sets its own
 Negroni price of 9.00. The coffee variants keep their own prices. The demo sirloin carries a seeded
-options list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras
-list, so nothing in it shows an extra being added to a dish.
+options list, **Punto**, asking how the steak should be cooked. On **Pollo asado**, you can choose
+up to three optional sides from **Guarniciones**: Padrón peppers (2.00), mixed salad (1.50) and
+house bread (0.50). These prices apply to one portion added to the chicken, so you can try an
+extra priced differently from the same product sold on its own.
 
