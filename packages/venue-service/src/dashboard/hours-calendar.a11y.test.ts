@@ -55,6 +55,7 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
     dayCutover: "06:00",
     civilDate: "2026-10-07",
     clockReadable: true,
+    departments: [],
     subjects: [
       { kind: "station", id: "restaurant", name: "Restaurant", active: true, isDefault: false },
       { kind: "station", id: "kitchen", name: "Kitchen", active: true, isDefault: true },

@@ -188,9 +188,6 @@ export class HoursScreen extends LitElement {
       tbody th {
         white-space: nowrap;
       }
-      [data-separator] {
-        border-inline-start: var(--wt-field-line-width-active) solid var(--wt-color-text-muted);
-      }
       tr[aria-current] > th {
         color: var(--wt-color-primary-text);
       }
@@ -352,7 +349,6 @@ export class HoursScreen extends LitElement {
     this.renderRoot.querySelector<HTMLElement>(`thead th[data-subject="${key}"]`)?.focus();
   }
 
-  /** The model's subjects, departments first; inactive ones only when asked for. */
   #subjects(): Subject[] {
     return this.model!.subjects.filter((subject) => subject.active || this.showInactive);
   }
@@ -931,12 +927,8 @@ export class HoursScreen extends LitElement {
     return format(key, { department: this.#departmentName(departmentId) });
   }
 
-  /** A department's name from the model, which lists inactive departments too. */
   #departmentName(id: string | undefined): string {
-    return (
-      this.model!.subjects.find((subject) => subject.kind === "department" && subject.id === id)
-        ?.name ?? ""
-    );
+    return this.model!.departments.find((department) => department.id === id)?.name ?? "";
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1061,12 +1053,7 @@ export class HoursScreen extends LitElement {
         return {
           heading: format("hours.clear_heading", { subject: editor.subject.name }),
           body: html`<p data-test="confirm-text">
-            ${format(
-              editor.subject.kind === "department"
-                ? "hours.clear_department"
-                : "hours.clear_station",
-              { subject: editor.subject.name },
-            )}
+            ${format("hours.clear_station", { subject: editor.subject.name })}
           </p>`,
           save: t("hours.clear"),
           danger: true,
@@ -1414,7 +1401,6 @@ export class HoursScreen extends LitElement {
 
   #week() {
     const subjects = this.#subjects();
-    const firstStation = subjects.find((subject) => subject.kind === "station");
     const today = this.model!.civilDate === null ? null : weekdayOf(this.model!.civilDate);
     const editableKeys = WEEK_DISPLAY_ORDER.flatMap((weekday) =>
       subjects
@@ -1443,12 +1429,7 @@ export class HoursScreen extends LitElement {
             <th scope="col">${t("hours.day_column")}</th>
             ${subjects.map(
               (subject) =>
-                html`<th
-                  scope="col"
-                  tabindex="-1"
-                  data-subject=${keyOf(subject)}
-                  ?data-separator=${subject === firstStation}
-                >
+                html`<th scope="col" tabindex="-1" data-subject=${keyOf(subject)}>
                   <div>
                     <span
                       ><span class="subject-name">${subject.name}</span>${
@@ -1475,11 +1456,7 @@ export class HoursScreen extends LitElement {
                   const key = keyOf(subject);
                   const value = this.#standardText(subject, weekday);
                   const shown = unbrokenRanges(value);
-                  return html`<td
-                    data-subject=${key}
-                    data-weekday=${weekday}
-                    ?data-separator=${subject === firstStation}
-                  >
+                  return html`<td data-subject=${key} data-weekday=${weekday}>
                     ${
                       this.#editable(subject)
                         ? html`<button

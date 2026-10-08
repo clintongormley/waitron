@@ -456,9 +456,11 @@ describe("clearProvisionFixture", () => {
     const cfg = { locationId: brandLocationId(result.locationId) };
     const at = new Date("2026-10-06T10:00:00Z");
     await withTransaction(db, async (tx) => {
-      const { rows } = await tx.execute<{ id: string }>(sql`
-        select id from departments where is_default`);
-      const restaurant = { kind: "department" as const, id: rows[0]!.id };
+      const [pass] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: result.locationId, name: "Restaurant pass" })
+        .returning({ id: kitchenStations.id });
+      const restaurant = { kind: "station" as const, id: pass!.id };
       const [bar] = await tx
         .insert(kitchenStations)
         .values({ locationId: result.locationId, name: "Bar" })

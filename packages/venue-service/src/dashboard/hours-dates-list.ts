@@ -120,7 +120,7 @@ export function renderDatesList(host: DatesListHost) {
     ...host.subjects.map((subject) => ({
       key: keyOf(subject),
       label: subject.active ? subject.name : `${subject.name} ${t("hours.inactive")}`,
-      group: t(subject.kind === "department" ? "hours.departments" : "hours.stations"),
+      group: t("hours.stations"),
       cell: (row: ListRow) => dateCell(host, row, subject),
     })),
     ...(host.readOnly ? [] : [actions]),

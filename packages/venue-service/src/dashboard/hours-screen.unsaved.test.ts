@@ -23,6 +23,7 @@ const model: HoursModel = {
   dayCutover: "06:00",
   civilDate: "2026-10-07",
   clockReadable: true,
+  departments: [],
   subjects: [{ kind: "station", id: "d1", name: "Restaurant", active: true, isDefault: false }],
   week: [{ subject: { kind: "station", id: "d1" }, days }],
   days: [],

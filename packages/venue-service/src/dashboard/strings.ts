@@ -392,11 +392,9 @@ const en = {
   "hours.closed": "Closed",
   "hours.all_day": "Open all day",
   "hours.periods": "Opening periods",
-  "hours.not_set_department": "No hours set",
   "hours.not_set_station": "No hours restriction",
   "hours.always_open_cell": "Always open",
   "hours.inactive": "(inactive)",
-  "hours.departments": "Departments",
   "hours.stations": "Prep stations",
   "hours.subject_actions": "Hours actions: {name}",
   "hours.configure": "Configure hours",
@@ -409,7 +407,6 @@ const en = {
   "hours.save_hours": "Save hours",
   "hours.back": "Back",
   "hours.clear_heading": "Clear schedule: {subject}",
-  "hours.clear_department": "{subject} will show no opening hours.",
   "hours.clear_station": "{subject} will have no hours restriction and take work at any time.",
   "hours.mode": "Hours",
   "hours.inherit": "Standard hours",
@@ -452,7 +449,7 @@ const en = {
   "hours.period_unsaved":
     "One of these periods could not be saved as sent. Close this editor and open it again to start from the saved hours.",
   "hours.subject_gone":
-    "A department or prep station these hours are for no longer exists. Close this editor and open it again.",
+    "A prep station these hours are for no longer exists. Close this editor and open it again.",
   "hours.week_mixed":
     "Some days of this week now have no hours, and a week has hours on every day or on none. Close this editor and open it again.",
   "hours.date": "Date",
@@ -1119,11 +1116,9 @@ const es: Record<keyof typeof en, string> = {
   "hours.closed": "Cerrado",
   "hours.all_day": "Abierto todo el día",
   "hours.periods": "Periodos de apertura",
-  "hours.not_set_department": "Sin horario",
   "hours.not_set_station": "Sin restricción horaria",
   "hours.always_open_cell": "Siempre abierta",
   "hours.inactive": "(inactivo)",
-  "hours.departments": "Departamentos",
   "hours.stations": "Estaciones de preparación",
   "hours.subject_actions": "Acciones de horario: {name}",
   "hours.configure": "Configurar horario",
@@ -1138,7 +1133,6 @@ const es: Record<keyof typeof en, string> = {
   "hours.save_hours": "Guardar horario",
   "hours.back": "Volver",
   "hours.clear_heading": "Borrar horario: {subject}",
-  "hours.clear_department": "{subject} no mostrará horario de apertura.",
   "hours.clear_station":
     "{subject} no tendrá restricción horaria y aceptará trabajo a cualquier hora.",
   "hours.mode": "Horario",
@@ -1182,7 +1176,7 @@ const es: Record<keyof typeof en, string> = {
   "hours.period_unsaved":
     "Uno de estos periodos no se pudo guardar tal como se envió. Cierra este editor y vuelve a abrirlo para partir del horario guardado.",
   "hours.subject_gone":
-    "Ya no existe un departamento o una estación de preparación de este horario. Cierra este editor y vuelve a abrirlo.",
+    "Ya no existe una estación de preparación de este horario. Cierra este editor y vuelve a abrirlo.",
   "hours.week_mixed":
     "Algunos días de esta semana ya no tienen horario, y una semana tiene horario todos los días o ninguno. Cierra este editor y vuelve a abrirlo.",
   "hours.date": "Fecha",

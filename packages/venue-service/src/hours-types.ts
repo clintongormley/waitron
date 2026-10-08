@@ -25,7 +25,7 @@ export type DateCell =
   | { mode: "periods"; periods: HourPeriod[] };
 
 export interface HoursSubject {
-  kind: "department" | "station";
+  kind: "station";
   id: string;
 }
 
@@ -85,6 +85,8 @@ export interface HoursModel {
   /** The venue's date now; null when its clock cannot be read. */
   civilDate: LocalDate | null;
   clockReadable: boolean;
+  /** Timetable refusals can name a department that has no editable station column. */
+  departments: { id: string; name: string }[];
   subjects: HoursModelSubject[];
   /** Each subject's standard week, Sunday first, in `subjects` order. */
   week: { subject: HoursSubject; days: WeekDay[] }[];

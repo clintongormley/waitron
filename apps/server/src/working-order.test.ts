@@ -103,6 +103,7 @@ import {
   departments,
   readHolidayFacts,
   replaceWeekHours,
+  replaceMenuWeek,
   saveSpecialDate,
   setStationFallback,
   setStationToday,
@@ -3376,12 +3377,9 @@ describe("opening hours", () => {
         .from(departments)
         .where(eq(departments.locationId, cfg.locationId));
       expect(departmentRows.length).toBeGreaterThan(0);
-      const closedWeek = WEEK_DISPLAY_ORDER.map((weekday) => ({
-        weekday,
-        cell: { mode: "closed" as const, periods: [] as [] },
-      }));
+      const closedWeek = WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, slots: [] }));
       for (const row of departmentRows)
-        await replaceWeekHours(tx, cfg, { kind: "department", id: row.id }, closedWeek, new Date());
+        await replaceMenuWeek(tx, cfg, row.id, closedWeek, new Date());
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
       try {

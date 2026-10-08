@@ -982,15 +982,12 @@ async function readRange(
   return { subjects, weeks, specials, cellsByDate };
 }
 
-async function calendarDays(
-  tx: Transaction,
-  cfg: VenueScope,
+function calendarDays(
+  opening: Awaited<ReturnType<typeof readOpeningHoursModel>>,
   dates: readonly LocalDate[],
   range: Awaited<ReturnType<typeof readRange>>,
   holidays: readonly HolidayFact[],
-  at: Date,
-): Promise<CalendarDay[]> {
-  const opening = await readOpeningHoursModel(tx, cfg, at);
+): CalendarDay[] {
   const specialOn = new Map(range.specials.map((special) => [special.date, special]));
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of holidays) {
@@ -1052,12 +1049,10 @@ export async function readCalendarDays(
   const dates = rangeDates(from, to);
   const range = await readRange(tx, cfg, dates);
   return calendarDays(
-    tx,
-    cfg,
+    await readOpeningHoursModel(tx, cfg, new Date()),
     dates,
     range,
     await readHolidays(tx, cfg, dates, holidays),
-    new Date(),
   );
 }
 
@@ -1075,11 +1070,13 @@ export async function readHoursModel(
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
   const listFrom = civilDate === null ? from : addDays(civilDate, -1);
   const range = await readRange(tx, cfg, dates, listFrom);
+  const opening = await readOpeningHoursModel(tx, cfg, at);
   return {
     timeZone: clock.timeZone,
     dayCutover: clock.dayCutover,
     civilDate,
     clockReadable: civilDate !== null,
+    departments: opening.departments.map(({ id, name }) => ({ id, name })),
     subjects: range.subjects,
     week: range.subjects.map(({ kind, id }) => ({
       subject: { kind, id },
@@ -1088,14 +1085,7 @@ export async function readHoursModel(
         cell: range.weeks.get(keyOf({ kind, id }))?.[weekday] ?? { mode: "not_set", periods: [] },
       })),
     })),
-    days: await calendarDays(
-      tx,
-      cfg,
-      dates,
-      range,
-      await readHolidays(tx, cfg, dates, holidays),
-      at,
-    ),
+    days: calendarDays(opening, dates, range, await readHolidays(tx, cfg, dates, holidays)),
     specialDates: range.specials.filter((special) => special.date >= listFrom),
     specialCells: range.specials.map((special) => ({
       specialDateId: special.id,

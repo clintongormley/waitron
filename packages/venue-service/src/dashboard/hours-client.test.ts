@@ -15,6 +15,7 @@ const model = (civilDate: string): HoursModel => ({
   dayCutover: "06:00",
   civilDate,
   clockReadable: true,
+  departments: [],
   subjects: [],
   week: [],
   days: [],

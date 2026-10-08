@@ -622,7 +622,7 @@ implement; pass; open the order screen in both themes and at phone width and loo
   `resolveSubjects :945`, `resolveOpeningDateHours :1021`, `readRange :1040`, `calendarDays :1154`),
   `hours-rules.ts :159-163`, `hours-types.ts :27`, `index.ts :40-46`,
   `dashboard/hours-screen.ts`, `hours-view.ts`, `hours-client.ts`, `dashboard/index.ts`, `strings.ts`
-  (`nav.hours`), `apps/dashboard/src/navigation.ts :10`, `configuration-transfer.ts` `ownerKey
+  (`nav.hours`), `dashboard/hours-dates-list.ts`, `apps/dashboard/src/navigation.ts :10`, `configuration-transfer.ts` `ownerKey
   :70-80`
 - Test: `hours.test.ts`, `hours-routes.test.ts`, `dashboard/hours-*.test.ts`,
   `apps/dashboard/src/navigation.test.ts`
@@ -632,6 +632,9 @@ siblings are (`hours.invalid` at `subject.kind`); readers ignore any department 
 tables; `resolveOpeningDateHours` is deleted; the calendar's Closed tone means "no active
 department is open that business day" (through `readOpeningHoursModel`); the nav label is "Station
 hours" / "Horario de estaciones"; the URL's `department` parameter goes.
+Timetable refusals keep their department names in a separate `HoursModel.departments` list of
+`{ id, name }`, from the opening-model snapshot used for the calendar. These names do not create
+editable columns; `subjects` and all hour cells remain stations only.
 
 - [ ] Steps: failing tests per behaviour; watch them fail; implement; pass; commit
 `feat(venue-service): the Hours screen keeps stations only (A366)`.

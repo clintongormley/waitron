@@ -31,6 +31,7 @@ function model(clockReadable = true): HoursModel {
     dayCutover: "06:00",
     civilDate: clockReadable ? "2026-10-07" : null,
     clockReadable,
+    departments: [],
     subjects: [
       { kind: "station", id: "restaurant", name: "Restaurant", active: true, isDefault: false },
       { kind: "station", id: "deli", name: "Deli", active: true, isDefault: false },

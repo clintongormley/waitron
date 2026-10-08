@@ -195,10 +195,7 @@ const read = (f: Fixture, subject: HoursSubject) =>
 /** Every stored row behind one subject's week, so a refusal can be shown to have written nothing. */
 async function storedWeek(subject: HoursSubject) {
   return withTransaction(db, async (tx: Transaction) => {
-    const owner =
-      subject.kind === "department"
-        ? eq(hoursWeekCells.departmentId, subject.id)
-        : eq(hoursWeekCells.stationId, subject.id);
+    const owner = eq(hoursWeekCells.stationId, subject.id);
     const cells = await tx
       .select()
       .from(hoursWeekCells)
@@ -1207,7 +1204,7 @@ const makeDefault = (f: Fixture, station: HoursSubject) =>
       .where(eq(kitchenStations.id, station.id));
   });
 
-const setDepartmentActive = (department: HoursSubject, active: boolean) =>
+const setDepartmentActive = (department: { id: string }, active: boolean) =>
   withTransaction(db, (tx) =>
     tx.update(departments).set({ active }).where(eq(departments.id, department.id)),
   );
@@ -1231,7 +1228,7 @@ async function addSubjects(f: Fixture) {
       ])
       .returning();
     return {
-      terraceDepartment: { kind: "department", id: terrace!.id } as HoursSubject,
+      terraceDepartment: { kind: "department" as const, id: terrace!.id },
       terrace: { kind: "station", id: terraceStation!.id } as HoursSubject,
       grill: { kind: "station", id: grill!.id } as HoursSubject,
     };
