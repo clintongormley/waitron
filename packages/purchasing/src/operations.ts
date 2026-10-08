@@ -290,8 +290,9 @@ export async function listPurchaseInvoices(
 
 /**
  * Patch a received invoice: any subset of header fields, and optionally a full REPLACEMENT of its
- * VAT lines (validated like create). Throws
- * `purchase.not_found` when no invoice with `id` is visible. `updated_at` is always bumped.
+ * VAT lines (validated like create). Throws `purchase.not_found` when no invoice with `id` is
+ * visible, and `purchase.duplicate` when the resulting supplier pair is another invoice's.
+ * `updated_at` is always bumped.
  */
 export async function updatePurchaseInvoice(
   tx: Transaction,
@@ -306,17 +307,36 @@ export async function updatePurchaseInvoice(
   // `total` crosses to cents and `deductibleProportion` to basis points; the rest pass through.
   // An absent field stays `undefined`, which drizzle's `set` leaves out of the statement.
   const { total, deductibleProportion, ...header } = patch.header ?? {};
-  const updated = await tx
-    .update(purchaseInvoices)
-    .set({
-      ...header,
-      total: total === undefined ? undefined : decimalToCents(total),
-      deductibleProportion:
-        deductibleProportion === undefined ? undefined : decimalToBasisPoints(deductibleProportion),
-      updatedAt: now(),
-    })
-    .where(eq(purchaseInvoices.id, id))
-    .returning({ id: purchaseInvoices.id });
+  let updated: { id: string }[];
+  try {
+    updated = await tx
+      .update(purchaseInvoices)
+      .set({
+        ...header,
+        total: total === undefined ? undefined : decimalToCents(total),
+        deductibleProportion:
+          deductibleProportion === undefined
+            ? undefined
+            : decimalToBasisPoints(deductibleProportion),
+        updatedAt: now(),
+      })
+      .where(eq(purchaseInvoices.id, id))
+      .returning({ id: purchaseInvoices.id });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    // The refused statement backed out by itself, so the stored row still reads as it was.
+    const [stored] = await tx
+      .select({
+        supplierTaxId: purchaseInvoices.supplierTaxId,
+        supplierInvoiceNumber: purchaseInvoices.supplierInvoiceNumber,
+      })
+      .from(purchaseInvoices)
+      .where(eq(purchaseInvoices.id, id));
+    throw new AppError("purchase.duplicate", {
+      supplierTaxId: header.supplierTaxId ?? stored!.supplierTaxId,
+      supplierInvoiceNumber: header.supplierInvoiceNumber ?? stored!.supplierInvoiceNumber,
+    });
+  }
   if (updated.length === 0) throw new AppError("purchase.not_found", { id });
 
   if (patch.lines !== undefined) {

@@ -4666,9 +4666,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   PATH location answers `location.not_found`** — left open by A394-3 (#1447). If workforce moves to
   the new code, declare it in `packages/db/src/errors.ts`.
 
-- **A394-4 to A394-22 — refusal statuses by one rule** — OPEN, low priority, not queued — owner
-  2026-10-08: take them from here when a lane has room. (A394-1 to A394-3 landed as #1441, #1444 and
-  #1447.) Read, not run: of 49 boundaries, 96 status rows break the rule
+- **A394-5 to A394-22 — refusal statuses by one rule** — OPEN, low priority, not queued — owner
+  2026-10-08: take them from here when a lane has room. (A394-1 to A394-4 landed as #1441, #1444,
+  #1447 and this PR.) Read, not run: of 49 boundaries, 96 status rows break the rule
   (`docs/developers/conventions-data.md`); 17 defects answer 500 or success for a missing id (A394-1
   to -6 first); 16 owner questions; A394-8 settles A374's. The follow-ups and the rows:
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
