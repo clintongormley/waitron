@@ -4153,8 +4153,8 @@ The original walkthrough is retained under _Detail → Setup wizard_.
   dashboard (one saved plan per zone, tables created in bulk, saved joins, Undo/Redo), and a till
   map whose job is status and rearranging: today's plan is the saved plan plus today's moves,
   joins, spares and seat changes, reset at the day cutover and on a button, with occupied tables
-  waiting for their tab to close. Table names are copied as text when a party closes or a delivery
-  ends, so a table can really be deleted. Five slices, each its own pull request; only slice 5
+  waiting for their tab to close. Table names are copied as text when a party closes, and onto
+  past orders and bookings when their table is deleted, so a table can really be deleted. Five slices, each its own pull request; only slice 5
   (removing the old floor screen tabs, placement routes and columns) needs a venue reset.
   [Spec](superpowers/specs/2026-10-08-floor-plan-design.md),
   [plan](superpowers/plans/2026-10-08-floor-plan.md) — its "Decisions this plan makes" list is
