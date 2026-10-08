@@ -5302,7 +5302,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       (`visibleRoutingRows` and `rowInModel`,
       `packages/venue-service/src/dashboard/routing-grid-model.ts`). An inactive product's cells
       stay out of sight until it is active again, as before.
-    - **Done by A373: a routing preview works out only what the change can move.** It works out
+    - **Done by A373 (#1405): a routing preview works out only what the change can move.** It works out
       the before and after choice only for the products under the changed row, in the changed zone
       (every zone for an Every zone cell), and only for the extras whose dish or own row is under
       it (`changeReach`, `packages/venue-service/src/routing.ts`); a dish outside that reach which
