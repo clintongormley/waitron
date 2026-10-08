@@ -108,6 +108,12 @@ skip is refused (`skippedEndpoint`).
 
 ## 5. At the till
 
+**Owner update, 2026-10-08:** the earlier after-period sending rule below is superseded.
+Each period gets a signed number of minutes from its end, negative for last orders before
+it, positive for sending leftovers after it. Slice 1 fixes it at 0 and accepts new dishes
+only while their own period runs. See [slice 1 decision 1](../plans/2026-10-07-a366-slice-1-service-periods.md).
+A432 adds the configurable value.
+
 - **Only the current period's menus can be ordered**, the customer menu and its staff-only menus.
   The till opens on the customer menu.
 - **Items already on an order when a period ends can still be sent after it.** New items from a

@@ -449,9 +449,10 @@ closes that department for the date's business day. Closing the whole venue clos
 department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these cases.
 
 The till offers new items from the running period's customer and staff menus. Sending a new line
-also accepts a menu from a period that ended earlier in this business day or ran on the previous
-one, because the server cannot observe when you put an unsent item in the basket. Increasing a
-stored line's quantity requires the current period; other edits retain the stored line.
+or increasing a stored line's quantity requires that period too. An unsent basket or draft can
+retain its dishes after the period ends, but sending them is refused. Slice 1 fixes the period-end
+offset at 0 (owner, 2026-10-08); A432 adds the signed minute setting. Other edits retain the stored
+line.
 `apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
 Pricing reads static period membership, without resolving ranges, dates or the clock. If the venue
 clock cannot be read, timetable resolution leaves the department's period menus orderable.

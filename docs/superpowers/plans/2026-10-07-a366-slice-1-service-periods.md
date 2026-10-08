@@ -48,13 +48,14 @@ and menu-state answers).
 
 The owner confirms or overrides these when reviewing the plan.
 
-1. **Items added before a period ended can be sent at any time after it** (owner, 2026-10-07: the
-   kitchen should see what is left to cook). The till's basket stays on the till until it is sent,
-   so the server cannot know when an item was added: it accepts a new line whose menu belongs to
-   the current period or to any period that has already ended this business day or ran on the one
-   before, and refuses a menu whose period has not started yet, or anything when no period has
-   run. The till offers no new items from a period that has ended. Lines already stored are never
-   re-checked.
+1. **A request adds dishes only while their own period runs** (owner, 2026-10-08,
+   replacing the earlier unlimited leftovers allowance). Each period will have one signed
+   minutes setting measured from its end: negative closes orders before the end; positive
+   allows sending after it. In slice 1 the offset is fixed at **0**. A Lunch dish sent at
+   13:50 during Lunch 12:00–14:00 is accepted; at 14:00 or 17:00 it is refused. A menu
+   whose period has not started is refused even if it ran yesterday, and a closed day
+   accepts no new dishes. The till's selections follow the running period. Existing stored
+   dishes retain their snapshots; other edits do not add new dishes. A432 adds the setting.
 2. **Asking for more of a stored line after its period has ended is refused** (owner, 2026-10-07),
    until slice 3's manager extension can keep the period open. Raising a stored line's quantity
    is checked against the current period only. Any other edit of a stored line is not checked.
@@ -135,7 +136,7 @@ has its test in the task named.
    morning is Friday's Night (Tasks 1 and 4).
 2. **A boundary minute.** Lunch 12:00–14:00 then Afternoon 14:00–19:00: 14:00 is Afternoon; 13:59
    is Lunch (Task 1).
-3. **After a period ends.** A Lunch item left in the basket and sent at 17:00 is accepted; a
+3. **After a period ends.** A Lunch item left in the basket and sent at 17:00 is refused; a
    Dinner item sent during Lunch is refused with `menu_period.not_running`; raising a stored Lunch
    line's quantity at 14:05 is refused the same way; the till's basket keeps a Lunch line after
    the period changes (Tasks 8 and 9).
@@ -569,13 +570,13 @@ client, screen and their types.
 **Interfaces:** error `menu_period.not_running`, params `{ departmentId, menuId }`, registered in
 `packages/venue-service/src/errors.ts` (a refusal, not a recorded incident: no alert wording).
 
-Rule: a line the request adds is accepted when its menu is in `orderableMenuIds` or
-`endedMenuIds`. The added quantity of a stored line is accepted only when its menu is in
-`orderableMenuIds`. Anything else about stored lines is not checked. An item on no menu of the
+Rule: a line the request adds, including a draft submission, is accepted only when its menu
+is in `orderableMenuIds`. The added quantity of a stored line follows the same rule.
+`endedMenuIds` describes elapsed ranges; it never grants acceptance with slice 1's fixed 0 offset. Anything else about stored lines is not checked. An item on no menu of the
 department's periods stays `service_zone.offer_not_allowed`.
 
 - [ ] **Step 1: Failing tests** through the real routes with `vi.setSystemTime`: a Lunch item sent
-at 13:50 → accepted; sent at 17:00 → accepted; a Dinner item sent at 13:00 →
+at 13:50 → accepted; sent at 14:00 or 17:00 → `menu_period.not_running`; a Dinner item sent at 13:00 →
 `menu_period.not_running`; a Lunch line stored at 13:50, quantity raised at 13:55 → accepted, at
 14:05 → `menu_period.not_running`; that stored line's note edited at 15:00 → accepted; on a day with
 no periods, any new line → `menu_period.not_running`; an item on no period's menu →
