@@ -1,5 +1,10 @@
 # Adding and editing devices — implementation plan
 
+**2026-10-08 update:** [A413](../../backlog.md) replaces the two Add buttons with one in the page
+heading, shows a completed join as a heading for four seconds before the shared fade, and changes
+the empty waiting message to "Waiting for more devices…" after the first join. The Devices table
+also gains search and profile/status filters. The original design and plan below remain historical.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A device joins the way a printer is added — through an Add a device dialog that holds the
