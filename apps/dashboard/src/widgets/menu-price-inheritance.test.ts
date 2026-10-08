@@ -26,6 +26,7 @@ const burger: MenuPriceRow = {
   override: null,
   effectivePrice: "12.00",
   active: true,
+  available: true,
   variants: [],
 };
 const steak: MenuPriceRow = {
@@ -57,9 +58,10 @@ const lemonade: MenuPriceRow = {
   override: "2.50",
   effectivePrice: "2.50",
   active: true,
+  available: true,
   variants: [
-    { variantId: "v-small", price: null, active: true },
-    { variantId: "v-large", price: "3.75", active: true },
+    { variantId: "v-small", price: null, active: true, available: true },
+    { variantId: "v-large", price: "3.75", active: true, available: true },
   ],
 };
 const wine: MenuPriceRow = {
@@ -83,10 +85,11 @@ const wine: MenuPriceRow = {
   override: "13.00",
   effectivePrice: "13.00",
   active: true,
+  available: true,
   variants: [
-    { variantId: "v-glass", price: "7.00", active: true },
-    { variantId: "v-bottle", price: null, active: true },
-    { variantId: "v-carafe", price: "15.00", active: true },
+    { variantId: "v-glass", price: "7.00", active: true, available: true },
+    { variantId: "v-bottle", price: null, active: true, available: true },
+    { variantId: "v-carafe", price: "15.00", active: true, available: true },
   ],
 };
 const juice: MenuPriceRow = {
@@ -109,9 +112,10 @@ const juice: MenuPriceRow = {
   override: null,
   effectivePrice: "4.00",
   active: true,
+  available: true,
   variants: [
-    { variantId: "v-juice-small", price: "3.50", active: true },
-    { variantId: "v-juice-large", price: null, active: true },
+    { variantId: "v-juice-small", price: "3.50", active: true, available: true },
+    { variantId: "v-juice-large", price: null, active: true, available: true },
   ],
 };
 const cider: MenuPriceRow = {
@@ -134,9 +138,10 @@ const cider: MenuPriceRow = {
   override: null,
   effectivePrice: "4.00",
   active: true,
+  available: true,
   variants: [
-    { variantId: "v-pint", price: null, active: true },
-    { variantId: "v-half", price: null, active: true },
+    { variantId: "v-pint", price: null, active: true, available: true },
+    { variantId: "v-half", price: null, active: true, available: true },
   ],
 };
 

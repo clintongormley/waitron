@@ -324,6 +324,7 @@ export async function menuVariantsOfItems(
         variantId: products.id,
         price: menuItemVariantOverrides.price,
         active: products.active,
+        available: products.available,
       })
       .from(menuItems)
       .innerJoin(products, eq(products.parentId, menuItems.productId))
@@ -337,7 +338,12 @@ export async function menuVariantsOfItems(
       .where(and(inArray(menuItems.id, batch), eq(products.active, true)))
       .orderBy(menuItems.id, products.variantOrder, products.id)) {
       const held = grouped.get(row.menuItemId) ?? [];
-      held.push({ variantId: row.variantId, price: priceOrNull(row.price), active: row.active });
+      held.push({
+        variantId: row.variantId,
+        price: priceOrNull(row.price),
+        active: row.active,
+        available: row.available,
+      });
       grouped.set(row.menuItemId, held);
     }
   return grouped;

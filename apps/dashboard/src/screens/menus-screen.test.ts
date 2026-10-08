@@ -257,6 +257,7 @@ function lunchPrices(): MenuPriceRow[] {
       override: null,
       effectivePrice: "12.00",
       active: true,
+      available: true,
       variants: [],
     },
     {
@@ -279,9 +280,10 @@ function lunchPrices(): MenuPriceRow[] {
       override: "2.50",
       effectivePrice: "2.50",
       active: true,
+      available: true,
       variants: [
-        { variantId: "v-small", price: null, active: true },
-        { variantId: "v-large", price: "3.75", active: true },
+        { variantId: "v-small", price: null, active: true, available: true },
+        { variantId: "v-large", price: "3.75", active: true, available: true },
       ],
     },
     {
@@ -294,6 +296,7 @@ function lunchPrices(): MenuPriceRow[] {
       override: null,
       effectivePrice: "2.00",
       active: true,
+      available: true,
       variants: [],
     },
   ];

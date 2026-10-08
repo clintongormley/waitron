@@ -728,7 +728,8 @@ describe("a menu's prices", () => {
         override: null,
         effectivePrice: "3.00",
         active: true,
-        variants: [{ variantId: f.large, price: null, active: true }],
+        available: true,
+        variants: [{ variantId: f.large, price: null, active: true, available: true }],
       },
       {
         menuItemId: await itemOf(f.lunch, f.water),
@@ -739,6 +740,7 @@ describe("a menu's prices", () => {
         override: null,
         effectivePrice: "2.00",
         active: true,
+        available: true,
         variants: [],
       },
     ]);
@@ -809,10 +811,54 @@ describe("a menu's prices", () => {
       ["Water (staff)", true],
       ["Juice (staff)", true],
     ]);
+    expect(rows.map(({ name, available }) => [name, available])).toEqual([
+      ["Lemonade (staff)", true],
+      ["Water (staff)", false],
+      ["Juice (staff)", true],
+    ]);
     // A till's offers still leave the inactive product out.
     expect(
       (await app((tx) => listMenuOffers(tx, [f.lunch]))).map(({ productId }) => productId),
     ).toEqual([f.lemonade, f.water, f.juice]);
+  });
+
+  it("carries each variant's own Available", async () => {
+    const f = await fixture();
+    const { small } = await app(async (tx) => {
+      const variants = await setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          {
+            id: f.large,
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "3.50",
+            available: true,
+          },
+          {
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.50",
+            available: false,
+          },
+        ],
+        "en",
+      );
+      await addMember(tx, f.lunchRoot, product(f.lemonade));
+      return { small: variants.find((variant) => variant.name === "Small")!.id };
+    });
+    const [row] = await app((tx) => menuPrices(tx, f.lunch));
+    expect(row!.variants.map(({ variantId, available }) => [variantId, available])).toEqual([
+      [f.large, true],
+      [small, false],
+    ]);
+    // A sold-out size does not make the product read sold out.
+    expect(row!.available).toBe(true);
   });
 
   it("carries the Active variants as the variants read gives them, and leaves the Inactive one out", async () => {
@@ -862,8 +908,8 @@ describe("a menu's prices", () => {
     const [lunchRow] = await app((tx) => menuPrices(tx, f.lunch));
     const [dinnerRow] = await app((tx) => menuPrices(tx, f.dinner));
     expect(lunchRow!.variants).toEqual([
-      { variantId: f.large, price: "3.25", active: true },
-      { variantId: small, price: null, active: true },
+      { variantId: f.large, price: "3.25", active: true, available: true },
+      { variantId: small, price: null, active: true, available: true },
     ]);
     expect(lunchRow!.variants.map(({ variantId, price }) => ({ variantId, price }))).toEqual(
       await app((tx) => listMenuVariants(tx, lunchItem)),
@@ -875,8 +921,8 @@ describe("a menu's prices", () => {
     ]);
     // Dinner sets nothing for any size, and lists no Inactive Jug either.
     expect(dinnerRow!.variants).toEqual([
-      { variantId: f.large, price: null, active: true },
-      { variantId: small, price: null, active: true },
+      { variantId: f.large, price: null, active: true, available: true },
+      { variantId: small, price: null, active: true, available: true },
     ]);
   });
 

@@ -73,6 +73,7 @@ const burger: MenuPriceRow = {
   override: null,
   effectivePrice: "12.00",
   active: true,
+  available: true,
   variants: [],
 };
 const lemonade: MenuPriceRow = {
@@ -95,9 +96,10 @@ const lemonade: MenuPriceRow = {
   override: "2.50",
   effectivePrice: "2.50",
   active: true,
+  available: true,
   variants: [
-    { variantId: "v-small", price: null, active: true },
-    { variantId: "v-large", price: "3.75", active: true },
+    { variantId: "v-small", price: null, active: true, available: true },
+    { variantId: "v-large", price: "3.75", active: true, available: true },
   ],
 };
 const lager: MenuPriceRow = {
@@ -110,6 +112,7 @@ const lager: MenuPriceRow = {
   override: null,
   effectivePrice: "2.00",
   active: true,
+  available: true,
   variants: [],
 };
 
@@ -578,14 +581,14 @@ it("counts a product whose only price on this menu is a variant's as overridden,
         ...lemonade,
         override: null,
         variants: [
-          { variantId: "v-small", price: null, active: true },
-          { variantId: "v-large", price: "4.25", active: true },
+          { variantId: "v-small", price: null, active: true, available: true },
+          { variantId: "v-large", price: "4.25", active: true, available: true },
         ],
       },
       {
         ...lager,
         combined: combinedFixture("p-lager", "2.00", [{ variantId: "v-small", price: null }]),
-        variants: [{ variantId: "v-small", price: null, active: true }],
+        variants: [{ variantId: "v-small", price: null, active: true, available: true }],
       },
       burger,
     ],
@@ -830,8 +833,8 @@ it("sends only the field committed, with the price stored when it was sent, what
       ...lemonade,
       override: "2.60",
       variants: [
-        { variantId: "v-small", price: "1.00", active: true },
-        { variantId: "v-large", price: "3.75", active: true },
+        { variantId: "v-small", price: "1.00", active: true, available: true },
+        { variantId: "v-large", price: "3.75", active: true, available: true },
       ],
     },
     lager,
@@ -1872,10 +1875,11 @@ describe("variants", () => {
     override: "13.00",
     effectivePrice: "13.00",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-glass", price: "7.00", active: true },
-      { variantId: "v-bottle", price: null, active: true },
-      { variantId: "v-carafe", price: "15.00", active: true },
+      { variantId: "v-glass", price: "7.00", active: true, available: true },
+      { variantId: "v-bottle", price: null, active: true, available: true },
+      { variantId: "v-carafe", price: "15.00", active: true, available: true },
     ],
   };
   /** Its only menu price is a variant's. */
@@ -1899,9 +1903,10 @@ describe("variants", () => {
     override: null,
     effectivePrice: "4.00",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-juice-small", price: "3.50", active: true },
-      { variantId: "v-juice-large", price: null, active: true },
+      { variantId: "v-juice-small", price: "3.50", active: true, available: true },
+      { variantId: "v-juice-large", price: null, active: true, available: true },
     ],
   };
   const tea: MenuPriceRow = {
@@ -1921,7 +1926,8 @@ describe("variants", () => {
     override: null,
     effectivePrice: "2.00",
     active: true,
-    variants: [{ variantId: "v-pot", price: "2.40", active: true }],
+    available: true,
+    variants: [{ variantId: "v-pot", price: "2.40", active: true, available: true }],
   };
   /** No menu price anywhere. */
   const cider: MenuPriceRow = {
@@ -1944,9 +1950,10 @@ describe("variants", () => {
     override: null,
     effectivePrice: "4.00",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-pint", price: null, active: true },
-      { variantId: "v-half", price: null, active: true },
+      { variantId: "v-pint", price: null, active: true, available: true },
+      { variantId: "v-half", price: null, active: true, available: true },
     ],
   };
   const steak: MenuPriceRow = {
@@ -2076,8 +2083,8 @@ describe("variants", () => {
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "5.0", active: true },
-            { variantId: "v-juice-large", price: null, active: true },
+            { variantId: "v-juice-small", price: "5.0", active: true, available: true },
+            { variantId: "v-juice-large", price: null, active: true, available: true },
           ],
         },
       ],
@@ -2134,9 +2141,10 @@ describe("variants", () => {
       override: null,
       effectivePrice: "6.00",
       active: true,
+      available: true,
       variants: [
-        { variantId: "v-zeta", price: null, active: true },
-        { variantId: "v-alpha", price: null, active: true },
+        { variantId: "v-zeta", price: null, active: true, available: true },
+        { variantId: "v-alpha", price: null, active: true, available: true },
       ],
     };
     const el = await mount({ rows: [pizza, burger], products: [pizzaProduct] });
@@ -2301,8 +2309,8 @@ describe("variants", () => {
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "1000.00", active: true },
-            { variantId: "v-juice-large", price: "9999.99", active: true },
+            { variantId: "v-juice-small", price: "1000.00", active: true, available: true },
+            { variantId: "v-juice-large", price: "9999.99", active: true, available: true },
           ],
         };
         const el = await mount({ rows: [wide], products });
@@ -3328,8 +3336,8 @@ it.each(["en-GB", "es-ES"])(
         ...lemonade,
         override: "4.00",
         variants: [
-          { variantId: "v-small", price: null, active: true },
-          { variantId: "v-large", price: "14.00", active: true },
+          { variantId: "v-small", price: null, active: true, available: true },
+          { variantId: "v-large", price: "14.00", active: true, available: true },
         ],
         combined: {
           ...lemonade.combined,
@@ -3492,8 +3500,8 @@ describe("the clash message and the Clashes filter", () => {
         ],
       },
       variants: [
-        { variantId: "v-small", price: null, active: true },
-        { variantId: "v-large", price: null, active: true },
+        { variantId: "v-small", price: null, active: true, available: true },
+        { variantId: "v-large", price: null, active: true, available: true },
       ],
     } as MenuPriceRow;
   }
@@ -3868,12 +3876,18 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
       override: null,
       effectivePrice: "3.00",
       active,
+      available: true,
       combined: {
         productId: `p-${id}`,
         price,
         variants: sizes.map(({ variantId, price }) => ({ variantId, price })),
       },
-      variants: sizes.map(({ variantId, active }) => ({ variantId, price: null, active })),
+      variants: sizes.map(({ variantId, active }) => ({
+        variantId,
+        price: null,
+        active,
+        available: true,
+      })),
     } as MenuPriceRow;
   }
   const shapes = {

@@ -41,6 +41,7 @@ const rows: MenuPriceRow[] = [
     override: null,
     effectivePrice: "12.00",
     active: true,
+    available: true,
     variants: [],
   },
   {
@@ -63,9 +64,10 @@ const rows: MenuPriceRow[] = [
     override: "2.50",
     effectivePrice: "2.50",
     active: true,
+    available: true,
     variants: [
-      { variantId: "v-small", price: null, active: true },
-      { variantId: "v-large", price: "3.75", active: true },
+      { variantId: "v-small", price: null, active: true, available: true },
+      { variantId: "v-large", price: "3.75", active: true, available: true },
     ],
   },
 ];

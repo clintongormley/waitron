@@ -864,6 +864,7 @@ interface MenuPriceRow {
   override: string | null;
   effectivePrice: string;
   active: boolean;
+  available: boolean;
 }
 
 async function menuPricesVia(app: Hono, menuId: string): Promise<MenuPriceRow[]> {
@@ -2569,6 +2570,11 @@ describe("mountCatalogueApi — products", () => {
     const inactiveOffer = await offerVia(app, catalogueId, inactiveId, "4.50");
     const listed = async (): Promise<[string, boolean][]> =>
       (await menuPricesVia(app, catalogueId)).map(({ menuItemId, active }) => [menuItemId, active]);
+    const availability = async (): Promise<[string, boolean][]> =>
+      (await menuPricesVia(app, catalogueId)).map(({ menuItemId, available }) => [
+        menuItemId,
+        available,
+      ]);
 
     const soldOut = await send(app, "PUT", `/management-api/products/${unavailableId}/editor`, {
       body: await editorBody(app, { name: "Rutas", active: true, available: false }),
@@ -2578,12 +2584,17 @@ describe("mountCatalogueApi — products", () => {
       [unavailableOffer, true],
       [inactiveOffer, true],
     ]);
+    expect(await availability()).toEqual([
+      [unavailableOffer, false],
+      [inactiveOffer, true],
+    ]);
 
     const deleted = await send(app, "PUT", `/management-api/products/${inactiveId}/editor`, {
       body: await editorBody(app, { name: "Bravas", active: false, available: true }),
     });
     expect(deleted.status).toBe(200);
     expect(await listed()).toEqual([[unavailableOffer, true]]);
+    expect(await availability()).toEqual([[unavailableOffer, false]]);
   });
 
   it("creates a product with its kitchen course in one save", async () => {
@@ -4055,6 +4066,7 @@ describe("a menu's prices", () => {
         override: "1.40",
         effectivePrice: "1.40",
         active: true,
+        available: true,
         variants: [],
       },
     ]);
