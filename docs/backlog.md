@@ -1576,6 +1576,8 @@ building, not changed:**
   `apps/till/src/widgets/product-name.ts`) names itself in English only, so a Spanish till drawing
   such a product shows the unit's id — seen only with test products; whether the server ever sends
   a product without a unit was not checked;
+  **2026-10-08:** A385 supplies Spanish legacy-unit text and removes the id fallback;
+  helper and rendered-tile cases cover the legacy product shape.
 - **for the owner:** the two dropdown explanations on venue service's Kitchen panel in Venue
   settings ("Applies to new kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`,
   which a field that always holds a value never shows, so only screen readers read them while the

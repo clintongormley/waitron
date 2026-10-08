@@ -16837,7 +16837,7 @@ describe("W69 till shell leave routes", () => {
             expect(currentLocale()).toBe(locale);
             const tab =
               shell(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button:last-of-type")!;
-            expect(tab.textContent?.trim()).toBe("Floor");
+            expect(tab.textContent?.trim()).toBe(locale === "es-ES" ? "Sala" : "Floor");
             await userEvent.click(tab);
             await expect.poll(() => question(el).open).toBe(true);
             const q = question(el);
