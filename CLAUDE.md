@@ -223,11 +223,11 @@ called weaker than its name, the topic file lists what it does not see.
   2026-10-07, A331); the forms that follow it are listed in design-system.md, and nothing guards it
   across screens. A button that is not a save is drawn quiet while it waits for a choice, a
   selection or a load, and in its own colour once it can act or while its own request is sent
-  (owner, 2026-10-08, A416); nothing guards it across screens. A field's hint is its placeholder. A
-  short explanation is a hint, not a "?" button (owner, 2026-10-03); nothing guards that across
-  screens (backlog A237). Every input has a semantic
-  `name`, never a generated widget id. The owner's other dated decisions, and the sign-in exception,
-  are in [conventions-ui.md](docs/developers/conventions-ui.md).
+  (owner, 2026-10-08, A416); its exceptions are in design-system.md → Forms, and nothing guards it
+  across screens. A field's hint is its placeholder. A short explanation is a hint, not a "?"
+  button (owner, 2026-10-03); nothing guards that across screens (backlog A237). Every input has a
+  semantic `name`, never a generated widget id. The owner's other dated decisions, and the sign-in
+  exception, are in [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Cost:
   a native dropdown cannot take the approved look (A178). Guard: `scripts/native-form-fields.test.ts`,

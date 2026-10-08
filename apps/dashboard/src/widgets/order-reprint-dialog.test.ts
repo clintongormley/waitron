@@ -181,6 +181,7 @@ it("keeps Print quiet when there is no printer to send to", async () => {
   await vi.waitFor(() => expect(api.getOrderPrinters).toHaveBeenCalled());
   arrive([]);
   await held;
+  await vi.waitFor(() => expect((el as unknown as { printers: unknown }).printers).toEqual([]));
   await el.updateComplete;
   const print = printButton(el);
   await print.updateComplete;
