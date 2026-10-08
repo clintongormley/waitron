@@ -1279,6 +1279,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   set by its signed end offset. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service
   zones spec; it folds in S11. [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
+  Slice 3 Part A remains in progress on `feat/service-periods-slice-3-station-controls`:
+  its station-day and period-extension server controls are implemented; the till and kitchen
+  display controls, full branch review and current-head CI remain.
+
 - **Changing the business-day start after saving service hours** — open review follow-up from
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
   the setting directly in the database. [Detail](backlog/service-periods.md#changing-the-business-day-start-after-saving-service-hours)

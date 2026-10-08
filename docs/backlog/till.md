@@ -1034,6 +1034,10 @@ passing; the second met coverage. Receipts: `~/waitron-campaign-d/receipts/w101/
 and `till-full-coverage2.log`. The triggering test and cause are unverified; isolate the profile-switch
 case and its identity response before choosing a fix. Transfer-focused runs did not log this rejection.
 
+2026-10-09: A366-3A's A11 `pnpm --filter @waitron/till exec vitest run` also logged this
+rejection from `#switchProfile` and reported 5,897 passing tests. That run does not establish its
+cause; retain the investigation above. Local receipt: Lane E's `receipts/a366-3a/a11-till.log`.
+
 ## A card payment stuck `attempting` holds its device's profile switch
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:

@@ -249,7 +249,7 @@ export interface ZoneMenu {
 /** What a zone sells: its active, published menus' live versions, each offer marked with its
  *  availability. */
 export interface ZoneOffers {
-  readonly service: { readonly open: boolean; readonly periodName: string | null };
+  readonly service: ZoneMenuState["service"];
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];
@@ -265,7 +265,17 @@ export interface ZoneUnavailable {
 
 /** A zone's live menu versions, and what they hold that cannot be sold now. */
 export interface ZoneMenuState {
-  readonly service: { readonly open: boolean; readonly periodName: string | null };
+  readonly service: {
+    readonly open: boolean;
+    readonly periodName: string | null;
+    readonly keepOpen: {
+      readonly periodId: string;
+      readonly periodName: string;
+      readonly endsAt: string;
+      readonly running: boolean;
+      readonly extendedUntil: string | null;
+    } | null;
+  };
   readonly menus: readonly {
     readonly menuId: string;
     readonly versionId: string;

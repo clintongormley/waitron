@@ -380,7 +380,17 @@ export interface ServedMenu {
 /** `GET /api/menu-state?zoneId=` — each live menu's published version, and what cannot be sold
  * now. */
 export interface MenuState {
-  service: { open: boolean; periodName: string | null };
+  service: {
+    open: boolean;
+    periodName: string | null;
+    keepOpen: {
+      periodId: string;
+      periodName: string;
+      endsAt: string;
+      running: boolean;
+      extendedUntil: string | null;
+    } | null;
+  };
   menus: { menuId: string; versionId: string; orderable: boolean; sendable: boolean }[];
   unavailable: MenuUnavailable;
 }

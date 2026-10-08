@@ -810,7 +810,6 @@ async function zoneLiveDocuments(
 }
 
 export interface ServiceZoneOffers extends ZoneOffers {
-  readonly service: { readonly open: boolean; readonly periodName: string | null };
   readonly menus: readonly (ServedMenu & {
     readonly audience: "customer" | "staff";
     readonly orderable: boolean;
@@ -866,7 +865,11 @@ export async function listZoneOffers(
   }));
   return {
     defaultMenuId,
-    service: { open: service?.open ?? true, periodName: service?.periodName ?? null },
+    service: {
+      open: service?.open ?? true,
+      periodName: service?.periodName ?? null,
+      keepOpen: service?.keepOpen ?? null,
+    },
     menus,
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
   };
@@ -889,14 +892,14 @@ export async function menuState(
     );
   if (zone?.departmentId == null)
     return {
-      service: { open: false, periodName: null },
+      service: { open: false, periodName: null, keepOpen: null },
       menus: [],
       unavailable: { products: [], optionLabels: [] },
     };
   const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
   const published = await zoneLiveDocuments(tx, zoneId);
   return {
-    service: { open: service.open, periodName: service.periodName },
+    service: { open: service.open, periodName: service.periodName, keepOpen: service.keepOpen },
     menus: published.map(({ menuId, versionId }) => ({
       menuId,
       versionId,
