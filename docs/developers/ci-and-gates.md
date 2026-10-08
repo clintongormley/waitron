@@ -778,6 +778,53 @@ is reported as unbounded, it does not judge whether the number is a sensible one
 every job with a four-space `uses:`, relying on the called workflow's own jobs, which it reads only
 when that workflow is one of this repository's `.github/workflows/` files.
 
+### Every apt wait is bounded
+
+Every `apt-get update` and `apt-get install` in a workflow or in `deploy/Dockerfile` runs under an
+outer `timeout` and is retried, because apt's own read timeout cannot end a wait on a mirror that
+keeps sending a little.
+
+The stall: main run `37771042263`, `image / smoke`, step "Load the print agent's AppArmor profile,
+and put a stand-in BlueZ on the system bus", `sudo apt-get update`. From 11:36:22Z the log printed
+nothing after
+
+    Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+
+until the job's 15-minute limit cancelled it.
+
+Measured 2026-10-08 in an `ubuntu:24.04` container, apt 2.8.3, against a local listener on a docker
+network, each run as `timeout 400 apt-get update`:
+
+- a listener that accepts and never answers: apt gave up after 247 s, with a warning and exit 0;
+- one that sends an HTTP 200 head and then nothing: apt gave up after 127 s;
+- one that sends the head and then one byte every 5 s: still waiting at 400 s, having printed only
+  `Get:1 http://a422-trickle:8099/ubuntu noble InRelease [200 kB]` — the same shape as the CI log.
+
+So a per-read timeout is reset by every byte that arrives, and only an outer limit ends that wait.
+
+Normal duration of the whole AppArmor/BlueZ step (apt included) over 29 green runs: median 10 s,
+longest 24 s.
+
+The limits chosen:
+
+- In `image-smoke.yml` the apt calls have a step of their own with `timeout-minutes: 8` (the job's
+  limit is 15). Each attempt is `timeout 60` for the update and `timeout 90` for the install, with
+  `Acquire::Retries=3` and `Acquire::http::Timeout=30` / `Acquire::https::Timeout=30`, up to three
+  attempts: at most 3 × (60 + 90) = 450 s, under the step's 480 s.
+- In `deploy/Dockerfile` each apt-get goes through a `bounded()` wrapper: `timeout 300` per attempt,
+  three attempts, with the same apt settings written to `/etc/apt/apt.conf.d/99bounded-waits` and
+  removed again in the same `RUN`, so the image ships no apt setting. 300 s rather than CI's 60-90 s,
+  because `deploy/waitron.sh` builds this same file on a venue's box over whatever link it has.
+
+<!-- A422 bounded-probe receipt -->
+
+Guards: the "apt waits" cases in `scripts/ci-workflow.test.mjs` and "the Dockerfile's apt waits"
+cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — both read TEXT. The
+workflow case misses apt run by a script the step calls, by a composite or Docker action, by a tool
+itself (`playwright install --with-deps`), or from a command built from a variable, and it checks
+neither the retry loop nor the step's `timeout-minutes`. The Dockerfile case sees only `apt-get`
+named in a `RUN`, and neither runs the shell nor judges the numbers.
+
 ### The GHA cache is a shared per-repository budget, evicted least-recently-used
 
 A new `cache-to: type=gha,mode=max` exporter does not merely cost its own bytes — it competes for

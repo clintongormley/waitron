@@ -6833,6 +6833,13 @@ approved.
   **Open point (no action queued):** both image jobs still run `docker/setup-buildx-action`, whose
   only stated reason was the cache export #1427 removed. Whether the builds still need it (for
   example for `load: true` or the print-agent build reusing the app build's layers) was not tried.
+- **Every apt wait is bounded (A422, watcher 2026-10-08) — landed pending (branch
+  fix/apt-bounded-waits).** Main run 37771042263's image smoke hung in `apt-get update` on a mirror
+  that kept trickling bytes, until the job's 15-minute limit; apt's own read timeout cannot end that
+  wait. Each apt-get in `image-smoke.yml` and `deploy/Dockerfile` now runs under an outer `timeout`
+  with retries, and guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`
+  fail on one that does not. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
+  bounded".
 - **A rebased branch's push was refused for an unsigned commit already on main (A392, owner
   2026-10-08) — DONE (#1421).** Main's squash `6797bc03a` (#1377) has no `Signed-off-by`; the pre-push
   hook checked every commit from the remote's old tip, so a rebase over it refused the push, and
