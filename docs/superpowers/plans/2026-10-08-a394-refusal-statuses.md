@@ -1422,3 +1422,68 @@ holds — never "active" or "not suspended", which would be a new rule.
 
 Clients: none read these statuses (the dashboard and till map refusals by code). No migration.
 Tests changed: none expected; any that change go in `~/waitron-campaign-c/item-a394-1-changed-tests.md`.
+
+## A394-2 — tasks (lane C, 2026-10-08)
+
+Re-read on `main` at `c68ad3468` before writing. The four rows still hold, by reading:
+`setProductRecipe` (`packages/recipes/src/recipes.ts`) refuses a variant but inserts the body's
+ingredient ids unchecked, and with an EMPTY list an unknown product falls through
+`applyDerivation` (`packages/catalogue/src/operations.ts`, `written === undefined` and no row →
+`return`) to a 204; `getProductRecipe` never reads `products`; `updateIngredient`
+(`packages/recipes/src/ingredients.ts`) does not read the update's row count. Products are never
+hard-deleted (no `delete(products)` outside tests), so a 404 on the recipe read cannot meet a
+product the dashboard listed a moment earlier. The dashboard reads these refusals by code only
+(`recipe-screen.ts` `#showReadError` / `codeOf`). Existence only, the thing the foreign key holds —
+never "active": an inactive ingredient stays usable in a recipe, and a variant's recipe read keeps
+answering `[]` (`recipes.test.ts`, the variant case).
+
+1. **Package, test first.** In `packages/recipes/src/recipes.test.ts` and `ingredients.test.ts`:
+   - `setProductRecipe` with an unknown product id, once with an empty list and once with a real
+     ingredient → `product.not_found` `{ productId }`; nothing written (the real ingredient has no
+     `recipe_lines` row afterwards).
+   - `setProductRecipe` on a real product with one real and one unknown ingredient id →
+     `management.request_invalid` `{ field: "ingredientIds" }`; the product's existing recipe
+     unchanged (set a recipe first, then try the bad one, then read it back).
+   - Precedence: an unknown product with an unknown ingredient → `product.not_found` (the path
+     first).
+   - `getProductRecipe` with an unknown product id → `product.not_found`.
+   - `updateIngredient` with an unknown id → `ingredient.not_found` `{ ingredientId }`, both for a
+     rename-only patch and for an allergens patch (the fan-out branch).
+   Run them on `main`'s code first and record what each does (driver foreign-key error, a silent
+   success, or `[]`).
+2. **Package, the fix.**
+   - `setProductRecipe`: replace the variant-only read with one read of the product's
+     `parentId`; no row → `product.not_found`, a variant → `product.not_found` as today. Then, before
+     the delete, read the ingredient ids that exist among the DISTINCT body ids (one `inArray`
+     select, skipped for an empty list); fewer than the distinct count →
+     `management.request_invalid` `{ field: "ingredientIds" }`. A duplicate id in the body is NOT
+     changed by this item (it still meets `recipe_lines_product_ingredient_key`); say so in the PR
+     as an open point.
+   - `getProductRecipe`: one existence read of the product first; no row → `product.not_found`.
+   - `updateIngredient`: add `.returning({ id: ingredients.id })` to the update; no row →
+     `ingredient.not_found` `{ ingredientId: id }`, thrown before the fan-out. Body validation
+     (`validateAllergens`, `validateOrigin`) stays first, matching the route, which screens the body
+     before any read.
+   - New `packages/recipes/src/errors.ts` declaring `"ingredient.not_found": { ingredientId: string }`
+     in the shared registry (same shape as `packages/workforce/src/errors.ts`), imported for its side
+     effect by `ingredients.ts`, so it is reachable from `src/index.ts`.
+     `management.request_invalid` and `product.not_found` are declared elsewhere — confirm where, and
+     that `recipes.ts` already reaches each declaring module.
+3. **Route, test first.** In `apps/server/src/recipe-api.test.ts`, assert status AND `{ code, params }`:
+   `GET /management-api/products/:id/recipe` unknown → 404 `product.not_found`;
+   `PUT …/recipe` unknown product (empty list, and with a real ingredient) → 404
+   `product.not_found`; `PUT` real product with an unknown ingredient → 400
+   `management.request_invalid` `{ field: "ingredientIds" }`; `PATCH /management-api/ingredients/:id`
+   unknown → 404 `ingredient.not_found`. Run them on `main` first: 200/204/500/204. Add
+   `"ingredient.not_found": 404` to `recipe-api.ts`'s `STATUS`.
+4. **Dashboard wording.** `ingredient.not_found` in `apps/dashboard/src/i18n/codes.ts`, English and
+   Spanish, beside `ingredient.name_required`, saying the ingredient no longer exists and to refresh;
+   a case in `codes.test.ts` that it is not the generic message in either language.
+5. **Proof by deletion.** Remove each new check in turn (product existence in set and get, the
+   ingredient-id check, the update's row check) and confirm its package and route cases fail;
+   restore.
+6. **Guards.** `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`
+   from the root; the golden huella and `inmutabilidad` unedited.
+
+Clients: none read these statuses. No migration. Tests changed: none expected; any that change go in
+`~/waitron-campaign-c/item-a394-2-changed-tests.md`.
