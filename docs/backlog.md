@@ -1563,11 +1563,21 @@ the new colour once the menu is published again. The look (`~/waitron-campaign-b
 found that a saved setting never repainted an open screen: the change feed sent the id of a
 one-row table as a number and the dashboard dropped the whole batch. The feed now sends every id
 as text, which also makes the other one-row settings tables refresh open screens. Open points:
-(1) at phone width every swatch slot is hidden and a category's row menu has no colour item, so
-the default cannot be set on a phone; (2) a refused default colour reuses
-`category.invalid {field:"color"}`, as the VAT default reuses `product.invalid`; (3) the All
+(1) at phone width every swatch slot is hidden except a category's name box while it is being
+named, and a category's row menu has no colour item, so the default cannot be set on a phone (owner
+2026-10-08: leave it until categories get a phone-width way in); (2) a refused default colour
+reuses `category.invalid {field:"color"}`, as the VAT default reuses `product.invalid`; (3) the All
 products swatch sits one tree level left of the categories' swatches, by the table's indent
-rule — the owner may want them in one column instead.
+rule. Owner ruling 2026-10-08 (A415): keep each square at its own row's indent, never one column,
+and every level has one. A look on 2026-10-08 (`~/waitron-campaign-b/a415-shots/`: EN and ES in
+both themes at 1280 and 640 px, and all but Spanish dark at 560 and 520 px; a category three
+deep) found every level already drew one, so A415 added only a Chromium case pinning it:
+one square per row for All products, each category depth, a product and its variants, each a
+level's step further in, a variant on its product's indent. At 520 px the table had switched to its
+narrow layout (a tree 440 px wide or less, `packages/ui/src/components/wt-data-table.ts`), which
+hides every row's square; only a category's name box keeps one while the category is being named.
+Still open for the owner: a category with no colour of its own shows an empty outline, even when
+the products under it show a colour inherited from a category above or the venue default.
 
 **Held reorder drags scroll at the list edge (A334, 2026-10-08) — BUILT.**
 Products, shared reorder tables, preparation stations and the column chooser use
