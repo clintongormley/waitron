@@ -282,6 +282,24 @@ tutorial is reopened (the Demo bar, A246, W36, is the obvious place); whether it
 well as the dashboard; and how each required lesson's check is read without slowing the dashboard.
 It comes after the Demo bar (A246, W36) and A238, whose device and profile model it teaches.
 
+## Android/iOS on-device install and trust rows
+
+- **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
+  run. The name-constrained CA does NOT protect a personal Android phone (measured 2026-09-08); BYOD
+  Android either accepts broad trust in the box CA or uses the public-certificate path — an owner
+  call before go-live.
+
+## The till's "This device hasn't trusted the till yet" page has never been seen on a real device
+
+- **The till's "This device hasn't trusted the till yet" page has never been seen on a real
+  device.** `isTrustBroken` (`apps/till/src/trust-check.ts`) reads a `SecurityError` from
+  registering the non-existent `/sw-probe.js` as "certificate not trusted"; that signal is still a
+  belief, never checked on a device that clicked past the browser's warning. It runs only on pages
+  served over HTTPS. Two gaps remain: the signal is trustworthy only while the server answers the
+  probe with 404, which the box's `mountSpa` does; and no test covers the HTTPS default, because a
+  browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
+  above, click past the certificate warning on one device and confirm the page appears.
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it

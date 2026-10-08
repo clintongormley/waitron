@@ -355,6 +355,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
   open.
 
+- **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the
+  original invoice total.** **PARKED (owner, 2026-09-29)** until the product can issue a corrective
+  invoice; the owner's points for that design are on the corrective-invoice entry (R5, above). Left
+  open by the table actions plan.
+  [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -389,6 +395,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
   the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
   are still to measure. [Detail](backlog/box.md#box-image-constraints-b3)
+  **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
+  run. [Detail](backlog/setup.md#androidios-on-device-install-and-trust-rows)
 
 - **A Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live**
   (whether this is wanted is not recorded; it sits among the wizard's constraints). The location
@@ -531,6 +539,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   the till's dialog then says so (`adjust.no_reasons`); whether setup should add the default after
   such an import is the owner's to decide. Left open by service Task 11 (#916).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
+
+- **The till's "This device hasn't trusted the till yet" page has never been seen on a real
+  device.** **Next action:** during the on-device trust rows above, click past the certificate
+  warning on one device and confirm the page appears.
+  [Detail](backlog/setup.md#the-tills-this-device-hasnt-trusted-the-till-yet-page-has-never-been-seen-on-a-real-device)
 
 ### Menus and the catalogue
 
@@ -852,6 +865,24 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere._ Detail: [backl
 - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a correction,
   and a Reprint's REPRINT and HOLD section, can print at a station whose printer never printed that
   group's HOLD ticket. Left open by service Task 6 (#761, HOLD tickets in advance).
+
+- **A plan default the owner may overturn (P16):** spec §15's "leaves with them outside any group"
+  is read as the side the bill leaves; the receiving party groups the dishes. Left open by the table
+  actions plan's Task 9 (#874, dishes arriving in a party get a kitchen group).
+
+- Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
+  right only while every writer stores the same `toISOString()` form (every writer found uses
+  `nowIso()`; not proven for all); and a dish recalled and fired again carries its new fire time but
+  its old group's firer. Left open by the table actions plan's Task 9 (#874, dishes arriving in a
+  party get a kitchen group).
+
+- Left by C80 (read from `draftSections` and `groupArrivingDishes`, not compared with a running
+  till): the till files a dish whose course it does not list (an inactive course) under the earliest
+  course it lists, while a move keeps it in its own held group; and when a round is SENT,
+  `working-order.ts` picks its earliest course without checking whether it is active, so with a
+  switched-off course the send path and the move path can file a dish with no course under different
+  courses (owner, 2026-09-29: not queued). Left open by the table actions plan's Task 9 (#874,
+  dishes arriving in a party get a kitchen group).
 
 ### The till, devices and table service
 
@@ -1376,6 +1407,118 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   counter order invoiced when it was placed can be cancelled with a credit note).
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
 
+- The move moves the bill's revision on, open or presented, without `bumpRevision`'s refusal of
+  money in flight, since a move changes no amount (plan P19); plan P17 flags for the owner that a
+  MOVED slip can name the same table as where the dish came from and where it went (the slip's text
+  was not checked); and since A143 (#928) paying a pay-first order with a dish no station can take
+  files the sale and raises `route.dish_not_sent`, but invoice-first placing still refuses such a
+  dish — nobody has decided whether it should take the order and raise the alert instead. Left open
+  by the table actions plan's Task 7 (#864, move a whole bill).
+
+- A party with no table whose chain of merges never ends (an unknown id, or two parties recorded as
+  merged into each other, which the database accepts) is named by the bill's own label; whether any
+  till action can make such a loop was not checked. Left open by the table actions plan's Task 8
+  (#869, move guests, join and split tables) and C77/C86.
+
+- `party.main_bill_stays`'s till wording says "the table has other unpaid bills", which Split a
+  table choosing the main bill need not satisfy. Left open by the table actions plan's Task 8 (#869,
+  move guests, join and split tables) and C77/C86.
+
+- Left by #906's review: `computeOverdueOrders` is the one report function that reads its own node's
+  location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was suggested,
+  not done); no case pins what a MOVED slip's "from" line or a correction slip prints for a counter
+  order delivered to a table; and a database built on purpose with a delivery table in another
+  location now names the order by its own label — no product path creates that state, and whether
+  every existing venue database is free of it was not checked. Left open by the table actions plan's
+  Task 8 (#869, move guests, join and split tables) and C77/C86.
+
+- Unchecked Send to radios are Chromium's own dark-theme control, dim grey on the dark dialog (seen
+  in the 390 px Spanish dark screenshot). Left open by the table actions plan's Task 10 (#875).
+
+- Open (found by #905's review, by reading, not reproduced): on a handheld, a waiter who taps a free
+  table to seat it, goes back to the order tab while the seating is still under way and starts Move
+  guests can have the move set the wrong table on the new party; the suggested fix is to count only
+  table opens started in the current operator session; not queued. Left open by the table actions
+  plan's Task 11 (#881).
+
+- The till sends `otherPartyId: null` when its floor does not list the target table at all (a failed
+  floor read empties the list); a table another party holds is then refused as out of date, never
+  combined. Left open by the table actions plan's Task 11 (#881).
+
+- On a 390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines). Left open
+  by the table actions plan's Task 11 (#881).
+
+- Seen by C82 at 390 and 1280 px, not measured further: a token for four seats or fewer, or with no
+  seat count set, is so narrow that the party name shows only its first few letters ("T…" at two
+  seats), and the table's label, its covers and its "to serve" chip spill past the token's edge; the
+  map's token sizes (`sizeForCapacity`, `wt-floor-canvas`) decide that (owner, 2026-09-30, on C82's
+  question: "wait on this"; not queued). A tab total does not fit either: see "A four-digit total
+  does not fit a small round table on the till's floor map", below. Left open by the table actions
+  plan's Task 11 (#881).
+
+- **Open, from C84's review (#913):** when a void or line change gets no answer, `#rereadAmounts()`
+  can put on screen what the party still owes, taken from its bills after its own floor read failed,
+  while the revision on screen stays where it was. Traced in the code, not reproduced. Left open by
+  the table actions plan.
+  [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
+
+- **A four-digit total does not fit a small round table on the till's floor map** (found 2026-10-03
+  by looking at the map while making its amounts follow the locale, lane C's W15). **Next action:**
+  the owner decides whether this changes "wait on this"; a fix that lets a small token hold what it
+  shows would cover both.
+  [Detail](backlog/till.md#a-four-digit-total-does-not-fit-a-small-round-table-on-the-tills-floor-map)
+
+- **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when this
+  is designed. For now, orders remain at table/tab level and staff select items manually when
+  splitting bills; seat assignment is not a prerequisite for the service workflow.
+
+- **Later: staff-to-table assignments (owner, 2026-09-20).** Design assigning responsibility for
+  tables to staff, including handover and how assignments appear on the floor dashboard. The current
+  workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
+
+- **Later: change the working floor layout during service (owner, 2026-09-20) — covered by A429
+  (2026-10-08), whose spec §6 is this item.**
+  [Detail](backlog/till.md#later-change-the-working-floor-layout-during-service-owner-2026-09-20)
+
+- **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
+  text.** **Next action:** whoever takes the till layout pass below decides whether these four want
+  `--wt-color-warning`, a new `--wt-color-warning-text` defined in both themes, or the
+  `--wt-color-danger` the dish picker's refusals now use.
+  [Detail](backlog/till.md#four-till-surfaces-ask-for-a-caution-colour-that-is-defined-nowhere-so-all-four-render-as-plain-text)
+
+- **Five measured till layout defects and one seen in a screenshot, all of them older than the
+  extras-and-options work.** Found while looking at the real screens for B1 Task 12.
+  [Detail](backlog/till.md#five-measured-till-layout-defects-and-one-seen-in-a-screenshot-all-of-them-older-than-the-extras-and-options-work)
+
+- **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
+  being re-read is still hidden when the till follows the party onto its next tab**
+  [Detail](backlog/till.md#unchecked-since-the-service-plans-task-8-806-whether-a-round-entered-while-the-floor-was-being-re-read-is-still-hidden-when-the-till-follows-the-party-onto-its-next-tab)
+
+- **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
+  appear live on it. A till-app fix.
+
+- **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.
+
+- **Location-consistency guard** — nothing enforces that a sale-capable device's own location
+  (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
+
+- **Refuse a request from a device that is not enrolled** (owner design of 2026-08-30, deferred
+  until after the demo:
+  [design](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)). But a request
+  that carries NO device still passes `assertDeviceCapability`
+  (`apps/server/src/device-session.ts`). It sits on the sale and cash path, so it takes the full
+  review. [Detail](backlog/till.md#refuse-a-request-from-a-device-that-is-not-enrolled)
+
+- **Screen faults seen during menus Task 9's look on 2026-09-27.** **Next action:** check each
+  against `main`, then fix or file it on its own.
+  [Detail](backlog/till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
+
+- **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
+  Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list of
+  tabs, each tab a grid of cards, chosen per device profile. **Decided the same day: delete now**,
+  before the redesign.
+  [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -1665,6 +1808,12 @@ _Formerly A6, and Track C's payments items._ Detail: [backlog/payments.md](backl
   card running at the reader in this process, but not a stored payment its provider has not
   resolved, nor one captured and not yet filed; the cancel had no payment check at all before C126.
   Left open by C126 (cancelling an order whose invoice was issued credits it, #1030).
+
+- **Task 4 (#832, every paper names all of a party's tables).** Not yet checked: the payment API's
+  `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
+  `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
+  the same column. Left open by the table actions plan.
+  [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
 ### Users, sign-in and the dashboard shell
 
@@ -3005,6 +3154,13 @@ _Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/ar
   called only by its own tests; delete it with its cases**: nothing else calls it, because the built
   Task 6 works out the default itself, and only the demo-data plan's Task 6 sketch still names it.
   Left by #1320 (W109-6, content languages per region), OPEN, unqueued.
+
+- `partyFamilies`, the reverse lookup of `partySurvivors`, stayed in `apps/server/src/parties.ts`,
+  while `partySurvivors` is in `packages/db/src/party-table-labels.ts`. Left open by the table
+  actions plan's Task 8 (#869, move guests, join and split tables) and C77/C86.
+
+- The device-management routes build their `devices ⨝ device_profiles` read inline
+  (`apps/server/src/device-api.ts`) where a `listDevices` store verb belongs.
 
 ### Data protection and legal compliance
 
@@ -5063,278 +5219,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
-### A4. Till, displays and devices
-
-- **Tables, parties and bills — the till's table actions: DONE (2026-09-29, all thirteen tasks).**
-  [plan](superpowers/plans/2026-09-28-table-actions.md); Task 1 #816, 2 #825, 3 #844, 4 #832,
-  5 #852, 6 #818, 7 #864, 8 #869, 9 #874, 10 #875, 11 #881, 12 #888, 13 #897. What stays open:
-  - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows
-    the original invoice total.** `collectOrder` queues no receipt on this path; the ticket it
-    returns, the original receipt the till offers, and any reprint are all built by
-    `readSettledTicket` (`apps/server/src/till-sale.ts`) and show the invoice's original total, and
-    since C67 the card-reader payment of a bill that owes nothing returns the same. The printed
-    receipt and the screen both give the cash line as total plus change
-    (`apps/server/src/receipt-ticket.ts`, `apps/till/src/screens/till-ticket-view.ts`), so it
-    overstates what was handed over. **PARKED (owner, 2026-09-29)** until the product can issue a
-    corrective invoice; the owner's points for that design are on the corrective-invoice entry (R5,
-    above). Also from C67's review (a probe, not a committed test): for a bill corrected to exactly
-    zero, a captured card payment with no sale still takes the recovery branch first, settling at
-    the captured amount with all of it recorded as tip; the below-zero case with a capture was not
-    run.
-  - **Task 4 (#832, every paper names all of a party's tables).** At 390 px a pass card whose
-    label wraps also wraps its "2 min" onto two lines (`apps/till/src/screens/till-expo-screen.ts`);
-    nothing overflows. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
-    card, later kitchen notices and the till's list of a party's bills keep showing the frozen
-    receipt label with the party's name ("Ana · Mesa 4, 5"). Not yet checked: the payment API's
-    `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
-    `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
-    the same column.
-  - **Task 3 (#844, a table needs clearing, not its party). DECIDED (owner, 2026-09-29): keep the
-    plan's P9** — a stale Mark cleared from a floor screen that had not refreshed is accepted, even
-    when it frees a table a LATER party has left.
-  - **Task 7 (#864, move a whole bill).** Open: the move moves the bill's revision on, open or
-    presented, without `bumpRevision`'s refusal of money in flight, since a move changes no amount
-    (plan P19); plan P17 flags for the owner that a MOVED slip can name the same table as where the
-    dish came from and where it went (the slip's text was not checked); and since A143 (#928)
-    paying a pay-first order with a dish no station can take files the sale and raises
-    `route.dish_not_sent`, but invoice-first placing still refuses such a dish — nobody has decided
-    whether it should take the order and raise the alert instead.
-  - **Task 8 (#869, move guests, join and split tables) and C77/C86.** Open: a party with no table
-    whose chain of merges never ends (an unknown id, or two parties recorded as merged into each
-    other, which the database accepts) is named by the bill's own label; whether any till action
-    can make such a loop was not checked. `partyFamilies`, the reverse lookup of `partySurvivors`,
-    stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
-    `packages/db/src/party-table-labels.ts`. `party.main_bill_stays`'s till wording says "the table
-    has other unpaid bills", which Split a table choosing the main bill need not satisfy. Left by
-    #906's review: `computeOverdueOrders` is the one report function that reads its own node's
-    location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
-    suggested, not done); no case pins what a MOVED slip's "from" line or a correction slip prints
-    for a counter order delivered to a table; and a database built on purpose with a delivery table
-    in another location now names the order by its own label — no product path creates that state,
-    and whether every existing venue database is free of it was not checked.
-  - **Task 9 (#874, dishes arriving in a party get a kitchen group).** **A plan default the owner
-    may overturn (P16):** spec §15's "leaves with them outside any group" is read as the side the
-    bill leaves; the receiving party groups the dishes. Left by C78's review: the earliest fire
-    time is picked by comparing the stored times as text, right only while every writer stores the
-    same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a dish
-    recalled and fired again carries its new fire time but its old group's firer. Left by C80
-    (read from `draftSections` and `groupArrivingDishes`, not compared with a running till): the
-    till files a dish whose course it does not list (an inactive course) under the earliest course
-    it lists, while a move keeps it in its own held group; and when a round is SENT,
-    `working-order.ts` picks its earliest course without checking whether it is active, so with a
-    switched-off course the send path and the move path can file a dish with no course under
-    different courses (owner, 2026-09-29: not queued).
-  - **Task 10 (#875).** Unchecked Send to radios are Chromium's own dark-theme control, dim grey on
-    the dark dialog (seen in the 390 px Spanish dark screenshot).
-  - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
-    waiter who taps a free table to seat it, goes back to the order tab while the seating is still
-    under way and starts Move guests can have the move set the wrong table on the new party; the
-    suggested fix is to count only table opens started in the current operator session; not
-    queued. The till sends `otherPartyId: null` when its floor does not list the target table at
-    all (a failed floor read empties the list); a table another party holds is then refused as out
-    of date, never combined. On a 390 px phone the bill choice's buttons wrap ("Keep separate
-    bills" on three lines). Seen by C82 at 390 and 1280 px, not measured further: a token for four
-    seats or fewer, or with no seat count set, is so narrow that the party name shows only its
-    first few letters ("T…" at two seats), and the table's label, its covers and its "to serve"
-    chip spill past the token's edge; the map's token sizes (`sizeForCapacity`, `wt-floor-canvas`)
-    decide that (owner, 2026-09-30, on C82's question: "wait on this"; not queued). A tab total
-    does not fit either: see the entry below on a four-digit total.
-  - **Open, from C84's review (#913):** when a void or line change gets no answer,
-    `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
-    own floor read failed, while the revision on screen stays where it was. A later floor read that
-    also fails keeps a floor listing the same party at that EQUAL revision, which
-    `#retakePartyFromFloor()` takes, and `#followDraft` → `#rememberOrderParty()` after a send with
-    no answer takes too, putting the floor's older amount back (`apps/till/src/till-app.ts`). Traced
-    in the code, not reproduced.
-- **A four-digit total does not fit a small round table on the till's floor map** (found
-  2026-10-03 by looking at the map while making its amounts follow the locale, lane C's W15). On a
-  four-seat round table at 1280 wide, dark theme, `1234,50 €` (the locale form, kept on one line by
-  the formatter's no-break space before `€`) runs past the token's right edge; with the form before
-  that change, `1234.50 €`, the amount still ran past the edge and `€` wrapped onto a second line.
-  Measured with throwaway screenshot tests; screenshots in `~/waitron-campaign-c/w15-shots/`
-  (`map-*` and `old-form-map-dark-1280.png`, not in the repository). W15 did not measure other
-  shapes and capacities, or amounts of five digits. The cause is the one C82 recorded in the
-  Task 11 note above, which the owner put on hold: the token is
-  `packages/ui/src/components/wt-table-token.ts`, its size comes from `sizeForCapacity` in
-  `packages/ui/src/floor.ts`, and the size rules are in
-  `packages/ui/src/components/wt-floor-canvas.ts`. **Next action:** the owner decides whether this
-  changes "wait on this"; a fix that lets a small token hold what it shows would cover both.
-- **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
-  this is designed. For now, orders remain at table/tab level and staff select items manually
-  when splitting bills; seat assignment is not a prerequisite for the service workflow.
-- **Later: staff-to-table assignments (owner, 2026-09-20).** Design assigning responsibility for
-  tables to staff, including handover and how assignments appear on the floor dashboard. The
-  current workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
-- **Later: change the working floor layout during service (owner, 2026-09-20) — covered by A429
-  (2026-10-08), whose spec §6 is this item.** From the floor
-  plan, join or split tables, increase or decrease chair counts, move a whole tab or selected items
-  to another table, and add or remove tables. Each service day starts from a saved default layout;
-  changes during service affect that day's working layout. Define the service-day boundary and
-  handling of still-open tabs before implementing the reset. These are future requirements: audit
-  the existing floor editor and transfer operations before deciding what needs changing, and retain
-  order and kitchen progress when moving items (see A9's KDS correction). This operational floor
-  editor is distinct from the general screen-layout canvas editor under reconsideration.
-- **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
-  text.** The token is `--wt-color-warning-text`, declared in no theme; what exists in
-  `packages/ui-core/src/tokens/colors.css` is `--wt-color-warning` (with `--wt-color-on-warning`),
-  which `wt-count-badge` uses. Each of the four call sites writes the fallback form
-  `color: var(--wt-color-warning-text, var(--wt-color-text))` — `apps/till/src/widgets/basket.ts`,
-  `station-queue.ts`, `diet-badges.ts` and `apps/till/src/screens/till-expo-screen.ts` — so the
-  emphasis those rows were written to carry never appears. `diet-badges.ts` also reads
-  `--wt-color-success-text`, declared nowhere, the same way. **Next action:** whoever takes the till
-  layout pass below decides whether these four want `--wt-color-warning`, a new
-  `--wt-color-warning-text` defined in both themes, or the `--wt-color-danger` the dish picker's
-  refusals now use. These five reads are the listed exceptions in
-  `scripts/style-token-names.test.ts`; fixing them means deleting their entries from its
-  `FALLBACK_READS`.
-- **Five measured till layout defects and one seen in a screenshot, all of them older than the
-  extras-and-options work.** Found while looking at the real screens for B1 Task 12. **Next action:**
-  take these six as
-  one till layout pass over `apps/till`, at 390 and at 1024, measuring rectangles rather than
-  reading rules — and set the width with `page.viewport(w, h)`, never `commands.setViewportSize`,
-  which resizes the outer page and leaves the components' own iframe alone
-  ([testing-guide.md](developers/testing-guide.md)).
-  - **Within one extras list, prices are not a column and names are not a column**
-    (`apps/till/src/widgets/modifier-picker.ts`) — a checkbox row and a stepper row misalign both the
-    price edges and the name edges, at 1024 and at 390.
-  - **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's own
-    top border**, so the required marker (appended as a plain space) can break onto a line of its own
-    sitting on the border rule.
-  - **Nothing says WHY Add is disabled when a list's minimum is unmet.** The only cues are a `*` on the
-    legend and a dimmed Add — and that `*` is also the only thing telling `minPicks: 1` from
-    `minPicks: 2`. Wants a sentence beside the list stating the minimum in words.
-  - **A long dish name pushes that line's remove control outside the basket**
-    (`apps/till/src/widgets/basket.ts`): the unstacked layout's `1fr` column bottoms out at the
-    longest word. Measured at phone width before A310. Since A310 a canvas tab's basket at 40rem or
-    less (`card-grid.ts`) puts the name on its own row; not re-measured there. Above 40rem the
-    unstacked layout and its `1fr` column are unchanged.
-  - **A pick's money column sits right of the dish total it belongs under**, further right than the
-    dish row's own remove button, because `.line` and `.option` use different column templates.
-  - **Product-grid tiles: a long name starts left of its own card border, and a unit price crosses the
-    card's right border.** Seen in a screenshot, not measured. That widget was retired on 2026-09-27
-    for `till-menu-browser` (`apps/till/src/widgets/menu-browser.ts`), whose tiles wrap their text
-    inside the card; in the menus Task 9 screenshots opened at 390 and 1280 px no name or price
-    crossed a border. Looked at, not measured: close once someone measures it.
-- **Two modifier-picker states, and how far each is actually out of reach** — a fact worth having
-  before anyone writes a test claiming to cover them. An options label marked unavailable never
-  reaches the picker at all: the served offer and the till's menu-state poll replace a default that
-  is missing or names an unavailable label with the first available label in the published
-  version's order, or with null (`effectiveDefaultLabelId`,
-  `packages/catalogue/src/option-default.ts`; `withUnavailable`,
-  `apps/till/src/state/menu-refresh.ts`), and the till filters unavailable labels out before the
-  picker is given them (`sellableModifiers`, `apps/till/src/api/client.ts`) — traced through the
-  code, not run. An over-cap count is different: stepping cannot produce one, because `#step`
-  clamps, but a REOPENED line is seeded straight from `initialSelections` with no clamp, so
-  `#allSatisfied`'s `total <= entry.maxPicks` arm is reachable (run in the till's browser harness on
-  2026-09-21: a picker seeded with 5 of one product on a list whose `maxPicks` is 2 renders a count
-  of 5 and a disabled Add). The real-world shape is a parked line whose list had its cap reduced
-  under it.
-- **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
-  being re-read is still hidden when the till follows the party onto its next tab** (the second
-  finding of the retroactive Codex review of #719). The review's probe tested code since rewritten
-  — the draft now lives on the party, on the server and in `DraftSync`, so nothing is carried
-  between tabs — and was not re-run against the new code.
-- **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
-  appear live on it. A till-app fix.
-- **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.
-- **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
-  run. The name-constrained CA does NOT protect a personal Android phone (measured 2026-09-08); BYOD
-  Android either accepts broad trust in the box CA or uses the public-certificate path — an owner
-  call before go-live.
-- **The till's "This device hasn't trusted the till yet" page has never been seen on a real
-  device.** `isTrustBroken` (`apps/till/src/trust-check.ts`) reads a `SecurityError` from
-  registering the non-existent `/sw-probe.js` as "certificate not trusted"; that signal is still a
-  belief, never checked on a device that clicked past the browser's warning. It runs only on pages
-  served over HTTPS. Two gaps remain: the signal is trustworthy only while the server answers the
-  probe with 404, which the box's `mountSpa` does; and no test covers the HTTPS default, because a
-  browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
-  above, click past the certificate warning on one device and confirm the page appears.
-- **Location-consistency guard** — nothing enforces that a sale-capable device's own location
-  (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
-- **Refuse a request from a device that is not enrolled** (owner design of 2026-08-30, deferred
-  until after the demo: [design](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)).
-  Tills enrol, selling needs an enrolled device, and a device profile's capabilities gate some
-  actions (`assertDeviceCapability`). But a request that carries NO device still passes
-  `assertDeviceCapability` (`apps/server/src/device-session.ts`). Left: refuse a request with no device, one table of which
-  device kinds may do what with a guard that walks the routes, and printer identity (the design's
-  sub-project C). It sits on the sale and cash path, so it takes the full review. Since B29 (#1011)
-  a handheld places, collects and cancels like a till, and since A238 no refusal is for being a
-  handheld: taking cash, the drawer, integrated card payment and printing each follow the device
-  profile's capability. The design's table is out of date on those rows.
-- The device-management routes build their `devices ⨝ device_profiles` read inline
-  (`apps/server/src/device-api.ts`) where a `listDevices` store verb belongs.
-- **Screen faults seen during menus Task 9's look on 2026-09-27.** Seen on the dev stack while
-  checking the till's home page, not investigated, and not checked against `main`, so any of them
-  may predate that branch:
-  - on the till at 390 px wide, the header makes the page wider than the screen (measured in
-    C130's entry above: 560 px in English and 602 px in Spanish with only Find a bill offered);
-  - on the till's floor map at 390 px wide, tables overlap one another;
-  - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
-    canvases, see A182 below; fixed by A379 on 2026-10-08);
-  - the till's browser console shows Lit's "scheduled an update … after an update completed"
-    warning.
-
-  **Next action:** check each against `main`, then fix or file it on its own.
-
-- **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
-  The owner decided on 2026-09-20 to ship well-designed built-in screens instead of a screen
-  designer that venues drag and resize; customisation beyond that, if it is ever needed, means
-  screens written in code that plug in
-  ([service design §11](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md)).
-  Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list
-  of tabs, each tab a grid of cards, chosen per device profile. Ranked second under _What to work on next_ (owner,
-  2026-10-01). What exists today:
-  - A default canvas per form factor, in code (`packages/layouts/src/default-canvases.ts`): the
-    till gets a Counter tab (product grid, basket, total, pay, held orders) and a Floor tab; a phone
-    or tablet handheld gets Floor and Order; a kitchen screen gets one Kitchen tab. The card types
-    are `CARD_TYPES` (`packages/layouts/src/canvas.ts`).
-  - Stored canvases in the `canvases` table (`packages/db/src/schema/canvases.ts`); a device
-    profile may name one (`device_profiles.canvas_id`), and otherwise gets its form factor's
-    default. The till's start-up answer carries the chosen canvas (`apps/server/src/till-api.ts`),
-    the till shows its tabs only once it has one (`apps/till/src/till-app.ts`), and it draws each
-    tab's cards in `apps/till/src/widgets/card-grid.ts`.
-  - The dashboard's canvas editor (`apps/dashboard/src/screens/canvas-editor-screen.ts` and
-    `canvas-editor/`), the canvas picker on the device profiles screen, the
-    `/management-api/canvases` routes, the `listCanvases` and `getCanvas` live queries, and the
-    `canvas.*` error codes (`packages/layouts/src/errors.ts`).
-  - A canvas may carry a theme override (`CanvasDef.theme`); a grep of `apps/` for `.theme` finds
-    nothing that reads it.
-
-  One fault already traced to canvases: the till draws each tab's name straight from the canvas's
-  stored `title` (`apps/till/src/widgets/tab-shell.ts`), and the defaults store English titles,
-  which is why "Counter", "Floor" and "Order" stay in English in Spanish (one of the screen faults
-  in the entry above).
-  **2026-10-08:** A379 translates the standard key/title pairs at render time while preserving
-  renamed and custom titles.
-
-  The work, each part its own brainstorm, spec and plan:
-  1. **Design the screens for each kind of device** — the till at the counter, the handheld (phone
-     and tablet), the kitchen screen and the pass — starting from the till screens that already
-     exist (`apps/till/src/screens/`) and [ui-review.md](ui-review.md)'s walk of the three displays.
-     Decide what each one shows, how it fits narrow and wide screens (a responsive grid inside a
-     screen is fine, §11), and what a venue may still choose per device, such as its kitchen
-     station — set on the device profile, not drawn in an editor. _(2026-10-06: W93 took the home
-     layout out of the profile: a menu's Device Home Page has one display per kind of device, and
-     the device's form factor picks it.)_
-  2. **Retire canvases** once those screens replace them: the till's canvas tabs and card grid, the
-     `canvases` table and `device_profiles.canvas_id`, the canvas code in `packages/layouts`, the
-     dashboard's editor, its navigation entry and the profile screen's picker, the routes, the live
-     queries, the error codes and their translations. No data is carried over (§3's pre-live rule).
-     Trace every consumer before deleting; the tests that build a canvas for the till go too.
-
-  **Separate, and staying** (§11): a menu's Device Home Page and its Handheld and Till displays
-  (how its shortcuts are arranged), receipt
-  configuration, and the floor-plan editor.
-
-  **Owner, 2026-10-08:** "delete the canvases functionality. we provide prebuilt screens with
-  configuration settings." **Decided the same day: delete now**, before the redesign. Today's
-  default canvases (`packages/layouts/src/default-canvases.ts`) become the fixed built-in screens
-  for each kind of device, and part 2 below runs first; part 1's redesign follows, starting from
-  those fixed screens rather than from canvases.
-
-  **Until this lands, build no new feature as a canvas card or card setting** — put it in the
-  screen itself. Slice 3d already kept its kitchen-group choice off the `expo` card (its P15).
-
 ### A5. Incidents and notifications
 
 **Dashboard alerts and the incidents surface — LANDED #363/#368/#371.** Still not built: a standby
@@ -6961,7 +6845,7 @@ while it holds decisions still open.
 | [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md)                                                                                                                       | not started; parked; written before device profiles                                                                                                                        | _Later and parked_                                                        |
 | [Star CloudPRNT](superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md) and [Epson Server Direct Print](superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md) | not started beyond the `cloud_poll` columns; low priority                                                                                                                  | B6                                                                        |
 | [Failover printing](superpowers/specs/2026-08-26-failover-printing-design.md)                                                                                                                     | partly built (the job lease, network printers any agent may claim, unprinted kitchen tickets shown on the till, #750)                                                      | B6, _Afterwards_                                                          |
-| [Every device enrolled, fail closed](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)                                                                                    | partly built; deferred                                                                                                                                                     | A4                                                                        |
+| [Every device enrolled, fail closed](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)                                                                                    | partly built; deferred                                                                                                                                                     | The till, devices and table service                                       |
 | [Language fallback](superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)                                                                                                     | partly built                                                                                                                                                               | A9                                                                        |
 | [Native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md)                                                                                                                | reference; nothing committed                                                                                                                                               | the go-native decision                                                    |
 | [Logging and diagnostics](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md)                                                                                                  | Slice 1 built (#192)                                                                                                                                                       | A9, _Alerts, logging and diagnostics_                                     |
