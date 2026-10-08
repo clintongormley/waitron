@@ -1,0 +1,157 @@
+# A420 Inline Translations Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline, one whole task per firing. Do not dispatch agents. Spec and unattended execution are approved.
+
+**Goal:** Fill one language's missing customer-facing names in one staged, atomic save.
+
+**Architecture:** Add paged translation targets and dedicated names-only commands in catalogue. The route owns one transaction; the widget separates drafts from passive snapshots. Keep the existing gap report and publication flow.
+
+**Tech Stack:** TypeScript, Drizzle/SQLite, Hono, Lit, shared `wt-*` controls, Vitest and real Chromium.
+
+**Spec:** `docs/superpowers/specs/2026-10-08-a420-inline-translations.md`.
+
+## Global constraints
+
+- Work in this feature worktree only. No fiscal writers, migrations, append-only workarounds, guard/configuration changes or edits in other lanes' trees or main checkout.
+- Only named cells change. A required default companion starts blank; staff text is only its placeholder. Never copy implicitly, clear translations, autosave, auto-publish or chunk writes.
+- Exact limits: 1–100 unique targets, 50 displayed rows per page, 256 KiB serialized request, 4 KiB UTF-8 per entered name. Trim at submission, preserving internal spaces and typing selection.
+- Preserve sibling names, variants/activity, option ordering/defaults, extras/prices, include folder settings, unit abbreviations/precision/seed/hardware, publications and recorded snapshots.
+- Read CLAUDE.md, developer topics and the TDD skill before code. Follow observed red, minimal implementation, observed green. Domain refusals are caught outside `withTransaction` in tests.
+
+Source: `ecba0d3794225407ad3eb8e3d5c7e4db37f1bb65`, **unverified until execution**. Re-read dependencies; no campaign-file reads beyond the brief. Record commands/counts, remaining tasks and commit at checkpoints; leave no processes running.
+
+## Review focus
+
+1. Multibyte text/false Content-Length: byte limits (4).
+2. Reordered equivalent keys/language sets: save succeeds (3).
+3. Joint root/include edits: validate final dependencies (3).
+4. Detach before dirty scope redraw: reconnect protects edits (6).
+5. Live fill/owner replacement: retain text/focus until review (6).
+
+## Files and interfaces
+
+Under `packages/catalogue/`, create `src/content-translation-types.ts` (browser-safe types), `content-translation-targets.ts` (bounded reads), `content-translation-writes.ts` (per-kind commands), `content-translations.ts` (batch), with sibling tests. Export from `packages/catalogue/src/index.ts`; register new errors in `errors.ts`.
+
+Create `apps/server/src/content-translations-api.ts`/`.test.ts`; mount through `catalogue-api.ts`'s `gated`. Under `apps/dashboard/src/`, create `widgets/content-translations-model.ts`, `.test.ts`, `content-translations-dialog.ts`, `.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`. Modify `api/client.ts`, `api/live-queries.ts`, their existing `.test.ts` files, `screens/content-languages-screen.ts` and its two test files, `i18n/strings.ts`, `i18n/codes.ts`. Consumer paths appear in Task 7.
+
+Wire types: `TranslationRef = {kind: TranslationGapKind; id: string}`; `TranslationEdit = TranslationRef & {expected: string; text: string; defaultText?: string}`; `TranslationBatch = {edits: TranslationEdit[]}`. `TranslationTarget` adds `label`, `context`, `reason`, `owners`, `selectedStored`, `selectedEffective`, `defaultStored`, `defaultEffective` (cells: `string | null`), `defaultRequired`, `eligible`, `unavailableReason`, `expected`. Optional `owners` keys: `parentProductId`, `optionListId`, `menuId`, `rootId`, `sectionId`, `includedMenuId`, `includedRootId`. `TranslationPage = {language: string; config: ContentLanguages; required: string[]; rows: TranslationTarget[]; next: string | null; total: number}`.
+
+Expected tokens encode canonical values, not timestamps or whole-row hashes: reference/selected language, relevant role/activity/owners, selected/default cells and inheritance sources, enabled/default/required settings. Compare decoded structures by values; sort set-like language arrays. Reject malformed tokens. Tokens grant no authority; rederive owners/permissions.
+
+### Exact read model contract
+
+`TranslationContext = {fallbackLanguage: string; required: readonly string[]}`. Each target has
+`name: string`, `parent?: {id: string; name: string}`, `reason: TranslationGapReason`,
+`selectedText`, `defaultText`, `effectiveSelectedText`, `effectiveDefaultText` (each `string | null`),
+`defaultRequired: boolean`, `eligible: boolean`, `unavailableReason: null | "missing" | "inactive" | "ownership" | "role"`,
+`owners: TranslationOwners | null`, and `expected: string`.
+
+`TranslationOwners` is a discriminated union keyed by the report kind: product has `parentId: null`;
+variant has `parentId`; option_list/extra_list/unit have only kind; option_label has `listId`;
+menu has `menuId, rootId`; section has `menuId`; included_menu has
+`menuId, sectionId, includedMenuId, includedRootId`. Every id is a string. No owner id is trusted from a request.
+
+Resolved targets are either `{state: "missing"; target: TranslationTarget}` or
+`{state: "present"; target: TranslationTarget; names: Record<string,string> | null;
+inheritedNames: Record<string,string>; structure: TranslationStructure}`.
+`TranslationStructure = {role: string | null; active: boolean; ownerActive: boolean;
+rootMatched: boolean; parentRole: string | null; childActive: boolean}`.
+Only present, eligible targets reach a names-only writer. Expected values include the
+selected/default stored/effective cells, ownership/structure and value-normalized configuration;
+unrelated names and other aggregate fields are excluded.
+
+## Task 1: Bounded selected-language targets for all nine kinds
+
+**Files:** New catalogue types/targets/tests and `index.ts`.
+
+**Interfaces:** Produce `listTranslationTargets(tx: Transaction, language: string, query: {after?: string; targets?: TranslationRef[]}, context: {fallbackLanguage: string; required: readonly string[]}): Promise<TranslationPage>` and `resolveTranslationTargets(tx: Transaction, refs: readonly TranslationRef[], context: TranslationContext): Promise<TranslationResolution>`. Define `TranslationContext` as the context above; resolution holds `config`, `required` and `targets: Map<string, ResolvedTranslationTarget>`, keyed kind:id. Resolved targets hold wire fields, config, typed stored rows and dependencies.
+
+- [ ] Write cases named `nine target identities`, `activity and ownership`, `default fallback`, `bounded reads`, `stable pages`. Use `useVenueDb`; distinct variant/parent, menu/root, member/section/include ids. Assert partial/absent membership, extras absent omission, units names-only/no activity filter, unavailable option labels still included, either inactive inclusion menu ineligible, wrong roles/owners unavailable, configured/unset default and required-language settings.
+- [ ] RED: `pnpm --filter @waitron/catalogue exec vitest run src/content-translation-targets.test.ts`. Require the expected missing-read-model failure and Tests count.
+- [ ] Implement projected SQL gap selection ordered by declared kind order then id, with cursor validation, `LIMIT 50`, and count separately. No all-language report, editors or whole section graph. Explicit-target reads include filled/unavailable/deleted references for review; accept at most 50 per read and forbid combining them with a cursor. Bulk fetch deduplicated target/owner/dependency ids in chunks of 100, statements awaited in sequence. Assert one config read and equal same-kind reads for 1/100 references; pin counts/mixed-kind bound.
+- [ ] GREEN: repeat RED command and `pnpm --filter @waitron/catalogue exec vitest run src/content-translation-report.test.ts src/content-languages.test.ts`.
+- [ ] Stage exact task paths; `git commit -s -m "feat: resolve bounded inline translation targets"`. Checkpoint: internal reads and retained report tests green.
+
+## Task 2: Names-only shared-definition commands
+
+**Files:** Catalogue writes/tests.
+
+**Interfaces:** Produce `writeProductTranslation`, `writeVariantTranslation`, `writeOptionListTranslation`, `writeOptionLabelTranslation`, `writeExtraListTranslation`, `writeUnitTranslation`, each `(tx: Transaction, target: ResolvedTranslationTarget, names: Record<string,string>): Promise<void>`; define `ResolvedTranslationTarget` in targets.
+
+- [ ] Write `shared named cells preserve aggregates`: exercise six kinds with distinct staff/customer/kitchen text; assert untouched cells and aggregate state unchanged. Add default-companion missing/present controls using the existing product editor, options/extras writers and unit name validation to establish equivalent name rules.
+- [ ] RED: `pnpm --filter @waitron/catalogue exec vitest run src/content-translation-writes.test.ts`.
+- [ ] Implement explicit column updates on resolved own ids, never aggregate saves or generic table updates. Validate merged maps through `contentTranslationGap` against the already-read config, preserving domain codes/fields. No per-row config read. Recheck active parent/list and label ownership during resolution; unit writes touch only `name`.
+- [ ] GREEN: repeat RED command; run `pnpm --filter @waitron/catalogue exec vitest run src/product-editor.test.ts src/options.test.ts src/extras.test.ts src/units.operations.test.ts`.
+- [ ] `git commit -s -m "feat: write shared translation cells without aggregate reconciliation"` after staging. Checkpoint: six tested commands, no route.
+
+## Task 3: Menu commands and atomic comparison/retry algorithm
+
+**Files:** Extend writes/tests; new catalogue orchestration/tests/errors; `index.ts`.
+
+**Interfaces:** Add `writeMenuTranslation`, `writeSectionTranslation`, `writeIncludedMenuTranslation` with Task 2's signature. Produce `saveContentTranslations(tx: Transaction, language: string, batch: TranslationBatch, context: TranslationContext): Promise<{saved: TranslationTarget[]}>`. Register `content.translation_stale`, `content.translation_unavailable`, `content.translation_batch_invalid`, `content.translation_refused`. Refused params: domain `causeCode`/`causeParams`, kind/id, field (`text`/`defaultText`), language.
+
+- [ ] Write `mixed batch rollback`, `cell conflict versus unrelated concurrency`, `equivalent retry`, `root include final maps`. Assert same-cell/owner/role/activity/config changes refuse all writes; reordered sets/maps and concurrent price/other-language changes succeed. Retry the original payload after success and assert canonical results with no writes; one divergent cell refuses the entire retry. Include inherited default, folder-off, foreign label and replaced inclusion cases. Probe root fallback through existing menu/section/include writers configured/unset.
+- [ ] RED: `pnpm --filter @waitron/catalogue exec vitest run src/content-translations.test.ts src/content-translation-writes.test.ts`.
+- [ ] Resolve once, merge only requested cells, build all proposed maps before validation. For includes validate effective names as if the folder were on, preserving `showAsFolder`, image/color and other overrides; resolve root through `menu_details.rootSectionId`, section role/owner and both inclusion menus.
+- [ ] Compare normal requests against baseline dependencies. Permit no-op retry only when **every** intended stored cell equals the canonical request and all other preconditions match. Project this batch's root/default effects into retry dependency baselines; retain ownership/config checks. Accept `defaultText` only for a required, currently missing companion, or an equivalent retry of that companion. Preserve existing defaults; reject gratuitous second-language writes. Validate all targets, then sequentially dispatch the nine commands in the caller's transaction; never recreate missing rows.
+- [ ] GREEN: repeat RED command; `pnpm --filter @waitron/catalogue exec vitest run src/include-folder.db.test.ts src/sections.db.test.ts src/content-languages.concurrency.test.ts`.
+- [ ] `git commit -s -m "feat: save translation batches atomically with value comparisons"`. Checkpoint: domain behavior and rollback/read-count receipts.
+
+## Task 4: Authenticated GET/PUT and dashboard transport
+
+**Files:** Server API/tests/mount; dashboard client/live-query files/tests; EN/ES error codes.
+
+**Interfaces:** Mount `GET`/`PUT /management-api/content-translations/:language`; GET accepts `after` or repeated `target=kind:id`. Client methods: `getContentTranslationTargets(language: string, query: TranslationQuery): Promise<TranslationPage>` and `saveContentTranslations(language: string, batch: TranslationBatch): Promise<{saved: TranslationTarget[]}>`; `TranslationQuery` is Task 1's query type.
+
+- [ ] Write authenticated nine-kind success/rollback cases, manager success controls beside missing/expired/staff permission refusals; assert permission/session rechecked inside `gated`. Reject unknown fields/kinds, duplicates, nulls, invalid tokens/language/cursor and 0/101 targets. Test GET 50 succeeds/51 refuses and PUT 100 succeeds/101 refuses, 4096/4097 UTF-8 bytes per text, 262144/262145 actual body bytes, absent/false Content-Length and chunked input. Assert domain cause and target/field/language survive client transport.
+- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/content-translations-api.test.ts`; `pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts src/api/live-queries.test.ts`.
+- [ ] Bound raw body bytes before JSON parsing, including streamed bodies, in this route. Reuse `gated` exactly once; no nested transaction. Keep gap GET unchanged. Dependencies include content_languages, products, option_lists/labels, extra_lists, sections, section_members, **menu_details**, catalogues and units. Audit shipped subscription resources; add no guard exemptions. Add localized stale/unavailable/invalid/refused wording; show preserved domain cause for validation failures.
+- [ ] GREEN: repeat both commands and `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts -t 'missing-translations report|content languages'`.
+- [ ] `git commit -s -m "feat: expose authenticated translation target and batch routes"`. Checkpoint: complete API.
+
+## Task 5: Staged modal, filters, pages and drafts
+
+**Files:** New dashboard model/dialog/tests; screen/tests; strings.
+
+**Interfaces:** Widget properties `api: DashboardApi`, `language: string`, `open: boolean`; events `translations-closed`, `translations-saved` with `{saved: TranslationTarget[]}`. Model `TranslationDrafts`: `edit(ref: TranslationRef, field: "text" | "defaultText", text: string): void`, `submission(): TranslationBatch`, `validate(): FieldFault[]`, `review(latest: TranslationTarget[], choices: Map<string, "keep" | "replace" | "discard">): void`; `FieldFault = {target: TranslationRef; field: "text" | "defaultText"; message: string}`.
+
+- [ ] Write `explicit companion`, `hidden drafts save together`, `empty revert`, `limits and hidden invalid focus`: selected language only, blank companion only for a non-default selection lacking effective default text, no staff copy, whitespace cancellation, companion-only invalidity, untouched omissions, 50-row pages, 100/101 draft boundary, byte limits and Show edited/count. Assert Kind multi-select, Why single-select, context search and retryable field refusals.
+- [ ] RED: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-model.test.ts src/widgets/content-translations-dialog.test.ts src/screens/content-languages-screen.test.ts`.
+- [ ] Scan selected-language pages sequentially with passive reads, assembling the opening ordered rows before enabling edits. Apply filters before slicing 50 visible rows; drafts are keyed by kind/id outside that slice. Use `wt-modal`, field primitives, semantic names/language tags/required markers, `part` styling/tokens and bottom form message. At draft capacity keep other rows readable. Explain shared-definition versus membership-override scope, and retain editor links through the leave gate. Wire `draftScopeFor`, `saveActionState` and shared close protection now; commit/close on successful PUT before refresh. Replace the temporary dialog; retain gap-GET completeness.
+- [ ] GREEN: repeat RED command; `git commit -s -m "feat: stage inline translation drafts across filters and pages"`.
+
+## Task 6: Live review, leave protection and reply generations
+
+**Files:** Dialog/model/tests, new `.unsaved.test.ts`; screen integration tests.
+
+- [ ] Write real Chromium cases for edit/revert; Cancel/native close/Escape, navigation/editor links, locale, voluntary logout and unload; Keep/Discard; dirty-before-disconnect/reconnect; late GET/PUT/review replies after reopen. Live arrivals count without insertion; clean departures may leave, dirty departures retain text/focus/unavailable state. Review latest must show old/current/draft and require explicit keep draft/replace with latest/discard edit before accepting a baseline. Fetch retained references in groups of 50 so filled/deleted rows remain reviewable. Complete every passive refresh by scanning all gap pages under one opening generation and snapshot revision, then apply the assembled latest set atomically. Compare enabled/default/required configuration by values on every page; if it changes during the scan, abandon that scan and expose a retryable read failure without touching drafts. A late page never partially replaces rows. Include an arrival/departure on page two and a mid-scan configuration change in the browser cases.
+- [ ] RED: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.unsaved.test.ts src/widgets/content-translations-dialog.test.ts`.
+- [ ] Compare normalized submissions to the opening baseline; guard unchanged/busy/invalid saves. Dispose/recreate scope on connection changes without rebasing edited text. Fence reads/actions/review with opening generation plus snapshot revision; newer live data wins over an older explicit read. Watchers assign snapshots only. Separate read/action errors. Keep Task 5's write-success-before-refresh ordering; refresh failures remain load failures. Security teardown invalidates pending decisions/replies.
+- [ ] GREEN: repeat RED command; assert repeated save sends once, network/stale refusal retains draft and remains retryable, and save-success/refresh-failure closes exactly once. `git commit -s -m "feat: protect translation drafts through live review and reconnect"`.
+
+## Task 7: Consumer evidence, deletion controls and visual acceptance
+
+**Files:** Extend `packages/catalogue/src/menu-publication.test.ts`, `product-presentation.test.ts`, `option-snapshot-labels.test.ts`; `apps/server/src/till-api.receipt.test.ts`; new dialog `.a11y.test.ts`; update `docs/developers/products.md` and A420 entry in `docs/backlog.md` when stale.
+
+- [ ] Add `inline changes preserve publication and recorded names` in consumer suites. Record a sale first, save translations through the real route, then read back sale descriptions, fiscal record bytes/hash/sequence and invoice counter unchanged. Preview sees edited shared names; already-published version stays identical until explicit publish. Preserve three distinct names in fixtures.
+- [ ] Run `pnpm --filter @waitron/catalogue exec vitest run src/menu-publication.test.ts src/product-presentation.test.ts src/option-snapshot-labels.test.ts`; `pnpm --filter @waitron/server exec vitest run src/till-api.receipt.test.ts -t 'inline changes|filed identity'`.
+- [ ] In an installed disposable candidate, delete unchanged-save, ownership, stale comparison, generation and draft protection one at a time. For ownership/stale deletion run Task 3's RED command; for unchanged/generation/draft deletion run Task 6's RED command. Require behavioral failure, then restore and rerun for green, including legitimate-success controls. Restore each deletion before the next. Never swap working-tree files or weaken tests/guards.
+- [ ] Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/content-translations-dialog.a11y.test.ts src/screens/content-languages-screen.a11y.test.ts`. Inspect EN/ES × light/dark × measured `window.innerWidth` 390/1280, keyboard/caret, long names and loading/empty/invalid/conflict states. Save screenshots under sibling `__screenshots__/`; run axe per state/theme and inspect the images. Check browser memory headroom. Build via `pnpm --filter @waitron/dashboard build` and open the resulting UI. Stop only recorded owned process ids.
+- [ ] `git commit -s -m "test: verify inline translation consumers and draft protections"`. Checkpoint: ready to run finish-branch.
+
+### Existing assertion inventory
+
+Retain catalogue report/API assertions unchanged. In `content-languages-screen.test.ts`, replace multi-language disclosure ordering/expansion and read-only-modal assertions (877, 1415, 1492, 1521) with selected-language opening/loading/reopening checks. Move gap search/filter/link/context/localization/column-stability assertions (822–1179, 1281, 1348) to widget tests, retaining their behavior with staged fields. Replace automatic row removal (927) with separate clean/dirty departure assertions. Preserve completeness/loading/refusal recovery, pinned language actions, receipt warnings and all language-setting tests. Split report-read accessibility (screen `.a11y.test.ts:233`) from target-read accessibility. Re-read names/lines; inventory additional changes, never delete behavioral assertions to fit implementation.
+
+## Task 8: One final review, normal hook, current-head CI; landing locked
+
+- [ ] Check clean tree, spec coverage and consumers/prose. Execute finish-branch inline: fetch/rebase feature branch for initial review, capture literal base SHA, build an independent disposable candidate containing the complete tree, install locked dependencies.
+- [ ] Run one completed Claude whole-branch review through `~/workspace/tools/claude-seat.sh review-run <candidate> <brief> <report>`. Include deletion receipts/unverified claims; require completed findings and experiment results. Fix findings with red/green and `git commit -s`. Do not repeat review solely for later rebases.
+- [ ] Push through the normal hook once; never bypass it or duplicate whole-workspace package tests locally. Require current-head CI, expected package selections/coverage, resolved conversations and matching SHA. Handle origin/main advances here only: inspect overlap/conflicts; focused checks, hook/CI after required rebases.
+- [ ] Report ready PR/receipts. **Landing stays locked:** this plan authorizes no merge, main-checkout work or branch cleanup. Hand off to locked landing. End the firing with a clean tree and no owned processes.
+
+## Plan self-check
+
+Coverage: nine kinds 1–3; auth/limits 4; companion/filters/pages/save 3–5; comparisons/retries 3; live/leave/reconnect/generations/write-before-refresh 5–6; aggregates/publications/snapshots/visuals/deletion 2–3/7; review/hook/CI/locked landing 8. No known gaps; runtime, read-count, deletion and visual evidence await execution.
+
+Fresh-context plan review (2026-10-08) found four gaps: resolver language, concrete result fields, separate GET/domain limits and whole-scan live refresh. The contracts above incorporate each finding. Runtime results remain unverified until execution.
