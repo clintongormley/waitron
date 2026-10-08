@@ -2100,3 +2100,175 @@ describe("a device behind the live version (§9)", () => {
     );
   });
 });
+
+describe("keep-open changes refresh the order screen", () => {
+  const initialService = {
+    open: true,
+    periodName: "Lunch",
+    keepOpen: {
+      periodId: "lunch",
+      periodName: "Lunch",
+      endsAt: "14:00",
+      running: true,
+      extendedUntil: null,
+    },
+  };
+  const extendedService = {
+    ...initialService,
+    keepOpen: { ...initialService.keepOpen, extendedUntil: "14:30" },
+  };
+  it("redraws the counter after a poll changes only the extension", async () => {
+    let service = initialService as ZoneOfferCatalogue["service"];
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...V1, service: initialService }),
+      listZoneOffers: vi.fn(() => Promise.resolve({ ...V1, service })),
+      menuState: vi.fn(() => Promise.resolve({ ...menuState("v1"), service })),
+    });
+    await toCounter(el);
+    add(el, "Lemonade");
+    service = extendedService;
+    await poll(el);
+    await expect
+      .poll(() =>
+        counter(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+      )
+      .toBe("Lunch · kept open until 14:30");
+    expect(
+      counter(el).store.lines.map((line) => [
+        line.product.productId,
+        line.quantity,
+        line.product.unitPrice,
+      ]),
+    ).toEqual([["Lemonade", "1", "3.00"]]);
+  });
+  it("refreshes the counter immediately after a successful keep-open change", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...V1, service: initialService }),
+      listZoneOffers: vi.fn().mockResolvedValue({ ...V1, service: extendedService }),
+      menuState: vi.fn().mockResolvedValue({ ...menuState("v1"), service: extendedService }),
+    });
+    await toCounter(el);
+    const widget = counter(el).shadowRoot!.querySelector("till-keep-open");
+    expect(widget, "the app mounts the counter control").not.toBeNull();
+    emit(widget!, "keep-open-changed", { zoneId: "zone-counter" });
+    await expect
+      .poll(() =>
+        counter(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+      )
+      .toBe("Lunch · kept open until 14:30");
+    expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-counter"]);
+  });
+  it("redraws the canvas table screen after a poll changes only the extension", async () => {
+    let service = initialService as ZoneOfferCatalogue["service"];
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        listZoneOffers: vi.fn((zone: string) =>
+          Promise.resolve(zone === "zone-dining" ? { ...DINING, service } : V1),
+        ),
+        menuState: vi.fn(() => Promise.resolve({ ...menuState("v1"), service })),
+      }),
+    );
+    await toTable(el);
+    api.listZoneOffers.mockImplementation((zone: string) =>
+      Promise.resolve(zone === "zone-dining" ? { ...DINING, service } : V1),
+    );
+    service = extendedService;
+    await poll(el);
+    await expect
+      .poll(() =>
+        tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+      )
+      .toBe("Lunch · kept open until 14:30");
+    expect(dialog(el)).toBeNull();
+  });
+  it("passes the API and dining zone through the canvas card and refreshes it after a change", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        listZoneOffers: vi.fn((zone: string) =>
+          Promise.resolve(zone === "zone-dining" ? { ...DINING, service: initialService } : V1),
+        ),
+        menuState: vi.fn().mockResolvedValue({ ...menuState("v1"), service: extendedService }),
+      }),
+    );
+    await toTable(el);
+    api.listZoneOffers.mockImplementation((zone: string) =>
+      Promise.resolve(zone === "zone-dining" ? { ...DINING, service: extendedService } : V1),
+    );
+    const widget = tableScreen(el).shadowRoot!.querySelector<
+      HTMLElement & { api: TillApi; zoneId: string }
+    >("till-keep-open");
+    expect(widget, "the embedded table control is mounted").not.toBeNull();
+    expect(widget!.api).toBe(api);
+    expect(widget!.zoneId).toBe("zone-dining");
+    emit(widget!, "keep-open-changed", { zoneId: "zone-dining" });
+    await expect
+      .poll(() =>
+        tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
+      )
+      .toBe("Lunch · kept open until 14:30");
+    expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-dining"]);
+  });
+});
+
+it("passes keep-open recovery through a standalone table drill", async () => {
+  const service = {
+    open: false,
+    periodName: null,
+    keepOpen: {
+      periodId: "lunch",
+      periodName: "Lunch",
+      endsAt: "14:00",
+      running: false,
+      extendedUntil: null,
+    },
+  };
+  const { el } = await mountApp(
+    tableStubs(DINING, {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        canvas: { ...tableCanvas, tabs: tableCanvas.tabs.filter((tab) => tab.key !== "order") },
+      }),
+      listZoneOffers: vi.fn((zone: string) =>
+        Promise.resolve(zone === "zone-dining" ? { ...DINING, service } : V1),
+      ),
+      menuState: vi.fn().mockResolvedValue({
+        ...menuState("v1"),
+        service: {
+          ...service,
+          open: true,
+          periodName: "Lunch",
+          keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
+        },
+      }),
+    }),
+  );
+  await toTable(el);
+  api.listZoneOffers.mockImplementation((zone: string) =>
+    Promise.resolve(
+      zone === "zone-dining"
+        ? {
+            ...DINING,
+            service: {
+              ...service,
+              open: true,
+              periodName: "Lunch",
+              keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
+            },
+          }
+        : V1,
+    ),
+  );
+  const screen = el.shadowRoot!.querySelector("till-table-order-screen")!;
+  expect(screen, "the standalone order drill is reachable").not.toBeNull();
+  const widget = screen.shadowRoot!.querySelector<HTMLElement & { api: TillApi; zoneId: string }>(
+    "till-keep-open",
+  )!;
+  expect(widget, "the closed drill exposes recovery").not.toBeNull();
+  expect(widget.api).toBe(api);
+  expect(widget.zoneId).toBe("zone-dining");
+  emit(widget, "keep-open-changed", { zoneId: "zone-dining" });
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim())
+    .toBe("Lunch · kept open until 14:30");
+  expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-dining"]);
+});

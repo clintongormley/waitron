@@ -1282,7 +1282,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   destination after a refused PIN and reloads its status after saving or on its polling tick.
   The keep-open widget and dialog now offer the server's endpoints, explain delays to the next
   period, end an extension and retry with a manager PIN. The dialog protects an edited endpoint
-  across Cancel, Escape and reconnect. Wiring that control into the order screens remains to do.
+  across Cancel, Escape and reconnect. Counter and table order screens now show the period
+  endpoint beside that control, including recovery from a closed department after a period ran.
+  A successful change immediately reads that zone; polls also refresh extension-only changes.
   Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows
@@ -1291,8 +1293,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
   Slice 3 Part A remains in progress on `feat/service-periods-slice-3-station-controls`:
   its station-day and period-extension server controls and station UI are implemented; the
-  keep-open widget and dialog are implemented; their order-screen wiring, full branch review
-  and current-head CI remain.
+  keep-open widget, dialog and order-screen wiring are implemented; documentation, final rebase,
+  full branch review and current-head CI remain.
 
 - **Changing the business-day start after saving service hours** — open review follow-up from
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed

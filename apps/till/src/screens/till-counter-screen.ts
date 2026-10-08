@@ -1,3 +1,5 @@
+import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
+import type { MenuState } from "../api/client.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
@@ -49,6 +51,7 @@ export class TillCounterScreen extends LitElement {
 
   static override styles = [
     baseStyles,
+    servicePeriodStyles,
     languageChooserStyles,
     css`
       :host {
@@ -145,9 +148,10 @@ export class TillCounterScreen extends LitElement {
   /** The grid shows the selected menu's offers; the allergen lookup screen keeps the full zone set. */
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
-  @property({ attribute: false }) service: { open: boolean; periodName: string | null } | null = {
+  @property({ attribute: false }) service: MenuState["service"] | null = {
     open: true,
     periodName: null,
+    keepOpen: null,
   };
   @property() departmentName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
@@ -282,15 +286,7 @@ export class TillCounterScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${
-        this.service?.open === false
-          ? html`<p role="status" data-service-closed>
-              ${t("menu.department_closed").replace("{department}", () => this.departmentName)}
-            </p>`
-          : this.service?.periodName == null
-            ? nothing
-            : html`<p role="status" data-service-period>${this.service?.periodName}</p>`
-      }
+      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId)}
       ${this.service?.open === true && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
       ${
         this.service?.open === true

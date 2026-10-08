@@ -41,6 +41,10 @@ export class MenuStatePoll {
     if (this.#timer === undefined) this.#timer = setInterval(() => this.#tick(), POLL_MS);
   }
 
+  readNow(zoneId: string): Promise<void> {
+    return this.running ? this.#readZone(zoneId, ++this.#requested) : Promise.resolve();
+  }
+
   stop(): void {
     clearInterval(this.#timer);
     this.#timer = undefined;
