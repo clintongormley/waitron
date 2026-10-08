@@ -739,6 +739,32 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     },
   );
 
+  it("renders device filters and the joined confirmation accessibly", async () => {
+    sessionStorage.removeItem("devices");
+    const { el, host } = await mountWidget<DevicesScreen>(
+      "dashboard-devices-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    await page.getByRole("button", { name: t("table.filters"), exact: true }).click();
+    await expectNoA11yViolations(host);
+    await page.getByRole("button", { name: t("table.filters_close"), exact: true }).click();
+    await openAdd(el);
+    await openPair(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=pair-name]")).not.toBeNull(),
+    );
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp1");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=pair-submit]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=pair-modal]")).toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=joined-modal]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the Add a device dialog with nothing waiting accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",

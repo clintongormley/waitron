@@ -244,7 +244,7 @@ it("new-device settings start clean after number proof and retain invalid edits"
   expect((q(screen, "[data-test=pair-name]") as HTMLInputElement).value).toBe("");
   expect(deny).not.toHaveBeenCalled();
 });
-it("successful pairing commits its exact payload before a failed refresh and leaves Add open", async () => {
+it("successful pairing commits its exact payload before a failed refresh and opens confirmation", async () => {
   let reads = 0;
   const { screen, accept, deny, release } = await mount({
     listDevices: async () => {
@@ -264,12 +264,15 @@ it("successful pairing commits its exact payload before a failed refresh and lea
     stationId: "s1",
   });
   expect(deny).not.toHaveBeenCalled();
-  expect(release).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
   expect(unload()).toBe(false);
-  expect(modal(screen, "add")!.open).toBe(true);
+  expect(modal(screen, "add")).toBeNull();
+  expect(q(screen, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.open).toBe(
+    true,
+  );
   await expect
-    .poll(() => screen.shadowRoot!.textContent)
-    .toContain(t("devices.enabled").replace("{name}", "Renamed"));
+    .poll(() => q(screen, "[data-test=joined-modal]")?.getAttribute("heading"))
+    .toBe(t("devices.enabled").replace("{name}", "Renamed"));
 });
 it("refused pairing retains changed settings and asks before cleanup", async () => {
   const { app, screen, deny } = await mount({
@@ -316,6 +319,9 @@ it("submitted pairing remains nondismissible and newer delivered input stays dir
   expect((q(screen, "[data-test=pair-name]") as HTMLInputElement).value).toBe("Newer");
   expect(unload()).toBe(true);
   expect((q(screen, "[data-test=pair-submit]") as HTMLButtonElement).disabled).toBe(true);
+  expect(q(screen, "[data-test=waiting-empty]")).toBeNull();
+  expect(q(screen, "[data-test=waiting-table]")).toBeNull();
+  expect(q(screen, "[data-test=joined-modal]")).toBeNull();
   q(screen, "[data-test=pair-cancel]")!.click();
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();

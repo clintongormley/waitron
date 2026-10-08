@@ -1,6 +1,5 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
-import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
@@ -300,10 +299,6 @@ export class DevicesScreen extends LitElement {
         gap: var(--wt-space-2);
         color: var(--wt-color-text-muted);
       }
-      .added {
-        color: var(--wt-color-text);
-        font-weight: var(--wt-font-weight-bold);
-      }
       wt-data-table::part(being-paired),
       wt-data-table::part(battery-stale),
       wt-data-table::part(profile-retired) {
@@ -405,6 +400,7 @@ export class DevicesScreen extends LitElement {
   @state() private qr = "";
   /** The last device this dialog paired, and whether it was enabled rather than added. */
   @state() private added: { name: string; enabled: boolean } | null = null;
+  @state() private hasJoined = false;
   /** The device whose open Pair dialog its own new ask replaced. */
   @state() private askedAgain: string | null = null;
   /** The Add dialog's own refusal: a wrong number, a failed discard, or its read of the address. */
@@ -438,6 +434,7 @@ export class DevicesScreen extends LitElement {
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
   #pairSettled = false;
   #pairEpoch = 0;
+  #joinVersion = 0;
   #pairLeave?: LeaveCoordinator;
   #pairScope?: DraftScope<Parameters<DashboardApi["acceptDeviceJoinRequest"]>[1]>;
   readonly #beforePairClose = async (reason: LeaveReason): Promise<boolean> =>
@@ -627,8 +624,7 @@ export class DevicesScreen extends LitElement {
           this.pairing = value;
         }),
         this.#queries.watch("joinRequests", ["device"], (value) => {
-          this.pendingJoins = value;
-          this.#closeReplacedPair(value);
+          this.#applyJoins(value);
         }),
       ]);
     } catch (error) {
@@ -683,10 +679,11 @@ export class DevicesScreen extends LitElement {
     super.disconnectedCallback();
   }
 
-  async #openAddDevice(): Promise<void> {
-    if (this.addingDevice) return;
+  async #openAddDevice(more = false): Promise<void> {
+    if (this.addingDevice && !more) return;
     const epoch = ++this.#addEpoch;
     this.addingDevice = true;
+    this.hasJoined = more;
     this.added = null;
     this.askedAgain = null;
     this.addError = null;
@@ -699,6 +696,12 @@ export class DevicesScreen extends LitElement {
       this.deviceAddress = deviceAddress;
       const qr = await this.qrFor(deviceAddress);
       if (epoch === this.#addEpoch) this.qr = qr;
+      if (more) {
+        const version = this.#joinVersion;
+        const requests = await this.api.joinRequests("device");
+        // A live snapshot or successful pairing supersedes this reopening read.
+        if (epoch === this.#addEpoch && version === this.#joinVersion) this.#applyJoins(requests);
+      }
     } catch (error) {
       // A read's failure never replaces an action's message.
       if (epoch === this.#addEpoch && this.addError === null) this.addError = codeOf(error);
@@ -750,6 +753,12 @@ export class DevicesScreen extends LitElement {
         if (code !== "join_request.not_found" && this.addingDevice && addEpoch === this.#addEpoch)
           this.addError = code;
       });
+  }
+
+  #applyJoins(rows: JoinRequestRow[]): void {
+    this.#joinVersion++;
+    this.pendingJoins = rows;
+    this.#closeReplacedPair(rows);
   }
 
   /**
@@ -856,6 +865,7 @@ export class DevicesScreen extends LitElement {
         return;
       }
       this.#pairSettled = true;
+      this.#joinVersion++;
       this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
       await this.#finishPair(epoch, "security");
       this.addError = code;
@@ -937,6 +947,9 @@ export class DevicesScreen extends LitElement {
     this.submitting = false;
     this.#pairSettled = true;
     this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
+    this.hasJoined = true;
+    this.#addEpoch++;
+    this.#hold.stop();
     this.added = { name: result.name, enabled: Boolean(request.returning) };
     if (!scope?.isDirty()) await this.#finishPair(epoch, "saved");
     try {
@@ -1457,6 +1470,16 @@ export class DevicesScreen extends LitElement {
       },
       {
         key: "profile",
+        filter: {
+          label: t("devices.device_profile"),
+          allLabel: t("devices.filter_profile_all"),
+          value: (d) => (d.profileRetired ? "retired" : (d.deviceProfileId ?? "none")),
+          options: [
+            ...this.deviceProfiles.map((profile) => ({ value: profile.id, label: profile.name })),
+            { value: "none", label: t("equipment.none") },
+            { value: "retired", label: t("devices.profile_deleted") },
+          ],
+        },
         choosable: "shown",
         label: t("devices.device_profile"),
         sortValue: (d) =>
@@ -1500,6 +1523,16 @@ export class DevicesScreen extends LitElement {
       },
       {
         key: "status",
+        sortValue: (d) => (d.active ? t("devices.status_active") : t("devices.status_disabled")),
+        filter: {
+          label: t("devices.column_status"),
+          allLabel: t("devices.filter_status_all"),
+          value: (d) => (d.active ? "active" : "disabled"),
+          options: [
+            { value: "active", label: t("devices.status_active") },
+            { value: "disabled", label: t("devices.status_disabled") },
+          ],
+        },
         choosable: "shown",
         label: t("devices.column_status"),
         cell: (d) =>
@@ -1528,6 +1561,8 @@ export class DevicesScreen extends LitElement {
       noMatchesMessage=${tableNoMatches()}
       filterSearchPlaceholder=${t("categories.combobox_search")}
       filterNoResultsLabel=${t("categories.combobox_no_results")}
+      searchable
+      searchLabel=${t("devices.search")}
       data-test="devices-table"
       viewKey="devices"
       customiseColumnsLabel=${t("table.customise_columns")}
@@ -1552,13 +1587,11 @@ export class DevicesScreen extends LitElement {
       .rowClickable=${(d: DeviceRow) => d.active}
       .rowClickLabel=${(d: DeviceRow) => t("devices.edit_title").replace("{name}", d.label)}
       .emptyMessage=${t("devices.no_devices")}
-      >${this.devices.length === 0 ? this.#renderAddButton("empty-action") : nothing}</wt-data-table
-    >`;
+    ></wt-data-table>`;
   }
 
-  #renderAddButton(slot?: "empty-action"): TemplateResult {
+  #renderAddButton(): TemplateResult {
     return html`<wt-button
-      slot=${ifDefined(slot)}
       variant="primary"
       data-test="open-add-device"
       @click=${() => void this.#openAddDevice()}
@@ -1576,11 +1609,13 @@ export class DevicesScreen extends LitElement {
   }
 
   #renderWaiting(): TemplateResult | typeof nothing {
+    if (this.added !== null) return nothing;
     if (this.pendingJoins.length === 0)
       return this.holdStatus === "lapsed" || this.holdStatus === "failed"
         ? nothing
         : html`<p class="waiting" data-test="waiting-empty">
-            <wt-spinner></wt-spinner>${t("devices.waiting")}
+            <wt-spinner></wt-spinner
+            >${t(this.hasJoined ? "devices.waiting_more" : "devices.waiting")}
           </p>`;
     const held = this.#hold.holdId !== null;
     const columns: DataTableColumn<JoinRequestRow>[] = [
@@ -1628,8 +1663,43 @@ export class DevicesScreen extends LitElement {
     ></wt-data-table>`;
   }
 
+  #renderJoinedDialog(): TemplateResult | typeof nothing {
+    if (!this.addingDevice || this.added === null || this.pairRequest !== null) return nothing;
+    const epoch = this.#addEpoch;
+    return html`<wt-modal
+      size="compact"
+      data-test="joined-modal"
+      heading=${t(this.added.enabled ? "devices.enabled" : "devices.added").replace("{name}", this.added.name)}
+      description=${t("devices.add_another_question")}
+      .open=${true}
+      .opener=${this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (epoch === this.#addEpoch && this.added !== null) this.#endAdding();
+      }}
+    >
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          data-test="joined-close"
+          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=joined-modal]")?.requestClose("cancel")}
+          >${t("action.close")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-test="add-another-device"
+          @click=${() => {
+            if (epoch !== this.#addEpoch || this.added === null) return;
+            void this.#openAddDevice(true);
+          }}
+          >${t("devices.add_another")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-modal>`;
+  }
+
   #renderAddDialog(): TemplateResult | typeof nothing {
-    if (!this.addingDevice) return nothing;
+    if (!this.addingDevice || (this.added !== null && this.pairRequest === null)) return nothing;
     const epoch = this.#addEpoch;
     const until = this.#openUntil();
     const [before, after] = t("devices.add_hint").split("{address}");
@@ -1643,7 +1713,7 @@ export class DevicesScreen extends LitElement {
       .beforeClose=${this.#pairScope ? this.#beforePairClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
-        if (epoch === this.#addEpoch) this.#endAdding();
+        if (epoch === this.#addEpoch && this.added === null) this.#endAdding();
       }}
     >
       ${this.qr === "" ? nothing : html`<img class="qr" data-test="device-qr" src=${this.qr} alt=${t("devices.qr_alt")} />`}
@@ -1652,16 +1722,6 @@ export class DevicesScreen extends LitElement {
       </p>
       ${until === null ? nothing : html`<p class="hint" data-test="pairing-until">${relativeTime(t("devices.window_closes"), until, { deadline: true, now: this.now })}</p>`}
       ${holdNotice(this.holdStatus, () => void this.#hold.start())}
-      ${
-        this.added === null
-          ? nothing
-          : html`<p class="added" role="status" data-test="added-device">
-              ${t(this.added.enabled ? "devices.enabled" : "devices.added").replace(
-                "{name}",
-                this.added.name,
-              )}
-            </p>`
-      }
       ${
         this.askedAgain === null
           ? nothing
@@ -2104,7 +2164,8 @@ export class DevicesScreen extends LitElement {
             </p>`
           : nothing
       }
-      ${this.#renderAddDialog()} ${this.#renderPairDialog()} ${this.#renderEditDialog()}
+      ${this.#renderAddDialog()} ${this.#renderJoinedDialog()} ${this.#renderPairDialog()}
+      ${this.#renderEditDialog()}
     `;
   }
 }

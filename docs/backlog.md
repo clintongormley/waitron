@@ -3568,8 +3568,10 @@ passed 630 cases without the warning, and the unedited fiscal pair passed 20 cas
 eight revised EN/ES/theme/width screenshots were inspected. The normal push hook passed 5,406 root
 checks. CI, licence and CodeQL completed successfully on the final head
 `dd4e3702171268b76649341ee2f46028b3723bef`; the UI job passed 2,287 UI and 504 UI-core cases,
-and the dashboard job passed 9,588 cases. The merge has its own CI run (37771042263);
-its result was pending at landing.
+and the dashboard job passed 9,588 cases. The merge's CI run 37771042263 was cancelled on
+2026-10-08 after image smoke's `apt-get update` stopped printing output for more than fourteen
+minutes; all package jobs passed, image smoke and publishing were cancelled. The closure commit's
+CI 37771257874 and both CodeQL runs passed. The package-index stall remains open under B9.
 Review follow-up: the initial geometry includes currency-part inline padding/borders and ancestor scaling,
 where later `contentRect` does not; scaled ancestors or currency-part padding can cause an initial
 width adjustment. A source search found no `part(currency)`, `transform: scale` or `zoom:` consumer
@@ -3983,16 +3985,25 @@ The original walkthrough is retained under _Detail → Setup wizard_.
      belongs to a location, not a department (`printers.location_id`); departments share one through
      `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
 
-- **A413 — the Devices screen and Add a device (owner, 2026-10-08; open; no lane yet).**
+- **A413 — the Devices screen and Add a device (owner, 2026-10-08; in progress in lane E on `fix/devices-screen-add-device`).**
   1. **Two "Add a device" buttons when there are no devices**: one in the page heading and one in
      the "No devices yet." box. Show one.
-  2. **"Added [name]" is lost in the dialog's text.** When a device joins, show its name as a large
-     heading that stays a few seconds and fades. Once one has joined, the waiting line reads
-     "Waiting for more devices…" (the first wait keeps "Waiting for devices…"). Both languages.
+  2. **After a device joins, ask whether to add another** (owner revised this part, 2026-10-08).
+     Close the waiting dialog and show a compact confirmation: "[device name] has been added."
+     and "Do you want to add another device?" Close ends adding; Add another device resumes
+     waiting with "Waiting for more devices…". The first wait keeps "Waiting for devices…".
+     Both languages. Release this flow's pairing hold while the question shows. Releasing the
+     last hold discards simultaneous pending asks: those devices ask again after Add another
+     device reopens the window. Asks kept live by another hold are offered after reopening.
   3. **The devices table has no search and no filters.** The shared `wt-data-table` offers both
      (`searchable`, which the content languages, modifiers and units screens turn on, and column
      filters); `devices-screen.ts` passes the filter labels but turns neither on. Filter at least by
      device profile and status.
+  Review follow-up: the profile filter's None choice selects devices whose Profile cell is blank;
+  typing "None" or "Ninguno" in search therefore finds none. The blank cell is unchanged from
+  main `3c508a481` (`#profileName` returns an empty string when there is no matching profile).
+  No wording change is queued. A Pair save completing after disconnect/reopen remains outside
+  this item's scope; its existing unsaved-draft tests remain in place.
 
 - **A414 — device screens on a phone (owner, 2026-10-08; open; no lane yet).**
   1. **A fifth of a phone's width is margin.** Measured on the owner's Android phone (Chrome 154,
@@ -6781,6 +6792,15 @@ approved.
 
 ### B9. CI and test infra
 
+- **Image smoke's package-index refresh can consume its whole job limit — OPEN (2026-10-08,
+  observed while checking A407's merge; no action queued).** In main run 37771042263, job
+  113290522107 entered the AppArmor/BlueZ setup step at 11:35:49 UTC. Its last output at
+  11:36:22 was from `apt-get update`, including an ignored `noble InRelease` from
+  `azure.archive.ubuntu.com`; it printed nothing else before cancellation at 11:50:57.
+  The same step took eleven seconds in successful main run 37767334613. No image build or smoke
+  ran in the cancelled job; its log does not establish the network fault. Lane E retained the log
+  and did not rerun it unchanged. **Next action:** queue a scoped change that bounds the package
+  refresh's network waits, with a deliberately stalled command as the timeout control.
 - **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
   watcher/owner 2026-10-08, "active monitoring") — DONE (#1427).** PR #1399's image smoke sat
   46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
