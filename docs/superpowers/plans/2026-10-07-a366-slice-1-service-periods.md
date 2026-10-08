@@ -448,9 +448,12 @@ the department's row for the business day's special date when there is one, else
 periods** (so pricing and the till's basket keep any line's menu), each with
 `audience: "customer" | "staff"` and `orderable: boolean`; `isDefault` marks the current customer
 menu. `ZoneOffers.service` is `{ open: boolean; periodName: string | null }`. With
-`withDefault: false` (pricing) the timetable is not read and `orderable` is `true` for every menu;
-the existing case "price a basket's offers without reading the timetable at all" keeps passing
-unchanged.
+`withDefault: false` (pricing), static customer/staff period membership may be read; range,
+special-date and clock resolution is not read. Every period menu remains present and orderable,
+with no default selected. Owner, 2026-10-08 Task 5 ruling (A): update the pricing test to compare
+the same membership with no ranges against many ranges, preserve its statement-count assertion,
+forbid range/date/clock reads, and add a resolver-in-pricing deletion control. Commit the changed
+assertion separately and include its inventory in the pull request.
 
 Readiness: `zone.menu_missing` goes; `department.no_periods` (an active department with no slot on
 any weekday) is added; `zone.menu_unpublished` and `zone.menu_empty` read the department's period

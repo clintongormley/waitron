@@ -1804,25 +1804,46 @@ describe("statements", () => {
     expect((await resolve(v, v.barra, at)).defaultMenuId).toBe(menus.Cócteles);
   });
 
-  it("price a basket's offers without reading the timetable at all", async () => {
-    const plain = await venue({ timetable: false });
+  it("prices every period menu without reading ranges, dates or the venue clock", async () => {
+    const plain = await timed();
     const busy = await timed();
     await scoped(async (tx) => {
+      for (const v of [plain, busy])
+        await updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] });
+      await replaceMenuWeek(
+        tx,
+        plain.cfg,
+        plain.restaurant,
+        weekOf(() => []),
+        AT,
+      );
       await replaceMenuWeek(tx, busy.cfg, busy.restaurant, twentySlots(busy.periods), AT);
-      for (const periodId of Object.values(busy.periods).slice(0, 5))
-        await setZonePeriodMenu(tx, busy.cfg, busy.barra, periodId, busy.menus.Café);
     });
-    const read = (v: Venue) =>
+    const read = (v: Timed) =>
       statementsOf((tx) =>
         listZoneOffers(tx, v.cfg, v.barra, { menuItemIds: [randomUUID()], withDefault: false }),
       );
     const none = await read(plain);
     const lots = await read(busy);
+    const v = busy;
     expect(lots).toHaveLength(none.length);
-    expect(lots.filter((text) => TIMETABLE_TABLES.test(text))).toEqual([]);
-    // Without the option the timetable is read, which is what the check above would see.
-    const withDefault = await statementsOf((tx) => listZoneOffers(tx, busy.cfg, busy.barra));
-    expect(withDefault.some((text) => TIMETABLE_TABLES.test(text))).toBe(true);
+    const runningPeriodReads = /"(menu_slots|menu_day_timetables|special_dates|locations)"/;
+    expect(lots.filter((text) => runningPeriodReads.test(text))).toEqual([]);
+    const priced = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { withDefault: false }));
+    expect(priced.defaultMenuId).toBeNull();
+    expect(priced.menus.map((menu) => menu.id).sort()).toEqual(
+      [
+        v.menus.Desayunos,
+        v.menus.Almuerzo,
+        v.menus.Cena,
+        v.menus.Copas,
+        v.menus["Brunch de Navidad"],
+        v.menus.Bebidas,
+      ].sort(),
+    );
+    expect(priced.menus.every((menu) => menu.orderable && !menu.isDefault)).toBe(true);
+    const withDefault = await statementsOf((tx) => listZoneOffers(tx, v.cfg, v.barra));
+    expect(withDefault.some((text) => runningPeriodReads.test(text))).toBe(true);
   });
 });
 
