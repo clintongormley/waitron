@@ -30,8 +30,12 @@ caps package concurrency at two. Direct package commands retain their Vitest tim
 The pre-push hook (`.husky/pre-push`) checks sign-offs, runs
 `pnpm install --frozen-lockfile`, `format:check`, lint and the root guards with coverage, then
 `typecheck` over changed packages and their dependents. `scripts/changed-packages.mjs` resolves
-the scope for both the hook and CI. Package tests and coverage run in CI; the root guards stay local
-because they check the machinery that decides what runs. CI also runs mutation testing and
+the scope for both the hook and CI. The sign-off check leaves out commits already reachable from
+the local `origin/main`, when there is one. For a ref the remote already has, the typecheck scope is
+what the push changes since the remote's old tip, plus the branch's own changes since its merge base
+with `origin/main` when that merge base exists and differs from the old tip. A new ref is scoped
+from its merge base with `origin/main`. Package tests and coverage run in CI; the root guards stay
+local because they check the machinery that decides what runs. CI also runs mutation testing and
 `bundle-smoke`.
 
 ### What `bundle-smoke` does NOT cover: the three front-end bundles
@@ -1017,15 +1021,17 @@ tests in two OTHER packages red until an unrelated task ran them. Grep for tests
 run those guards, and verify CI selects every affected consumer. Use a broader local run when
 needed to investigate a failure.
 
-### After a rebase + `--force-with-lease`, the hook can scope the WRONG package
+### After a rebase, the old-tip..new-tip diff can leave out the branch's own changes
 
-Restacking a dashboard-only branch, it printed `all checks passed (@waitron/till + dependents)`.
-Mechanism unconfirmed (plausibly the stale remote SHA git feeds a force-update). Confirm what
-changed with `git diff --name-only origin/main..HEAD`, check that the hook typechecked the actual
-changed packages, and run any missing typechecks. Verify CI’s package scope and coverage results
-on the current head; the PR’s own CI scopes off the PR diff.
-
-In that check, a root script `ROOT_SCOPE_CONSUMERS` lists selects the packages listed against it.
+Restacking a dashboard-only branch once printed `all checks passed (@waitron/till + dependents)`.
+`scripts/pre-push.test.mjs` shows one way this happens: in its fixture, a branch already pushed
+with a change to one package is rebased onto a main commit touching another, and
+`git diff --name-only` from the remote's old tip to the new tip names only main's file — the
+branch's own change is on both sides, so it cancels out. Whether that was the cause of the till
+incident was not checked. The hook now adds the branch's own changes since it left `origin/main`
+(its merge base with `origin/main`) to the scope, and the test asserts that both packages are
+typechecked. With no `origin/main` in the checkout the hook keeps the old-tip diff alone. The PR's
+own CI scopes off the PR diff.
 
 ## Concurrency and machine-resource rules
 
