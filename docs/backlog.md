@@ -1463,8 +1463,8 @@ attributing them to W69 or changing quantity/money handling. Service-status labe
 and warning hover contrast investigations remain separate below.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
-BUILT: batch 1 in #1391; batch 3a built on `feat/save-follows-changes-venue` (pull request
-pending); batches 2, 3b and 4–7 OPEN.** The owner: "open a form with the Save button
+BUILT: batch 1 in #1391; batch 3a in #1401; batches 2, 3b and
+4–7 OPEN.** The owner: "open a form with the Save button
 transparent (and disabled?). but as soon as you make a change, make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Create, Add…)
 disabled and drawn in the same quiet style as Cancel; the first real change turns it blue and
@@ -1486,7 +1486,7 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   (lane A) changed two of its files. The venue settings page's "VAT class for new products" Save
   (`dashboard-catalogue-settings-panel`) is one of them: on 2026-10-08 it still opened blue and
   pressable with nothing changed.
-- **Batch 3a — BUILT, pull request pending.** The venue settings, service and people forms: the
+- **Batch 3a — LANDED in #1401.** The venue settings, service and people forms: the
   floor plan's table rows and Add table, the service-status rows and Create, the kitchen's late
   flags, the venue details editor, My schedule's cover and time-off requests, the receipts page,
   the backup turn-on form and settings editor, the bucket copy form, your profile's details and
