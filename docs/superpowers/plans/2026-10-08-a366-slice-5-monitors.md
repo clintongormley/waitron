@@ -526,9 +526,9 @@ one is also listed under "New decisions this revision made" at the end.
     watcher (`prep-stations-screen.ts:3450-3457`; the form's other opener edits an existing one),
     and after Part A a new watcher could only be a printer setting: no screen shows one. A
     configuration import still carries watchers and their printers
-    (`packages/db/src/configuration-transfer.ts:41-43`, `:61`), so until Part B a venue can still
-    get a pass-ticket printer by importing a configuration that has one; Part A does not close that
-    path. The cost, stated in the pull request: between Part A and slice 4, a venue cannot add a
+    (`packages/db/src/configuration-transfer.ts:41-43`, `:61`), so until Part B a venue being set
+    up can still start with one by importing a configuration that has one (the import runs only at
+    setup, `apps/server/src/boot.ts:1017-1046`); Part A does not close that path. The cost, stated in the pull request: between Part A and slice 4, a venue cannot add a
     pass-ticket printer from the dashboard; its existing watchers stay editable. The form's "new"
     mode goes with the button. The action area's width cap exists because two buttons shared it
     (`prep-stations-screen.ts:112-115`, A424); with one button left, the cap stays or goes by what
@@ -723,8 +723,19 @@ task changes, each with `file:line`, before and after.
 | A1 | `apps/server/src/management-api.device-profiles.test.ts:1742-1787` (`take-orders` at `:1744`) | POST refuses `take-orders` on a kitchen display | the loop drops `take-orders`; a POST with `take-orders` and `hand-over-orders` answers 201 |
 | A1 | `apps/dashboard/src/screens/device-profiles-screen.test.ts:1631-1666` | screens group without "Runs the pass" (`:1648-1653`); a kitchen display's actions `["cap-prepare-orders"]` (`:1657`); saved `["act-as-kds", "prepare-orders"]` (`:1663-1666`) | screens group gains `cap-run-the-pass`; a kitchen display's actions are take, prepare and hand over; the saved capabilities keep the profile's `take-orders` |
 | A5a | `apps/dashboard/src/screens/devices-screen.test.ts:1467`, `:2167`, `:2215`, `:3949` | `device.station_required` | `kitchen_screen.required` |
+| A5a | `apps/server/src/device.test.ts:71-77` (code at `:77`) | a kitchen display with no station target is refused `device.station_required` | a kitchen display with no kitchen screen is refused `kitchen_screen.required` |
+| A5a | `apps/server/src/device.test.ts:273-278` | "a kds profile with NO station is device.station_required" | a kitchen display accepted with no kitchen screen is `kitchen_screen.required` |
+| A5a | `apps/server/src/device-api.test.ts:1493-1503` | a PATCH leaving a kitchen display without a station or watcher answers `device.station_required` | a PATCH with `kitchenScreens: []` answers 400 `kitchen_screen.required` |
+| A5a | `apps/server/src/join-api.db.test.ts:805-824` | a join accept on a kitchen display profile with no station answers 400 `device.station_required`, the request survives | the same with no kitchen screen answers 400 `kitchen_screen.required`, the request survives |
+| A5a | `apps/server/src/join-requests.test.ts:900-911` (code at `:911`) | a returning kitchen display accepted without a station is refused `device.station_required` | refused `kitchen_screen.required` |
+| A10a | `apps/server/src/device.test.ts:248-267` (code at `:267`) | accepting a kitchen display with a watcher its profile does not list is refused `watcher.not_allowed` | the watcher half is deleted with the code; the station half (`station.not_allowed`) stays; Task A3b's `kitchen_screen.not_allowed` and `station.not_allowed` cases cover the new choice |
+| A10a | `apps/server/src/device-api.test.ts:1671-1711` (code at `:1711`) | a PATCH giving a screen an unlisted watcher answers `watcher.not_allowed` | deleted with watchers on devices (Task A8b); the PATCH's refusals are A5a's `kitchen_screen.*` cases |
+| A10a | `apps/server/src/join-api.db.test.ts:829-845` (pair at `:845`) | a join accept naming an unlisted watcher answers 400 `watcher.not_allowed` | the watcher pair is deleted; the station pair (`station.not_allowed`) stays |
+| A10a | `apps/till/src/i18n/codes.test.ts:433-436` | the till words `watcher.not_allowed` in both languages | the `watcher.not_allowed` row is deleted with the code; `station.not_allowed` stays |
+| A10a | `apps/till/src/widgets/profile-dialog.test.ts:74-78` | a `watcher.not_allowed` refusal shows under the profile | `watcher.not_allowed` leaves the `it.each` list; the other three codes stay |
+| A10a | `packages/venue-service/src/profile-access.test.ts:900-910`, `:915-924` | `assertProfileBinding` refuses an unlisted watcher, and any watcher on an empty list, `watcher.not_allowed` | deleted with `assertProfileBinding`; Task A3b's device-choice cases are at least as strict |
 | A6 | `apps/server/src/management-api.device-profiles.test.ts:1224-1265` (code at `:1255`) | removing a shown station answers 409 `device_profile.station_in_use` and keeps the save | answers 200, the save kept, the device named in `narrowedDevices` with the station |
-| A6 | `packages/venue-service/src/profile-access.test.ts:945-955` (codes at `:949`, `:961`) | removing a shown station or watcher is refused | deleted with the in-use blocks; Task A3c's narrowing cases are at least as strict |
+| A6 | `packages/venue-service/src/profile-access.test.ts:945-965` (codes at `:949`, `:961`) | removing a shown station or watcher is refused | deleted with the in-use blocks; Task A3c's narrowing cases are at least as strict |
 | A6 | `apps/dashboard/src/screens/device-profiles-screen.test.ts:1318-1355` (`:1321`, `:1345`); `device-profiles-screen.a11y.test.ts:375` | the editor names the device under the list on an in-use refusal | deleted with the codes; Task A15's narrowed-devices status line case replaces them |
 | A4 | `packages/db/src/schema/devices.trigger.test.ts`; `scripts/behavioural-triggers.test.ts:143-144`, `:1527`, `:1626` | the binding triggers refuse | the triggers are absent (decision 10) |
 | A8b | `apps/server/src/watchers.test.ts:46-62`, `:245`, `:392-412`, `:417`, `:443`, `:466`, `:476`, `:495`, `:531` | a device or mark keeps a watcher in use | each passes `disable` or checks deletion |
@@ -917,6 +928,10 @@ export interface KitchenScreenScope { readonly stationIds: readonly string[] | n
 export type ProfileKitchenScreens = Readonly<Partial<Record<KitchenScreenKind, KitchenScreenScope>>>;
 export interface DeviceKitchenScreen extends KitchenScreenScope { readonly kind: KitchenScreenKind }
 export interface Named { readonly id: string; readonly name: string }
+export interface NarrowedDevice {
+  readonly deviceId: string; readonly deviceName: string;
+  readonly lost: { readonly screens: readonly KitchenScreenKind[]; readonly stations: readonly Named[]; readonly zones: readonly Named[] };
+}
 
 readProfileKitchenScreens(tx, cfg): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]>; // every live profile; switched-off entries included
 setProfileKitchenScreens(tx, cfg, profileId: string, screens: ProfileKitchenScreens): Promise<NarrowedDevice[]>; // replaces all of the profile's rows; narrows devices from A3c, answers [] until then
@@ -1021,11 +1036,7 @@ Rules the tests pin:
 **Interfaces:**
 
 ```ts
-export interface NarrowedDevice {
-  readonly deviceId: string; readonly deviceName: string;
-  readonly lost: { readonly screens: readonly KitchenScreenKind[]; readonly stations: readonly Named[]; readonly zones: readonly Named[] };
-}
-narrowDeviceKitchenScreens(tx, cfg, deviceId: string, profileId: string): Promise<NarrowedDevice | null>; // null: it lost nothing
+narrowDeviceKitchenScreens(tx, cfg, deviceId: string, profileId: string): Promise<NarrowedDevice | null>; // null: it lost nothing; NarrowedDevice is A3a's
 ```
 
 Decision 21's "Stored" and "Re-adding" rules. Rules the tests pin:
@@ -1129,9 +1140,14 @@ as `watcher_item_marks_done_by_ck` does (`schema/watcher-item-marks.ts:36-39`).
   test** that proves the rebuild kept the refusal on old rows: apply the core set up to the
   migration before this task's rebuild (with the upgrade walk's step helper in
   `scripts/migration-upgrade.test.ts`, or drizzle's migrator on a journal cut at that entry,
-  whichever is smaller), write a group and an event, apply the rest through `applyMigrations`, then
-  check the event survived and an update and a delete of it are refused. Before running, say what
-  the failing case prints: the update succeeds (no `RAISE(ABORT)`), or the event is gone.
+  whichever is smaller), write an event whose `group_id` is null (a reorder event names no group,
+  `schema/order-groups.ts:59`), apply the rest through `applyMigrations`, then check the event
+  survived and an update and a delete of it are refused. The event must not point at a group:
+  `order_group_events.group_id` is a `no action` key into `order_groups`
+  (`packages/db/drizzle/0028_order_groups.sql:10`), so a row pointing at a group makes this task's
+  `order_groups` rebuild fail, which on a real box is the venue reset's job, not this test's.
+  Before running, say what the failing case prints: the update succeeds (no `RAISE(ABORT)`), the
+  event is gone, or a `FOREIGN KEY constraint failed` error.
 - [ ] **Step 2: Generate in two steps** (CLAUDE.md §3). First add the two columns and generate; read
   the SQL: it must be `ALTER TABLE … ADD` only, as the precedents above are. If drizzle writes a
   rebuild of `order_groups` for this generation, STOP and ask: a rebuild there also adds a column.
@@ -1243,10 +1259,11 @@ the path. A profile switch narrows the device against the new profile and record
   `:568`), `apps/dashboard/src/screens/device-profiles-screen.ts` (`inUse`/`inUseSentence`
   `:169-178`), `apps/dashboard/src/i18n/strings.ts` (`device_profiles.station_in_use`,
   `.watcher_in_use`, `:1846-1849`, `:4348-4351`), `apps/dashboard/src/i18n/codes.ts`
-  (`:600-607`)
+  (`:600-607`), `docs/developers/conventions-ui.md` (`:258-262`, which names both codes at
+  `:261-262`; Task A18 rereads it for the rest of the slice)
 - Test: `management-api.device-profiles.test.ts` (its in-use case `:1224-1265`, code at `:1255`,
   turns red and changes as planned), `device-api.test.ts`, `management-api.test.ts`;
-  `packages/venue-service/src/profile-access.test.ts` (`:945-955`, codes at `:949`, `:961`);
+  `packages/venue-service/src/profile-access.test.ts` (`:945-965`, codes at `:949`, `:961`);
   `apps/dashboard/src/screens/device-profiles-screen.test.ts` (`:1318-1355`) and
   `device-profiles-screen.a11y.test.ts` (`:375`) — all listed under "Changed test checks (planned)"
 
@@ -1433,7 +1450,10 @@ session is required and its person recorded. The watcher routes still answer unt
 ### Task A8c: The kitchen display's pass levers
 
 **Files:**
-- Create: `apps/server/src/device-levers.ts` (the six routes, mounted from `device-api.ts`; it
+- Create: `apps/server/src/device-levers.ts` (the six routes, mounted from `device-api.ts`, whose
+  error-to-status table `device-api.ts:96-150` gains `kitchen_screen.zone_not_allowed` and
+  `kitchen_screen.not_allowed` at 403, as `till-api.ts:466` answers `service_zone.not_allowed`,
+  beside its existing `device.forbidden_action` 403; it
   imports `./errors.js`, and throws only server codes — `device.unauthorized`, and
   `device.forbidden_action` through `assertProfileAction`; the zone refusal is venue-service's
   `assertPassScreenZone`) and `device-levers.test.ts`
@@ -1888,8 +1908,8 @@ its kind ("Pantalla Cocina — station screen"). The tab row's actions hold "New
 ### Task A18: Documentation and backlog
 
 **Files:** `docs/developers/conventions-ui.md` (`:246-249`, "A kitchen display may only prepare",
-which decision 23 makes false; `:258-262`, the station and watcher lists and their in-use
-refusals), `docs/developers/design-system.md` (any line naming the device's "Shows" choice or the
+which decision 23 makes false; `:258-262`, the station and watcher lists, whose in-use sentence
+Task A6 already corrected), `docs/developers/design-system.md` (any line naming the device's "Shows" choice or the
 profile's station and watcher lists: `grep -n "watcher list\|Shows" docs/developers/design-system.md`),
 `docs/backlog.md` and `docs/backlog/service-periods.md` (A366: slice 5 Part A built; Part B waits
 for slice 4)
@@ -1903,7 +1923,8 @@ reset needed — required: the migration refuses on any box with a sign-in or a 
 will not start until it is reset"**. Its description also says: the no-screen tests (Task A7) and
 that nothing in this slice turns "no screen" into a warning; the Prep stations tab row look (Task
 A17); that between this pull request and slice 4 the dashboard cannot add a watcher, while a
-configuration import still can (decision 22); and the changed test checks.
+venue being set up can still start with one by importing a configuration that has one (the import
+runs only at setup, `apps/server/src/boot.ts:1017-1046`; decision 22); and the changed test checks.
 
 ---
 
@@ -1914,7 +1935,7 @@ writing tests, re-ground each one: `grep -rn "watcher\|Watcher" apps/server/src 
 and `grep -rn "makes_and_watches" apps packages --include='*.ts'`. If slice 4's combined tickets
 are not on `main`, or a pass ticket today still comes only from a watcher printer, STOP and ask.
 After Part A no screen shows a watcher and the dashboard cannot add one (decision 22); what is left
-is the venue's existing watchers as printer settings, and an import's.
+is the venue's existing watchers as printer settings, and those a new venue imports at setup.
 
 ### Task B1: Kitchen printing without watchers
 
@@ -1996,7 +2017,9 @@ Each is a default the owner may override; the decision it sits in has the detail
 - **6 (refinement).** A device's "Every station" means every station its profile allows less its
   recorded removals, and may be chosen under an explicit profile list.
 - **22.** The "New watcher" button (and the form's new mode) leaves in Part A; between Part A and
-  slice 4 the dashboard cannot add a pass-ticket printer, though a configuration import still can.
+  slice 4 the dashboard cannot add a pass-ticket printer, though a venue being set up can still
+  start with one by importing a configuration that has one (the import runs only at setup,
+  `apps/server/src/boot.ts:1017-1046`).
 - **23.** A kitchen display profile may also hold `take-orders` and `hand-over-orders`, which only
   its pass levers check; new venues' kitchen display profile keeps `prepare-orders` only.
 - **24.** A kitchen display's lever checks the order's zone against its pass zones, not its
