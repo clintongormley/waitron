@@ -710,3 +710,119 @@ it.each([
     ]);
   },
 );
+
+it("keeps a new period's selected colour through background reads and uses fresh colours on reopening", async () => {
+  const data = model();
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  const editor = await edit(el);
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=colour]")!.value,
+  ).toBe("red");
+  await change(editor, "colour", "purple");
+  data.departments[0]!.periods = [{ ...data.departments[0]!.periods[0]!, colour: "red" }];
+  el.api.rereadWatches();
+  await expect.poll(() => table(el).rows[0]?.colour).toBe("red");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=colour]")!.value,
+  ).toBe("purple");
+  editor.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  const reopened = await edit(el);
+  expect(
+    reopened.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=colour]")!
+      .value,
+  ).toBe("amber");
+  expect(
+    reopened.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-period]",
+    )!.disabled,
+  ).toBe(true);
+});
+
+it("marks the new period's missing name and menu above the buttons without submitting", async () => {
+  const writes: unknown[] = [];
+  const el = await mount((async (_path, method, body) => {
+    if (method === "GET") return model();
+    writes.push(body);
+  }) as DashboardRequest);
+  const editor = await edit(el);
+  await change(editor, "colour", "purple");
+  submit(editor);
+  await editor.updateComplete;
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+  ).toBe("Enter a name.");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=menuId]")!.error,
+  ).toBe("Choose a menu.");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error,
+  ).toBe("Correct the highlighted fields to continue.");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-period]")!
+      .disabled,
+  ).toBe(true);
+  expect(writes).toEqual([]);
+});
+
+it("places a refused period name under Name with the bottom explanation and retry enabled", async () => {
+  const writes: unknown[] = [];
+  const el = await mount((async (_path, method, body) => {
+    if (method === "GET") return model();
+    writes.push(body);
+    throw { code: "menu_timetable.invalid", params: { field: "name" } };
+  }) as DashboardRequest);
+  const editor = await edit(el, true);
+  await change(editor, "name", "Dinner");
+  submit(editor);
+  const name = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+  await expect.poll(() => name.error).toBe("Check this value.");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error,
+  ).toBe("Correct the highlighted fields to continue.");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-period]")!
+      .disabled,
+  ).toBe(false);
+  expect(name.value).toBe("Dinner");
+  submit(editor);
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes).toEqual([
+    { name: "Dinner", colour: "green", menuId: "lunch", staffMenuIds: ["staff"] },
+    { name: "Dinner", colour: "green", menuId: "lunch", staffMenuIds: ["staff"] },
+  ]);
+});
+
+it("names every weekday and special date preventing deletion in one sentence", async () => {
+  const data = model();
+  data.departments[0]!.periods = [{ ...data.departments[0]!.periods[0]!, name: "Madrugada" }];
+  const writes: unknown[] = [];
+  const el = await mount((async (path, method, body) => {
+    if (method === "GET") return structuredClone(data);
+    writes.push({ path, method, body });
+    throw {
+      code: "menu_period.in_use",
+      params: {
+        periodId: "p1",
+        uses: [
+          { kind: "week", weekday: 5 },
+          { kind: "week", weekday: 6 },
+          { kind: "special_date", specialDateId: "navidad", date: "2025-12-25" },
+        ],
+      },
+    };
+  }) as DashboardRequest);
+  await removePeriod(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=delete-error]")?.textContent)
+    .toBe(
+      "Madrugada is still placed on Friday, Saturday, Thu, 25 Dec 2025. Take it off those days first.",
+    );
+  expect(writes).toEqual([
+    { path: "/management-api/venue-service/menu-periods/p1", method: "DELETE", body: undefined },
+  ]);
+  expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
+});

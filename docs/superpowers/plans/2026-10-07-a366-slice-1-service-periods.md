@@ -738,7 +738,10 @@ these approved destinations, retaining request/live-data wiring and viewer permi
 A new forward-navigation check asserts no history write on Keep and one write after Discard.
 Focused checks and three safeguard-deletion controls pass after restoration. The registered
 manager and viewer Periods views have been inspected in both languages, themes and phone/desktop
-widths. Old Menu timetable sources and their tests remain pending retirement; preserve the Week
+widths. New periods now start with the first unused department colour, repeating the first palette colour
+once all have been used (decision 6). Existing periods keep their recorded colour; background reads
+keep a selected draft colour. Focused browser checks and two safeguard-deletion controls cover that
+selection. Old Menu timetable sources and their tests remain pending retirement; preserve the Week
 and special-date assertions while moving them to their new consumers. Week and Day content remain
 Tasks 13 and 14. Leave Task 12 unchecked until its remaining work and verification finish.
 

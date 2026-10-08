@@ -315,6 +315,7 @@ export class OpeningHoursScreen extends LitElement {
                 .open=${true}
                 .period=${this.editor.period}
                 .departmentName=${this.editor.department.name}
+                .usedColours=${this.editor.department.periods.map((period) => period.colour)}
                 .menus=${this.model!.menus}
                 .busy=${this.busy}
                 @period-save=${this.savePeriod}

@@ -24,7 +24,12 @@ import { t } from "./strings.js";
 type Draft = MenuPeriodInput & { colour: CalendarColour };
 type Field = keyof Draft;
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
-const empty = (): Draft => ({ name: "", colour: "blue", menuId: "", staffMenuIds: [] });
+const empty = (usedColours: readonly CalendarColour[] = []): Draft => ({
+  name: "",
+  colour: CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0],
+  menuId: "",
+  staffMenuIds: [],
+});
 const fields: Field[] = ["name", "colour", "menuId", "staffMenuIds"];
 
 @customElement("period-editor")
@@ -48,6 +53,7 @@ export class PeriodEditor extends LitElement {
   @property({ attribute: false })
   period?: OpeningHoursModel["departments"][number]["periods"][number];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
+  @property({ attribute: false }) usedColours: readonly CalendarColour[] = [];
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
   @state() private draft: Draft = empty();
   @state() private attempted = false;
@@ -95,7 +101,7 @@ export class PeriodEditor extends LitElement {
             menuId: this.period.menuId,
             staffMenuIds: [...this.period.staffMenuIds],
           }
-        : empty();
+        : empty(this.usedColours);
       this.baseline = copy(this.input);
       this.attempted = false;
       this.refusal = undefined;
