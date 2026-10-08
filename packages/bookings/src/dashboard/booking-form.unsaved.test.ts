@@ -467,3 +467,88 @@ it.each([
     expect(screen.shadowRoot!.querySelector("dashboard-booking-form")!.open).toBe(false);
   },
 );
+
+async function putBack(form: BookingForm) {
+  const parent = form.parentNode!;
+  form.remove();
+  await form.updateComplete;
+  parent.appendChild(form);
+  await form.updateComplete;
+}
+async function saveButton(form: BookingForm) {
+  await form.updateComplete;
+  const button =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  await button.updateComplete;
+  return { variant: button.variant, disabled: button.disabled };
+}
+async function escapeFrom(form: BookingForm, name: string) {
+  input(form, name).shadowRoot!.querySelector<HTMLElement>("input, textarea")!.focus();
+  await userEvent.keyboard("{Escape}");
+}
+it("a booking put back after a detached update still asks before Escape discards an edit", async () => {
+  const { screen } = await mount();
+  const form = await open(screen);
+  await putBack(form);
+  await field(form, "notes", "After put-back");
+  expect(unload()).toBe(true);
+  await escapeFrom(form, "notes");
+  expect((await question()).open).toBe(true);
+  expect(form.open).toBe(true);
+});
+it("a booking keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { screen } = await mount();
+  const form = await open(screen);
+  await field(form, "notes", "Before put-back");
+  await putBack(form);
+  expect(input(form, "notes").value).toBe("Before put-back");
+  expect(unload()).toBe(true);
+  expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
+  await escapeFrom(form, "notes");
+  expect((await question()).open).toBe(true);
+  expect(form.open).toBe(true);
+});
+it("a booking put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const pending = deferred();
+  const { screen } = await mount({ write: pending.promise });
+  const form = await open(screen);
+  await field(form, "notes", "Submitted note");
+  await save(form);
+  await expect.poll(() => form.busy).toBe(true);
+  await field(form, "notes", "Newer note");
+  pending.resolve();
+  await expect.poll(() => form.busy).toBe(false);
+  expect(form.open).toBe(true);
+  await putBack(form);
+  await field(form, "notes", "Submitted note");
+  expect(unload()).toBe(false);
+});
+it("a booking reopened on another booking after a put-back save opens quiet with that booking", async () => {
+  const { screen } = await mount();
+  const form = await open(screen);
+  await field(form, "notes", "Before put-back");
+  await putBack(form);
+  await save(form);
+  await expect.poll(() => form.open).toBe(false);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-booking-two]")!.click();
+  await screen.updateComplete;
+  await form.updateComplete;
+  expect(form.open).toBe(true);
+  expect(input(form, "notes").value).toBe("Second note");
+  expect(unload()).toBe(false);
+  expect((await saveButton(form)).disabled).toBe(true);
+});
+it("a booking write that started before the form was taken out and put back neither saves nor closes it", async () => {
+  const pending = deferred();
+  const { screen } = await mount({ write: pending.promise });
+  const form = await open(screen);
+  await field(form, "notes", "Submitted note");
+  await save(form);
+  await expect.poll(() => form.busy).toBe(true);
+  await putBack(form);
+  pending.resolve();
+  await expect.poll(() => form.busy).toBe(false);
+  expect(form.open).toBe(true);
+  expect(input(form, "notes").value).toBe("Submitted note");
+  expect(unload()).toBe(true);
+});

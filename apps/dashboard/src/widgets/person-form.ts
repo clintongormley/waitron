@@ -78,9 +78,15 @@ export class PersonForm extends LitElement {
 
   #scope?: DraftScope<PersonInput>;
   #leave?: LeaveCoordinator;
+  #baseline?: PersonInput;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
 
   override disconnectedCallback(): void {
     this.#scope?.dispose();
@@ -99,7 +105,9 @@ export class PersonForm extends LitElement {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
+      this.#baseline = undefined;
+    } else if (this.isConnected && !this.#scope) {
+      this.#baseline ??= this.#submissionValue();
       const { coordinator, scope } = draftScopeFor<PersonInput>(this, {
         id: this,
         current: () => this.#submissionValue(),
@@ -116,6 +124,7 @@ export class PersonForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
 
@@ -209,6 +218,7 @@ export class PersonForm extends LitElement {
   }
 
   commitSaved(submitted: PersonInput): void {
+    this.#baseline = { ...submitted };
     this.#scope?.commit(submitted);
   }
 
@@ -235,6 +245,7 @@ export class PersonForm extends LitElement {
 
   #reset(): void {
     this.open = false;
+    this.#baseline = undefined;
     this.firstNames = "";
     this.lastNames = "";
     this.displayName = "";

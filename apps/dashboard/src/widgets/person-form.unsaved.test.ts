@@ -5,7 +5,12 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./person-form.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -164,4 +169,78 @@ it("standalone Add staff Cancel reports once after the native delayed close", as
   await closeReportsDelivered();
   expect(closed).toBe(1);
   expect(form.open).toBe(false);
+});
+function firstNamesField(form: HTMLElement) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "[data-test=first-names]",
+  )!;
+}
+async function confirmButton(form: HTMLElementTagNameMap["dashboard-person-form"]) {
+  await form.updateComplete;
+  const confirm = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=confirm]",
+  )!;
+  await confirm.updateComplete;
+  return { variant: confirm.variant, disabled: confirm.disabled };
+}
+it("Add staff put back after a detached update still asks before Escape discards an edit", async () => {
+  const { app, form } = await mount();
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "first-names", "Ada");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("Add staff keeps an edit made before it was taken out and put back, and still asks", async () => {
+  const { app, form } = await mount();
+  await edit(form, "first-names", "Ada");
+  await reattachAfterDetachedUpdate(form);
+  expect(firstNamesField(form).value).toBe("Ada");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  expect(await confirmButton(form)).toEqual({ variant: "primary", disabled: false });
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(form.open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+it("Add staff reopened after a put-back entry was saved opens quiet and empty", async () => {
+  const { app, form } = await mount();
+  await edit(form, "first-names", "Ada");
+  await reattachAfterDetachedUpdate(form);
+  expect(
+    form.closeSaved({
+      firstNames: "Ada",
+      lastNames: "",
+      displayName: "Ada",
+      email: "",
+      telephone: null,
+      role: "staff",
+    }),
+  ).toBe(true);
+  expect(form.open).toBe(false);
+  await closeReportsDelivered();
+  form.open = true;
+  await form.updateComplete;
+  expect(firstNamesField(form).value).toBe("");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect((await confirmButton(form)).disabled).toBe(true);
+  await edit(form, "first-names", "Bea");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await edit(form, "first-names", "");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("Add staff put back keeps its last saved values as the ones an edit is compared with", async () => {
+  const { app, form } = await mount();
+  await edit(form, "first-names", "Ada");
+  await edit(form, "last-names", "Lovelace");
+  await edit(form, "email", "submitted@example.com");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  expect(app.submitted).toHaveLength(1);
+  await edit(form, "email", "newer@example.com");
+  expect(form.closeSaved(app.submitted[0] as Parameters<typeof form.closeSaved>[0])).toBe(false);
+  await reattachAfterDetachedUpdate(form);
+  await edit(form, "email", "submitted@example.com");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });

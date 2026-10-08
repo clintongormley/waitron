@@ -66,9 +66,15 @@ export class PersonEdit extends LitElement {
   #personId: string | null = null;
   #scope?: DraftScope<PersonEditDetails>;
   #leave?: LeaveCoordinator;
+  #baseline?: PersonEditDetails;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
 
   override disconnectedCallback(): void {
     this.#scope?.dispose();
@@ -92,7 +98,9 @@ export class PersonEdit extends LitElement {
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-    } else if (!this.#scope) {
+      this.#baseline = undefined;
+    } else if (this.isConnected && !this.#scope) {
+      this.#baseline ??= this.#submissionValue();
       const { coordinator, scope } = draftScopeFor<PersonEditDetails>(this, {
         id: this,
         current: () => this.#submissionValue(),
@@ -104,6 +112,7 @@ export class PersonEdit extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
 
@@ -131,6 +140,7 @@ export class PersonEdit extends LitElement {
   #loadPerson(): void {
     const person = this.person;
     this.#personId = person?.personId ?? null;
+    this.#baseline = undefined;
     this.details = {
       displayName: person?.displayName ?? "",
       firstNames: person?.firstNames ?? "",
@@ -208,6 +218,7 @@ export class PersonEdit extends LitElement {
   }
 
   closeSaved(submitted: PersonEditDetails): boolean {
+    this.#baseline = { ...submitted };
     this.#scope?.commit(submitted);
     return this.closeIfUnchanged();
   }

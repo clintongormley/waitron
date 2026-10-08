@@ -20,6 +20,10 @@ import { t } from "./strings.js";
 type Choice = { id: string; name: string; active?: boolean };
 type Refusal = { code: string; params?: { field?: string } };
 
+function copyInput(input: WatcherInput): WatcherInput {
+  return { ...input, stationIds: [...input.stationIds], zoneIds: [...input.zoneIds] };
+}
+
 export function watcherInputErrors(input: WatcherInput) {
   return {
     name: input.name.trim() ? "" : t("venue.field_required"),
@@ -83,6 +87,9 @@ export class WatcherForm extends LitElement {
   private scope?: DraftScope<WatcherInput>;
   private leave?: LeaveCoordinator;
   private identity?: object;
+  private leaveToken = {};
+  private submittedToken?: object;
+  private baseline?: WatcherInput;
   private watcherId?: string;
 
   override connectedCallback() {
@@ -94,7 +101,7 @@ export class WatcherForm extends LitElement {
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
-    this.identity = undefined;
+    this.leaveToken = {};
     super.disconnectedCallback();
   }
 
@@ -115,22 +122,31 @@ export class WatcherForm extends LitElement {
   readonly requestLeave = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy || !this.isConnected) return false;
     const identity = this.identity;
+    const token = this.leaveToken;
     if (!this.scope || !this.leave) return true;
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
-    return this.isConnected && identity === this.identity && outcome === "proceeded";
+    return (
+      this.isConnected &&
+      identity === this.identity &&
+      token === this.leaveToken &&
+      outcome === "proceeded"
+    );
   };
 
   commitSubmitted(input: WatcherInput): boolean {
-    if (!this.isConnected) return false;
+    if (!this.isConnected || this.submittedToken !== this.leaveToken) return false;
+    this.baseline = copyInput(input);
     this.scope?.commit(input);
     return !this.scope?.isDirty();
   }
 
   protected override willUpdate() {
-    if (!this.isConnected) return;
     if (!this.identity || this.watcherId !== this.watcher?.id) {
       this.scope?.dispose();
+      this.scope = undefined;
+      this.leave = undefined;
       this.identity = {};
+      this.baseline = undefined;
       this.watcherId = this.watcher?.id;
       this.draft = this.watcher
         ? {
@@ -151,21 +167,21 @@ export class WatcherForm extends LitElement {
             runsPass: false,
           };
       this.attempted = false;
+    }
+    if (this.isConnected && !this.scope) {
+      this.baseline ??= copyInput(this.input);
       const { coordinator, scope } = draftScopeFor(this, {
         id: this.identity,
         current: () => this.input,
-        snapshot: (input) => ({
-          ...input,
-          stationIds: [...input.stationIds],
-          zoneIds: [...input.zoneIds],
-        }),
+        snapshot: copyInput,
         equal: (a, b) => this.equalInput(a, b),
         restore: (input) => {
-          this.draft = { ...input, stationIds: [...input.stationIds], zoneIds: [...input.zoneIds] };
+          this.draft = copyInput(input);
         },
       });
       this.leave = coordinator;
       this.scope = scope;
+      scope.commit(this.baseline);
     }
   }
   private get visibleStations() {
@@ -231,6 +247,7 @@ export class WatcherForm extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
+    this.submittedToken = this.leaveToken;
     this.dispatchEvent(new CustomEvent("watcher-save", { detail: { input: this.input } }));
   }
   override render() {

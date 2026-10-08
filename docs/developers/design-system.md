@@ -1543,19 +1543,31 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   (`beforeClose`, Cancel's `requestClose`) on the coordinator, not on the scope. The scope's
   `commit` and `dispose` redraw the host, so a form left open after a save draws its action quiet
   again;
-- a form that takes its scope in `willUpdate` and disposes it on disconnect returns before
-  `draftScopeFor` while `!this.isConnected`. Disposing the scope redraws the form, so without that
-  return a form taken out of the page takes a new scope while detached, and once put back it does
-  not ask before discarding an edit made after that (an edit made before it was taken out is a
-  separate open point: backlog A331, batches 2a, 2b and 4c). The till's party name, invoice recipient, extras picker and station
+- a form that takes its scope in `willUpdate` and disposes it on disconnect takes a new scope only
+  while `this.isConnected`, and asks for an update when it is put back (Lit runs none on
+  reconnect). Disposing the scope redraws the form, so without that check a form taken out of the
+  page takes a new scope while detached, and once put back it does not ask before discarding an
+  edit made after that. The till's party name, invoice recipient, extras picker and station
   dialogs, the venue-service watcher form, the dashboard's unit, ingredient, extras list, option
   list and option label forms, recipe editor, Add to menus picker and a section's Add products
-  picker, and the menus screen's section and menu details form and an include's Edit dialog do
-  this, each also asking for an update when it is put back (Lit runs none on reconnect); with the
-  return deleted, a reconnect case in the `*.unsaved.test.ts` that covers it fails. The other
-  dashboard forms that take their scope in `willUpdate` (person edit and new person, product
-  editor, variant form, purchase form, shift dialog, booking form) do not yet, and whether they show
-  the fault is untested;
+  picker, the menus screen's section and menu details form and an include's Edit dialog, the staff
+  edit and new person forms, the variant, purchase and shift forms, and the bookings form do this;
+  with the check deleted, a reconnect case in the `*.unsaved.test.ts` that covers it fails. The
+  product editor does not yet, and whether it shows the fault is untested (backlog A331, batch 5's
+  open points);
+- an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
+  scope last committed — the opened value, then each saved value — in a field the disconnect does
+  not clear, commit it into the new scope, and clear it wherever the form really reopens, or a
+  reopened form starts changed. A form that forgets on disconnect which record it opened re-seeds
+  its fields when put back and replaces the edit; it keeps that identity instead, and renews on
+  disconnect only the token that stops a write started before it left from saving or closing it.
+  The staff edit and new person, variant, purchase, shift, bookings and watcher forms do this, each
+  with an edit-first reconnect case. The unit form keeps such an edit on screen but stops counting
+  it (measured in batch 2a, backlog A331); batch 2b records the same for the menus screen's section
+  and menu details form and an include's Edit dialog from one throwaway case. The recipe editor
+  clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
+  extras picker and station dialogs keep it and count it, each with a reconnect case in its
+  `*.unsaved.test.ts`. The other forms in the list above are untried;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;
 - return early from the save handler while `saveActionState(scope).unchanged`. `disabled` stops a

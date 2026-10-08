@@ -64,6 +64,7 @@ export class ShiftDialog extends LitElement {
   #identity = "";
   #opening = {};
   #scope?: DraftScope<ShiftDraft>;
+  #baseline?: ShiftDraft;
   #leave?: LeaveCoordinator;
   #submitted?: ShiftDraft;
   #startsOffsetMinutes = 0;
@@ -72,9 +73,14 @@ export class ShiftDialog extends LitElement {
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
   override disconnectedCallback(): void {
     this.#disposeDraft();
-    this.#identity = "";
+    this.#opening = {};
     super.disconnectedCallback();
   }
 
@@ -102,6 +108,7 @@ export class ShiftDialog extends LitElement {
     return () => {
       if (!this.isConnected || !this.open || opening !== this.#opening) return false;
       if (submitted) {
+        this.#baseline = { ...submitted };
         scope?.commit(submitted);
         if (scope?.isDirty()) return false;
       }
@@ -119,6 +126,7 @@ export class ShiftDialog extends LitElement {
       this.#submitted = undefined;
       this.#identity = identity;
       this.#opening = {};
+      this.#baseline = undefined;
       this.#startsOffsetMinutes = this.shift?.startsOffsetMinutes ?? 0;
       this.#endsOffsetMinutes = this.shift?.endsOffsetMinutes ?? 0;
       this.start = this.shift
@@ -128,7 +136,8 @@ export class ShiftDialog extends LitElement {
       this.shiftRole = this.shift?.role ?? "";
     }
     if (!this.open) this.#disposeDraft();
-    else if (!this.#scope) {
+    else if (this.isConnected && !this.#scope) {
+      this.#baseline ??= this.#value();
       const { coordinator, scope } = draftScopeFor<ShiftDraft>(this, {
         id: this,
         current: () => this.#value(),
@@ -146,6 +155,7 @@ export class ShiftDialog extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      scope.commit(this.#baseline);
     }
   }
 
