@@ -163,10 +163,6 @@ hook, or how tests are scheduled:
   and reads like a broken checkout.
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
   it.** Grep for tests that pin the list, run those guards, and verify CI selects every affected consumer.
-- **After a rebase + `--force-with-lease`, the hook can scope the WRONG package** (mechanism
-  unconfirmed). Confirm with `git diff --name-only origin/main..HEAD` that the hook typechecked the
-  packages the changed paths select; run any missing typechecks and verify the PR’s CI scope and
-  results.
 - **Every package whose vitest config enables browser mode runs in real headless Chromium**
   (`grep -l browser */*/vitest.config.ts` — two levels, not one — says which). Concurrency is
   decided by measured headroom (`memory_pressure | grep free`), never by a count: beside ANOTHER

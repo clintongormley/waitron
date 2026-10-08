@@ -32,7 +32,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
     continue
   fi
 
-  # Commits already on main were checked when they landed; a rebase brings them into this range.
+  # A rebase brings main's commits into this range; they are not this push's to sign.
   if [ -n "$main_tip" ]; then
     range_commits=$(git rev-list "$base..$local_sha" "^$main_tip" 2>/dev/null) || {
       range_unknown=1
@@ -48,6 +48,15 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
     range_unknown=1
     continue
   }
+  # After a rebase, old-tip..new-tip can miss the branch's own changes; add them since it left main.
+  if [ -n "$main_tip" ] && fork=$(git merge-base "$main_tip" "$local_sha" 2>/dev/null) &&
+    [ "$fork" != "$base" ]; then
+    own_paths=$(git -c core.quotePath=false diff --name-only "$fork..$local_sha" 2>/dev/null) || {
+      range_unknown=1
+      continue
+    }
+    range_paths=$(printf '%s\n%s' "$range_paths" "$own_paths")
+  fi
 
   have_range=1
   commits=$(printf '%s\n%s' "$commits" "$range_commits")

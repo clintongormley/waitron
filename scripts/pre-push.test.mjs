@@ -204,12 +204,15 @@ describe("pre-push fast checks", () => {
       { signed: false },
     );
   });
-  it("accepts a rebased branch whose range brings in an unsigned commit already on main", () => {
+  it("accepts a rebased branch over an unsigned main commit and typechecks both sides of the rebase", () => {
     fixture("packages/source/src/index.ts", ({ invoke, ref, head, ...repo }) => {
       const { rebased } = rebaseOntoUnsignedMain({ head, ...repo });
       const result = invoke(ref(rebased, head));
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.checks).toEqual([...cheap, ["--filter", "...@waitron/consumer", "typecheck"]]);
+      expect(result.checks).toEqual([
+        ...cheap,
+        ["--filter", "...@waitron/consumer", "--filter", "...@waitron/source", "typecheck"],
+      ]);
     });
   });
   it("still refuses the branch's own unsigned commit after a rebase, naming it and not main's", () => {
