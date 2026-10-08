@@ -1724,8 +1724,10 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   may be replaced by the stored watcher without a question (its `disconnectedCallback` forgets the
   draft's identity, so the next `willUpdate` starts it again); the till dialogs keep such an edit.
   The reviewer believes main behaved the same before #1418, which nobody ran either. It matters only
-  if the prep stations screen ever moves the open form; next action: a reconnect case that edits
-  first, then removes and re-adds the form, run on main and on the fix.
+  if the prep stations screen ever moves the open form. DONE on branch
+  `fix/forms-reconnect-keep-asking` (2026-10-08): the edit-first case failed on main (the edit was
+  replaced) and passes with the fix; the form now keeps the record it opened and the value it last
+  saved across removal.
 - **Batch 5 — LANDED in #1414 (A331-5).** The till's five forms that save an edit: the party name dialog,
   the schedule's cover and time-off requests, the full invoice recipient dialog, the extras picker
   when it edits a line, and the station dialog's Make at. Adding a dish never waits for a change
@@ -1742,8 +1744,17 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   batch. Left open: the station dialog widens or narrows with the chosen station's name, so its
   buttons shift a little as a station is picked (it did so before this batch). Also left open from
   #1414's review: (1) the till's profile dialog — done in batch 4c; (2) the four batch 5 dialogs had to stop registering their draft while out of the page, or a
-  reattached dialog stopped asking before discarding; design-system.md → Forms names seven
-  dashboard forms that still register that way, untested for the same fault.
+  reattached dialog stopped asking before discarding; design-system.md → Forms named seven
+  dashboard forms that still registered that way, untested for the same fault. DONE for six of
+  them on branch `fix/forms-reconnect-keep-asking` (2026-10-08): the staff edit and new person,
+  variant, purchase and shift forms and the bookings form. Each one failed both cases on main (an
+  edit made after the form is put back, and one made before it was taken out) and passes with the
+  fix; the purchase and shift forms and the bookings form also replaced an edit made before
+  removal with the stored values. Still open: the product editor, and the unit form's edit-first
+  point under batch 2a, both waiting for lane B's A332 (`feat/all-products-colour`), which changes
+  their unsaved suites. Also seen in the purchase and shift forms' tests, not changed and not
+  tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
+  neither asks nor closes until a field is clicked again.
 - **Batch 6 — AUDITED (A331-6, 2026-10-08).** No setup screen edits already stored settings.
   Admin, venue and certificate Next buttons contribute to the provisioning draft; Connect adopts
   with credentials; Import stages configuration; reset, file/bucket/Cloud restore and provisioning
