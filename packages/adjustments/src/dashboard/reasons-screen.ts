@@ -440,6 +440,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #open(editor: Editor, opener: HTMLElement): void {
     this.#reasonScope?.dispose();
     this.#reasonScope = undefined;
+    this.#leave = undefined;
     this.#opener = opener;
     this.editor = editor;
     this.draft = undefined;
@@ -477,6 +478,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #close(): void {
     this.#reasonScope?.dispose();
     this.#reasonScope = undefined;
+    this.#leave = undefined;
     this.#closeGuard = undefined;
     this.editor = undefined;
     this.draft = undefined;

@@ -652,3 +652,23 @@ it("reconnect waits for fresh settings before exposing a limit draft", async () 
   await field(screen, "maxBillDiscount", "30");
   expect(unload()).toBe(true);
 });
+
+it.each([false, true])(
+  "closing Deactivate does not route through a retired reason draft (replaced=%s)",
+  async (replaced) => {
+    const { screen } = await mount();
+    await open(screen);
+    if (!replaced) await press(screen, "cancel-editor");
+    await press(screen, "deactivate-reason-one");
+    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const request = vi.spyOn(app.leave.coordinator, "request");
+    try {
+      await modal.requestClose("cancel");
+      await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+    }
+  },
+);

@@ -455,6 +455,11 @@ registrations or credentials after the provider step.
   `:1051`; bookings: `:273` guards the callback at `:91`; media: `:714`, `:780` guard `:320`.
   Preserve parent scopes, discard/close behavior, submitted-value commits and stale-completion checks.
   Dispose and recreate scopes on reopen; test without a coordinator and with the real coordinator.
+  Standalone booking/reason forms also commit submitted values and retain newer edits after a
+  successful write; previously they closed because no scope existed. This deliberately matches
+  their coordinated dashboard behavior. The retained standalone limit likewise adopts the
+  refreshed/submitted baseline and quiets Save when its values match. Dispose the reason
+  coordinator handle whenever its scope is retired, including replacement by Deactivate.
 - Equality must compare draft values independently of busy state: do not copy the payment forms'
   `busy || equal` pattern (`stripe-add-reader.ts:74`, `stripe-connect-form.ts:67`,
   `sumup-connect-form.ts:99`). A changed in-flight save stays primary and disabled. Keep each

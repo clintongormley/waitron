@@ -42,7 +42,7 @@ async function mount() {
     createReason: vi.fn().mockResolvedValue(reason),
   };
   el = document.createElement("dashboard-adjustment-reasons-screen");
-  el.api = api as unknown as AdjustmentsApi;
+  el.api = Object.assign(api, { background: api }) as unknown as AdjustmentsApi;
   applyTokens(el);
   document.body.append(el);
   await vi.waitFor(() =>
@@ -148,4 +148,26 @@ it("a refused changed limit remains primary and retryable", async () => {
     expect(el.shadowRoot!.querySelector("[data-test=limit-saved]")).not.toBeNull(),
   );
   await state("save-limit", true, "secondary");
+});
+
+it("a standalone reason keeps newer input after saving and quiets when returned to the submitted value", async () => {
+  const api = await mount();
+  await edit();
+  let finish!: (value: AdjustmentReason) => void;
+  api.updateReason.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+  await change("name", "Submitted complaint");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+  await el.updateComplete;
+  await state("save-editor", true, "primary");
+  await change("name", "Newer complaint");
+  finish(reason);
+  await vi.waitFor(() => expect(api.listReasons).toHaveBeenCalledTimes(2));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+  ).toBe("Newer complaint");
+  await state("save-editor", false, "primary");
+  await change("name", " Submitted complaint ");
+  await state("save-editor", true, "secondary");
 });
