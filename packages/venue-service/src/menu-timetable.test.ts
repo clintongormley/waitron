@@ -72,6 +72,7 @@ import {
   zonePeriodMenus,
 } from "./schema/menus.js";
 import { specialDates } from "./schema/hours.js";
+import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
 const suite = useVenueDb({
@@ -127,6 +128,72 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 });
 const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: fill(weekday) }));
+
+describe("Always fixture periods", () => {
+  it("keeps the previous customer menu and staff menus when the fixture selects another default", async () => {
+    const v = await venue({ timetable: false });
+    await scoped(async (tx) => {
+      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Desayunos);
+      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Bebidas, { displayOrder: 9 });
+      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Café, { makeDefault: true });
+    });
+    const offers = await scoped((tx) =>
+      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "15:00") }),
+    );
+    expect(offers.defaultMenuId).toBe(v.menus.Café);
+    expect(
+      offers.menus.map((menu) => ({
+        id: menu.id,
+        audience: menu.audience,
+        orderable: menu.orderable,
+      })),
+    ).toEqual([
+      { id: v.menus.Café, audience: "customer", orderable: true },
+      { id: v.menus.Desayunos, audience: "staff", orderable: true },
+      { id: v.menus.Bebidas, audience: "staff", orderable: true },
+    ]);
+    expect(
+      await db
+        .select({
+          menuId: menuPeriodStaffMenus.menuId,
+          displayOrder: menuPeriodStaffMenus.displayOrder,
+        })
+        .from(menuPeriodStaffMenus)
+        .innerJoin(menuPeriods, eq(menuPeriods.id, menuPeriodStaffMenus.periodId))
+        .where(eq(menuPeriods.departmentId, v.restaurant))
+        .orderBy(menuPeriodStaffMenus.displayOrder),
+    ).toEqual([
+      { menuId: v.menus.Desayunos, displayOrder: 0 },
+      { menuId: v.menus.Bebidas, displayOrder: 9 },
+    ]);
+  });
+
+  it("keeps two menus orderable on both sides of midnight and both touching ranges", async () => {
+    const v = await venue({ timetable: false });
+    await scoped(async (tx) => {
+      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Desayunos, { makeDefault: true });
+      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Bebidas);
+    });
+    for (const time of ["03:00", "06:00", "15:00", "18:00"])
+      for (const zoneId of [v.sala, v.barra]) {
+        const offers = await scoped((tx) =>
+          listZoneOffers(tx, v.cfg, zoneId, { at: madrid(MONDAY, time) }),
+        );
+        expect(offers.defaultMenuId).toBe(v.menus.Desayunos);
+        expect(offers.service).toEqual({ open: true, periodName: "Always" });
+        expect(
+          offers.menus.map((menu) => ({
+            id: menu.id,
+            audience: menu.audience,
+            orderable: menu.orderable,
+          })),
+        ).toEqual([
+          { id: v.menus.Desayunos, audience: "customer", orderable: true },
+          { id: v.menus.Bebidas, audience: "staff", orderable: true },
+        ]);
+      }
+  });
+});
 
 describe("service-period writers", () => {
   it("returns only the new period id and updates without a response body", async () => {
