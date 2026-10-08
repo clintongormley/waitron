@@ -14,6 +14,7 @@ import { AppError, normaliseUuid } from "@waitron/shared";
 import { liveDocumentsByZone, resolveZoneContext, type VenueScope } from "./operations.js";
 import {
   cellKey,
+  changeReach,
   chooseMaker,
   chooseExtraMaker,
   chooseExtraMakerBeside,
@@ -21,6 +22,7 @@ import {
   stationDayHours,
   stationStatus,
   targetKey,
+  type ChangeReach,
   type MakerChoice,
   type ProductFacts,
   type RouteTarget,
@@ -424,16 +426,16 @@ export async function previewRoutingChange(
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .where(eq(products.active, true));
-  const zoneList = zones.length ? zones : [{ id: null, name: null }];
+  const reach = changeReach(rules.parentOf, address);
+  const zoneList = (zones.length ? zones : [{ id: null, name: null }]).filter((zone) =>
+    reach.reachesZone(zone.id),
+  );
   const moves: RoutingMove[] = [];
   const dishChoices = new Map<string, { before: MakerChoice; after: MakerChoice }>();
-  for (const product of productsToCheck)
+  for (const product of productsToCheck) {
+    const facts = productFacts(product);
+    if (!reach.covers(facts)) continue;
     for (const zone of zoneList) {
-      const facts = {
-        productId: storedUuid(product.id),
-        routedProductId: storedUuid(product.routedId),
-        categoryId: product.categoryId,
-      };
       const previous = chooseMaker(rules, facts, zone.id, null);
       const from = previous.route;
       const next = chooseMaker(after, facts, zone.id, null);
@@ -450,6 +452,7 @@ export async function previewRoutingChange(
           toNoReplacement: next.noReplacement,
         });
     }
+  }
   moves.push(
     ...(await extraMoves(
       tx,
@@ -457,6 +460,7 @@ export async function previewRoutingChange(
       { before: rules, after },
       productsToCheck,
       zoneList,
+      reach,
       dishChoices,
     )),
   );
@@ -469,6 +473,12 @@ export async function previewRoutingChange(
       (a.dish?.productId ?? "").localeCompare(b.dish?.productId ?? ""),
   );
 }
+
+const productFacts = (product: { id: string; routedId: string; categoryId: string | null }) => ({
+  productId: storedUuid(product.id),
+  routedProductId: storedUuid(product.routedId),
+  categoryId: product.categoryId,
+});
 
 const choiceKey = (productId: string, zoneId: string | null) =>
   `${storedUuid(productId)}\u0000${zoneId ?? ""}`;
@@ -493,7 +503,8 @@ async function extraMoves(
     categoryId: string | null;
   }[],
   zones: readonly { id: string | null; name: string | null }[],
-  dishChoices: ReadonlyMap<string, { before: MakerChoice; after: MakerChoice }>,
+  reach: ChangeReach,
+  dishChoices: Map<string, { before: MakerChoice; after: MakerChoice }>,
 ): Promise<RoutingMove[]> {
   const extrasByDish = new Map<string, Map<string, Set<string | null>>>();
   const offer = (dishId: string, extraId: string, zoneIds: readonly (string | null)[]) => {
@@ -541,18 +552,27 @@ async function extraMoves(
       : { follows: true, target: dishChoice.route, noReplacement: dishChoice.noReplacement };
   };
   const moves: RoutingMove[] = [];
+  // A dish the change cannot reach keeps its choice, so it is worked out once, for both states.
+  const choiceBeside = (dish: ProductFacts, zoneId: string | null) => {
+    const key = choiceKey(dish.productId, zoneId);
+    let choice = dishChoices.get(key);
+    if (choice === undefined) {
+      const unchanged = chooseMaker(rules.before, dish, zoneId, null);
+      dishChoices.set(key, (choice = { before: unchanged, after: unchanged }));
+    }
+    return choice;
+  };
   for (const dish of dishes) {
-    for (const [extraId, inZones] of extrasByDish.get(storedUuid(dish.id)) ?? []) {
+    const dishFacts = productFacts(dish);
+    const dishInReach = reach.covers(dishFacts);
+    for (const [extraId, inZones] of extrasByDish.get(dishFacts.productId) ?? []) {
       const extra = active.get(extraId);
       if (extra === undefined) continue;
-      const facts = {
-        productId: extraId,
-        routedProductId: storedUuid(extra.routedId),
-        categoryId: extra.categoryId,
-      };
+      const facts = productFacts(extra);
+      if (!dishInReach && !reach.covers(facts)) continue;
       for (const zone of zones) {
         if (!inZones.has(zone.id)) continue;
-        const dishChoice = dishChoices.get(choiceKey(dish.id, zone.id))!;
+        const dishChoice = choiceBeside(dishFacts, zone.id);
         const from = placeIn(rules.before, dishChoice.before, facts, zone.id);
         const to = placeIn(rules.after, dishChoice.after, facts, zone.id);
         if ((from.follows && to.follows) || sameRoute(from.target, to.target)) continue;
