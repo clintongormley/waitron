@@ -35,6 +35,7 @@ export const swatchPartStyles = css`
     padding: var(--wt-space-1);
     border-style: dashed;
     border-color: var(--wt-color-text-muted);
+    border-radius: var(--wt-radius-md);
     background-clip: content-box;
   }
 `;

@@ -5030,6 +5030,9 @@ describe("a colour a row inherits", () => {
     });
     await openRow(el, "folder:d");
     expectMarkedInherited(chipOf(root, "b"), "rgb(177, 37, 37)");
+    // Rounded as an inheriting product's square is, so its inset fill keeps rounded corners too.
+    const chipStyle = getComputedStyle(chipOf(root, "b"));
+    expect(chipStyle.borderTopLeftRadius).toBe(chipStyle.getPropertyValue("--wt-radius-md").trim());
     expect(swatchButton(root, "b").getAttribute("aria-label")).toBe(
       categoryInheritedName("Beer", "Drinks"),
     );
