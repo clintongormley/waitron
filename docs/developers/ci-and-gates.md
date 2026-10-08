@@ -781,8 +781,11 @@ when that workflow is one of this repository's `.github/workflows/` files.
 ### Every apt wait is bounded
 
 Every `apt-get update` and `apt-get install` in a workflow or in `deploy/Dockerfile` runs under an
-outer `timeout` and is retried, because apt's own read timeout cannot end a wait on a mirror that
-keeps sending a little.
+outer `timeout`, and runs again when it stalls or exits non-zero (in the workflow, the update and
+the install run again together), because apt's own read timeout did not end a wait on a mirror
+sending a byte every 5 s. An `apt-get update` that could not connect, or timed out waiting, warned
+"Failed to fetch" and exited 0 (apt 2.8.3 and 3.0.3), so the Dockerfile does not retry it; one
+answered 404 for its `Release` file exited 100 and is retried.
 
 The stall: main run `37771042263`, `image / smoke`, step "Load the print agent's AppArmor profile,
 and put a stand-in BlueZ on the system bus", `sudo apt-get update`. From 11:36:22Z the log printed
@@ -814,9 +817,11 @@ The limits chosen:
 - In `deploy/Dockerfile` each apt-get goes through a `bounded()` wrapper: `timeout 300` per attempt,
   three attempts, with the same apt settings written to `/etc/apt/apt.conf.d/99bounded-waits` and
   removed again in the same `RUN`, so the image ships no apt setting. 300 s rather than CI's 60-90 s,
-  because `deploy/waitron.sh` builds this same file on a venue's box over whatever link it has.
-  In CI one stalled attempt costs 5 minutes and its retry fits inside `smoke`'s 15-minute job
-  limit; three stalled attempts (900 s) do not, and the job's limit ends the build first.
+  because `deploy/waitron.sh install <ref>` builds this same file on the box, for a branch or
+  commit, over whatever link the box has. In CI one stalled attempt costs 5 minutes and its retry
+  fits inside `smoke`'s 15-minute job limit; three stalled attempts (900 s) do not, and the job's
+  limit ends the build first. `publish` (`ci.yml`) builds both targets of the same file under a
+  10-minute limit, so one stalled attempt there uses half of it.
 
 The same probe with the bound, run 2026-10-08 in the same containers. If the bound did nothing, the
 trickling case would print nothing more after its `Get:1` line until an outside limit killed it, as
@@ -832,17 +837,20 @@ The Dockerfile's `bounded()` wrapper and settings file, copied verbatim, run und
 `node:26-slim` container (Debian 13, apt 3.0.3):
 
 - against the trickling listener: `bounded apt-get update` printed
-  `attempt 1 of 3 failed or stalled: apt-get update` at each of its three 300 s attempts, and the
-  shell exited 1 after 900 s;
+  `attempt N of 3 failed or stalled: apt-get update` after each of its three 300 s attempts, N
+  running 1 to 3, and the shell exited 1 after 900 s;
 - control, against Debian's own mirror: `bounded apt-get update` and
   `bounded apt-get install -y --no-install-recommends python3-minimal` finished in 4 s, exit 0.
 
 Guards: the "apt waits" cases in `scripts/ci-workflow.test.mjs` and "the Dockerfile's apt waits"
 cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — both read TEXT. The
-workflow case misses apt run by a script the step calls, by a composite or Docker action, by a tool
-itself (`playwright install --with-deps`), or from a command built from a variable, and it checks
-neither the retry loop nor the step's `timeout-minutes`. The Dockerfile case sees only `apt-get`
-named in a `RUN`, and neither runs the shell nor judges the numbers.
+workflow case reads steps through the same reader as the "apt installs" case, so it misses every
+install that case's comment lists as passing — among them apt run by a script the step calls, by a
+composite or Docker action, by a tool itself (`playwright install --with-deps`), or from a command
+built from a variable — and it checks neither the retry loop nor the step's `timeout-minutes`. It
+reads each line on its own, so a `timeout` at the end of a `\`-continued line is reported as
+unbounded. The Dockerfile case sees only `apt-get` named in a `RUN`, does not check that `bounded()`
+retries, and neither runs the shell nor judges the numbers.
 
 ### The GHA cache is a shared per-repository budget, evicted least-recently-used
 

@@ -332,10 +332,11 @@ describe("the print-agent image and its compose wiring", () => {
 
 /**
  * What each `RUN` in a Dockerfile that mentions `apt-get` misses of the bounded-wait shape: apt's
- * own read timeouts written to a file under /etc/apt/apt.conf.d/, a `bounded()` retry wrapper
- * whose attempts run under `timeout <n>`, every `apt-get update` and `apt-get install` called
- * through it, and the file removed again so the image ships no apt setting. Reads TEXT: it does
- * not run the shell, judge the numbers, or see apt reached any other way (`apt`, a script).
+ * own read timeouts written to a file under /etc/apt/apt.conf.d/, a `bounded()` wrapper that runs
+ * `"$@"` under `timeout <n>`, every `apt-get update` and `apt-get install` called through it, and
+ * the file removed again so the image ships no apt setting. Reads TEXT: it does not check that
+ * `bounded()` retries, run the shell, judge the numbers, or see apt reached any other way (`apt`,
+ * a script).
  */
 function aptRunGaps(dockerfile: string): { runs: number; gaps: string[] } {
   const runs = dockerfile
@@ -414,7 +415,8 @@ describe("the Dockerfile's apt waits", () => {
     expect(runs, "expected both stages' apt-get RUNs to still be here").toBeGreaterThanOrEqual(2);
     expect(
       gaps,
-      "a trickling mirror never trips apt's own read timeout, so each apt-get on a box's link runs " +
+      "apt's own read timeout did not end a wait on a mirror sending a byte every 5 s, so each " +
+        "apt-get on a box's link runs " +
         'through bounded() (docs/developers/ci-and-gates.md, "Every apt wait is bounded")',
     ).toEqual([]);
   });

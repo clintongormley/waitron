@@ -148,10 +148,12 @@ hook, or how tests are scheduled:
   on one cache download. Guard: the job-time-limit cases in `scripts/ci-workflow.test.mjs`, weaker
   than its name — it reads text, does not judge the number, and never reads a called workflow kept
   in another repository.
-- **An apt-get in a workflow or `deploy/Dockerfile` runs under an outer `timeout`, with retries**,
-  because a mirror that trickles bytes never trips apt's own read timeout. Cost: main run
-  37771042263's image smoke and publish. Guards: the apt-wait cases in `scripts/ci-workflow.test.mjs`
-  and `scripts/deploy-image-env.test.ts`, weaker than their names — they read text. Receipt:
+- **An apt-get in a workflow or `deploy/Dockerfile` runs under an outer `timeout`, and is retried
+  when it stalls or exits non-zero**, because apt's own read timeout did not end a wait on a mirror
+  sending a byte every 5 s. Cost: main run 37771042263's image smoke sat silent in `apt-get update`
+  until its 15-minute limit, and `publish` was cancelled with it. Guards: the apt-wait cases in
+  `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`, weaker than their names —
+  they read text and do not check the retries. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-apt-wait-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.

@@ -6811,15 +6811,19 @@ approved.
 
 ### B9. CI and test infra
 
-- **Image smoke's package-index refresh can consume its whole job limit — OPEN (2026-10-08,
-  observed while checking A407's merge; queued as A422 in lane A).** In main run 37771042263, job
-  113290522107 entered the AppArmor/BlueZ setup step at 11:35:49 UTC. Its last output at
+- **Image smoke's package-index refresh can consume its whole job limit — IN PROGRESS (A422,
+  2026-10-08), branch `fix/apt-bounded-waits` (observed while checking A407's merge).** In main
+  run 37771042263, job 113290522107 entered the AppArmor/BlueZ setup step at 11:35:49 UTC. Its last output at
   11:36:22 was from `apt-get update`, including an ignored `noble InRelease` from
   `azure.archive.ubuntu.com`; it printed nothing else before cancellation at 11:50:57.
   The same step took eleven seconds in successful main run 37767334613. No image build or smoke
   ran in the cancelled job; its log does not establish the network fault. Lane E retained the log
-  and did not rerun it unchanged. **Next action:** lane A's A422 bounds and retries the package
-  refresh's network waits, with a deliberately stalled mirror as the timeout control.
+  and did not rerun it unchanged. **Fix (A422):** a local probe showed apt's own read timeout did
+  not end a wait on a mirror sending a byte every 5 s. Each apt-get in `image-smoke.yml` and
+  `deploy/Dockerfile` now runs under an outer `timeout`, and a call that stalls or exits non-zero is
+  retried; guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts` fail on
+  one with no outer timeout. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
+  bounded".
 - **Every CI job has a time limit, and the image builds stop using the remote Docker cache (A399,
   watcher/owner 2026-10-08, "active monitoring") — DONE (#1427).** PR #1399's image smoke sat
   46 minutes on one cache layer download (run 37743000577), and with no `timeout-minutes` GitHub
@@ -6833,13 +6837,6 @@ approved.
   **Open point (no action queued):** both image jobs still run `docker/setup-buildx-action`, whose
   only stated reason was the cache export #1427 removed. Whether the builds still need it (for
   example for `load: true` or the print-agent build reusing the app build's layers) was not tried.
-- **Every apt wait is bounded (A422, watcher 2026-10-08) — landed pending (branch
-  fix/apt-bounded-waits).** Main run 37771042263's image smoke sat in `apt-get update` with no output
-  until the job's 15-minute limit cancelled it, and `publish` was cancelled with it. A local probe
-  showed apt's own read timeout does not end a wait on a mirror that trickles bytes. Each apt-get in `image-smoke.yml` and `deploy/Dockerfile` now runs under an outer `timeout`
-  with retries, and guards in `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`
-  fail on one that does not. See [ci-and-gates.md](developers/ci-and-gates.md), "Every apt wait is
-  bounded".
 - **A rebased branch's push was refused for an unsigned commit already on main (A392, owner
   2026-10-08) — DONE (#1421).** Main's squash `6797bc03a` (#1377) has no `Signed-off-by`; the pre-push
   hook checked every commit from the remote's old tip, so a rebase over it refused the push, and

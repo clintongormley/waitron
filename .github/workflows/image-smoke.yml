@@ -50,9 +50,9 @@ jobs:
             echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"
           } > deploy/.env
 
-      # A mirror that trickles a byte every few seconds never trips apt's own read timeout, so each
-      # call has an outer limit and is retried. Receipt: docs/developers/ci-and-gates.md, "Every apt
-      # wait is bounded".
+      # apt's own read timeout did not end a wait on a mirror sending a byte every 5 s, so each call
+      # has an outer limit, and the update and the install run again together when either stalls or
+      # exits non-zero. Receipt: docs/developers/ci-and-gates.md, "Every apt wait is bounded".
       - name: Install BlueZ and the stand-in's Python libraries from apt
         timeout-minutes: 8
         run: |

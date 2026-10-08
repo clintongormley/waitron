@@ -1501,9 +1501,12 @@ function workflowSteps(text) {
   }));
 }
 
+/** An `apt` or `apt-get` command running `word`, options before it included. */
+const apt = (word, flags = "") =>
+  new RegExp(`\\bapt(?:-get)?(?:\\s+(?:-[oc]\\s+\\S+|-\\S+))*\\s+${word}\\b`, flags);
+
 /** The steps whose `run:` command installs with apt, and whether it updates the package list first. */
 function aptInstallSteps(text) {
-  const apt = (word) => new RegExp(`\\bapt(?:-get)?(?:\\s+(?:-[oc]\\s+\\S+|-\\S+))*\\s+${word}\\b`);
   return workflowSteps(text).flatMap(({ step, command }) => {
     const install = apt("install").exec(command);
     if (install === null) return [];
@@ -1518,11 +1521,11 @@ function aptInstallSteps(text) {
  * `-o Acquire::http::Timeout=<n>` and `-o Acquire::https::Timeout=<n>` before the word.
  */
 function aptWaits(text) {
-  const apt = /\bapt(?:-get)?(?:\s+(?:-[oc]\s+\S+|-\S+))*\s+(?:update|install)\b/g;
+  const aptWait = apt("(?:update|install)", "g");
   const outerLimit = /(?:^|[\s;&|(!])(?:sudo\s+)?timeout\s+\d+\s+(?:sudo\s+)?$/;
   return workflowSteps(text).flatMap(({ step, command }) =>
     command.split("\n").flatMap((line) =>
-      [...line.matchAll(apt)].map((found) => ({
+      [...line.matchAll(aptWait)].map((found) => ({
         step,
         command: found[0],
         bounded:
@@ -1799,13 +1802,12 @@ describe("the workflows' apt installs", () => {
 
 /**
  * Every apt update or install in a step runs under an outer `timeout <n>` on its own line and
- * carries apt's own `Acquire::http::Timeout` and `Acquire::https::Timeout`: a mirror that trickles
- * a byte every few seconds never trips apt's read timeout, so only the outer limit ends that wait
- * (receipt: docs/developers/ci-and-gates.md, "Every apt wait is bounded"). It reads each workflow
- * as TEXT through the same step reader as the case above, so it misses the same installs: apt run
- * by a script the step calls, by a composite or Docker action, by a tool itself (`playwright
- * install --with-deps`), or from a command built from a variable. It does not check that the
- * step retries, nor judge the numbers.
+ * carries apt's own `Acquire::http::Timeout` and `Acquire::https::Timeout`: apt's read timeout did
+ * not end a wait on a mirror sending a byte every 5 s, and the outer limit did (receipt:
+ * docs/developers/ci-and-gates.md, "Every apt wait is bounded"). It reads each workflow as TEXT
+ * through the same step reader as the case above, so it misses every install that case lists as
+ * passing. It reads line by line, so a `timeout` at the end of a `\`-continued line is reported as
+ * unbounded. It does not check that the step retries, nor judge the numbers.
  */
 describe("the workflows' apt waits", () => {
   const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
@@ -1881,8 +1883,8 @@ describe("the workflows' apt waits", () => {
         .filter((wait) => !wait.bounded)
         .map((wait) => `${wait.name}: ${wait.step}: ${wait.command}`),
       "run each apt-get as `sudo timeout <seconds> apt-get -o Acquire::http::Timeout=<n> " +
-        "-o Acquire::https::Timeout=<n> …` inside a retry loop: a trickling mirror never trips " +
-        "apt's own read timeout",
+        "-o Acquire::https::Timeout=<n> …` inside a retry loop: apt's own read timeout did not " +
+        "end a wait on a mirror sending a byte every 5 s",
     ).toEqual([]);
   });
 });

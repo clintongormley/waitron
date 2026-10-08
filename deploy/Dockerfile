@@ -68,10 +68,11 @@ RUN set -eux; \
 FROM node:26-slim AS print-agent
 # python3-minimal goes in alone and first, so the packages it adds to the base image can be listed:
 # their Debian copyright files ship in /app/third-party/python3-minimal (deploy/third-party/README.md).
-# A trickling mirror never trips apt's own read timeout, so each apt-get runs under an outer limit and
-# is retried (docs/developers/ci-and-gates.md, "Every apt wait is bounded"). 300 s, not CI's 60-90 s,
-# because waitron.sh builds this same file on a venue's box over whatever link it has. The apt
-# setting is removed again so the image ships none.
+# apt's own read timeout did not end a wait on a mirror sending a byte every 5 s, so each apt-get runs
+# under an outer limit, and one that stalls or exits non-zero is retried
+# (docs/developers/ci-and-gates.md, "Every apt wait is bounded"). 300 s, not CI's 60-90 s, because
+# `waitron.sh install <ref>` builds this same file on the box, for a branch or commit, over whatever
+# link the box has. The apt setting is removed again so the image ships none.
 RUN set -eux; \
   printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
     > /etc/apt/apt.conf.d/99bounded-waits; \
