@@ -2700,6 +2700,7 @@ controls and preview, and the till's home at a phone's width and on the counter 
 use "carta".
 Left open:
 
+- **A339 is in progress on `fix/home-column-ranges` (2026-10-08), not landed.** The database boundary tests now store handheld 2–3 and till 4–10, and refuse the adjacent invalid values without changing either display. The phone grid, preview, wording and visual checks remain unfinished. The queue forbids editing `menus-screen.test.ts`, but its retained slider cases fail with the new limits (the bounds case and both localized save cases); Lane D questions records a proposed narrow exception.
 - The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
   the menu shares the screen with the order: from 720 px wide the table order screen gives it three
   fifths (`apps/till/src/screens/till-table-order-screen.ts`), and on the demo counter at 1280 px

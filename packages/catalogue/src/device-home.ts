@@ -23,8 +23,8 @@ export const HOME_DISPLAY_DEFAULTS: Readonly<Record<HomeDevice, Readonly<HomeDis
 };
 
 export const HOME_COLUMN_RANGE: Readonly<Record<HomeDevice, { min: number; max: number }>> = {
-  handheld: { min: 2, max: 6 },
-  till: { min: 6, max: 10 },
+  handheld: { min: 2, max: 3 },
+  till: { min: 4, max: 10 },
 };
 
 /** A key of `patch` holding a value `device` cannot take, or null. An absent key is not

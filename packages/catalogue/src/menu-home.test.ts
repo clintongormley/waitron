@@ -174,8 +174,8 @@ describe("setHomeDisplay", () => {
     const before = await displayRow(f.lunch);
     const refusals: ["handheld" | "till", Record<string, unknown>, string][] = [
       ["handheld", { columns: 1 }, "columns"],
-      ["handheld", { columns: 7 }, "columns"],
-      ["till", { columns: 5 }, "columns"],
+      ["handheld", { columns: 4 }, "columns"],
+      ["till", { columns: 3 }, "columns"],
       ["till", { columns: 11 }, "columns"],
       ["till", { columns: 6.5 }, "columns"],
       ["till", { columns: "8" }, "columns"],
@@ -196,8 +196,8 @@ describe("setHomeDisplay", () => {
     const f = await menusFixture(fx.db);
     for (const [device, columns] of [
       ["handheld", 2],
-      ["handheld", 6],
-      ["till", 6],
+      ["handheld", 3],
+      ["till", 4],
       ["till", 10],
     ] as const) {
       await app((tx) => setHomeDisplay(tx, f.lunch, device, { columns }));
