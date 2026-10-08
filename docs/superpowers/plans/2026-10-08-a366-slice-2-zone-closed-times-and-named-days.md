@@ -358,8 +358,11 @@ it("a repeating 29 February falls only in leap years", () => {
 - Create (generated): `packages/venue-service/drizzle/0035_*.sql`, its snapshot, journal entry
 
 **Interfaces — produces:**
-- `specialDates.kind`: `enumType(NAMED_DAY_KINDS)("kind").notNull().default("working_day")`,
-  **no CHECK yet**; `specialDates.repeatOn`: `label("repeat_on")`, nullable, no CHECK yet;
+- `specialDates.kind`: `label("kind").$type<NamedDayKind>().notNull().default("working_day")`,
+  **no CHECK yet**. Use typed text until Task 27 adds the enum declaration and its CHECK
+  together: `schema/schema-conformance.test.ts` requires every declared enum to have its
+  vocabulary enforced in the migrated database. `specialDates.repeatOn`: `label("repeat_on")`,
+  nullable, no CHECK yet;
   `specialDates.ownHours`: `flag("own_hours").notNull().default(false)`. `colour` stays for now.
 - `zoneClosedTimes` (table `zone_closed_times`): `id` (primary key), `zoneId` not null,
   `weekday` (`count`, nullable), `specialDateId` (nullable), `startsAt`, `endsAt` (`timeOfDay`, not
@@ -1118,7 +1121,8 @@ rule for the rewritten editor.
 ### Task 27: Migration 0036 — named days lose their colour; local holidays go
 
 **Files:**
-- Modify: `schema/hours.ts` (`specialDates`: drop `colour`; add `special_dates_kind_ck`
+- Modify: `schema/hours.ts` (`specialDates`: drop `colour`; change `kind` to
+  `enumType(NAMED_DAY_KINDS)("kind").notNull().default("working_day")`; add `special_dates_kind_ck`
   (`enumCheck`), `special_dates_repeat_ck` (`repeat_on is null or repeat_on = substr(date, 6, 5)`),
   unique `special_dates_location_repeat_key` on (`location_id`, `repeat_on`) where `repeat_on is
   not null`), `schema/holidays.ts` (delete `localHolidays :37-58`), `classification.ts` (+ test),

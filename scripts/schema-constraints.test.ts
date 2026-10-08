@@ -294,6 +294,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["zone_service_policies", ["department_id"], "departments"],
   ["zone_service_policies", ["location_id"], "locations"],
   ["zone_service_policies", ["zone_id"], "floor_zones"],
+  ["zone_closed_times", ["zone_id"], "zone_service_policies"],
+  ["zone_closed_times", ["special_date_id"], "special_dates"],
 ];
 
 /** Every unique index that is not a primary key, by the name its declaration gives it. */
@@ -480,6 +482,9 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "menu_day_timetables_one_day_ck",
   "menu_day_timetables_weekday_ck",
   "menu_slots_step_ck",
+  "zone_closed_times_one_day_ck",
+  "zone_closed_times_weekday_ck",
+  "zone_closed_times_step_ck",
   "holiday_geographies_city_ck",
   "local_holidays_date_ck",
   "local_holidays_name_ck",

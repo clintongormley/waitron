@@ -11,6 +11,7 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("department_transfer_requests", "state", STATE),
   classify("department_sale_policies", "state", STATE),
   classify("zone_service_policies", "state", STATE),
+  classify("zone_closed_times", "state", STATE),
   classify("zone_sale_policies", "state", STATE),
   appendOnly("sale_receipt_headers", "ledger", "receipt header as issued for a sale"),
   classify("menu_periods", "state", STATE),

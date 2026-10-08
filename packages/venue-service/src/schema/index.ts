@@ -8,3 +8,4 @@ export * from "./holidays.js";
 export * from "./menus.js";
 export * from "./department-transfers.js";
 export * from "./period-extensions.js";
+export * from "./zone-closed-times.js";

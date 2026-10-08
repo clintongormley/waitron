@@ -14,6 +14,7 @@ import {
   table,
   timeOfDay,
 } from "@waitron/db";
+import type { NamedDayKind } from "../named-day-rules.js";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import { departments } from "./service.js";
 
@@ -90,6 +91,9 @@ export const specialDates = table(
     date: day("date").notNull(),
     name: label("name").notNull(),
     colour: calendarColour("colour").notNull(),
+    kind: label("kind").$type<NamedDayKind>().notNull().default("working_day"),
+    repeatOn: label("repeat_on"),
+    ownHours: flag("own_hours").notNull().default(false),
     closeWholeVenue: flag("close_whole_venue").notNull().default(false),
   },
   (t) => [
