@@ -1686,12 +1686,15 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow to show "A331 look
   canvas (copy)" whole; the printer name dialog is titled "Add a printer" when its button says
   Enable. The owner confirmed #1415's Bluetooth Pair dialog and bill attestation rulings: both
-  are gated like a save and open with every required field empty. **A396 — IN PROGRESS**
-  (`fix/profile-zone-off-shows-on-open`): the owner reversed the disabled-zone ruling on 2026-10-08.
+  are gated like a save and open with every required field empty. **A396 — DONE (#1428, 2026-10-08).**
+  The owner reversed the disabled-zone ruling on 2026-10-08.
   A device profile with no active allowed zone shows its field errors and bottom correction
   message on open. Save stays quiet while unchanged, and a name or reader edit cannot save until
   an active zone is chosen. Focused Chromium checks: 226 pass; fiscal golden and inmutabilidad: 20 unchanged pass.
-  EN/ES, light/dark, 390/1280 views inspected; Claude review found no bugs. CI/landing pending. The look left a switched-off printer
+  EN/ES, light/dark, 390/1280 views inspected; Claude review found no bugs. Current-head
+  dashboard CI passed 9,544 tests with coverage above its required thresholds; root guards,
+  types, licence and CodeQL passed. The merge's own CI is recorded in the lane ledger for
+  follow-up. The look left a switched-off printer
   named "A331 look Epson" (the owner's Epson at 192.168.10.81) in the shared demo venue.
 - **Batch 4a — DONE (A331-4a, 2026-10-08).** Adjustment reason create/edit and bill-discount limit,
   booking create/edit, and image upload/names edit use the shared Save gate. Stripe Connect/Add
@@ -1771,8 +1774,8 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   **Still reserved:** hours/date/slot, service settings, venue operations and timetable forms
   wait for lane D's A366 slices and batch 4b. Local holiday and watcher forms landed in #1418,
   preparation stations in #1426. Next action: after the relevant A366 slices land, finish batch
-  4b and rerun the inventories on the rewritten forms. A396's disabled-zone profile ruling,
-  A397's reconnect work and A231q's future invoice screens remain separate tasks.
+  4b and rerun the inventories on the rewritten forms. A396's disabled-zone profile ruling is
+  done in #1428; A397's reconnect work and A231q's future invoice screens remain separate tasks.
 
 **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
 The native status colour fields show an ellipsis instead of the full label in the inspected
