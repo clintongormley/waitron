@@ -111,10 +111,23 @@ if (kind === "ls") {
       const calls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
       return { ...result, calls, checks: calls.filter((args) => !args.includes("ls")) };
     };
-    run({ invoke, ref, base, head });
+    run({ invoke, ref, base, head, git, dir });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+// The pushed branch tip `head` rebased onto an UNSIGNED main commit touching the consumer package.
+function rebaseOntoUnsignedMain({ git, dir, base, head }) {
+  git("checkout", "-q", "--detach", base);
+  mkdirSync(join(dir, "packages/consumer/src"), { recursive: true });
+  writeFileSync(join(dir, "packages/consumer/src/index.ts"), "main\n");
+  git("add", "packages/consumer/src/index.ts");
+  git("commit", "-q", "-m", "Main squash without a sign-off");
+  const main = git("rev-parse", "HEAD");
+  git("update-ref", "refs/remotes/origin/main", main);
+  git("cherry-pick", head);
+  return { main, rebased: git("rev-parse", "HEAD") };
 }
 
 const cheap = [
@@ -190,6 +203,37 @@ describe("pre-push fast checks", () => {
       },
       { signed: false },
     );
+  });
+  it("accepts a rebased branch whose range brings in an unsigned commit already on main", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, ref, head, ...repo }) => {
+      const { rebased } = rebaseOntoUnsignedMain({ head, ...repo });
+      const result = invoke(ref(rebased, head));
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.checks).toEqual([...cheap, ["--filter", "...@waitron/consumer", "typecheck"]]);
+    });
+  });
+  it("still refuses the branch's own unsigned commit after a rebase, naming it and not main's", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, ref, head, git, dir, ...repo }) => {
+      const { main } = rebaseOntoUnsignedMain({ head, git, dir, ...repo });
+      writeFileSync(join(dir, "packages/source/src/index.ts"), "unsigned\n");
+      git("commit", "-qam", "Branch change without a sign-off");
+      const unsigned = git("rev-parse", "HEAD");
+      const result = invoke(ref(unsigned, head));
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toContain(unsigned.slice(0, 7));
+      expect(result.stdout).not.toContain(main.slice(0, 7));
+      expect(result.calls).toEqual([]);
+    });
+  });
+  it("refuses an unsigned commit in the range when there is no origin/main to leave it out by", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, ref, head, git, ...repo }) => {
+      const { main, rebased } = rebaseOntoUnsignedMain({ head, git, ...repo });
+      git("update-ref", "-d", "refs/remotes/origin/main");
+      const result = invoke(ref(rebased, head));
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toContain(main.slice(0, 7));
+      expect(result.calls).toEqual([]);
+    });
   });
   it("offers the --no-verify skip to the owner only, never to an agent", () => {
     fixture(

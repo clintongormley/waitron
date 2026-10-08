@@ -11,6 +11,7 @@ have_range=0
 range_unknown=0
 commits=""
 changed_paths=""
+main_tip=$(git rev-parse --verify -q 'origin/main^{commit}' 2>/dev/null) || main_tip=""
 
 while read -r _local_ref local_sha _remote_ref remote_sha; do
   saw_ref=1
@@ -31,10 +32,18 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
     continue
   fi
 
-  range_commits=$(git rev-list "$base..$local_sha" 2>/dev/null) || {
-    range_unknown=1
-    continue
-  }
+  # Commits already on main were checked when they landed; a rebase brings them into this range.
+  if [ -n "$main_tip" ]; then
+    range_commits=$(git rev-list "$base..$local_sha" "^$main_tip" 2>/dev/null) || {
+      range_unknown=1
+      continue
+    }
+  else
+    range_commits=$(git rev-list "$base..$local_sha" 2>/dev/null) || {
+      range_unknown=1
+      continue
+    }
+  fi
   range_paths=$(git -c core.quotePath=false diff --name-only "$base..$local_sha" 2>/dev/null) || {
     range_unknown=1
     continue
