@@ -44,3 +44,19 @@ test("the till app registers the kebab wt-row-actions draws by default", async (
   await icon.updateComplete;
   expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
 });
+
+test("the till app registers the hamburger the top bar's More menu draws", async () => {
+  const el = document.createElement("wt-row-actions") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  el.setAttribute("label", "More");
+  el.setAttribute("icon", "hamburger");
+  document.body.append(el);
+  mounted.push(el);
+  await el.updateComplete;
+  const icon = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    'wt-icon[name="hamburger"]',
+  )!;
+  await icon.updateComplete;
+  expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
+});
