@@ -53,7 +53,7 @@ import {
 import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
-import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
+import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
   clearRoutingCell,
   explainRoute,
@@ -87,7 +87,6 @@ import {
 import "./errors.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
 
-const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -116,6 +115,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "route.subject_not_found": 404,
   "route.station_inactive": 409,
   "station.not_found": 404,
+  "station.destination_invalid": 400,
   "station.fallback_loop": 409,
   "time_zone.unreadable": 409,
   "hours.invalid": 400,

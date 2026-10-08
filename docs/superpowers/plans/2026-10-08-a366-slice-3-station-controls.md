@@ -591,17 +591,17 @@ add a `{ ignoreToday?: true }` option to `snapshot`'s scope (`SnapshotScope :216
 `snapshot :235`, `routing-store.ts`, M) and export one reader from `routing-store.ts`
 (`scheduledStationStatus(tx, cfg, stationId, at)`) rather than a second status rule.
 
-- [ ] **Step 1: Failing tests:** closing Grill with Bar stores `open: false` and Bar; closing the
+- [x] **Step 1: Failing tests:** closing Grill with Bar stores `open: false` and Bar; closing the
   default station → `station.always_open`; closing Grill towards itself, towards a switched-off
   station and towards a station closed for today → `station.destination_invalid` with `self`,
   `inactive`, `closed`; `stationDestinations` for Grill lists the default first and leaves out
   Grill and a station closed for today; opening a station closed by hand inside its hours removes
   the row; opening one outside its hours stores "open"; an unreadable time zone refuses each
   writer. (Fails today: neither function exists.)
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/station-times.test.ts`.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run; see them pass;** the venue-service node project; typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): close a station for today with a destination (A366)`.
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/station-times.test.ts`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run; see them pass;** the venue-service node project; typecheck.
+- [x] **Step 5: Commit** — `feat(venue-service): close a station for today with a destination (A366)`.
 
 ---
 

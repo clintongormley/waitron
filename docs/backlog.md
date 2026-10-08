@@ -1258,10 +1258,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
   APPROVED 2026-10-07; remaining work is slices 2–7, each planned then built without
-  stopping for the owner**. Slice 7's plan/spec apply the owner's 2026-10-08 receipt answers;
-  BUILD waits for same-lane 3A to land, then 6A, before 7A (two PRs; Part B depends on slice 6).
-  Slice 3 Part A is in progress: its storage adds today's station destination and period
-  extensions; the controls and their request paths remain to build. Opening hours and
+  stopping for the owner**. Slice 3 Part A is in progress: its storage adds today's station
+  destination and period extensions, and the station's close/open writers and destination choices
+  are implemented; routing, controls and their request paths remain to build.
+  Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
   a department's day is time ranges each given a period, with last-order and leftover windows
   set by its signed end offset. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service

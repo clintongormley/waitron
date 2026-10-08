@@ -29,6 +29,7 @@ import {
   type RoutingRules,
   type RoutingMoment,
   type StationTransition,
+  type StationStatus,
 } from "./routing.js";
 import { readLocationClock } from "@waitron/reporting";
 import {
@@ -214,6 +215,7 @@ async function clockAt(tx: Transaction, cfg: VenueScope, at: Date) {
  * and the dates whose special hours apply.
  */
 interface SnapshotScope {
+  ignoreToday?: true;
   businessDay: string | null;
   dates: { from: LocalDate; to: LocalDate } | null;
 }
@@ -264,7 +266,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
           .from(stationFallbacks)
           .where(inArray(stationFallbacks.stationId, stationIds));
   const dayStates =
-    stationIds.length === 0 || businessDay === null
+    stationIds.length === 0 || businessDay === null || scope.ignoreToday
       ? []
       : await tx
           .select()
@@ -297,6 +299,17 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     timing,
   };
   return { rules, folders, stations };
+}
+
+export async function scheduledStationStatus(
+  tx: Transaction,
+  cfg: VenueScope,
+  stationId: string,
+  at: Date,
+): Promise<StationStatus> {
+  const { moment } = await clockAt(tx, cfg, at);
+  const { rules } = await snapshot(tx, cfg, { ...scopeAt(moment), ignoreToday: true });
+  return stationStatus(rules, stationId, moment);
 }
 
 export async function loadRoutingRules(
