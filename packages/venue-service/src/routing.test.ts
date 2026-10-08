@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getCountryPack } from "@waitron/country-packs";
 import {
   cellKey,
+  changeReach,
   chooseMaker,
   chooseExtraMaker,
   chooseExtraMakerBeside,
@@ -12,6 +13,9 @@ import {
   selectRoutingCell,
   stationStatus,
   targetKey,
+  type CellAddress,
+  type MakerChoice,
+  type ProductFacts,
   type RouteTarget,
   type RoutingCell,
   type RoutingMoment,
@@ -1385,5 +1389,178 @@ describe("a public holiday", () => {
       open: true,
       why: "in_hours",
     });
+  });
+});
+
+describe("changeReach", () => {
+  const tree = new Map<string, string | null>([
+    ["a", null],
+    ["a1", "a"],
+    ["a2", "a"],
+    ["a1x", "a1"],
+    ["b", null],
+    ["b1", "b"],
+  ]);
+  const facts = (productId: string, categoryId: string | null, routedProductId = productId) => ({
+    productId,
+    routedProductId,
+    categoryId,
+  });
+  const catalogue: readonly ProductFacts[] = [
+    facts("p1", "a1x"),
+    facts("p2", "a1"),
+    facts("p3", "a2"),
+    facts("p4", "b1"),
+    facts("p5", "b"),
+    facts("p6", null),
+    facts("p7", null),
+    facts("v1", "a1x", "p1"),
+    // A variant that stores a category of its own still has its parent's effective one.
+    facts("v6", null, "p6"),
+  ];
+  const zones = ["z1", "z2", "z3"];
+  const columns = [...zones, null];
+  const rows: RoutingRow[] = [
+    all,
+    { kind: "no_category" },
+    ...[...tree.keys()].map(category),
+    ...catalogue.filter((p) => p.productId === p.routedProductId).map((p) => product(p.productId)),
+  ];
+  const addresses: CellAddress[] = rows.flatMap((row) =>
+    [...zones, null].flatMap((zoneId) =>
+      row.kind === "all" && zoneId === null ? [] : [{ row, zoneId }],
+    ),
+  );
+  const targets: (RouteTarget | null)[] = [
+    station("s1"),
+    station("s2"),
+    station("offWithFallback"),
+    station("offAlone"),
+    noPreparation,
+    null,
+  ];
+  const stationRules = {
+    parentOf: tree,
+    activeStationIds: new Set(["s1", "s2"]),
+    defaultStationId: "s1",
+    timing: new Map<string, StationTiming>([
+      ["offWithFallback", { fallbackId: "s2", hours: [], today: null }],
+      ["offAlone", { fallbackId: null, hours: [], today: null }],
+    ]),
+  };
+  /** A fixed-seed generator (mulberry32), so a failure replays. */
+  const random = (seed: number) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const savedCells = (seed: number): RoutingCell[] => {
+    const next = random(seed);
+    return addresses.flatMap((address) => {
+      if (next() > 0.25) return [];
+      const target = targets[Math.floor(next() * (targets.length - 1))]!;
+      return [{ ...address, target: target! }];
+    });
+  };
+  const withChange = (rules: RoutingRules, address: CellAddress, target: RouteTarget | null) => {
+    const key = cellKey(address);
+    const cells = rules.cells.filter((cell) => cellKey(cell) !== key);
+    if (target !== null) cells.push({ ...address, target });
+    return { ...rules, cells };
+  };
+  const sameChoice = (a: MakerChoice, b: MakerChoice) =>
+    targetKey(a.route) === targetKey(b.route) && a.noReplacement === b.noReplacement;
+  const placement = (
+    rules: RoutingRules,
+    dish: MakerChoice,
+    extra: ProductFacts,
+    zoneId: string | null,
+  ) => {
+    const made = chooseExtraMakerBeside(rules, dish, extra, zoneId, null)?.outcome;
+    return made?.kind === "made" ? `made:${made.stationId}` : `follows:${targetKey(dish.route)}`;
+  };
+
+  it("holds every choice a change can move, for every address and target", () => {
+    let dishMoves = 0;
+    let extraMoves = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const before: RoutingRules = { ...stationRules, cells: savedCells(seed) };
+      for (const address of addresses) {
+        const reach = changeReach(tree, address);
+        for (const target of targets) {
+          const after = withChange(before, address, target);
+          for (const zoneId of columns) {
+            const choices = new Map(
+              catalogue.map((p) => [
+                p.productId,
+                {
+                  before: chooseMaker(before, p, zoneId, null),
+                  after: chooseMaker(after, p, zoneId, null),
+                },
+              ]),
+            );
+            for (const p of catalogue) {
+              const choice = choices.get(p.productId)!;
+              if (sameChoice(choice.before, choice.after)) continue;
+              dishMoves++;
+              expect([address, p.productId, zoneId, reach.reachesZone(zoneId)]).toEqual([
+                address,
+                p.productId,
+                zoneId,
+                true,
+              ]);
+              expect([address, p.productId, zoneId, reach.covers(p)]).toEqual([
+                address,
+                p.productId,
+                zoneId,
+                true,
+              ]);
+            }
+            for (const dish of catalogue)
+              for (const extra of catalogue) {
+                const dishChoice = choices.get(dish.productId)!;
+                if (
+                  placement(before, dishChoice.before, extra, zoneId) ===
+                  placement(after, dishChoice.after, extra, zoneId)
+                )
+                  continue;
+                extraMoves++;
+                expect([
+                  address,
+                  dish.productId,
+                  extra.productId,
+                  zoneId,
+                  reach.reachesZone(zoneId) && (reach.covers(dish) || reach.covers(extra)),
+                ]).toEqual([address, dish.productId, extra.productId, zoneId, true]);
+              }
+          }
+        }
+      }
+    }
+    expect(dishMoves).toBeGreaterThan(1000);
+    expect(extraMoves).toBeGreaterThan(1000);
+  });
+
+  it("does not reach a sibling product, another zone, or another branch of the tree", () => {
+    const p1InZ1 = changeReach(tree, { row: product("p1"), zoneId: "z1" });
+    expect(catalogue.filter((p) => p1InZ1.covers(p)).map((p) => p.productId)).toEqual(["p1", "v1"]);
+    expect(columns.filter((zoneId) => p1InZ1.reachesZone(zoneId))).toEqual(["z1"]);
+    const a1 = changeReach(tree, { row: category("a1"), zoneId: null });
+    expect(catalogue.filter((p) => a1.covers(p)).map((p) => p.productId)).toEqual([
+      "p1",
+      "p2",
+      "v1",
+    ]);
+    expect(columns.filter((zoneId) => a1.reachesZone(zoneId))).toEqual(columns);
+    const loose = changeReach(tree, { row: { kind: "no_category" }, zoneId: "z2" });
+    expect(catalogue.filter((p) => loose.covers(p)).map((p) => p.productId)).toEqual([
+      "p6",
+      "p7",
+      "v6",
+    ]);
+    const everything = changeReach(tree, { row: all, zoneId: "z3" });
+    expect(catalogue.every((p) => everything.covers(p))).toBe(true);
+    expect(columns.filter((zoneId) => everything.reachesZone(zoneId))).toEqual(["z3"]);
   });
 });

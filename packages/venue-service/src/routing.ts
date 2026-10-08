@@ -349,6 +349,41 @@ export function chooseExtraMakerBeside(
   return chooseExtraMaker(rules, extra, zoneId, moment, dishStationId);
 }
 
+export interface ChangeReach {
+  readonly reachesZone: (zoneId: string | null) => boolean;
+  readonly covers: (product: ProductFacts) => boolean;
+}
+
+/**
+ * The zones and products whose `chooseMaker` can read the cell at `address`, so the only ones a
+ * change to that cell can move. `covers` compares ids as given, as `selectRoutingCell` does.
+ */
+export function changeReach(
+  parentOf: ReadonlyMap<string, string | null>,
+  { row, zoneId }: CellAddress,
+): ChangeReach {
+  const reachesZone = (zone: string | null) => zoneId === null || zone === zoneId;
+  if (row.kind === "all") return { reachesZone, covers: () => true };
+  if (row.kind === "no_category")
+    return { reachesZone, covers: (product) => product.categoryId === null };
+  if (row.kind === "product")
+    return { reachesZone, covers: (product) => product.routedProductId === row.productId };
+  const under = new Map<string, boolean>();
+  return {
+    reachesZone,
+    covers: ({ categoryId }) => {
+      if (categoryId === null) return false;
+      let found = under.get(categoryId);
+      if (found === undefined)
+        under.set(
+          categoryId,
+          (found = folderAncestors(parentOf, categoryId).includes(row.categoryId)),
+        );
+      return found;
+    },
+  };
+}
+
 /** The cells are copied and frozen so `selectRoutingCell` can cache its index for them. */
 export function selectionRulesFromModel(model: RoutingModel): RoutingSelectionRules {
   return {
