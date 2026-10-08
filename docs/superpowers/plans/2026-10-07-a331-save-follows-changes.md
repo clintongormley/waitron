@@ -2001,3 +2001,51 @@ untried for it. `docs/backlog.md`: mark #1418's watcher-form point and #1414's p
 the forms covered, and leave the product editor and unit form named as part 2. Changed test
 checks (if any) listed in `~/waitron-campaign-c/item-a397-changed-tests.md` and the PR. No visual
 change, so no screenshots.
+
+## A397 part 2 — the product editor, the unit form, and the two menus forms (Lane C)
+
+Branch `fix/forms-reconnect-keep-asking-2`. Same method, cases and proofs as part 1 above (Case R,
+Case E, run on `main` first, record in `~/waitron-campaign-c/item-a397-measurements.md` under a
+"Part 2" heading, fix only where a case fails, proof by deletion per fixed part, a reopen case per
+form that gains a `#baseline`). Lane B's A332 (#1430) has landed, so its unsaved suites may now be
+edited. Light review path, no migration.
+
+Starting points on `main` a44bfee49 (read, not run):
+
+- **Product editor** (`apps/dashboard/src/widgets/product-editor.ts`). No `connectedCallback`; the
+  scope-taking branch (`else if (!this.#draftScope)`, ~line 516) has no `this.isConnected` guard;
+  `disconnectedCallback` disposes the scope. So both cases are expected to fail. Its re-seed branch
+  (`changed.has("value") || (changed.has("open") && this.open)`) is where `#baseline` is cleared;
+  the variant form inside it keeps its own part-1 behaviour, and `product-editor.unsaved.test.ts`'s
+  variant cases stay green unedited.
+- **Unit form** (`unit-form.ts`). Already guarded and redraws on reconnect (part of #1422), so Case R
+  is expected to pass — find its existing R case (it may sit in `catalogue-forms.unsaved.test.ts` or
+  `screens/unit-owners.unsaved.test.ts`) rather than duplicate it. Case E failed on `main` per the
+  backlog's batch 2a note: add the `#baseline` fix, cleared in its re-seed branch (`this.open &&
+  needsDraft`).
+- **Section details form** and **include folder form** (`section-details-form.ts`,
+  `include-folder-form.ts`; OWNER 2026-10-08 ~11:55, #1424's open point). Both already have Case R
+  (`… taken out of the page and put back asks before discarding an edit made afterwards`). Add
+  Case E to each suite; #1424 reports the edit stays on screen but becomes the new starting point,
+  so expect the `#baseline` fix.
+
+### Task A397.5 — the product editor
+
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.unsaved.test.ts`, then
+`src/widgets/product-editor*.test.ts` and `src/widgets/variant-form*.test.ts`.
+
+### Task A397.6 — the unit form and the two menus forms
+
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/unit-form*.test.ts
+src/screens/unit-owners.unsaved.test.ts src/widgets/catalogue-forms.unsaved.test.ts
+src/widgets/section-details-form*.test.ts src/widgets/include-folder-form*.test.ts`, then the
+menus screen suites that host the two menus forms (found by grep).
+
+### Task A397.7 — docs, backlog
+
+`design-system.md` → Forms: the product editor joins the list that takes a scope only while
+connected; the four forms join the list that keeps an edit made before removal. `docs/backlog.md`:
+mark A331's open point (2) done for the product editor and the unit form, batch 2a's "Left open"
+note done for the unit form (say which other batch 2a forms remain untried for Case E), and batch
+2b's (#1424) edit-first point done for the two menus forms. Changed test checks (if any) in
+`~/waitron-campaign-c/item-a397-2-changed-tests.md` and the PR. No visual change, so no screenshots.
