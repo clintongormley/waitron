@@ -1559,7 +1559,13 @@ and nothing guards it across screens:
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
   form; the shift dialog;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
-  upload and names edit.
+  upload and names edit;
+- batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
+  invoice recipient dialog; the extras picker when it edits a line (adding a dish keeps Add ready,
+  through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look). Every other
+  till dialog takes an action — pay, refund, override, sign in, seat, send — and keeps its own
+  rules; the list, with the reason for each, is in
+  [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
 
 The backup settings editor is the one form here that can open already savable: when the stored
 schedule is not a wall-clock one, or no retention is stored, the form cannot show what is running,
