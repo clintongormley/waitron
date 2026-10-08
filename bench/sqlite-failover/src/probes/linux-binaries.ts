@@ -159,7 +159,7 @@ async function main(): Promise<void> {
       const image = `${RUN_ID}-ca:${tag}`;
       docker(["build", "--platform", platform, "--label", LABEL, "-t", image, "-"], {
         input: CA_DOCKERFILE,
-        timeoutMs: 900_000,
+        timeoutMs: 2_100_000,
       });
       try {
         const full = inside(platform, image, network, "full");

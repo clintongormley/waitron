@@ -1644,6 +1644,7 @@ describe("the apt_get wrapper inside waitron.sh", () => {
     const probe = spawnSync(BASH, ["-c", "command -v gtimeout || command -v timeout"], {
       encoding: "utf8",
       env: { ...process.env, PATH: EMPTY_BIN },
+      timeout: RUN_TIMEOUT_MS,
     });
     expect(probe.status, "the empty PATH must really hide both timeout commands").not.toBe(0);
     const r = aptGet(["update"], { path: EMPTY_BIN });

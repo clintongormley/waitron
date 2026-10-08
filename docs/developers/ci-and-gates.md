@@ -889,17 +889,19 @@ closed port. If the setting did nothing, the bounded run would exit 0 after one 
   `attempt N of 3 failed or stalled: apt-get update` three times and exited 1, in 21 s;
 - control, the image's own sources with the same settings: one attempt, exit 0.
 
-Guards: the "apt waits" and "playwright --with-deps waits" cases in `scripts/ci-workflow.test.mjs`, and "the
-Dockerfile's apt waits" (which also reads the bench's CA probe image) and "waitron.sh's apt waits"
-cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — all read TEXT. The
-`--with-deps` case asks only for `timeout <n>` earlier on the same line, not a retry. The waitron.sh
-case asks that every `apt-get` outside a whole-line comment or a `command -v apt-get` sits inside
-`apt_get()` and that its body runs apt
-under `"$limit" <n>`; it does not run the shell. The numbers it hands to `timeout`, its retries and its
-stop are run with stubs (the `timeout` stub drops the limit, so no stall is ever cut off) by "the
-apt_get wrapper inside waitron.sh" cases in `scripts/waitron-sh.test.mjs`. The
-workflow case reads steps through the same reader as the "apt installs" case, so it misses every
-install that case's comment lists as passing — among them apt run by a script the step calls, by a
+Guards: the "apt waits" and "playwright --with-deps waits" cases in `scripts/ci-workflow.test.mjs`,
+and "the Dockerfile's apt waits" (which also reads the bench's CA probe image) and "waitron.sh's apt
+waits" cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — all read TEXT. The
+`--with-deps` case asks only that the command holding it start with `timeout <n>` on the same line
+(a lone `&` ends a command; the `&` in `2>&1` does not), not for a retry. The waitron.sh case asks
+that every `apt-get` outside a whole-line comment or a `command -v apt-get` sits inside `apt_get()`,
+and that every `apt-get` in that body, other than one named inside quotes, runs under
+`"$limit" <n>` in its own command; it does not run the shell. The numbers it hands to `timeout`,
+its retries and its stop are run with stubs (the `timeout` stub drops the limit, so no stall is ever
+cut off) by "the apt_get wrapper inside waitron.sh" cases in `scripts/waitron-sh.test.mjs`. Both
+workflow cases read steps through the same reader as the "apt installs" case, which takes the quotes
+off a one-line `run: "…"` or `run: '…'` value. The apt waits case therefore misses every install
+that case's comment lists as passing — among them apt run by a script the step calls, by a
 composite or Docker action, by a tool itself (`playwright install --with-deps`, which only the
 `--with-deps` case reads), or from a command
 built from a variable — and it checks neither the retry loop nor the step's `timeout-minutes`. It

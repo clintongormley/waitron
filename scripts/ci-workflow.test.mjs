@@ -28,10 +28,11 @@ import {
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
 // case reading mutation.yml, and a token-permissions case, two apt cases and a `--with-deps` case
-// reading every .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than the
-// workflow. Each extraction carries a guard that it found something, because a silently-empty
-// extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
-// each shard's filters are handed to the real `pnpm ls` and the answer is read back.
+// reading every .yml file in .github/workflows/. A transcription tests this file's copy of a
+// workflow rather than the workflow. Each extraction carries a guard that it found something,
+// because a silently-empty extraction makes every assertion below pass against nothing. Nor are the
+// SELECTIONS modelled: each shard's filters are handed to the real `pnpm ls` and the answer is read
+// back.
 //
 // Line matching rather than a YAML parser, because there is no YAML library in this workspace.
 // Compare the extractions with a real YAML parser's rather than reasoning about the regexes if this
@@ -1453,8 +1454,21 @@ function jobsWithoutTimeout(text) {
 }
 
 /**
- * Each step under a `steps:` key, with its `name:` and the first line or `|`/`>` block of its
- * `run:`, shell comments cut.
+ * A one-line YAML value with its quotes taken off: `'…'` with `''` read as `'`, and `"…"` with `\n`
+ * and `\t` decoded and any other backslash dropped before the character it escapes. Any other
+ * value, a quoted one left open on its line included, comes back as it is.
+ */
+function unquoted(value) {
+  const single = /^'((?:[^']|'')*)'\s*(?:#.*)?$/.exec(value);
+  if (single !== null) return single[1].replaceAll("''", "'");
+  const double = /^"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/.exec(value);
+  if (double === null) return value;
+  return double[1].replace(/\\(.)/g, (_, char) => ({ n: "\n", t: "\t" })[char] ?? char);
+}
+
+/**
+ * Each step under a `steps:` key, with its `name:` and the first line, unquoted, or `|`/`>` block
+ * of its `run:`, shell comments cut.
  */
 function workflowSteps(text) {
   const workflowLines = text.split("\n");
@@ -1489,7 +1503,7 @@ function workflowSteps(text) {
       if (key === "name") step.name = value.trim();
       if (key !== "run") continue;
       if (/^[|>][-+\d]*\s*(#.*)?$/.test(value)) blockIndent = step.keyIndent;
-      else step.run.push(value);
+      else step.run.push(unquoted(value));
     }
   });
   return steps.map(({ line, name, run }) => ({
@@ -1540,7 +1554,8 @@ function aptWaits(text) {
 /**
  * Every `--with-deps` in a step's `run:` command, which makes Playwright run apt-get itself, and
  * whether the command it belongs to runs under `timeout <n>` on the same line (`if`, `!` and `sudo`
- * allowed before `timeout`; a `;`, `&&`, `|` or `(` between them starts another command).
+ * allowed before `timeout`; a `;`, `&&`, `|`, `(` or a `&` that is not part of `&&`, `>&`, `<&`
+ * or `&>` between them starts another command).
  */
 function withDepsWaits(text) {
   const limited = /^\s*(?:if\s+|!\s*)?(?:sudo\s+)?timeout\s+\d+\s/;
@@ -1551,7 +1566,7 @@ function withDepsWaits(text) {
         bounded: limited.test(
           line
             .slice(0, found.index)
-            .split(/;|&&|\|\||\||\(/)
+            .split(/;|&&|\|\||\||(?<![<>&])&(?![&>])|\(/)
             .at(-1),
         ),
       })),
@@ -1683,13 +1698,14 @@ describe("the workflows' job time limits", () => {
  * A step that runs `apt install` or `apt-get install` runs `apt update` or `apt-get update` earlier
  * in its own `run:` command: the runner's baked-in package list can name a file the archive no
  * longer serves. It reads each workflow as TEXT, by indent: a step is a `- ` item under a `steps:`
- * key, its command is the first line of its own `run:` value or the indented block under a
- * `run: |` or `run: >`, and a shell comment is cut from a full-line `#` or a whitespace-led ` #`
- * to the end of the line, inside quotes too. An install it does not read passes, among them one
- * after a quoted ` #` on its line, on the second line of a `run:` value that is neither `|` nor
- * `>`, after an option whose value is a separate word (`-t noble-backports`), in a step written in
- * flow style (`- {run: …}`), in a composite or Docker action, in a script the step calls, in a
- * command built from a variable, and in one a tool runs itself (`playwright install --with-deps`).
+ * key, its command is the first line of its own `run:` value, unquoted, or the indented block
+ * under a `run: |` or `run: >`, and a shell comment is cut from a full-line `#` or a
+ * whitespace-led ` #` to the end of the line, inside quotes too. An install it does not read
+ * passes, among them one after a quoted ` #` on its line, on the second line of a `run:` value that
+ * is neither `|` nor `>`, after an option whose value is a separate word (`-t noble-backports`), in
+ * a step written in flow style (`- {run: …}`), in a composite or Docker action, in a script the
+ * step calls, in a command built from a variable, and in one a tool runs itself
+ * (`playwright install --with-deps`).
  * Any `apt update` or `apt-get update` text before the install counts, whether or not it runs.
  */
 describe("the workflows' apt installs", () => {
@@ -1851,6 +1867,16 @@ describe("the workflows' apt waits", () => {
     ]);
   });
 
+  it.each([[`"timeout 60 apt-get ${options} update"`], [`'timeout 60 apt-get ${options} update'`]])(
+    "passes the quoted run: value %j",
+    (run) => {
+      const text = workflow(`      - name: deps\n        run: ${run}\n`);
+      expect(aptWaits(text)).toEqual([
+        { step: "deps", command: `apt-get ${options} update`, bounded: true },
+      ]);
+    },
+  );
+
   it("reports an apt command with no outer limit", () => {
     const text = workflow(
       `      - name: deps\n        run: sudo apt-get ${options} install -y bluez\n`,
@@ -1913,8 +1939,8 @@ describe("the workflows' apt waits", () => {
 
 /**
  * `playwright install --with-deps` runs apt-get where no `-o` option or guard above reaches it, so
- * it takes the same outer limit. Reads TEXT through the same step reader, line by line, and does not
- * check that the step retries or judge the number.
+ * it takes the same outer limit. Reads TEXT through the same step reader, line by line, and does
+ * not check that the step retries or judge the number.
  */
 describe("the workflows' playwright --with-deps waits", () => {
   const workflow = (run) =>
@@ -1925,6 +1951,12 @@ describe("the workflows' playwright --with-deps waits", () => {
     ["if sudo timeout 600 npx playwright install --with-deps chromium; then :; fi", true],
     ["pnpm exec playwright install --with-deps chromium", false],
     ["timeout 60 true && pnpm exec playwright install --with-deps chromium", false],
+    ["timeout 60 true & pnpm exec playwright install --with-deps chromium", false],
+    ["timeout 600 pnpm exec playwright install 2>&1 --with-deps chromium", true],
+    ['"timeout 600 pnpm exec playwright install --with-deps chromium"', true],
+    ["'timeout 600 pnpm exec playwright install --with-deps chromium'", true],
+    ['"pnpm exec playwright install --with-deps chromium"', false],
+    ['"echo \\"x\\"\\ntimeout 600 pnpm exec playwright install --with-deps chromium"', true],
     [
       "|\n          timeout 600 true\n          pnpm exec playwright install --with-deps chromium",
       false,

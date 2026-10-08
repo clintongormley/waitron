@@ -450,9 +450,10 @@ describe("the Dockerfile's apt waits", () => {
 
 /**
  * What a box script misses of the bounded apt shape: every `apt-get` runs inside `apt_get()`, whose
- * body runs it under `"$limit" <n>` (a number or a `"$variable"`) with `limit` resolved from gtimeout or timeout. Reads TEXT: a
- * `command -v apt-get` lookup and whole-line comments are skipped, and it does not run the shell,
- * check the retries, or see apt reached any other way (`apt`, `eval`, a variable).
+ * body runs each one under `"$limit" <n>` (a number or a `"$variable"`) in the same command, with
+ * `limit` resolved from gtimeout or timeout. Reads TEXT: a `command -v apt-get` lookup, whole-line
+ * comments and, inside the body, apt-get named within quotes are skipped, and it does not run the
+ * shell, check the retries, or see apt reached any other way (`apt`, `eval`, a variable).
  */
 function shAptGaps(script: string): string[] {
   const gaps: string[] = [];
@@ -460,15 +461,33 @@ function shAptGaps(script: string): string[] {
   const start = lines.findIndex((line) => /^apt_get\(\) \{$/.test(line));
   const end = start === -1 ? -1 : lines.indexOf("}", start);
   if (end === -1) return ["defines no multi-line apt_get() { … } function"];
-  const body = lines
-    .slice(start + 1, end)
-    .join("\n")
-    .replace(/\\\n\s*/g, " ");
+  const commands: { line: number; text: string }[] = [];
+  for (let index = start + 1; index < end; index += 1) {
+    const line = lines[index] ?? "";
+    const previous = commands.at(-1);
+    if (previous?.text.endsWith("\\"))
+      previous.text = `${previous.text.slice(0, -1).trimEnd()} ${line.trim()}`;
+    else if (!/^\s*#/.test(line)) commands.push({ line: index + 1, text: line.trim() });
+  }
+  const body = commands.map((command) => command.text).join("\n");
   if (
     !/\blimit="\$\(command -v gtimeout \|\| command -v timeout\)"/.test(body) ||
     !/"\$limit"\s+(?:\d+|"\$\w+")\s[^\n]*\bapt-get\b/.test(body)
   ) {
     gaps.push('apt_get() does not run apt-get under "$limit" <n>, limit from gtimeout or timeout');
+  }
+  for (const { line, text } of commands) {
+    const masked = text.replace(/"(?!\$\w+")[^"]*"|'[^']*'/g, '""');
+    for (const call of masked.matchAll(/\bapt-get\b/g)) {
+      const command =
+        masked
+          .slice(0, call.index)
+          .split(/;|&&|\|\||\||(?<![<>&])&(?![&>])|\(|\{/)
+          .at(-1) ?? "";
+      if (!/"\$limit"\s+(?:\d+|"\$\w+")\s/.test(command)) {
+        gaps.push(`line ${line} runs apt-get in apt_get() but not under "$limit" <n>: ${text}`);
+      }
+    }
   }
   lines.forEach((line, index) => {
     if ((index > start && index < end) || /^\s*#/.test(line)) return;
@@ -494,24 +513,49 @@ describe("waitron.sh's apt waits", () => {
     expect(shAptGaps(script)).toEqual([]);
   });
 
+  it("passes apt-get named only inside quotes in the body", () => {
+    const quoted = script.replace(
+      '"$@"\n}',
+      '"$@" && return 0\n  echo "attempt failed: apt-get $*" >&2\n  die \'apt-get failed\'\n}',
+    );
+    expect(shAptGaps(quoted)).toEqual([]);
+  });
+
   it.each([
     [
       "a direct apt-get call",
       `${script}\n  apt-get install -y curl`,
-      "line 8 runs apt-get outside apt_get(): apt-get install -y curl",
+      ["line 8 runs apt-get outside apt_get(): apt-get install -y curl"],
     ],
     [
       "an apt_get() with no limit",
       script.replace('"$limit" 300 ', ""),
-      'apt_get() does not run apt-get under "$limit" <n>, limit from gtimeout or timeout',
+      [
+        'apt_get() does not run apt-get under "$limit" <n>, limit from gtimeout or timeout',
+        'line 4 runs apt-get in apt_get() but not under "$limit" <n>: as_root env apt-get ' +
+          '-o Acquire::Retries=3 "$@"',
+      ],
+    ],
+    [
+      "an unbounded apt-get beside the bounded one",
+      script.replace("  as_root", "  apt-get update\n  as_root"),
+      ['line 4 runs apt-get in apt_get() but not under "$limit" <n>: apt-get update'],
+    ],
+    [
+      "a second apt-get on the bounded call's line",
+      script.replace('"$@"\n}', '"$@"; apt-get update\n}'),
+      [
+        'line 4 runs apt-get in apt_get() but not under "$limit" <n>: as_root "$limit" 300 env ' +
+          'apt-get -o Acquire::Retries=3 "$@"; apt-get update',
+      ],
     ],
     [
       "no apt_get() at all",
       script.replace("apt_get() {", "apt_get () {"),
-      "defines no multi-line apt_get() { … } function",
+      ["defines no multi-line apt_get() { … } function"],
     ],
-  ])("reports %s", (_shape, fixture, gap) => {
-    expect(shAptGaps(fixture)).toEqual([gap]);
+  ])("reports %s", (_shape, fixture, gaps) => {
+    expect(shAptGaps(fixture)).toEqual(gaps);
   });
 
   it("runs every apt-get in deploy/waitron.sh through the bounded apt_get()", () => {
