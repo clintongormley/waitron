@@ -89,16 +89,51 @@ test("reopening during collapse continues from the current height", async () => 
   const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
   const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const pauseHeightTransition = (previous?: Animation): Promise<Animation> =>
+    new Promise((resolve, reject) => {
+      const pause = () => {
+        if (!body.isConnected) {
+          reject(new Error("Disclosure removed before its height transition started"));
+          return;
+        }
+        const animation = body
+          .getAnimations()
+          .find(
+            (candidate) =>
+              candidate !== previous &&
+              candidate instanceof CSSTransition &&
+              candidate.transitionProperty === "height",
+          );
+        if (!animation) {
+          requestAnimationFrame(pause);
+          return;
+        }
+        // Pause in the frame that finds the transition, before an awaited observer can miss it.
+        animation.pause();
+        animation.currentTime = 0;
+        resolve(animation);
+      };
+      requestAnimationFrame(pause);
+    });
+
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  const closing = await pauseHeightTransition();
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
   const heightWhileClosing = body.getBoundingClientRect().height;
   expect(heightWhileClosing).toBeGreaterThan(0);
+  expect(heightWhileClosing).toBeLessThan(200);
   header.click();
   await disclosure.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  const reopening = await pauseHeightTransition(closing);
+  expect(body.getBoundingClientRect().height).toBeCloseTo(heightWhileClosing, 0);
+  reopening.currentTime = Number(reopening.effect!.getTiming().duration) / 2;
   expect(body.getBoundingClientRect().height).toBeGreaterThanOrEqual(heightWhileClosing - 1);
   expect(body.getBoundingClientRect().height).toBeLessThan(200);
+  reopening.finish();
+  await expect.poll(() => body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(false);
+  expect(body.getBoundingClientRect().height).toBe(200);
 });
 
 test("an empty body opened before content arrives grows with its content", async () => {
