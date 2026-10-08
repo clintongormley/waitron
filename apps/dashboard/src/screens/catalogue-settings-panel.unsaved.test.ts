@@ -23,8 +23,11 @@ afterEach(cleanupWidgets);
 it("keeps or discards the pending default and clears the leave guard only after save succeeds", async () => {
   const api = {
     liveData: new LiveData(),
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "reduced" }),
-    saveCatalogueSettings: async (value: CatalogueSettings) => value,
+    getCatalogueSettings: async () => ({ defaultProductVatClass: "reduced", defaultColor: null }),
+    saveCatalogueSettings: async (value: Pick<CatalogueSettings, "defaultProductVatClass">) => ({
+      ...value,
+      defaultColor: null,
+    }),
   } as unknown as DashboardApi;
   const { el: app } = await mountWidget<DefaultsLeaveHost>("defaults-leave-test-host", { api });
   const panel = app.shadowRoot!.querySelector("dashboard-catalogue-settings-panel")!;

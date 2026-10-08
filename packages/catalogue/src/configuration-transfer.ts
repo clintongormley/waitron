@@ -79,6 +79,10 @@ export function validateCatalogueConfiguration(tables: Readonly<Record<string, R
       throw new AppError("setup.request_invalid", {
         field: "catalogue_settings.default_product_vat_class",
       });
+    if (row.default_color !== undefined)
+      colorOrNull(row.default_color, () => {
+        throw new AppError("setup.request_invalid", { field: "catalogue_settings.default_color" });
+      });
   }
   checkHomeDisplays(tables.menu_details);
   checkColors(tables.products, "products");

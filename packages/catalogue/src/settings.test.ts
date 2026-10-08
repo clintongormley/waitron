@@ -12,6 +12,7 @@ describe("the venue's new-product defaults", () => {
   it("uses general before provisioning has stored a preset", async () => {
     expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
       defaultProductVatClass: "general",
+      defaultColor: null,
     });
   });
 
@@ -33,7 +34,10 @@ describe("the venue's new-product defaults", () => {
       await withTransaction(suite.db, (tx) =>
         catalogue.saveCatalogueSettings(tx, { defaultProductVatClass }),
       );
-      expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({ defaultProductVatClass });
+      expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+        defaultProductVatClass,
+        defaultColor: null,
+      });
       expect(
         await suite.db
           .select({ vatClass: products.vatClass })
@@ -59,6 +63,58 @@ describe("the venue's new-product defaults", () => {
       });
       expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
         defaultProductVatClass: "zero",
+        defaultColor: null,
+      });
+    },
+  );
+});
+
+describe("the venue's default colour", () => {
+  it("keeps the VAT default and the colour apart, whichever is saved last", async () => {
+    expect(
+      await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#b12525")),
+    ).toEqual({ defaultProductVatClass: "general", defaultColor: "#b12525" });
+    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+      defaultProductVatClass: "general",
+      defaultColor: "#b12525",
+    });
+
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        catalogue.saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
+      ),
+    ).toEqual({ defaultProductVatClass: "zero", defaultColor: "#b12525" });
+    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+      defaultProductVatClass: "zero",
+      defaultColor: "#b12525",
+    });
+
+    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#25b125"));
+    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+      defaultProductVatClass: "zero",
+      defaultColor: "#25b125",
+    });
+  });
+
+  it("clears the colour when saved as null", async () => {
+    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#b12525"));
+    await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, null));
+    expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+      defaultProductVatClass: "general",
+      defaultColor: null,
+    });
+  });
+
+  it.each(["#ABCDEF", "#abc", "red", 123, {}, undefined])(
+    "refuses %j without changing the stored colour",
+    async (value) => {
+      await withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, "#b12525"));
+      await expect(
+        withTransaction(suite.db, (tx) => catalogue.saveCatalogueDefaultColor(tx, value)),
+      ).rejects.toMatchObject({ code: "category.invalid", params: { field: "color" } });
+      expect(await catalogue.readCatalogueSettings(suite.db)).toEqual({
+        defaultProductVatClass: "general",
+        defaultColor: "#b12525",
       });
     },
   );

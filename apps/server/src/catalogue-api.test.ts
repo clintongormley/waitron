@@ -5961,10 +5961,10 @@ describe("catalogue settings routes", () => {
         body: { defaultProductVatClass },
       });
       expect(saved.status).toBe(200);
-      expect(await saved.json()).toEqual({ defaultProductVatClass });
+      expect(await saved.json()).toEqual({ defaultProductVatClass, defaultColor: null });
       const loaded = await send(app, "GET", "/management-api/catalogue-settings");
       expect(loaded.status).toBe(200);
-      expect(await loaded.json()).toEqual({ defaultProductVatClass });
+      expect(await loaded.json()).toEqual({ defaultProductVatClass, defaultColor: null });
     }
   });
 

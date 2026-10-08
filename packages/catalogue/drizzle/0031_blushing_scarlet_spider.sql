@@ -1,0 +1,1 @@
+ALTER TABLE `catalogue_settings` ADD `default_color` text;

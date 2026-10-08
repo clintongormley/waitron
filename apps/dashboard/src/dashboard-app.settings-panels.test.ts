@@ -90,7 +90,9 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
       modules: ["widgets"],
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
-    getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "reduced" }),
+    getCatalogueSettings: vi
+      .fn()
+      .mockResolvedValue({ defaultProductVatClass: "reduced", defaultColor: null }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),

@@ -33,7 +33,9 @@ it.each(cases)(
     ]) {
       const api = {
         liveData: new LiveData(),
-        getCatalogueSettings: vi.fn().mockResolvedValue({ defaultProductVatClass: "reduced" }),
+        getCatalogueSettings: vi
+          .fn()
+          .mockResolvedValue({ defaultProductVatClass: "reduced", defaultColor: null }),
         saveCatalogueSettings: vi.fn().mockRejectedValue({ code: "connection.failed" }),
       } as unknown as DashboardApi;
       if (state === "loading")

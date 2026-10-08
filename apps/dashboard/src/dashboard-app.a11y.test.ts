@@ -56,7 +56,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       loginDefault: "es-ES",
       venueName: "Deli Test SL",
     }),
-    getCatalogueSettings: async () => ({ defaultProductVatClass: "general" }),
+    getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
