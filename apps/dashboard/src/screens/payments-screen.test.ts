@@ -205,6 +205,11 @@ function liveApi(overrides: Partial<DashboardApi> = {}): DashboardApi & { liveDa
 const q = (el: PaymentsScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 
+const disconnectNotice = (el: PaymentsScreen) =>
+  el
+    .shadowRoot!.querySelector("[data-test=disconnect-notice-acme]")
+    ?.shadowRoot?.querySelector("[role=alert] .message");
+
 // The readers data-table renders its cells (row menu, status span) inside its OWN shadow root, so
 // a cell selector reaches through the `<wt-data-table>` element the screen hosts.
 const qCell = (el: PaymentsScreen, selector: string) =>
@@ -278,7 +283,7 @@ describe("payments-screen", () => {
   });
 
   it("disconnects a connected provider behind a two-tap confirm", async () => {
-    const { el, api } = await mount();
+    const { el, api } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([]) }));
 
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
@@ -531,6 +536,7 @@ describe("payments-screen", () => {
 
   it("surfaces a payment.provider_in_use rejection as its localized copy", async () => {
     const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue([]),
       disconnectPaymentProvider: vi.fn().mockRejectedValue({ code: "payment.provider_in_use" }),
     });
     const { el } = await mount(api);
@@ -540,12 +546,13 @@ describe("payments-screen", () => {
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
 
-    expect(q(el, "[role=alert]")?.textContent).toContain("Disable");
-    expect(q(el, "[role=alert]")?.textContent).not.toContain("payment.provider_in_use");
+    expect(disconnectNotice(el)?.textContent).toContain("Disable");
+    expect(disconnectNotice(el)?.textContent).not.toContain("payment.provider_in_use");
   });
 
   it("keeps a failed disconnect when a provider connect already in flight completes after it", async () => {
     const api = stubApi({
+      listReaders: vi.fn().mockResolvedValue([]),
       disconnectPaymentProvider: vi.fn().mockRejectedValue({ code: "payment.provider_in_use" }),
     });
     const { el } = await mount(api);
@@ -556,14 +563,14 @@ describe("payments-screen", () => {
     await flush(el);
     q(el, "[data-test=disconnect-acme]")!.click();
     await vi.waitFor(() =>
-      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("payment.provider_in_use")),
+      expect(disconnectNotice(el)?.textContent).toBe(codeMessage("payment.provider_in_use")),
     );
 
     const reads = vi.mocked(api.listPaymentProviders).mock.calls.length;
     q(el, "[data-test=fake-connect-zeta]")!.click();
     await vi.waitFor(() => expect(api.listPaymentProviders).toHaveBeenCalledTimes(reads + 1));
     await flush(el);
-    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("payment.provider_in_use"));
+    expect(disconnectNotice(el)?.textContent).toBe(codeMessage("payment.provider_in_use"));
   });
 });
 
@@ -1816,7 +1823,7 @@ describe("the providers and readers once the server answers again", () => {
   });
 
   it("keeps an armed Disconnect armed through a background refresh", async () => {
-    const api = liveApi();
+    const api = liveApi({ listReaders: vi.fn().mockResolvedValue([]) });
     const { el } = await mount(api);
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
@@ -1840,6 +1847,7 @@ describe("the providers and readers once the server answers again", () => {
       PROVIDERS[1]!,
     ];
     const api = liveApi({
+      listReaders: vi.fn().mockResolvedValue([]),
       listPaymentProviders: vi
         .fn()
         .mockResolvedValueOnce(PROVIDERS)
@@ -1861,9 +1869,9 @@ describe("the providers and readers once the server answers again", () => {
     const api = liveApi({
       listReaders: vi
         .fn()
-        .mockResolvedValueOnce(READERS)
+        .mockResolvedValueOnce([{ ...READERS[0]!, provider: "other" }])
         .mockRejectedValueOnce(down)
-        .mockResolvedValue(READERS),
+        .mockResolvedValue([{ ...READERS[0]!, provider: "other" }]),
       disconnectPaymentProvider: vi.fn().mockRejectedValue(down),
     });
     const { el } = await mount(api);

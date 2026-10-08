@@ -41,16 +41,13 @@ their full text.
      explicit choice, otherwise its profile default, and the screen shortens a long list to
      "Bar till, Terrace till +3" with the full list in its title. The current holder stays separate.
      Disconnect and Disable below remain open; this item lands together in one PR.
-  3. **Disconnect asks the way other screens do, and checks first.** It shows "Tap again to
-     disconnect" (`payments.disconnect_confirm`), unlike the other screens' confirm steps (the
-     Devices screen's button, for one, turns into "Disable this device?"). The refusal "Disable
-     this provider's card readers before disconnecting it" (`payment.provider_in_use`) comes only
-     after confirming, at the top of the page, moving the page down. Check for active readers when
-     Disconnect is pressed, skip the confirm when it would be refused, and show the refusal as a
-     floating message beside the button, so nothing moves. The bucket copy's Turn off says "Tap
-     again to turn off" too (`stream.turn_off_confirm`,
-     `apps/dashboard/src/screens/stream-settings-panel.ts`); give it the same confirm (owner,
-     2026-10-08).
+  3. **Disconnect checks first and confirms beside its button.** Implemented locally on
+     `feat/card-payments-controls`; not landed. An active reader for that provider refuses
+     before confirmation, including an offline reader, with a floating message beside Disconnect.
+     A second tap checks the latest reader snapshot again. A server `payment.provider_in_use`
+     refusal uses the same message. Otherwise the button asks "Disconnect this provider?" in
+     the danger colour. The bucket copy's Turn off asks "Turn off this copy?" the same way.
+     Disable below remains open; all four parts land together.
   4. **One Disable instead of Disable plus "Unpair from SumUp".** Unpairing already switches the
      reader off and can never be undone here (the unpair route sets `active: false`, and an
      unpaired reader loses Enable, `canEnable`). Disable opens a confirm with an "Also unpair from

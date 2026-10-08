@@ -23,6 +23,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-tabs.js";
+import "@waitron/ui/src/components/wt-toast.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
 import {
@@ -221,6 +222,16 @@ export class PaymentsScreen extends LitElement {
         display: flex;
         gap: var(--wt-space-2);
       }
+      .disconnect-action {
+        position: relative;
+      }
+      .disconnect-action wt-toast {
+        position: absolute;
+        inset-block-start: 100%;
+        inset-inline-end: 0;
+        width: min(300px, calc(100vw - 2 * var(--wt-space-4)));
+        z-index: 4;
+      }
       .panel-slot {
         margin-top: var(--wt-space-3);
       }
@@ -346,6 +357,7 @@ export class PaymentsScreen extends LitElement {
   @state() private connectingId: string | null = null;
   @state() private addingId: string | null = null;
   @state() private armedDisconnectId: string | null = null;
+  @state() private refusedDisconnectId: string | null = null;
   @state() private discoveringId: string | null = null;
   @state() private available?: AvailableReader[];
   @state() private listingFailed = false;
@@ -531,7 +543,6 @@ export class PaymentsScreen extends LitElement {
     return key ? tRaw(key) : providerId;
   }
 
-  /** Disarms the two-tap Disconnect, since the armed row may no longer exist. */
   async #load(): Promise<void> {
     if (this.#readErrorShown) this.#showError(null);
     this.armedDisconnectId = null;
@@ -632,11 +643,24 @@ export class PaymentsScreen extends LitElement {
     this.addingId = null;
   }
 
-  /** Disconnect deletes the stored credential, so it takes a second, confirming tap. */
   #onDisconnect(providerId: string): void {
+    if (this.busy) return;
+    this.refusedDisconnectId = null;
+    if (this.readers?.some((reader) => reader.provider === providerId && reader.active)) {
+      this.armedDisconnectId = null;
+      this.refusedDisconnectId = providerId;
+      return;
+    }
     if (this.armedDisconnectId === providerId) {
       this.armedDisconnectId = null;
-      void this.#mutate(() => this.api.disconnectPaymentProvider(providerId));
+      void this.#mutate(async () => {
+        try {
+          await this.api.disconnectPaymentProvider(providerId);
+        } catch (error) {
+          if (codeOf(error) !== "payment.provider_in_use") throw error;
+          this.refusedDisconnectId = providerId;
+        }
+      });
       return;
     }
     this.armedDisconnectId = providerId;
@@ -1458,16 +1482,30 @@ export class PaymentsScreen extends LitElement {
                     @click=${() => void this.#onAddReader(provider.providerId)}
                     >${t("payments.add_reader")}</wt-button
                   >
-                  <wt-button
-                    variant="ghost"
-                    data-test="disconnect-${provider.providerId}"
-                    @click=${() => this.#onDisconnect(provider.providerId)}
-                    >${
-                      this.armedDisconnectId === provider.providerId
-                        ? t("payments.disconnect_confirm")
-                        : t("payments.disconnect")
-                    }</wt-button
-                  >
+                  <span class="disconnect-action">
+                    <wt-button
+                      variant=${this.armedDisconnectId === provider.providerId ? "danger" : "ghost"}
+                      data-armed=${this.armedDisconnectId === provider.providerId ? "true" : nothing}
+                      ?disabled=${this.busy}
+                      data-test="disconnect-${provider.providerId}"
+                      @click=${() => this.#onDisconnect(provider.providerId)}
+                      >${
+                        this.armedDisconnectId === provider.providerId
+                          ? t("payments.disconnect_confirm")
+                          : t("payments.disconnect")
+                      }</wt-button
+                    >
+                    <wt-toast
+                      data-test="disconnect-notice-${provider.providerId}"
+                      tone="error"
+                      .open=${this.refusedDisconnectId === provider.providerId}
+                      .message=${codeMessage("payment.provider_in_use")}
+                      .closeLabel=${t("action.close")}
+                      @wt-close=${() => {
+                        this.refusedDisconnectId = null;
+                      }}
+                    ></wt-toast>
+                  </span>
                 `
               : html`<wt-button
                   variant="secondary"
