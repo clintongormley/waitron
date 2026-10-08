@@ -16,6 +16,11 @@ import {
   reorder,
   visuallyHiddenStyles,
 } from "@waitron/ui";
+import {
+  holdPageCursor,
+  pointerElementsAt,
+  releasePageCursor,
+} from "@waitron/ui/src/reorder-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -64,6 +69,27 @@ const KEY_STEPS: Record<string, number> = {
   ArrowRight: 1,
   ArrowDown: 1,
 };
+
+/** How far the pointer travels from the press before it is a drag, so a press alone does nothing. */
+const DRAG_THRESHOLD_PX = 5;
+
+/** `setPointerCapture` throws for a synthetic pointer; without capture a real drag still reaches
+ * the document's listeners. */
+function capturePointer(el: Element, pointerId: number): void {
+  try {
+    el.setPointerCapture(pointerId);
+  } catch {
+    /* no active pointer */
+  }
+}
+
+function releasePointer(el: Element, pointerId: number): void {
+  try {
+    if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+  } catch {
+    /* nothing captured */
+  }
+}
 
 function thumb(image: string): TemplateResult {
   return html`<img class="thumb" src=${`/media/${encodeURIComponent(image)}`} alt="" />`;
@@ -291,7 +317,19 @@ export class DeviceHomePreview extends LitElement {
         color: var(--wt-color-text);
         touch-action: none;
         user-select: none;
-        cursor: grab;
+        cursor: var(--reorder-drag-cursor, grab);
+      }
+
+      .shortcut[data-dragging] {
+        opacity: var(--wt-opacity-disabled);
+      }
+
+      .shortcut[data-drop="before"] {
+        box-shadow: calc(-1 * var(--wt-space-1)) 0 0 0 var(--wt-color-primary);
+      }
+
+      .shortcut[data-drop="after"] {
+        box-shadow: var(--wt-space-1) 0 0 0 var(--wt-color-primary);
       }
 
       .grip:disabled {
@@ -343,6 +381,20 @@ export class DeviceHomePreview extends LitElement {
 
   #refocus: string | null = null;
 
+  /** A pressed grip; `dragging` once the pointer has travelled far enough to be a drag. */
+  #press: {
+    memberId: string;
+    name: string;
+    grip: HTMLElement;
+    pointerId: number;
+    x: number;
+    y: number;
+    dragging: boolean;
+  } | null = null;
+
+  /** The shortcut the dragged one would take the place of, if released now. */
+  @state() private dropOn: string | null = null;
+
   /** The open section's path, as {@link sectionTrail} reads it. Empty is home. */
   @state() private path: SectionStep[] = [];
 
@@ -386,6 +438,11 @@ export class DeviceHomePreview extends LitElement {
     if (grip && this.shadowRoot!.activeElement !== grip) grip.focus();
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#endPress();
+  }
+
   #control<T extends HTMLElement>(part: string, id: string): T | null {
     return this.shadowRoot?.querySelector<T>(`[data-test="${part}-${CSS.escape(id)}"]`) ?? null;
   }
@@ -416,22 +473,118 @@ export class DeviceHomePreview extends LitElement {
     return order.flatMap((memberId) => list.filter((tile) => tile.memberId === memberId));
   }
 
-  #gripKey(event: KeyboardEvent, memberId: string, name: string): void {
-    const step = KEY_STEPS[event.key];
-    if (step === undefined || this.busy || this.shortcuts === null) return;
-    // Without this the arrow scrolls the page, carrying the tile out from under the grip.
-    event.preventDefault();
-    const ids = this.#editable(this.shortcuts).map((tile) => tile.memberId);
-    const from = ids.indexOf(memberId);
-    const to = from + step;
-    if (to < 0 || to >= ids.length) return;
-    this.#order = reorder(ids, from, to);
+  #shortcutIds(): string[] {
+    return this.#editable(this.shortcuts ?? []).map((tile) => tile.memberId);
+  }
+
+  #move(memberId: string, name: string, to: number): void {
+    const ids = this.#shortcutIds();
+    this.#order = reorder(ids, ids.indexOf(memberId), to);
     this.#refocus = memberId;
     this.announcement = t("action.reordered")
       .replace("{item}", name)
       .replace("{index}", String(to + 1))
       .replace("{total}", String(ids.length));
     this.#send("wt-shortcut-move", { memberId, to });
+  }
+
+  #gripKey(event: KeyboardEvent, memberId: string, name: string): void {
+    const step = KEY_STEPS[event.key];
+    if (step === undefined || this.busy || this.shortcuts === null) return;
+    // Without this the arrow scrolls the page, carrying the tile out from under the grip.
+    event.preventDefault();
+    const ids = this.#shortcutIds();
+    const to = ids.indexOf(memberId) + step;
+    if (to < 0 || to >= ids.length) return;
+    this.#move(memberId, name, to);
+  }
+
+  #gripDown(event: PointerEvent, memberId: string, name: string): void {
+    if (event.button !== 0 || this.busy || this.#press !== null) return;
+    const grip = event.currentTarget as HTMLElement;
+    capturePointer(grip, event.pointerId);
+    this.#press = {
+      memberId,
+      name,
+      grip,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      dragging: false,
+    };
+    document.addEventListener("pointermove", this.#onPointerMove);
+    document.addEventListener("pointerup", this.#onPointerUp);
+    document.addEventListener("pointercancel", this.#onPointerCancel);
+    document.addEventListener("keydown", this.#onDragKey, true);
+  }
+
+  /** The shortcut cell under the pointer, other than the dragged one; never an add tile or the
+   * menu block, so those are never a place to drop. */
+  #shortcutAt(x: number, y: number, dragged: string): string | null {
+    for (const element of pointerElementsAt(x, y)) {
+      if (element.getRootNode() !== this.shadowRoot) continue;
+      if (!(element instanceof HTMLElement) || !element.classList.contains("shortcut")) continue;
+      const over = element.dataset.memberId!;
+      return over === dragged ? null : over;
+    }
+    return null;
+  }
+
+  readonly #onPointerMove = (event: PointerEvent): void => {
+    const press = this.#press!;
+    if (event.pointerId !== press.pointerId) return;
+    if (!press.dragging) {
+      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD_PX) return;
+      press.dragging = true;
+      holdPageCursor();
+      this.requestUpdate();
+    }
+    this.dropOn = this.#shortcutAt(event.clientX, event.clientY, press.memberId);
+  };
+
+  readonly #onPointerUp = (event: PointerEvent): void => {
+    const press = this.#press!;
+    if (event.pointerId !== press.pointerId) return;
+    const over = this.dropOn;
+    this.#endPress();
+    if (over === null || this.busy) return;
+    // A new list from the host while the pointer was held may have dropped either shortcut.
+    const ids = this.#shortcutIds();
+    const to = ids.indexOf(over);
+    if (to >= 0 && ids.includes(press.memberId)) this.#move(press.memberId, press.name, to);
+  };
+
+  readonly #onPointerCancel = (event: PointerEvent): void => {
+    if (event.pointerId === this.#press!.pointerId) this.#endPress();
+  };
+
+  readonly #onDragKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape") return;
+    // Escape here ends the drag only, not a dialog the preview sits in.
+    event.preventDefault();
+    event.stopPropagation();
+    this.#endPress();
+  };
+
+  #endPress(): void {
+    const press = this.#press;
+    if (press === null) return;
+    this.#press = null;
+    releasePointer(press.grip, press.pointerId);
+    if (press.dragging) releasePageCursor();
+    this.dropOn = null;
+    this.requestUpdate();
+    document.removeEventListener("pointermove", this.#onPointerMove);
+    document.removeEventListener("pointerup", this.#onPointerUp);
+    document.removeEventListener("pointercancel", this.#onPointerCancel);
+    document.removeEventListener("keydown", this.#onDragKey, true);
+  }
+
+  #dropSide(memberId: string): "before" | "after" | typeof nothing {
+    const press = this.#press;
+    if (press === null || this.dropOn !== memberId) return nothing;
+    const ids = this.#shortcutIds();
+    return ids.indexOf(memberId) < ids.indexOf(press.memberId) ? "before" : "after";
   }
 
   /** A shortcut's face and the name it is known by: the device's tile, a dashed one when the
@@ -473,7 +626,12 @@ export class DeviceHomePreview extends LitElement {
   #editCell(tile: HomeTile, index: PreviewIndex, mode: HomeTileMode): TemplateResult {
     const { memberId } = tile;
     const { face, name } = this.#shortcutFace(tile, index, mode);
-    return html`<div class="shortcut" data-member-id=${memberId}>
+    return html`<div
+      class="shortcut"
+      data-member-id=${memberId}
+      data-drop=${this.#dropSide(memberId)}
+      ?data-dragging=${this.#press?.dragging === true && this.#press.memberId === memberId}
+    >
       ${face}
       <div class="controls">
         <button
@@ -483,6 +641,7 @@ export class DeviceHomePreview extends LitElement {
           aria-label=${`${t("members.reorder")}: ${name}`}
           ?disabled=${this.busy}
           @keydown=${(event: KeyboardEvent) => this.#gripKey(event, memberId, name)}
+          @pointerdown=${(event: PointerEvent) => this.#gripDown(event, memberId, name)}
         >
           <wt-icon name="grip"></wt-icon>
         </button>

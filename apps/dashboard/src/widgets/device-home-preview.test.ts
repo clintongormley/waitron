@@ -1084,4 +1084,199 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(await el.focusAdd("product")).toBe(true);
     expect(root(el).activeElement).toBe(add(el, "product"));
   });
+
+  describe("dragging a grip", () => {
+    const cellOf = (el: DeviceHomePreview, memberId: string) =>
+      root(el).querySelector<HTMLElement>(`.shortcut[data-member-id="${memberId}"]`)!;
+    const marked = (el: DeviceHomePreview) => [
+      ...root(el).querySelectorAll<HTMLElement>("[data-drop]"),
+    ];
+
+    function centre(node: Element): { x: number; y: number } {
+      const box = node.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    }
+
+    /** Dispatched on the grip, where pointer capture sends a real drag's events. */
+    function pointer(
+      el: DeviceHomePreview,
+      memberId: string,
+      type: string,
+      at: { x: number; y: number },
+    ): void {
+      grip(el, memberId).dispatchEvent(
+        new PointerEvent(type, {
+          pointerId: 7,
+          button: 0,
+          isPrimary: true,
+          clientX: at.x,
+          clientY: at.y,
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+    }
+
+    /** Presses `memberId`'s grip and moves the pointer to the middle of `over`, leaving it held. */
+    async function hold(el: DeviceHomePreview, memberId: string, over: Element): Promise<void> {
+      pointer(el, memberId, "pointerdown", centre(grip(el, memberId)));
+      await el.updateComplete;
+      pointer(el, memberId, "pointermove", centre(over));
+      await el.updateComplete;
+    }
+
+    async function release(el: DeviceHomePreview, memberId: string, over: Element): Promise<void> {
+      pointer(el, memberId, "pointerup", centre(over));
+      await el.updateComplete;
+    }
+
+    afterEach(() => {
+      document.body.style.cursor = "";
+    });
+
+    it("keeps a touch on the grip from scrolling the page", async () => {
+      const { el } = await mount({ shortcuts: LIST });
+      expect(getComputedStyle(grip(el, "sc-lemonade")).touchAction).toBe("none");
+    });
+
+    it("moves the first tile past the third, marking where it will land, sending one move", async () => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      document.body.style.cursor = "help";
+      await hold(el, "sc-lemonade", cellOf(el, "sc-drinks"));
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(marked(el)).toEqual([cellOf(el, "sc-ham")]);
+      expect(cellOf(el, "sc-ham").dataset.drop).toBe("after");
+      expect(getComputedStyle(cellOf(el, "sc-ham")).boxShadow).not.toBe("none");
+      expect(cellOf(el, "sc-lemonade").hasAttribute("data-dragging")).toBe(true);
+      expect(document.body.style.cursor).toBe("grabbing");
+      expect(events).toEqual([]);
+
+      await release(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(events).toEqual([
+        { type: "wt-shortcut-move", detail: { memberId: "sc-lemonade", to: 2 } },
+      ]);
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Drinks para clientes", "Ham", "Lemonade"]);
+      expect(marked(el)).toEqual([]);
+      expect(cellOf(el, "sc-lemonade").hasAttribute("data-dragging")).toBe(false);
+      expect(document.body.style.cursor).toBe("help");
+      expect(status(el)).toBe("Lemonade moved to position 3 of 3");
+    });
+
+    it("moves the last tile to the front, marking the first tile before it", async () => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      await hold(el, "sc-ham", cellOf(el, "sc-lemonade"));
+      expect(cellOf(el, "sc-lemonade").dataset.drop).toBe("before");
+      await release(el, "sc-ham", cellOf(el, "sc-lemonade"));
+      expect(events).toEqual([{ type: "wt-shortcut-move", detail: { memberId: "sc-ham", to: 0 } }]);
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Ham", "Lemonade", "Drinks para clientes"]);
+    });
+
+    it("sends nothing when released where it started, or pressed without moving", async () => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      await hold(el, "sc-drinks", cellOf(el, "sc-ham"));
+      await hold(el, "sc-drinks", cellOf(el, "sc-drinks"));
+      expect(marked(el)).toEqual([]);
+      await release(el, "sc-drinks", cellOf(el, "sc-drinks"));
+
+      pointer(el, "sc-drinks", "pointerdown", centre(grip(el, "sc-drinks")));
+      await el.updateComplete;
+      expect(document.body.style.cursor).toBe("");
+      await release(el, "sc-drinks", grip(el, "sc-drinks"));
+      expect(events).toEqual([]);
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
+      expect(document.body.style.cursor).toBe("");
+    });
+
+    it("cancels on Escape, sending nothing then or on release", async () => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      const escape = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      });
+      grip(el, "sc-lemonade").dispatchEvent(escape);
+      await el.updateComplete;
+      expect(escape.defaultPrevented).toBe(true);
+      expect(marked(el)).toEqual([]);
+      expect(document.body.style.cursor).toBe("");
+      await release(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(events).toEqual([]);
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
+    });
+
+    it("ends without a move when the pointer is cancelled", async () => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      pointer(el, "sc-lemonade", "pointercancel", centre(cellOf(el, "sc-ham")));
+      await el.updateComplete;
+      expect(marked(el)).toEqual([]);
+      expect(document.body.style.cursor).toBe("");
+      await release(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(events).toEqual([]);
+    });
+
+    it("never targets an add tile or the menu block", async () => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      await hold(el, "sc-lemonade", add(el, "section"));
+      expect(marked(el)).toEqual([]);
+      await release(el, "sc-lemonade", add(el, "section"));
+
+      const water = tile(el, "structure", "Water");
+      water.scrollIntoView({ block: "center" });
+      await hold(el, "sc-lemonade", water);
+      expect(marked(el)).toEqual([]);
+      await release(el, "sc-lemonade", water);
+      expect(events).toEqual([]);
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
+    });
+
+    it("sends nothing when it turns busy, or the dragged shortcut leaves the list, before release", async () => {
+      const { el, host } = await mount({ shortcuts: LIST });
+      const events = heard(host);
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      el.busy = true;
+      await el.updateComplete;
+      await release(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(document.body.style.cursor).toBe("");
+      el.busy = false;
+      await el.updateComplete;
+
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      el.shortcuts = [DRINKS, HAM];
+      await el.updateComplete;
+      await release(el, "sc-ham", cellOf(el, "sc-ham"));
+      expect(events).toEqual([]);
+      expect(names(tiles(el, "shortcuts"))).toEqual(["Drinks para clientes", "Ham"]);
+      expect(document.body.style.cursor).toBe("");
+    });
+
+    it("hands the page's cursor back when removed mid-drag", async () => {
+      const { el } = await mount({ shortcuts: LIST });
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(document.body.style.cursor).toBe("grabbing");
+      el.remove();
+      expect(document.body.style.cursor).toBe("");
+    });
+
+    it("does not drag while busy", async () => {
+      const { el, host } = await mount({ shortcuts: LIST, busy: true });
+      const events = heard(host);
+      await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(marked(el)).toEqual([]);
+      expect(cellOf(el, "sc-lemonade").hasAttribute("data-dragging")).toBe(false);
+      expect(document.body.style.cursor).toBe("");
+      await release(el, "sc-lemonade", cellOf(el, "sc-ham"));
+      expect(events).toEqual([]);
+    });
+  });
 });
