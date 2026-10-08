@@ -2360,3 +2360,43 @@ it("marks the held menu source even when the first move stays over that source",
     pointer(from, "pointercancel");
   }
 });
+
+it.each([300, 301.5])(
+  "releases on the final menu sibling after edge scrolling stops (%s px)",
+  async (height) => {
+    const { el, box, send, moves, pending, restoreFrames } = await edgeMenu();
+    try {
+      box.style.height = `${height}px`;
+      box.scrollTop = box.scrollHeight - box.clientHeight - 150;
+      send("pointermove");
+      await expect.poll(() => pending.size, { timeout: 4000 }).toBe(0);
+      expect(box.scrollTop).toBe(box.scrollHeight - box.clientHeight);
+      expect(marked(el, "drop-gap-after")).toEqual(["edge-34"]);
+      send("pointerup");
+      expect(moves).toEqual([{ path: [], memberId: "edge-0", to: 34 }]);
+      expect(pending.size).toBe(0);
+    } finally {
+      send("pointercancel");
+      restoreFrames();
+    }
+  },
+);
+
+it("releases on the menu sibling under the pointer after leaving the edge", async () => {
+  const { el, box, bounds, send, moves, pending, restoreFrames } = await edgeMenu();
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 4000 }).toBeGreaterThan(100);
+    const target = nameAt(el, "edge-12");
+    box.scrollTop += target.getBoundingClientRect().top - bounds.top - 120;
+    const targetBox = target.getBoundingClientRect();
+    send("pointermove", targetBox.top + targetBox.height / 2);
+    expect(pending.size).toBe(0);
+    expect(marked(el, "drop-gap-after")).toEqual(["edge-12"]);
+    send("pointerup");
+    expect(moves).toEqual([{ path: [], memberId: "edge-0", to: 12 }]);
+    expect(pending.size).toBe(0);
+  } finally {
+    send("pointercancel");
+    restoreFrames();
+  }
+});
