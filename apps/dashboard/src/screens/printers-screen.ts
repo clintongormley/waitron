@@ -11,6 +11,8 @@ import {
   type DataTableColumn,
   type WtModal,
   leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -690,8 +692,7 @@ export class PrintersScreen extends LitElement {
     this.editingAgent = { ...agent };
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-agent-modal]");
     if (modal) modal.open = true;
-    this.#agentLeave = leaveCoordinatorFor(this);
-    this.#agentScope = this.#agentLeave?.register<string>({
+    const { coordinator, scope } = draftScopeFor<string>(this, {
       id: {},
       current: () => this.editingAgent!.name.trim(),
       snapshot: (value) => value,
@@ -700,6 +701,8 @@ export class PrintersScreen extends LitElement {
         this.editingAgent = { ...this.editingAgent!, name };
       },
     });
+    this.#agentLeave = coordinator;
+    this.#agentScope = scope;
   }
 
   #finishAgentEdit(opening: number): void {
@@ -2126,13 +2129,14 @@ export class PrintersScreen extends LitElement {
     if (!agent) return nothing;
     const opening = this.#agentOpening;
     const nameError = this.formAttempted && !agent.name.trim() ? t("form.name_required") : "";
+    const s = saveActionState(this.#agentScope);
     return html`<wt-modal
       size="compact"
       heading=${t("printers.edit_agent")}
       data-test="edit-agent-modal"
       .open=${true}
       .dismissible=${!this.submitting}
-      .beforeClose=${this.#agentScope ? this.#beforeAgentClose : undefined}
+      .beforeClose=${this.#agentLeave ? this.#beforeAgentClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#finishAgentEdit(opening);
@@ -2169,10 +2173,10 @@ export class PrintersScreen extends LitElement {
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          variant="primary"
+          variant=${s.variant}
           data-test="save-agent"
           ?loading=${this.submitting}
-          ?disabled=${this.submitting || nameError !== ""}
+          ?disabled=${s.unchanged || this.submitting || nameError !== ""}
           @click=${() => void this.#saveAgent()}
           >${t("action.save")}</wt-button
         >
@@ -2182,7 +2186,7 @@ export class PrintersScreen extends LitElement {
 
   async #saveAgent(): Promise<void> {
     const agent = this.editingAgent;
-    if (!agent) return;
+    if (!agent || saveActionState(this.#agentScope).unchanged) return;
     this.formAttempted = true;
     if (!agent.name.trim()) {
       this.#focusFirstInvalid("[data-test=edit-agent-modal]");
@@ -2367,7 +2371,7 @@ export class PrintersScreen extends LitElement {
   #openDetailName(printer: Printer): void {
     this.#detailNameScope?.dispose();
     this.detailName = { id: printer.id, value: printer.name, saving: false, error: null };
-    this.#detailNameScope = leaveCoordinatorFor(this)?.register<string>({
+    this.#detailNameScope = draftScopeFor<string>(this, {
       id: {},
       current: () => this.detailName!.value.trim(),
       snapshot: (value) => value,
@@ -2375,7 +2379,7 @@ export class PrintersScreen extends LitElement {
       restore: (value) => {
         this.detailName = { ...this.detailName!, value, error: null };
       },
-    });
+    }).scope;
   }
 
   #detailConnectionValues(): { host: string; port: string } {
@@ -2393,7 +2397,7 @@ export class PrintersScreen extends LitElement {
       saving: false,
       error: null,
     };
-    this.#detailConnectionScope = leaveCoordinatorFor(this)?.register({
+    this.#detailConnectionScope = draftScopeFor(this, {
       id: {},
       current: () => this.#detailConnectionValues(),
       snapshot: (value) => ({ ...value }),
@@ -2401,7 +2405,7 @@ export class PrintersScreen extends LitElement {
       restore: (value) => {
         this.detailConnection = { ...this.detailConnection!, ...value, error: null };
       },
-    });
+    }).scope;
   }
 
   async #cancelDetail(owner: "name" | "connection"): Promise<void> {
@@ -2426,6 +2430,8 @@ export class PrintersScreen extends LitElement {
   }
 
   async #saveDetailConnection(printer: Printer): Promise<void> {
+    const scope = this.#detailConnectionScope;
+    if (!scope || saveActionState(scope).unchanged) return;
     const draft = this.detailConnection;
     if (draft?.id !== printer.id || draft.saving) return;
     const host = draft.host.trim();
@@ -2437,34 +2443,25 @@ export class PrintersScreen extends LitElement {
       };
       return;
     }
-    const scope = this.#detailConnectionScope;
-    const savingDraft = { ...draft, saving: true, error: null };
-    this.detailConnection = savingDraft;
+    this.detailConnection = { ...draft, saving: true, error: null };
     try {
       await this.api.updatePrinter(printer.id, { host, port: port ? Number(port) : null });
     } catch (error) {
       if (!this.isConnected || scope !== this.#detailConnectionScope) return;
-      if (scope && this.detailConnection?.id === printer.id)
-        this.detailConnection = {
-          ...this.detailConnection,
-          saving: false,
-          error: codeMessage(codeOf(error)),
-        };
-      else if (this.detailConnection === savingDraft)
-        this.detailConnection = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      this.detailConnection = {
+        ...this.detailConnection!,
+        saving: false,
+        error: codeMessage(codeOf(error)),
+      };
       return;
     }
     if (!this.isConnected || scope !== this.#detailConnectionScope) return;
-    if (scope) {
-      scope.commit({ host, port: port ? String(Number(port)) : "" });
-      if (scope.isDirty())
-        this.detailConnection = { ...this.detailConnection!, saving: false, error: null };
-      else {
-        scope.dispose();
-        this.#detailConnectionScope = undefined;
-        this.detailConnection = null;
-      }
-    } else if (this.detailConnection === savingDraft) {
+    scope.commit({ host, port: port ? String(Number(port)) : "" });
+    if (scope.isDirty())
+      this.detailConnection = { ...this.detailConnection!, saving: false, error: null };
+    else {
+      scope.dispose();
+      this.#detailConnectionScope = undefined;
       this.detailConnection = null;
     }
     await this.#load();
@@ -2484,6 +2481,8 @@ export class PrintersScreen extends LitElement {
   }
 
   async #saveDetailName(printer: Printer): Promise<void> {
+    const scope = this.#detailNameScope;
+    if (!scope || saveActionState(scope).unchanged) return;
     const draft = this.detailName;
     if (draft?.id !== printer.id || draft.saving) return;
     const name = draft.value.trim();
@@ -2491,29 +2490,20 @@ export class PrintersScreen extends LitElement {
       this.detailName = { ...draft, error: t("form.name_required") };
       return;
     }
-    const scope = this.#detailNameScope;
-    const savingDraft = { ...draft, saving: true, error: null };
-    this.detailName = savingDraft;
+    this.detailName = { ...draft, saving: true, error: null };
     try {
       await this.api.updatePrinter(printer.id, { name });
     } catch (error) {
       if (!this.isConnected || scope !== this.#detailNameScope) return;
-      if (scope && this.detailName?.id === printer.id)
-        this.detailName = { ...this.detailName, saving: false, error: codeMessage(codeOf(error)) };
-      else if (this.detailName === savingDraft)
-        this.detailName = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      this.detailName = { ...this.detailName!, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
     if (!this.isConnected || scope !== this.#detailNameScope) return;
-    if (scope) {
-      scope.commit(name);
-      if (scope.isDirty()) this.detailName = { ...this.detailName!, saving: false, error: null };
-      else {
-        scope.dispose();
-        this.#detailNameScope = undefined;
-        this.detailName = null;
-      }
-    } else if (this.detailName === savingDraft) {
+    scope.commit(name);
+    if (scope.isDirty()) this.detailName = { ...this.detailName!, saving: false, error: null };
+    else {
+      scope.dispose();
+      this.#detailNameScope = undefined;
       this.detailName = null;
     }
     await this.#load();
@@ -2633,9 +2623,9 @@ export class PrintersScreen extends LitElement {
                     >${t("action.cancel")}</wt-button
                   >
                   <wt-button
-                    variant="primary"
+                    variant=${saveActionState(this.#detailNameScope).variant}
                     data-test="save-printer-name"
-                    ?disabled=${this.detailName.saving || !this.detailName.value.trim()}
+                    ?disabled=${saveActionState(this.#detailNameScope).unchanged || this.detailName.saving || !this.detailName.value.trim()}
                     @click=${() => void this.#saveDetailName(p)}
                     >${t("action.save")}</wt-button
                   >
@@ -2768,9 +2758,9 @@ export class PrintersScreen extends LitElement {
                         >${t("action.cancel")}</wt-button
                       >
                       <wt-button
-                        variant="primary"
+                        variant=${saveActionState(this.#detailConnectionScope).variant}
                         data-test="save-printer-connection"
-                        ?disabled=${this.detailConnection.saving || !!this.#detailConnectionErrors().host || !!this.#detailConnectionErrors().port}
+                        ?disabled=${saveActionState(this.#detailConnectionScope).unchanged || this.detailConnection.saving || !!this.#detailConnectionErrors().host || !!this.#detailConnectionErrors().port}
                         @click=${() => void this.#saveDetailConnection(p)}
                         >${t("action.save")}</wt-button
                       >
@@ -3151,7 +3141,7 @@ export class PrintersScreen extends LitElement {
     if (!modal?.open) return;
     if (id === "edit-agent-modal") {
       if (this.submitting) return;
-      if (this.#agentScope) {
+      if (this.#agentLeave) {
         await modal.requestClose("cancel");
         return;
       }

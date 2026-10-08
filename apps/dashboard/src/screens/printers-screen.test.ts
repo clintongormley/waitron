@@ -4124,6 +4124,7 @@ it("saves an inline printer name when Enter is pressed in its field", async () =
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Kitchen receipt");
+  await flush(el);
   const input = q(el, '[name="printer-detail-name"]')!.shadowRoot!.querySelector("input")!;
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
@@ -4145,6 +4146,7 @@ it("saves an inline network address when Enter is pressed in its field", async (
   q(el, "[data-test=edit-printer-connection]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-host"]', "10.0.0.20");
+  await flush(el);
   const input = q(el, '[name="printer-detail-host"]')!.shadowRoot!.querySelector("input")!;
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
@@ -5542,6 +5544,8 @@ describe("printers-screen agent joining edges", () => {
     await flush(el);
     q(el, "[data-test=edit-agent-a1]")!.click();
     await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen Pi");
+    await flush(el);
     const staleSave = q(el, "[data-test=save-agent]")!;
     q(el, "[data-test=cancel-edit-agent]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-agent-modal]")).toBeNull());
@@ -6021,6 +6025,8 @@ describe("printers-screen printer editor edges", () => {
     await flush(el);
     q(el, "[data-test=edit-printer-name]")!.click();
     await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "Barra nueva");
+    await flush(el);
 
     staleName.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "Leaked" }, bubbles: true, composed: true }),
@@ -6028,7 +6034,7 @@ describe("printers-screen printer editor edges", () => {
     q(el, "[data-test=save-printer-name]")!.click();
 
     await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { name: "Barra USB" }),
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { name: "Barra nueva" }),
     );
   });
 
@@ -6038,6 +6044,8 @@ describe("printers-screen printer editor edges", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
     await flush(el);
     const staleSave = q(el, "[data-test=save-printer-name]")!;
     q(el, "[data-test=cancel-printer-name]")!.click();
@@ -6475,6 +6483,8 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     });
     q(el, "[data-test=edit-agent-a1]")!.click();
     await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen box");
+    await flush(el);
     q(el, "[data-test=save-agent]")!.click();
     await flush(el);
     expect(isDisabled(el, "[data-test=save-agent]")).toBe(false);
@@ -6488,6 +6498,8 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
       updateAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }),
     });
     q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen box");
     await flush(el);
     q(el, "[data-test=save-agent]")!.click();
     await flush(el);
@@ -6560,7 +6572,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     expect(errorOf(el, '[name="printer-detail-host"]')).toBe("");
     expect(isDisabled(el, "[data-test=save-printer-connection]")).toBe(true);
 
-    typeField(el, '[name="printer-detail-port"]', "9100");
+    typeField(el, '[name="printer-detail-port"]', "9101");
     await flush(el);
     expect(isDisabled(el, "[data-test=save-printer-connection]")).toBe(false);
     expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -6606,6 +6618,9 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     );
     expect(errorOf(el, '[name="printer-detail-name"]')).toBe("");
     expect(q(el, "[data-test=printer-name-refusal]")).toBeNull();
+    expect(isDisabled(el, "[data-test=save-printer-name]")).toBe(true);
+    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
+    await flush(el);
     expect(isDisabled(el, "[data-test=save-printer-name]")).toBe(false);
   });
 
