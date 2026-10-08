@@ -1576,9 +1576,9 @@ one square per row for All products, each category depth, a product and its vari
 level's step further in, a variant on its product's indent. At 520 px the table had switched to its
 narrow layout (a tree 440 px wide or less, `packages/ui/src/components/wt-data-table.ts`), which
 hides every row's square; only a category's name box keeps one while the category is being named.
-That last open point is done (A423, owner 2026-10-08): a category with no colour of its own now
-shows the colour it inherits, marked as inherited (dashed outline, inset fill), as an inheriting
-product's square is.
+A category with no colour of its own used to show an empty outline even when the products under
+it showed an inherited colour; A423 (owner 2026-10-08) made it show the colour it inherits, marked
+as inherited (dashed outline, inset fill), as an inheriting product's square is.
 
 **Held reorder drags scroll at the list edge (A334, 2026-10-08) — BUILT.**
 Products, shared reorder tables, preparation stations and the column chooser use

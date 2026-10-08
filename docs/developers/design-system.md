@@ -1125,8 +1125,8 @@ falling back to its category's inherited colour, then to the venue's default; wi
 the frame is empty. A category with no colour of its own shows the colour it inherits the same way:
 from the nearest coloured category above it, else the venue's default, else an empty outline. An
 inherited colour is marked, not by colour alone (owner, 2026-10-08, A423): its square keeps its size
-but takes a dashed 1px `--wt-color-text-muted` outline with a `--wt-space-1` gap before the fill and
-`--wt-radius-md` corners (an `inherited` part beside `color-swatch`), and a photo's coloured ring is dashed. Its accessible name says
+but takes a dashed 1px `--wt-color-text-muted` outline with a `--wt-space-1` gap before the fill, and
+`--wt-radius-md` corners, which a product's square always has (an `inherited` part beside `color-swatch`), and a photo's coloured ring is dashed. Its accessible name says
 where it comes from (`folders.edit_color_inherited`, `product.edit_named_inherited`), naming the
 category or All products. Opening an inheriting category's colour picker starts on No colour. Clicking
 the product slot opens the product's Edit dialog with its photo field focused. Category squares and
@@ -1160,8 +1160,8 @@ taking the room from there to the pinned cell. Keep the grip in its leading colu
 the line above, and the asterisk wraps in what they leave of that room; the count is hidden
 at that width (above). While a category is being renamed or added, the name box's colour square
 takes the row's colour-square slot, where the row's own square sits at rest, and the box starts
-where the name started. It shows only a colour chosen for the category itself, so an inheriting
-category's square shows the empty outline while it is being named. At phone width that slot shows only while naming, on the row's first line
+where the name started. The name box's square shows only a colour chosen for the category itself,
+so an inheriting category's shows the empty outline while it is being named. At phone width that slot shows only while naming, on the row's first line
 above the box. That square is not a Tab stop, so Tab still leaves the box.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"

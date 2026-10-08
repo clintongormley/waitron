@@ -31,7 +31,8 @@ Enter or leaving the box saves, and Esc or a blank name cancels. A colour square
 category's name. A category with no colour of its own shows the colour it inherits from the nearest
 coloured category above it, or the venue's default, drawn dashed as inherited
 ([design-system.md](design-system.md)); with neither it is an empty outline. While the box is open,
-the box's own square takes that place, showing only a colour chosen for the category itself and the box takes the name's. Either square opens a small chooser (`apps/dashboard/src/widgets/category-color-form.ts`)
+the box's own square takes that place and the box takes the name's; that square shows only a colour
+chosen for the category itself, so an inheriting category's is an empty outline. Either square opens a small chooser (`apps/dashboard/src/widgets/category-color-form.ts`)
 holding the shared swatches, No colour and Custom. Choosing a swatch or No colour is the answer and
 closes it; Custom answers once the colour picker settles on a colour; Cancel and Esc change nothing.
 From a row's square the choice is saved at once, as the colour alone, never the name or the parent,
