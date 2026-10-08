@@ -4,6 +4,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   addProductToMenu,
+  addMember,
+  requireMenuRoot,
   buildMenuDocument,
   createCatalogue,
   createProduct,
@@ -40,8 +42,10 @@ import {
   clearSpecialDateMenus,
   deleteMenuPeriod,
   readMenuTimetableModel,
+  readOpeningHoursModel,
   replaceMenuWeek,
   resolveDefaultMenu,
+  resolveDepartmentService,
   resolveZoneMenus,
   saveMenuPeriod,
   saveSpecialDateMenus,
@@ -2133,5 +2137,348 @@ describe("the editor's model of two venues", () => {
     expect(model.specialDates).toEqual([
       { id: ours.id, date: CHRISTMAS, name: "Navidad", timetables: [] },
     ]);
+  });
+});
+
+describe("department service periods", () => {
+  const FRIDAY = "2026-10-16";
+  const serviceVenue = async () => {
+    const v = await venue({ timetable: false });
+    await db
+      .update(locations)
+      .set({ dayCutover: "06:00:00" })
+      .where(eq(locations.id, v.locationId));
+    return scoped(async (tx) => {
+      const lunch = (
+        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          name: "Lunch",
+          colour: "blue",
+          menuId: v.menus.Almuerzo,
+          staffMenuIds: [v.menus.Bebidas, v.menus.Café],
+        })
+      ).id;
+      const afternoon = (
+        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          name: "Afternoon",
+          colour: "amber",
+          menuId: v.menus.Café,
+          staffMenuIds: [],
+        })
+      ).id;
+      const night = (
+        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          name: "Night",
+          colour: "grey",
+          menuId: v.menus.Cena,
+          staffMenuIds: [],
+        })
+      ).id;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf((weekday) =>
+          weekday === 5
+            ? [
+                slot(lunch, "12:00", "14:00"),
+                slot(afternoon, "14:00", "19:00"),
+                slot(night, "21:00", "03:00"),
+              ]
+            : [],
+        ),
+        AT,
+      );
+      return { ...v, lunch, afternoon, night };
+    });
+  };
+  type ServiceVenue = Awaited<ReturnType<typeof serviceVenue>>;
+  const read = (v: ServiceVenue, date: string, time: string) =>
+    scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(date, time)));
+
+  it("reads opening hours with period colours, ordered staff menus, all seven days and explicit closed dates", async () => {
+    const v = await serviceVenue();
+    const other = await venue({ timetable: false });
+    const date = await makeDate(v, FRIDAY);
+    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT));
+    await db.update(specialDates).set({ colour: "red" }).where(eq(specialDates.id, date.id));
+    await db.update(menuPeriods).set({ colour: "blue" }).where(eq(menuPeriods.id, v.lunch));
+    await scoped((tx) => deactivateDepartment(tx, v.cfg, v.deli));
+    const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(model.dayCutover).toBe("06:00");
+    expect(model.departments.map((department) => department.id)).toEqual([v.deli, v.restaurant]);
+    expect(
+      model.departments.find((department) => department.id === other.restaurant),
+    ).toBeUndefined();
+    expect(model.departments.find((department) => department.id === v.restaurant)).toEqual({
+      id: v.restaurant,
+      name: "Restaurant",
+      active: true,
+      periods: [
+        {
+          id: v.afternoon,
+          name: "Afternoon",
+          colour: "amber",
+          menuId: v.menus.Café,
+          staffMenuIds: [],
+          weekdays: [5],
+        },
+        {
+          id: v.lunch,
+          name: "Lunch",
+          colour: "blue",
+          menuId: v.menus.Almuerzo,
+          staffMenuIds: [v.menus.Bebidas, v.menus.Café],
+          weekdays: [5],
+        },
+        {
+          id: v.night,
+          name: "Night",
+          colour: "grey",
+          menuId: v.menus.Cena,
+          staffMenuIds: [],
+          weekdays: [5],
+        },
+      ],
+      week: weekOf((weekday) =>
+        weekday === 5
+          ? [
+              slot(v.lunch, "12:00", "14:00"),
+              slot(v.afternoon, "14:00", "19:00"),
+              slot(v.night, "21:00", "03:00"),
+            ]
+          : [],
+      ),
+      dates: [{ specialDateId: date.id, slots: [] }],
+    });
+    expect(model.departments.find((department) => department.id === v.deli)).toEqual({
+      id: v.deli,
+      name: "Deli",
+      active: false,
+      periods: [],
+      week: weekOf(() => []),
+      dates: [],
+    });
+    expect(model.specialDates).toEqual([
+      { id: date.id, date: FRIDAY, name: "Navidad", colour: "red", closeWholeVenue: false },
+    ]);
+  });
+
+  it("retains past dates with timetables and omits unused older dates when the clock is readable", async () => {
+    const v = await serviceVenue();
+    const used = await makeDate(v, "2026-10-04");
+    const unused = await makeDate(v, "2026-10-05");
+    const yesterday = await makeDate(v, "2026-10-06");
+    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, used.id, v.restaurant, [], AT));
+    expect(
+      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).specialDates.map(
+        (date) => date.id,
+      ),
+    ).toEqual([used.id, yesterday.id]);
+    await db
+      .update(locations)
+      .set({ timeZone: "not/a-zone" })
+      .where(eq(locations.id, v.locationId));
+    expect(
+      (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).specialDates.map(
+        (date) => date.id,
+      ),
+    ).toEqual([used.id, unused.id, yesterday.id]);
+  });
+
+  it("names direct menu inclusions without treating nested inclusions as direct", async () => {
+    const v = await serviceVenue();
+    await scoped(async (tx) => {
+      const lunch = await requireMenuRoot(tx, v.menus.Almuerzo);
+      const drinks = await requireMenuRoot(tx, v.menus.Bebidas);
+      const coffee = await requireMenuRoot(tx, v.menus.Café);
+      await addMember(tx, lunch, { kind: "section", sectionId: drinks });
+      await addMember(tx, drinks, { kind: "section", sectionId: coffee });
+    });
+    await db.update(catalogues).set({ active: false }).where(eq(catalogues.id, v.menus.Cena));
+    const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(model.menus.find((menu) => menu.id === v.menus.Almuerzo)).toEqual({
+      id: v.menus.Almuerzo,
+      name: "Almuerzo",
+      active: true,
+      includes: ["Bebidas"],
+    });
+    expect(model.menus.find((menu) => menu.id === v.menus.Bebidas)?.includes).toEqual(["Café"]);
+    expect(model.menus.find((menu) => menu.id === v.menus.Cena)).toEqual({
+      id: v.menus.Cena,
+      name: "Cena",
+      active: false,
+      includes: [],
+    });
+  });
+
+  it("orders the current customer and staff menus and switches at the exact boundary", async () => {
+    const v = await serviceVenue();
+    expect(await read(v, FRIDAY, "13:59")).toEqual({
+      departmentId: v.restaurant,
+      open: true,
+      periodId: v.lunch,
+      periodName: "Lunch",
+      customerMenuId: v.menus.Almuerzo,
+      orderableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
+      endedMenuIds: [],
+    });
+    expect(await read(v, FRIDAY, "14:00")).toEqual({
+      departmentId: v.restaurant,
+      open: true,
+      periodId: v.afternoon,
+      periodName: "Afternoon",
+      customerMenuId: v.menus.Café,
+      orderableMenuIds: [v.menus.Café],
+      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas],
+    });
+  });
+
+  it("uses Friday's overnight period on Saturday morning until its exclusive end", async () => {
+    const v = await serviceVenue();
+    expect(await read(v, SATURDAY, "02:30")).toEqual({
+      departmentId: v.restaurant,
+      open: true,
+      periodId: v.night,
+      periodName: "Night",
+      customerMenuId: v.menus.Cena,
+      orderableMenuIds: [v.menus.Cena],
+      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
+    });
+    expect(await read(v, SATURDAY, "03:00")).toEqual({
+      departmentId: v.restaurant,
+      open: false,
+      periodId: null,
+      periodName: null,
+      customerMenuId: null,
+      orderableMenuIds: [],
+      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena],
+    });
+    expect(await read(v, SATURDAY, "06:10")).toEqual({
+      departmentId: v.restaurant,
+      open: false,
+      periodId: null,
+      periodName: null,
+      customerMenuId: null,
+      orderableMenuIds: [],
+      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena],
+    });
+  });
+
+  it("closes in a gap and forgets menus older than the preceding business day", async () => {
+    const v = await serviceVenue();
+    expect(await read(v, FRIDAY, "20:00")).toEqual({
+      departmentId: v.restaurant,
+      open: false,
+      periodId: null,
+      periodName: null,
+      customerMenuId: null,
+      orderableMenuIds: [],
+      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
+    });
+    expect(await read(v, "2026-10-18", "06:10")).toEqual({
+      departmentId: v.restaurant,
+      open: false,
+      periodId: null,
+      periodName: null,
+      customerMenuId: null,
+      orderableMenuIds: [],
+      endedMenuIds: [],
+    });
+  });
+
+  it("replaces the business day's week with special-date ranges, including its next morning", async () => {
+    const v = await serviceVenue();
+    const date = await makeDate(v, FRIDAY);
+    await scoped((tx) =>
+      saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [slot(v.lunch, "13:00", "03:00")], AT),
+    );
+    expect(await read(v, FRIDAY, "12:30")).toMatchObject({
+      open: false,
+      orderableMenuIds: [],
+      endedMenuIds: [],
+    });
+    expect(await read(v, FRIDAY, "15:00")).toMatchObject({
+      open: true,
+      periodId: v.lunch,
+      orderableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
+    });
+    expect(await read(v, SATURDAY, "02:30")).toMatchObject({ open: true, periodId: v.lunch });
+    expect((await read(v, SATURDAY, "06:10")).endedMenuIds).toEqual([
+      v.menus.Almuerzo,
+      v.menus.Bebidas,
+      v.menus.Café,
+    ]);
+  });
+
+  it("distinguishes an empty special-date row from following the normal week", async () => {
+    const v = await serviceVenue();
+    const date = await makeDate(v, FRIDAY);
+    expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: true, periodId: v.lunch });
+    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT));
+    expect(await read(v, FRIDAY, "13:00")).toMatchObject({
+      open: false,
+      orderableMenuIds: [],
+      endedMenuIds: [],
+    });
+    await scoped((tx) => clearSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, AT));
+    expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: true, periodId: v.lunch });
+  });
+
+  it("a whole-venue closure overrides both special-date ranges and the week", async () => {
+    const v = await serviceVenue();
+    const date = await makeDate(v, FRIDAY);
+    await scoped((tx) =>
+      saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [slot(v.lunch, "12:00", "16:00")], AT),
+    );
+    await db
+      .update(specialDates)
+      .set({ closeWholeVenue: true })
+      .where(eq(specialDates.id, date.id));
+    expect(await read(v, FRIDAY, "13:00")).toMatchObject({
+      open: false,
+      orderableMenuIds: [],
+      endedMenuIds: [],
+    });
+    await scoped((tx) => clearSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, AT));
+    expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: false, orderableMenuIds: [] });
+    expect((await read(v, SATURDAY, "06:10")).endedMenuIds).toEqual([]);
+  });
+
+  it("fails open with each distinct period menu when the clock cannot be read", async () => {
+    const v = await serviceVenue();
+    await db
+      .update(locations)
+      .set({ timeZone: "not/a-zone" })
+      .where(eq(locations.id, v.locationId));
+    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, AT));
+    expect(service).toMatchObject({
+      departmentId: v.restaurant,
+      open: true,
+      periodId: null,
+      periodName: null,
+      customerMenuId: null,
+      endedMenuIds: [],
+    });
+    expect(new Set(service.orderableMenuIds)).toEqual(
+      new Set([v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena]),
+    );
+    expect(service.orderableMenuIds).toHaveLength(4);
+  });
+
+  it("reports an empty department closed and refuses a different venue's department", async () => {
+    const v = await serviceVenue();
+    expect(await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.deli, AT))).toEqual({
+      departmentId: v.deli,
+      open: false,
+      periodId: null,
+      periodName: null,
+      customerMenuId: null,
+      orderableMenuIds: [],
+      endedMenuIds: [],
+    });
+    const other = await venue({ timetable: false });
+    await expect(
+      scoped((tx) => resolveDepartmentService(tx, other.cfg, v.restaurant, AT)),
+    ).rejects.toMatchObject({ code: "department.not_found" });
   });
 });

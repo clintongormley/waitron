@@ -1,12 +1,20 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
 import { catalogues, floorZones, newId, type Transaction } from "@waitron/db";
+import { directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { assertDepartment, assertMember, listDepartmentMenus } from "./department-menus.js";
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
-import { calendarDateOfTime, parseServiceDay } from "./service-day.js";
+import {
+  calendarDateOfTime,
+  parseServiceDay,
+  rangeInForce,
+  rangeSpan,
+  serviceMomentAt,
+  type ServiceRange,
+} from "./service-day.js";
 import type { SpecialDateParticipant } from "./hours.js";
 import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
 import {
@@ -16,6 +24,8 @@ import {
   slotInForce,
 } from "./menu-timetable-rules.js";
 import type {
+  DepartmentService,
+  OpeningHoursModel,
   MenuPeriodInput,
   MenuPeriodUse,
   MenuSlot,
@@ -194,6 +204,129 @@ async function writeDay(
         endsAt: storedTime(slot.endsAt),
       })),
     );
+}
+
+export async function resolveDepartmentService(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  at: Date,
+): Promise<DepartmentService> {
+  await assertDepartment(tx, cfg, departmentId);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const moment = serviceMomentAt(at, clock);
+  const periods = await tx
+    .select({ id: menuPeriods.id, name: menuPeriods.name, menuId: menuPeriods.menuId })
+    .from(menuPeriods)
+    .where(eq(menuPeriods.departmentId, departmentId))
+    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
+  const staff = await tx
+    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
+    .from(menuPeriodStaffMenus)
+    .where(eq(menuPeriodStaffMenus.departmentId, departmentId))
+    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
+  const menusOf = (periodId: string): string[] => {
+    const period = periods.find((entry) => entry.id === periodId)!;
+    return [
+      period.menuId,
+      ...staff.filter((entry) => entry.periodId === periodId).map((entry) => entry.menuId),
+    ];
+  };
+  const closed: DepartmentService = {
+    departmentId,
+    open: false,
+    periodId: null,
+    periodName: null,
+    customerMenuId: null,
+    orderableMenuIds: [],
+    endedMenuIds: [],
+  };
+  if (moment === null)
+    return {
+      ...closed,
+      open: true,
+      orderableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
+    };
+
+  const yesterday = addDays(moment.businessDay, -1);
+  const dates = await tx
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
+    .from(specialDates)
+    .where(
+      and(
+        eq(specialDates.locationId, cfg.locationId),
+        inArray(specialDates.date, [yesterday, moment.businessDay]),
+      ),
+    );
+  const timetables = await tx
+    .select({
+      id: menuDayTimetables.id,
+      weekday: menuDayTimetables.weekday,
+      specialDateId: menuDayTimetables.specialDateId,
+    })
+    .from(menuDayTimetables)
+    .where(
+      and(
+        eq(menuDayTimetables.departmentId, departmentId),
+        or(
+          inArray(menuDayTimetables.weekday, [weekdayOf(yesterday), moment.weekday]),
+          dates.length === 0
+            ? undefined
+            : inArray(
+                menuDayTimetables.specialDateId,
+                dates.map((date) => date.id),
+              ),
+        ),
+      ),
+    );
+  const timetableOn = (date: string) => {
+    const special = dates.find((entry) => entry.date === date);
+    if (special?.closeWholeVenue) return undefined;
+    return (
+      (special === undefined
+        ? undefined
+        : timetables.find((entry) => entry.specialDateId === special.id)) ??
+      timetables.find((entry) => entry.weekday === weekdayOf(date))
+    );
+  };
+  const today = timetableOn(moment.businessDay);
+  const previous = timetableOn(yesterday);
+  const slots = await slotsByTimetable(
+    tx,
+    [today?.id, previous?.id].filter((id): id is string => id !== undefined),
+  );
+  const rangesOn = (id: string | undefined): ServiceRange[] =>
+    id === undefined
+      ? []
+      : (slots.get(id) ?? [])
+          .slice()
+          .sort(
+            (a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start,
+          );
+  const ranges = rangesOn(today?.id);
+  const running = rangeInForce(ranges, moment.minute, clock.dayCutover);
+  const period =
+    running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
+  const orderableMenuIds = period === undefined ? [] : menusOf(period.id);
+  const ended = [
+    ...rangesOn(previous?.id),
+    ...ranges.filter((range) => rangeSpan(range, clock.dayCutover).end <= moment.minute),
+  ];
+  return {
+    departmentId,
+    open: period !== undefined,
+    periodId: period?.id ?? null,
+    periodName: period?.name ?? null,
+    customerMenuId: period?.menuId ?? null,
+    orderableMenuIds,
+    endedMenuIds: [...new Set(ended.flatMap((range) => menusOf(range.periodId)))].filter(
+      (id) => !orderableMenuIds.includes(id),
+    ),
+  };
 }
 
 /**
@@ -788,5 +921,127 @@ export async function readMenuTimetableModel(
         .filter((row) => row.specialDateId === special.id)
         .map((row) => ({ departmentId: row.departmentId, slots: slots.get(row.id)! })),
     })),
+  };
+}
+
+export async function readOpeningHoursModel(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<OpeningHoursModel> {
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const moment = serviceMomentAt(at, clock);
+  const departmentRows = await tx
+    .select({ id: departments.id, name: departments.name, active: departments.active })
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId))
+    .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
+  const periods = await tx
+    .select({
+      id: menuPeriods.id,
+      departmentId: menuPeriods.departmentId,
+      name: menuPeriods.name,
+      colour: menuPeriods.colour,
+      menuId: menuPeriods.menuId,
+    })
+    .from(menuPeriods)
+    .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
+    .where(eq(departments.locationId, cfg.locationId))
+    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
+  const staff = await tx
+    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
+    .from(menuPeriodStaffMenus)
+    .innerJoin(departments, eq(departments.id, menuPeriodStaffMenus.departmentId))
+    .where(eq(departments.locationId, cfg.locationId))
+    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
+  const timetables = await tx
+    .select({
+      id: menuDayTimetables.id,
+      departmentId: menuDayTimetables.departmentId,
+      weekday: menuDayTimetables.weekday,
+      specialDateId: menuDayTimetables.specialDateId,
+    })
+    .from(menuDayTimetables)
+    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
+    .where(eq(departments.locationId, cfg.locationId))
+    .orderBy(asc(menuDayTimetables.weekday), asc(menuDayTimetables.specialDateId));
+  const slots = await slotsByTimetable(
+    tx,
+    timetables.map((row) => row.id),
+  );
+  const ranges = (id: string): ServiceRange[] =>
+    slots
+      .get(id)!
+      .slice()
+      .sort((a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start);
+  const dates = await tx
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      name: specialDates.name,
+      colour: specialDates.colour,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
+    .from(specialDates)
+    .where(
+      and(
+        eq(specialDates.locationId, cfg.locationId),
+        moment === null
+          ? undefined
+          : or(
+              gte(specialDates.date, addDays(moment.businessDay, -1)),
+              inArray(
+                specialDates.id,
+                timetables.flatMap((row) =>
+                  row.specialDateId === null ? [] : [row.specialDateId],
+                ),
+              ),
+            ),
+      ),
+    )
+    .orderBy(asc(specialDates.date));
+  const menus = await tx
+    .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
+    .from(catalogues)
+    .orderBy(asc(catalogues.name), asc(catalogues.id));
+  const graph = await loadSectionGraph(tx);
+  const menuNames = new Map(menus.map((menu) => [menu.id, menu.name]));
+  return {
+    dayCutover: clock.dayCutover,
+    menus: menus.map((menu) => ({
+      ...menu,
+      includes: directIncludedMenus(graph, menu.id).map((id) => menuNames.get(id)!),
+    })),
+    specialDates: dates,
+    departments: departmentRows.map((department) => {
+      const days = timetables.filter((row) => row.departmentId === department.id);
+      return {
+        ...department,
+        periods: periods
+          .filter((period) => period.departmentId === department.id)
+          .map(({ id, name, colour, menuId }) => ({
+            id,
+            name,
+            colour,
+            menuId,
+            staffMenuIds: staff
+              .filter((entry) => entry.periodId === id)
+              .map((entry) => entry.menuId),
+            weekdays: days
+              .filter(
+                (day) =>
+                  day.weekday !== null && ranges(day.id).some((range) => range.periodId === id),
+              )
+              .map((day) => day.weekday!),
+          })),
+        week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
+          const day = days.find((row) => row.weekday === weekday);
+          return { weekday, slots: day === undefined ? [] : ranges(day.id) };
+        }),
+        dates: days
+          .filter((row) => row.specialDateId !== null)
+          .map((day) => ({ specialDateId: day.specialDateId!, slots: ranges(day.id) })),
+      };
+    }),
   };
 }
