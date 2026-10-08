@@ -2914,7 +2914,15 @@ it.each([
     );
     expect(el.getBoundingClientRect().right).toBeLessThanOrEqual(width);
     await expectNoA11yViolations(host);
-    await page.screenshot({ path: `a8-stations-${locale}-${theme}-${width}.png` });
+    await page.screenshot({ path: `__screenshots__/a8-stations-${locale}-${theme}-${width}.png` });
+    const fallback = await openSettingsFallback(el);
+    expect(fallback.label).toBe(
+      locale === "en"
+        ? "Upstairs bar: Outside its hours, work goes to"
+        : "Upstairs bar: Fuera de su horario, el trabajo va a",
+    );
+    await expectNoA11yViolations(host);
+    await page.screenshot({ path: `__screenshots__/a8-settings-${locale}-${theme}-${width}.png` });
   } finally {
     document.body.style.background = previous.body;
     document.documentElement.style.background = previous.canvas;
@@ -6972,7 +6980,9 @@ it.each(["en", "es"] as const)(
     );
     const combo = await openSettingsFallback(el);
     expect(combo.label).toBe(
-      locale === "en" ? "Outside its hours, work goes to" : "Fuera de su horario, el trabajo va a",
+      locale === "en"
+        ? "Upstairs bar: Outside its hours, work goes to"
+        : "Upstairs bar: Fuera de su horario, el trabajo va a",
     );
   },
 );
