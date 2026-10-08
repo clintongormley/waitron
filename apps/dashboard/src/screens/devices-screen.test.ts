@@ -360,19 +360,17 @@ describe("devices-screen", () => {
       try {
         const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
           api: stubApi({
-            listDevices: vi
-              .fn()
-              .mockResolvedValue([
-                ...devices,
-                { ...devices[0]!, id: "d3", label: "Handheld", deviceProfileId: "dp2" },
-                {
-                  ...devices[0]!,
-                  id: "d4",
-                  label: "Retired profile",
-                  deviceProfileId: "dp-retired",
-                  profileRetired: true,
-                },
-              ]),
+            listDevices: vi.fn().mockResolvedValue([
+              ...devices,
+              { ...devices[0]!, id: "d3", label: "Handheld", deviceProfileId: "dp2" },
+              {
+                ...devices[0]!,
+                id: "d4",
+                label: "Retired profile",
+                deviceProfileId: "dp-retired",
+                profileRetired: true,
+              },
+            ]),
           }),
         });
         await flush(el);
