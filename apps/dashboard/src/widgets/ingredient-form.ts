@@ -137,7 +137,7 @@ export class IngredientForm extends LitElement {
 
   /** Allergens are seeded into BOTH the live value (`allergens`, what a save emits) and the picker's
    * `declaration` seed (`seedAllergens`); the picker does not emit on seed, so the form must seed its
-   * own live copy too, or an untouched edit would re-save the wrong value. */
+   * own live copy too. */
   override willUpdate(changed: PropertyValues): void {
     const previous = changed.get("ingredient") as Ingredient | null | undefined;
     const reopened =

@@ -364,8 +364,9 @@ describe("the Change time form's Change time", () => {
     expect(await actionState(el)).toEqual(ready);
   });
 
-  // The edge named for the owner: a version at one of the two 02:30s of the autumn clock change
-  // can no longer be sent untouched to draw the server's question of which 02:30.
+  // The ruling named for the owner (backlog A331 batch 2a): a version at one of the two 02:30s of
+  // the autumn clock change opens unchanged, so an untouched press does not reach the server's
+  // question of which 02:30.
   it("opens a version at a repeated time quiet, and its untouched press asks nothing", async () => {
     const api = stubApi();
     const { el } = await mount(api);

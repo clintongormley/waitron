@@ -1594,11 +1594,13 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     window afterwards shows the refusal with the window's Save quiet until something in the window
     changes (the list hands the refusal to the window, `option-list-form.ts`). A refusal still
     never disables Save once something has changed;
-  - on the autumn clock-change day, a scheduled menu version can no longer be moved between the two
-    copies of a repeated local time (the two 02:30s) from the Change time form. The form opens on
-    the stored date and time, so an untouched press now does nothing, where it used to bring up the
-    server's "which 02:30" choice. After a real edit to a repeated time the choice still appears.
-    For the owner: does moving between the two 02:30s need its own way in?
+  - on the autumn clock-change day, the Change time form can no longer move a scheduled menu
+    version to the other copy of the same repeated local time (the other 02:30) in one step. The
+    form opens on the stored date and time, so an untouched press now does nothing, where it used
+    to bring up the server's "which 02:30" choice, and typing another time and then the stored one
+    back is no change. After a real edit to a repeated time the choice still appears, so the other
+    02:30 is reached only by two moves through another time. For the owner: does moving between the
+    two 02:30s need its own way in?
 
   Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form
   unchanged and after one edit; the catalogue default also after a save; the extras list, the
