@@ -1294,6 +1294,8 @@ every create opens empty — the unit form from the catalogue screen has no `.va
 stored date and time (`menu-publications.ts` ~430–431), where pressing Move untouched changes
 nothing. The catalogue default VAT class is always a stored `VatClass`
 (`packages/catalogue/src/settings-types.ts` ~4), so the panel opens on a valid stored value.
+(2026-10-08: superseded for one opening by A410 — the option window opened showing a refusal the
+list handed it passes `savableAtOpen`; see design-system.md → Forms.)
 
 **Not a save, not gated (no code change):**
 

@@ -90,7 +90,7 @@ export class OptionLabelForm extends LitElement {
   @state() private dismissed = new Set<string>();
 
   #scope?: DraftScope<Omit<DraftLabel, "id">>;
-  /** Opened showing a refusal, so Save starts active: a refusal never disables it (owner, A410). */
+  /** Opened showing a refusal, so Save starts active: a refusal never disables it. */
   #refusedAtOpen = false;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>

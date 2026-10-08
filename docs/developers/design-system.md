@@ -1577,9 +1577,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   while its inner button is disabled;
 - a create form with nothing typed is unchanged. A form whose opened state is already savable (a
   duplicate, a pre-filled value the operator must confirm) passes `{ savableAtOpen: true }`, so it
-  is never stuck disabled. So does the option window when it opens showing a refusal the options
-  list handed it: pressing Save untouched gives the option back to the list, which clears its
-  refusal (owner, 2026-10-08, A410). The option window opened any other way opens quiet;
+  is never stuck disabled;
 - a changed form that is blocked — failing its own checks after the first press, busy, a nested
   window open — stays drawn `primary` and disabled. A refused save leaves the draft changed, so the
   action stays enabled;
@@ -1653,6 +1651,10 @@ These open already savable:
   with, and pressing Pair approves the device;
 - each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
 - the canvas Duplicate dialog, holding `<name> (copy)`;
+- the option window when it opens showing a refusal the options list handed it: pressing Save
+  untouched gives the option back to the list, which clears that option's refusal (`#refusedAtOpen`
+  in `apps/dashboard/src/widgets/option-label-form.ts`; owner, 2026-10-08, A410). Opened by Add
+  option, or by Edit on an option with no refusal, it opens quiet;
 - a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
   as changed from the start.
 

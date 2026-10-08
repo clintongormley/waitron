@@ -1600,8 +1600,9 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   Venue settings, the recipe editor and the ingredient form, the unit form (new and existing), the
   options list and its option window, the extras list, Add to menus after a product is created, a
   section's Add products, and a menu's Schedule and Change time on its Preview tab (list:
-  [design-system.md](developers/design-system.md) → Forms). None of them opens already savable.
-  Rulings for the owner to confirm:
+  [design-system.md](developers/design-system.md) → Forms). None of them opens already savable,
+  except the option window when it opens showing a refusal (A410, below).
+  Rulings put to the owner, with the answers:
   - the Units screen's Change unit (in the "unit in use" dialog), the Products browser's Move and
     Delete dialog and the image picker are not saves, so they are not gated. Change unit already
     stays disabled until products and a new unit are chosen; Move already stays disabled until a
