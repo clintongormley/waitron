@@ -167,13 +167,21 @@ describe.each(["light", "dark"] as const)("the schedule form (%s)", (theme) => {
       )!;
       expect(dialog.open).toBe(true);
       const submit = dialog.querySelector<HTMLElement>('[data-test="schedule-submit"]')!;
-      if (refusal !== null) {
-        const [date, time] =
-          state === "schedule occurrence" ? ["2026-10-25", "02:30"] : ["2026-10-08", "08:00"];
-        for (const [name, value] of [
-          ["date", date],
-          ["time", time],
-        ] as const) {
+      if (state !== "schedule form") {
+        // A date alone, for the field errors state: the press then explains the missing time.
+        const entries: (readonly ["date" | "time", string])[] =
+          state === "schedule field errors"
+            ? [["date", "2026-10-08"]]
+            : state === "schedule occurrence"
+              ? [
+                  ["date", "2026-10-25"],
+                  ["time", "02:30"],
+                ]
+              : [
+                  ["date", "2026-10-08"],
+                  ["time", "08:00"],
+                ];
+        for (const [name, value] of entries) {
           const input = dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(
             `[name="${name}"]`,
           )!;
@@ -192,6 +200,10 @@ describe.each(["light", "dark"] as const)("the schedule form (%s)", (theme) => {
           ).not.toBe(""),
         );
       }
+      if (state === "schedule field errors")
+        expect(
+          dialog.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="time"]')!.error,
+        ).toBe("Choose a time.");
       if (state === "schedule occurrence")
         expect(dialog.querySelector('wt-combobox[name="occurrence"]')).not.toBeNull();
       if (state === "schedule overtaken")
