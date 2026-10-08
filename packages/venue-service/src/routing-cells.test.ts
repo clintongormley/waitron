@@ -34,6 +34,7 @@ import {
 import type { RouteTarget } from "./routing.js";
 import type { CellAddress } from "./routing-types.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
+import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -516,6 +517,25 @@ describe("setRoutingCell / clearRoutingCell", () => {
       expect.objectContaining({ zone_id: f.terrace, station_id: f.bar }),
     ]);
     await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    expect(await readStoredCells(f)).toEqual([]);
+  });
+
+  it("refuses an active zone whose department is switched off", async () => {
+    const f = await setup();
+    const [dining] = await db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.locationId, f.cfg.locationId));
+    // deactivateDepartment switches the department's zones off too, so no product path leaves an
+    // active zone in a switched-off department; an import bundle can still carry one.
+    await db.update(departments).set({ active: false }).where(eq(departments.id, dining!.id));
+    const address: CellAddress = {
+      row: { kind: "category", categoryId: f.drinks },
+      zoneId: f.terrace,
+    };
+    await expect(
+      scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar))),
+    ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: f.terrace } });
     expect(await readStoredCells(f)).toEqual([]);
   });
 
