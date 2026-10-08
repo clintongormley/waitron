@@ -1,3 +1,4 @@
+import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
@@ -368,6 +369,8 @@ export class MenuStructureTable extends LitElement {
     document.addEventListener("keydown", this.#dragKey, true);
   }
 
+  readonly #edgeScroll = new DragEdgeScroll();
+
   readonly #moveDrag = (event: PointerEvent): void => {
     const drag = this.#drag;
     if (!drag || event.pointerId !== drag.pointerId) return;
@@ -393,16 +396,26 @@ export class MenuStructureTable extends LitElement {
       };
       void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
     }
+    if (starting) {
+      const origin = shownRow(this.#table()!.shadowRoot!, drag.key);
+      if (origin) this.#edgeScroll.start(origin, this.#pointer, () => this.#trackDrop());
+    }
+    this.#edgeScroll.update(this.#pointer);
+    this.#trackDrop();
+    if (starting) this.#paint();
+  };
+
+  #trackDrop(): void {
     placeDragGhost(this.renderRoot, this.#pointer);
-    const over = pointerElementsAt(event.clientX, event.clientY).find(
+    const over = pointerElementsAt(this.#pointer.x, this.#pointer.y).find(
       (item): item is HTMLElement =>
         item instanceof HTMLElement && item.matches("tr[data-row-key]"),
     )?.dataset.rowKey;
-    const target = over === undefined ? undefined : this.#targetFor(drag.key, over);
-    if (!starting && target === this.#target) return;
+    const target = over === undefined ? undefined : this.#targetFor(this.#drag!.key, over);
+    if (target === this.#target) return;
     this.#target = target;
     this.#paint();
-  };
+  }
 
   readonly #endDrag = (event: PointerEvent): void => {
     const drag = this.#drag;
@@ -426,6 +439,7 @@ export class MenuStructureTable extends LitElement {
   };
 
   #finishDrag(): void {
+    this.#edgeScroll.stop();
     const drag = this.#drag;
     document.removeEventListener("pointermove", this.#moveDrag);
     document.removeEventListener("pointerup", this.#endDrag);
