@@ -451,9 +451,11 @@ department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these ca
 You set last orders with the period's signed whole-minute end offset, which defaults to 0.
 For Lunch 12:00–14:00, −15 stops selection and sending at 13:45. With +15, selection stops at
 14:00 and unsent dishes may be sent until 14:15. The cutoff minute itself is refused. Increasing
-a stored line's quantity uses the selection cutoff too; existing unchanged lines, decreases and
-notes retain their stored-line behavior. A fresh request during grace is accepted without checking
-when you selected its dishes, because the server receives no trusted selection timestamp.
+a line already sent to an order uses the selection cutoff too; unchanged lines, decreases and
+notes retain their stored-line behavior. Saving an unsent table draft does not enforce that cutoff:
+the till gates additions and increases, while the server checks the sending window on submission.
+A fresh request during grace is accepted without checking when you selected its dishes, because
+the server receives no trusted selection timestamp.
 
 An offset is bounded to −1439…1439 minutes. Each placement must keep a nonempty sending window;
 a positive offset must stop strictly before the same department's next placement starts. The

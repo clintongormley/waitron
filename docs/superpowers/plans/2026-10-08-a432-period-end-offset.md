@@ -45,7 +45,10 @@
    `periodId`, `departmentId`, and weekday/date. Timetable edits reuse `menu_timetable.invalid`
    with the submitted slot/day field and `reason: "end_offset"`, naming the conflicting period.
    Calendar and clock edits name their own shown `date`, `closeWholeVenue`, `dayCutover` or
-   `timeZone` field. Import maps refusals to `setup.request_invalid` and a table/column field.
+   `timeZone` field. Clock edits validate placements even at offset 0: a range crossing the new
+   changeover is refused with the clock field and the internal reason `end_offset`, which covers
+   invalid placement arithmetic as well as nonzero offsets. The existing screen shows its generic
+   field-invalid message. Import maps refusals to `setup.request_invalid` and a table/column field.
 
 > **Execution:** implement inline with `superpowers:executing-plans`; owner authorizes proceeding
 > after this plan without another question. Read `superpowers:test-driven-development` before
