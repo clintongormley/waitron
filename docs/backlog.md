@@ -1538,7 +1538,14 @@ Chromium cases cover both edges and the exact move reported on release, leaving 
 release, cancellation, Escape, disconnect and a fitting list. The lifecycle cases track real
 animation-frame requests and cancellation, including the absence of a pending frame at the end.
 
-**Main image smoke cannot fetch BlueZ (2026-10-08) — OPEN.**
+**Main image smoke cannot fetch BlueZ (2026-10-08) — DONE (A391, #1420).** Cause measured with
+`curl -I` on 2026-10-08: Ubuntu superseded `bluez_5.72-0ubuntu5.5` (404 on the archive and security
+pools) with `5.72-0ubuntu5.6` (200 on both), and the step installed from the runner image's own
+package list. The step now runs `apt-get update` first, and a case in `scripts/ci-workflow.test.mjs`
+(weaker than its name: it reads workflow `run:` text, so an install in a composite action or a
+called script is not seen) refuses an apt install with no update before it in the same step. Proof:
+image-nightly run 37741541793 on the PR's head installed `5.72-0ubuntu5.6` and passed. What was
+recorded at the time:
 The [image smoke job after A334b](https://github.com/clintongormley/waitron/actions/runs/37741153470/job/113192086434)
 failed before either image build: `apt-get install` could not fetch
 `bluez_5.72-0ubuntu5.5_amd64.deb`, receiving HTTP 404 from `security.ubuntu.com`, and exited 100.
