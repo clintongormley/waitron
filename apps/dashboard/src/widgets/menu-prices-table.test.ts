@@ -2340,6 +2340,28 @@ describe("variants", () => {
       }
     },
   );
+
+  it("fits the longest range placeholder whole inside the field in a larger, wider font, beyond phone width", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    onTestFinished(() => page.viewport(width, height));
+    await page.viewport(1280, 800);
+    await vi.waitFor(() => expect(window.innerWidth).toBe(1280));
+    const el = await mount({ rows: [rangedRow("1000.00", "9999.99")] });
+    const host = el.parentElement!;
+    const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+    expect(family).not.toBe("");
+    host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+    host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
+    // Connected again once the font is set, as a table drawn in that font from the start would be.
+    el.remove();
+    host.append(el);
+    expect(textFit(override(el, "mi-ranged")).shown).toBe("1000.00 – 9999.99");
+    await vi.waitFor(() => {
+      const fit = textFit(override(el, "mi-ranged"));
+      expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    });
+  });
 });
 
 it("sends the product's field and a size's field as two saves, one field each, on leaving each", async () => {
@@ -2523,11 +2545,12 @@ function linesOf(node: Element): number {
 }
 
 /** At a phone's width, 390 px unless given, once the row menu's column has been measured into
- * --actions-width. */
+ * --actions-width; with `font` named first in the page's font family when given. */
 async function atPhoneWidth(
   locale: string,
   props: Partial<MenuPricesTable> = {},
   viewport = 390,
+  font = "",
 ): Promise<MenuPricesTable> {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -2539,6 +2562,16 @@ async function atPhoneWidth(
   await page.viewport(viewport, 844);
   await vi.waitFor(() => expect(window.innerWidth).toBe(viewport));
   const el = await mount(props);
+  if (font !== "") {
+    // Connected again once the font is set, as a table drawn in that font from the start would be.
+    const host = el.parentElement!;
+    const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+    expect(family).not.toBe("");
+    host.style.setProperty("--wt-font-family", `${font}, ${family}`);
+    el.style.removeProperty("--actions-width");
+    el.remove();
+    host.append(el);
+  }
   await vi.waitFor(() => expect(el.style.getPropertyValue("--actions-width")).not.toBe(""));
   await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
   await frame();
@@ -2650,28 +2683,69 @@ function textFit(field: HTMLElementTagNameMap["wt-price-input"]) {
   };
 }
 
+/** Scrolls the table's box from its start until the row's field ends at the pinned row menu. */
+async function scrollClearOfMenu(el: MenuPricesTable, key: string): Promise<HTMLElement> {
+  const scroller = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
+  scroller.scrollLeft = 0;
+  await frame();
+  const under =
+    override(el, key).getBoundingClientRect().right -
+    pinnedCell(el, key).getBoundingClientRect().left;
+  scroller.scrollLeft = Math.max(0, Math.ceil(under));
+  await frame();
+  return scroller;
+}
+
+/** Asserts the row's ⋮ is on screen and is what a tap at its centre reaches. */
+function expectMenuReachable(el: MenuPricesTable, key: string): void {
+  const pinned = pinnedCell(el, key);
+  const trigger = pinned
+    .querySelector("wt-row-actions")!
+    .shadowRoot!.querySelector("button")!
+    .getBoundingClientRect();
+  expect(trigger.left, key).toBeGreaterThanOrEqual(0);
+  expect(trigger.right, key).toBeLessThanOrEqual(window.innerWidth);
+  expect(
+    paintsTopmost(pinned, trigger.left + trigger.width / 2, trigger.top + trigger.height / 2),
+    `${key} ⋮ covered`,
+  ).toBe(true);
+}
+
+// Where `fits` is false the field may start under the pinned row menu, the table's box scrolling
+// sideways under it: once scrolled until the field ends at the menu, the whole field is in view.
 it.each([
-  ["en-GB", 320, "12.50", "15.00"],
-  ["es-ES", 320, "12.50", "15.00"],
-  ["en-GB", 390, "1000.00", "9999.99"],
-  ["es-ES", 390, "1000.00", "9999.99"],
+  ["en-GB", 320, "12.50", "15.00", "", false],
+  ["es-ES", 320, "12.50", "15.00", "", false],
+  ["en-GB", 390, "1000.00", "9999.99", "", true],
+  ["es-ES", 390, "1000.00", "9999.99", "", true],
+  ["en-GB", 320, "12.50", "15.00", "Verdana", false],
+  ["es-ES", 320, "12.50", "15.00", "Verdana", false],
+  ["es-ES", 390, "1000.00", "9999.99", "Verdana", true],
 ])(
-  "shows a range placeholder whole in the field, left of the row menu, at phone width (%s, %i px, %s – %s)",
-  async (locale, viewport, low, high) => {
-    const el = await atPhoneWidth(locale, { rows: [rangedRow(low, high)] }, viewport);
+  "shows a range placeholder whole in the field, left of the row menu, at phone width (%s, %i px, %s – %s, font %s)",
+  async (locale, viewport, low, high, font, fits) => {
+    const el = await atPhoneWidth(locale, { rows: [rangedRow(low, high)] }, viewport, font);
     toggleOf(el, "mi-ranged")!.click();
     await table(el).updateComplete;
     await frame();
     await frame();
+    const keys = ["mi-ranged", "mi-ranged:v-small", "mi-ranged:v-large"];
     // As typed into the field, with a point whatever the language.
     expect(textFit(override(el, "mi-ranged")).shown).toBe(`${low} – ${high}`);
-    for (const key of ["mi-ranged", "mi-ranged:v-small", "mi-ranged:v-large"]) {
-      const field = override(el, key);
-      const fit = textFit(field);
+    for (const key of keys) {
+      const fit = textFit(override(el, key));
       expect(fit.needed, `${key} ${JSON.stringify(fit)}`).toBeLessThanOrEqual(fit.room);
+      expectMenuReachable(el, key);
+    }
+    for (const key of keys) {
+      const scroller = fits ? null : await scrollClearOfMenu(el, key);
+      const field = override(el, key).getBoundingClientRect();
       const menu = pinnedCell(el, key).getBoundingClientRect();
-      expect(field.getBoundingClientRect().right, key).toBeLessThanOrEqual(menu.left + 0.5);
+      expect(field.right, key).toBeLessThanOrEqual(menu.left + 0.5);
+      if (scroller !== null)
+        expect(field.left, key).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().left);
       expect(menu.right, key).toBeLessThanOrEqual(window.innerWidth);
+      expectMenuReachable(el, key);
     }
   },
 );
@@ -2682,19 +2756,23 @@ async function typeAndDraw(el: MenuPricesTable, key: string, value: string) {
   await frame();
 }
 
-it("widens a field whose stored price is cleared, so the range it then shows is whole at 320 px", async () => {
-  const el = await atPhoneWidth(
-    "es-ES",
-    { rows: [{ ...rangedRow("12.50", "15.00"), override: "13.00" }] },
-    320,
-  );
-  const stored = override(el, "mi-ranged").getBoundingClientRect().width;
-  await typeAndDraw(el, "mi-ranged", "");
-  const fit = textFit(override(el, "mi-ranged"));
-  expect(fit.shown).toBe("12.50 – 15.00");
-  expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
-  expect(override(el, "mi-ranged").getBoundingClientRect().width).toBeGreaterThan(stored);
-});
+it.each(["", "Verdana"])(
+  "widens a field whose stored price is cleared, so the range it then shows is whole at 320 px (font %s)",
+  async (font) => {
+    const el = await atPhoneWidth(
+      "es-ES",
+      { rows: [{ ...rangedRow("12.50", "15.00"), override: "13.00" }] },
+      320,
+      font,
+    );
+    const stored = override(el, "mi-ranged").getBoundingClientRect().width;
+    await typeAndDraw(el, "mi-ranged", "");
+    const fit = textFit(override(el, "mi-ranged"));
+    expect(fit.shown).toBe("12.50 – 15.00");
+    expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    expect(override(el, "mi-ranged").getBoundingClientRect().width).toBeGreaterThan(stored);
+  },
+);
 
 it("keeps a field that shows a range as wide while a price is typed into it at 320 px", async () => {
   const el = await atPhoneWidth("es-ES", { rows: [rangedRow("12.50", "15.00")] }, 320);

@@ -1151,15 +1151,18 @@ unused `units` property is gone (it closes W75's leftover).
   column holding Edit product, a link to the product's or size's page. The Structure tab's product
   rows show the same Available word, muted like Type, and their ⋮ offers Edit product before Remove
   at every width. At phone width the price field gives up width before a name does while no field
-  shows a range; while one does, the names give up width first. Measured in the dashboard's test
-  browser, in English and Spanish, with every field left of the ⋮: "12.50 – 15.00" shows whole in
-  the table alone at 320px, and "1000.00 – 9999.99" in the table alone at 390px and inside the
-  dashboard at a 390px window. In the table alone with a range shown, "Lemonade" then breaks
-  mid-word at 320px and at 390px (observed, not asserted).
-  - Open: at a 320px window only "12.50 – 15.00" was measured. The field's width there is set for
-    the whole table, not by its text, so by that case's room (106.33px English, 90.33px Spanish)
-    "1000.00 – 9999.99" (123.96px) would clip in both languages, and a three-digit range such as
-    "100.00 – 150.00" may clip in Spanish; neither was measured.
+  shows a range; while one does, the names give up width first, and the field is never narrower
+  than the widest range the table shows, measured in the placeholder's own font, so where the row
+  then does not fit, the table's box scrolls sideways under the pinned ⋮. Measured in the
+  dashboard's test browser on macOS, in English and Spanish, each range whole in its field: with
+  the default font and every field left of the ⋮, "1000.00 – 9999.99" in the table alone at 390px,
+  and inside the dashboard at a 390px window "12.50 – 15.00" in both languages and "1000.00 –
+  9999.99" in English; with the field whole in view once the box is scrolled to it,
+  "12.50 – 15.00" in the table alone at 320px, with the default font and with Verdana (wider, like
+  the Linux font CI draws in), and "1000.00 – 9999.99" inside the dashboard in Spanish. In the
+  table alone with a range shown, "Lemonade" then breaks mid-word at 320px and at 390px (observed,
+  not asserted).
+  - Open: at a 320px window only "12.50 – 15.00" was measured.
   - Open, for the owner: `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since
     A347 (#1392), so the dashboard's Inactive branches (`#active` and `activeOffer` in
     `menu-prices-table.ts`, the `active` conditions in `menu-price-inheritance.ts`) cannot be

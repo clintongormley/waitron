@@ -145,6 +145,9 @@ const spanText = (span: Span, format: (amount: string) => string = priceText): s
         .replace("{low}", format(span.low))
         .replace("{high}", format(span.high));
 
+/** As typed into a price field, which draws no sign. */
+const placeholderOf = (span: Span): string => spanText(span, (amount) => amount);
+
 /**
  * One menu's price overrides: a row per Active product the menu reaches, with its Active sizes
  * under it, each showing whether it is Available and a field for the price this menu sets for it.
@@ -159,9 +162,11 @@ export class MenuPricesTable extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      /* A field's width counts its padding, --wt-space-3 on each side, as well as its text. */
       :host {
         display: block;
         container-type: inline-size;
+        --range-field-width: calc(var(--range-text-width, 0px) + 2 * var(--wt-space-3));
       }
       .error {
         margin-block: 0;
@@ -204,14 +209,15 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(price-note) {
         font-size: var(--wt-font-size-sm);
       }
-      /* Wide enough that a range placeholder shows whole rather than clipped into one price; phone
-         width sizes it below. Its positioned box holds the field's hidden hint, which otherwise
-         escapes the table's scroller and widens the page. Its end margin clears the outcome message
-         floating at the bottom, whose height is measured into --outcome-height because a long
-         sentence wraps it. */
+      /* Wide enough that a range placeholder shows whole rather than clipped into one price: the
+         widest range the table shows is measured, in the placeholder's own font, into
+         --range-text-width. Phone width sizes it below. Its positioned box holds the field's hidden
+         hint, which otherwise escapes the table's scroller and widens the page. Its end margin
+         clears the outcome message floating at the bottom, whose height is measured into
+         --outcome-height because a long sentence wraps it. */
       wt-data-table::part(override-field) {
         position: relative;
-        --wt-price-field-width: var(--wt-price-range-field-width);
+        --wt-price-field-width: max(var(--wt-price-range-field-width), var(--range-field-width));
         scroll-margin-block-end: max(
           var(--wt-tap-min) + 2 * var(--wt-space-2),
           var(--outcome-height, 0px) + var(--wt-space-3)
@@ -264,16 +270,21 @@ export class MenuPricesTable extends LitElement {
         }
         /* While a field shows a range, the names give up width first, down to --wt-space-6 or to
            the width the column's heading, measured into --name-heading-width, holds them at anyway.
-           The pinned cell may cover part of the price cell's end padding. */
+           The pinned cell may cover part of the price cell's end padding. The field is never
+           narrower than the range it shows: where the row then does not fit, the table scrolls
+           sideways under the pinned cell. */
         wt-data-table.ranges {
           --name-floor: max(
             var(--wt-space-6),
             var(--name-heading-width, 0px) - var(--tree-arrow-width)
           );
-          --narrow-price-field-width: clamp(
-            var(--wt-price-field-width),
-            var(--name-and-field-room) + var(--wt-space-2) - var(--name-floor),
-            var(--wt-price-range-field-width)
+          --narrow-price-field-width: max(
+            var(--range-field-width),
+            clamp(
+              var(--wt-price-field-width),
+              var(--name-and-field-room) + var(--wt-space-2) - var(--name-floor),
+              var(--wt-price-range-field-width)
+            )
           );
         }
         wt-data-table::part(override-field) {
@@ -487,6 +498,39 @@ export class MenuPricesTable extends LitElement {
     const head = this.#table()?.shadowRoot?.querySelector("thead");
     this.#measureInto("--actions-width", head?.querySelector('th[data-pinned="end"]'));
     this.#measureInto("--name-heading-width", head?.querySelector('[part="tree-heading"]'));
+    this.#fitRanges();
+  }
+
+  /** The ranges the fields show now, as their placeholders read; set on each draw. */
+  #ranges: string[] = [];
+  /** The ranges --range-text-width was last measured for, joined. */
+  #measuredRanges = "";
+  #canvas: CanvasRenderingContext2D | null = null;
+
+  /** Measured in a field's own placeholder font, as fonts differ between machines; a field not
+   * holding a price is chosen, whose placeholder is not drawn bold. */
+  #fitRanges(): void {
+    if (this.#ranges.length === 0) {
+      this.#measuredRanges = "";
+      this.style.removeProperty("--range-text-width");
+      return;
+    }
+    const fields = this.#table()?.shadowRoot;
+    const input = (
+      fields?.querySelector("wt-price-input:not([overriding])") ??
+      fields?.querySelector("wt-price-input")
+    )?.shadowRoot?.querySelector("input");
+    if (!input) return;
+    this.#measuredRanges = this.#ranges.join("\n");
+    const style = getComputedStyle(input, "::placeholder");
+    const context = (this.#canvas ??= document.createElement("canvas").getContext("2d")!);
+    context.font = style.font;
+    context.letterSpacing = style.letterSpacing;
+    const widest = Math.max(...this.#ranges.map((range) => context.measureText(range).width));
+    // A pixel to spare, as a box's reported width (`clientWidth`) is rounded to a whole pixel.
+    const width = `${Math.ceil(widest) + 1}px`;
+    if (this.style.getPropertyValue("--range-text-width") !== width)
+      this.style.setProperty("--range-text-width", width);
   }
 
   #measureInto(property: string, node: Element | null | undefined): void {
@@ -542,6 +586,7 @@ export class MenuPricesTable extends LitElement {
       void table.updateComplete.then(() => {
         this.#readFilter();
         if (reshaped) this.#fitActions();
+        else if (this.#ranges.join("\n") !== this.#measuredRanges) this.#fitRanges();
       });
     if (changed.has("outcome")) this.#outcomeFitted = this.#showOutcome();
     // The cells read these, and the table redraws only when its own properties change.
@@ -798,8 +843,7 @@ export class MenuPricesTable extends LitElement {
       placeholder = t("menu_prices.clash_placeholder");
       hint = clash === "own" ? sentence : t("menu_prices.override_help_clash");
     } else {
-      // As typed into a price field, which draws no sign.
-      placeholder = spanText(inherited, (amount) => amount);
+      placeholder = placeholderOf(inherited);
       hint = oneAmount(inherited)
         ? t("menu_prices.override_help").replace("{price}", priceText(inherited.low))
         : t("menu_prices.override_help_range").replace("{range}", spanText(inherited));
@@ -1128,8 +1172,18 @@ export class MenuPricesTable extends LitElement {
   }
 
   override render() {
+    this.#ranges = [
+      ...new Set(
+        this.#lines.flatMap((line) => {
+          const inherited = this.#inherited(line);
+          return this.#showsRange(line) && inherited.state === "price"
+            ? [placeholderOf(inherited)]
+            : [];
+        }),
+      ),
+    ];
     return html`${this.#clashMessage()}<wt-data-table
-        class=${this.#lines.some((line) => this.#showsRange(line)) ? "ranges" : ""}
+        class=${this.#ranges.length > 0 ? "ranges" : ""}
         @wt-filter-change=${() => this.#readFilter()}
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}

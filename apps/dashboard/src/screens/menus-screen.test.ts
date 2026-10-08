@@ -4346,14 +4346,17 @@ async function mountPrices(client: Api = api()) {
   return el;
 }
 
+// Where `fits` is false the field may start under the pinned row menu, the table's box scrolling
+// sideways under it: once scrolled until the field ends at the menu, the whole field is in view.
 it.each([
-  ["en-GB", "12.50", "15.00"],
-  ["es-ES", "12.50", "15.00"],
-  ["en-GB", "1000.00", "9999.99"],
-  ["es-ES", "1000.00", "9999.99"],
+  ["en-GB", "12.50", "15.00", "", true],
+  ["es-ES", "12.50", "15.00", "", true],
+  ["en-GB", "1000.00", "9999.99", "", true],
+  ["es-ES", "1000.00", "9999.99", "", false],
+  ["es-ES", "1000.00", "9999.99", "Verdana", false],
 ])(
-  "shows Lemonade's range placeholder whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s)",
-  async (locale, low, high) => {
+  "shows Lemonade's range placeholder whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s, font %s)",
+  async (locale, low, high, font, fits) => {
     await import("../dashboard-app.js");
     registerIcons(DASHBOARD_ICONS);
     const width = window.innerWidth,
@@ -4418,7 +4421,16 @@ it.each([
         displayName: "Ada",
       }),
     });
-    const { el: app } = await mountWidget<DashboardApp>("dashboard-app", { api: client }, "light");
+    const { el: app, host } = await mountWidget<DashboardApp>(
+      "dashboard-app",
+      { api: client },
+      "light",
+    );
+    if (font !== "") {
+      const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+      expect(family).not.toBe("");
+      host.style.setProperty("--wt-font-family", `${font}, ${family}`);
+    }
     const screen = () =>
       app.shadowRoot!.querySelector<MenusScreen>("dashboard-menus-screen") ?? undefined;
     await vi.waitFor(() => expect(screen() && prices(screen()!)?.rows.length).toBe(3));
@@ -4457,12 +4469,35 @@ it.each([
         room: field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
       };
       expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
-      const menu = rowOf(key).querySelector('td[data-pinned="end"]')!.getBoundingClientRect();
-      expect(
-        rowOf(key).querySelector("wt-price-input")!.getBoundingClientRect().right,
-        key,
-      ).toBeLessThanOrEqual(menu.left + 0.5);
+      const fieldOf = () => rowOf(key).querySelector("wt-price-input")!.getBoundingClientRect();
+      const menuOf = () =>
+        rowOf(key).querySelector('td[data-pinned="end"]')!.getBoundingClientRect();
+      const scroller = grid.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+      if (!fits) {
+        scroller.scrollLeft = 0;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        scroller.scrollLeft = Math.max(0, Math.ceil(fieldOf().right - menuOf().left));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expect(fieldOf().left, key).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().left);
+      }
+      const menu = menuOf();
+      expect(fieldOf().right, key).toBeLessThanOrEqual(menu.left + 0.5);
       expect(menu.right, key).toBeLessThanOrEqual(window.innerWidth);
+      rowOf(key).scrollIntoView({ block: "center", inline: "nearest" });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const trigger = rowOf(key)
+        .querySelector("wt-row-actions")!
+        .shadowRoot!.querySelector("button")!
+        .getBoundingClientRect();
+      const hit = grid.shadowRoot!.elementFromPoint(
+        trigger.left + trigger.width / 2,
+        trigger.top + trigger.height / 2,
+      );
+      expect(
+        hit !== null && rowOf(key).querySelector('td[data-pinned="end"]')!.contains(hit),
+        `${key} ⋮ covered`,
+      ).toBe(true);
+      scroller.scrollLeft = 0;
     }
   },
 );
