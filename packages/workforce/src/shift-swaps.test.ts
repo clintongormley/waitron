@@ -189,6 +189,13 @@ describe("requestSwap", () => {
       written: 0,
     });
   });
+
+  it("refuses an unknown toPersonId beside an unknown toShiftId — management.request_invalid, not shift.not_found", async () => {
+    expect(await unknownToPersonRefusal(async () => crypto.randomUUID())).toEqual({
+      refusal: { code: "management.request_invalid", params: { field: "toPersonId" } },
+      written: 0,
+    });
+  });
 });
 
 describe("acceptSwap", () => {

@@ -21,8 +21,7 @@ export interface AcceptSwapInput {
 
 /**
  * Records a `requested` swap and returns its id. The requester must own `fromShift`, and a supplied
- * `toShift` must be `toPerson`'s own (`swap.not_permitted`); either shift missing is `shift.not_found`,
- * and an unknown `toPerson` is `management.request_invalid`.
+ * `toShift` must be `toPerson`'s own (`swap.not_permitted`).
  */
 export async function requestSwap(tx: Transaction, input: RequestSwapInput): Promise<string> {
   const fromShiftOwner = await shiftOwner(tx, input.fromShiftId);
