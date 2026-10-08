@@ -948,21 +948,21 @@ export class MenuPreviewPanel extends LitElement {
       <div class="panes">
         <div
           class="pane"
-          data-test="document-pane"
-          tabindex=${this.preview !== null && !this.failed ? 0 : nothing}
-          role=${this.preview !== null && !this.failed ? "region" : nothing}
-          aria-labelledby=${this.preview !== null && !this.failed ? "document-heading" : nothing}
-        >
-          ${this.#renderDocument()}
-        </div>
-        <div
-          class="pane"
           data-test="changes-pane"
           tabindex="0"
           role="region"
           aria-labelledby="changes-heading"
         >
           ${this.#renderChanges()}
+        </div>
+        <div
+          class="pane"
+          data-test="document-pane"
+          tabindex=${this.preview !== null && !this.failed ? 0 : nothing}
+          role=${this.preview !== null && !this.failed ? "region" : nothing}
+          aria-labelledby=${this.preview !== null && !this.failed ? "document-heading" : nothing}
+        >
+          ${this.#renderDocument()}
         </div>
       </div>
       ${

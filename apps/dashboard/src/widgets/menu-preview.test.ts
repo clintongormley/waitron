@@ -1090,8 +1090,8 @@ it.each([
       const changesPane = q(el, '[data-test="changes-pane"]');
       expect(documentPane).not.toBeNull();
       expect(changesPane).not.toBeNull();
-      const left = documentPane!.getBoundingClientRect();
-      const right = changesPane!.getBoundingClientRect();
+      const left = changesPane!.getBoundingClientRect();
+      const right = documentPane!.getBoundingClientRect();
       if (width === 390) {
         expect(right.top).toBeGreaterThanOrEqual(left.bottom);
         expect(Math.abs(right.left - left.left)).toBeLessThan(1);

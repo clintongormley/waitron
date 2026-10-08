@@ -2932,8 +2932,9 @@ Follow-up Preview bundle (A349/A350/A351/A352/A383/A384) in progress: the first 
 step removes the repeated Live section, names and links includers beside Publish, shows clashes
 as a red sentence with their prices, and uses Unpublished changes as its heading. Its Clashes
 link now opens Price overrides with that filter selected once, after the rows load, even when
-All prices was remembered; subsequent choices are retained. The frozen Structure-style tree,
-grouped View links, Hide/Show all, Spanish conflicto wording and failed-refresh count still await
+All prices was remembered; subsequent choices are retained. A350 now places changes to the left
+of the menu on desktop and above it on a phone. The frozen Structure-style tree, grouped View
+links, Hide/Show all, Spanish conflicto wording and failed-refresh count still await
 the bundle's remaining steps.
 The bundle has not landed.
 The [design](superpowers/specs/2026-10-06-w95-menu-preview-design.md) and

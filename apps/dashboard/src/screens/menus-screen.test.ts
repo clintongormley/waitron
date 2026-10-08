@@ -5947,8 +5947,8 @@ describe("publishing", () => {
       const el = await mount(client, PREVIEW_PATH, theme);
       await vi.waitFor(() => expect(inPanel(el, "changes")).not.toBeNull());
       const panes = () => [
-        inPanel(el, "document-pane")!.getBoundingClientRect(),
         inPanel(el, "changes-pane")!.getBoundingClientRect(),
+        inPanel(el, "document-pane")!.getBoundingClientRect(),
       ];
       const checkWidth = () => {
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
