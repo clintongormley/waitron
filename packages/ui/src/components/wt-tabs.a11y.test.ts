@@ -19,7 +19,7 @@ describe.each(["light", "dark"] as const)("tabs accessibility (%s)", (theme) => 
     await expectNoA11yViolations(host);
   });
 
-  test("a strip scrolling beside a whole action in a narrow row stays accessible", async () => {
+  test("a strip scrolling beside an action in a narrow row stays accessible", async () => {
     const el = (await mountThemed(
       '<wt-tabs label="Printers"><div slot="actions"><button>Añadir un agente</button></div><p slot="queue">Jobs</p><p slot="agents">Agents</p></wt-tabs>',
       theme,

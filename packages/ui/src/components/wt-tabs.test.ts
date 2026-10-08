@@ -279,7 +279,7 @@ test.each([300, 390, 641])(
   },
 );
 
-test("a strip beside a wide action scrolls, and keyboard focus never leaves a tab under the action", async () => {
+test("a strip beside a wide action scrolls, and End brings the last tab clear of the action", async () => {
   const el = await wideAction(390);
   const action = el
     .querySelector<HTMLButtonElement>("button[slot=actions]")!
@@ -354,7 +354,7 @@ test("right to left, a selected tab that fits scrolls in only as far as its end"
   expect(Math.abs(tab.left - strip.left)).toBeLessThanOrEqual(1);
 });
 
-test("control: at 1280 px the tabs and a wide action sit on one line with nothing scrolling", async () => {
+test("control: at 1280 px neither the tabs nor a wide action scroll", async () => {
   const el = await wideAction(1280);
   expect(tablist(el).scrollWidth).toBeLessThanOrEqual(tablist(el).clientWidth);
   const area = el.shadowRoot!.querySelector<HTMLElement>('[part="tab-actions"]')!;

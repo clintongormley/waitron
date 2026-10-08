@@ -9725,7 +9725,7 @@ describe.each(["en", "es-ES"] as const)(
       for (const { name, box } of tabBoxes) expect(inside(box, strip), name).toBe(true);
     });
 
-    it("keeps the action on the tabs' line at every screen width from 900 px down to 300 px", async () => {
+    it("keeps the action on the tabs' line at screen widths from 900 px down to 305 px, every 7 px", async () => {
       const { el, host } = await layoutAt("agents", 900);
       for (let width = 900; width >= 300; width -= 7) {
         host.style.width = `${width}px`;

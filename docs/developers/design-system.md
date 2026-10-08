@@ -3039,11 +3039,13 @@ there on the tabs' line at every width: never let the row wrap the action onto a
 action, ending where the actions area begins. The actions area keeps its whole width up to the row
 less two touch targets; actions wider than that scroll within it. A selected tab wider than the
 strip shows its start: in Spanish at a 390 px window (a 310 px screen), Printers' "Agentes de
-impresión" tab is cut that way beside "Añadir un agente" (pinned in
-`apps/dashboard/src/screens/printers-screen.test.ts`). Prep stations, whose two add buttons share
-the area, caps it at half the row through the `tab-actions` part so its tabs keep that half
-(pinned in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`). Keep actions for
-other tabs out of sight until their tab is selected.
+impresión" tab is cut that way beside "Añadir un agente" (the "shows the selected tab whole at
+every window width except the Spanish Agents tab on a phone" case in
+`apps/dashboard/src/screens/printers-screen.test.ts`). Prep stations, which shows both its add
+buttons (New station and New watcher) on every tab rather than only on their own, caps the area at
+half the row through the `tab-actions` part so its tabs keep that half (the "keeps half of a … px
+tab row for the tabs" cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
+Keep actions for other tabs out of sight until their tab is selected.
 A tab whose list is a tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
 Structure tab puts them in the ⋮ of the menu's own row and of each section the menu owns, and
 nothing in the `actions` slot (the "the Structure tree" cases in
