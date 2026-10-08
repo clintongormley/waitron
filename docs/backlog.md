@@ -1169,6 +1169,13 @@ unused `units` property is gone (it closes W75's leftover).
   - A384, from #1383's review: the Preview bundle drops the heading's stale clash count after
     a failed live refresh, retaining known publication facts and the existing refresh error.
     Both-theme browser checks load 2, fail the refresh, then recover with 3.
+- **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
+  2026-10-07: "would it be possible to have an 'Undo' link as well?"; PARKED, not queued — owner
+  2026-10-08: take it from here when a lane has room).** Started in lane D, then parked for A366.
+  Its work so far is on a LOCAL branch only — `feat/menu-preview-undo` at `e04b3abe7`, in the
+  worktree `waitron-feat-menu-preview-undo` (no push, no pull request): the plan, and the scalar
+  and presentation Undo checkpoint. What was left at the park: the rest of its Task 2's controls,
+  the structural Undo commands, and the server and dashboard wiring.
 - **A347, owner 2026-10-07 — DONE (#1392, a disabled product or size is on
   no menu):** disabling a product takes it off every menu list in the same transaction and clears
   its prices on every menu, so each menu's next publish leaves it out; a Device Home Page shortcut
