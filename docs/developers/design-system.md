@@ -1577,7 +1577,9 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   while its inner button is disabled;
 - a create form with nothing typed is unchanged. A form whose opened state is already savable (a
   duplicate, a pre-filled value the operator must confirm) passes `{ savableAtOpen: true }`, so it
-  is never stuck disabled;
+  is never stuck disabled. So does the option window when it opens showing a refusal the options
+  list handed it: pressing Save untouched gives the option back to the list, which clears its
+  refusal (owner, 2026-10-08, A410). The option window opened any other way opens quiet;
 - a changed form that is blocked — failing its own checks after the first press, busy, a nested
   window open — stays drawn `primary` and disabled. A refused save leaves the draft changed, so the
   action stays enabled;

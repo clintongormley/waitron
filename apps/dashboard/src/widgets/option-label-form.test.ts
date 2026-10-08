@@ -274,13 +274,13 @@ it("reports a cancel when its own dialog is dismissed", async () => {
 });
 
 it.each(["label-customer-name-en", "label-kitchen-name", "label-name"])(
-  "shows an error given for %s beside it, in sight, and Save works once anything changes",
+  "shows an error given for %s beside it, in sight, with Save working throughout",
   async (key) => {
     const { el } = await mount({ value: rare, errors: { [key]: "Refused." } });
 
     expect(field(el, key).error).toBe("Refused.");
-    expect(saveOf(el).disabled).toBe(true);
-    expect(saveOf(el).variant).toBe("secondary");
+    expect(saveOf(el).disabled).toBe(false);
+    expect(saveOf(el).variant).toBe("primary");
 
     await toggle(el, "label-available", false);
     expect(field(el, key).error).toBe("Refused.");
@@ -373,11 +373,11 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
 
-it("keeps a field's refusal until that field changes, with Save working once anything changes", async () => {
+it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
   const { el } = await mount({ value: rare, errors: { "label-kitchen-name": "Too long." } });
   expect(field(el, "label-kitchen-name").error).toBe("Too long.");
-  expect(saveOf(el).disabled).toBe(true);
-  expect(saveOf(el).variant).toBe("secondary");
+  expect(saveOf(el).disabled).toBe(false);
+  expect(saveOf(el).variant).toBe("primary");
 
   await type(el, "label-name", "Very rare");
   expect(field(el, "label-kitchen-name").error).toBe("Too long.");
@@ -433,7 +433,7 @@ it("keeps a refusal naming no field in the bottom message alone, leaving Save wo
   const submitted = record(host);
 
   expect(await bottomOf(el)).toBe("Refused.");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 
   await type(el, "label-kitchen-name", "RR");
   expect(await bottomOf(el)).toBe("Refused.");

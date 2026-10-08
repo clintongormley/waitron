@@ -153,6 +153,36 @@ it("a refusal leaves a changed option's Save enabled", async () => {
   expect(await saveState(el)).toEqual(ready);
 });
 
+it("an option opened showing a refusal opens with Save active, and an untouched press hands it back", async () => {
+  const { el } = await mountWidget<OptionLabelForm>("dashboard-option-label-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "es"] },
+    value: RARE,
+    errors: { "label-name": "Already used." },
+  });
+  const submit = submissions(el);
+  expect(field(el, "label-name").error).toBe("Already used.");
+  expect(await saveState(el)).toEqual(ready);
+  await press(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value).toEqual(RARE);
+});
+
+it("the same option reopened without a refusal opens with Save quiet", async () => {
+  const { el } = await mountWidget<OptionLabelForm>("dashboard-option-label-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "es"] },
+    value: RARE,
+    errors: { "label-name": "Already used." },
+  });
+  expect(await saveState(el)).toEqual(ready);
+  el.open = false;
+  await el.updateComplete;
+  el.errors = {};
+  el.open = true;
+  expect(await saveState(el)).toEqual(quiet);
+});
+
 it("Cancel on a changed option with no leave coordinator reports the cancel", async () => {
   const { el } = await mount(RARE);
   await type(el, "label-name", "Very rare");

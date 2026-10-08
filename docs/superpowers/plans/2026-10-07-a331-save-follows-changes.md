@@ -1403,6 +1403,9 @@ Split from the option list (2a.3b) for size; the window goes first, and each com
   src/widgets/modifier-forms.unsaved src/widgets/section-details-form.test.ts`
   (`section-details-form.test.ts` ~347–352 mounts the option window for a style comparison only).
 
+_2026-10-08 (owner, A410): the option window opened showing a refusal the list handed it now opens
+with Save active; see design-system.md → Forms._
+
 ### Task 2a.3b — option lists (`widgets/option-list-form.ts`)
 
 - `save` (~794–799, fixed `variant="primary"`, `.disabled=${this.busy || invalid}`) on `#scope`

@@ -1615,16 +1615,15 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
     label and on a reprint, and two on the till. Whether they should all be drawn quiet the same
     way is not decided; none is queued;
   - when the server refuses an options list's save because of one option, opening that option's
-    window afterwards shows the refusal with the window's Save quiet until something in the window
-    changes (the list hands the refusal to the window, `option-list-form.ts`). A refusal still
-    never disables Save once something has changed;
+    window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
+    window with Save active, and pressing it untouched gives the option back to the list, which
+    clears that option's refusal; the window opened any other way still opens quiet;
   - on the autumn clock-change day, the Change time form can no longer move a scheduled menu
     version to the other copy of the same repeated local time (the other 02:30) in one step. The
     form opens on the stored date and time, so an untouched press now does nothing, where it used
     to bring up the server's "which 02:30" choice, and typing another time and then the stored one
     back is no change. After a real edit to a repeated time the choice still appears, so the other
-    02:30 is reached only by two moves through another time. For the owner: does moving between the
-    two 02:30s need its own way in?
+    02:30 is reached only by two moves through another time. Owner, 2026-10-08: keep it as built.
 
   Looked at on 2026-10-08 against the demo venue in Chromium (English, 1280px, light, each form
   unchanged and after one edit; the catalogue default also after a save; the extras list, the
