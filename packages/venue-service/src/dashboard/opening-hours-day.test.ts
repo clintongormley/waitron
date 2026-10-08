@@ -28,6 +28,7 @@ export function dayFixture(): OpeningHoursModel {
             colour: "green",
             menuId: "m1",
             staffMenuIds: [],
+            endOffsetMinutes: 0,
             weekdays: [1, 2],
           },
         ],
@@ -50,6 +51,7 @@ export function dayFixture(): OpeningHoursModel {
             colour: "blue",
             menuId: "m1",
             staffMenuIds: [],
+            endOffsetMinutes: 0,
             weekdays: [1, 2],
           },
         ],
@@ -393,7 +395,11 @@ it("creates a nested period once and selects it in the same range with its times
   await expect.poll(() => day.shadowRoot!.querySelector("period-editor")).toBeNull();
   await range.updateComplete;
   expect(writes).toEqual([
-    ["/management-api/venue-service/departments/d1/menu-periods", "POST", periodInput],
+    [
+      "/management-api/venue-service/departments/d1/menu-periods",
+      "POST",
+      { ...periodInput, endOffsetMinutes: 0 },
+    ],
   ]);
   expect(
     range.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=periodId]")!.value,
@@ -662,4 +668,51 @@ it("shows an empty department state and recovers from an unreadable timezone", a
   await day.updateComplete;
   expect(day.shadowRoot!.textContent).toContain("No departments yet.");
   expect(save(day)).toBeNull();
+});
+
+it("explains an offset timetable refusal beside its department and retains the retryable draft", async () => {
+  const day = await mount(async () => {
+    throw {
+      code: "menu_timetable.invalid",
+      params: { field: "days.1.slots.0.endsAt", reason: "end_offset", periodId: "p1" },
+    };
+  });
+  resize(day);
+  await day.updateComplete;
+  const submitted = structuredClone(grid(day).columns[0]!.slots);
+  save(day).click();
+  await expect
+    .poll(() => day.shadowRoot!.querySelector("[data-department-error=d1]")?.textContent)
+    .toBe("Change this period’s end offset to fit these time ranges.");
+  expect(grid(day).columns[0]!.slots).toEqual(submitted);
+  expect(save(day).disabled).toBe(false);
+});
+
+it("keeps a created period's signed offset in its wire body and department range choice", async () => {
+  const writes: unknown[] = [];
+  const day = await mount(async (...args) => {
+    writes.push(args);
+    return { id: "late" };
+  });
+  const { range, period } = await newPeriod(day);
+  for (const [name, value] of [
+    ["name", "Tea"],
+    ["menuId", "m1"],
+    ["endOffsetMinutes", "+14"],
+  ])
+    emit(period.shadowRoot!.querySelector(`[name=${name}]`)!, "wt-change", { value });
+  await period.updateComplete;
+  period.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
+  await expect.poll(() => day.shadowRoot!.querySelector("period-editor")).toBeNull();
+  await range.updateComplete;
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/departments/d1/menu-periods",
+      "POST",
+      { name: "Tea", colour: "red", menuId: "m1", staffMenuIds: [], endOffsetMinutes: 14 },
+    ],
+  ]);
+  expect(
+    range.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=periodId]")!.value,
+  ).toBe("late");
 });

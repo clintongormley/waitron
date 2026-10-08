@@ -295,6 +295,12 @@ export class OpeningHoursScreen extends LitElement {
         cell: (row) => row.staffMenuIds.map((id) => this.menuLabel(id)).join(", "),
       },
       {
+        key: "endOffsetMinutes",
+        label: t("menu.end_offset_column"),
+        cell: (row) =>
+          row.endOffsetMinutes > 0 ? `+${row.endOffsetMinutes}` : String(row.endOffsetMinutes),
+      },
+      {
         key: "weekdays",
         label: t("menu.period_uses"),
         cell: (row) =>

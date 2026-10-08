@@ -4,7 +4,7 @@
 // `deploymentEnvironment` resolves to `preproduction` for the seeded sales.
 
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -72,6 +72,8 @@ function tillConfigFor(venue: Venue): OriginConfig {
 }
 
 describe("demo seed end-to-end", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("keeps the chicken's existing options when attaching its optional extras", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
@@ -100,6 +102,7 @@ describe("demo seed end-to-end", () => {
   });
 
   it("seeds a venue whose reports, menus, media, and mixed order all compose", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-08T10:00:00.000Z") });
     const venue = await provisionVenue();
     const start = Date.now();
 

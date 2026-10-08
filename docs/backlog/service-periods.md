@@ -11,7 +11,7 @@ their full text.
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
   a name with one customer menu plus staff-only menus, a department's day is time ranges each given
-  a period, and the till sells only the current period's menus. Zones can be closed for part of
+  a period, with last-order and leftover windows set by its signed end offset. Zones can be closed for part of
   their department's time; prep stations lose their hours and fallbacks; routing cells can name
   periods; a printer shared by stations prints one combined ticket; watchers become kitchen
   screens and monitors on device profiles; receipts move to departments with translated text.
@@ -38,14 +38,6 @@ their full text.
   settings shared by departments and zones, now (it needs slice 1 only); each zone's closed times
   on its Zones tab after slice 2; the floor plan on the Zones tab after A429's editor — with its
   open decisions at its top.
-
-## A432 — a service period's signed end offset
-
-Owner, 2026-10-08: one signed whole-minute setting per service period, measured from its end.
-Slice 1 fixes it at 0. Negative means last orders before the end; positive allows unsent dishes
-within the window after it. Keep the editor, server refusal and till selection/sending rules aligned.
-The implementation needs its own small plan, migration and review. Campaign lane D queues A432
-immediately after slice 1.
 
 ## Changing the business-day start after saving service hours
 

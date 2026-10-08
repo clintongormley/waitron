@@ -889,13 +889,18 @@ function isVersionRefusal(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "menu.version_changed";
 }
 
-/** Whether a poll names another set of menus, or another version of one, than the till loaded. */
-function versionsMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"]): boolean {
+/** Whether menu membership, versions or selection/sending eligibility differ from the loaded snapshot. */
+function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"]): boolean {
   return (
     loaded.length !== polled.length ||
-    polled.some(
-      (menu) => loaded.find((own) => own.id === menu.menuId)?.versionId !== menu.versionId,
-    )
+    polled.some((menu) => {
+      const own = loaded.find((entry) => entry.id === menu.menuId);
+      return (
+        own?.versionId !== menu.versionId ||
+        own.orderable !== menu.orderable ||
+        own.sendable !== menu.sendable
+      );
+    })
   );
 }
 
@@ -908,10 +913,16 @@ class ZoneOfferIndex {
   live: TillMenuOffer[] = [];
   byId = new Map<string, TillMenuOffer>();
   versions = new Map<string, string>();
+  selectable = new Set<string>();
+  sendable = new Set<string>();
   /** False after a load that failed, when there is nothing to judge a line against. */
   loaded = false;
 
   load(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
+    this.selectable = new Set(
+      catalogue.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
+    );
+    this.sendable = new Set(catalogue.menus.filter((menu) => menu.sendable).map((menu) => menu.id));
     this.#loaded = catalogue.offers;
     this.#unavailableKey = null;
     this.#setLive(catalogue.offers);
@@ -947,7 +958,10 @@ class ZoneOfferIndex {
       if (!this.loaded || line.workingOrderLineId !== undefined) return undefined;
       const offer = this.byId.get(line.product.menuItemId ?? "");
       if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
-      return lineBlock(line, offer)?.reason;
+      return (
+        lineBlock(line, offer)?.reason ??
+        (offer !== undefined && !this.sendable.has(offer.menuId) ? "period_ended" : undefined)
+      );
     });
   }
 }
@@ -1500,7 +1514,11 @@ export class TillApp extends LitElement {
       this.#syncBasketDraft();
     });
     this.#store.on("refused", (payload) => {
-      this.errorKey = { overLimit: (payload as BasketRefusal).limit };
+      const refusal = payload as BasketRefusal;
+      this.errorKey =
+        refusal.code === "menu_period.not_running"
+          ? "menu.last_orders_ended"
+          : { overLimit: refusal.limit };
     });
   }
 
@@ -2813,6 +2831,8 @@ export class TillApp extends LitElement {
     loaded = true,
   ): void {
     this.#counterOffers.load(catalogue, loaded);
+    this.#store.canSelectProduct = (product) =>
+      this.#counterOffers.selectable.has(product.catalogueId ?? "");
     this.menus = catalogue.menus;
     this.counterService = loaded ? catalogue.service : null;
     this.counterDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
@@ -2863,6 +2883,8 @@ export class TillApp extends LitElement {
   async #markUnsellable(round: WorkingOrderStore): Promise<void> {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined) return;
+    round.canSelectProduct = (product) =>
+      this.#tableOffers.selectable.has(product.catalogueId ?? "");
     this.#markedRounds.add(round);
     await this.#reloadTableOffers(zoneId);
   }
@@ -2955,7 +2977,7 @@ export class TillApp extends LitElement {
         state.service.periodName !== this.counterService?.periodName;
       const busy = this.submitting || this.parking || this.placing;
       if (
-        (versionsMoved(this.menus, state.menus) || serviceMoved) &&
+        (menusMoved(this.menus, state.menus) || serviceMoved) &&
         !busy &&
         this.basketRefresh === undefined
       )
@@ -2971,7 +2993,7 @@ export class TillApp extends LitElement {
       const serviceMoved =
         state.service.open !== this.tableService?.open ||
         state.service.periodName !== this.tableService?.periodName;
-      if (!versionsMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
+      if (!menusMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
       else
         void this.#reloadTableOffers(zoneId).then((read) => {
           if (read) this.#reconcileDraft(false);
@@ -3095,6 +3117,8 @@ export class TillApp extends LitElement {
     if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
     if (round === this.#draftSync?.store) this.#draftRefreshDue = false;
     const outcome = this.#reconcileBasket(round, this.#tableOffers);
+    round.canSelectProduct = (product) =>
+      this.#tableOffers.selectable.has(product.catalogueId ?? "");
     this.#markedRounds.add(round);
     this.#markRounds(true);
     return outcome;
@@ -3133,6 +3157,10 @@ export class TillApp extends LitElement {
   async #onConfirmPayment(event: Event, retried = false): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
+    if (this.#store.lines.some((line) => line.blocked === "period_ended")) {
+      this.errorKey = "menu.last_orders_ended";
+      return;
+    }
     if (this.#askInvoiceRecipientForLargeBill()) return;
     this.submitting = true;
     this.#counterSends++;
@@ -5487,6 +5515,10 @@ export class TillApp extends LitElement {
     const tableId = this.activeTableId;
     const party = this.orderParty;
     if (tabId === undefined || store?.sending === true) return;
+    if (sent?.some((line) => line.blocked === "period_ended")) {
+      this.errorKey = "menu.last_orders_ended";
+      return;
+    }
     if (party === null) {
       this.errorKey = "table.error";
       return;

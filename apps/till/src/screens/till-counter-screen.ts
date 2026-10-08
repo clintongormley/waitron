@@ -291,6 +291,7 @@ export class TillCounterScreen extends LitElement {
             ? nothing
             : html`<p role="status" data-service-period>${this.service?.periodName}</p>`
       }
+      ${this.service?.open === true && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
       ${
         this.service?.open === true
           ? html`<till-menu-switcher

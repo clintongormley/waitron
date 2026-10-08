@@ -321,6 +321,7 @@ async function ringCafe(el: TillApp, screen: TillTableOrderScreen) {
   store.addProduct(
     {
       id: "cafe",
+      catalogueId: screen.selectedMenuId ?? "menu-dinner",
       menuItemId: "menu-item-cafe-0",
       name: "Café",
       pricingUnit: "each",
@@ -2368,6 +2369,8 @@ describe("till-app table ordering: a menu published while a table is open", () =
         menus: (zoneId === floorZone.id ? diningOffers : counterOffers).menus.map((menu) => ({
           menuId: menu.id,
           versionId: menu.versionId,
+          orderable: menu.orderable,
+          sendable: menu.sendable,
         })),
         unavailable: {
           products: ["cordero"],
@@ -2412,8 +2415,13 @@ describe("till-app table ordering: a menu published while a table is open", () =
         service: { open: true, periodName: null },
         menus:
           zoneId === floorZone.id
-            ? [{ menuId: "menu-dinner", versionId: "v2" }]
-            : counterOffers.menus.map((menu) => ({ menuId: menu.id, versionId: menu.versionId })),
+            ? [{ menuId: "menu-dinner", versionId: "v2", orderable: true, sendable: true }]
+            : counterOffers.menus.map((menu) => ({
+                menuId: menu.id,
+                versionId: menu.versionId,
+                orderable: menu.orderable,
+                sendable: menu.sendable,
+              })),
         unavailable: { products: [], optionLabels: [] },
       }));
       const { el } = await mountApp({

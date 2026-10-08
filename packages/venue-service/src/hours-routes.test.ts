@@ -24,7 +24,7 @@ import {
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { civilDateOf } from "@waitron/reporting";
-import { locationId } from "@waitron/shared";
+import { AppError, locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
   readHoursModel,
@@ -1044,4 +1044,22 @@ describe("station-only Hours request boundary", () => {
     );
     expect(await venueDates(fx)).toEqual([]);
   });
+});
+
+it("rolls back POST date and cells when an after-change participant refuses", async () => {
+  const fx = await fixture();
+  participants.push({
+    async copy() {},
+    async beforeDelete() {},
+    async afterChange() {
+      throw new AppError("hours.invalid", { field: "date" });
+    },
+  });
+  const before = await db.select().from(specialDateHours);
+  await refused(await send(fx, "POST", "/special-dates", fx.manager, input()), 400, {
+    code: "hours.invalid",
+    params: { field: "date" },
+  });
+  expect(await venueDates(fx)).toEqual([]);
+  expect(await db.select().from(specialDateHours)).toEqual(before);
 });

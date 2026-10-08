@@ -75,6 +75,7 @@ const menu: TillZoneMenu = {
   name: "Lunch",
   isDefault: true,
   orderable: true,
+  sendable: true,
   audience: "customer",
   versionId: "v1",
   structure: {
@@ -146,6 +147,7 @@ function servedMenu(key: string, name: string, offered: TillProduct[]): TillZone
     name,
     isDefault: false,
     orderable: true,
+    sendable: true,
     audience: "customer",
     versionId: `v-${key}`,
     structure: {

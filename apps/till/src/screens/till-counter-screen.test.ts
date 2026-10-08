@@ -11,6 +11,7 @@ import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
 const cafe: TillProduct = {
   id: "p1",
+  catalogueId: "cat-default",
   name: "Café",
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
@@ -56,6 +57,10 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
   mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
     products,
+    menus: servedMenus(
+      [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
+      [],
+    ),
     counterTab,
     operatorName: "Ana",
     ...over,

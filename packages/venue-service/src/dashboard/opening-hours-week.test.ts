@@ -36,6 +36,7 @@ export function fixture(): OpeningHoursModel {
             colour: "green",
             menuId: "m1",
             staffMenuIds: [],
+            endOffsetMinutes: 0,
             weekdays: [1],
           },
         ],
@@ -765,4 +766,61 @@ it("preserves all six other weekdays when staging a Sunday range", async () => {
       },
     ],
   ]);
+});
+
+it("explains an offset timetable refusal beside its day and retains the retryable draft", async () => {
+  const week = await mount(async () => {
+    throw {
+      code: "menu_timetable.invalid",
+      params: { field: "days.2.slots.0.endsAt", reason: "end_offset", periodId: "p1" },
+    };
+  });
+  await add(week);
+  const submitted = structuredClone(grid(week).columns.find((column) => column.key === "2")!.slots);
+  week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
+  await expect
+    .poll(() => week.shadowRoot!.querySelector("[data-day-error='2']")?.textContent)
+    .toBe("Tuesday: Change this period’s end offset to fit these time ranges.");
+  expect(grid(week).columns.find((column) => column.key === "2")!.slots).toEqual(submitted);
+  expect(
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-week]")!
+      .disabled,
+  ).toBe(false);
+});
+
+it("keeps a created period's signed offset in its wire body and nested range choice", async () => {
+  const writes: unknown[] = [];
+  const week = await mount(async (...args) => {
+    writes.push(args);
+    return { id: "late" };
+  });
+  const dialog = await range(week);
+  emit(dialog.shadowRoot!.querySelector("[name=periodId]")!, "wt-combobox-action", {
+    value: "new",
+  });
+  await week.updateComplete;
+  const period =
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["period-editor"]>("period-editor")!;
+  await period.updateComplete;
+  for (const [name, value] of [
+    ["name", "Tea"],
+    ["menuId", "m1"],
+    ["endOffsetMinutes", "-15"],
+  ])
+    emit(period.shadowRoot!.querySelector(`[name=${name}]`)!, "wt-change", { value });
+  await period.updateComplete;
+  period.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
+  await expect.poll(() => week.shadowRoot!.querySelector("period-editor")).toBeNull();
+  await dialog.updateComplete;
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/departments/d1/menu-periods",
+      "POST",
+      { name: "Tea", colour: "red", menuId: "m1", staffMenuIds: [], endOffsetMinutes: -15 },
+    ],
+  ]);
+  expect(
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=periodId]")!
+      .value,
+  ).toBe("late");
 });

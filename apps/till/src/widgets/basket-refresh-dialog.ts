@@ -15,6 +15,7 @@ export interface BasketRefreshDetail {
 }
 
 const REASON_WORDS: Record<BlockReason, StringKey> = {
+  period_ended: "basket_refresh.period_ended",
   removed: "basket_refresh.removed",
   variant_removed: "basket_refresh.removed",
   not_sold_separately: "basket_refresh.not_sold_separately",

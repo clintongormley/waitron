@@ -1360,7 +1360,11 @@ export class TillTableOrderScreen extends LitElement {
   @state() private takeOverSent: number | null = null;
 
   get #draftStore(): WorkingOrderStore | null {
-    return this.draftStore === undefined ? this.#ownDraft : this.draftStore;
+    const store = this.draftStore === undefined ? this.#ownDraft : this.draftStore;
+    if (store !== null)
+      store.canSelectProduct = (product) =>
+        this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
+    return store;
   }
 
   /** The draft this screen re-renders on. */
@@ -2464,6 +2468,8 @@ export class TillTableOrderScreen extends LitElement {
   /** The browser gets the products through the diet lens; a tab line's name still resolves against
    * the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
   #menuBrowser(store: WorkingOrderStore): TemplateResult {
+    store.canSelectProduct = (product) =>
+      this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
     const menu = shownMenu(this.menus, this.selectedMenuId);
     return html`<till-menu-browser
       class="round-control"
@@ -2472,7 +2478,13 @@ export class TillTableOrderScreen extends LitElement {
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}
       .menus=${this.menus}
-      .servedProducts=${this.#searchProducts(this.products, "", this.selectedDiet)}
+      .servedProducts=${this.#searchProducts(
+        this.products.filter((product) =>
+          this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable),
+        ),
+        "",
+        this.selectedDiet,
+      )}
       .store=${store}
       .handheld=${this.handheld}
       weighs
@@ -2719,6 +2731,7 @@ export class TillTableOrderScreen extends LitElement {
       html`<wt-button
         variant="secondary"
         data-last-added-step=${by}
+        ?disabled=${by === 1 && store.canSelectProduct?.(line.product) === false}
         aria-label=${`${t(key)} · ${name}`}
         @click=${() =>
           count + by < 1
@@ -2802,6 +2815,10 @@ export class TillTableOrderScreen extends LitElement {
         <p role="status" data-service-closed>
           ${t("menu.department_closed").replace("{department}", () => this.departmentName)}
         </p>
+      </div>`;
+    if (!this.menus.some((menu) => menu.orderable))
+      return html`<div class="grid-region">
+        <p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>
       </div>`;
     return html`<div class="grid-region">
       ${this.service?.periodName == null ? nothing : html`<p role="status" data-service-period>${this.service?.periodName}</p>`}
@@ -3025,17 +3042,22 @@ export class TillTableOrderScreen extends LitElement {
       key: StringKey,
       variant: "primary" | "secondary",
       name: string = action.kind,
-    ) =>
-      html`<wt-button
+    ) => {
+      const selectedOnly = action.kind === "send-selected" || action.kind === "fire-selected";
+      const expired = store.lines.every(
+        (line) => line.blocked === "period_ended" || (selectedOnly && !this.#selected.has(line)),
+      );
+      return html`<wt-button
         class="draft-action"
         data-draft-action=${name}
-        variant=${variant}
+        variant=${expired ? "secondary" : variant}
         size="lg"
-        ?disabled=${disabled}
+        ?disabled=${disabled || expired}
         @click=${() => this.#openPreview(store, action)}
       >
         ${t(key)}
       </wt-button>`;
+    };
     if (this.#isLaterAddition(store)) {
       return html`<div class="draft-bar">
         ${this.#destinationChoice()}

@@ -324,6 +324,9 @@ const defaultStation = {
 /** A menu's structure listing one offer, and a Device Home Page with no shortcuts. */
 function servedAs(menuItemId: string, productId: string) {
   return {
+    audience: "customer" as const,
+    orderable: true,
+    sendable: true,
     structure: { members: [{ kind: "product" as const, menuItemId, productId }] },
     home: {
       shortcuts: [],
@@ -669,6 +672,7 @@ async function ringCafe(
   store.addProduct(
     {
       id: "cafe",
+      catalogueId: "cat-default",
       menuItemId: "menu-item-cafe-0",
       name: "Café",
       pricingUnit: "each",
@@ -5565,6 +5569,7 @@ describe("till-app", () => {
   it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
     const homeFields = {
       orderable: true,
+      sendable: true,
       audience: "customer" as const,
       structure: { members: [] },
       home: {

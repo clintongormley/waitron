@@ -98,11 +98,9 @@ export interface OrderLine {
  * `"refused"` reports an edit the basket refused, carrying {@link BasketRefusal}. */
 export type WorkingOrderEvent = "changed" | "product-selected" | "refused";
 
-/** An edit refused because it would take the basket past the simplified-invoice limit. */
-export interface BasketRefusal {
-  code: "sale.total_exceeds_simplified_limit";
-  limit: string;
-}
+export type BasketRefusal =
+  | { code: "sale.total_exceeds_simplified_limit"; limit: string }
+  | { code: "menu_period.not_running" };
 
 export type WorkingOrderListener = (payload?: unknown) => void;
 
@@ -210,6 +208,13 @@ export class WorkingOrderStore {
   #lastAdded?: OrderLine;
   #limit: Decimal | null = null;
   #fullInvoiceOrderId?: string;
+  canSelectProduct: ((product: TillProduct) => boolean) | undefined;
+
+  #refusesSelection(product: TillProduct): boolean {
+    if (this.canSelectProduct?.(product) !== false) return false;
+    this.emit("refused", { code: "menu_period.not_running" } satisfies BasketRefusal);
+    return true;
+  }
 
   /**
    * The largest total this regime records for a sale with no named customer (the server's
@@ -382,6 +387,7 @@ export class WorkingOrderStore {
 
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#refusesEdits) return;
+    if (this.#refusesSelection(product)) return;
     const line = newLine(product, quantity, selection);
     if (this.#passesLimit(ZERO, lineGross(line))) return;
     this.#lines.push(line);
@@ -396,6 +402,7 @@ export class WorkingOrderStore {
    */
   addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#refusesEdits) return;
+    if (this.#refusesSelection(product)) return;
     const line = newLine(product, quantity, selection);
     const into = mergeTarget(this.#lines, line);
     const merged =
@@ -443,6 +450,11 @@ export class WorkingOrderStore {
       return;
     }
     const line = this.#lines[index]!;
+    if (
+      compareDecimal(decimal(quantity), decimal(line.quantity)) > 0 &&
+      this.#refusesSelection(line.product)
+    )
+      return;
     assertQuantityPrecision(quantity, productUnit(line.product).precision, {
       positive: true,
     });

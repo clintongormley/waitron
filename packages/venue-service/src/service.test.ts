@@ -7,6 +7,7 @@ describe("VENUE_SERVICE", () => {
     expect(Object.keys(VENUE_SERVICE).sort()).toEqual([
       "acceptDepartmentTransfer",
       "acknowledgeKitchenNotice",
+      "assertPeriodEndOffsets",
       "assertProfileBinding",
       "assertProfileZone",
       "copyLineContext",

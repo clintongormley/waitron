@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
@@ -54,6 +55,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
                       colour: "green",
                       menuId: "lunch",
                       staffMenuIds: [],
+                      endOffsetMinutes: 0,
                       weekdays: [1, 3],
                     },
                   ],
@@ -88,5 +90,74 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       }
     }
     await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
+  describe.each(["light", "dark"] as const)("%s", (theme) => {
+    test.each([1280, 390])("at %s px", async (width) => {
+      setLocale(locale);
+      history.replaceState(null, "", "/manage/opening-hours/view/periods");
+      await page.viewport(width, 900);
+      try {
+        const wrapper = await mountThemed("<div></div>", theme);
+        const screen = document.createElement(
+          "dashboard-opening-hours-screen",
+        ) as OpeningHoursScreen;
+        screen.api = new OpeningHoursApi((async () => ({
+          timeZone: "Europe/Madrid",
+          clockReadable: true,
+          dayCutover: "06:00",
+          specialDates: [],
+          menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
+          departments: [
+            {
+              id: "restaurant",
+              name: "Restaurant",
+              active: true,
+              week: [],
+              dates: [],
+              periods: [-15, 0, 14].map((offset, index) => ({
+                id: `p${index}`,
+                name: ["Breakfast", "Lunch", "Dinner"][index],
+                colour: "green",
+                menuId: "lunch",
+                staffMenuIds: [],
+                endOffsetMinutes: offset,
+                weekdays: [1],
+              })),
+            },
+          ],
+        })) as DashboardRequest);
+        wrapper.appendChild(screen);
+        await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+        const table =
+          screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+            "wt-data-table",
+          )!;
+        await table.updateComplete;
+        expect(table.shadowRoot!.textContent).toContain("-15");
+        expect(table.shadowRoot!.textContent).toContain("+14");
+        await expectNoA11yViolations(host);
+        await page.screenshot({
+          path: `../__screenshots__/a432-editor/list-${locale}-${theme}-${width}.png`,
+        });
+        if (width === 390) {
+          const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+          scroll.scrollLeft = scroll.scrollWidth;
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          const cell = table.shadowRoot!.querySelector<HTMLElement>("tbody td:nth-child(4)")!;
+          expect(cell.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+            scroll.getBoundingClientRect().left,
+          );
+          expect(cell.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+          await page.screenshot({
+            path: `../__screenshots__/a432-editor/list-offset-${locale}-${theme}-${width}.png`,
+          });
+        }
+      } finally {
+        await page.viewport(1280, 768);
+      }
+    });
   });
 });

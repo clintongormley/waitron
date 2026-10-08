@@ -35,6 +35,7 @@ class DayLeaveApp extends LitElement {
               colour: "green",
               menuId: "m1",
               staffMenuIds: [],
+              endOffsetMinutes: 0,
               weekdays: [1],
             },
           ],

@@ -140,6 +140,7 @@ function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue
         name: "Lunch",
         isDefault: true,
         orderable: true,
+        sendable: true,
         audience: "customer",
         versionId: version,
         structure: {
@@ -167,7 +168,7 @@ const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
     service: { open: true, periodName: null },
-    menus: [{ menuId: "lunch", versionId: version }],
+    menus: [{ menuId: "lunch", versionId: version, orderable: true, sendable: true }],
     unavailable: { ...NOTHING, ...unavailable },
   };
 }
@@ -2045,7 +2046,7 @@ describe("the menu's Device Home Page", () => {
     const shown = browser(el).menu;
     api.menuState.mockResolvedValue({
       service: { open: true, periodName: null },
-      menus: [{ menuId: "lunch", versionId: "v2" }],
+      menus: [{ menuId: "lunch", versionId: "v2", orderable: true, sendable: true }],
       unavailable: NOTHING,
     } satisfies MenuState);
     await poll(el);

@@ -45,6 +45,7 @@ function notOfferedMarker() {
 }
 
 const BLOCKED_WORDS: Record<BlockReason, StringKey> = {
+  period_ended: "basket.blocked.period_ended",
   removed: "basket.blocked.removed",
   variant_removed: "basket.blocked.removed",
   not_sold_separately: "basket.blocked.not_sold_separately",
@@ -649,6 +650,7 @@ export class TillBasket extends LitElement {
         <span class="count">${line.quantity}</span>
         <wt-button
           class="step step-inc"
+          ?disabled=${this.store.canSelectProduct?.(line.product) === false}
           variant="ghost"
           size="sm"
           aria-label=${`${t("basket.increase")} ${name}`}

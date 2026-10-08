@@ -26,6 +26,7 @@ export const menuPeriods = table(
     name: label("name").notNull(),
     colour: calendarColour("colour").notNull().default("grey"),
     menuId: id("menu_id").notNull(),
+    endOffsetMinutes: count("end_offset_minutes").notNull().default(0),
   },
   (t) => [
     foreignKey({

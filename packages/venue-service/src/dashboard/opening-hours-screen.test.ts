@@ -47,6 +47,7 @@ function model(): OpeningHoursModel {
             colour: "green",
             menuId: "lunch",
             staffMenuIds: ["staff"],
+            endOffsetMinutes: 0,
             weekdays: [1, 3],
           },
         ],
@@ -203,7 +204,15 @@ it("creates the changed draft and closes it before refreshing the list", async (
     writes.push({ path, method, body });
     data.departments[0]!.periods = [
       ...data.departments[0]!.periods,
-      { id: "p2", name: "Dinner", colour: "red", menuId: "lunch", staffMenuIds: [], weekdays: [] },
+      {
+        id: "p2",
+        name: "Dinner",
+        colour: "red",
+        menuId: "lunch",
+        staffMenuIds: [],
+        endOffsetMinutes: 0,
+        weekdays: [],
+      },
     ];
     return { id: "p2" };
   }) as DashboardRequest);
@@ -218,7 +227,13 @@ it("creates the changed draft and closes it before refreshing the list", async (
     {
       path: "/management-api/venue-service/departments/restaurant/menu-periods",
       method: "POST",
-      body: { name: "Dinner", colour: "red", menuId: "lunch", staffMenuIds: [] },
+      body: {
+        name: "Dinner",
+        colour: "red",
+        menuId: "lunch",
+        staffMenuIds: [],
+        endOffsetMinutes: 0,
+      },
     },
   ]);
   await expect.poll(() => table(el).rows.length).toBe(2);
@@ -238,7 +253,13 @@ it("updates the existing period and preserves every other submitted value", asyn
     {
       path: "/management-api/venue-service/menu-periods/p1",
       method: "PATCH",
-      body: { name: "Late lunch", colour: "green", menuId: "lunch", staffMenuIds: ["staff"] },
+      body: {
+        name: "Late lunch",
+        colour: "green",
+        menuId: "lunch",
+        staffMenuIds: ["staff"],
+        endOffsetMinutes: 0,
+      },
     },
   ]);
   await expect.poll(() => el.shadowRoot!.querySelector("period-editor")).toBeNull();
@@ -707,7 +728,13 @@ it.each([
       {
         path: "/management-api/venue-service/departments/restaurant/menu-periods",
         method: "POST",
-        body: { name: "Breakfast", colour: expected, menuId: "lunch", staffMenuIds: [] },
+        body: {
+          name: "Breakfast",
+          colour: expected,
+          menuId: "lunch",
+          staffMenuIds: [],
+          endOffsetMinutes: 0,
+        },
       },
     ]);
   },
@@ -792,8 +819,20 @@ it("places a refused period name under Name with the bottom explanation and retr
   submit(editor);
   await expect.poll(() => writes.length).toBe(2);
   expect(writes).toEqual([
-    { name: "Dinner", colour: "green", menuId: "lunch", staffMenuIds: ["staff"] },
-    { name: "Dinner", colour: "green", menuId: "lunch", staffMenuIds: ["staff"] },
+    {
+      name: "Dinner",
+      colour: "green",
+      menuId: "lunch",
+      staffMenuIds: ["staff"],
+      endOffsetMinutes: 0,
+    },
+    {
+      name: "Dinner",
+      colour: "green",
+      menuId: "lunch",
+      staffMenuIds: ["staff"],
+      endOffsetMinutes: 0,
+    },
   ]);
 });
 
@@ -870,4 +909,48 @@ it("shows the Spanish Opening hours title and named-period actions", async () =>
   );
   await table(el).updateComplete;
   expect(table(el).shadowRoot!.textContent).toContain("Lunes, Miércoles");
+});
+
+it.each([-15, 0, 14])("shows a signed offset column for %s minutes", async (offset) => {
+  const data = model();
+  data.departments[0]!.periods[0]!.endOffsetMinutes = offset;
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  const grid = table(el);
+  await grid.updateComplete;
+  const column = grid.columns.find((column) => column.key === "endOffsetMinutes");
+  expect(column).toBeDefined();
+  expect(column!.label).toBe("End offset (min)");
+  expect(grid.shadowRoot!.textContent).toContain(offset > 0 ? `+${offset}` : String(offset));
+});
+
+it("sends an offset-only edit through the real period client and closes before a failed refresh", async () => {
+  const writes: unknown[] = [];
+  let reads = 0;
+  const el = await mount((async (path, method, body) => {
+    if (method === "GET") {
+      if (++reads > 1) throw { code: "connection.failed" };
+      return structuredClone(model());
+    }
+    writes.push({ path, method, body });
+  }) as DashboardRequest);
+  const editor = await edit(el, true);
+  await change(editor, "endOffsetMinutes", "-15");
+  submit(editor);
+  await expect
+    .poll(() => writes)
+    .toEqual([
+      {
+        path: "/management-api/venue-service/menu-periods/p1",
+        method: "PATCH",
+        body: {
+          name: "Lunch",
+          colour: "green",
+          menuId: "lunch",
+          staffMenuIds: ["staff"],
+          endOffsetMinutes: -15,
+        },
+      },
+    ]);
+  await expect.poll(() => el.shadowRoot!.querySelector("period-editor")).toBeNull();
+  await expect.poll(() => reads).toBe(2);
 });

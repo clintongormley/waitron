@@ -33,6 +33,7 @@ function fixture(own = true): OpeningHoursModel {
             colour: "green",
             menuId: "m1",
             staffMenuIds: [],
+            endOffsetMinutes: 0,
             weekdays: [1],
           },
         ],

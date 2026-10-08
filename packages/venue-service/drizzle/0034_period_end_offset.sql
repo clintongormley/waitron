@@ -1,0 +1,1 @@
+ALTER TABLE `menu_periods` ADD `end_offset_minutes` integer DEFAULT 0 NOT NULL;

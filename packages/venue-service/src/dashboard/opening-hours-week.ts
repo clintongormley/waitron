@@ -113,6 +113,7 @@ export class OpeningHoursWeek extends LitElement {
   @state() private error = "";
   @state() private errorDay?: number;
   @state() private skippedTime = false;
+  @state() private offsetClash = false;
   private scope?: DraftScope<Draft>;
   private baseline: Draft = { days: [], following: false };
   private source?: Department;
@@ -277,6 +278,7 @@ export class OpeningHoursWeek extends LitElement {
     this.error = "";
     this.errorDay = undefined;
     this.skippedTime = false;
+    this.offsetClash = false;
     try {
       if (this.specialDate) {
         if (submitted.following)
@@ -297,6 +299,9 @@ export class OpeningHoursWeek extends LitElement {
         if (this.specialDate && /^(?:slots(?:\.|$)|date$)/.test(field))
           this.errorDay = weekdayOf(this.specialDate.date);
         else if (match) this.errorDay = input[Number(match[1])]?.weekday;
+        this.offsetClash =
+          this.errorDay !== undefined &&
+          (error as { params?: { reason?: unknown } }).params?.reason === "end_offset";
         this.skippedTime =
           this.errorDay !== undefined &&
           (error as { params?: { reason?: unknown } }).params?.reason === "clock_skips";
@@ -345,6 +350,7 @@ export class OpeningHoursWeek extends LitElement {
           colour: input.colour ?? "blue",
           menuId: input.menuId,
           staffMenuIds: [...input.staffMenuIds],
+          endOffsetMinutes: input.endOffsetMinutes ?? 0,
           weekdays: [],
         },
       ];
@@ -439,7 +445,7 @@ export class OpeningHoursWeek extends LitElement {
                               >${t("opening.clear_day")}</wt-button
                             >
                           </wt-row-actions>`
-                    }${this.errorDay === weekday ? html`<p class="day-errors" data-day-error=${weekday}>${this.dayLabel(weekday)}: ${t(this.skippedTime ? "menu.time_skipped" : "opening.check_day")}</p>` : nothing}
+                    }${this.errorDay === weekday ? html`<p class="day-errors" data-day-error=${weekday}>${this.dayLabel(weekday)}: ${t(this.skippedTime ? "menu.time_skipped" : this.offsetClash ? "menu.offset_timetable" : "opening.check_day")}</p>` : nothing}
                   </div>`,
               )
         }</service-grid

@@ -93,6 +93,7 @@ function catalogue(version: string, prices: Record<string, string> = {}): ZoneOf
         name: "Lunch",
         isDefault: true,
         orderable: true,
+        sendable: true,
         audience: "customer",
         versionId: version,
         structure: {
@@ -322,7 +323,7 @@ const tableOrder = (el: TillApp) =>
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
 const browser = (el: TillApp) =>
   tableOrder(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser");
-const draft = (el: TillApp) => browser(el)!.store;
+const draft = (el: TillApp) => tableOrder(el)!.draftStore!;
 const rows = (el: TillApp) =>
   draft(el).lines.map((line) => `${line.product.name} ×${line.quantity}`);
 
@@ -3494,7 +3495,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     try {
       const state = (versionId: string) => ({
         service: { open: true, periodName: null },
-        menus: [{ menuId: "lunch", versionId }],
+        menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
         unavailable: { products: [], optionLabels: [] },
       });
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
@@ -3553,7 +3554,7 @@ describe("till-app: other people's drafts and taking one over", () => {
 describe("till-app: a menu published while a table's draft is open (D9)", () => {
   const state = (versionId: string, soldOut: string[] = []) => ({
     service: { open: true, periodName: null },
-    menus: [{ menuId: "lunch", versionId }],
+    menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
 
@@ -4236,7 +4237,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
 describe("till-app: a draft line that cannot be sold now", () => {
   const state = (soldOut: string[]) => ({
     service: { open: true, periodName: null },
-    menus: [{ menuId: "lunch", versionId: "v1" }],
+    menus: [{ menuId: "lunch", versionId: "v1", orderable: true, sendable: true }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
 
@@ -4570,7 +4571,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     });
     const at = (versionId: string) => ({
       service: { open: true, periodName: null },
-      menus: [{ menuId: "lunch", versionId }],
+      menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
       unavailable: { products: [], optionLabels: [] },
     });
     const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");

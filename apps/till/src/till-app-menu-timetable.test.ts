@@ -91,6 +91,7 @@ function offers(
       name: menu.name,
       isDefault: menu.id === defaultMenuId,
       orderable: true,
+      sendable: true,
       audience: "customer",
       versionId: "v1",
       structure: {
@@ -117,7 +118,12 @@ const TERRAZA = offers("zone-terraza", [CENA, ALMUERZO, DESAYUNOS], "cena");
 function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenuId?: string } {
   return {
     service: { open: true, periodName: null },
-    menus: menus.map((menu) => ({ menuId: menu.id, versionId: "v1" })),
+    menus: menus.map((menu) => ({
+      menuId: menu.id,
+      versionId: "v1",
+      orderable: true,
+      sendable: true,
+    })),
     unavailable: { products: [], optionLabels: [] },
     ...(defaultMenuId === undefined ? {} : { defaultMenuId }),
   };
@@ -284,6 +290,63 @@ afterEach(() => {
 });
 
 describe("period service at the counter", () => {
+  it("end-offset poll closes selection with unchanged service and versions, then marks grace expiry", async () => {
+    const running = { ...BARRA, service: { open: true, periodName: "Breakfast" } };
+    const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => running) });
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+    const grace = {
+      ...running,
+      defaultMenuId: null,
+      menus: running.menus.map((menu) => ({
+        ...menu,
+        orderable: false,
+        sendable: true,
+        isDefault: false,
+      })),
+    };
+    api.listZoneOffers.mockResolvedValue(grace);
+    api.menuState.mockResolvedValue({
+      ...state([DESAYUNOS, ALMUERZO]),
+      service: running.service,
+      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
+        ...menu,
+        orderable: false,
+        sendable: true,
+      })),
+    });
+    await poll(el);
+    expect(counter(el).menus.every((menu) => !menu.orderable && menu.sendable)).toBe(true);
+    const screen = counter(el);
+    const grid = screen.shadowRoot!.querySelector("till-card-grid")!;
+    expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim()).toBe(
+      "Last orders have ended",
+    );
+    expect(screen.store.lines[0]?.blocked).toBeUndefined();
+    screen.store.setLineQuantity(0, "2");
+    expect(screen.store.lines[0]?.quantity).toBe("1");
+    const expired = { ...grace, menus: grace.menus.map((menu) => ({ ...menu, sendable: false })) };
+    api.listZoneOffers.mockResolvedValue(expired);
+    api.menuState.mockResolvedValue({
+      ...state([DESAYUNOS, ALMUERZO]),
+      service: running.service,
+      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
+        ...menu,
+        orderable: false,
+        sendable: false,
+      })),
+    });
+    await poll(el);
+    expect(screen.store.lines[0]?.blocked).toBe("period_ended");
+    const basket = grid.shadowRoot!.querySelector("till-basket")!;
+    expect(basket.shadowRoot!.textContent).toContain("Last orders have ended");
+    emit(screen, "confirm-payment", { method: "cash", amount: "20" });
+    await flush(el);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
   it("names the newly selected counter department when it is closed", async () => {
     const closed = {
       ...TERRAZA,
@@ -338,7 +401,7 @@ describe("period service at the counter", () => {
     },
   );
 
-  it("shows the initial closed department without removing its basket or retained offers", async () => {
+  it("shows the initial closed department and refuses additions while retaining offers", async () => {
     const closed = {
       ...BARRA,
       service: { open: false, periodName: null },
@@ -356,7 +419,7 @@ describe("period service at the counter", () => {
     const grid = screen.shadowRoot!.querySelector("till-card-grid")!;
     expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
     expect(grid.shadowRoot!.querySelector("till-basket")).not.toBeNull();
-    expect(screen.store.lines.map((line) => line.product.productId)).toEqual(["Tostada"]);
+    expect(screen.store.lines.map((line) => line.product.productId)).toEqual([]);
     expect(screen.products.map((product) => product.productId)).toEqual([
       "Tostada",
       "Menú del día",
@@ -800,6 +863,96 @@ describe("an open table's order", () => {
     expect(
       tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
     ).toBe("Lunch");
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "counter" });
+    await flush(el);
+    expect(selected(el)).toBe("desayunos");
+  });
+
+  it("end-offset table poll hides selection and retains sendable grace before expiry", async () => {
+    const breakfast = {
+      ...COMEDOR,
+      service: { open: true, periodName: "Breakfast" },
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
+    };
+    const lunch = {
+      ...breakfast,
+      defaultMenuId: null,
+      menus: COMEDOR.menus.map((menu) => ({
+        ...menu,
+        orderable: false,
+        sendable: true,
+        isDefault: false,
+      })),
+    };
+    let current: ZoneOfferCatalogue = breakfast;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      listZoneOffers: vi.fn(async (zoneId: string) =>
+        zoneId === "zone-comedor" ? current : BARRA,
+      ),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      listZones: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "zone-comedor", name: "Comedor", displayOrder: 0, active: true },
+        ]),
+      listStatuses: vi.fn().mockResolvedValue([]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+      menuState: vi.fn(async (zoneId: string) =>
+        zoneId === "zone-comedor"
+          ? {
+              ...state([DESAYUNOS, ALMUERZO], current.defaultMenuId ?? undefined),
+              service: current.service,
+              menus: current.menus.map((menu) => ({
+                menuId: menu.id,
+                versionId: menu.versionId,
+                orderable: menu.orderable,
+                sendable: menu.sendable,
+              })),
+            }
+          : state([DESAYUNOS, ALMUERZO], "desayunos"),
+      ),
+    });
+    await signIn(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el);
+    const screen = tableScreen(el);
+    const browser = screen.shadowRoot!.querySelector<
+      HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
+    >("till-menu-browser")!;
+    browser.store.addProduct({ ...menuOfferToTillProduct(offer(DESAYUNOS), "v1") }, "1");
+    await flush(el);
+    current = lunch;
+    await poll(el);
+    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(
+      tableScreen(el).shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim(),
+    ).toBe("Last orders have ended");
+    expect(browser.store.lines[0]?.blocked).toBeUndefined();
+    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    browser.store.setLineQuantity(0, "2");
+    expect(browser.store.lines.map((line) => [line.product.productId, line.quantity])).toEqual([
+      ["Tostada", "1"],
+    ]);
+    current = { ...lunch, menus: lunch.menus.map((menu) => ({ ...menu, sendable: false })) };
+    await poll(el);
+    expect(browser.store.lines[0]?.blocked).toBe("period_ended");
+    const sendButtons = tableScreen(el).shadowRoot!.querySelectorAll<
+      HTMLElement & { disabled: boolean; variant: string }
+    >("[data-draft-action]");
+    expect(sendButtons).toHaveLength(2);
+    for (const button of sendButtons) {
+      expect(button.disabled).toBe(true);
+      expect(button.variant).toBe("secondary");
+    }
     emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "counter" });
     await flush(el);
     expect(selected(el)).toBe("desayunos");

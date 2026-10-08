@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { formatMoney } from "@waitron/shared";
@@ -67,13 +67,14 @@ const offers: ZoneOfferCatalogue = {
     serviceMode: "prepay",
   },
   defaultMenuId: null,
-  menus: [],
+  menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }], []),
   offers: [],
 };
 
 const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   id,
   menuItemId: `mi-${id}`,
+  catalogueId: "cat-default",
   name,
   pricingUnit: "each",
   unitPrice,

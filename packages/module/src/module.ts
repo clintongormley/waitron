@@ -239,6 +239,7 @@ export interface ZoneMenu {
   readonly name: string;
   readonly isDefault: boolean;
   readonly orderable: boolean;
+  readonly sendable: boolean;
   readonly audience: "customer" | "staff";
   readonly versionId: string;
   readonly structure: { readonly members: readonly ZoneMenuMember[] };
@@ -265,7 +266,12 @@ export interface ZoneUnavailable {
 /** A zone's live menu versions, and what they hold that cannot be sold now. */
 export interface ZoneMenuState {
   readonly service: { readonly open: boolean; readonly periodName: string | null };
-  readonly menus: readonly { readonly menuId: string; readonly versionId: string }[];
+  readonly menus: readonly {
+    readonly menuId: string;
+    readonly versionId: string;
+    readonly orderable: boolean;
+    readonly sendable: boolean;
+  }[];
   readonly unavailable: ZoneUnavailable;
 }
 
@@ -365,6 +371,7 @@ export interface DepartmentTransferReceiver extends DepartmentTransferActor {
 
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;
   listDepartmentTransferDestinations(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -443,6 +450,7 @@ export interface VenueServiceContribution {
   ): Promise<{
     departmentId: string;
     orderableMenuIds: readonly string[];
+    sendableMenuIds: readonly string[];
     endedMenuIds: readonly string[];
   }>;
   resolveSalePolicy(

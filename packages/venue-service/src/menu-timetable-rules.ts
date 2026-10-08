@@ -8,7 +8,8 @@ export function invalidTimetable(
   clash?: {
     date?: LocalDate;
     departmentId?: string;
-    reason: "overlap" | "clock_skips" | "empty" | "order" | "step";
+    periodId?: string;
+    reason: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
   },
 ): never {
   throw new AppError("menu_timetable.invalid", { field, ...clash });

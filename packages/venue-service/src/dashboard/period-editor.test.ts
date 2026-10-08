@@ -18,6 +18,7 @@ const period = {
   colour: "blue" as const,
   menuId: "lunch",
   staffMenuIds: ["deli"],
+  endOffsetMinutes: 0,
   weekdays: [1, 2],
 };
 beforeEach(() => setLocale("en"));
@@ -102,7 +103,13 @@ it("sends the changed period's trimmed name, colour and staff menus once", async
   expect(writes).toEqual([
     {
       periodId: null,
-      input: { name: "Dinner", colour: "green", menuId: "lunch", staffMenuIds: ["deli", "drinks"] },
+      input: {
+        name: "Dinner",
+        colour: "green",
+        menuId: "lunch",
+        staffMenuIds: ["deli", "drinks"],
+        endOffsetMinutes: 0,
+      },
     },
   ]);
 });
@@ -209,7 +216,13 @@ it("Enter on the native name field submits the changed period", async () => {
   expect(writes).toEqual([
     {
       periodId: "p1",
-      input: { name: "Dinner", colour: "blue", menuId: "lunch", staffMenuIds: ["deli"] },
+      input: {
+        name: "Dinner",
+        colour: "blue",
+        menuId: "lunch",
+        staffMenuIds: ["deli"],
+        endOffsetMinutes: 0,
+      },
     },
   ]);
 });
@@ -231,7 +244,13 @@ it("draws Save in the footer and a native click submits the changed period", asy
   expect(writes).toEqual([
     {
       periodId: "p1",
-      input: { name: "Dinner", colour: "blue", menuId: "lunch", staffMenuIds: ["deli"] },
+      input: {
+        name: "Dinner",
+        colour: "blue",
+        menuId: "lunch",
+        staffMenuIds: ["deli"],
+        endOffsetMinutes: 0,
+      },
     },
   ]);
 });
@@ -352,4 +371,137 @@ it("departed controls cannot edit, submit or close a reopened period", async () 
   expect(field(el, "menuId").value).toBe("lunch");
   expect(field(el, "staffMenuIds").values).toEqual(["deli"]);
   expect(writes).toEqual([]);
+});
+
+it.each([0, -15, 14])(
+  "opens the saved offset %s on the native required text field",
+  async (offset) => {
+    const el = await mount(true);
+    el.period = { ...period, id: `offset-${offset}`, endOffsetMinutes: offset };
+    await el.updateComplete;
+    const control =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]")!;
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector("input")!;
+    expect(native.value).toBe(String(offset));
+    expect(native.name).toBe("endOffsetMinutes");
+    expect(control.required).toBe(true);
+    expect(save(el).disabled).toBe(true);
+  },
+);
+
+it("starts new periods at zero and sends an offset-only edit as a JSON number on Enter", async () => {
+  const fresh = await mount();
+  expect(field(fresh, "endOffsetMinutes").value).toBe("0");
+  fresh.remove();
+  const el = await mount(true);
+  const writes: unknown[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(el, "endOffsetMinutes", { value: "+014" });
+  expect(save(el).variant).toBe("primary");
+  expect(save(el).disabled).toBe(false);
+  const control =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]")!;
+  await control.updateComplete;
+  control
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  expect(JSON.parse(JSON.stringify(writes))).toEqual([
+    {
+      periodId: "p1",
+      input: {
+        name: "Lunch",
+        colour: "blue",
+        menuId: "lunch",
+        staffMenuIds: ["deli"],
+        endOffsetMinutes: 14,
+      },
+    },
+  ]);
+  expect(
+    el.commitSubmitted({
+      name: "Lunch",
+      colour: "blue",
+      menuId: "lunch",
+      staffMenuIds: ["deli"],
+      endOffsetMinutes: 14,
+    }),
+  ).toBe(true);
+  await el.updateComplete;
+  expect(save(el).disabled).toBe(true);
+  await change(el, "endOffsetMinutes", { value: "-15" });
+  expect(save(el).disabled).toBe(false);
+  await change(el, "endOffsetMinutes", { value: "0014" });
+  expect(save(el).disabled).toBe(true);
+});
+
+it("equivalent signed zero does not make an unchanged period saveable", async () => {
+  const el = await mount(true);
+  const writes: unknown[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(el, "endOffsetMinutes", { value: "-000" });
+  expect(save(el).variant).toBe("secondary");
+  expect(save(el).disabled).toBe(true);
+  save(el).click();
+  expect(writes).toEqual([]);
+});
+
+it.each(["", "1.5", "1e2", "-", "1440", "-1440", "Infinity"])(
+  "preserves invalid offset %j and blocks saving until corrected",
+  async (text) => {
+    const el = await mount(true);
+    const writes: unknown[] = [];
+    el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+    await change(el, "endOffsetMinutes", { value: text });
+    save(el).click();
+    await el.updateComplete;
+    expect(field(el, "endOffsetMinutes").value).toBe(text);
+    expect(field(el, "endOffsetMinutes").error).toBe("Enter whole minutes from -1439 to 1439.");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+        .error,
+    ).toBe("Correct the highlighted fields to continue.");
+    expect(writes).toEqual([]);
+    expect(save(el).disabled).toBe(true);
+    await change(el, "endOffsetMinutes", { value: "-1439" });
+    expect(field(el, "endOffsetMinutes").error).toBe("");
+    expect(save(el).disabled).toBe(false);
+  },
+);
+
+it("marks an offset placement refusal and leaves retry enabled", async () => {
+  const el = await mount(true);
+  await change(el, "endOffsetMinutes", { value: "15" });
+  save(el).click();
+  el.refusal = {
+    code: "menu_period.invalid",
+    params: { field: "endOffsetMinutes", reason: "placement" },
+  };
+  await el.updateComplete;
+  expect(field(el, "endOffsetMinutes").error).toBe(
+    "Change the offset so orders end after this period starts and before the next period starts.",
+  );
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error,
+  ).toBe("Correct the highlighted fields to continue.");
+  expect(save(el).disabled).toBe(false);
+  await change(el, "endOffsetMinutes", { value: "14" });
+  expect(field(el, "endOffsetMinutes").error).toBe("");
+});
+
+it("shows the Spanish offset label, explanation and local validation", async () => {
+  setLocale("es");
+  const el = await mount(true);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  const control =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=endOffsetMinutes]")!;
+  expect(control.label).toBe("Desfase del final del periodo (minutos)");
+  expect(el.shadowRoot!.textContent).toContain("Negativo: deja de añadir platos antes del final.");
+  await change(el, "endOffsetMinutes", { value: "" });
+  save(el).click();
+  await el.updateComplete;
+  expect(control.error).toBe("Introduce minutos enteros entre -1439 y 1439.");
 });

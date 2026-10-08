@@ -879,6 +879,39 @@ describe("validateHolidayConfiguration", () => {
 });
 
 describe("the menu timetable rows of a bundle", () => {
+  it.each([null, "15", 1.5, NaN, Infinity, -1440, 1440])(
+    "refuses malformed imported end offset %s at its own column",
+    (endOffsetMinutes) => {
+      const tables = menuTables();
+      tables.menu_periods![0]!.end_offset_minutes = endOffsetMinutes;
+      expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+        refusal("menu_periods.end_offset_minutes"),
+      );
+    },
+  );
+  it.each([-15, 0, 14, undefined])("accepts scalar imported end offset %s", (offset) => {
+    const tables = menuTables();
+    if (offset !== undefined) tables.menu_periods![0]!.end_offset_minutes = offset;
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+  });
+
+  it("refuses imported grace reaching the next business day's period", () => {
+    const tables = menuTables();
+    tables.menu_periods![1]!.end_offset_minutes = 240;
+    tables.menu_day_timetables!.push({
+      id: "t-saturday",
+      department_id: RESTAURANT,
+      weekday: 6,
+      special_date_id: null,
+    });
+    tables.menu_slots!.push(slotRow("t-saturday", MANANAS, "06:00:00", "09:00:00"));
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("menu_slots"),
+    );
+    tables.menu_periods![1]!.end_offset_minutes = 239;
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+  });
+
   const BARRA = "z-barra";
   const MANANAS = "11111111-1111-4111-8111-111111111111";
   const MADRUGADA = "22222222-2222-4222-8222-222222222222";

@@ -16,6 +16,7 @@ import {
   stationPrinters,
   withTransaction,
 } from "@waitron/db";
+import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -89,7 +90,7 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);

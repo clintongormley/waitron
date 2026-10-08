@@ -1266,14 +1266,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   APPROVED 2026-10-07; remaining work is slices 2–7, each planned then built without
   stopping for the owner**. Opening hours and
   the menu timetable become one idea: a period is a name with one customer menu plus staff-only menus,
-  a department's day is time ranges each given a period, and the till sells only the current
-  period's menus. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service
+  a department's day is time ranges each given a period, with last-order and leftover windows
+  set by its signed end offset. It replaces A254 §4, A261 §4–§7 in part, and §2 of the devices, menus and service
   zones spec; it folds in S11. [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
-
-- **A432 — a service period's signed end offset** (owner, 2026-10-08). Slice 1 fixes the offset
-  at 0. Add one signed whole-minute value per period: negative stops new dishes before the end,
-  positive allows sending leftovers after it. Editor, request gate and till follow the same window.
-  [Detail](backlog/service-periods.md#a432--a-service-periods-signed-end-offset)
 
 - **Changing the business-day start after saving service hours** — open review follow-up from
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
@@ -1560,6 +1555,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   owner's call. Left open by A424.
 
 ### The till, devices and table service
+
+- **Investigate a null device identity during profile switching.** A432’s full till coverage run
+  on 2026-10-08 passed 5,951 tests and its thresholds, but the browser logged an unhandled
+  rejection at `apps/till/src/till-app.ts:4468` through `#readIdentity` / `#enterSwitchedProfile`.
+  Reproduce which profile-switch test answers null and determine whether the fixture or the
+  public identity response needs correction; keep the existing profile and login assertions.
+  Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 

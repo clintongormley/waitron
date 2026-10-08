@@ -18,6 +18,7 @@ import {
 import type { SpecialDateParticipant } from "./hours.js";
 import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
+import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
 import type {
   DepartmentService,
   OpeningHoursModel,
@@ -79,6 +80,7 @@ async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string)
       departmentId: menuPeriods.departmentId,
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
+      endOffsetMinutes: menuPeriods.endOffsetMinutes,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -190,6 +192,98 @@ async function writeDay(
     );
 }
 
+async function endOffsetClash(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId?: string,
+  cutover?: string,
+  validateZeroOffsets = false,
+) {
+  const periods = await tx
+    .select({
+      id: menuPeriods.id,
+      departmentId: menuPeriods.departmentId,
+      offset: menuPeriods.endOffsetMinutes,
+    })
+    .from(menuPeriods)
+    .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
+    .where(
+      and(
+        eq(departments.locationId, cfg.locationId),
+        departmentId === undefined ? undefined : eq(departments.id, departmentId),
+      ),
+    );
+  if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
+  const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
+  const timetables = await tx
+    .select({
+      id: menuDayTimetables.id,
+      departmentId: menuDayTimetables.departmentId,
+      weekday: menuDayTimetables.weekday,
+      specialDateId: menuDayTimetables.specialDateId,
+    })
+    .from(menuDayTimetables)
+    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
+    .where(
+      and(
+        eq(departments.locationId, cfg.locationId),
+        departmentId === undefined ? undefined : eq(departments.id, departmentId),
+      ),
+    );
+  const slots = await slotsByTimetable(
+    tx,
+    timetables.map((day) => day.id),
+  );
+  const dates = await tx
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
+    .from(specialDates)
+    .where(eq(specialDates.locationId, cfg.locationId));
+  const dateById = new Map(dates.map((date) => [date.id, date.date]));
+  const offsets = new Map(periods.map((period) => [period.id, period.offset]));
+  for (const id of new Set(periods.map((period) => period.departmentId))) {
+    const clash = findScheduleEndOffsetClash(
+      timetables
+        .filter((day) => day.departmentId === id)
+        .map((day) => ({
+          weekday: day.weekday,
+          date: day.specialDateId === null ? null : dateById.get(day.specialDateId)!,
+          slots: slots.get(day.id)!,
+        })),
+      dates,
+      offsets,
+      dayCutover,
+    );
+    if (clash !== null) {
+      return {
+        periodId: clash.periodId,
+        weekday: clash.weekday,
+        date: clash.date,
+        departmentId: id,
+      };
+    }
+  }
+  return null;
+}
+
+export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
+  const clash = await endOffsetClash(tx, cfg, undefined, undefined, true);
+  if (clash !== null) invalidTimetable("dayCutover", { reason: "end_offset", ...clash });
+}
+
+async function assertCalendarEndOffsets(
+  tx: Transaction,
+  cfg: VenueScope,
+  field: string,
+  cutover?: string,
+): Promise<void> {
+  const clash = await endOffsetClash(tx, cfg, undefined, cutover);
+  if (clash !== null) throw new AppError("hours.invalid", { field, date: clash.date });
+}
+
 export async function resolveDepartmentService(
   tx: Transaction,
   cfg: VenueScope,
@@ -200,7 +294,12 @@ export async function resolveDepartmentService(
   const clock = await readLocationClock(tx, cfg.locationId);
   const moment = serviceMomentAt(at, clock);
   const periods = await tx
-    .select({ id: menuPeriods.id, name: menuPeriods.name, menuId: menuPeriods.menuId })
+    .select({
+      id: menuPeriods.id,
+      name: menuPeriods.name,
+      menuId: menuPeriods.menuId,
+      offset: menuPeriods.endOffsetMinutes,
+    })
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
@@ -223,6 +322,7 @@ export async function resolveDepartmentService(
     periodName: null,
     customerMenuId: null,
     orderableMenuIds: [],
+    sendableMenuIds: [],
     endedMenuIds: [],
   };
   if (moment === null)
@@ -230,6 +330,7 @@ export async function resolveDepartmentService(
       ...closed,
       open: true,
       orderableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
+      sendableMenuIds: [...new Set(periods.flatMap((period) => menusOf(period.id)))],
     };
 
   const yesterday = addDays(moment.businessDay, -1);
@@ -295,7 +396,24 @@ export async function resolveDepartmentService(
   const running = rangeInForce(ranges, moment.minute, clock.dayCutover);
   const period =
     running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
-  const orderableMenuIds = period === undefined ? [] : menusOf(period.id);
+  const occurrences = [
+    ...rangesOn(previous?.id).map((range) => ({ range, day: -1440 })),
+    ...ranges.map((range) => ({ range, day: 0 })),
+  ];
+  const eligibleMenus = (selection: boolean): string[] => [
+    ...new Set(
+      occurrences.flatMap(({ range, day }) => {
+        const span = rangeSpan(range, clock.dayCutover);
+        const offset = periods.find((entry) => entry.id === range.periodId)!.offset;
+        const cutoff = span.end + (selection ? Math.min(offset, 0) : offset);
+        return moment.minute >= span.start + day && moment.minute < cutoff + day
+          ? menusOf(range.periodId)
+          : [];
+      }),
+    ),
+  ];
+  const orderableMenuIds = eligibleMenus(true);
+  const sendableMenuIds = eligibleMenus(false);
   const ended = [
     ...rangesOn(previous?.id),
     ...ranges.filter((range) => rangeSpan(range, clock.dayCutover).end <= moment.minute),
@@ -307,6 +425,7 @@ export async function resolveDepartmentService(
     periodName: period?.name ?? null,
     customerMenuId: period?.menuId ?? null,
     orderableMenuIds,
+    sendableMenuIds,
     endedMenuIds: [...new Set(ended.flatMap((range) => menusOf(range.periodId)))].filter(
       (id) => !orderableMenuIds.includes(id),
     ),
@@ -355,6 +474,9 @@ async function writeMenuPeriod(
   period: MenuPeriodInput,
 ): Promise<{ id: string }> {
   const name = menuPeriodName(period.name);
+  const endOffsetMinutes = parseEndOffsetMinutes(
+    period.endOffsetMinutes === undefined ? 0 : period.endOffsetMinutes,
+  );
   await assertDepartment(tx, cfg, departmentId);
   if (
     period.colour !== undefined &&
@@ -399,7 +521,7 @@ async function writeMenuPeriod(
     period.colour ??
     CALENDAR_COLOURS.find((value) => !used.some((row) => row.colour === value)) ??
     CALENDAR_COLOURS[0];
-  const values = { name, menuId: period.menuId, colour };
+  const values = { name, menuId: period.menuId, colour, endOffsetMinutes };
   let id = periodId;
   if (periodId === null) {
     const [row] = await tx
@@ -420,6 +542,16 @@ async function writeMenuPeriod(
         displayOrder,
       })),
     );
+  const clash = await endOffsetClash(tx, cfg, departmentId);
+  if (clash !== null)
+    throw new AppError("menu_period.invalid", {
+      field: "endOffsetMinutes",
+      reason: "placement",
+      periodId: clash.periodId,
+      departmentId,
+      weekday: clash.weekday,
+      date: clash.date,
+    });
   return { id: id! };
 }
 
@@ -445,6 +577,8 @@ export async function updateMenuPeriod(
     colour: period.colour === undefined ? appearance!.colour : period.colour,
     staffMenuIds:
       period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
+    endOffsetMinutes:
+      period.endOffsetMinutes === undefined ? stored.endOffsetMinutes : period.endOffsetMinutes,
   });
 }
 
@@ -522,6 +656,12 @@ export async function replaceMenuWeek(
     await tx.delete(menuDayTimetables).where(inArray(menuDayTimetables.id, emptied));
   for (const [weekday, slots] of week.slots.entries())
     if (slots.length > 0) await writeDay(tx, idOf(weekday), { departmentId, weekday }, slots);
+  const clash = await endOffsetClash(tx, cfg, departmentId, clock.dayCutover);
+  if (clash !== null)
+    invalidTimetable(
+      clash.weekday === undefined ? "days" : `days.${week.indexOf[clash.weekday]}.slots`,
+      { reason: "end_offset", ...clash },
+    );
 }
 
 export async function saveSpecialDateMenus(
@@ -550,6 +690,8 @@ export async function saveSpecialDateMenus(
       ),
     );
   await writeDay(tx, existing?.id, { departmentId, specialDateId }, parsed);
+  const clash = await endOffsetClash(tx, cfg, departmentId, clock.cutover);
+  if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
 }
 
 export async function clearSpecialDateMenus(
@@ -573,6 +715,8 @@ export async function clearSpecialDateMenus(
     );
   if (existing === undefined) return;
   await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.id, existing.id));
+  const clash = await endOffsetClash(tx, cfg, departmentId);
+  if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
 }
 
 async function dateTimetables(tx: Transaction, specialDateId: string) {
@@ -609,14 +753,19 @@ export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
       await writeDay(tx, undefined, { departmentId, specialDateId: targetId }, slots);
   },
   async afterCopies(tx, cfg, sourceId, targets, at) {
+    const clock = await readVenueClock(tx, cfg, at);
     await assertPlaced(
-      await readVenueClock(tx, cfg, at),
+      clock,
       await dateTimetables(tx, sourceId),
       targets.map((target) => target.date),
     );
+    await assertCalendarEndOffsets(tx, cfg, "date", clock.cutover);
   },
   async beforeMove(tx, cfg, id, toDate, at) {
     await assertPlaced(await readVenueClock(tx, cfg, at), await dateTimetables(tx, id), [toDate]);
+  },
+  async afterChange(tx, cfg, field) {
+    await assertCalendarEndOffsets(tx, cfg, field);
   },
   async beforeDelete() {},
 };
@@ -640,6 +789,7 @@ export async function readOpeningHoursModel(
       name: menuPeriods.name,
       colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
+      endOffsetMinutes: menuPeriods.endOffsetMinutes,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -718,11 +868,12 @@ export async function readOpeningHoursModel(
         ...department,
         periods: periods
           .filter((period) => period.departmentId === department.id)
-          .map(({ id, name, colour, menuId }) => ({
+          .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({
             id,
             name,
             colour,
             menuId,
+            endOffsetMinutes,
             staffMenuIds: staff
               .filter((entry) => entry.periodId === id)
               .map((entry) => entry.menuId),

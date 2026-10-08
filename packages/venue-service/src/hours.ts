@@ -712,6 +712,17 @@ export async function saveSpecialDate(
     .map((cell) => cell.id);
   if (dropped.length > 0)
     await tx.delete(specialDateHours).where(inArray(specialDateHours.id, dropped));
+  for (const participant of participants)
+    await participant.afterChange?.(
+      tx,
+      cfg,
+      current !== null &&
+        current.date === parsed.date &&
+        current.closeWholeVenue !== parsed.closeWholeVenue
+        ? "closeWholeVenue"
+        : "date",
+      at,
+    );
   return { id: specialDateId, ...values };
 }
 
@@ -742,7 +753,8 @@ export async function renameSpecialDate(
  * caller's transaction and never opens its own, and `at` is the caller's "now". `copy` runs once per
  * target, after that target date and its hours are written; `afterCopies` runs once per duplicate,
  * after every target and every participant's copies exist, so a check can see all the targets at
- * once; `beforeMove` runs before a date's new date is written; `beforeDelete` may only refuse,
+ * once; `beforeMove` runs before a date's new date is written; `afterChange` validates the proposed
+ * save or deletion inside the caller's transaction; `beforeDelete` may only refuse,
  * since the date's own foreign keys remove what hangs from it.
  */
 export interface SpecialDateParticipant {
@@ -767,13 +779,19 @@ export interface SpecialDateParticipant {
     toDate: LocalDate,
     at: Date,
   ): Promise<void>;
+  afterChange?(
+    tx: Transaction,
+    cfg: VenueScope,
+    field: "date" | "closeWholeVenue",
+    at: Date,
+  ): Promise<void>;
   beforeDelete(tx: Transaction, cfg: VenueScope, id: string, at: Date): Promise<void>;
 }
 
 /**
  * Copies a special date's name, colour, closure and every cell to each target date under new ids,
- * then hands each copy to every participant. The whole batch is checked before anything is
- * written, so one refusal creates no target at all.
+ * then hands each copy to every participant. A refusal rolls back the batch in the caller's
+ * transaction.
  */
 export async function duplicateSpecialDate(
   tx: Transaction,
@@ -889,6 +907,7 @@ export async function deleteSpecialDate(
   );
   for (const participant of participants) await participant.beforeDelete(tx, cfg, id, at);
   await tx.delete(specialDates).where(eq(specialDates.id, id));
+  for (const participant of participants) await participant.afterChange?.(tx, cfg, "date", at);
 }
 
 /**
