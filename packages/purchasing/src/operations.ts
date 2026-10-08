@@ -324,7 +324,6 @@ export async function updatePurchaseInvoice(
       .returning({ id: purchaseInvoices.id });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    // The refused statement backed out by itself, so the stored row still reads as it was.
     const [stored] = await tx
       .select({
         supplierTaxId: purchaseInvoices.supplierTaxId,
