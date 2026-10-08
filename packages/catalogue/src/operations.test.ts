@@ -427,6 +427,38 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("refuses a create naming an unknown catalogue with catalogue.not_found", async () => {
+    await asTenant(async (tx) => {
+      const missing = crypto.randomUUID();
+      await expect(
+        createProduct(tx, {
+          catalogueId: missing,
+          categoryId: null,
+          name: "Stray",
+          unitId: eachUnitId,
+          unitPrice: "1.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({ code: "catalogue.not_found", params: { catalogueId: missing } });
+    });
+  });
+
+  it("names the catalogue before the category when both are unknown", async () => {
+    await asTenant(async (tx) => {
+      const missing = crypto.randomUUID();
+      await expect(
+        createProduct(tx, {
+          catalogueId: missing,
+          categoryId: crypto.randomUUID(),
+          name: "Stray",
+          unitId: eachUnitId,
+          unitPrice: "1.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({ code: "catalogue.not_found", params: { catalogueId: missing } });
+    });
+  });
+
   it("still rejects a create with neither unitId nor pricingUnit", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
@@ -1485,6 +1517,42 @@ describe("catalogue operations", () => {
         sql`select count(*) as count from location_catalogues where location_id = ${locationId}`,
       );
       expect(members.rows[0]!.count).toBe(0);
+    });
+  });
+
+  describe.each([
+    ["addCatalogueToLocation", addCatalogueToLocation],
+    ["setLocationDefaultCatalogue", setLocationDefaultCatalogue],
+  ] as const)("%s with an id naming nothing", (_name, write) => {
+    it("refuses an unknown location with location.not_found", async () => {
+      await asTenant(async (tx) => {
+        const casa = await createCatalogue(tx, { name: "Casa" });
+        const missing = crypto.randomUUID();
+        await expect(write(tx, missing, casa.id)).rejects.toMatchObject({
+          code: "location.not_found",
+          params: { locationId: missing },
+        });
+      });
+    });
+
+    it("refuses an unknown catalogue at a real location with catalogue.not_found", async () => {
+      await asTenant(async (tx) => {
+        const missing = crypto.randomUUID();
+        await expect(write(tx, locationId, missing)).rejects.toMatchObject({
+          code: "catalogue.not_found",
+          params: { catalogueId: missing },
+        });
+      });
+    });
+
+    it("names the location first when both ids are unknown", async () => {
+      await asTenant(async (tx) => {
+        const missing = crypto.randomUUID();
+        await expect(write(tx, missing, crypto.randomUUID())).rejects.toMatchObject({
+          code: "location.not_found",
+          params: { locationId: missing },
+        });
+      });
     });
   });
 
