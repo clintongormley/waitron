@@ -632,6 +632,63 @@ decision about the naming policy; this change adds no such restriction.
   wholly behind it until the tree is scrolled. Letting long names wrap at narrow widths may free
   the room; not tried.
 
+## What #1151 left open (2026-10-03)
+
+- **The database still accepts a maximum of 0.** The CHECK on `extra_lists` allows `max_picks = 0`
+  when `min_picks` is 0, and configuration transfer copies stored lists without the request check,
+  so a stored 0 can still arrive; the form then shows the 0 and refuses to save until it is
+  changed. Refusing it in the database is a table rebuild (CLAUDE.md §3's rebuild rule). OPEN,
+  unqueued: the owner has not asked for it.
+- **A very long number is cut off in the narrower box.** The request check accepts up to
+  2147483647, which needs about 82px against the 66px between the buttons (measured by #1151's
+  review); three digits need about 26px. Left alone because widening the box would undo the size
+  the owner approved. OPEN, unqueued.
+- At 390px the extras table's Price column runs past its scroll area's right edge until scrolled;
+  #1151's review measured it on main before the change (452px against a 373px area) and smaller
+  after it (388px). OPEN, unqueued; W49 changed the table's column sizing, but horizontal scrolling
+  remains for the Price column at phone width. (2026-10-04: W75 added a Portion column and widened
+  the table; not re-measured.)
+
+## A disabled course keeps its name
+
+**An Add course button beside the course dropdown (A212) — DONE (#1087); left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
+rows too, so adding a course with a disabled course's name is refused as taken (measured
+2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
+it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there
+(its other point, `wt-combobox`'s `stable-width` missing from `docs/developers/design-system.md`,
+A342 documented): the catalogue-screen test "ignores the closed window's late close…" catches its guard's removal only through an unhandled error, because the late close throws
+before it changes anything a state assertion could see.
+
+## Allergens and dietary preferences are edited in place (A213): what #1079 left open
+
+**Allergens and dietary preferences are edited in place (A213) — DONE (#1079); left open by #1079
+(raised in its review, not changed there):** on a variant's page an empty
+line reads "None specified" while the grey hint under it gives the parent's values, which reads as
+a contradiction — A211's "an empty value shows the parent's value" is the natural place to settle
+it. And on a product's own page a reviewed-empty allergen list and one nobody has reviewed yet
+(`allergens: null`) both read "None specified"; before #1079 both read "None selected", so this
+predates it (checked against the old code in #1079's review). The variant hint already tells the
+two apart ("Not yet reviewed", `editor.allergens_unreviewed`); the product line does not.
+(2026-10-03, A211: a variant's closed Nutritional info line now shows the parent's values in
+italic, but the open line still reads "None specified" above the hint, so the first point stands;
+on a product's own page the closed line reads both cases as "None specified" too, as the open line
+does, so the second stands.)
+
+## Left open by #1188's review, none started (the pricing unit dialog, W66)
+
+**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE (#1188).**
+The price field's unit button, and on a product with variants the unit button in the
+variants table's Price heading, open one Pricing unit dialog holding the unit dropdown and Add unit.
+Detail: design-system.md, the `wt-price-input` note under the product editor.
+Left open by #1188's review, none started: (1) one kind of unit refusal reads "The server rejected
+this value…", and on the price field after a price message "this value" reads as the price — a
+unit-specific sentence needs the owner's wording; (2) the price field's own unit button does not
+announce that it opens a dialog (`aria-haspopup`), while the heading's button does — needs an option on
+the shared `wt-price-input`; (3) `EACH_CHOICE` is still exported from `variant-table.ts` though only
+the product editor uses it; (4) the test title "…when the table's heading dropdown is hidden" still
+says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled while
+saving (same on `main` before W66, not checked further).
+
 ## Decisions and deliberate limits
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
@@ -676,3 +733,29 @@ From A294 (#1300, the Products and Structure trees show drag grips only in a mod
 - The Structure tree's section rows were deliberately not top-aligned: section names do not wrap
   there, and `apps/dashboard/src/widgets/menu-structure-table.test.ts` deliberately centres the
   included-menu name and note.
+
+From the product editor tidy-up (A209 to A219, owner 2026-10-02):
+
+- A209 (#1090) — No migration clears the categories variants already store, and none will be written (owner
+  decision, 2026-10-03: no data-migration code before go-live, CLAUDE.md §3, and the dev venue is
+  reset before then). The effective category (`effectiveProductColumns.categoryId`) and the
+  editor's read ignore a stored one, and the next save of the variant's own page, or that
+  category's deletion, clears it.
+- A216 (#1057) — **Decided (owner, 2026-10-02):** "Each" with no unit, "per <unit>" with one.
+- A217 (#1065) — The wording is "inactive", to match the rest of the dashboard (owner).
+- A219 (#1065) — **Decided (owner, 2026-10-02):** the price comes before VAT, everywhere.
+
+From A332 (#1430, "All products" holds a venue default colour):
+
+- (3) the All products swatch sits one tree level left of the categories' swatches, by the table's
+  indent rule. Owner ruling 2026-10-08 (A415): keep each square at its own row's indent, never one
+  column, and every level has one.
+
+From A204's W99 (#1358, queued menu publication), left open after W99:
+
+- **Left as it is (owner 2026-10-07): a narrow window, and menus are not fiscal records.** A due
+  version is served as live before anything records it (publication plan Decision 5), so if
+  the box's clock is stepped backwards past its time before the activation duty records it, reads
+  serve the previous version again until the clock catches up. A Codex review reproduced it against
+  the real migrations. Closing it means reads recording what they serve, or a never-decreasing
+  clock in the process.

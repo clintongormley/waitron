@@ -318,6 +318,17 @@ server without changing their deployed same-origin paths; this also affects setu
   **Next action:** run that pause on fake timers, as the lost-reply case in
   `till-app-drafts.test.ts`'s "a Send the session outlives" does.
 
+## Update the root null-exception rule after W54
+
+**Update the root null-exception rule after W54 — OPEN (owner rule-file maintenance).**
+`CLAUDE.md` §3 still names only `maxPicks` and `guestCount` as fields where explicit null is a value.
+An item's `maxQuantity` is now another; `packages/catalogue/src/extra-contract.test.ts` pins both
+its absent default and explicit null. The setup request's `taxpayerDomicile` is another:
+`parseVenue` in `apps/server/src/setup-api.ts` reads an explicit null the same as an absent field,
+meaning no registered business address, which a demo setup sends; `apps/server/src/setup-api.test.ts`
+pins a demo provisioned with the field null or absent, and Prepare and Live refused with it absent,
+null, empty or blank. Lane D RUNNER §7 bars this campaign from editing the rule file.
+
 ## Decisions and deliberate limits
 
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator

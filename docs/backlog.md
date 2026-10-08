@@ -976,6 +976,124 @@ _Formerly Track A's catalogue and menus part, and the catalogue entries filed un
   bottom (left alone; not measured). Left open by A294 (the Products and Structure trees show drag
   grips only in a mode, #1300).
 
+- **The database still accepts a maximum of 0** — OPEN, unqueued: the owner has not asked for it;
+  left open by A263 (#1151). The CHECK on `extra_lists` allows `max_picks = 0` when `min_picks` is
+  0, and configuration transfer copies stored lists without the request check, so a stored 0 can
+  still arrive; the form then shows the 0 and refuses to save until it is changed. Refusing it in
+  the database is a table rebuild (CLAUDE.md §3's rebuild rule).
+  [Detail](backlog/catalogue.md#what-1151-left-open-2026-10-03)
+
+- **A very long number is cut off in the narrower box** — OPEN, unqueued; left open by A263
+  (#1151). The request check accepts up to 2147483647, which needs about 82px against the 66px
+  between the buttons (measured by #1151's review); three digits need about 26px. Left alone
+  because widening the box would undo the size the owner approved.
+  [Detail](backlog/catalogue.md#what-1151-left-open-2026-10-03)
+
+- **At 390px the extras table's Price column runs past its scroll area's right edge until
+  scrolled** — OPEN, unqueued; left open by A263 (#1151). W49 changed the table's column sizing,
+  but horizontal scrolling remains for the Price column at phone width. (2026-10-04: W75 added a
+  Portion column and widened the table; not re-measured.)
+  [Detail](backlog/catalogue.md#what-1151-left-open-2026-10-03)
+
+- **The options LIST form's names section is left as it is** — left open by A199 (done by A170,
+  #1040). Read as the single option's form, which the screenshots show; the options LIST form's
+  section is left as it is — ask if both were meant.
+
+- **In the product editor's Descriptors fold at 390 a long English description fills both of its
+  lines** — looked at 2026-10-03, after A200 (#1076): so the Spanish one does not show at all on
+  the closed line.
+
+- **Open test gap from A201b** (#1091): removing `#closeLostList()` from `#includeMenu` in a
+  disposable checkout left `pnpm --filter @waitron/dashboard exec vitest run
+  src/screens/menus-screen.test.ts` green (207/207, 2026-10-03). The suite does not establish
+  whether that guard catches a list disappearing between the last read and selection. Check that
+  race with a focused test, or remove the guard if the path cannot occur; its reachability remains
+  unverified.
+
+- **Past sales of a variant that had a category of its own now show under its product's
+  category** — left open by A209 (#1090): in the category sales report's "Current categories"
+  mode (`current`, `packages/reporting/src/category-sales.ts`), which classifies each line by the
+  catalogue as it is today; "Categories at time of sale" still reads what each line recorded.
+
+- **A configuration import copies `products` rows as they are** — left open by A209 (#1090):
+  (`select *` in `apps/server/src/configuration-transfer.ts`, from `CORE_CONFIGURATION_TRANSFER`
+  in `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
+  category that the effective category and the editor's read then ignore.
+
+- **The same "nothing" still reads two ways in one window** — left open by A211 (#1096): the
+  course dropdown says "— none —", and on a variant's page the hints under the open Nutritional
+  info say "None" (`editor.allergens_none`, `editor.diet_none`) where the closed line says "None
+  specified". At 390 wide a two-field line can wrap inside a value ("Dietary preferences: None" /
+  "specified"). Whether the Pricing fold should also name an empty base price or VAT is a question
+  for the owner.
+
+- **A disabled course keeps its name** — left open by A212 (#1087), raised in its review and not
+  changed there: because `kitchen_courses_name_key` covers disabled rows too, so adding a course
+  with a disabled course's name is refused as taken; a deleted course frees its name (read, not
+  run). [Detail](backlog/catalogue.md#a-disabled-course-keeps-its-name)
+
+- **The catalogue-screen test "ignores the closed window's late close…" catches its guard's
+  removal only through an unhandled error** — left open by A212 (#1087): because the late close
+  throws before it changes anything a state assertion could see.
+  [Detail](backlog/catalogue.md#a-disabled-course-keeps-its-name)
+
+- **On a variant's page an empty line reads "None specified" while the grey hint under it gives
+  the parent's values** — left open by A213 (#1079), raised in its review: which reads as a
+  contradiction — A211's "an empty value shows the parent's value" is the natural place to settle
+  it.
+  [Detail](backlog/catalogue.md#allergens-and-dietary-preferences-are-edited-in-place-a213-what-1079-left-open)
+
+- **On a product's own page a reviewed-empty allergen list and one nobody has reviewed yet
+  (`allergens: null`) both read "None specified"** — left open by A213 (#1079), raised in its
+  review. The variant hint already tells the two apart ("Not yet reviewed",
+  `editor.allergens_unreviewed`); the product line does not.
+  [Detail](backlog/catalogue.md#allergens-and-dietary-preferences-are-edited-in-place-a213-what-1079-left-open)
+
+- **Each list still reads "Extra bread · Extras", and under its heading the " · Extras" is now
+  said twice** — left open by A218 (#1082).
+
+- **With three lists the dropdown already scrolls, so "+ New options list…" sits at or just below
+  its bottom edge when it opens** — left open by A218 (#1082).
+
+- **In Spanish the folded line reads "IVA: Reduced (10%)"** — left open by A219 (#1065). The VAT
+  class name is the stored label, which `taxLabel` shows untranslated, and on `main` before #1065
+  the VAT dropdown already read it the same way. Where those labels come from, and whether they
+  should be translated, is not checked.
+
+- **Left open by #1188's review, none started** — the pricing unit dialog (W66, #1188): (1) one
+  kind of unit refusal reads "The server rejected this value…", and on the price field after a
+  price message "this value" reads as the price — a unit-specific sentence needs the owner's
+  wording; (2) the price field's own unit button does not announce that it opens a dialog
+  (`aria-haspopup`), while the heading's button does — needs an option on the shared
+  `wt-price-input`; (3) `EACH_CHOICE` is still exported from `variant-table.ts` though only the
+  product editor uses it; (4) the test title "…when the table's heading dropdown is hidden" still
+  says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled
+  while saving (same on `main` before W66, not checked further).
+  [Detail](backlog/catalogue.md#left-open-by-1188s-review-none-started-the-pricing-unit-dialog-w66)
+
+- **In the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px** — left open
+  by W70 (#1222): (978px of content in a 974px box), with or without the size attribute.
+
+- **Complete `catalogue-screen.a11y.test.ts`'s accessibility fixture and assert the native dialog
+  is open before its scan** — left open by W70a (#1265). W70a's visual probe copied
+  `catalogue-screen.a11y.test.ts`'s fixture and found that its product confirmation stayed closed:
+  the fixture supplies no `listMadeAt`, which `#reloadProducts` awaits before loading products.
+  Adding that method to the temporary probe and waiting for the product read opens the
+  confirmation. The existing suite was not changed by W70a.
+
+- **At phone width the "All products" default colour cannot be set** — left open by A332 (#1430):
+  at phone width every swatch slot is hidden except a category's name box while it is being named,
+  and a category's row menu has no colour item, so the default cannot be set on a phone (owner
+  2026-10-08: leave it until categories get a phone-width way in).
+
+- **A refused default colour reuses `category.invalid {field:"color"}`, as the VAT default reuses
+  `product.invalid`** — left open by A332 (#1430).
+
+- **While a category is being added or renamed, its name box square shows only a colour chosen
+  for it** — left open by A423 (#1443): so an inheriting category's square turns into an empty
+  outline while its name is typed — left as built, the owner may ask for the inherited colour
+  there too.
+
 ### Service periods, opening hours and departments
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
@@ -2128,6 +2246,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `docs/developers/conventions-ui.md` and CLAUDE.md §3. The offered-list wire carries no stable
   per-list identifier to use instead, so closing this means adding one to that wire.
 
+- **The live till basket still uses `×N` for modifier counts** (`apps/till/src/widgets/basket.ts`)
+  — left open by W53 (#1152); W53 changes the filed display surfaces.
+
+- **Synthetic phone captures also showed a clipped Counter total and padded-looking Spanish
+  quantities** — left open by W69 (#1325). Cause and real-venue reproduction remain unverified.
+  Inspect the real till before attributing them to W69 or changing quantity/money handling.
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -3052,6 +3177,32 @@ _Formerly A7, and Track A's dashboard part; part of A9._ Detail: [backlog/dashbo
   during render** (A370 caller audit, code reading only). Their redraw work was not measured in this
   item. Next: measure it before deciding whether to retain those lists. Left open by A370 (#1393).
 
+- **Contrast that axe leaves undecided for any other reason passes** — still not checked, left
+  open by A226 (#1092): among them an overlapping element (such as an empty `wt-input`), a
+  background image or gradient, content too short or not text — passes, so contrast in those
+  places is checked by nobody.
+
+- **`--wt-color-primary-text` has fixed light and dark values that do not follow
+  `--wt-color-primary`, and a tenant theme cannot set it** — left open by A218 (#1082):
+  (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored tenant theme
+  yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), which
+  do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment that sets
+  only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered
+  primary or danger `wt-button`.
+
+- **Three labels already on `main` fill `{…}` placeholders one after another, so a name holding
+  `{from}`-style text or `$&` can garble them** — left open by A423 (#1443): the colour chooser's
+  heading (`apps/dashboard/src/widgets/catalogue-browser.ts`), the order detail dialog's `fill`,
+  and the "price per" unit text in `product-list.ts` — #1443 fixed its own two with
+  `fillPlaceholders` (`apps/dashboard/src/widgets/product-media.ts`), and four screens keep a
+  private `fill` of the same kind that could share it.
+
+- **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
+  bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
+  instrumented eight-case matrix reached the bottom in every case. The earlier cause is
+  unverified. If it recurs, capture the current scroll/limit, pointer position, drag state and
+  visible box before attributing it to the scroll helper.
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
@@ -3483,6 +3634,18 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
   demo-only again. Not built.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
+
+- **Reset pre-production venues before using W53 with orders recorded before this migration** —
+  left open by W53 (#1152); otherwise their live tickets and settled reprints can show the old unit
+  wording.
+
+- **Reset retained pre-live venues before installing core `0092`, which rebuilds both tables** —
+  left open by W52 (#1170).
+
+- **Installing W98 needs every populated venue reset** — left open by A204's W98 (#1331): it drops
+  `zone_menus` and rebuilds `zone_service_policies`, and nothing carries the old per-zone menus
+  across. The shared dev venue was reset when it landed (2026-10-07); the owner's box needs a reset
+  too.
 
 ### Replication, failover and the cloud
 
@@ -3990,6 +4153,13 @@ _Formerly B9, and Track C's development-stack and house-rules items; part of A9.
   every run** (ignored by git, but in the source tree), the shape A281 fixed for the kitchen screen.
   Predates A348 (`git blame`: W95, 2026-10-06). Left open by A346 + A348 (#1408).
 
+- **Update the root null-exception rule after W54 — OPEN (owner rule-file maintenance).**
+  `CLAUDE.md` §3 still names only `maxPicks` and `guestCount` as fields where explicit null is a
+  value. An item's `maxQuantity` is now another; `packages/catalogue/src/extra-contract.test.ts`
+  pins both its absent default and explicit null. Lane D RUNNER §7 bars this campaign from editing
+  the rule file.
+  [Detail](backlog/ci.md#update-the-root-null-exception-rule-after-w54)
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -4397,384 +4567,6 @@ _Formerly _Later and parked_._
 ---
 
 ## Track A — UI and application
-
-**A menu's prices table puts the Price column straight after the product's name (A302, owner
-2026-10-06) — DONE (#1327):** the columns read Product, Price override, Appears under, Main category,
-Status, and the Filters panel, which lists filters in the order the table defines its columns, now
-lists the price filter first. The table keeps its column choices under a new key,
-`waitron.menus.menu-prices.table`, so an order saved before (the old order, with Price override
-last, as the person rearranged it) is not read; hidden columns and the remembered sort and filters
-start again too, as when the Menus list changed key (W87).
-
-**The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
-
-**Empty extras and options tables keep their Preselected and Default headings readable (A262, owner
-2026-10-03) — DONE (W49, #1165).**
-
-**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE (#1151).**
-
-**What #1151 left open (2026-10-03):**
-
-- **The database still accepts a maximum of 0.** The CHECK on `extra_lists` allows `max_picks = 0`
-  when `min_picks` is 0, and configuration transfer copies stored lists without the request check,
-  so a stored 0 can still arrive; the form then shows the 0 and refuses to save until it is
-  changed. Refusing it in the database is a table rebuild (CLAUDE.md §3's rebuild rule). OPEN,
-  unqueued: the owner has not asked for it.
-- **A very long number is cut off in the narrower box.** The request check accepts up to
-  2147483647, which needs about 82px against the 66px between the buttons (measured by #1151's
-  review); three digits need about 26px. Left alone because widening the box would undo the size
-  the owner approved. OPEN, unqueued.
-- At 390px the extras table's Price column runs past its scroll area's right edge until scrolled;
-  #1151's review measured it on main before the change (452px against a 373px area) and smaller
-  after it (388px). OPEN, unqueued; W49 changed the table's column sizing, but horizontal scrolling
-  remains for the Price column at phone width. (2026-10-04: W75 added a Portion column and widened
-  the table; not re-measured.)
-
-**The extras list editor's columns stay in place as products are added (A264, owner 2026-10-03)
-— DONE (W49, #1165).**
-
-**Each extras row's Preselected switch repeats its column heading beside it (A265, owner
-2026-10-03) — DONE (W49, #1165).**
-
-**An extra's maximum quantity can be left blank for no limit (A266, owner 2026-10-03) — DONE
-(W54, #1169).**
-
-**Update the root null-exception rule after W54 — OPEN (owner rule-file maintenance).**
-`CLAUDE.md` §3 still names only `maxPicks` and `guestCount` as fields where explicit null is a value.
-An item's `maxQuantity` is now another; `packages/catalogue/src/extra-contract.test.ts` pins both
-its absent default and explicit null. The setup request's `taxpayerDomicile` is another:
-`parseVenue` in `apps/server/src/setup-api.ts` reads an explicit null the same as an absent field,
-meaning no registered business address, which a demo setup sends; `apps/server/src/setup-api.test.ts`
-pins a demo provisioned with the field null or absent, and Prepare and Live refused with it absent,
-null, empty or blank. Lane D RUNNER §7 bars this campaign from editing the rule file.
-
-**The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
-(#1040).** Read as the single option's form, which the screenshots show; the options LIST form's
-section is left as it is — ask if both were meant.
-
-**A folded names section's line puts a colon after each field's name (A200, owner 2026-10-02) —
-DONE (#1076).** Looked at, 2026-10-03: in the product editor's Descriptors fold at 390 a long
-English description fills both of its lines, so the Spanish one does not show at all on the closed
-line.
-
-**Choosing one thing to add acts at selection (A201b, owner 2026-10-03) — DONE (#1091).**
-
-**Open test gap from A201b:** removing `#closeLostList()` from `#includeMenu` in a disposable
-checkout left `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts`
-green (207/207, 2026-10-03). The suite does not establish whether that guard catches a list
-disappearing between the last read and selection. Check that race with a focused test, or remove
-the guard if the path cannot occur; its reachability remains unverified.
-
-**An extra is a fixed portion: a product sold by weight is offered as, say, 50 g a pick (A203,
-owner 2026-10-02) — DONE (#1149).** [Design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md);
-[plan](superpowers/plans/2026-10-03-extra-fixed-portion.md).
-
-**An extra sold by the piece prints as `x3` on receipts, kitchen tickets and the till's filed-ticket
-view (W53, owner 2026-10-03) — DONE (#1152).** Reset pre-production venues before using W53 with
-orders recorded before this migration; otherwise their live tickets and settled reprints can show
-the old unit wording.
-The live till basket still uses `×N` for modifier counts (`apps/till/src/widgets/basket.ts`);
-W53 changes the filed display surfaces.
-
-**A portion-only edit now names the extras list, product, and old and new amounts in the
-pre-publish changes list (W51) — DONE (#1160).** The core `working_order_lines.price_quantity` and
-`sale_lines.price_quantity` columns now require a positive count of thousandths (W52) — DONE (#1170).
-Reset retained pre-live venues before installing core `0092`, which rebuilds both tables.
-
-**Department menu timetables and queued publication (A204, owner 2026-10-02; refined
-2026-10-04) — department menus and timetable (W98) DONE (#1331, 2026-10-07); queued publication
-(W99) DONE (#1358, 2026-10-07).**
-Departments own the available-menu list and the only timetable; zones override defaults within its shared periods.
-An all-day default covers gaps; normal weeks and special dates share A261's calendar. Staff may
-still order from breakfast after it stops being the default. Several future menu editions can be
-queued, always moving forwards; an immediate publication that overtakes queued editions is refused
-until the manager cancels them or their time comes.
-[Spec](superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md), §§2–3 and the approved details in §9;
-[department-menu plan](superpowers/plans/2026-10-04-department-menus-and-timetable.md);
-[publication plan](superpowers/plans/2026-10-04-forward-only-menu-publication.md).
-W98: each department holds an ordered menu list, an all-day menu and named periods
-placed on a normal week and on special dates; a zone may choose its own menu for a period or for
-the all-day gaps. Managers edit it on a new Menu timetable page (`/manage/menu-timetable`, in the
-"Products and menus" navigation group); Departments and zones no longer edits menus per zone, and its
-"needs a default menu" line links there. Its menu participant is in
-`VENUE_SERVICE_CALENDAR_PARTICIPANTS`. **Installing it needs every populated venue reset**: it
-drops `zone_menus` and rebuilds `zone_service_policies`, and nothing carries the old per-zone menus
-across. The shared dev venue was reset when it landed (2026-10-07); the owner's box needs a reset
-too.
-W99: on a menu's Preview tab a manager schedules the previewed menu to go live at a later time on
-the venue's clock, changes a scheduled version's time, or cancels it. A schedule, a changed time or
-a Publish that would put a newer version live before an older one is refused with a sentence naming
-each version in the way; nothing offers to cancel it from there. The menus list still shows
-"Unpublished" for a menu whose only version is scheduled, until that version goes live (Decision 11
-of the publication plan).
-**Left open after W99 (#1358), each an owner question asked in the PR:**
-
-- **DONE (A376, #1377):** a refused Publish advised "Cancel it or move it earlier, then try again", but
-  moving a version can never let an immediate publish through (a move must land after now). It
-  now says "Cancel it, or publish once it is live." ("Cancélala o publica cuando ya esté
-  publicada."); the schedule and Change time forms keep their move-earlier and move-later advice
-  (`#publishRefusal` in `apps/dashboard/src/screens/menus-screen.ts`, `overtakeSentence` in
-  `apps/dashboard/src/widgets/menu-publications.ts`).
-- **Left as it is (owner 2026-10-07): a narrow window, and menus are not fiscal records.** A due
-  version is served as live before anything records it (publication plan Decision 5), so if
-  the box's clock is stepped backwards past its time before the activation duty records it, reads
-  serve the previous version again until the clock catches up. A Codex review reproduced it against
-  the real migrations. Closing it means reads recording what they serve, or a never-decreasing
-  clock in the process.
-- **DONE (A376, #1377):** the schedule and Change time forms closed with "Cancel" / "Cancelar" directly
-  under a sentence that says "Cancel it…" / "Cancélala…", which in Spanish could read as
-  cancelling the version in the way. The button now reads "Close" / "Cerrar".
-- **DONE (A365, 2026-10-07):** `loadConfig` refuses `WAITRON_MAX_TICK_MS` above
-  2,147,483,647 with `server.config_invalid` / `above_timer_limit`. The boundary is accepted by
-  the config reader; trading boot still applies its stricter filing-duty budget.
-
-**The product editor, tidied: eleven changes from one walk-through (A209 to A219, owner
-2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
-kg)". All eleven are in `apps/dashboard/src/widgets/product-editor.ts` unless another file is
-named. All eleven were settled from mockups on 2026-10-02 (A216 on the reading its entry
-records); the decisions follow each entry.
-LOOK at each on a product AND on a variant's page (the editor shows a variant with its parent's
-values as the blank choices), at 1280 and 390, light and dark.
-
-**No Add category button, and the category shown as a path (A209) — DONE (#1090).**
-**Left open:**
-
-- No migration clears the categories variants already store, and none will be written (owner
-  decision, 2026-10-03: no data-migration code before go-live, CLAUDE.md §3, and the dev venue is
-  reset before then). The effective category (`effectiveProductColumns.categoryId`) and the
-  editor's read ignore a stored one, and the next save of the variant's own page, or that
-  category's deletion, clears it.
-- Past sales of a variant that had a category of its own now show under its product's category in
-  the category sales report's "Current categories" mode (`current`,
-  `packages/reporting/src/category-sales.ts`), which classifies each line by the catalogue as it is
-  today; "Categories at time of sale" still reads what each line recorded.
-- A configuration import copies `products` rows as they are (`select *` in
-  `apps/server/src/configuration-transfer.ts`, from `CORE_CONFIGURATION_TRANSFER` in
-  `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
-  category that the effective category and the editor's read then ignore.
-
-**Standalone ordering becomes one dropdown (A210) — DONE (#1070).**
-
-**The accessibility checks fail when axe cannot confirm a colour contrast because of the colours
-themselves (A226, owner 2026-10-03) — DONE (#1092).** All five copies
-of `expectNoA11yViolations` (`packages/ui/src/a11y-helpers.ts`, `packages/ui-core/src/a11y-helpers.ts`,
-and `src/widgets/test-helpers.ts` in `apps/dashboard`, `apps/setup` and `apps/till`) now also fail on a
-`color-contrast` result axe 4.13.0 left undecided with the reason `equalRatio`, `fgAlpha` or
-`colorParse` — the three of its reasons that are about the colours themselves (4.13.0 never sets
-`fgAlpha`; it is only in axe's message table). Measured on main
-e0911d714 before deciding: failing on EVERY undecided contrast result would have turned 658 passing
-tests in 84 files red, with 2,555 undecided readings (`bgOverlap` 1,804, `nonBmp` 314,
-`shortTextContent` 198, `elmPartiallyObscured` 128, `elmPartiallyObscuring` 111) and none of the three
-colour reasons; the owner chose to fail on the colour reasons only.
-**Still not checked:** contrast that axe leaves undecided for any other reason — among them an
-overlapping element (such as an empty `wt-input`), a background image or gradient, content too
-short or not text — passes, so contrast in those places is checked by nobody.
-
-**A folded section says what is missing, not only what is filled in (A211) — DONE (#1096).**
-**Left open:** the same "nothing" still reads two ways in one window: the course dropdown says
-"— none —", and on a variant's page the hints under the open Nutritional info say "None"
-(`editor.allergens_none`, `editor.diet_none`) where the closed line says "None specified". At 390
-wide a two-field line can wrap inside a value ("Dietary preferences: None" / "specified").
-Whether the Pricing fold should also name an empty base price or VAT is a question for the owner.
-
-**An Add course button beside the course dropdown (A212) — DONE (#1087); left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
-rows too, so adding a course with a disabled course's name is refused as taken (measured
-2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
-it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there
-(its other point, `wt-combobox`'s `stable-width` missing from `docs/developers/design-system.md`,
-A342 documented): the catalogue-screen test "ignores the closed window's late close…" catches its guard's removal only through an unhandled error, because the late close throws
-before it changes anything a state assertion could see.
-
-**Allergens and dietary preferences are edited in place (A213) — DONE (#1079); left open by #1079
-(raised in its review, not changed there):** on a variant's page an empty
-line reads "None specified" while the grey hint under it gives the parent's values, which reads as
-a contradiction — A211's "an empty value shows the parent's value" is the natural place to settle
-it. And on a product's own page a reviewed-empty allergen list and one nobody has reviewed yet
-(`allergens: null`) both read "None specified"; before #1079 both read "None selected", so this
-predates it (checked against the old code in #1079's review). The variant hint already tells the
-two apart ("Not yet reviewed", `editor.allergens_unreviewed`); the product line does not.
-(2026-10-03, A211: a variant's closed Nutritional info line now shows the parent's values in
-italic, but the open line still reads "None specified" above the hint, so the first point stands;
-on a product's own page the closed line reads both cases as "None specified" too, as the open line
-does, so the second stands.)
-
-**No box around Pricing (A214) — DONE (#1065).**
-
-**Clicking a variant's row opens its edit window (A215) — DONE (#1049); the click on the Available
-switch's knob, left open from its review, is DONE by W76 (#1218).**
-
-**The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE (#1057).**
-**Decided (owner, 2026-10-02):** "Each" with no unit, "per <unit>" with one.
-
-**The variants' status filter becomes a "Show inactive" link (A217) — DONE (#1065).** The
-wording is "inactive", to match the rest of the dashboard (owner).
-
-**"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — DONE
-(#1082).**
-Built: "Add extras or options" lists the extras lists under an "Extras" heading and the options
-lists under "Options", each group ending with its make-new choice, drawn with a plus icon in the
-primary blue. A group whose lists are all attached, or that has none, still shows its heading and
-its make-new choice. The blue comes from a new opt-in on `wt-combobox` options, `primary`, which
-paints the row in a new token, `--wt-color-primary-text`: the primary colour itself was too faint
-on a hovered row in the light theme for axe (4.32:1). **Open:** each list still reads "Extra bread
-· Extras", and under its heading the " · Extras" is now said twice; with three lists the dropdown
-already scrolls, so "+ New options list…" sits at or just below its bottom edge when it opens; and
-`--wt-color-primary-text` has fixed light and dark values that do not follow `--wt-color-primary`,
-and a tenant theme cannot set it (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored
-tenant theme yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover`
-(A306), which do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment
-that sets only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a
-hovered primary or danger `wt-button`.
-
-**With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
-**Decided (owner, 2026-10-02):** the price comes before VAT, everywhere. **Open:** in
-Spanish the folded line reads "**IVA:** Reduced (10%)". The VAT class name is the stored label,
-which `taxLabel` shows untranslated, and on `main` before #1065 the VAT dropdown already read it
-the same way. Where those labels come from, and whether they should be translated, is not checked.
-
-**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE (#1188).**
-The price field's unit button, and on a product with variants the unit button in the
-variants table's Price heading, open one Pricing unit dialog holding the unit dropdown and Add unit.
-Detail: design-system.md, the `wt-price-input` note under the product editor.
-Left open by #1188's review, none started: (1) one kind of unit refusal reads "The server rejected
-this value…", and on the price field after a price message "this value" reads as the price — a
-unit-specific sentence needs the owner's wording; (2) the price field's own unit button does not
-announce that it opens a dialog (`aria-haspopup`), while the heading's button does — needs an option on
-the shared `wt-price-input`; (3) `EACH_CHOICE` is still exported from `variant-table.ts` though only
-the product editor uses it; (4) the test title "…when the table's heading dropdown is hidden" still
-says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled while
-saving (same on `main` before W66, not checked further).
-
-**Modals come in three sizes chosen for their content (W70, owner 2026-10-04) — DONE (#1222).**
-Detail: design-system.md, the `wt-modal` entry. W70a — DONE (#1265; owner, 2026-10-05,
-"compact only") — makes compact modals fit their content up to the screen's height, with the body
-scrolling beyond it and footer actions held in view. Standard and wide modals retain their full
-height. The category delete dialog is standard and retains its empty space; W74's height finding
-therefore remains open. _2026-10-06: A296 (#1301) made that dialog compact, closing the finding._ Left open: in the wide Extras editor at 1280px wide, the items table scrolls
-sideways by 4px (978px of content in a 974px box), with or without the size attribute.
-
-W70a's visual probe copied `catalogue-screen.a11y.test.ts`'s fixture and found that its product
-confirmation stayed closed: the fixture supplies no `listMadeAt`, which `#reloadProducts` awaits
-before loading products. Adding that method to the temporary probe and waiting for the product
-read opens the confirmation. Follow-up: complete that accessibility fixture and assert the native
-dialog is open before its scan. The existing suite was not changed by W70a.
-
-**Warn before discarding unsaved changes (W69, owner 2026-10-04) — DONE (#1325, 2026-10-07).**
-
-You get one shared warning for staged forms, modal close requests, page navigation
-and browser leaving across the dashboard, setup wizard, till and contributed screens. Keep
-retains the affected draft; Discard resets only that local draft before the requested leave.
-Successful writes commit independently before refresh. Forced security exits cancel pending
-questions and clear sensitive inputs; automatically saved party drafts keep their existing lifecycle.
-
-The final audit found PIN sign-in missing from the implementation: its keypad was outside the
-field-tag discovery search. Cancel, locale replacement and unload now use the same registry;
-explicit login submission remains direct. Later digits during an in-flight login stay protected. The [dated owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md)
-records the original failing tests, deliberate fixture changes, deletion controls and native
-language/theme/width checks for each rollout checkpoint. Earlier rollout-status paragraphs are
-superseded by its dated receipts. The whole-branch Claude review found stale URL query writes, a copied Hours history position,
-a reused history epoch and a retained PIN owner after a forced server switch. Those findings
-have focused regression tests and installed deletion controls. PR #1325 landed as
-`d5de03678d996e7fce04205259c93d350b7af38b`. The normal hook and every selected CI job passed
-on `31479aae30f5e29fab397b96aa30357221041243` (CI `37571245178`, CodeQL `37571242705`,
-licence `37571244942`). Earlier CI `37568443521` passed the package tests but refused dashboard
-branch coverage at 94.79%; the added stale-operation, independent-write and busy-input cases
-passed the local full dashboard run with 8,371 tests and 95% branch coverage before the final CI pass.
-
-The printer detail's inline name and network connection now register independent drafts with
-the shared leave controller. Focused browser cases cover Cancel, breadcrumb and Back decisions,
-normalized reverts, browser-leaving registration, successful and refused writes, newer input and
-independent saves. The old local discard prompts have been replaced by the shared question.
-Removed inputs from an earlier opening cannot change a reopened editor. Actual dashboard tests
-cover both editors through sidebar navigation, language change, sign-out, Forward, printer
-switching and forced session expiry. Sixteen EN/ES, light/dark, phone/desktop cases cover native
-focus, scoped accessibility and activated Chromium reload; 32 captures were inspected. The APIs
-in these checks are synthetic. The dated audit records the commands and fixture corrections.
-The merge’s own CI is tracked separately in the lane’s progress log; a passing PR run does not
-establish the merged main result.
-
-Activated desktop Chromium checks cover reload, external navigation and closing with the
-Schedule owner; the implementation does not promise prompts on every browser or after mobile
-process termination. Rendered-link tests use actual dispatched elements with synthetic APIs;
-they do not establish physical reachability beneath an unrelated modal or live server writes.
-
-Synthetic phone captures also showed a clipped Counter total and padded-looking Spanish
-quantities. Cause and real-venue reproduction remain unverified. Inspect the real till before
-attributing them to W69 or changing quantity/money handling. Service-status labels, sidebar
-and warning hover contrast investigations remain separate below.
-
-**"All products" holds a venue default colour (A332, owner 2026-10-07) — LANDED as #1430 (2026-10-08).**
-The venue has one default colour, stored in `catalogue_settings.default_color` (catalogue
-migration 0031, an added column) and edited from the Products screen's All products row, whose
-swatch now sits in the slot that was blank. It is the last step of the colour walk: a product
-with no colour of its own, no category colour and none above takes it. The dashboard shows it
-live (Products, the product editor's "Use default colour" choice, a menu's Structure tab);
-published menus freeze it, so a menu reads "changed" after the default changes and the till shows
-the new colour once the menu is published again. The look (`~/waitron-campaign-b/a332-shots/`)
-found that a saved setting never repainted an open screen: the change feed sent the id of a
-one-row table as a number and the dashboard dropped the whole batch. The feed now sends every id
-as text, which also makes the other one-row settings tables refresh open screens. Open points:
-(1) at phone width every swatch slot is hidden except a category's name box while it is being
-named, and a category's row menu has no colour item, so the default cannot be set on a phone (owner
-2026-10-08: leave it until categories get a phone-width way in); (2) a refused default colour
-reuses `category.invalid {field:"color"}`, as the VAT default reuses `product.invalid`; (3) the All
-products swatch sits one tree level left of the categories' swatches, by the table's indent
-rule. Owner ruling 2026-10-08 (A415): keep each square at its own row's indent, never one column,
-and every level has one. A look on 2026-10-08 (`~/waitron-campaign-b/a415-shots/`: EN and ES in
-both themes at 1280 and 640 px, and all but Spanish dark at 560 and 520 px; a category three
-deep) found every level already drew one, so A415 added only a Chromium case pinning it:
-one square per row for All products, each category depth, a product and its variants, each a
-level's step further in, a variant on its product's indent. At 520 px the table had switched to its
-narrow layout (a tree 440 px wide or less, `packages/ui/src/components/wt-data-table.ts`), which
-hides every row's square; only a category's name box keeps one while the category is being named.
-A category with no colour of its own used to show an empty outline even when the products under
-it showed an inherited colour; A423 (owner 2026-10-08) made it show the colour it inherits, marked
-as inherited (dashed outline, inset fill), as an inheriting product's square is — LANDED as #1443
-(2026-10-08). A product or variant without a colour of its own now carries the same mark in the
-Products tree, and each inheriting square's accessible name says where the colour comes from (a
-category, or All products). The Menus editor's squares are unchanged. Left open: (a) while a
-category is being added or renamed, its name box square shows only a colour chosen for it, so an
-inheriting category's square turns into an empty outline while its name is typed — left as built,
-the owner may ask for the inherited colour there too; (b) three labels already on `main` fill
-`{…}` placeholders one after another, so a name holding `{from}`-style text or `$&` can garble
-them: the colour chooser's heading (`apps/dashboard/src/widgets/catalogue-browser.ts`), the
-order detail dialog's `fill`, and the "price per" unit text in `product-list.ts` — #1443 fixed
-its own two with `fillPlaceholders` (`apps/dashboard/src/widgets/product-media.ts`), and four
-screens keep a private `fill` of the same kind that could share it.
-
-**Held reorder drags scroll at the list edge (A334, 2026-10-08) — BUILT.**
-Products, shared reorder tables, preparation stations and the column chooser use
-one `DragEdgeScroll` helper. A held pointer scrolls the nearest visible scrolling box and refreshes
-the drop target; leaving the edge or ending the gesture stops its frame loop. Columns reorder
-vertically in Customise; the helper also covers horizontal scrolling. Floor and grid placement
-editors remain outside this change.
-One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
-bottom; a later instrumented eight-case matrix reached the bottom in every case. The earlier
-cause is unverified. If it recurs, capture the current scroll/limit, pointer position, drag state
-and visible box before attributing it to the scroll helper.
-
-**Menu Structure drags scroll at the list edge (A334b, 2026-10-08) — BUILT.**
-Menu Structure uses A334's shared helper, refreshing the drop target after each scroll.
-Chromium cases cover both edges and the exact move reported on release, leaving the edge,
-release, cancellation, Escape, disconnect and a fitting list. The lifecycle cases track real
-animation-frame requests and cancellation, including the absence of a pending frame at the end.
-
-**Main image smoke cannot fetch BlueZ (2026-10-08) — DONE (A391, #1420).** Cause measured with
-`curl -I` on 2026-10-08: Ubuntu superseded `bluez_5.72-0ubuntu5.5` (404 on the archive and security
-pools) with `5.72-0ubuntu5.6` (200 on both), and the step installed from the runner image's own
-package list. The step now runs `apt-get update` first, and a case in `scripts/ci-workflow.test.mjs`
-(weaker than its name: it reads workflow `run:` text, so an install in a composite action or a
-called script is not seen) refuses an apt install with no update before it in the same step. Proof:
-image-nightly run 37741541793 on the PR's head installed `5.72-0ubuntu5.6` and passed. What was
-recorded at the time:
-The [image smoke job after A334b](https://github.com/clintongormley/waitron/actions/runs/37741153470/job/113192086434)
-failed before either image build: `apt-get install` could not fetch
-`bluez_5.72-0ubuntu5.5_amd64.deb`, receiving HTTP 404 from `security.ubuntu.com`, and exited 100.
-The install is in `.github/workflows/image-smoke.yml:60`. Investigate package-index freshness
-and repository availability, then queue the workflow repair separately. No retry or repair was
-applied in A334b, whose merge changed only the menu tree, its tests and documentation.
-The remaining jobs on merge `cdb1722b6622ba7be77cfa0dcfc924bb2716b55e` were still running when this
-receipt was recorded; do not treat its complete main run as green.
 
 **A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07) — PARTLY
 BUILT: batch 1 in #1391; batch 3a in #1401; batch 3b in #1415; batch 4a module forms; batch 4c (two

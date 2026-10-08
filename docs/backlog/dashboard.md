@@ -637,3 +637,14 @@ From A342 (#1366, several values in one table filter):
 - Not changed, single-choice dropdowns outside `wt-data-table`: the Add products dialog's
   Category, the Staff screen's Role and the Orders screen's Status (a server query). Each could
   take several values later if wanted.
+
+From W69 (#1325, warn before discarding unsaved changes):
+
+- Activated desktop Chromium checks cover reload, external navigation and closing with the
+  Schedule owner; the implementation does not promise prompts on every browser or after mobile
+  process termination. Rendered-link tests use actual dispatched elements with synthetic APIs;
+  they do not establish physical reachability beneath an unrelated modal or live server writes.
+
+From A334 (#1416, held reorder drags scroll at the list edge):
+
+- Floor and grid placement editors remain outside this change.
