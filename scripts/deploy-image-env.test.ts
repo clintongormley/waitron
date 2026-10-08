@@ -330,6 +330,100 @@ describe("the print-agent image and its compose wiring", () => {
   });
 });
 
+/**
+ * What each `RUN` in a Dockerfile that mentions `apt-get` misses of the bounded-wait shape: apt's
+ * own read timeouts written to a file under /etc/apt/apt.conf.d/, a `bounded()` wrapper that runs
+ * `"$@"` under `timeout <n>`, every `apt-get update` and `apt-get install` called through it, and
+ * the file removed again so the image ships no apt setting. Reads TEXT: it does not check that
+ * `bounded()` retries, run the shell, judge the numbers, or see apt reached any other way (`apt`,
+ * a script).
+ */
+function aptRunGaps(dockerfile: string): { runs: number; gaps: string[] } {
+  const runs = dockerfile
+    .replace(/\\\n/g, " ")
+    .split("\n")
+    .filter((line) => /^RUN\s/.test(line) && line.includes("apt-get"));
+  const gaps = runs.flatMap((run, index) => {
+    const where = `RUN ${index + 1} with apt-get`;
+    const missing: string[] = [];
+    const config = /> *(\/etc\/apt\/apt\.conf\.d\/\S+?);/.exec(run)?.[1];
+    if (
+      config === undefined ||
+      !run.includes("Acquire::http::Timeout") ||
+      !run.includes("Acquire::https::Timeout")
+    ) {
+      missing.push(`${where}: writes no http and https read timeout under /etc/apt/apt.conf.d/`);
+    } else if (
+      !new RegExp(
+        `\\brm\\s+-rf\\b[^;]*\\s${config.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|;|$)`,
+      ).test(run)
+    ) {
+      missing.push(`${where}: does not remove ${config}`);
+    }
+    if (!/\bbounded\(\)\s*\{[^}]*\btimeout\s+\d+\s+"\$@"/.test(run)) {
+      missing.push(`${where}: defines no bounded() that runs each attempt under timeout <n>`);
+    }
+    for (const call of run.matchAll(/\bapt-get(?:\s+-\S+)*\s+(?:update|install)\b/g)) {
+      if (!/\bbounded\s+$/.test(run.slice(0, call.index))) {
+        missing.push(`${where}: \`${call[0]}\` is not called through bounded`);
+      }
+    }
+    return missing;
+  });
+  return { runs: runs.length, gaps };
+}
+
+describe("the Dockerfile's apt waits", () => {
+  const bounded =
+    "RUN set -eux; \\\n" +
+    "  printf '%s\\n' 'Acquire::Retries \"3\";' 'Acquire::http::Timeout \"30\";' 'Acquire::https::Timeout \"30\";' \\\n" +
+    "    > /etc/apt/apt.conf.d/99bounded-waits; \\\n" +
+    '  bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; done; return 1; }; \\\n' +
+    "  bounded apt-get update; \\\n" +
+    "  bounded apt-get install -y --no-install-recommends bluez; \\\n" +
+    "  rm -rf /var/lib/apt/lists/* /etc/apt/apt.conf.d/99bounded-waits\n";
+
+  it("passes a RUN in the bounded shape, and skips a RUN with no apt-get", () => {
+    expect(aptRunGaps(`FROM x\n${bounded}RUN echo hi\n`)).toEqual({ runs: 1, gaps: [] });
+  });
+
+  it.each([
+    [
+      "an apt-get not called through bounded",
+      bounded.replace("bounded apt-get update", "apt-get update"),
+      "RUN 1 with apt-get: `apt-get update` is not called through bounded",
+    ],
+    [
+      "a bounded() with no timeout",
+      bounded.replace("timeout 300 ", ""),
+      "RUN 1 with apt-get: defines no bounded() that runs each attempt under timeout <n>",
+    ],
+    [
+      "no https read timeout",
+      bounded.replace(" 'Acquire::https::Timeout \"30\";'", ""),
+      "RUN 1 with apt-get: writes no http and https read timeout under /etc/apt/apt.conf.d/",
+    ],
+    [
+      "a config left in the image",
+      bounded.replace(" /etc/apt/apt.conf.d/99bounded-waits\n", "\n"),
+      "RUN 1 with apt-get: does not remove /etc/apt/apt.conf.d/99bounded-waits",
+    ],
+  ])("reports %s", (_shape, dockerfile, gap) => {
+    expect(aptRunGaps(dockerfile).gaps).toEqual([gap]);
+  });
+
+  it("bounds every apt-get wait in deploy/Dockerfile", () => {
+    const { runs, gaps } = aptRunGaps(DOCKERFILE);
+    expect(runs, "expected both stages' apt-get RUNs to still be here").toBeGreaterThanOrEqual(2);
+    expect(
+      gaps,
+      "apt's own read timeout did not end a wait on a mirror sending a byte every 5 s, so each " +
+        "apt-get on a box's link runs " +
+        'through bounded() (docs/developers/ci-and-gates.md, "Every apt wait is bounded")',
+    ).toEqual([]);
+  });
+});
+
 describe("the waitron.sh box command", () => {
   it("is a bash script", () => {
     expect(WAITRON_SH).toMatch(/^#!.*\bbash\b/);

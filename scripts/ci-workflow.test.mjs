@@ -27,7 +27,7 @@ import {
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
-// case reading mutation.yml, and a token-permissions case and an apt case reading every .yml file
+// case reading mutation.yml, and a token-permissions case and two apt cases reading every .yml file
 // in .github/workflows/. A transcription tests this file's copy of a workflow rather than the
 // workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
@@ -1501,14 +1501,40 @@ function workflowSteps(text) {
   }));
 }
 
+/** An `apt` or `apt-get` command running `word`, options before it included. */
+const apt = (word, flags = "") =>
+  new RegExp(`\\bapt(?:-get)?(?:\\s+(?:-[oc]\\s+\\S+|-\\S+))*\\s+${word}\\b`, flags);
+
 /** The steps whose `run:` command installs with apt, and whether it updates the package list first. */
 function aptInstallSteps(text) {
-  const apt = (word) => new RegExp(`\\bapt(?:-get)?(?:\\s+(?:-[oc]\\s+\\S+|-\\S+))*\\s+${word}\\b`);
   return workflowSteps(text).flatMap(({ step, command }) => {
     const install = apt("install").exec(command);
     if (install === null) return [];
     return [{ step, updatesFirst: apt("update").test(command.slice(0, install.index)) }];
   });
+}
+
+/**
+ * Every `apt update`, `apt install`, `apt-get update` or `apt-get install` in a step's `run:`
+ * command, and whether it is bounded: run under `timeout <n>` on its own line (`sudo` allowed
+ * before `timeout` and between it and the apt word) and carrying both
+ * `-o Acquire::http::Timeout=<n>` and `-o Acquire::https::Timeout=<n>` before the word.
+ */
+function aptWaits(text) {
+  const aptWait = apt("(?:update|install)", "g");
+  const outerLimit = /(?:^|[\s;&|(!])(?:sudo\s+)?timeout\s+\d+\s+(?:sudo\s+)?$/;
+  return workflowSteps(text).flatMap(({ step, command }) =>
+    command.split("\n").flatMap((line) =>
+      [...line.matchAll(aptWait)].map((found) => ({
+        step,
+        command: found[0],
+        bounded:
+          outerLimit.test(line.slice(0, found.index)) &&
+          /-o\s+Acquire::http::Timeout=\d+\b/.test(found[0]) &&
+          /-o\s+Acquire::https::Timeout=\d+\b/.test(found[0]),
+      })),
+    ),
+  );
 }
 
 const workflowsDir = join(repoRoot, ".github", "workflows");
@@ -1770,6 +1796,95 @@ describe("the workflows' apt installs", () => {
       steps.filter((found) => !found.updatesFirst).map((found) => `${found.name}: ${found.step}`),
       "run `sudo apt-get update` earlier in the same step's `run:` than its `apt-get install`: " +
         "the runner's baked-in package list can name a file the archive no longer serves",
+    ).toEqual([]);
+  });
+});
+
+/**
+ * Every apt update or install in a step runs under an outer `timeout <n>` on its own line and
+ * carries apt's own `Acquire::http::Timeout` and `Acquire::https::Timeout`: apt's read timeout did
+ * not end a wait on a mirror sending a byte every 5 s, and the outer limit did (receipt:
+ * docs/developers/ci-and-gates.md, "Every apt wait is bounded"). It reads each workflow as TEXT
+ * through the same step reader as the case above, so it misses every install that case lists as
+ * passing. It reads line by line, so a `timeout` at the end of a `\`-continued line is reported as
+ * unbounded. It does not check that the step retries, nor judge the numbers.
+ */
+describe("the workflows' apt waits", () => {
+  const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
+  const options = "-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30";
+  const unbounded = (text) =>
+    aptWaits(text)
+      .filter((found) => !found.bounded)
+      .map((found) => found.command);
+
+  it.each([
+    ["sudo timeout 60 apt-get"],
+    ["timeout 60 apt-get"],
+    ["timeout 60 sudo apt-get"],
+    ["if sudo timeout 60 apt-get"],
+  ])("passes %j with both options", (prefix) => {
+    const text = workflow(`      - name: deps\n        run: ${prefix} ${options} update\n`);
+    expect(aptWaits(text)).toEqual([
+      { step: "deps", command: `apt-get ${options} update`, bounded: true },
+    ]);
+  });
+
+  it("reports an apt command with no outer limit", () => {
+    const text = workflow(
+      `      - name: deps\n        run: sudo apt-get ${options} install -y bluez\n`,
+    );
+    expect(unbounded(text)).toEqual([`apt-get ${options} install`]);
+  });
+
+  it.each([
+    ["the http", "-o Acquire::https::Timeout=30"],
+    ["the https", "-o Acquire::http::Timeout=30"],
+  ])("reports an apt command without %s read timeout", (_missing, kept) => {
+    const text = workflow(
+      `      - name: deps\n        run: sudo timeout 60 apt-get ${kept} update\n`,
+    );
+    expect(unbounded(text)).toEqual([`apt-get ${kept} update`]);
+  });
+
+  it("does not count a timeout on an earlier line", () => {
+    const text = workflow(
+      `      - name: deps\n        run: |\n          sudo timeout 60 true\n          sudo apt-get ${options} update\n`,
+    );
+    expect(unbounded(text)).toEqual([`apt-get ${options} update`]);
+  });
+
+  it("does not count a timeout that bounds a different command on the same line", () => {
+    const text = workflow(
+      `      - name: deps\n        run: timeout 60 true && sudo apt-get ${options} update\n`,
+    );
+    expect(unbounded(text)).toEqual([`apt-get ${options} update`]);
+  });
+
+  it("counts an update with no install, and each command on its own", () => {
+    const text = workflow(
+      "      - name: refresh\n        run: sudo apt-get update\n" +
+        `      - name: deps\n        run: |\n          sudo timeout 60 apt-get ${options} update &&\n` +
+        "            sudo apt install -y bluez\n",
+    );
+    expect(aptWaits(text)).toEqual([
+      { step: "refresh", command: "apt-get update", bounded: false },
+      { step: "deps", command: `apt-get ${options} update`, bounded: true },
+      { step: "deps", command: "apt install", bounded: false },
+    ]);
+  });
+
+  it("bound every apt update and install with an outer timeout and apt's own read timeouts", () => {
+    const found = workflowFiles.flatMap((name) =>
+      aptWaits(readFileSync(join(workflowsDir, name), "utf8")).map((wait) => ({ ...wait, name })),
+    );
+    expect(found.length, "expected image-smoke's apt commands to still be here").toBeGreaterThan(0);
+    expect(
+      found
+        .filter((wait) => !wait.bounded)
+        .map((wait) => `${wait.name}: ${wait.step}: ${wait.command}`),
+      "run each apt-get as `sudo timeout <seconds> apt-get -o Acquire::http::Timeout=<n> " +
+        "-o Acquire::https::Timeout=<n> …` inside a retry loop: apt's own read timeout did not " +
+        "end a wait on a mirror sending a byte every 5 s",
     ).toEqual([]);
   });
 });
