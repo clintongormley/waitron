@@ -156,6 +156,54 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders the settings editor accessibly with Save quiet, then with Save ready after an edit", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi(ENABLED) },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    const save = q(el, "[data-test=save-settings]") as HTMLElementTagNameMap["wt-button"];
+    expect([save.variant, save.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=destination]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "/mnt/usb/waitron-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    await save.updateComplete;
+    expect([save.variant, save.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders turning archives on accessibly with Apply quiet, then with Apply ready after an edit", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      theme,
+    );
+    await flush(el);
+    const apply = q(el, "[data-test=apply]") as HTMLElementTagNameMap["wt-button"];
+    expect([apply.variant, apply.disabled]).toEqual(["secondary", true]);
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=destination]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "/mnt/usb/waitron" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    await apply.updateComplete;
+    expect([apply.variant, apply.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders a retention box the form refused accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
