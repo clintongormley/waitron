@@ -80,3 +80,29 @@ enums, but a user-definable kitchen-status list does not exist.
   `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a real
   service:** whether that is enough for something a cook must not miss, or whether an options answer
   deserves its own prominent form on the ticket. Nobody has watched a real kitchen read one.
+
+## On the Routing tab, the label above the "Where is this made?" time choice is cut
+
+- **Seen in A323's look at the demo (2026-10-07), in files A323 did not change.** On the
+  Routing tab, the label above the "Where is this made?" time choice is cut to "W…" ("Cuá…" in
+  Spanish) at 1280 and 390 px, in both themes, because the choice is too narrow for it. At
+  390 px the Prep stations tab row scrolls sideways with both ends cut ("Stations" on the left,
+  "New watcher" on the right) and nothing shows that it scrolls. Screenshots:
+  `~/waitron-campaign-c/a323-shots/`.
+
+## At 390 px the routing grid's fixed first column takes about 140 of the grid's roughly 310 px
+
+- **Seen in A372's look at the demo (2026-10-07), in files A372 did not change.** At 390 px
+  the routing grid's fixed first column takes about 140 of the grid's roughly 310 px, so one
+  zone column shows at a time and a saved choice in a zone column is reached only by scrolling
+  sideways. In a cell at 390 px, "Downstairs bar" fills its field and its last letter touches
+  the dropdown arrow. Screenshots: `~/waitron-campaign-c/a372-shots/`.
+
+## Prep stations' Settings cell saves have the shape A261-4 changed for routing cells
+
+- **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells.**
+  `#saveSettingsCell`
+  (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
+  releases its unsaved-changes registration as soon as the save succeeds, before the refresh
+  that follows has settled. A routing cell now keeps its registration until that refresh
+  settles. Not changed in A261-4.

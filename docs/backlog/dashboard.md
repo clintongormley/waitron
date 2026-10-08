@@ -493,3 +493,5 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   (`multiple`), and optionally offer to add what was typed when nothing matches. Left out on
   purpose, per its design: searching on the server, disabling single options, taking part in a
   native `<form>`, and showing chosen options as chips (it shows a count instead).
+- **Venue settings' Tables and Kitchen tabs (A261 step 1, #1166; owner amendment, 2026-10-04).**
+  Supervisors can read Tables and Kitchen, while writes remain manager-only.

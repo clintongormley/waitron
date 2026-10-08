@@ -619,3 +619,5 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
   Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
   0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.
+- **Over-limit invoices (A261-2c, #1285; owner decision, 2026-10-06).** Non-fiscal placement
+  accepts an over-limit order; collection refuses the over-limit invoice without taking money.

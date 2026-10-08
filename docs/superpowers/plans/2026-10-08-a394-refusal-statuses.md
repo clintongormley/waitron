@@ -390,7 +390,7 @@ Status changes:
   `packages/venue-service/src/routes.ts` (table `:95-134`, second boundaries for the path routes),
   `routes.test.ts`, `menu-timetable-routes.test.ts`, `hours-routes.test.ts`. Changes the six codes
   in its group 404/409 → 400. **This is the item that settles A374's open point** (commit
-  `7f0e38789`, backlog bullet "Done by A374 (#1403 …)"): under the rule the configuration import's
+  `7f0e38789`, bullet "Done by A374 (#1403 …)", now in `docs/backlog/architecture.md`): under the rule the configuration import's
   400 for `service_zone.not_found` is already right (pinned by `apps/server/src/setup-api.test.ts:1229,1615-1632`),
   and it is the routing grid's save that should move from 404 to 400. No change to `setup-api.ts`.
   With owner question 9, `zone.department_inactive` and `route.station_inactive` → 400 too, which

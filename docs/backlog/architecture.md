@@ -433,6 +433,33 @@ that cite it obliquely; and searching "sync origin" also reaches a still-live th
 own `origin_node_id` column (`packages/db/src/schema/mirror-config.ts`), which is outside this item
 and must not be swept with it.
 
+## The configuration import answers a routing cell's `service_zone.not_found` 400, while the grid's save answers the same code 404
+
+- **Done by A374 (#1403; owner answer "refuse, and say which choice and why", 2026-10-07): a
+  configuration import refuses a routing cell on a zone in a switched-off department.**
+  `validateRoutingConfiguration` (`packages/venue-service/src/configuration-transfer.ts`)
+  refuses it with the routing grid's own `service_zone.not_found`, naming the zone, the
+  department and the row (each name only where the export holds one), and the setup app's import screen says which choice it is and how to
+  fix it, in English and Spanish.
+  Still open: the import answers this refusal 400, the boundary's default, while the grid's
+  save answers the same code 404. The owner answered on 2026-10-08 that every API answers a
+  refusal by one rule based on what it means; the campaign's A394 (low priority, not yet a
+  backlog entry) audits the statuses against that rule.
+
+## The configuration import answers `zone.department_inactive` 400, while the dashboard's saves answer the same code 409
+
+- **Done by A393 (#1425; owner answer "Yes, refuse it", 2026-10-08): a configuration import refuses a
+  switched-on zone in a switched-off department**, whether or not a routing cell names it,
+  with the zone's own `zone.department_inactive`, naming the zone and the department (each name
+  only where the export holds one), answered 400; the dashboard's saves answer the same code
+  409 (`packages/venue-service/src/routes.ts`, `apps/server/src/management-api.ts`), which
+  A394's audit covers too. A zone's or department's `active` flag other than 0 or 1 is refused
+  (`setup.request_invalid`, naming `floor_zones.active` or `departments.active`), and a row
+  without the flag is read as switched on, as storage keeps it. The check runs after the routing one, so a
+  bundle that also has a routing cell on that zone still gets A374's message naming the row.
+  The setup app's import screen names the zone and the department and how to fix it, in
+  English and Spanish.
+
 ## Decisions and deliberate limits
 
 **What slice 1 left (#490 and the preparation tasks):**

@@ -37,3 +37,58 @@ their full text.
   Departments and zones; other screens still await their own one-department survey. Tab billing
   remains open; the shared calendar is built by A261 step 5 (below), and its public holidays by
   step 6.
+
+## Smaller notes from the Hours reviews
+
+- Smaller notes: the calendar's day read repeats the subject precedence `resolveSubjects` holds
+  and matches a cell by id alone; one `hours-client.test.ts` case detaches in the same turn and
+  cannot fail; the participant-failure route case checks the status, not the body's code; the
+  time-zone route case never asserts `nextTransition`; nothing pins which of two repeated
+  midnights a clock change picks; no test opens Hours from a department's link end to end; with
+  the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
+  has disabled; on a phone the calendar's cells break a long
+  special-date name mid-word (a design choice for the owner); the test where the live feed
+  delivers nothing does not check that its two reads cover different ranges; and no test sends
+  the default station with a blank inherited cell.
+
+## Province edits in Venue details
+
+- **Province edits in Venue details.** `apps/server/src/venue-details.ts` still refuses every
+  province change (`geography_context` before sales). The step 7 plan allowed a change keeping
+  the same derived context, holiday region included, once a sourced province-to-region map
+  existed; step 6 ships that map (`packages/country-es/src/data/regions.ts`). Allowing it is a
+  separate decision; nothing in step 6 changes it.
+
+## Smaller notes from the public holidays reviews
+
+- **Smaller notes from the reviews:** there is no control to clear a chosen area back to "not
+  chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
+  Arán" are Spanish data labels shown untranslated in English; the database does not count local
+  holidays, so only the writer and the import hold the yearly allowance; the local-holidays editor
+  decides "not available" from an allowance of 0 and the calendar from an unsupported country,
+  which differ only for a country shipping an allowance of 0 (none does); and `renameSpecialDate`
+  checks the name before the date's id, so a blank name for another venue's date answers
+  `hours.invalid` rather than not found.
+
+## Decisions and deliberate limits
+
+- **A department row's arrow (A301, #1335, A261 step 2).** Departments start open, unlike the
+  Products, menu Structure and menu prices trees, which start closed, and a folded department is
+  not remembered after a reload: the table remembers only the branches a person opens, only in a
+  tree that starts closed and turns on `rememberExpanded`, which of those three only the Products
+  tree does.
+- **A9 wages** will read the calendar's holiday facts through its own composition contract;
+  nothing in Hours computes pay. (A261 step 5, Hours, #1298.)
+- **Step 7 time zone and cutover** (A261). #1281 refuses a time zone or cutover change once the
+  venue has any sale, working order or daily close. Hours keeps wall times and date keys as stored and
+  reads again on a `locations` change; allowing a change after trading would need its own
+  decision on what stored hours mean.
+- **Venue details (A261 step 7, #1281).** Changes needing another fiscal/geographic context or
+  history removal use a separately approved setup/reset instead. Later
+  Hours/holidays/menu builds retain their own compatibility tests.
+- **Address changes during a local-holiday or area save (#1305's open points, A261 step 6).** An
+  address change that lands after Save is pressed but before the page has read the new address is not
+  caught: the route takes no expected address, and an area save already on its way has the same
+  gap. The address-change warning names only the new city, though a province change also
+  triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
+  (listed among the smaller notes from the public holidays reviews, above).

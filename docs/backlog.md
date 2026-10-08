@@ -377,6 +377,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and Track C's fiscal 
   exactly one. **Remaining:** contain repeated F2 requests per sale, with the invoice number on the
   slip. [Detail](backlog/fiscal.md#one-original-per-invoice-structurally)
 
+- **`packages/fiscal-verifactu/src/privileges.expected.ts` still lists `department_hours`** — left
+  open by the reviews of A261 step 5 (Hours, #1298); the file is a frozen record of the old grants
+  and was not edited.
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -838,6 +842,46 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
   open, including advisor questions Q21, Q14, Q27 and Q22. [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
 
+- **The "Disabled" note a zone or department can show is not muted** — left open for the owner by
+  A301 (#1335, A261 step 2). A zone with no department shows its "Not configured" note apart from
+  its name, in the muted text colour. Left open for the owner: the "Disabled" note a zone or
+  department can show in the same place is not muted (it was not before A301 either), so the two
+  notes now look different.
+
+- **A rename refusal without a supplied name remains a database error, rather than returning an
+  undefined name** — left open by A261-2d (#1274).
+
+- **The Hours page fixes its read window (yesterday plus a year) when it opens** — left open by the
+  reviews of A261 step 5 (Hours, #1298): a page left open for days keeps the old window until it is
+  reopened.
+
+- **For a non-default station with no hours, Hours says "No hours restriction" and Prep stations
+  says "Always open" (owner informed)** — left open by the reviews of A261 step 5 (Hours, #1298).
+
+- **Smaller notes from the Hours reviews** — left open by the reviews of A261 step 5 (Hours, #1298):
+  the calendar's day read repeats the subject precedence `resolveSubjects` holds and matches a cell
+  by id alone; one `hours-client.test.ts` case detaches in the same turn and cannot fail; …
+  [Detail](backlog/service-periods.md#smaller-notes-from-the-hours-reviews)
+
+- **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily
+  summaries to 2026-10-06 held no 2027 national list. Follow the yearly update once it is published
+  ([public-holidays.md](developers/public-holidays.md)). Andalucía's own 2027 calendar (BOJA,
+  Decreto 84/2026) is not national coverage and is not shipped.
+
+- **Canary islands** — left open by A261 step 6 (Public holidays, #1305). The island choice is built
+  from the data, but setup refuses the Canary provinces, so no venue reaches it.
+
+- **Province edits in Venue details** — left open by A261 step 6 (Public holidays, #1305).
+  `apps/server/src/venue-details.ts` still refuses every province change (`geography_context` before
+  sales). Allowing it is a separate decision; nothing in step 6 changes it.
+  [Detail](backlog/service-periods.md#province-edits-in-venue-details)
+
+- **Smaller notes from the public holidays reviews** — left open by A261 step 6 (Public holidays,
+  #1305): there is no control to clear a chosen area back to "not chosen" (the route accepts it);
+  the area names "Arán" and "Lleida, fuera del territorio de Arán" are Spanish data labels shown
+  untranslated in English; …
+  [Detail](backlog/service-periods.md#smaller-notes-from-the-public-holidays-reviews)
+
 ### The kitchen and preparation
 
 _Formerly Track A's kitchen part, and kitchen entries elsewhere._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
@@ -951,6 +995,35 @@ _Formerly Track A's kitchen part, and kitchen entries elsewhere._ Detail: [backl
   cook's eye before a real service:** whether that is enough for something a cook must not miss, or
   whether an options answer deserves its own prominent form on the ticket.
   [Detail](backlog/kitchen.md#is-a--sub-line-enough-for-a-doneness-answer-on-the-kitchen-ticket)
+
+- **Prep stations review notes retained for future cleanup** — left open by A261 step 3 (#1269): the
+  overview API object still exposes write methods (server routes remain the permission boundary),
+  and station reordering repeats an active filter after an active-only read.
+
+- **On the Routing tab, the label above the "Where is this made?" time choice is cut** — seen in
+  A323's look at the demo (2026-10-07), in files A323 did not change; left open by A261-4 (#1363).
+  The label is cut to "W…" ("Cuá…" in Spanish) at 1280 and 390 px, in both themes, because the
+  choice is too narrow for it. At 390 px the Prep stations tab row scrolls sideways with both ends
+  cut ("Stations" on the left, "New watcher" on the right) and nothing shows that it scrolls.
+  [Detail](backlog/kitchen.md#on-the-routing-tab-the-label-above-the-where-is-this-made-time-choice-is-cut)
+
+- **At 390 px the routing grid's fixed first column takes about 140 of the grid's roughly 310 px** —
+  seen in A372's look at the demo (2026-10-07), in files A372 did not change; left open by A261-4
+  (#1363). One zone column shows at a time and a saved choice in a zone column is reached only by
+  scrolling sideways.
+  [Detail](backlog/kitchen.md#at-390-px-the-routing-grids-fixed-first-column-takes-about-140-of-the-grids-roughly-310-px)
+
+- **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells** — left open
+  by A261-4 (#1363). `#saveSettingsCell`
+  (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
+  releases its unsaved-changes registration as soon as the save succeeds, before the refresh that
+  follows has settled.
+  [Detail](backlog/kitchen.md#prep-stations-settings-cell-saves-have-the-shape-a261-4-changed-for-routing-cells)
+
+- **A routing choice a refresh drops names one reason, chosen when it is dropped** — left open by
+  A375 (#1382, its review, 2026-10-07): if its zone and its category both go and only the zone comes
+  back, the message still names the zone; and only a returning zone or product has a test that the
+  message clears — a returning category or No category row has none.
 
 ### The till, devices and table service
 
@@ -1669,6 +1742,11 @@ _Formerly A4._ Detail: [backlog/till.md](backlog/till.md).
   styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another
   receipt language): one of two tidy-ups its review raised and left, because each changes files
   outside it.
+
+- **`apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
+  `updateTable`, `createStatus` and `updateStatus` to a label collision** — left open by A261-2d
+  (#1274), outside that zone item; a separate follow-up should identify each label key and force
+  another-key clash.
 
 ### Printers, the print agent and receipts
 
@@ -2417,6 +2495,11 @@ _Formerly A7, and Track A's dashboard part._ Detail: [backlog/dashboard.md](back
   `languageDisplayName` (`packages/shared`)** — left open by C114 (#1022, a copy printed in another
   receipt language): one of two tidy-ups its review raised and left, because each changes files
   outside it.
+
+- **When live updates are off and every Hours read both fails and takes longer than the 60-second
+  refresh, no error is shown: the dashboard's request code sets no timeout on a read** — left open
+  by A261 step 5 (Hours). Found in #1298's review; I believe it predates the branch (not checked
+  with `git blame`).
 
 ### Interface languages
 
@@ -3318,6 +3401,10 @@ _Formerly B9, and Track C's development-stack and house-rules items._ Detail: [b
   `wt-close` instead, keeping the timer for the stays-open tests. Left open by service Task 11
   (#916). [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
+- **`scripts/dashboard-browser-purity.test.ts` reads only bookings' and adjustments' dashboard
+  folders, so nothing checks that venue-service's dashboard code stays free of server imports** —
+  left open by the reviews of A261 step 5 (Hours, #1298).
+
 ### Dependency upgrades
 
 _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
@@ -3679,6 +3766,21 @@ _Formerly B8, parts of B9, and Track C's correctness items._ Detail: [backlog/ar
 
 - The device-management routes build their `devices ⨝ device_profiles` read inline
   (`apps/server/src/device-api.ts`) where a `listDevices` store verb belongs.
+
+- **`declarations` in `apps/server/src/configuration-transfer.ts` uses `module:<name>` when a local
+  module lacks its transfer declaration** — left open by A261-2e's review (#1277). Reachability with
+  the installed module list is unverified; distinguish that local build defect from an incompatible
+  artifact if it can reach setup.
+
+- **The configuration import answers a routing cell's `service_zone.not_found` 400, while the grid's
+  save answers the same code 404** — left open by A374 (#1403). The owner answered on 2026-10-08
+  that every API answers a refusal by one rule based on what it means; A394-8 settles it (above).
+  [Detail](backlog/architecture.md#the-configuration-import-answers-a-routing-cells-service_zonenot_found-400-while-the-grids-save-answers-the-same-code-404)
+
+- **The configuration import answers `zone.department_inactive` 400, while the dashboard's saves
+  answer the same code 409** — left open by A393 (#1425) (`packages/venue-service/src/routes.ts`,
+  `apps/server/src/management-api.ts`), which A394's audit covers too.
+  [Detail](backlog/architecture.md#the-configuration-import-answers-zonedepartment_inactive-400-while-the-dashboards-saves-answer-the-same-code-409)
 
 ### Data protection and legal compliance
 
@@ -5739,228 +5841,6 @@ otherwise it takes the venue's counter-default zone, and a venue with none is re
 
 ### A9. Product depth — after the primary works
 
-- **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; all eight steps implemented** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
-  The sidebar's Venue operations group; Venue settings with one tab per group
-  (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
-  tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
-  special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
-  Eight build steps, each its own queue item.
-  Step 8 retires Printing rules, its drawer-policy API/client and both legacy location receipt/drawer
-  columns. Manual opening always requires `cash.drawer` or a permitted supervisor PIN; device/profile
-  gates, automatic payment opens, separate audit jobs and calibration permissions are retained.
-  Configuration format 2 omits both keys and refuses older versions or either retired key before
-  staging, with English/Spanish instructions to export again. The populated core column rebuild
-  refuses at `DROP TABLE locations`; this pre-live release requires a venue reset (owner, 2026-10-06).
-  Fresh schema and populated-refusal checks cover that selected release path; no converter is added.
-  [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
-  Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
-  remain manager-only (owner amendment, 2026-10-04).
-  [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) (#1233) puts departments and
-  zones in one editable tree and keeps today's zone-menu and device-default-zone controls
-  temporarily in that screen (W97 retired the device-default-zone control, 2026-10-06; W98, #1331,
-  retires the zone-menu control, as menus move to a department's list on the Menu timetable page).
-  A301 — DONE (#1335; owner 2026-10-06): a department row now has the tree's arrow, named for the
-  department in English and Spanish, which hides and shows its zones; a department with no zones
-  keeps the arrow's space so the names line up. Departments start open, unlike the Products, menu
-  Structure and menu prices trees, which start closed, and a folded department is not remembered
-  after a reload: the table remembers only the branches a person opens, only in a tree that starts
-  closed and turns on `rememberExpanded`, which of those three only the Products tree does. A zone
-  with no department shows its "Not configured" note apart from its name, in the muted text colour. Left
-  open for the owner: the "Disabled" note a zone or department can show in the same place is
-  not muted (it was not before A301 either), so the two notes now look different.
-  A261-2c — DONE (#1285). Non-fiscal
-  placement accepts an over-limit order; collection refuses the over-limit invoice without taking
-  money (owner decision, 2026-10-06). A261-2d — DONE (#1274); left open:
-  A rename refusal without a supplied name remains a database error, rather than returning an
-  undefined name.
-  Outside this zone item, `apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
-  `updateTable`, `createStatus` and `updateStatus` to a label collision; a separate
-  follow-up should identify each label key and force another-key clash.
-  A261-2e — DONE ([PR #1277](https://github.com/clintongormley/waitron/pull/1277)); left open:
-  A261-2e's review also found that `declarations` in
-  `apps/server/src/configuration-transfer.ts` uses `module:<name>` when a local module lacks
-  its transfer declaration. Reachability with the installed module list is unverified;
-  distinguish that local build defect from an incompatible artifact if it can reach setup.
-  [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) — DONE
-  ([PR #1269](https://github.com/clintongormley/waitron/pull/1269)). Step 8 retires Printing rules'
-  drawer controls. The old
-  numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
-  API object still exposes write methods (server routes remain the permission boundary), and
-  station reordering repeats an active filter after an active-only read.
-  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) — DONE
-  ([PR #1298](https://github.com/clintongormley/waitron/pull/1298)). One Hours page
-  (`/manage/hours`) holds each department's and station's standard week, the special dates and a
-  month calendar; routing reads the same schedules. The old station and department hours editors
-  and their two tables are gone (venue-service `0022_retire_legacy_hours`); a pre-live venue is
-  reset rather than carrying old hours over. Separate dependencies it leaves open:
-  - **W98's participant wiring** — done (#1331): the menu timetable is the entry in
-    `VENUE_SERVICE_CALENDAR_PARTICIPANTS` (`packages/venue-service/src/calendar-participants.ts`),
-    and its day rows hold a cascading foreign key to `special_dates`.
-  - **Step 6 public holidays** — done (#1305, below): the Hours page reads holidays
-    through that seam, and "Make this a special date" starts with the day's holiday names or its
-    date.
-  - **A9 wages** will read the calendar's holiday facts through its own composition contract;
-    nothing in Hours computes pay.
-  - **Step 7 time zone and cutover.** #1281 refuses a time zone or cutover change once the venue
-    has any sale, working order or daily close. Hours keeps wall times and date keys as stored and
-    reads again on a `locations` change; allowing a change after trading would need its own
-    decision on what stored hours mean.
-    Left open by its reviews:
-  - `scripts/dashboard-browser-purity.test.ts` reads only bookings' and adjustments' dashboard
-    folders, so nothing checks that venue-service's dashboard code stays free of server imports.
-  - `packages/fiscal-verifactu/src/privileges.expected.ts` still lists `department_hours`; the
-    file is a frozen record of the old grants and was not edited.
-  - The Hours page fixes its read window (yesterday plus a year) when it opens, so a page left open
-    for days keeps the old window until it is reopened.
-  - For a non-default station with no hours, Hours says "No hours restriction" and Prep stations
-    says "Always open" (owner informed).
-  - Smaller notes: the calendar's day read repeats the subject precedence `resolveSubjects` holds
-    and matches a cell by id alone; one `hours-client.test.ts` case detaches in the same turn and
-    cannot fail; the participant-failure route case checks the status, not the body's code; the
-    time-zone route case never asserts `nextTransition`; nothing pins which of two repeated
-    midnights a clock change picks; no test opens Hours from a department's link end to end; with
-    the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
-    has disabled; on a phone the calendar's cells break a long
-    special-date name mid-word (a design choice for the owner); the test where the live feed
-    delivers nothing does not check that its two reads cover different ranges; and no test sends
-    the default station with a blank inherited cell.
-  - When live updates are off and every Hours read both fails and takes longer than the 60-second
-    refresh, no error is shown: the dashboard's request code sets no timeout on a read. Found in
-    #1298's review; I believe it predates the branch (not checked with `git blame`).
-  - The prep-stations screenshot tests wrote `look/*.png` into their folder on every run, untracked
-    in git — fixed by A281 (#1344): they write under the ignored `__screenshots__/look/`.
-    [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) — DONE
-    ([PR #1305](https://github.com/clintongormley/waitron/pull/1305)). The Hours calendar shows Spain's 2026 national and regional
-    holidays, transcribed from BOE-A-2025-21667 and compared with the archived annex by a test, with
-    each year's coverage and source; venues enter up to two local holidays a year for their address
-    city at the foot of the Special dates tab; "Make this a special date" and Duplicate name a date
-    after its holidays. Local holidays travel in a configuration transfer, checked against the
-    receiving build. How it works, what is and is not verified, and the yearly data update:
-    [public-holidays.md](developers/public-holidays.md). Left open:
-    - **2027 data.** Not shipped; the BOE daily summaries to 2026-10-06 held no 2027 national list.
-      Follow the yearly update once it is published. Andalucía's own 2027 calendar (BOJA, Decreto
-      84/2026) is not national coverage and is not shipped.
-    - **Canary islands.** The island choice is built from the data, but setup refuses the Canary
-      provinces, so no venue reaches it.
-    - **Province edits in Venue details.** `apps/server/src/venue-details.ts` still refuses every
-      province change (`geography_context` before sales). The step 7 plan allowed a change keeping
-      the same derived context, holiday region included, once a sourced province-to-region map
-      existed; step 6 ships that map (`packages/country-es/src/data/regions.ts`). Allowing it is a
-      separate decision; nothing in step 6 changes it.
-    - **Smaller notes from the reviews:** there is no control to clear a chosen area back to "not
-      chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
-      Arán" are Spanish data labels shown untranslated in English; the database does not count local
-      holidays, so only the writer and the import hold the yearly allowance; the local-holidays editor
-      decides "not available" from an allowance of 0 and the calendar from an unsupported country,
-      which differ only for a country shipping an allowance of 0 (none does); and `renameSpecialDate`
-      checks the name before the date's id, so a blank name for another venue's date answers
-      `hours.invalid` rather than not found.
-    - **Address changes during a local-holiday or area save (#1305's open points).** An address
-      change that lands after Save is pressed but before the page has read the new address is not
-      caught: the route takes no expected address, and an area save already on its way has the same
-      gap. The address-change warning names only the new city, though a province change also
-      triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
-      above.
-    [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) — DONE (A261-4,
-    #1363). Prep stations' Routing tab is a grid of categories, products, No
-    category and All categories against Every zone and each active service zone, stored one cell
-    per coordinate in `routing_cells`; `station_claims` and `route_exceptions` are dropped
-    (venue-service `0031_retire_routing_lists`), with no conversion, so a venue is reset and its
-    routing set again. The No category row has cells of its own (owner, 2026-10-07).
-    The grid orders sibling categories, and the products inside each, by the shared label
-    comparison the Products screen's table uses (`createLabelComparator`, `@waitron/shared`;
-    A323): `visibleRoutingRows` sorts them in the browser, and equal names keep the server's order.
-    Left open:
-    - **Seen in A323's look at the demo (2026-10-07), in files A323 did not change.** On the
-      Routing tab, the label above the "Where is this made?" time choice is cut to "W…" ("Cuá…" in
-      Spanish) at 1280 and 390 px, in both themes, because the choice is too narrow for it. At
-      390 px the Prep stations tab row scrolls sideways with both ends cut ("Stations" on the left,
-      "New watcher" on the right) and nothing shows that it scrolls. Screenshots:
-      `~/waitron-campaign-c/a323-shots/`.
-    - **Seen in A372's look at the demo (2026-10-07), in files A372 did not change.** At 390 px
-      the routing grid's fixed first column takes about 140 of the grid's roughly 310 px, so one
-      zone column shows at a time and a saved choice in a zone column is reached only by scrolling
-      sideways. In a cell at 390 px, "Downstairs bar" fills its field and its last letter touches
-      the dropdown arrow. Screenshots: `~/waitron-campaign-c/a372-shots/`.
-    - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells.**
-      `#saveSettingsCell`
-      (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
-      releases its unsaved-changes registration as soon as the save succeeds, before the refresh
-      that follows has settled. A routing cell now keeps its registration until that refresh
-      settles. Not changed in A261-4.
-    - **Done by A375 (owner answer "a — say so", 2026-10-07): a routing choice a refresh drops is
-      no longer dropped without a word.** When a refresh removes the row or zone of a choice whose
-      preview moved nothing, or the No category row of a choice whose preview is open, the screen
-      still drops the choice, and now says in the grid's message line, under the grid, that it was
-      not saved because its zone, category or product, or the No category row, is no longer in the
-      grid — the zone's reason given when the zone is gone. The sentence is generic per kind and
-      does not name the thing. A read that fails, or that still leaves its row or zone out of the
-      grid, leaves it; a refresh that brings its row and zone back, the next cell choice or a tab
-      change clears it (`#dropChoice`, `packages/venue-service/src/dashboard/prep-stations-screen.ts`).
-      Left open by A375 (its review, 2026-10-07): the reason is chosen once, when the choice is
-      dropped, so if its zone and its category both go and only the zone comes back, the message
-      still names the zone; and only a returning zone or product has a test that the message
-      clears — a returning category or No category row has none.
-    - **Done by A371 (owner answer, 2026-10-07): a routing preview lists an extra that stops or
-      starts following its dish.** A cell that names a station, even the default one, sends an
-      extra there (the owner kept that rule). The preview now also works out, for each extra a dish
-      offers when the change can reach the dish or the extra (A373 narrowed this), where the extra
-      is made before and after the change, through
-      `chooseExtraMaker`, and lists the extra when that place changes, naming its
-      dish ("Cheese — with Burger"); the grid then asks before saving. An extra that follows its
-      dish both before and after lists nothing. A dish offers an extra when the catalogue attaches
-      it (in every zone) or when a published menu a zone serves offers it with the dish (in that
-      zone) (`extraMoves`, `packages/venue-service/src/routing-store.ts`;
-      `liveDocumentsByZone`, `packages/venue-service/src/operations.ts`). Like a dish's own
-      move, an extra's move ignores opening hours and stations opened or closed by hand.
-    - **Done by A372 (owner answer, 2026-10-07): the No category row shows while it holds a saved
-      cell.** It used to be hidden, with its saved cells, while no active product was uncategorised,
-      so those cells could not be seen or cleared. The row now shows whenever it holds a saved cell,
-      in any zone, with no products under it when none is uncategorised, and its cells can be
-      cleared there; it hides only when it holds no cell and no active product is uncategorised
-      (`visibleRoutingRows` and `rowInModel`,
-      `packages/venue-service/src/dashboard/routing-grid-model.ts`). An inactive product's cells
-      stay out of sight until it is active again, as before.
-    - **Done by A373 (#1405): a routing preview works out only what the change can move.** It works out
-      the before and after choice only for the products under the changed row, in the changed zone
-      (every zone for an Every zone cell), and only for the extras whose dish or own row is under
-      it (`changeReach`, `packages/venue-service/src/routing.ts`); a dish outside that reach which
-      offers such an extra has its unchanged choice worked out once in each zone where it offers
-      one, and used for both before and after. What it reads and what it reports are unchanged.
-    - **Done by A374 (#1403; owner answer "refuse, and say which choice and why", 2026-10-07): a
-      configuration import refuses a routing cell on a zone in a switched-off department.**
-      `validateRoutingConfiguration` (`packages/venue-service/src/configuration-transfer.ts`)
-      refuses it with the routing grid's own `service_zone.not_found`, naming the zone, the
-      department and the row (each name only where the export holds one), and the setup app's import screen says which choice it is and how to
-      fix it, in English and Spanish.
-      Still open: the import answers this refusal 400, the boundary's default, while the grid's
-      save answers the same code 404. The owner answered on 2026-10-08 that every API answers a
-      refusal by one rule based on what it means; the campaign's A394 (low priority, not yet a
-      backlog entry) audits the statuses against that rule.
-    - **Done by A393 (#1425; owner answer "Yes, refuse it", 2026-10-08): a configuration import refuses a
-      switched-on zone in a switched-off department**, whether or not a routing cell names it,
-      with the zone's own `zone.department_inactive`, naming the zone and the department (each name
-      only where the export holds one), answered 400; the dashboard's saves answer the same code
-      409 (`packages/venue-service/src/routes.ts`, `apps/server/src/management-api.ts`), which
-      A394's audit covers too. A zone's or department's `active` flag other than 0 or 1 is refused
-      (`setup.request_invalid`, naming `floor_zones.active` or `departments.active`), and a row
-      without the flag is read as switched on, as storage keeps it. The check runs after the routing one, so a
-      bundle that also has a routing cell on that zone still gets A374's message naming the row.
-      The setup app's import screen names the zone and the department and how to fix it, in
-      English and Spanish.
-    [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
-    Changes needing another fiscal/geographic context or
-    history removal use a separately approved setup/reset instead. Later
-    Hours/holidays/menu builds retain their own compatibility tests.
-    [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
-    is implemented in [PR #1288](https://github.com/clintongormley/waitron/pull/1288).
-    It removes the redundant page and legacy location receipt/drawer settings, makes manual drawer
-    authorization unconditional, and preserves device/profile/printer gates, automatic drawer jobs
-    and receipt/replay safeguards. The owner approved the reset release and the exact core/0109
-    upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
-    older configuration exports are refused before staging.
-    [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
   access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
   action flags); equipment LANDED except NFC (W100, #1332); transfers DONE (W101).
