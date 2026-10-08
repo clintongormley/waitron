@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  catalogues,
   kitchenStations,
   locations,
   tenants,
@@ -51,6 +52,7 @@ import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { specialDateHours, specialDates } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
+import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { setStationToday } from "./station-times.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -142,6 +144,26 @@ async function fixture(): Promise<Fixture> {
         .returning({ id: persons.id });
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
+    const cfg = { locationId: locationId(location!.id) };
+    const [calendarMenu] = await tx
+      .insert(catalogues)
+      .values({ name: `Calendar ${randomUUID()}` })
+      .returning();
+    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
+      name: "Open",
+      menuId: calendarMenu!.id,
+      staffMenuIds: [],
+    });
+    await replaceMenuWeek(
+      tx,
+      cfg,
+      restaurant!.id,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [{ periodId: calendarPeriod.id, startsAt: "06:00", endsAt: "06:00" }],
+      })),
+      new Date(),
+    );
     return {
       cfg: { locationId: locationId(location!.id) },
       restaurant: { kind: "department" as const, id: restaurant!.id },
@@ -361,42 +383,57 @@ describe("reading Hours", () => {
     );
   });
 
-  it("colours a date Closed in the model only when every active department is Closed", async () => {
+  it("colours a date Closed only when no active department has service ranges", async () => {
     const fx = await fixture();
-    await withTransaction(db, async (tx) => {
-      await replaceWeekHours(tx, fx.cfg, fx.restaurant, week(), new Date());
-      await replaceWeekHours(
+    const deliPeriod = await withTransaction(db, async (tx) => {
+      await replaceMenuWeek(
         tx,
         fx.cfg,
-        fx.deli,
-        week({ 1: periods(period("09:00", "17:00")) }),
+        fx.restaurant.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         new Date(),
       );
+      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const period = await saveMenuPeriod(tx, fx.cfg, fx.deli.id, {
+        name: "Deli",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
+      await replaceMenuWeek(
+        tx,
+        fx.cfg,
+        fx.deli.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: weekday === 1 ? [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }] : [],
+        })),
+        new Date(),
+      );
+      return period;
     });
-    await createDate(
-      fx,
-      input({
-        date: "2030-10-14",
-        colour: "green",
-        cells: [{ subject: fx.deli, cell: { mode: "closed", periods: [] } }],
-      }),
+    const special = await createDate(fx, input({ date: "2030-10-14", colour: "green", cells: [] }));
+    await withTransaction(db, (tx) =>
+      saveSpecialDateMenus(tx, fx.cfg, special.id, fx.deli.id, [], new Date()),
     );
     const model = (await (
       await send(fx, "GET", "/hours?from=2030-10-14&to=2030-10-15", fx.manager)
     ).json()) as HoursModel;
     expect(model.days.map((day) => day.tone)).toEqual(["closed", "closed"]);
     await db.update(departments).set({ active: false }).where(eq(departments.id, fx.restaurant.id));
-    const deli = await withTransaction(db, async (tx) =>
+    const deli = await withTransaction(db, (tx) =>
       readHoursModel(tx, fx.cfg, "2030-10-14", "2030-10-15", new Date()),
     );
-    // Monday the 14th: the deli is Closed by the date. Tuesday: the deli's week is Closed.
     expect(deli.days.map((day) => day.tone)).toEqual(["closed", "closed"]);
     await withTransaction(db, (tx) =>
-      replaceWeekHours(
+      replaceMenuWeek(
         tx,
         fx.cfg,
-        fx.deli,
-        week({ 2: periods(period("09:00", "17:00")) }),
+        fx.deli.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots:
+            weekday === 2 ? [{ periodId: deliPeriod.id, startsAt: "09:00", endsAt: "17:00" }] : [],
+        })),
         new Date(),
       ),
     );

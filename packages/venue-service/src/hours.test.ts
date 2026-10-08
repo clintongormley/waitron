@@ -5,6 +5,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
+  catalogues,
   kitchenStations,
   locations,
   tenants,
@@ -62,6 +63,7 @@ import {
   specialDates,
 } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
+import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
 const suite = useVenueDb({
@@ -129,6 +131,25 @@ async function fixture(): Promise<Fixture> {
         { locationId: other!.id, name: "Other bar" },
       ])
       .returning();
+    const [calendarMenu] = await tx
+      .insert(catalogues)
+      .values({ name: `Calendar ${randomUUID()}` })
+      .returning();
+    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
+      name: "Open",
+      menuId: calendarMenu!.id,
+      staffMenuIds: [],
+    });
+    await replaceMenuWeek(
+      tx,
+      cfg,
+      restaurant!.id,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [{ periodId: calendarPeriod.id, startsAt: "06:00", endsAt: "06:00" }],
+      })),
+      new Date(),
+    );
     return {
       cfg,
       restaurant: { kind: "department", id: restaurant!.id },
@@ -1445,69 +1466,93 @@ describe("closing the whole venue on a date", () => {
 });
 
 describe("the calendar's Closed colour", () => {
-  it("is Closed only when every active department is Closed, whatever the stations do", async () => {
+  it("is Closed when no active department has a service range, whatever the stations do", async () => {
     const f = await fixture();
-    await save(f, f.restaurant, week({ 1: periods(period("09:00", "17:00")) }));
-
-    // Monday 19 October: the restaurant is open and the deli has no hours.
+    const deliPeriod = await withTransaction(db, async (tx) => {
+      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const restaurantPeriod = await saveMenuPeriod(tx, f.cfg, f.restaurant.id, {
+        name: "Lunch",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
+      const deliPeriod = await saveMenuPeriod(tx, f.cfg, f.deli.id, {
+        name: "Deli",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.restaurant.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots:
+            weekday === 1
+              ? [{ periodId: restaurantPeriod.id, startsAt: "09:00", endsAt: "17:00" }]
+              : [],
+        })),
+        AT,
+      );
+      return deliPeriod;
+    });
     expect(await tone(f, "2026-10-19")).toBe("standard");
-    // Tuesday 20 October: the restaurant is Closed, but no hours set is not Closed.
-    expect(await tone(f, "2026-10-20")).toBe("standard");
-
-    const closedDeli: DateHoursCell = { subject: f.deli, cell: { mode: "closed", periods: [] } };
-    // Wednesday 21 October: both departments Closed (the restaurant by its week), the bar open.
-    await saveDate(
-      f,
-      null,
-      specialInput({
-        date: "2026-10-21",
-        colour: "green",
-        cells: [closedDeli, { subject: f.bar, cell: { mode: "all_day", periods: [] } }],
-      }),
-    );
-    expect(await tone(f, "2026-10-21")).toBe("closed");
-    // Thursday 22 October: only the restaurant is Closed, so the date keeps its own colour.
-    await saveDate(
-      f,
-      null,
-      specialInput({
-        date: "2026-10-22",
-        colour: "purple",
-        cells: [
-          { subject: f.deli, cell: { mode: "periods", periods: [period("10:00", "14:00")] } },
-        ],
-      }),
-    );
-    expect(await tone(f, "2026-10-22")).toBe("purple");
-    // Friday 23 October: every station Closed and the deli open.
-    await save(f, f.bar, week());
-    await saveDate(
-      f,
-      null,
-      specialInput({
-        date: "2026-10-23",
-        colour: "red",
-        cells: [{ subject: f.deli, cell: { mode: "all_day", periods: [] } }],
-      }),
-    );
-    expect(await tone(f, "2026-10-23")).toBe("red");
-
-    // A new department with no hours stops Wednesday being Closed until it is switched off.
+    expect(await tone(f, "2026-10-20")).toBe("closed");
+    for (const [date, colour, open] of [
+      ["2026-10-21", "green", false],
+      ["2026-10-22", "purple", true],
+      ["2026-10-23", "red", true],
+    ] as const) {
+      const special = await saveDate(
+        f,
+        null,
+        specialInput({
+          date,
+          colour,
+          cells: [{ subject: f.bar, cell: { mode: "all_day", periods: [] } }],
+        }),
+      );
+      if (open)
+        await withTransaction(db, (tx) =>
+          saveSpecialDateMenus(
+            tx,
+            f.cfg,
+            special.id,
+            f.deli.id,
+            [{ periodId: deliPeriod.id, startsAt: "10:00", endsAt: "14:00" }],
+            AT,
+          ),
+        );
+      expect(await tone(f, date)).toBe(open ? colour : "closed");
+    }
     const { terrace } = await addSubjects(f);
+    expect(await tone(f, "2026-10-21")).toBe("closed");
+    await withTransaction(db, async (tx) => {
+      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const period = await saveMenuPeriod(tx, f.cfg, terrace.id, {
+        name: "Terrace",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        terrace.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: weekday === 3 ? [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }] : [],
+        })),
+        AT,
+      );
+    });
     expect(await tone(f, "2026-10-21")).toBe("green");
     await setDepartmentActive(terrace, false);
     expect(await tone(f, "2026-10-21")).toBe("closed");
-
     await saveDate(
       f,
       null,
       specialInput({ date: "2026-10-26", colour: "blue", closeWholeVenue: true }),
     );
     expect(await tone(f, "2026-10-26")).toBe("closed");
-
-    // An ordinary date is Closed once every active department's week is Closed that day.
-    await save(f, f.deli, week());
-    expect(await tone(f, "2026-10-20")).toBe("closed");
   });
 });
 
