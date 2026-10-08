@@ -1613,7 +1613,11 @@ request per batch: [plan](superpowers/plans/2026-10-07-a331-save-follows-changes
   first edit, and the unit form, the option window, the options and extras lists and Add products
   went quiet again when the edit was undone: no defect found. The look changed the demo venue's
   "VAT class for new products" and set it back to Reduced, and switched the demo owner's language
-  to English and back to Spanish; it saved nothing else.
+  to English and back to Spanish; it saved nothing else. Left open: an edit typed BEFORE one of
+  these forms is taken out of the page and put back stays on screen but no longer counts as
+  unsaved: measured 2026-10-08 on the unit form, the same before and after this batch's fix; the
+  other forms were not tried, and the recipe editor clears its choice on removal by design. It
+  matters only if a screen ever moves an open form.
 - **Batch 2b — OPEN, waits for lane D's menus Preview work (`feat/preview-a349-a350-a351-a352`) to
   land.** The menus screen's own forms (`menus-screen.ts`), the section and menu details form and the
   include dialog. Only the menus screen opens the last two, so gating them changes

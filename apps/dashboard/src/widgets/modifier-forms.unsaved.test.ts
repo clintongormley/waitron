@@ -411,8 +411,9 @@ it("an option label put back after a detached update still asks before Cancel di
   const label = form.shadowRoot!.querySelector("dashboard-option-label-form")!;
   await label.updateComplete;
   await reattachAfterDetachedUpdate(label);
-  // Put back, the child's dialog is open but not modal and a typed edit fires no change event there,
-  // so the edit is sent as the field's own change event.
+  // Put back on its own, the option window is no longer modal while the option list's window still
+  // is, and this form is drawn beside that window rather than inside it, so a typed edit does not
+  // reach the field. The edit is sent as the field's own change event.
   label
     .shadowRoot!.querySelector('[name="label-name"]')!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Child draft" } }));
