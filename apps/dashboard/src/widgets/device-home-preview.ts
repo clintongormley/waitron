@@ -50,6 +50,7 @@ import type {
   MenuDocument,
 } from "../api/client.js";
 import { localizedName } from "../i18n/localized.js";
+import { DRAG_THRESHOLD_PX, capturePointer, releasePointer } from "./pointer-drag.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
@@ -70,27 +71,6 @@ const KEY_STEPS: Record<string, number> = {
   ArrowRight: 1,
   ArrowDown: 1,
 };
-
-/** How far the pointer travels from the press before it is a drag, so a press alone does nothing. */
-const DRAG_THRESHOLD_PX = 5;
-
-/** `setPointerCapture` throws for a synthetic pointer; without capture a real drag still reaches
- * the document's listeners. */
-function capturePointer(el: Element, pointerId: number): void {
-  try {
-    el.setPointerCapture(pointerId);
-  } catch {
-    /* no active pointer */
-  }
-}
-
-function releasePointer(el: Element, pointerId: number): void {
-  try {
-    if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
-  } catch {
-    /* nothing captured */
-  }
-}
 
 function thumb(image: string): TemplateResult {
   return html`<img class="thumb" src=${`/media/${encodeURIComponent(image)}`} alt="" />`;
