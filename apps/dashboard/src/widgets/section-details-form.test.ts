@@ -170,7 +170,7 @@ it("rechecks invalid name submissions, focuses the field, keeps values and reset
   changeField(el, "internalName", "Drinks");
   await el.updateComplete;
   expect(bottomOf(el)).toBe("");
-  expect(saveButton(el).disabled).toBe(false);
+  expect(saveButton(el).disabled).toBe(true);
   changeField(el, "internalName", " ");
   await el.updateComplete;
   expect(field(el, "internalName").error).toBe(t("sections.internal_name_required"));
@@ -182,11 +182,12 @@ it("rechecks invalid name submissions, focuses the field, keeps values and reset
   await el.updateComplete;
   expect(field(el, "internalName").error).toBe("");
   expect(bottomOf(el)).toBe("");
-  expect(saveButton(el).disabled).toBe(false);
+  expect(saveButton(el).disabled).toBe(true);
   expect(field(el, "internalName").value).toBe("Drinks");
 });
 it("focuses a refused field, keeps Save retryable and clears only that field on change", async () => {
   const el = await detailsForm();
+  changeField(el, "names-es", "Bebidas frías");
   el.fieldErrors = { internalName: codeMessage("menu_section.invalid") };
   await el.updateComplete;
   await vi.waitFor(() =>
@@ -206,6 +207,7 @@ it("focuses a refused field, keeps Save retryable and clears only that field on 
 });
 it("keeps a non-field refusal retryable until the next submission", async () => {
   const el = await detailsForm();
+  changeField(el, "names-es", "Bebidas frías");
   el.refusal = { code: "server.internal" };
   await el.updateComplete;
   expect(bottomOf(el)).toBe(codeMessage("server.internal"));

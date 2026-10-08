@@ -7843,7 +7843,7 @@ describe("the name forms", () => {
     await rename(el, name(), " ");
     expect(name().error).toBe("");
     expect(await bottom(el, form.form)).toBe("");
-    expect(save().disabled).toBe(false);
+    expect(save().disabled).toBe(true);
   });
 
   it.each(forms)(
@@ -7926,7 +7926,7 @@ describe("the name forms", () => {
     await vi.waitFor(() => expect(modal(el, form.form).open).toBe(true));
     expect(name().error).toBe("");
     expect(await bottom(el, form.form)).toBe("");
-    expect(save().disabled).toBe(false);
+    expect(save().disabled).toBe(true);
   });
 
   it.each(forms)("$form keeps no message once it is cancelled", async (form) => {

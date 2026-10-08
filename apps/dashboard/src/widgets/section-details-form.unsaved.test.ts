@@ -272,3 +272,15 @@ it("a Section leave sees edited image names through its enclosing picker ancestr
   expect(field.value).toBe("Pan editado");
   expect(upload.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
 });
+it("a Section taken out of the page and put back asks before discarding an edit made afterwards", async () => {
+  const { app, form } = await mount();
+  const parent = form.parentNode!;
+  form.remove();
+  await form.updateComplete;
+  parent.appendChild(form);
+  await form.updateComplete;
+  await edit(form, "internalName", "Changed");
+  cancel(form);
+  expect((await question(app)).open).toBe(true);
+  expect(app.cancelled).toBe(0);
+});
