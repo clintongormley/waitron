@@ -1,6 +1,7 @@
 import { sameValue } from "./product-editor-model.js";
 import {
-  leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -197,8 +198,7 @@ export class OptionListForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<OptionListInput>({
+      const { coordinator, scope } = draftScopeFor<OptionListInput>(this, {
         id: this,
         parent: this.draftParent,
         current: () => this.#comparisonValue(),
@@ -206,6 +206,8 @@ export class OptionListForm extends LitElement {
         equal: sameValue,
         restore: (value) => this.#restoreDraft(value),
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -458,6 +460,7 @@ export class OptionListForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.dismissed = new Set(Object.keys(this.serverErrors));
     if (Object.keys(this.#validate()).length) {
@@ -510,7 +513,7 @@ export class OptionListForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#reportCancel();
   }
 
@@ -730,10 +733,11 @@ export class OptionListForm extends LitElement {
       ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
     ].join(" ");
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const saveAction = saveActionState(this.#scope);
     return html`<wt-modal
         size="standard"
         .open=${this.open}
-        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         heading=${t(this.value ? "options.edit" : "options.create")}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();
@@ -793,8 +797,8 @@ export class OptionListForm extends LitElement {
           >
           <wt-button
             data-test="save"
-            variant="primary"
-            .disabled=${this.busy || invalid}
+            variant=${saveAction.variant}
+            .disabled=${saveAction.unchanged || this.busy || invalid}
             @click=${(event: Event) => this.#submit(event)}
             >${t("action.save")}</wt-button
           ></wt-form-actions

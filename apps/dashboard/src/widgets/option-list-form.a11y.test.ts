@@ -80,8 +80,15 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
       theme,
     );
     if (state === "invalid") {
+      el.shadowRoot!.querySelector('[name="kitchen-name"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "CK" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!.error,
+      ).not.toBe("");
     }
     if (state === "option-editor") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-label-3"]')!.click();
