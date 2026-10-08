@@ -32,8 +32,16 @@ describe.each(["light", "dark"] as const)("option editor (%s)", (theme) => {
       theme,
     );
     if (state === "invalid") {
+      el.shadowRoot!.querySelector('[name="label-kitchen-name"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "WD" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
       await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="label-name"]')!
+          .invalid,
+      ).toBe(true);
     }
     // Each named state is scanned in the shape it names.
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(state !== "closed");

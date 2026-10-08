@@ -1,12 +1,15 @@
 import {
-  leaveCoordinatorFor,
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
 } from "@waitron/ui";
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -105,8 +108,7 @@ export class OptionLabelForm extends LitElement {
       this.#scope = undefined;
       this.#leave = undefined;
     } else if (!this.#scope) {
-      this.#leave = leaveCoordinatorFor(this);
-      this.#scope = this.#leave?.register<Omit<DraftLabel, "id">>({
+      const { coordinator, scope } = draftScopeFor<Omit<DraftLabel, "id">>(this, {
         id: this,
         parent: this.draftParent,
         current: () => this.#comparisonValue(),
@@ -114,6 +116,8 @@ export class OptionLabelForm extends LitElement {
         equal: sameValue,
         restore: (value) => this.#restoreDraft(value),
       });
+      this.#leave = coordinator;
+      this.#scope = scope;
     }
   }
 
@@ -188,6 +192,7 @@ export class OptionLabelForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.dismissed = new Set(Object.keys(this.errors));
     if (Object.keys(this.#validate()).length > 0) {
@@ -231,7 +236,7 @@ export class OptionLabelForm extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.open) return;
-    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     else this.#reportCancel();
   }
 
@@ -284,6 +289,7 @@ export class OptionLabelForm extends LitElement {
     const fields = this.#fields(errors);
     const fieldKeys = new Set(this.#fieldKeys(errors));
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const saveAction = saveActionState(this.#scope);
     const bottom = [
       ...Object.entries(errors)
         .filter(([key, message]) => message && !fieldKeys.has(key))
@@ -293,7 +299,7 @@ export class OptionLabelForm extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${t(this.value ? "options.edit_option" : "options.add_option")}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
@@ -346,8 +352,8 @@ export class OptionLabelForm extends LitElement {
         >
         <wt-button
           data-test="save"
-          variant="primary"
-          .disabled=${this.busy || invalid}
+          variant=${saveAction.variant}
+          .disabled=${saveAction.unchanged || this.busy || invalid}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions
