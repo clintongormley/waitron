@@ -414,13 +414,11 @@ export function validateMenuTimetables(
     for (const column of ["starts_at", "ends_at"])
       if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
         refuse(`menu_slots.${column}`);
-    slotsByDay
-      .get(row.timetable_id)!
-      .push({
-        periodId: row.period_id as string,
-        startsAt: (row.starts_at as string).slice(0, 5),
-        endsAt: (row.ends_at as string).slice(0, 5),
-      });
+    slotsByDay.get(row.timetable_id)!.push({
+      periodId: row.period_id as string,
+      startsAt: (row.starts_at as string).slice(0, 5),
+      endsAt: (row.ends_at as string).slice(0, 5),
+    });
   }
   if ((tables.menu_slots ?? []).length === 0) return;
   if (bundle === undefined || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(bundle.dayCutover))

@@ -497,17 +497,22 @@ period with no menu yet) makes the menu the customer menu, otherwise it becomes 
 bundle keeps format 2: the module-version check (`apps/server/src/configuration-transfer.ts:571-575`)
 already refuses an older export.
 
-- [ ] **Step 1: Failing tests:** `testing-zone-offers.test.ts`: two menus offered through one zone
+- [x] **Step 1: Failing tests:** `testing-zone-offers.test.ts`: two menus offered through one zone
 are both orderable at 03:00 and 15:00. `configuration-transfer.test.ts` (both): an export holds
 `menu_periods` with `colour` and `menu_period_staff_menus` and round-trips. `seed.test.ts`:
 decision 8's demo hours; no department rows in `hours_week_cells`.
-- [ ] **Step 2: Run; watch them fail.**
-- [ ] **Step 3: Implement,** including the raw-SQL fixtures and `provision.test.ts:205-211` (its
+- [x] **Step 2: Run; watch them fail.**
+- [x] **Step 3: Implement,** including the raw-SQL fixtures and `provision.test.ts:205-211` (its
 change goes in the `Changed test checks` commit). Then
 `pnpm --filter @waitron/server typecheck` and `pnpm --filter @waitron/venue-service typecheck`.
-- [ ] **Step 4: Run** the listed files, then `pnpm --filter @waitron/server test:coverage` in the
+- [x] **Step 4: Run** the listed files, then `pnpm --filter @waitron/server test:coverage` in the
 background after checking headroom (`memory_pressure | grep free`). Fix fixtures only.
-- [ ] **Step 5: Commit** — `test: fixtures, demo seed and configuration transfer follow periods (A366)`.
+- [x] **Step 5: Commit** — `test: fixtures, demo seed and configuration transfer follow periods (A366)`.
+
+Checkpoint 2026-10-08: server coverage ran 415 files and 9,550 tests, all passing with no skips.
+The configuration-transfer and fixture changes have focused checks and independent deletion
+controls recorded in the local implementation ledger. Task 7 still owns the legacy schema and
+transfer-table retirement; the slice remains unfinished.
 
 ---
 
