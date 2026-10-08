@@ -2374,7 +2374,7 @@ describe("till-table-order-screen", () => {
       expect(seen.event!.detail.revision).toBe(7);
     });
 
-    it("prefills the line's note, answer and extras; saving unchanged sends the extras back and leaves the answer out", async () => {
+    it("prefills the line's note, answer and extras; saving a note-only change sends the extras back and leaves the answer out", async () => {
       const dish: TillProduct = { ...burger, offeredModifiers: [cookedList, extrasList] };
       const line: TabLine = {
         ...burgerLine,
@@ -2410,13 +2410,14 @@ describe("till-table-order-screen", () => {
       expect(count("p-bacon")).toBe("0");
 
       const seen = captureChange(el);
+      await typeNote(picker, "sin cebolla");
       picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       expect(seen.event!.detail).toEqual({
         lineNo: 5,
         lineName: "Burger",
         revision: 3,
         patch: {
-          note: "sin sal",
+          note: "sin cebolla",
           extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],
         },
         saleLine: {
@@ -2424,7 +2425,7 @@ describe("till-table-order-screen", () => {
           quantity: "2.000",
           options: [{ listId: "list-cooked", labelId: "label-rare" }],
           extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],
-          note: "sin sal",
+          note: "sin cebolla",
         },
       });
     });
@@ -2455,6 +2456,7 @@ describe("till-table-order-screen", () => {
           .textContent!.trim(),
       ).toBe("3");
       const seen = captureChange(el);
+      await typeNote(picker, "sin sal");
       picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       expect(seen.event!.detail.patch).toMatchObject({
         extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 3 }] }],
@@ -2493,15 +2495,21 @@ describe("till-table-order-screen", () => {
         expect(seen.event!.detail.patch).toEqual({ note: "sin sal" });
       });
 
-      it("an answer changed and changed back is compared by value and left out", async () => {
+      it("an answer changed and changed back is compared by value: Save is disabled and sends nothing", async () => {
         const { el } = await mountWithdrawn();
         await openDrawer(el);
         const picker = await openChange(el, 5);
         await pickLabel(picker, "label-medium");
         await pickLabel(picker, "label-rare");
+        const save =
+          picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!;
+        await save.updateComplete;
+        expect(save.disabled).toBe(true);
+        expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
         const seen = captureChange(el);
-        picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
-        expect(seen.event!.detail.patch).toEqual({ note: null });
+        save.click();
+        await el.updateComplete;
+        expect(seen.event).toBeUndefined();
       });
 
       /** The server refuses an answer naming a list the dish no longer offers (`options.invalid`), so

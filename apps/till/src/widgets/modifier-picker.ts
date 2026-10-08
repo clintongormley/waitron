@@ -2,7 +2,7 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { decimal, formatMoney, toScale } from "@waitron/shared";
@@ -209,10 +209,9 @@ export class TillModifierPicker extends LitElement {
   override willUpdate(): void {
     if (!this.product || !this.active) return;
     if (!this.#seeded) this.#seedSelections();
-    if (this.#scope) return;
+    if (!this.isConnected || this.#scope) return;
     this.#baseline ??= this.#draft();
-    this.#leave = leaveCoordinatorFor(this);
-    this.#scope = this.#leave?.register<ModifierDraft>({
+    const { coordinator, scope } = draftScopeFor<ModifierDraft>(this, {
       id: this,
       current: () => this.#draft(),
       snapshot: (value) => ({ ...value, picks: { ...value.picks }, answers: { ...value.answers } }),
@@ -230,7 +229,9 @@ export class TillModifierPicker extends LitElement {
         this.note = value.note;
       },
     });
-    this.#scope?.commit(this.#baseline);
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#baseline);
   }
 
   override disconnectedCallback(): void {
@@ -435,6 +436,7 @@ export class TillModifierPicker extends LitElement {
   #confirm(e?: Event): void {
     e?.stopPropagation();
     if (!this.isConnected || !this.active) return;
+    if (this.#saveAction().unchanged) return;
     if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
     const submitted = this.#draft();
     this.#baseline = submitted;
@@ -462,7 +464,7 @@ export class TillModifierPicker extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (!this.isConnected || !this.active) return;
-    if (this.#scope) {
+    if (this.#leave) {
       void this.shadowRoot!.querySelector<WtDialog>("wt-modal")!.requestClose("cancel");
       return;
     }
@@ -478,6 +480,11 @@ export class TillModifierPicker extends LitElement {
     this.#reportCancel();
   }
 
+  /** A fresh open is adding a dish, and its defaults are valid to send; only an edit waits for a change. */
+  #saveAction() {
+    return saveActionState(this.#scope, { savableAtOpen: this.initialSelections === undefined });
+  }
+
   #reportCancel(): void {
     this.dispatchEvent(
       new CustomEvent("wt-modifier-cancel", { detail: {}, bubbles: true, composed: true }),
@@ -487,11 +494,12 @@ export class TillModifierPicker extends LitElement {
   override render() {
     const stale = this.#stalePicks();
     const totals = this.#listTotals();
+    const saveAction = this.#saveAction();
     return html`<wt-modal
       ${trackDialog()}
       size="standard"
       .open=${this.active}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       .heading=${productName(this.product)}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
@@ -569,8 +577,8 @@ export class TillModifierPicker extends LitElement {
       <wt-button
         slot="footer"
         class="confirm"
-        variant="primary"
-        ?disabled=${!this.#satisfied(stale, totals)}
+        variant=${saveAction.variant}
+        ?disabled=${saveAction.unchanged || !this.#satisfied(stale, totals)}
         @click=${(e: Event) => this.#confirm(e)}
       >
         ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
