@@ -49,6 +49,30 @@ const gripSpace = html`<span part="grip-space" aria-hidden="true"
 ></span>`;
 const TOP_LIST = "";
 
+type MemberRef = MenuStructureNode["ref"];
+
+const sameRef = (a: MemberRef, b: MemberRef): boolean =>
+  a.kind === "product"
+    ? b.kind === "product" && a.productId === b.productId
+    : b.kind === "section" && a.sectionId === b.sectionId;
+
+/** A section can be drawn in several places, so what lies inside a member is told by section id. */
+function sectionIdsWithin(node: MenuStructureNode): string[] {
+  return node.ref.kind === "section"
+    ? [node.ref.sectionId, ...(node.children ?? []).flatMap(sectionIdsWithin)]
+    : [];
+}
+
+/** Where a release would put the dragged member: beside a sibling (a reorder), at the end of a
+ * closed section's list, or beside a row of another list. */
+type Drop =
+  | { kind: "sibling"; key: string }
+  | { kind: "into"; key: string }
+  | { kind: "beside"; key: string; side: "before" | "after" };
+
+const sameDrop = (a: Drop | undefined, b: Drop | undefined): boolean =>
+  JSON.stringify(a) === JSON.stringify(b);
+
 interface Row {
   /** The member ids from the menu's top level to this member, joined with `/`. */
   key: string;
@@ -203,8 +227,7 @@ export class MenuStructureTable extends LitElement {
   #refocus: string | null = null;
   @state() private announcement = "";
   #drag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null = null;
-  /** The sibling's key a release would move the dragged member to, while one is offered. */
-  #target: string | undefined = undefined;
+  #target: Drop | undefined = undefined;
   #pointer = { x: 0, y: 0 };
   @state() private ghost: DragGhost | null = null;
   /** Whether a column filter is narrowing the rows, as the table last reported. */
@@ -386,7 +409,7 @@ export class MenuStructureTable extends LitElement {
         item instanceof HTMLElement && item.matches("tr[data-row-key]"),
     )?.dataset.rowKey;
     const target = over === undefined ? undefined : this.#targetFor(this.#drag!.key, over);
-    if (target === this.#target) return;
+    if (sameDrop(target, this.#target)) return;
     this.#target = target;
     this.#paint();
   }
@@ -399,9 +422,22 @@ export class MenuStructureTable extends LitElement {
     if (!drag.active || event.type !== "pointerup") return;
     blockClickAfterDrag(false);
     const row = this.#movable(drag.key);
-    if (row === undefined || this.busy) return;
-    const to = this.#siblingRows(row).findIndex((sibling) => sibling.key === target);
-    if (to >= 0) this.#move(row, to);
+    const at = target && this.#rowByKey.get(target.key);
+    if (row === undefined || this.busy || !target || !at) return;
+    if (target.kind === "sibling") {
+      const to = this.#siblingRows(row).findIndex((sibling) => sibling.key === target.key);
+      if (to >= 0) this.#move(row, to);
+      return;
+    }
+    const from = row.path.slice(0, -1);
+    const memberId = row.node.memberId;
+    if (target.kind === "into") {
+      this.#send("wt-member-move-into", { from, memberId, to: at.path });
+      return;
+    }
+    const position =
+      this.#siblings(at).indexOf(at.node.memberId) + (target.side === "after" ? 1 : 0);
+    this.#send("wt-member-move-into", { from, memberId, to: at.path.slice(0, -1), position });
   };
 
   readonly #dragKey = (event: KeyboardEvent): void => {
@@ -426,16 +462,51 @@ export class MenuStructureTable extends LitElement {
     this.#paint();
   }
 
-  /** A member moves only within its own list, so the row under the pointer stands for
-   * the sibling whose branch holds it. Keys are compared by whole member ids: `m-fav` does not hold
+  /** What a release over the row `over` would do. A closed section the menu owns takes the member
+   * at its end over its middle half; elsewhere a row offers the place beside it in its own list, by
+   * the pointer's half. Branches are compared by whole member ids: `m-fav` does not hold
    * `m-fav-drinks`. */
-  #targetFor(dragged: string, over: string): string | undefined {
+  #targetFor(dragged: string, over: string): Drop | undefined {
     const row = this.#movable(dragged);
-    if (!row) return undefined;
-    const target = this.#siblingRows(row).find(
-      (sibling) => over === sibling.key || over.startsWith(`${sibling.key}/`),
-    );
-    return target === undefined || target.key === dragged ? undefined : target.key;
+    const at = this.#rowByKey.get(over);
+    if (!row || !at || over === dragged || over.startsWith(`${dragged}/`)) return undefined;
+    const inside = new Set(sectionIdsWithin(row.node));
+    if (inside.has(at.list) || at.readOnly) return undefined;
+    const ref = row.node.ref;
+    const sibling = at.parentKey === row.parentKey;
+    // The server leaves a product no longer in the catalogue out of a list's contents, so it can
+    // only be reordered where it is.
+    const known = ref.kind === "section" || this.#productById.has(ref.productId);
+    if (!known && !sibling) return undefined;
+    const height = this.#heightIn(over);
+    const target = at.node.ref;
+    if (
+      known &&
+      target.kind === "section" &&
+      this.#ownedSection(at) &&
+      !inside.has(target.sectionId) &&
+      shownRow(this.#table()!.shadowRoot!, over)!.getAttribute("aria-expanded") !== "true" &&
+      height >= 0.25 &&
+      height < 0.75
+    )
+      return (at.node.children ?? []).some((child) => sameRef(child.ref, ref))
+        ? undefined
+        : { kind: "into", key: over };
+    if (sibling) return { kind: "sibling", key: over };
+    // This also refuses the dragged member's own list drawn in another place, which holds it.
+    if (this.#siblingRows(at).some((other) => sameRef(other.node.ref, ref))) return undefined;
+    return { kind: "beside", key: over, side: height < 0.5 ? "before" : "after" };
+  }
+
+  /** How far down the row's content the pointer is, from 0 to 1. A drawn gap pads the row's cells,
+   * so the content box, not the row, keeps a pointer in the same band once the gap appears. */
+  #heightIn(key: string): number {
+    const cell = shownRow(this.#table()!.shadowRoot!, key)!.querySelector("td")!;
+    const box = cell.getBoundingClientRect();
+    const style = getComputedStyle(cell);
+    const top = box.top + parseFloat(style.paddingTop);
+    const bottom = box.bottom - parseFloat(style.paddingBottom);
+    return (this.#pointer.y - top) / (bottom - top);
   }
 
   #paint(): void {
@@ -444,17 +515,25 @@ export class MenuStructureTable extends LitElement {
     const drag = this.#drag;
     if (!drag?.active) return;
     markDragging(shownRow(root, drag.key));
+    if (this.#target?.kind === "into")
+      shownRow(root, this.#target.key)?.querySelector("td")?.part.add("drop-target");
     const gap = this.#gap(drag.key);
     if (gap) markGap(root, gap);
   }
 
   #gap(dragged: string): DropGap | undefined {
     const row = this.#movable(dragged);
-    if (this.#target === undefined || !row) return undefined;
+    const target = this.#target;
+    if (target === undefined || target.kind === "into" || !row) return undefined;
+    const root = this.#table()!.shadowRoot!;
+    if (target.kind === "beside")
+      return target.side === "before"
+        ? { key: target.key, side: "before" }
+        : { key: lastShownRow(root, target.key), side: "after" };
     const keys = this.#siblingRows(row).map((sibling) => sibling.key);
-    if (keys.indexOf(this.#target) < keys.indexOf(dragged))
-      return { key: this.#target, side: "before" };
-    return { key: lastShownRow(this.#table()!.shadowRoot!, this.#target), side: "after" };
+    if (keys.indexOf(target.key) < keys.indexOf(dragged))
+      return { key: target.key, side: "before" };
+    return { key: lastShownRow(root, target.key), side: "after" };
   }
 
   #move(row: Row, to: number): void {
