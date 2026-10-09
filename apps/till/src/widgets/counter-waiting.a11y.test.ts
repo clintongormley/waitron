@@ -60,4 +60,17 @@ describe.each(["light", "dark"] as const)("till-counter-waiting a11y (%s theme)"
     expect(el.shadowRoot!.querySelector("[data-waiting-cancel-credit]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it("a paid order with Hand over and Move to station has no violations", async () => {
+    const { el, host } = await mountWidget<TillCounterWaiting>(
+      "till-counter-waiting",
+      {
+        orders: [{ ...orders[2]!, movableDishes: [{ lineId: "line-1", stationId: "grill" }] }],
+        canMoveStation: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-waiting-move-station]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

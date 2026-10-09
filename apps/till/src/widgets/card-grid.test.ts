@@ -246,6 +246,21 @@ describe("till-card-grid", () => {
     ).toBe(tables);
   });
 
+  it.each([true, false])(
+    "tells the waiting list under the held orders whether it may offer Move to station (%s)",
+    async (canMoveStation) => {
+      const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+        tab: heldTab,
+        store: new WorkingOrderStore(),
+        heldOrders: [mesa],
+        canMoveStation,
+      });
+      expect(el.shadowRoot!.querySelector("till-counter-waiting")!.canMoveStation).toBe(
+        canMoveStation,
+      );
+    },
+  );
+
   it("lets a held-orders retrieve event bubble through the grid host", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {

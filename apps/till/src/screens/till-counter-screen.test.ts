@@ -85,6 +85,7 @@ const cardGrid = (el: TillCounterScreen) =>
       tipsEnabled: boolean;
       cardOutcome?: string;
       cardAttemptsOver: number;
+      canMoveStation: boolean;
     }
   >("till-card-grid");
 
@@ -349,6 +350,11 @@ describe("till-counter-screen", () => {
   it("threads cardAttemptsOver through to the card grid", async () => {
     const { el } = await mount({ cardAttemptsOver: 3 });
     expect(cardGrid(el)!.cardAttemptsOver).toBe(3);
+  });
+
+  it("threads canMoveStation through to the card grid, off by default", async () => {
+    expect(cardGrid((await mount({ canMoveStation: true })).el)!.canMoveStation).toBe(true);
+    expect(cardGrid((await mount()).el)!.canMoveStation).toBe(false);
   });
 
   it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {

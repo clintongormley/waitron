@@ -153,6 +153,8 @@ export class TillCardGrid extends LitElement {
   @property() cardProvider: CardProvider = "none";
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
+  /** See the waiting list's `canMoveStation`. */
+  @property({ type: Boolean }) canMoveStation = false;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
   @property({ attribute: false }) cardAttemptsOver = 0;
@@ -379,7 +381,10 @@ export class TillCardGrid extends LitElement {
             .orders=${this.heldOrders}
             .tables=${this.tables}
           ></till-held-orders
-          ><till-counter-waiting .orders=${this.counterWaiting}></till-counter-waiting>`;
+          ><till-counter-waiting
+            .orders=${this.counterWaiting}
+            .canMoveStation=${this.canMoveStation}
+          ></till-counter-waiting>`;
       case "prep-queue":
         return html`<till-station-queue
           .groups=${this.stationQueue}

@@ -15,8 +15,9 @@ export interface PayWaitingOrderDetail {
 /**
  * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
  * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
- * its `hand-over-order` and `pay-waiting-order` events into API calls, and its
- * `cancel-credit-waiting-order` event into the cancel and credit dialog.
+ * its `hand-over-order` and `pay-waiting-order` events into API calls, its
+ * `cancel-credit-waiting-order` event into the cancel and credit dialog, and its
+ * `move-waiting-order` event into the move-to-station dialog.
  */
 @customElement("till-counter-waiting")
 export class TillCounterWaiting extends LitElement {
@@ -73,6 +74,8 @@ export class TillCounterWaiting extends LitElement {
   ];
 
   @property({ attribute: false }) orders: CounterWaitingOrder[] = [];
+  /** The device's profile allows `take-orders`, which the move route requires. */
+  @property({ type: Boolean }) canMoveStation = false;
 
   #emit(type: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -118,6 +121,17 @@ export class TillCounterWaiting extends LitElement {
                   aria-label=${`${t("waiting.hand_over")} ${scope}`}
                   @click=${() => this.#emit("hand-over-order", { id: order.id })}
                   >${t("waiting.hand_over")}</wt-button
+                >`
+              : nothing
+          }
+          ${
+            this.canMoveStation && !pay && order.movableDishes.length > 0
+              ? html`<wt-button
+                  data-waiting-move-station
+                  variant="secondary"
+                  aria-label=${`${t("table.move_station")} ${scope}`}
+                  @click=${() => this.#emit("move-waiting-order", { id: order.id })}
+                  >${t("table.move_station")}</wt-button
                 >`
               : nothing
           }

@@ -142,6 +142,74 @@ describe("till-counter-waiting", () => {
     ]);
   });
 
+  describe("Move to station", () => {
+    const movable: CounterWaitingOrder = {
+      ...paid,
+      movableDishes: [{ lineId: "line-1", stationId: "grill" }],
+    };
+    const moveButton = (el: TillCounterWaiting, id: string) =>
+      rowOf(el, id).querySelector<HTMLElement>("wt-button[data-waiting-move-station]");
+
+    it("a paid order with a dish that can move offers it after Hand over, as a secondary action naming the order", async () => {
+      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+        orders: [movable],
+        canMoveStation: true,
+      });
+      const row = rowOf(el, "wo-paid");
+
+      expect(buttons(row)).toEqual([t("waiting.hand_over"), t("table.move_station")]);
+      const action = moveButton(el, "wo-paid")!;
+      expect(action.getAttribute("variant")).toBe("secondary");
+      expect(action.ariaLabel).toBe(`${t("table.move_station")} #11 Ana`);
+    });
+
+    it("is not offered on a paid order with nothing left to move", async () => {
+      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+        orders: [paid],
+        canMoveStation: true,
+      });
+
+      expect(moveButton(el, "wo-paid")).toBeNull();
+    });
+
+    it("is not offered on an order sent and not paid, even one listing dishes", async () => {
+      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+        orders: [{ ...sent, movableDishes: movable.movableDishes }],
+        canMoveStation: true,
+      });
+
+      expect(moveButton(el, "wo-sent")).toBeNull();
+    });
+
+    it("is not offered when the device may not take orders", async () => {
+      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+        orders: [movable],
+      });
+
+      expect(moveButton(el, "wo-paid")).toBeNull();
+      expect(buttons(rowOf(el, "wo-paid"))).toEqual([t("waiting.hand_over")]);
+    });
+
+    it("asks the app, naming the order, in an event that bubbles and crosses shadow roots", async () => {
+      const { el, host } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+        orders: [movable],
+        canMoveStation: true,
+      });
+      const seen: unknown[] = [];
+      host.addEventListener("move-waiting-order", (event) =>
+        seen.push({
+          detail: (event as CustomEvent).detail,
+          bubbles: event.bubbles,
+          composed: event.composed,
+        }),
+      );
+
+      moveButton(el, "wo-paid")!.click();
+
+      expect(seen).toEqual([{ detail: { id: "wo-paid" }, bubbles: true, composed: true }]);
+    });
+  });
+
   describe("Cancel and credit", () => {
     const invoiced: CounterWaitingOrder = { ...sent, invoiceNumber: "A/12" };
 
