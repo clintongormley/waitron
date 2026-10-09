@@ -918,3 +918,161 @@ it.each(dialogs.slice(0, 4))(
     expect(request).toHaveBeenCalledTimes(1);
   },
 );
+
+it.each([
+  { kind: "move-zone" as const, row: view.floorZones[0]! },
+  { kind: "add-to-department" as const, row: { id: "z2", name: "Garden" } },
+])("$kind places a code-only missing department refusal beside its destination", async (dialog) => {
+  const { el, request } = await mount(
+    dialog,
+    vi.fn(async () => {
+      throw { code: "department.not_found", params: {}, status: 404 };
+    }),
+  );
+  const destination = field(el, "departmentId") as unknown as HTMLElementTagNameMap["wt-combobox"];
+  await chooseOption(destination, "d2");
+  save(el).click();
+  await expect
+    .poll(() => destination.error)
+    .toBe("This value was not accepted. Change it and save again.");
+  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+  expect(save(el).disabled).toBe(false);
+  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(request.mock.calls[0]).toEqual([
+    `/management-api/venue-service/zones/${dialog.row.id}`,
+    "PUT",
+    { departmentId: "d2", serviceMode: dialog.kind === "move-zone" ? "ticket_then_pay" : null },
+  ]);
+});
+
+it.each(
+  dialogs.slice(0, 4).flatMap((dialog) => ["en", "es"].map((locale) => ({ dialog, locale }))),
+)(
+  "$dialog.kind validates native input only after Save and rechecks every correction in $locale",
+  async ({ dialog, locale }) => {
+    setLocale(locale);
+    const { el, request } = await mount(dialog);
+    const control = field(el, "name");
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    const type = async (value: string) => {
+      await userEvent.fill(page.elementLocator(native), value);
+      await el.updateComplete;
+      await control.updateComplete;
+    };
+    const required = locale === "es" ? "Este campo es obligatorio." : "This field is required.";
+    const fix =
+      locale === "es"
+        ? "Corrige los campos marcados para continuar."
+        : "Correct the highlighted fields to continue.";
+    const adding = dialog.kind === "add-department" || dialog.kind === "add-zone";
+    const refusal = adding
+      ? locale === "es"
+        ? "No se pudo guardar el cambio."
+        : "The change could not be saved."
+      : "";
+    const invalidBottom = refusal ? `${refusal} ${fix}` : fix;
+    expect(control.name).toBe("name");
+    expect(control.required).toBe(true);
+    expect(native.type).toBe("text");
+    await type("Changed");
+    await type("");
+    expect(control.error).toBe("");
+    expect(native.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottom(el)).toBe("");
+    if (dialog.kind === "add-department" || dialog.kind === "add-zone") {
+      expect(save(el).disabled).toBe(true);
+      save(el).click();
+      await el.updateComplete;
+      expect(control.error).toBe("");
+      expect(request).not.toHaveBeenCalled();
+      await type("Attempted");
+      request.mockRejectedValue(new Error("offline"));
+      save(el).click();
+      await expect
+        .poll(() => bottom(el))
+        .toBe(locale === "es" ? "No se pudo guardar el cambio." : "The change could not be saved.");
+      await type("");
+    } else save(el).click();
+    await expect.poll(() => control.error).toBe(required);
+    await control.updateComplete;
+    expect(native.getAttribute("aria-invalid")).toBe("true");
+    await expect.poll(() => control.shadowRoot!.activeElement).toBe(native);
+    expect(await bottom(el)).toBe(invalidBottom);
+    expect(save(el).disabled).toBe(true);
+    expect(request).toHaveBeenCalledTimes(dialog.kind.startsWith("add-") ? 1 : 0);
+    await type("Corrected");
+    expect(control.error).toBe("");
+    expect(native.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottom(el)).toBe(refusal);
+    expect(save(el).disabled).toBe(false);
+    await type("");
+    expect(control.error).toBe(required);
+    expect(native.getAttribute("aria-invalid")).toBe("true");
+    expect(await bottom(el)).toBe(invalidBottom);
+    expect(save(el).disabled).toBe(true);
+    expect(request).toHaveBeenCalledTimes(adding ? 1 : 0);
+    if (adding) {
+      await type("Corrected");
+      let finish!: (value: unknown) => void;
+      request.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      save(el).click();
+      await el.updateComplete;
+      expect(await bottom(el)).toBe("");
+      expect(control.error).toBe("");
+      expect(save(el).disabled).toBe(true);
+      expect(request).toHaveBeenCalledTimes(2);
+      finish({ id: "created", name: "Corrected" });
+      await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    }
+  },
+);
+
+it.each(
+  dialogs
+    .slice(0, 4)
+    .flatMap((dialog) => ["validation", "refusal"].map((outcome) => ({ dialog, outcome }))),
+)("$dialog.kind reopens clean after a recorded $outcome", async ({ dialog, outcome }) => {
+  const { el, request } = await mount(
+    dialog,
+    vi.fn(async () => {
+      throw new Error("offline");
+    }),
+  );
+  await change(el, "name", "Rejected");
+  save(el).click();
+  await expect.poll(() => bottom(el)).toBe("The change could not be saved.");
+  if (outcome === "validation") {
+    await field(el, "name").updateComplete;
+    const native = field(el, "name").shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await userEvent.fill(page.elementLocator(native), "");
+    await el.updateComplete;
+    expect(field(el, "name").error).toBe("This field is required.");
+    expect(await bottom(el)).toBe(
+      "The change could not be saved. Correct the highlighted fields to continue.",
+    );
+  }
+  el.dialog = undefined;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  el.dialog = structuredClone(dialog);
+  await el.updateComplete;
+  const control = field(el, "name");
+  await control.updateComplete;
+  expect(control.value).toBe("row" in dialog ? dialog.row.name : "");
+  expect(control.error).toBe("");
+  expect(
+    control.shadowRoot!.querySelector<HTMLInputElement>("input")!.getAttribute("aria-invalid"),
+  ).toBe("false");
+  expect(await bottom(el)).toBe("");
+  expect(save(el).disabled).toBe(true);
+  expect(save(el).variant).toBe("secondary");
+  expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
+});

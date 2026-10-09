@@ -1633,3 +1633,43 @@ arriving during a pending write, transfer reconnect/live reads, translated refus
 inheritance, opening-hours bounds and other mapped gaps remain. Keep the public legacy screen
 and its suites until those gaps close, then inventory retirement and switch the wrapper.
 Public LOOK, A13–A15, completed branch reviews, the push hook and current-head CI remain.
+
+
+### Implementation checkpoint: A10 native validation and transfer reconnect (2026-10-09)
+
+You can now follow the surviving native-field assertions in the replacement suites:
+`department-dialogs.test.ts` covers code-only `department.not_found` refusals in Move
+and Add to department; native input, first-invalid focus and validation corrections
+in English and Spanish; and reopening Add/Rename after validation or a request refusal.
+The Add cases retain the quiet, disabled unchanged form. After a refused write,
+a later invalid edit shows both the request failure and the field correction message;
+starting the retry clears the old refusal, and success closes the dialog.
+
+`department-settings.test.ts` carries the native trading-name refusal through an
+unrelated name edit and its own correction, including native invalid state, focus,
+retained submitted values and usable Save. Its same-department reconnect cases complete
+the departed and fresh transfer reads in both orders. They assert the fresh receiving
+profile, choices and destination checkbox, the retained name draft, and a quiet Save
+when that draft returns to its baseline.
+
+The 21 new cases passed. In an independently installed disposable checkout, removing
+the transfer generation check failed 2; code-only destination mapping failed 2;
+clearing unrelated field refusals failed 1; native trading-name handling
+failed 1; native dialog-name handling failed 16; and clearing the reopened dialog's
+failure failed 8. Restoring the source passed 21. These controls preceded a test-only
+fixture type correction: the two Move fixtures were written as a typed literal table
+with the same values instead of slicing the full dialog union. The final affected
+14-file run passed 565 cases, scoped types, focused lint and formatting passed, and
+the unchanged fiscal pair passed 20. No production code or previous test body changed.
+
+The initial failures were harness corrections: an incorrect zone configure URL,
+trying to validate an unchanged Add draft, and expecting a request refusal to disappear
+on a local edit. They are not reproduced product defects. The type correction and
+initial logs remain in the campaign receipts.
+
+A10 remains incomplete. Before you retire the original suites, finish the mapped
+live-read/open-dialog, translated Enable, post-save inheritance, opening-hours and
+remaining native/focus assertions. Reconcile the retained same-request input behavior
+with the existing busy-input check. Then inventory removed checks, switch the public
+wrapper, remove the staged create spy and rerun mounted dashboard checks and public
+LOOK. A13–A15, branch reviews, the normal push hook and current-head CI remain.

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -1007,3 +1008,99 @@ it.each([
     expect(save(el).disabled).toBe(false);
   },
 );
+
+it.each(["old-first", "fresh-first"] as const)(
+  "a same-department reconnect ignores the departed transfer read: %s",
+  async (order) => {
+    const { el } = await mount();
+    el.remove();
+    el.departmentId = "d2";
+    const reads: { path: string; finish: (value: unknown) => void }[] = [];
+    el.api = new VenueServiceApi(
+      ((path) =>
+        new Promise<unknown>((finish) => {
+          reads.push({ path, finish });
+        })) as DashboardRequest,
+    );
+    hosts[0]!.append(el);
+    await el.updateComplete;
+    await expect.poll(() => reads.length).toBe(2);
+    await change(el, "name", "Deli draft");
+    el.remove();
+    hosts[0]!.append(el);
+    await el.updateComplete;
+    await expect.poll(() => reads.length).toBe(4);
+    const complete = async (offset: number, profile: string, destinations: string[]) => {
+      for (const read of reads.slice(offset, offset + 2))
+        read.finish(
+          read.path.endsWith("/profiles")
+            ? [{ id: profile, name: `${profile} desk` }]
+            : {
+                departmentId: "d2",
+                receivingProfileId: profile,
+                destinationDepartmentIds: destinations,
+              },
+        );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+    };
+    if (order === "old-first") {
+      await complete(0, "old", ["d1"]);
+      expect(el.shadowRoot!.querySelector("[name=receivingProfileId]")).toBeNull();
+      await complete(2, "fresh", []);
+    } else {
+      await complete(2, "fresh", []);
+      await complete(0, "old", ["d1"]);
+    }
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
+      .not.toBeNull();
+    const profile = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=receivingProfileId]",
+    )!;
+    expect(profile.value).toBe("fresh");
+    expect(profile.options.map((option) => option.value)).toEqual(["", "fresh"]);
+    expect(
+      el.shadowRoot!.querySelector<HTMLInputElement>("[name=transferDestination-d1]")!.checked,
+    ).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=transfers-load-error]")).toBeNull();
+    expect(field(el, "name").value).toBe("Deli draft");
+    expect(save(el).disabled).toBe(false);
+    await change(el, "name", "Deli");
+    expect(save(el).disabled).toBe(true);
+  },
+);
+
+it("a native trading-name refusal survives a name edit and clears on its own input", async () => {
+  const { el, writes } = await mount(structuredClone(model), {
+    code: "management.request_invalid",
+    params: { field: "tradingName" },
+  });
+  const trading = field(el, "tradingName");
+  await trading.updateComplete;
+  const native = trading.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  await userEvent.fill(page.elementLocator(native), "Casa revised");
+  await el.updateComplete;
+  save(el).click();
+  await expect
+    .poll(() => trading.error)
+    .toBe("This value was not accepted. Change it and save again.");
+  await trading.updateComplete;
+  expect(native.getAttribute("aria-invalid")).toBe("true");
+  await expect.poll(() => trading.shadowRoot!.activeElement).toBe(native);
+  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+  expect(native.value).toBe("Casa revised");
+  expect(save(el).disabled).toBe(false);
+  await change(el, "name", "Restaurant revised");
+  expect(trading.error).toBe("This value was not accepted. Change it and save again.");
+  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+  await userEvent.fill(page.elementLocator(native), "Casa corrected");
+  await el.updateComplete;
+  await trading.updateComplete;
+  expect(trading.error).toBe("");
+  expect(native.getAttribute("aria-invalid")).toBe("false");
+  expect(await bottom(el)).toBe("");
+  expect(save(el).disabled).toBe(false);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.body).toMatchObject({ name: "Restaurant", tradingName: "Casa revised" });
+});
