@@ -959,7 +959,7 @@ describe("GET /api/menu-state", () => {
     const v1 = await publish(v.menuId);
     expect(await state(v)).toEqual({
       service: {
-        open: true,
+        open: true, zoneOpen: true,
         periodName: "Always",
         keepOpen: {
           periodId: expect.any(String),
@@ -979,7 +979,7 @@ describe("GET /api/menu-state", () => {
     await setBurger(false);
     expect(await state(v)).toEqual({
       service: {
-        open: true,
+        open: true, zoneOpen: true,
         periodName: "Always",
         keepOpen: {
           periodId: expect.any(String),

@@ -26,6 +26,8 @@ describe("VENUE_SERVICE", () => {
       "assertProfileBinding",
       "assertProfileZone",
       "closeStationForToday",
+      "assertZoneTakesNewOrders",
+      "closedZoneIdsAt",
       "copyLineContext",
       "copyOrderContext",
       "declineDepartmentTransfer",

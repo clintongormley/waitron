@@ -126,7 +126,7 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
 
 function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue {
   return {
-    service: { open: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId: "zone-counter",
@@ -167,7 +167,7 @@ const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
-    service: { open: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
     menus: [{ menuId: "lunch", versionId: version, orderable: true, sendable: true }],
     unavailable: { ...NOTHING, ...unavailable },
   };
@@ -2045,7 +2045,7 @@ describe("the menu's Device Home Page", () => {
     await toCounter(el);
     const shown = browser(el).menu;
     api.menuState.mockResolvedValue({
-      service: { open: true, periodName: null, keepOpen: null },
+      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
       menus: [{ menuId: "lunch", versionId: "v2", orderable: true, sendable: true }],
       unavailable: NOTHING,
     } satisfies MenuState);

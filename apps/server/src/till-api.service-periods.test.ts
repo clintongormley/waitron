@@ -1352,7 +1352,7 @@ describe("menu-state follows department service periods", () => {
     expect(answer.status).toBe(200);
     expect(answer.body).toMatchObject({
       defaultMenuId: null,
-      service: { open: false, periodName: null },
+      service: { open: false, zoneOpen: true, periodName: null },
     });
     expect(answer.body.menus).toEqual([
       { menuId: v.menus["Café"], versionId: v.versions["Café"], orderable: false, sendable: false },
@@ -1400,7 +1400,7 @@ describe("menu-state follows department service periods", () => {
     expect(answer.status).toBe(200);
     expect(answer.body).toMatchObject({
       defaultMenuId: null,
-      service: { open: true, periodName: null },
+      service: { open: true, zoneOpen: true, periodName: null },
     });
   });
 });
