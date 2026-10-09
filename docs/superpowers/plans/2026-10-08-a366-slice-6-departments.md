@@ -1385,3 +1385,31 @@ when the wrapper switches. Task A10 remains in progress: wire dialogs, Enable,
 refresh failures and focus return; audit and carry every surviving assertion; then
 replace the old tree and editors and run the mounted dashboard integration matrix.
 A11–A15 and the final review, push, CI and landing gates remain.
+
+
+### Implementation checkpoint — Task A10 staged actions (2026-10-09)
+
+The internal shell now opens the department and zone dialogs from child events. A new
+department opens after its successful write and refresh; a moved zone selects the first
+remaining zone in the viewed department. Enable writes only `active: true`. Dialogs close
+before their passive refresh, and Add/row-menu focus returns after Cancel or a same-page
+save. Action refusals and load failures have separate messages. The action tests exercise
+snapshot replacement, a failed stale refresh, navigation during refresh, repeated Enable
+events and responses from a previous connection.
+
+Task A10 remains in progress. The public wrapper and every legacy assertion remain intact.
+The staged shell emits `model-change` after applying an action refresh. The wrapper switch
+must reconcile that with its existing QueryController/live snapshot ownership and preserve
+its initial/passive read contract; this checkpoint does not verify the mounted DashboardApp.
+Audit every kept legacy assertion before retiring its old suite, including dirty zone actions,
+receipt/parent links, permissions and history. A11–A15 and the final branch workflow remain.
+
+Receipts are local under Lane E's `receipts/a366-6a/a10-actions/`: initial 16 failing action
+cases, five additional focus/late-response failures and one read-recovery failure; final
+19 focused browser files / 347 cases pass. Six guard-removal experiments failed, followed
+by 26 passing restored action cases in an installed disposable checkout. Scoped types and
+lint pass. Thirty-two staged dialog/error screenshots cover EN/ES, both themes and CSS
+1280/390 widths; scaled sheets were inspected. They are viewport captures, not a full-page
+or mounted-dashboard rendering claim. Package coverage and whole-branch review remain
+later gates. No existing assertion, fiscal source, migration, guard or coverage setting
+changed in this checkpoint.
