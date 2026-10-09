@@ -118,7 +118,7 @@ it("selects a linked inactive department and keeps view and department in the ad
   await el.updateComplete;
   expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/restaurant");
   const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
-  expect(tabs.items.map((item) => item.key)).toEqual(["week", "periods", "day"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["week", "periods", "day", "calendar"]);
   tabs.dispatchEvent(
     new CustomEvent("wt-tab-change", { detail: { value: "day" }, bubbles: true, composed: true }),
   );
