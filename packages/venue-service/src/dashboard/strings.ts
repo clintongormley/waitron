@@ -685,6 +685,20 @@ const en = {
   "routing.dropped_product": "Your choice was not saved: its product is no longer in the grid.",
   "routing.dropped_no_category":
     "Your choice was not saved: the No category row is no longer in the grid.",
+  "routing.editor_from": "From {source}",
+  "routing.any_other_time": "Any other time",
+  "routing.line_periods": "Periods",
+  "routing.line_station": "Station",
+  "routing.add_line": "+ Different station during some periods",
+  "routing.remove_line": "Remove",
+  "routing.periods_required": "Choose at least one period.",
+  "routing.station_required": "Choose a station.",
+  "routing.period_not_offered": "{period} offers none of these products.",
+  "routing.period_other_department": "{period} is another department's.",
+  "routing.period_repeated": "{period} is in two lines.",
+  "routing.not_copied": "Not copied: {periods}",
+  "routing.not_copied_department": "{period} ({department}) — another department's",
+  "routing.not_copied_products": "{period} — offers none of these products",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -1397,6 +1411,20 @@ const es: Record<keyof typeof en, string> = {
     "Tu elección no se ha guardado: su producto ya no está en la cuadrícula.",
   "routing.dropped_no_category":
     "Tu elección no se ha guardado: la fila Sin categoría ya no está en la cuadrícula.",
+  "routing.editor_from": "De {source}",
+  "routing.any_other_time": "El resto del tiempo",
+  "routing.line_periods": "Periodos",
+  "routing.line_station": "Estación",
+  "routing.add_line": "+ Otra estación en algunos periodos",
+  "routing.remove_line": "Quitar",
+  "routing.periods_required": "Elige al menos un periodo.",
+  "routing.station_required": "Elige una estación.",
+  "routing.period_not_offered": "{period} no ofrece ninguno de estos productos.",
+  "routing.period_other_department": "{period} es de otro departamento.",
+  "routing.period_repeated": "{period} está en dos líneas.",
+  "routing.not_copied": "No copiado: {periods}",
+  "routing.not_copied_department": "{period} ({department}) — de otro departamento",
+  "routing.not_copied_products": "{period} — no ofrece ninguno de estos productos",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };
