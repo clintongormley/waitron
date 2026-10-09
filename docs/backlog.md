@@ -3652,6 +3652,11 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 - **Still not built: a standby that has fallen behind** — left open by "Dashboard alerts and the
   incidents surface" (A5, LANDED #363/#368/#371).
 
+- **No test fails if `boot.ts` stops registering the dark pass screen alert** — left open by A451
+  (#1486). `passScreenAlertSource` is tested on its own (`apps/server/src/station-outputs-down.test.ts`),
+  but its registration in `apps/server/src/boot.ts` is checked by nothing that review found; the
+  other sources registered beside it were not looked at.
+
 - **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
   Devices list; nothing alerts when a handheld runs low.
 
