@@ -124,6 +124,12 @@ Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2
 
 ## Decisions and deliberate limits
 
+- **Zone and period extensions remain separate (A366 slice 3 Part B, 2026-10-09).** Cancelling
+  a department's period extension does not delete its zones' overrides. In the server keep-open
+  suite, a retained zone override until 01:30 still leaves the 01:15 dish submission refused
+  with `menu_period.not_running` after the period extension is cancelled. The zone line reports
+  its own closure, rather than the department's combined availability.
+
 - **A department row's arrow (A301, #1335, A261 step 2).** Departments start open, unlike the
   Products, menu Structure and menu prices trees, which start closed, and a folded department is
   not remembered after a reload: the table remembers only the branches a person opens, only in a

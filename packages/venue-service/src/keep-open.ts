@@ -6,7 +6,11 @@ import { AppError } from "@waitron/shared";
 import { departmentDay, keepOpenSubject, serviceRuns } from "./menu-timetable.js";
 import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { floorZones } from "@waitron/db";
-import { zoneClosureDay, withoutZoneExtension } from "./zone-closed-times.js";
+import {
+  zoneClosureDay,
+  withoutZoneExtension,
+  zoneExtensionForRange,
+} from "./zone-closed-times.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import {
@@ -177,7 +181,11 @@ async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at:
   const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock);
   const openRanges =
     day.ranges.length === 0 ? [] : withExtension(day.ranges, day.extension, c.clock.dayCutover);
-  return { ...c, closure, openRanges };
+  const extended =
+    c.moment === null || closure === undefined
+      ? null
+      : zoneExtensionForRange(c.extension, closure, c.clock.dayCutover);
+  return { ...c, closure, openRanges, extended };
 }
 
 function departmentCovers(
@@ -218,8 +226,7 @@ export async function readZoneKeepOpen(
     if (!clockTimeSkipped(c.moment.businessDay, time, c.clock.dayCutover, c.clock.timeZone, true))
       choices.push(time);
   }
-  const extended =
-    c.extension !== null && c.extension.startsAt === c.closure.startsAt ? c.extension : null;
+  const extended = c.extended;
   const effective = withoutZoneExtension(c.ranges, c.extension, c.clock.dayCutover);
   return {
     id: zoneId,
@@ -287,7 +294,13 @@ export async function keepZoneOpen(
   const values = {
     zoneId,
     businessDay: c.moment.businessDay,
-    startsAt: storedTime(c.closure!.startsAt),
+    startsAt: storedTime(
+      c.extended !== null &&
+        rangeSpan(c.extended, c.clock.dayCutover).start <
+          rangeSpan(c.closure!, c.clock.dayCutover).start
+        ? c.extended.startsAt
+        : c.closure!.startsAt,
+    ),
     endsAt: storedTime(input.until),
   };
   await tx

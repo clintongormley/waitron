@@ -47,6 +47,7 @@ import {
   readSaleReceiptHeader,
   resolveZoneContext,
   menuState,
+  readZoneKeepOpenState,
   orderInZones,
 } from "./operations.js";
 import {
@@ -113,6 +114,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listZoneOffers,
   resolveDefaultMenu,
   menuState,
+  readZoneKeepOpenState,
   resolveNewOrderZone,
   readProfileServiceAccess,
   readProfileZones,

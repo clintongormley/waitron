@@ -509,6 +509,12 @@ export interface VenueServiceContribution {
     zoneId: string,
     at: Date,
   ): Promise<{ period: KeepOpenSubject | null; zone: KeepOpenSubject | null }>;
+  readZoneKeepOpenState(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    at: Date,
+  ): Promise<ZoneOffers["service"]["zoneKeepOpen"]>;
   keepZoneOpen(
     tx: Transaction,
     cfg: { locationId: LocationId },

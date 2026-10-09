@@ -1316,8 +1316,8 @@ notice and the period line), `screens/till-floor-screen.ts` (the zone bar), `til
 **Wording:** `keep_open.zone_button` "Keep {zone} open later" / "Ampliar el horario de {zone}";
 `keep_open.zone_closes` "{zone} closes at {time} today." / "Hoy {zone} cierra a las {time}.";
 `keep_open.zone_closed` "{zone} is closed now." / "{zone} está cerrada ahora."; code
-`zone_extension.not_allowed` "This area cannot stay open after {department} closes, or has no
-closing time left today." / "Esta zona no puede seguir abierta cuando {department} ha cerrado, o
+`zone_extension.not_allowed` "This area cannot stay open after its department closes, or has no
+closing time left today." / "Esta zona no puede seguir abierta cuando su departamento ha cerrado, o
 hoy ya no tiene hora de cierre."; code `zone_extension.invalid` as `period_extension.invalid`.
 
 - [x] Steps: failing tests (the zone button in the closed-zone notice and beside the period line

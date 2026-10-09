@@ -38,6 +38,7 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { send } from "./testing/bill-venue.js";
 import { mountTillApi } from "./till-api.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 
@@ -451,6 +452,43 @@ describe("the till keeps a zone open today", () => {
     const answer = await call("POST", `/api/tables/${late}/seat`, { guestCount: 2 });
     expect(answer.status).toBe(409);
     expect(answer.json).toMatchObject({ code: "service_zone.closed" });
+  });
+  it("reads floor closing times without invoking the dialog choice reader", async () => {
+    const choices = vi.spyOn(VENUE_SERVICE, "readKeepOpen");
+    try {
+      expect(await zoneState()).toMatchObject({ closed: false, closesAt: "23:30" });
+      expect(choices).not.toHaveBeenCalled();
+      expect((await call("GET", read())).status).toBe(200);
+      expect(choices).toHaveBeenCalledTimes(1);
+    } finally {
+      choices.mockRestore();
+    }
+  });
+  it("keeps period admission closed after cancelling its extension while a zone extension remains", async () => {
+    await run((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        department,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "01:00" }],
+        })),
+        new Date(),
+      ),
+    );
+    expect((await call("PUT", write(), { periodId: lunch, until: "02:00" })).status).toBe(204);
+    expect((await call("PUT", writeZone(), { until: "01:30" })).status).toBe(204);
+    expect((await call("PUT", write(), { periodId: lunch, until: null })).status).toBe(204);
+    nextDay("01:15");
+    expect(await zoneState()).toMatchObject({ closed: false, closesAt: "01:30" });
+    const answer = await call("POST", "/api/working-orders", {
+      id: randomUUID(),
+      zoneId: zone,
+      lines: [{ menuItemId: lunchItem, quantity: "1" }],
+    });
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({ code: "menu_period.not_running" });
   });
   it("refuses an extension beyond the department closing time without writing", async () => {
     await run((tx) =>

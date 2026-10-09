@@ -657,3 +657,151 @@ it("excludes a skipped zone end from choices and refuses it without writing", as
   });
   expect(await zoneRows(f)).toEqual([]);
 });
+
+it("retains a spanning extension in both readouts and when replacing it after the first closure", async () => {
+  const f = await fixture();
+  await run(async (tx) => {
+    await replaceMenuWeek(
+      tx,
+      f.cfg,
+      f.departmentId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [{ periodId: f.lunch, startsAt: "21:00", endsAt: "06:00" }],
+      })),
+      at("21:00"),
+    );
+    await replaceZoneClosedWeek(
+      tx,
+      f.cfg,
+      f.zoneId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        ranges: [
+          { startsAt: "23:30", endsAt: "00:30" },
+          { startsAt: "01:00", endsAt: "03:00" },
+        ],
+      })),
+    );
+    await keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "02:00" }, at("23:00"));
+  });
+  for (const time of ["00:45", "01:30"]) {
+    const instant = at(time, "2026-10-10");
+    expect((await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, instant))).zone).toMatchObject({
+      endsAt: "02:00",
+      extendedUntil: "02:00",
+      running: true,
+    });
+    expect(
+      (await run((tx) => menuState(tx, f.cfg, f.zoneId, instant))).service.zoneKeepOpen,
+    ).toMatchObject({ closesAt: "02:00", extendedUntil: "02:00", running: true });
+    expect((await run((tx) => closedZoneIdsAt(tx, f.cfg, instant, [f.zoneId]))).has(f.zoneId)).toBe(
+      false,
+    );
+  }
+  await run((tx) =>
+    keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "02:30" }, at("01:30", "2026-10-10")),
+  );
+  expect(await zoneRows(f)).toEqual([
+    {
+      id: expect.any(String),
+      zoneId: f.zoneId,
+      businessDay: "2026-10-09",
+      startsAt: "23:30:00",
+      endsAt: "02:30:00",
+    },
+  ]);
+  expect(
+    (await run((tx) => closedZoneIdsAt(tx, f.cfg, at("02:30", "2026-10-10"), [f.zoneId]))).has(
+      f.zoneId,
+    ),
+  ).toBe(true);
+});
+
+it("shows the effective extension after a manager moves the closure start", async () => {
+  const f = await zoneFixture();
+  await run((tx) => keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "01:30" }, at("23:00")));
+  await run((tx) =>
+    replaceZoneClosedWeek(
+      tx,
+      f.cfg,
+      f.zoneId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
+      })),
+    ),
+  );
+  const instant = at("23:45");
+  expect((await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, instant))).zone).toMatchObject({
+    endsAt: "01:30",
+    extendedUntil: "01:30",
+    running: true,
+  });
+  expect(
+    (await run((tx) => menuState(tx, f.cfg, f.zoneId, instant))).service.zoneKeepOpen,
+  ).toMatchObject({ closesAt: "01:30", extendedUntil: "01:30", running: true });
+});
+
+it("reads a floor closing summary without building period choices", async () => {
+  const f = await zoneFixture();
+  await run(async (tx) => {
+    const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    const spy = vi.spyOn(session, "prepareQuery");
+    try {
+      const answer = await VENUE_SERVICE.readZoneKeepOpenState(tx, f.cfg, f.zoneId, at("23:00"));
+      expect(answer).toEqual({
+        zoneId: f.zoneId,
+        zoneName: "Dining",
+        closesAt: "23:30",
+        running: true,
+        extendedUntil: null,
+      });
+      const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
+      expect(
+        sql.some(
+          (q) =>
+            q.includes('"menu_periods"') ||
+            q.includes('"menu_slots"') ||
+            q.includes('"period_extensions"'),
+        ),
+      ).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+it.each([
+  ["23:30", "00:30"],
+  ["03:00", "04:00"],
+])(
+  "leaves a disjoint saved extension %s–%s out of the next closure readout",
+  async (startsAt, endsAt) => {
+    const f = await fixture();
+    await run(async (tx) => {
+      await replaceZoneClosedWeek(
+        tx,
+        f.cfg,
+        f.zoneId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          ranges: [{ startsAt: "01:00", endsAt: "03:00" }],
+        })),
+      );
+      await tx
+        .insert(zoneExtensions)
+        .values({ zoneId: f.zoneId, businessDay: "2026-10-09", startsAt, endsAt });
+    });
+    const instant = at("01:30", "2026-10-10");
+    expect((await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, instant))).zone).toMatchObject({
+      endsAt: "01:00",
+      extendedUntil: null,
+      running: false,
+    });
+    expect(
+      await run((tx) => VENUE_SERVICE.readZoneKeepOpenState(tx, f.cfg, f.zoneId, instant)),
+    ).toMatchObject({ closesAt: "01:00", extendedUntil: null, running: false });
+  },
+);

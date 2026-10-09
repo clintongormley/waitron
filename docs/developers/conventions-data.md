@@ -1317,7 +1317,7 @@ The zone override lifts its closed times; it changes no menu timetable or price.
 
 The real-route cases in `apps/server/src/till-api.keep-open.test.ts` seat a table during the
 extension and refuse it at the endpoint. `packages/venue-service/src/keep-open.test.ts` checks
-a department gap and reads the pricing path without zone-extension queries. The till's
+a department gap, an extension spanning two closed ranges, and the pricing path without zone-extension queries. The till's
 `zone-keep-open.test.ts`, `zone-keep-open-screens.test.ts` and menu-refresh cases check the
 zone write, manager retry and refreshed controls.
 

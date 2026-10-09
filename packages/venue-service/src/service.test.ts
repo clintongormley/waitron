@@ -63,6 +63,7 @@ describe("VENUE_SERVICE", () => {
       "readProfileZones",
       "readReleaseReminderMinutes",
       "readSaleReceiptHeader",
+      "readZoneKeepOpenState",
       "recordKitchenNotices",
       "recordLineContexts",
       "recordOrderContext",

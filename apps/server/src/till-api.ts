@@ -2263,12 +2263,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const answer = [];
         for (const zone of visible) {
           const keepOpen = serviceZones.has(zone.id)
-            ? await VENUE_SERVICE.readKeepOpen(tx, deps.cfg, zone.id, at)
+            ? await VENUE_SERVICE.readZoneKeepOpenState(tx, deps.cfg, zone.id, at)
             : null;
           answer.push({
             ...zone,
             closed: closed.has(zone.id),
-            closesAt: keepOpen?.zone?.endsAt ?? null,
+            closesAt: keepOpen?.closesAt ?? null,
           });
         }
         return answer;

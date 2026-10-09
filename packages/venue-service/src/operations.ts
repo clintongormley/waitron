@@ -1,5 +1,10 @@
 import { rangeSpan } from "./service-day.js";
-import { closedZoneIdsAt, zoneClosureDay, withoutZoneExtension } from "./zone-closed-times.js";
+import {
+  closedZoneIdsAt,
+  zoneClosureDay,
+  withoutZoneExtension,
+  zoneExtensionForRange,
+} from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
@@ -876,7 +881,7 @@ export async function listZoneOffers(
       periodName: service?.periodName ?? null,
       keepOpen: service?.keepOpen ?? null,
       zoneKeepOpen:
-        options.withDefault === false ? null : await zoneKeepOpenState(tx, cfg, zoneId, at),
+        options.withDefault === false ? null : await readZoneKeepOpenState(tx, cfg, zoneId, at),
     },
     menus,
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
@@ -918,7 +923,7 @@ export async function menuState(
       zoneOpen: !(await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId),
       periodName: service.periodName,
       keepOpen: service.keepOpen,
-      zoneKeepOpen: await zoneKeepOpenState(tx, cfg, zoneId, at),
+      zoneKeepOpen: await readZoneKeepOpenState(tx, cfg, zoneId, at),
     },
     menus: published.map(({ menuId, versionId }) => ({
       menuId,
@@ -1312,7 +1317,12 @@ export async function copyWorkingLineContext(
   });
 }
 
-async function zoneKeepOpenState(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
+export async function readZoneKeepOpenState(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  at: Date,
+) {
   const c = await zoneClosureDay(tx, cfg, zoneId, at);
   if (c.moment === null) return null;
   const closure = c.ranges.find(
@@ -1323,7 +1333,7 @@ async function zoneKeepOpenState(tx: Transaction, cfg: VenueScope, zoneId: strin
     .select({ name: floorZones.name })
     .from(floorZones)
     .where(eq(floorZones.id, zoneId));
-  const extended = c.extension?.startsAt === closure.startsAt ? c.extension : null;
+  const extended = zoneExtensionForRange(c.extension, closure, c.clock.dayCutover);
   return {
     zoneId,
     zoneName: zone!.name,

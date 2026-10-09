@@ -155,6 +155,17 @@ export function withoutZoneExtension(
   });
 }
 
+export function zoneExtensionForRange(
+  extension: ClosedRange | null,
+  closure: ClosedRange,
+  cutover: string,
+): ClosedRange | null {
+  if (extension === null) return null;
+  const span = rangeSpan(extension, cutover);
+  const closed = rangeSpan(closure, cutover);
+  return span.start < closed.end && span.end > closed.start ? extension : null;
+}
+
 export async function zoneClosureDay(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
   const clock = await readLocationClock(tx, cfg.locationId);
   const moment = serviceMomentAt(at, clock);
