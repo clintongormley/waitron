@@ -342,6 +342,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "category.name_taken": 409,
   "category.contents_changed": 409,
   "product.name_taken": 409,
+  "product.archived": 409,
+  "product.on_live_menu": 409,
 };
 
 const run = createErrorBoundary(STATUS, "catalogue.failed");
@@ -1419,7 +1421,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             body,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
-          return applyRouting(tx, product, routing);
+          return product.active ? applyRouting(tx, product, routing) : product;
         }),
       );
     }),

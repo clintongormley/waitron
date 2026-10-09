@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -488,4 +489,38 @@ describe("mountRecipeApi", () => {
       });
     });
   });
+});
+
+it("refuses replacing an archived product recipe with 409 product.archived and preserves its ingredients", async () => {
+  const app = mountApp();
+  const archivedId = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: `Archive recipe ${crypto.randomUUID()}` });
+    const product = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: `Archived recipe ${crypto.randomUUID()}`,
+      unitId: null,
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+    return product.id;
+  });
+  const created = await send(app, "POST", "/management-api/ingredients", {
+    body: { name: "Archived bread" },
+  });
+  expect(created.status).toBe(201);
+  const ingredient = (await created.json()) as { id: string };
+  const path = `/management-api/products/${archivedId}/recipe`;
+  expect((await send(app, "PUT", path, { body: { ingredientIds: [ingredient.id] } })).status).toBe(
+    204,
+  );
+  const before = await (await send(app, "GET", path)).json();
+  expect(before).toEqual([expect.objectContaining({ id: ingredient.id, name: "Archived bread" })]);
+  await suite.db.update(products).set({ active: false }).where(eq(products.id, archivedId));
+  const refused = await send(app, "PUT", path, { body: { ingredientIds: [] } });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toEqual({
+    error: { code: "product.archived", params: { productId: archivedId } },
+  });
+  expect(await (await send(app, "GET", path)).json()).toEqual(before);
 });

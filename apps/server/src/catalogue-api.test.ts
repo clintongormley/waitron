@@ -930,6 +930,104 @@ async function createNamedProductVia(app: Hono, name: string): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
+describe("product archive route boundaries", () => {
+  beforeEach(async () => {
+    await suite.db.execute(sql`delete from content_languages`);
+  });
+
+  async function archive(app: Hono, productId: string) {
+    const response = await send(app, "POST", "/management-api/folders/delete", {
+      body: { productIds: [productId], categoryIds: [], contents: "delete" },
+    });
+    expect(response.status).toBe(204);
+  }
+
+  async function publishedProduct(app: Hono) {
+    const name = `Archive dish ${crypto.randomUUID()}`;
+    const productId = await createNamedProductVia(app, name);
+    const menuName = `Archive menu ${crypto.randomUUID()}`;
+    const menuId = await createCatalogueVia(app, menuName);
+    await offerVia(app, menuId, productId);
+    const preview = await send(app, "GET", `/management-api/catalogues/${menuId}/preview`);
+    expect(preview.status).toBe(200);
+    const { hash } = (await preview.json()) as MenuPreview;
+    const published = await send(app, "POST", `/management-api/catalogues/${menuId}/publish`, {
+      body: { expectedHash: hash },
+    });
+    expect(published.status).toBe(200);
+    return { productId, name, menuId, menuName };
+  }
+
+  it("answers an editor restore of an archived product with 409 product.archived", async () => {
+    const app = mountApp();
+    const productId = await createNamedProductVia(app, `Archived ${crypto.randomUUID()}`);
+    await archive(app, productId);
+    const response = await saveEditorFixture(app, productId, { active: true });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "product.archived", params: { productId } },
+    });
+    expect(
+      (await suite.db.execute(sql`select active from products where id = ${productId}`)).rows,
+    ).toEqual([{ active: 0 }]);
+  });
+
+  it.each(["editor", "folders"] as const)(
+    "answers a %s archive on a published menu with 409 and its menu name",
+    async (route) => {
+      const app = mountApp();
+      const { productId, name, menuId, menuName } = await publishedProduct(app);
+      const response =
+        route === "editor"
+          ? await saveEditorFixture(app, productId, { active: false })
+          : await send(app, "POST", "/management-api/folders/delete", {
+              body: { productIds: [productId], categoryIds: [], contents: "delete" },
+            });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "product.on_live_menu",
+          params: {
+            products: [{ id: productId, name }],
+            menus: [{ id: menuId, name: menuName }],
+          },
+        },
+      });
+      expect(
+        (await suite.db.execute(sql`select active from products where id = ${productId}`)).rows,
+      ).toEqual([{ active: 1 }]);
+    },
+  );
+
+  it("archives through the editor while preserving its stored disabled course", async () => {
+    const app = mountApp();
+    const productId = await createNamedProductVia(app, `Course archive ${crypto.randomUUID()}`);
+    const { courseId } = await seedRouting();
+    expect((await saveEditorFixture(app, productId, { courseId })).status).toBe(200);
+    await suite.db.execute(sql`update kitchen_courses set active = false where id = ${courseId}`);
+    const response = await saveEditorFixture(app, productId, { active: false });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: productId, active: false, courseId });
+    expect(
+      (await suite.db.execute(sql`select active, course_id from products where id = ${productId}`))
+        .rows,
+    ).toEqual([{ active: 0, course_id: courseId }]);
+  });
+
+  it("answers an extras-list create naming an archived product with 409 product.archived", async () => {
+    const app = mountApp();
+    const productId = await createNamedProductVia(app, `Archived extra ${crypto.randomUUID()}`);
+    await archive(app, productId);
+    const response = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name: "Archived extras", items: [{ productId }] },
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "product.archived", params: { productId, field: "items.0.productId" } },
+    });
+  });
+});
+
 describe("mountCatalogueApi — catalogues", () => {
   it("POST /management-api/catalogues creates one (201)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", {

@@ -3308,6 +3308,43 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     }
   });
 
+  it("PUT /products/:id/course refuses an archived product with 409 product.archived and retains its course", async () => {
+    const courseId = await createCourse(unique("Archive course"));
+    const productId = await withTransaction(suite.db, async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: unique("Archive menu") });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: unique("Archived dish"),
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await tx.update(products).set({ active: false, courseId }).where(eq(products.id, product.id));
+      return product.id;
+    });
+    for (const next of [null, randomUUID()]) {
+      const response = await req(
+        `/products/${productId}/course`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ courseId: next }),
+        },
+        managerCookie,
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "product.archived", params: { productId } },
+      });
+      expect(
+        await suite.db
+          .select({ courseId: products.courseId })
+          .from(products)
+          .where(eq(products.id, productId)),
+      ).toEqual([{ courseId }]);
+    }
+  });
+
   it("PUT /products/:id/course names the product before the course", async () => {
     const unknown = randomUUID();
     for (const [id, courseId] of [
