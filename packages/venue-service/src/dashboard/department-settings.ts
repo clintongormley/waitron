@@ -164,11 +164,8 @@ export class DepartmentSettings extends LitElement {
     const source: DepartmentSettingsInput = {
       name: row.name,
       tradingName: row.tradingName,
-      orderStart:
-        policy?.orderStart ?? (row.defaultServiceMode === "table_tab" ? "table" : "counter"),
-      paidWhen:
-        policy?.paidWhen ??
-        (row.defaultServiceMode === "ticket_then_pay" ? "ticket_then_pay" : "prepay"),
+      orderStart: policy?.orderStart ?? "counter",
+      paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
       receiptPrintMode: policy?.receiptPrintMode ?? "auto",
       printTradingName: policy?.printTradingName ?? false,

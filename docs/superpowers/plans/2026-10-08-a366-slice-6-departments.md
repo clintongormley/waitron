@@ -1158,14 +1158,14 @@ any of `{ name, tradingName }` (decision 9; a body naming `defaultServiceMode` i
 and keeps the zone's settings (it no longer clears an override when the field is missing,
 `routes.ts:845-848`); the answers drop `defaultServiceMode` and `serviceModeOverride`.
 
-- [ ] **Step 1: Failing tests:** the refusal (status and code); a PATCH with only `{ tradingName }`
+- [x] **Step 1: Failing tests:** the refusal (status and code); a PATCH with only `{ tradingName }`
   changes the trading name and nothing else; moving a zone keeps its `order_start` override. Run;
   watch them fail.
-- [ ] **Step 2: Implement; move `routes.test.ts`'s inputs** (decision 3's mapping; `expect`s that
+- [x] **Step 2: Implement; move `routes.test.ts`'s inputs** (decision 3's mapping; `expect`s that
   pin the removed inputs and answers are changed test checks, each listed).
-- [ ] **Step 3: Run** focused affected venue-service/server behavioural files, the venue-service
+- [x] **Step 3: Run** focused affected venue-service/server behavioural files, the venue-service
   browser files that stub the API; typecheck venue-service and dashboard.
-- [ ] **Step 4: Commit** — `refactor(venue-service): the department and zone routes speak of how orders start (A366)`.
+- [x] **Step 4: Commit** — `refactor(venue-service): the department and zone routes speak of how orders start (A366)`.
 
 ---
 

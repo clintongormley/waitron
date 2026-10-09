@@ -3520,9 +3520,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
-  instrumented eight-case matrix reached the bottom in every case. The earlier cause is
-  unverified. If it recurs, capture the current scroll/limit, pointer position, drag state and
-  visible box before attributing it to the scroll helper.
+  instrumented eight-case matrix reached the bottom in every case. A 2026-10-09 venue-service
+  browser run also missed the Prep stations drag test's 1500 ms bound at
+  `prep-stations-screen.test.ts:6556`: scrollTop was 266, against a required value above 317.
+  An isolated run of the complete file on the branch's earlier head passed. The cause remains
+  unverified. Capture the current scroll/limit, pointer position, drag state and visible box
+  before attributing it to the scroll helper.
 
 - **Re-check the venue-service screens for the save rule once after A366 slice 7 (A331, owner
   2026-10-08)** — OPEN. Each A366 slice builds the rule into the forms it creates or rewrites;

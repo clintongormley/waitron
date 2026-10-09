@@ -59,7 +59,6 @@ export interface Department {
   id: string;
   name: string;
   tradingName: string;
-  defaultServiceMode: ServiceMode;
   active: boolean;
 }
 
@@ -69,13 +68,12 @@ export async function listDepartments(tx: Transaction, cfg: VenueScope): Promise
       id: departments.id,
       name: departments.name,
       tradingName: departments.tradingName,
-      defaultServiceMode: departments.defaultServiceMode,
       active: departments.active,
     })
     .from(departments)
     .where(eq(departments.locationId, cfg.locationId))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
-  return rows.map((row) => ({ ...row, defaultServiceMode: row.defaultServiceMode as ServiceMode }));
+  return rows;
 }
 
 /** Pads an `HH:MM` wall-clock time to the one stored spelling, `HH:MM:SS`; it checks length alone. */
@@ -128,13 +126,10 @@ export async function listServiceZones(
       const paidWhen = zonePaidWhen ?? departmentPaidWhen ?? "prepay";
       const serviceMode: ServiceMode =
         (zoneOrderStart ?? departmentOrderStart ?? "counter") === "table" ? "table_tab" : paidWhen;
-      const serviceModeOverride: ServiceMode | null =
-        zoneOrderStart === null ? null : zoneOrderStart === "table" ? "table_tab" : paidWhen;
       return {
         ...row,
         ...(options.includeInactive ? { active } : {}),
         serviceMode,
-        serviceModeOverride,
       };
     },
   );
@@ -209,7 +204,6 @@ export async function createDepartment(
       id: departments.id,
       name: departments.name,
       tradingName: departments.tradingName,
-      defaultServiceMode: departments.defaultServiceMode,
       active: departments.active,
     });
   await tx
@@ -221,7 +215,7 @@ export async function createDepartment(
     .where(eq(locations.id, cfg.locationId));
   if (location?.menuId !== null && location?.menuId !== undefined)
     await placeOpenPeriod(tx, cfg, row!.id, location.menuId);
-  return { ...row!, defaultServiceMode: row!.defaultServiceMode as ServiceMode };
+  return row!;
 }
 
 export async function updateDepartment(
@@ -229,13 +223,13 @@ export async function updateDepartment(
   cfg: VenueScope,
   departmentId: string,
   input: {
-    name: string;
-    tradingName: string;
+    name?: string;
+    tradingName?: string;
     defaultServiceMode?: ServiceMode;
     orderStart?: OrderStart;
   },
 ): Promise<void> {
-  await requireDepartmentName(tx, cfg, input.name, departmentId);
+  if (input.name !== undefined) await requireDepartmentName(tx, cfg, input.name, departmentId);
   const [existing] = await tx
     .select({ style: departments.defaultServiceMode })
     .from(departments)
@@ -247,10 +241,15 @@ export async function updateDepartment(
       : styleForStart(input.orderStart, existing.style as ServiceMode)!;
   const [row] = await tx
     .update(departments)
-    .set({ name: input.name, tradingName: input.tradingName, defaultServiceMode: style })
+    .set({
+      ...(input.name === undefined ? {} : { name: input.name }),
+      ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
+      defaultServiceMode: style,
+    })
     .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
     .returning({ id: departments.id });
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
+  if (input.orderStart === undefined && input.defaultServiceMode === undefined) return;
   await tx
     .update(departmentSalePolicies)
     .set({ orderStart: startForStyle(style)! })
@@ -530,7 +529,9 @@ export async function configureZone(
     .where(eq(zoneServicePolicies.zoneId, input.zoneId));
   const style =
     input.orderStart === undefined
-      ? (input.serviceMode ?? null)
+      ? input.serviceMode === undefined
+        ? ((existing?.style as ServiceMode | null) ?? null)
+        : input.serviceMode
       : styleForStart(input.orderStart, (existing?.style as ServiceMode | null) ?? null);
   await tx
     .insert(zoneServicePolicies)
@@ -544,6 +545,8 @@ export async function configureZone(
       target: [zoneServicePolicies.zoneId],
       set: { departmentId: input.departmentId, serviceMode: style },
     });
+  if (input.orderStart === undefined && input.serviceMode === undefined && existing !== undefined)
+    return;
   await tx
     .insert(zoneSalePolicies)
     .values({ zoneId: input.zoneId, orderStart: startForStyle(style) })

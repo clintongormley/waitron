@@ -2,7 +2,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
-import type { ModuleRouteContext, ModuleRoutes, ServiceMode } from "@waitron/module";
+import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -126,7 +126,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "holiday.invalid": 400,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
-const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
@@ -172,13 +171,6 @@ function requireTransferSettings(value: unknown) {
     requireBodyUuid(id, "destinationDepartmentIds"),
   );
   return { receivingProfileId, destinationDepartmentIds };
-}
-
-function requireMode(value: unknown, field: string): ServiceMode {
-  if (typeof value !== "string" || !MODES.has(value as ServiceMode)) {
-    throw new AppError("management.request_invalid", { field });
-  }
-  return value as ServiceMode;
 }
 
 function requireDisplayOrder(value: unknown): number {
@@ -745,21 +737,23 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["active", "name", "tradingName"]);
         if (body.active !== undefined && typeof body.active !== "boolean") {
           throw new AppError("management.request_invalid", { field: "active" });
         }
         const active = body.active;
         const edit =
-          active === undefined ||
-          body.name !== undefined ||
-          body.tradingName !== undefined ||
-          body.defaultServiceMode !== undefined
+          body.name !== undefined || body.tradingName !== undefined || active === undefined
             ? {
-                name: requireName(body.name, "name"),
-                tradingName: requireName(body.tradingName, "tradingName"),
-                defaultServiceMode: requireMode(body.defaultServiceMode, "defaultServiceMode"),
+                ...(body.name === undefined ? {} : { name: requireName(body.name, "name") }),
+                ...(body.tradingName === undefined
+                  ? {}
+                  : { tradingName: requireName(body.tradingName, "tradingName") }),
               }
             : undefined;
+        if (active === undefined && edit !== undefined && Object.keys(edit).length === 0) {
+          throw new AppError("management.request_invalid", { field: "name" });
+        }
         await gated(sessionId, async (tx) => {
           if (edit !== undefined) await updateDepartment(tx, ctx.cfg, departmentId, edit);
           if (active === true) await activateDepartment(tx, ctx.cfg, departmentId);
@@ -853,6 +847,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["name", "tradingName"]);
         const department = await gated(sessionId, (tx) =>
           createDepartment(tx, ctx.cfg, {
             name: requireString(body.name, "name"),
@@ -860,10 +855,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               body.tradingName === undefined
                 ? undefined
                 : requireString(body.tradingName, "tradingName"),
-            defaultServiceMode:
-              body.defaultServiceMode === undefined
-                ? undefined
-                : requireMode(body.defaultServiceMode, "defaultServiceMode"),
           }),
         );
         return c.json(department, 201);
@@ -895,14 +886,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["departmentId"]);
         await gated(sessionId, (tx) =>
           configureZone(tx, ctx.cfg, {
             zoneId,
             departmentId: requireBodyUuid(body.departmentId, "departmentId"),
-            serviceMode:
-              body.serviceMode === null || body.serviceMode === undefined
-                ? null
-                : requireMode(body.serviceMode, "serviceMode"),
           }),
         );
         return c.body(null, 204);

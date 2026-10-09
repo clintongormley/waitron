@@ -5,7 +5,6 @@ export interface Department {
   id: string;
   name: string;
   tradingName: string;
-  defaultServiceMode: ServiceMode;
   active: boolean;
 }
 export interface DepartmentRemovalImpact {
@@ -17,7 +16,6 @@ export interface ServiceZone {
   departmentId: string;
   departmentName: string;
   serviceMode: ServiceMode;
-  serviceModeOverride: ServiceMode | null;
   active?: boolean;
 }
 export type PaidWhen = "prepay" | "ticket_then_pay";
@@ -177,23 +175,13 @@ export class VenueServiceApi {
     );
   }
 
-  createDepartment(input: {
-    name: string;
-    tradingName?: string;
-    defaultServiceMode?: ServiceMode;
-  }): Promise<Department> {
+  createDepartment(input: { name: string; tradingName?: string }): Promise<Department> {
     return this.request("/management-api/venue-service/departments", "POST", input);
   }
 
   updateDepartment(
     departmentId: string,
-    input:
-      | {
-          name: string;
-          tradingName: string;
-          defaultServiceMode: ServiceMode;
-        }
-      | { active: true },
+    input: { name?: string; tradingName?: string; active?: boolean },
   ): Promise<void> {
     return this.request(
       `/management-api/venue-service/departments/${departmentId}`,
@@ -214,10 +202,7 @@ export class VenueServiceApi {
     return this.#read(`/management-api/venue-service/zones/${zoneId}/removal-impact`);
   }
 
-  configureZone(
-    zoneId: string,
-    input: { departmentId: string; serviceMode: ServiceMode | null },
-  ): Promise<void> {
+  configureZone(zoneId: string, input: { departmentId: string }): Promise<void> {
     return this.request(`/management-api/venue-service/zones/${zoneId}`, "PUT", input);
   }
 

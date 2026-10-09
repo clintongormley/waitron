@@ -256,12 +256,8 @@ export class DepartmentZones extends LitElement {
       (p) => p.departmentId === department.id,
     );
     const follows = policy ?? {
-      orderStart:
-        department.defaultServiceMode === "table_tab" ? ("table" as const) : ("counter" as const),
-      paidWhen:
-        department.defaultServiceMode === "ticket_then_pay"
-          ? ("ticket_then_pay" as const)
-          : ("prepay" as const),
+      orderStart: "counter" as const,
+      paidWhen: "prepay" as const,
       collectionNumber: "none" as const,
       receiptPrintMode: "auto" as const,
     };

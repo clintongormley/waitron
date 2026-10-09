@@ -274,8 +274,6 @@ export class DepartmentDialogs extends LitElement {
           case "rename-department":
             await this.api.updateDepartment(dialog.row.id, {
               name: submitted.name.trim(),
-              tradingName: dialog.row.tradingName,
-              defaultServiceMode: dialog.row.defaultServiceMode,
             });
             detail = { departmentId: dialog.row.id };
             break;
@@ -295,9 +293,6 @@ export class DepartmentDialogs extends LitElement {
           case "add-to-department":
             await this.api.configureZone(dialog.row.id, {
               departmentId: submitted.departmentId,
-              serviceMode:
-                this.model.zones.find((zone) => zone.id === dialog.row.id)?.serviceModeOverride ??
-                null,
             });
             detail = { zoneId: dialog.row.id };
             break;
