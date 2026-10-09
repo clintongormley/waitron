@@ -145,9 +145,6 @@ export async function setProfileKitchenScreens(
   const formFactor = await liveFormFactor(tx, profileId);
   const stored = (await readStored(tx, cfg, profileId)).get(profileId) ?? {};
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
-  if (formFactor !== SHARED_DISPLAY && kinds.includes("pass_monitor")) {
-    refuse("kitchenScreens", "not_shared_display");
-  }
   const checked: { kind: KitchenScreenKind; scope: KitchenScreenScope }[] = [];
   for (const kind of kinds) {
     const scope = screens[kind]!;
@@ -271,25 +268,6 @@ async function insertLists(
       .values(zoneIds.map((zoneId) => ({ deviceProfileId: profileId, screen: kind, zoneId })))
       .onConflictDoNothing();
   }
-}
-
-/** Refuses a stored pass monitor on a profile that is no longer a kitchen display. */
-export async function checkProfileKitchenScreens(
-  tx: Transaction,
-  _cfg: VenueScope,
-  profileId: string,
-): Promise<void> {
-  if ((await liveFormFactor(tx, profileId)) === SHARED_DISPLAY) return;
-  const [monitor] = await tx
-    .select({ screen: deviceProfileKitchenScreens.screen })
-    .from(deviceProfileKitchenScreens)
-    .where(
-      and(
-        eq(deviceProfileKitchenScreens.deviceProfileId, profileId),
-        eq(deviceProfileKitchenScreens.screen, "pass_monitor"),
-      ),
-    );
-  if (monitor !== undefined) refuse("kitchenScreens", "not_shared_display");
 }
 
 /**
@@ -423,14 +401,15 @@ async function checkChoice(
   const sharedDisplay = (await liveFormFactor(tx, profileId)) === SHARED_DISPLAY;
   if (sharedDisplay && screens.length === 0) throw new AppError("kitchen_screen.required", {});
   const kinds = new Set(screens.map((screen) => screen.kind));
-  if (kinds.size !== screens.length || (sharedDisplay && screens.length > 1)) {
+  const bothPassKinds = kinds.has("pass") && kinds.has("pass_monitor");
+  if (kinds.size !== screens.length || (sharedDisplay && screens.length > 1) || bothPassKinds) {
     refuseChoice("screens", "one_only");
   }
   const offered = (await readStored(tx, cfg, profileId)).get(profileId) ?? {};
   const places = await placesHere(tx, cfg);
   for (const screen of screens) {
     const bound = offered[screen.kind];
-    if (sharedDisplay ? bound === undefined : screen.kind === "pass_monitor") {
+    if (bound === undefined && (sharedDisplay || screen.kind === "pass_monitor")) {
       throw new AppError("kitchen_screen.not_allowed", { screen: screen.kind });
     }
     if (screen.kind === "station" && screen.zoneIds !== null) {

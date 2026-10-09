@@ -346,7 +346,34 @@ describe("accepting a device writes its kitchen screens", () => {
     ]);
   });
 
-  it("a till accepted with a pass monitor is kitchen_screen.not_allowed", async () => {
+  async function offeringMonitor(cfg: TillConfig) {
+    const profileId = await seedProfile("till", "Perfil Caja");
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profileId, {
+        pass: { stationIds: null, zoneIds: null },
+        pass_monitor: { stationIds: null, zoneIds: null },
+      }),
+    );
+    return profileId;
+  }
+
+  it("a till whose profile offers a pass monitor is accepted with one, and stores it", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await offeringMonitor(cfg);
+    const { deviceId } = await accept(cfg, profileId, [
+      { kind: "pass_monitor", stationIds: [stationId], zoneIds: null },
+    ]);
+    expect(await shown(cfg, deviceId)).toEqual([
+      {
+        kind: "pass_monitor",
+        available: true,
+        stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
+        zones: null,
+      },
+    ]);
+  });
+
+  it("a till whose profile has no pass monitor row, accepted with a pass monitor, is kitchen_screen.not_allowed", async () => {
     const { cfg } = await setupVenue();
     const profileId = await offering(cfg, "till", "Perfil Caja");
     await expect(
@@ -354,6 +381,20 @@ describe("accepting a device writes its kitchen screens", () => {
     ).rejects.toMatchObject({
       code: "kitchen_screen.not_allowed",
       params: { screen: "pass_monitor" },
+    });
+  });
+
+  it("a till accepted with both a pass screen and a pass monitor is kitchen_screen.invalid one_only", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await offeringMonitor(cfg);
+    await expect(
+      accept(cfg, profileId, [
+        { kind: "pass", stationIds: null, zoneIds: null },
+        { kind: "pass_monitor", stationIds: null, zoneIds: null },
+      ]),
+    ).rejects.toMatchObject({
+      code: "kitchen_screen.invalid",
+      params: { field: "screens", reason: "one_only" },
     });
   });
 });

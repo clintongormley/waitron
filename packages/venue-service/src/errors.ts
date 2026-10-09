@@ -121,7 +121,6 @@ declare module "@waitron/shared" {
         | "required"
         | "department_required"
         | "shared_display"
-        | "not_shared_display"
         | "not_for_screen";
     };
     /** A device was given a station its profile does not offer. */

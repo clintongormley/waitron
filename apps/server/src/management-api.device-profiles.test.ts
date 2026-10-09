@@ -1271,7 +1271,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       expect(await screensOf(app, id)).toEqual({ station: { stationIds: [cold], zoneIds: null } });
     });
 
-    it("refuses a pass monitor on a till profile", async () => {
+    it("stores a pass monitor on a till profile", async () => {
       const app = mountApp();
       const created = await app.request("/management-api/device-profiles", {
         method: "POST",
@@ -1297,14 +1297,13 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           kitchenScreens: { pass_monitor: { stationIds: null, zoneIds: null } },
         }),
       });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({
-        error: { code: "device_profile.access_invalid", params: { field: "kitchenScreens" } },
+      expect(res.status).toBe(200);
+      expect(await screensOf(app, id)).toEqual({
+        pass_monitor: { stationIds: null, zoneIds: null },
       });
-      expect(await screensOf(app, id)).toEqual({});
     });
 
-    it("refuses moving a kitchen display profile with a pass monitor to a till unless the PUT names its kitchen screens", async () => {
+    it("moves a kitchen display profile with a pass monitor to a till, keeping its pass monitor", async () => {
       const app = mountApp();
       const name = uniqueName("Monitor");
       const monitor = { pass_monitor: { stationIds: null, zoneIds: null } };
@@ -1324,24 +1323,16 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         ...extra,
       });
 
-      const refused = await app.request(`/management-api/device-profiles/${id}`, {
+      const moved = await app.request(`/management-api/device-profiles/${id}`, {
         method: "PUT",
         headers: { ...JSON_HEADERS, cookie: managerCookie },
         body: JSON.stringify(asTill()),
       });
-      expect({ status: refused.status, body: await refused.json() }).toEqual({
-        status: 400,
-        body: {
-          error: {
-            code: "device_profile.access_invalid",
-            params: { field: "kitchenScreens", reason: "not_shared_display" },
-          },
-        },
-      });
+      expect(moved.status).toBe(200);
       const stored = await app.request(`/management-api/device-profiles/${id}`, {
         headers: { cookie: managerCookie },
       });
-      expect(((await stored.json()) as { formFactor: string }).formFactor).toBe("kds");
+      expect(((await stored.json()) as { formFactor: string }).formFactor).toBe("till");
       expect(await screensOf(app, id)).toEqual(monitor);
 
       const accepted = await app.request(`/management-api/device-profiles/${id}`, {

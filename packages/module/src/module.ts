@@ -720,9 +720,8 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
   ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]>;
   /** Replaces all of a profile's kitchen screens. Refused `device_profile.access_invalid`, naming
-   *  the field, for a pass monitor on a profile that is not a kitchen display, zones on a station
-   *  screen, an explicit empty list, or a station or zone unknown here or switched off and not
-   *  already stored for that screen. Narrows every device on the profile, switched off or not, at
+   *  the field, for zones on a station screen, an explicit empty list, or a station or zone
+   *  unknown here or switched off and not already stored for that screen. Narrows every device on the profile, switched off or not, at
    *  every location, in the same transaction, recording what each lost; answers those devices. */
   setProfileKitchenScreens(
     tx: Transaction,
@@ -739,12 +738,6 @@ export interface VenueServiceContribution {
     deviceId: string,
     profileId: string,
   ): Promise<NarrowedDevice | null>;
-  /** Refuses a stored pass monitor once the profile is no longer a kitchen display. */
-  checkProfileKitchenScreens(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    profileId: string,
-  ): Promise<void>;
   /** Adds the screen's stations and zones to the profile's row of its kind, creating the row when
    *  there is none; never removes anything and never narrows a device. Unchecked: for test set-up. */
   addProfileKitchenScreen(
@@ -782,9 +775,10 @@ export interface VenueServiceContribution {
     input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
   ): Promise<void>;
   /** A kitchen display takes exactly one kitchen screen (`kitchen_screen.required`, or
-   *  `kitchen_screen.invalid` `one_only`), each kind at most once, of a kind its profile offers
-   *  (`kitchen_screen.not_allowed`); stations and zones within the profile's lists
-   *  (`station.not_allowed`, `kitchen_screen.zone_not_allowed`) and switched on here unless
+   *  `kitchen_screen.invalid` `one_only`), each kind at most once and never both a pass screen and
+   *  a pass monitor (`one_only`), of a kind its profile offers (`kitchen_screen.not_allowed`; on
+   *  any form factor a pass monitor needs a profile row); stations and zones within the profile's
+   *  lists (`station.not_allowed`, `kitchen_screen.zone_not_allowed`) and switched on here unless
    *  `deviceId` names a device already storing them for the same kind (`kitchen_screen.invalid`).
    *  Writes nothing. */
   assertDeviceKitchenScreens(

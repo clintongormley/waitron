@@ -1520,17 +1520,15 @@ export function mountManagementApi(
           printerLists,
         });
         await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), id, scope);
-        // After the form factor is written: both read it to judge a pass monitor.
-        let narrowedDevices: NarrowedDevice[] = [];
-        if (kitchenScreens === undefined)
-          await VENUE_SERVICE.checkProfileKitchenScreens(tx, requireVenueCfg(deps), id);
-        else
-          narrowedDevices = await VENUE_SERVICE.setProfileKitchenScreens(
-            tx,
-            requireVenueCfg(deps),
-            id,
-            kitchenScreens,
-          );
+        const narrowedDevices: NarrowedDevice[] =
+          kitchenScreens === undefined
+            ? []
+            : await VENUE_SERVICE.setProfileKitchenScreens(
+                tx,
+                requireVenueCfg(deps),
+                id,
+                kitchenScreens,
+              );
         await setProfileAdmission(tx, id, admission);
         return { ...(await withProfileAccess(tx, [updated]))[0]!, narrowedDevices };
       });

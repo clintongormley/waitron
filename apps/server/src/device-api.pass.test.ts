@@ -374,6 +374,42 @@ describe("the pass monitor's device route", () => {
   });
 });
 
+describe("a pass monitor on a till", () => {
+  it("needs a signed-in session, then lists its zones' dishes with no marks", async () => {
+    const f = await fixture();
+    const itemId = await burgerOrder(f.v);
+    const monitorOn = async (name: string, zoneId: string) => {
+      const till = await f.device(name, f.till, {
+        kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: [zoneId] },
+      });
+      const [person] = await inTx(f.v, (tx) =>
+        tx.select({ id: persons.id }).from(persons).limit(1),
+      );
+      const session = await inTx(f.v, (tx) =>
+        loginWithPin(tx, { deviceId: till.id, personId: person!.id, pin: "1234" }),
+      );
+      return { ...till, signedIn: `${till.cookie}; ${SESSION_COOKIE}=${session.token}` };
+    };
+    const tables = await monitorOn("Caja Mesas", f.v.tables.zoneId);
+    const counter = await monitorOn("Caja Barra", f.v.counter.zoneId);
+
+    const anonymous = await f.app.request("/api/device/pass-monitor", {
+      headers: { cookie: tables.cookie },
+    });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
+
+    const board = await read(f.app, tables.signedIn, "/api/device/pass-monitor");
+    expect(items(board)).toEqual([itemId]);
+    expect(board.zones?.map((zone) => zone.id)).toEqual([f.v.tables.zoneId]);
+    expect(items(await read(f.app, counter.signedIn, "/api/device/pass-monitor"))).toEqual([]);
+    expect((await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: true })).status).toBe(
+      204,
+    );
+    expect(items(await read(f.app, tables.signedIn, "/api/device/pass-monitor"))).toEqual([itemId]);
+  });
+});
+
 describe("the till's watcher routes", () => {
   async function tillApp() {
     const f = await fixture();

@@ -23,7 +23,6 @@ import {
   assertDeviceKitchenScreens,
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,
-  checkProfileKitchenScreens,
   followsEveryStation,
   narrowDeviceKitchenScreens,
   readDeviceKitchenScreens,
@@ -81,7 +80,7 @@ async function seedLocation(): Promise<LocationId> {
   return brandLocationId(row!.id);
 }
 
-async function seedProfile(formFactor: "till" | "kds"): Promise<string> {
+async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promise<string> {
   const [row] = await db
     .insert(deviceProfiles)
     .values({ name: `Profile ${randomUUID()}`, formFactor })
@@ -229,12 +228,19 @@ describe("a profile's kitchen screens", () => {
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({});
   });
 
-  it("refuses a pass monitor on a profile that is not a kitchen display", async () => {
+  it("lets a till profile and a handheld profile each store a pass monitor", async () => {
     const venue = await seedVenue();
-    await expect(
-      outcome(set(venue, venue.till, { pass_monitor: { stationIds: null, zoneIds: null } })),
-    ).resolves.toEqual(refused("kitchenScreens", "not_shared_display"));
-    await expect(screensOf(venue, venue.till)).resolves.toEqual({});
+    const handheld = await seedProfile("phone-portrait");
+    for (const profileId of [venue.till, handheld]) {
+      await expect(
+        set(venue, profileId, {
+          pass_monitor: { stationIds: [venue.pastry, venue.grill], zoneIds: [venue.counter] },
+        }),
+      ).resolves.toEqual([]);
+      await expect(screensOf(venue, profileId)).resolves.toEqual({
+        pass_monitor: { stationIds: [venue.grill, venue.pastry], zoneIds: [venue.counter] },
+      });
+    }
   });
 
   it("refuses zones on a station screen", async () => {
@@ -342,45 +348,21 @@ describe("a profile's kitchen screens", () => {
   });
 });
 
-describe("a profile's stored kitchen screens re-checked against its form factor", () => {
-  const check = (venue: Venue, profileId: string) =>
-    outcome(scoped((tx) => checkProfileKitchenScreens(tx, venue.cfg, profileId)));
-
-  it("refuses a till profile holding a pass monitor", async () => {
+describe("a profile whose form factor changes", () => {
+  it("keeps a kitchen display's pass monitor once the profile is a till, and saves it again", async () => {
     const venue = await seedVenue();
-    await set(venue, venue.kds, {
+    const screens = {
       station: { stationIds: null, zoneIds: null },
-      pass_monitor: { stationIds: null, zoneIds: null },
-    });
+      pass_monitor: { stationIds: [venue.grill], zoneIds: [venue.dining] },
+    };
+    await set(venue, venue.kds, screens);
     await db
       .update(deviceProfiles)
       .set({ formFactor: "till" })
       .where(eq(deviceProfiles.id, venue.kds));
-    await expect(check(venue, venue.kds)).resolves.toEqual(
-      refused("kitchenScreens", "not_shared_display"),
-    );
-  });
-
-  it("passes a kitchen display, and a till with station and pass screens", async () => {
-    const venue = await seedVenue();
-    const screens = {
-      station: { stationIds: null, zoneIds: null },
-      pass: { stationIds: [venue.grill], zoneIds: null },
-    };
-    await set(venue, venue.kds, { ...screens, pass_monitor: { stationIds: null, zoneIds: null } });
-    await set(venue, venue.till, screens);
-    await expect(check(venue, venue.kds)).resolves.toEqual({ resolved: undefined });
-    await expect(check(venue, venue.till)).resolves.toEqual({ resolved: undefined });
-  });
-
-  it("refuses a profile that is unknown or retired", async () => {
-    const venue = await seedVenue();
-    await db
-      .update(deviceProfiles)
-      .set({ retiredAt: new Date().toISOString() })
-      .where(eq(deviceProfiles.id, venue.till));
-    await expect(check(venue, venue.till)).resolves.toEqual(refused("profileId", "not_found"));
-    await expect(check(venue, randomUUID())).resolves.toEqual(refused("profileId", "not_found"));
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual(screens);
+    await expect(outcome(set(venue, venue.kds, screens))).resolves.toEqual({ resolved: [] });
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual(screens);
   });
 });
 
@@ -542,7 +524,7 @@ describe("the kitchen screens a device chooses", () => {
     expect(await storedKindsOf(till)).toEqual([]);
   });
 
-  it("refuses a kind the profile does not offer, and a pass monitor anywhere but a kitchen display", async () => {
+  it("refuses a kind the profile does not offer, and a pass monitor on a profile with no pass monitor row", async () => {
     const { venue, screen, till } = await kitchen();
     await set(venue, venue.kds, { station: every });
     await expect(
@@ -551,6 +533,78 @@ describe("the kitchen screens a device chooses", () => {
     await expect(
       outcome(choose(venue, till, venue.till, [{ kind: "pass_monitor", ...every }])),
     ).resolves.toEqual({ code: "kitchen_screen.not_allowed", params: { screen: "pass_monitor" } });
+  });
+
+  it("lets a till and a handheld choose a pass monitor within their profile's row, and read it back", async () => {
+    const venue = await seedVenue();
+    const handheldProfile = await seedProfile("phone-portrait");
+    const row = { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining, venue.terrace] };
+    for (const profileId of [venue.till, handheldProfile]) {
+      await set(venue, profileId, { pass_monitor: row });
+      const device = await seedDevice(venue, profileId, `Device ${profileId}`);
+      await expect(
+        outcome(
+          choose(venue, device, profileId, [
+            { kind: "pass_monitor", stationIds: [venue.grill], zoneIds: [venue.terrace] },
+          ]),
+        ),
+      ).resolves.toEqual({ resolved: undefined });
+      await expect(shown(venue, device)).resolves.toEqual([
+        {
+          kind: "pass_monitor",
+          available: true,
+          stations: [{ id: venue.grill, name: "Grill", available: true, switchedOff: false }],
+          zones: [{ id: venue.terrace, name: "Terrace", available: true, switchedOff: false }],
+        },
+      ]);
+    }
+  });
+
+  it("refuses a till's pass monitor station or zone outside its profile's row", async () => {
+    const { venue, till } = await kitchen();
+    await set(venue, venue.till, {
+      pass_monitor: { stationIds: [venue.grill], zoneIds: [venue.dining] },
+    });
+    await expect(
+      outcome(
+        choose(venue, till, venue.till, [
+          { kind: "pass_monitor", stationIds: [venue.pastry], zoneIds: null },
+        ]),
+      ),
+    ).resolves.toEqual({ code: "station.not_allowed", params: { stationId: venue.pastry } });
+    await expect(
+      outcome(
+        choose(venue, till, venue.till, [
+          { kind: "pass_monitor", stationIds: [venue.grill], zoneIds: [venue.counter] },
+        ]),
+      ),
+    ).resolves.toEqual({
+      code: "kitchen_screen.zone_not_allowed",
+      params: { zoneId: venue.counter },
+    });
+    expect(await storedKindsOf(till)).toEqual([]);
+  });
+
+  it("refuses a till choosing both a pass screen and a pass monitor", async () => {
+    const { venue, till } = await kitchen();
+    await set(venue, venue.till, { pass: every, pass_monitor: every });
+    await expect(
+      outcome(
+        choose(venue, till, venue.till, [
+          { kind: "pass", ...every },
+          { kind: "pass_monitor", ...every },
+        ]),
+      ),
+    ).resolves.toEqual(invalid("screens", "one_only"));
+    expect(await storedKindsOf(till)).toEqual([]);
+    await expect(
+      outcome(
+        choose(venue, till, venue.till, [
+          { kind: "station", ...every },
+          { kind: "pass_monitor", ...every },
+        ]),
+      ),
+    ).resolves.toEqual({ resolved: undefined });
   });
 
   it("refuses a station or zone outside the profile's explicit list", async () => {

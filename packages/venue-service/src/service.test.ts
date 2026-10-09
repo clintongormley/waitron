@@ -29,7 +29,6 @@ describe("VENUE_SERVICE", () => {
       "assertPeriodEndOffsets",
       "assertProfileZone",
       "assertZoneTakesNewOrders",
-      "checkProfileKitchenScreens",
       "closeStationForToday",
       "closedZoneIdsAt",
       "copyLineContext",
