@@ -3125,7 +3125,10 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const venue = await setupVenue();
     const cfg: TillConfig = { ...venue.cfg };
     await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
+      offerProducts(tx, cfg, {
+        orderStart: "counter",
+        paidWhen: orderFlow,
+      }),
     );
     const { available, operatorId } = venue;
     const each = available.find((p) => p.pricingUnit === "each")!;

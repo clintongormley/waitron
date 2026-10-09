@@ -231,7 +231,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
-      offers: await offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
+      offers: await offerProducts(tx, cfg, {
+        orderStart: "counter",
+        paidWhen: orderFlow,
+      }),
     };
   });
   const each = available.find((p) => p.pricingUnit === "each")!;

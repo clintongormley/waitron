@@ -204,7 +204,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
-      offers: await offerProducts(tx, cfg, { serviceMode: orderFlow, paidWhen: orderFlow }),
+      offers: await offerProducts(tx, cfg, {
+        orderStart: "counter",
+        paidWhen: orderFlow,
+      }),
     };
   });
   const cafe = available.find((p) => p.name === "Café")!;
@@ -2491,7 +2494,9 @@ describe("a party's bill request goes when a card or collect settles its last ow
       ]);
       if (owingSibling) await splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
       if (serviceMode !== "table_tab") {
-        const elsewhere = await offerProducts(tx, cfg, { serviceMode });
+        const elsewhere = await offerProducts(tx, cfg, {
+          orderStart: "counter",
+        });
         await VENUE_SERVICE.retargetOrderContext(tx, cfg, tabId, elsewhere.zoneId);
       }
       const [party] = await tx

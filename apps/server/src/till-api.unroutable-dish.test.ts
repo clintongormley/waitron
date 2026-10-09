@@ -431,7 +431,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       return (
         await offerProducts(tx, v.cfg, {
           zone: { zoneId: zone!.id },
-          serviceMode: "ticket_then_pay",
+          orderStart: "counter",
           productIds: [made.productId],
         })
       ).zoneId;
@@ -987,7 +987,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       await inTx(v, (tx) =>
         offerProducts(tx, v.cfg, {
           zone: "counter",
-          serviceMode: mode,
+          orderStart: mode === "table_tab" ? "table" : "counter",
           productIds: [made.productId],
         }),
       );
@@ -1037,7 +1037,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await inTx(v, (tx) =>
       offerProducts(tx, v.cfg, {
         zone: "tables",
-        serviceMode: "prepay",
+        orderStart: "counter",
         productIds: [made.productId],
       }),
     );
@@ -1260,7 +1260,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       await inTx(v, (tx) =>
         offerProducts(tx, v.cfg, {
           zone: "counter",
-          serviceMode: mode,
+          orderStart: "counter",
           productIds: [made.productId],
         }),
       );

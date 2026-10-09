@@ -8,7 +8,6 @@ import {
   requireMenuRoot,
   resolveAccessibleCatalogueIds,
 } from "@waitron/catalogue";
-import type { ServiceMode } from "@waitron/module";
 import {
   configureZone,
   createDepartment,
@@ -35,8 +34,6 @@ export interface OfferProductsOptions {
   /** `"counter"` (default) is the venue's counter-default zone, created if the venue has none;
    *  `"tables"` is a zone of its own for dining tables. */
   zone?: "counter" | "tables" | { zoneId: string };
-  /** Defaults to `"prepay"`, or `"table_tab"` for `zone: "tables"`. */
-  serviceMode?: ServiceMode;
   orderStart?: "table" | "counter";
   paidWhen?: "prepay" | "ticket_then_pay";
   /** Defaults to every top-level product of the location's accessible catalogues. */
@@ -62,8 +59,7 @@ export async function offerProducts(
   options: OfferProductsOptions = {},
 ): Promise<ZoneOffers> {
   const zone = options.zone ?? "counter";
-  const serviceMode = options.serviceMode ?? (zone === "tables" ? "table_tab" : "prepay");
-  const orderStart = options.orderStart ?? (serviceMode === "table_tab" ? "table" : "counter");
+  const orderStart = options.orderStart ?? (zone === "tables" ? "table" : "counter");
   const zoneId = await resolveZone(tx, cfg, zone, orderStart);
   if (options.paidWhen !== undefined) {
     await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", options.paidWhen);

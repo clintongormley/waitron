@@ -489,7 +489,7 @@ describe("the order of a sale's refusals", () => {
     const deli = await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, v.cfg, {
         name: `Deli ${randomUUID()}`,
-        defaultServiceMode: "prepay",
+        orderStart: "counter",
       });
       return createServiceZone(tx, v.cfg, {
         name: `Deli ${randomUUID()}`,

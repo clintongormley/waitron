@@ -1137,8 +1137,8 @@ of drizzle inserts into `departments`, which the column's `NOT NULL` needs until
 stay. When every caller has moved, remove the helpers' old input. If the list is over about 20
 files, split it in two commits by file.
 
-- [ ] **Step 1:** change the inputs only; run focused affected server files: green, no `expect` changed.
-- [ ] **Step 2: Commit** — `test(server): tests say how orders start (A366)`.
+- [x] **Step 1:** change the inputs only; run focused affected server files: green, no `expect` changed.
+- [x] **Step 2: Commit** — `test(server): tests say how orders start (A366)`.
 
 ---
 
@@ -1526,3 +1526,29 @@ legacy style columns, retaining every name, trading name, counter-default flag a
 The floor trading-name check orders departments by `order_start`, keeping its expected rows
 unchanged. These are the A12a checks authorised above; all other existing assertions remain.
 A10's audit/public switch and A12b–A15 remain unfinished.
+
+
+### Implementation checkpoint — Task A12b (2026-10-09)
+
+A12b moves 85 direct and shorthand helper/writer inputs across 39 server test files from
+`serviceMode` / `defaultServiceMode` to `orderStart`, then removes the old input from
+`OfferProductsOptions`. Counter-only fixture parameters use the literal `counter`; mixed
+recorded-flow cases map `table_tab` to `table`, otherwise `counter`. Existing `paidWhen` inputs
+and recorded-order `serviceMode` answers stay. The adjustments fixture drops its now-unused
+style parameter. Raw database inserts and updates still name the old columns until A14.
+
+Before those fixture edits, an installed disposable checkout with the helper's old fallback
+removed failed two of three `watch-zones.test.ts` cases with `service_zone.mode_incompatible`.
+After the changes, the final focused run over the 39 affected files passed 2,512 tests.
+Server typechecking, focused lint, formatting and the five pointer-guard cases passed.
+The unchanged fiscal golden and immutability files passed 20 cases. An AST audit compared
+7,558 `expect` expression statements against the task's starting commit, ignoring whitespace;
+all matched. A second AST scan found no old direct or shorthand input on `offerProducts`,
+`createDepartment` or `configureZone` under `apps/server`.
+
+In the final installed candidate, the helper and watch-zone files passed 19 cases. Changing
+Terrace's new `orderStart` input from `table` to `counter` failed two cases; restoring it passed
+all 19. The final affected sources matched the candidate's hashes. These checks do not replace
+package coverage or current-head CI. No UI changed in A12b; A10/A11's final LOOK remains open.
+A10's assertion audit, public screen switch and mounted dashboard integration, A11 and A13–A15
+remain unfinished. Part A still needs its whole-branch reviews, normal push hook and CI.

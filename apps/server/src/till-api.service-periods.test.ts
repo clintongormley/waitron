@@ -184,10 +184,9 @@ async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
   };
   const seeded = await withTransaction(suite.db, async (tx) => {
     const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "prepay" })
+      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" })
     ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "prepay" }))
-      .id;
+    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
     for (const departmentId of [restaurant, deli]) {
       const initialPeriods = await tx
         .select({ id: menuPeriods.id })

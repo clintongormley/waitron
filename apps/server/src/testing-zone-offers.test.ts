@@ -335,7 +335,7 @@ describe("offerProducts", () => {
   it("keeps an explicit counter style separate from a table-tab zone", async () => {
     const venue = await seedVenue(suite.db);
     const context = await withTransaction(suite.db, async (tx) => {
-      const counter = await offerProducts(tx, venue.cfg, { serviceMode: "ticket_then_pay" });
+      const counter = await offerProducts(tx, venue.cfg, { orderStart: "counter" });
       const tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
       return {
         counter: await resolveZoneContext(tx, venue.cfg, counter.zoneId),
@@ -351,7 +351,7 @@ describe("offerProducts", () => {
     const venue = await seedVenue(suite.db);
     const context = await withTransaction(suite.db, async (tx) => {
       const counter = await offerProducts(tx, venue.cfg, {
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
         paidWhen: "ticket_then_pay",
       });
       return resolveZoneContext(tx, venue.cfg, counter.zoneId);

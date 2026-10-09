@@ -35,7 +35,7 @@ useVenueDb({
     v = await setupPartyVenue(db);
     terrace = await inTx(v, async (tx) => {
       const zone = await createZone(tx, v.cfg, { name: "Terrace" });
-      await offerProducts(tx, v.cfg, { zone: { zoneId: zone.id }, serviceMode: "table_tab" });
+      await offerProducts(tx, v.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
       return zone.id;
     });
   },

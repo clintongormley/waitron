@@ -4431,7 +4431,7 @@ describe("sale-policy order flow routes", () => {
       const zone = await withTransaction(suite.db, async (tx) => {
         const department = await createDepartment(tx, cfg, {
           name: `Counter flow ${randomUUID()}`,
-          defaultServiceMode: "table_tab",
+          orderStart: "table",
         });
         const zone = await createServiceZone(tx, cfg, {
           name: `Counter flow ${randomUUID()}`,
@@ -4481,7 +4481,7 @@ describe("sale-policy order flow routes", () => {
       const zoneId = await withTransaction(suite.db, async (tx) => {
         const department = await createDepartment(tx, cfg, {
           name: `Pay flow ${randomUUID()}`,
-          defaultServiceMode: "prepay",
+          orderStart: "counter",
         });
         const zone = await createServiceZone(tx, cfg, {
           name: `Pay flow ${randomUUID()}`,
