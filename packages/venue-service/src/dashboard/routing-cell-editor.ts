@@ -15,7 +15,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { targetKey, type RouteTarget } from "../routing.js";
+import { cellKey, targetKey, type RouteTarget } from "../routing.js";
 import type { CellAddress, PeriodLine, RoutingPeriod } from "../routing-types.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -127,7 +127,7 @@ export class RoutingCellEditor extends LitElement {
   private scope?: DraftScope<Draft>;
   private leave?: LeaveCoordinator;
   private identity?: object;
-  private openedCell?: RoutingCellEditorCell;
+  private openedKey?: string;
   private baseline?: Draft;
   private leftOut: LeftOut[] = [];
   private nextLine = 0;
@@ -156,12 +156,13 @@ export class RoutingCellEditor extends LitElement {
       this.generation = {};
       return;
     }
-    if (!this.identity || this.openedCell !== this.cell) {
+    const key = this.cell && cellKey(this.cell.address);
+    if (!this.identity || this.openedKey !== key) {
       this.scope?.dispose();
       this.scope = undefined;
       this.leave = undefined;
       this.identity = {};
-      this.openedCell = this.cell;
+      this.openedKey = key;
       this.generation = {};
       this.draft = this.opening();
       this.baseline = copy(this.draft);
@@ -314,42 +315,70 @@ export class RoutingCellEditor extends LitElement {
     return [...options, { value, label: station?.name ?? value, disabled: true }];
   }
 
-  /**
-   * A line offers the periods this column may store that meet the row, plus a period the cell
-   * stores with this line's target, plus whatever the line holds — never one another line holds.
-   */
-  private periodOptions(line: Line) {
-    const elsewhere = new Set(
-      this.draft.lines.filter((other) => other.id !== line.id).flatMap((other) => other.periodIds),
-    );
-    const stored = new Map(
+  private storedTargets(): Map<string, string> {
+    return new Map(
       this.inherited
         ? []
         : (this.cell?.periods ?? []).map(({ periodId, target }) => [periodId, targetKey(target)]),
     );
+  }
+
+  private offerable(period: RoutingPeriod): boolean {
+    return period.departmentInactive !== true && this.inColumn(period) && this.meetsRow(period);
+  }
+
+  /** Names shared by two periods some line may show; each such period carries its department. */
+  private repeatedNames(): Set<string> {
+    const stored = this.storedTargets();
+    const names = this.periods
+      .filter(
+        (period) =>
+          this.offerable(period) ||
+          stored.has(period.id) ||
+          this.draft.lines.some((line) => line.periodIds.includes(period.id)),
+      )
+      .map(({ name }) => name);
+    return new Set(names.filter((name, i) => names.indexOf(name) !== i));
+  }
+
+  /**
+   * A line offers the periods this column may store that meet the row, plus a period the cell
+   * stores with this line's target, plus whatever the line holds — never one another line holds.
+   */
+  private periodOptions(line: Line, repeated: Set<string>) {
+    const elsewhere = new Set(
+      this.draft.lines.filter((other) => other.id !== line.id).flatMap((other) => other.periodIds),
+    );
+    const stored = this.storedTargets();
     const grouped = this.zoneDepartmentId === null;
     return this.periods
       .filter(
         (period) =>
           line.periodIds.includes(period.id) ||
           (!elsewhere.has(period.id) &&
-            ((period.departmentInactive !== true &&
-              this.inColumn(period) &&
-              this.meetsRow(period)) ||
+            (this.offerable(period) ||
               (line.target !== "" && stored.get(period.id) === line.target))),
       )
       .map((period) => ({
         value: period.id,
         label: period.name,
         ...(grouped ? { group: period.departmentName } : {}),
+        ...(repeated.has(period.name)
+          ? {
+              valueLabel: format("routing.period_in_department", {
+                period: period.name,
+                department: period.departmentName,
+              }),
+            }
+          : {}),
       }));
   }
 
   /** A line's periods named in the model's order, for the field's closed face. */
-  private periodNames(line: Line): string {
-    return this.periods
-      .filter((period) => line.periodIds.includes(period.id))
-      .map((period) => period.name)
+  private periodNames(line: Line, repeated: Set<string>): string {
+    return this.periodOptions(line, repeated)
+      .filter((option) => line.periodIds.includes(option.value))
+      .map((option) => option.valueLabel ?? option.label)
       .join(", ");
   }
 
@@ -411,6 +440,7 @@ export class RoutingCellEditor extends LitElement {
     const current = () =>
       generation === this.generation && this.isConnected && this.open && !this.busy;
     const stored = !this.inherited && !this.isDefaultCell;
+    const repeated = this.repeatedNames();
     return keyed(
       generation,
       html`<wt-modal
@@ -439,7 +469,7 @@ export class RoutingCellEditor extends LitElement {
           ${repeat(
             this.draft.lines,
             (line) => line.id,
-            (line) =>
+            (line, index) =>
               html`<div class="line" data-test="period-line">
                 <wt-combobox
                   name="line-periods"
@@ -447,8 +477,8 @@ export class RoutingCellEditor extends LitElement {
                   multiple
                   required
                   .values=${line.periodIds}
-                  .options=${this.periodOptions(line)}
-                  .countLabel=${() => this.periodNames(line)}
+                  .options=${this.periodOptions(line, repeated)}
+                  .countLabel=${() => this.periodNames(line, repeated)}
                   .error=${
                     own.lines.get(line.id)?.periods ??
                     (refused?.id === line.id ? refused.message : "")
@@ -476,6 +506,13 @@ export class RoutingCellEditor extends LitElement {
                 <wt-button
                   data-test="remove-line"
                   variant="ghost"
+                  aria-label=${
+                    line.periodIds.length > 0
+                      ? format("routing.remove_line_periods", {
+                          periods: this.periodNames(line, repeated),
+                        })
+                      : format("routing.remove_line_number", { number: String(index + 1) })
+                  }
                   ?disabled=${this.busy}
                   @click=${() => {
                     if (current())

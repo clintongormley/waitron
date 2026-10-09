@@ -110,8 +110,8 @@ it("offers Every zone every active department's periods that meet the row, group
   const [periods] = linePeriods(el);
   expect(periods!.options).toEqual([
     { value: "breakfast", label: "Breakfast", group: "Dining" },
-    { value: "lunch", label: "Lunch", group: "Dining" },
-    { value: "bar-lunch", label: "Lunch", group: "Bar" },
+    { value: "lunch", label: "Lunch", group: "Dining", valueLabel: "Lunch (Dining)" },
+    { value: "bar-lunch", label: "Lunch", group: "Bar", valueLabel: "Lunch (Bar)" },
   ]);
 });
 
@@ -149,6 +149,7 @@ it("still shows a stored line naming a switched-off department's period", async 
     value: "old-lunch",
     label: "Lunch",
     group: "Old",
+    valueLabel: "Lunch (Old)",
   });
   await click(el, "add-line");
   expect(offered(linePeriods(el)[1]!)).not.toContain("old-lunch");
@@ -455,4 +456,107 @@ it("speaks Spanish", async () => {
   expect(one<Combobox>(el, "[name=target]")!.label).toBe("El resto del tiempo");
   expect(button(el, "add-line")!.textContent!.trim()).toBe("+ Otra estación en algunos periodos");
   expect(one(el, "[data-test=inherited-from]")!.textContent!.trim()).toBe("De Todas las zonas");
+});
+
+it("keeps the draft and a refusal when handed a new object for the same cell, and starts afresh for another cell", async () => {
+  const el = await mount({
+    periods: [
+      { periodId: "lunch", target: down },
+      { periodId: "brunch", target: up },
+    ],
+  });
+  await pick(el, one<Combobox>(el, "[name=target]")!, { value: "station:down" });
+  el.refusal = {
+    code: "route.period_invalid",
+    params: { periodId: "brunch", reason: "not_offered" },
+  };
+  await el.updateComplete;
+  el.cell = { ...el.cell!, address: { ...el.cell!.address } };
+  await el.updateComplete;
+  expect(one<Combobox>(el, "[name=target]")!.value).toBe("station:down");
+  expect(linePeriods(el)[1]!.error).toBe("Brunch offers none of these products.");
+  expect(button(el, "save-cell")!.disabled).toBe(false);
+  el.refusal = { code: "route.station_inactive", params: { stationId: "off" } };
+  el.cell = { ...el.cell!, periods: [...el.cell!.periods!] };
+  await el.updateComplete;
+  expect(one<Combobox>(el, "[name=target]")!.value).toBe("station:down");
+  expect(bottom(el)).toBe("This station is disabled. Choose an active station.");
+  el.cell = {
+    ...el.cell!,
+    address: { row: { kind: "product", productId: "mojito" }, zoneId: null },
+  };
+  await el.updateComplete;
+  expect(one<Combobox>(el, "[name=target]")!.value).toBe("station:up");
+  expect(bottom(el)).toBe("");
+  expect(button(el, "save-cell")!.disabled).toBe(true);
+});
+
+it("offers a stored period only in a line with its stored station", async () => {
+  const el = await mount({ periods: [{ periodId: "brunch", target: down }] });
+  await pick(el, linePeriods(el)[0]!, { values: [] });
+  await click(el, "add-line");
+  await pick(el, lineTargets(el)[1]!, { value: "station:up" });
+  expect(offered(linePeriods(el)[1]!)).not.toContain("brunch");
+  await pick(el, lineTargets(el)[1]!, { value: "station:down" });
+  expect(offered(linePeriods(el)[1]!)).toContain("brunch");
+});
+
+const removeNames = (el: RoutingCellEditor) =>
+  all<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=remove-line]").map((remove) =>
+    remove.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
+  );
+
+it("names a period another offered period shares a name with by its department, and only then", async () => {
+  const el = await mount({
+    periods: [
+      { periodId: "lunch", target: down },
+      { periodId: "breakfast", target: down },
+      { periodId: "bar-lunch", target: up },
+    ],
+  });
+  const [first, second] = linePeriods(el);
+  expect(first!.countLabel(2)).toBe("Breakfast, Lunch (Dining)");
+  expect(second!.options.find((option) => option.value === "bar-lunch")!.valueLabel).toBe(
+    "Lunch (Bar)",
+  );
+  expect(second!.options.find((option) => option.value === "bar-lunch")!.label).toBe("Lunch");
+  const zone = await mount(
+    { periods: [{ periodId: "lunch", target: down }] },
+    { zoneDepartmentId: "dining" },
+  );
+  expect(linePeriods(zone)[0]!.options.every((option) => option.valueLabel === undefined)).toBe(
+    true,
+  );
+  expect(removeNames(zone)).toEqual(["Remove Lunch"]);
+});
+
+it("names each line's Remove by its periods, or by its place while it has none", async () => {
+  const el = await mount({
+    periods: [
+      { periodId: "lunch", target: down },
+      { periodId: "breakfast", target: down },
+      { periodId: "bar-lunch", target: up },
+    ],
+  });
+  await click(el, "add-line");
+  expect(removeNames(el)).toEqual([
+    "Remove Breakfast, Lunch (Dining)",
+    "Remove Lunch (Bar)",
+    "Remove line 3",
+  ]);
+  setLocale("es");
+  const es = await mount({ periods: [{ periodId: "bar-lunch", target: up }] });
+  await click(es, "add-line");
+  expect(removeNames(es)).toEqual(["Quitar Lunch (Bar)", "Quitar línea 2"]);
+});
+
+it("says in Spanish which inherited periods were not copied", async () => {
+  setLocale("es");
+  const el = await mount({
+    inheritedFrom: "Todas las zonas",
+    periods: [{ periodId: "brunch", target: down }],
+  });
+  expect(one(el, "[data-test=not-copied]")!.textContent!.trim()).toBe(
+    "Sin copiar: Brunch — no ofrece ninguno de estos productos",
+  );
 });
