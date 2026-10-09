@@ -1079,6 +1079,17 @@ cells; the readiness section) and is deleted under "Changed test checks", each n
 
 ---
 
+**A10 load-ownership staging ruling, 2026-10-09:** Keep the public legacy wrapper and its
+assertions intact while testing the load handoff in the unregistered `VenueOperationsLoader`
+base class. The final public wrapper can extend this class when its assertion audit is complete;
+there is no second dashboard route. Its QueryController reads the existing operations query,
+passes snapshots to the staged shell, and accepts the shell's successful action refreshes.
+A shared query retains its first observer's reader (`LiveData.observe`), so an action snapshot's
+freshness fence is shared by the observers of that LiveData. A later action refresh invalidates
+all operations dependencies, including when the change feed delivers nothing. Cost if wrong:
+fold this base into the public wrapper at retirement. A10 is still incomplete; the removed-row
+draft audit, public switch and mounted DashboardApp checks remain.
+
 ### Task A11: Phone width, both themes and the look pass
 
 **Files:** the Task A5–A10 elements and their tests, as needed.
