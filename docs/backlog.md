@@ -1295,6 +1295,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
+- **Split an order's recorded service mode into two facts (owner, 2026-10-09) — future work.**
+  Served at a table or counter; payment due before the kitchen, at collection or at the end of
+  the tab. Slice 6 keeps the three-value order record and its behaviour.
+  [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
+
+
 - **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
   own-hours dates and keep it beside only the action that failed, retaining its retry and draft.
   [Detail](backlog/service-periods.md#opening-hours-dated-save-refusal-presentation)
