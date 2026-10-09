@@ -272,3 +272,26 @@ it("reads a refusal's code and params, and a bare rejection as a server failure"
     code: "station.name_taken",
   });
 });
+
+it("keeps a printer choice it can no longer send out of the save when the station is switched off meanwhile", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  await pickPrinters(el, ["star"]);
+  el.station = { ...GRILL, active: false };
+  await el.updateComplete;
+  expect(printersField(el)).toBeNull();
+  expect($(el, "[data-test=station-printers]")!.textContent).toContain("Epson");
+  expect($(el, "[data-test=station-printers]")!.textContent).not.toContain("Star");
+  expect(el.shadowRoot!.textContent).toContain("Enable the station to change its printers.");
+  const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
+  expect(button.disabled).toBe(true);
+  await save(el);
+  expect(seen).toEqual([]);
+  expect(el.open).toBe(true);
+  await rename(el, "Hot grill");
+  expect(button.disabled).toBe(false);
+  await save(el);
+  expect(seen).toEqual([{ name: "Hot grill" }]);
+  expect(el.saved()).toBe(false);
+  expect(el.dirty).toBe(true);
+});

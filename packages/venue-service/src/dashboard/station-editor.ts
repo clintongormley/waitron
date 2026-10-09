@@ -268,18 +268,14 @@ export class StationEditor extends LitElement {
     this.scope?.changed();
   }
 
-  private save() {
-    if (!this.open || !this.isConnected || this.busy || saveActionState(this.scope).unchanged)
-      return;
-    this.attempted = true;
-    this.refusal = undefined;
-    if (this.nameError()) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
-      return;
-    }
+  /**
+   * What a save would send. Printers chosen before the station was switched off, or before the
+   * read-out took their field away, cannot be sent, so they are left out.
+   */
+  private sendable(): StationEditorSave {
     const base = this.baseline!;
     const draft = this.draft;
-    const detail: StationEditorSave = {
+    return {
       ...(draft.name.trim() !== base.name.trim() ? { name: draft.name.trim() } : {}),
       ...(this.printersEditable && !sameSet(draft.printerIds, base.printerIds)
         ? { printerIds: [...draft.printerIds] }
@@ -288,7 +284,32 @@ export class StationEditor extends LitElement {
         ? { showsRestOfOrder: draft.showsRestOfOrder }
         : {}),
     };
-    this.submitted = copy(draft);
+  }
+
+  private get nothingToSend(): boolean {
+    return this.baseline !== undefined && Object.keys(this.sendable()).length === 0;
+  }
+
+  private save() {
+    if (
+      !this.open ||
+      !this.isConnected ||
+      this.busy ||
+      saveActionState(this.scope).unchanged ||
+      this.nothingToSend
+    )
+      return;
+    this.attempted = true;
+    this.refusal = undefined;
+    if (this.nameError()) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
+    const detail = this.sendable();
+    this.submitted = {
+      ...copy(this.draft),
+      printerIds: [...(detail.printerIds ?? this.baseline!.printerIds)],
+    };
     this.dispatchEvent(
       new CustomEvent("station-editor-save", { detail, bubbles: true, composed: true }),
     );
@@ -302,9 +323,9 @@ export class StationEditor extends LitElement {
     return this.isConnected && generation === this.generation && outcome === "proceeded";
   };
 
-  private printerNames(): string {
+  private printerNames(printerIds: readonly string[]): string {
     return (
-      this.draft.printerIds
+      printerIds
         .map((id) => this.printers.find((printer) => printer.id === id)?.name ?? id)
         .join(", ") || t("prep.none")
     );
@@ -314,7 +335,7 @@ export class StationEditor extends LitElement {
     if (!this.printersEditable)
       return html`<dl class="readout" data-test="station-printers">
         <dt>${t("prep.printers")}</dt>
-        <dd>${this.printerNames()}</dd>
+        <dd>${this.printerNames(this.station!.printerIds)}</dd>
       </dl>`;
     return html`<wt-combobox
       name="printerIds"
@@ -323,7 +344,7 @@ export class StationEditor extends LitElement {
       .values=${this.draft.printerIds}
       .options=${stationPrinterOptions(this.printers, this.watchers, this.draft.printerIds)}
       .error=${error}
-      .countLabel=${() => this.printerNames()}
+      .countLabel=${() => this.printerNames(this.draft.printerIds)}
       .searchPlaceholder=${t("prep.printers")}
       .noResultsLabel=${t("venue.combobox_no_results")}
       @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
@@ -413,8 +434,8 @@ export class StationEditor extends LitElement {
           >
           <wt-button
             data-test="save-station-edit"
-            variant=${s.variant}
-            ?disabled=${s.unchanged || this.busy || nameError !== ""}
+            variant=${this.nothingToSend ? "secondary" : s.variant}
+            ?disabled=${s.unchanged || this.nothingToSend || this.busy || nameError !== ""}
             ?loading=${this.busy}
             @click=${() => {
               if (current()) this.save();

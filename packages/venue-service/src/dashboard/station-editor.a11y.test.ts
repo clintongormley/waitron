@@ -36,13 +36,16 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       el.shadowRoot!.querySelector("wt-input[name=stationName]")!.dispatchEvent(
         new CustomEvent("wt-change", { detail: { value: "" } }),
       );
-      el.refusal = { code: "printer.makes_and_watches", params: { printerId: "pass" } };
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+      el.refusal = { code: "printer.makes_and_watches", params: { printerId: "pass" } };
       await el.updateComplete;
       expect(
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error,
       ).toBe("Enter a name.");
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.error,
+      ).toBe("Choose active printers that no watcher uses.");
     }
     await expectNoA11yViolations(host);
   });
