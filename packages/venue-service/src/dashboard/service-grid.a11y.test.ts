@@ -1,3 +1,4 @@
+import { setLocale } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -5,7 +6,10 @@ import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { ServiceGrid } from "./service-grid.js";
 import "./service-grid.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setLocale("en");
+});
 
 describe.each(["light", "dark"] as const)("service grid (%s)", (theme) => {
   test.each(["empty", "filled", "selected", "read-only", "resizing"])("%s", async (state) => {
@@ -59,6 +63,44 @@ describe.each(["light", "dark"] as const)("service grid (%s)", (theme) => {
         }),
       );
       await el.updateComplete;
+    }
+    await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("closed service grid (%s)", (theme) => {
+  test.each(["empty", "filled", "selected", "read-only"])("%s", async (state) => {
+    const el = (await mountThemed("<service-grid></service-grid>", theme)) as ServiceGrid;
+    el.columns = [
+      {
+        key: "zone",
+        label: "Terrace",
+        editable: true,
+        periods: [{ id: "lunch", name: "Lunch", colour: "green" }],
+        slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }],
+        ...{
+          layer: "closed" as const,
+          narrow: true,
+          closed: state === "empty" ? [] : [{ startsAt: "14:00", endsAt: "15:00" }],
+        },
+      },
+    ];
+    el.readOnly = state === "read-only";
+    await el.updateComplete;
+    if (state !== "empty") expect(el.shadowRoot!.querySelector(".closed")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".faded")).not.toBeNull();
+    if (state === "selected") {
+      const step = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-minute='360']")!;
+      step.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          shiftKey: true,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector(".selection")).not.toBeNull();
     }
     await expectNoA11yViolations(host);
   });

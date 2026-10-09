@@ -449,3 +449,125 @@ test.each(["en", "es"] as const)("the resize control names its action in %s", as
     locale === "en" ? "Adjust Night range" : "Ajustar el intervalo de Night",
   );
 });
+
+async function closedGrid(closed = [{ startsAt: "13:00", endsAt: "14:00" }]) {
+  const el = await grid([{ periodId: "night", startsAt: "12:00", endsAt: "15:00" }]);
+  el.columns = [{ ...el.columns[0]!, ...{ layer: "closed" as const, closed } }];
+  await el.updateComplete;
+  return el;
+}
+
+test("closed layer pointer selection crosses a faded period and stops at the next closure", async () => {
+  const el = await closedGrid();
+  const selected = events(el, "grid-range-select");
+  point(el, 360, "pointerdown", step(el, 360));
+  point(el, 540, "pointerup");
+  expect(selected).toEqual([{ columnKey: "fri", startsAt: "12:00", endsAt: "13:00" }]);
+  point(el, 510, "pointerdown", step(el, 510));
+  point(el, 360, "pointerup");
+  expect(selected.at(-1)).toEqual({ columnKey: "fri", startsAt: "14:00", endsAt: "14:30" });
+});
+
+test("closed layer shift selection crosses faded periods and stops at a closed block", async () => {
+  const el = await closedGrid();
+  const selected = events(el, "grid-range-select");
+  step(el, 390).focus();
+  key(step(el, 390), "ArrowDown", true);
+  await el.updateComplete;
+  key(step(el, 405), "ArrowDown", true);
+  await el.updateComplete;
+  key(step(el, 420), "ArrowDown", true);
+  await el.updateComplete;
+  key(step(el, 420), "Enter");
+  expect(selected).toEqual([{ columnKey: "fri", startsAt: "12:30", endsAt: "13:00" }]);
+});
+
+test("closed layer Enter and click open closure indices rather than period indices", async () => {
+  const el = await closedGrid([
+    { startsAt: "10:00", endsAt: "11:00" },
+    { startsAt: "13:00", endsAt: "14:00" },
+  ]);
+  const opened = events(el, "grid-block-open");
+  key(step(el, 435), "Enter");
+  expect(opened).toEqual([{ columnKey: "fri", index: 1 }]);
+  const block = el.shadowRoot!.querySelector<HTMLButtonElement>(".closed[data-index='0']");
+  expect(block).not.toBeNull();
+  block!.click();
+  expect(opened.at(-1)).toEqual({ columnKey: "fri", index: 0 });
+});
+
+test.each(["en", "es"] as const)(
+  "closed layer announces closures and paints inert faded periods in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await closedGrid();
+    host.style.setProperty("--wt-opacity-disabled", "0.37");
+    const faded = el.shadowRoot!.querySelector<HTMLElement>(".faded")!;
+    expect(faded).not.toBeNull();
+    expect(faded.tagName).toBe("DIV");
+    expect(getComputedStyle(faded, "::before").opacity).toBe("0.37");
+    expect(getComputedStyle(faded).pointerEvents).toBe("none");
+    expect(getComputedStyle(faded).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(faded).color).toBe(getComputedStyle(el).color);
+    expect(el.shadowRoot!.querySelectorAll(".resize")).toHaveLength(1);
+    const opened = events(el, "grid-block-open");
+    faded.click();
+    expect(opened).toEqual([]);
+    const label = locale === "en" ? "Closed" : "Cerrado";
+    expect(step(el, 435).getAttribute("aria-label")).toBe(`Friday, 13:15, ${label}, 13:00–14:00`);
+    expect(el.shadowRoot!.querySelector(".closed")!.textContent).toContain(label);
+    expect(getComputedStyle(el.shadowRoot!.querySelector(".closed")!).backgroundImage).toContain(
+      "repeating-linear-gradient",
+    );
+  },
+);
+
+test("closed layer resizes the closure up to its next neighbour across faded periods", async () => {
+  const el = await closedGrid([
+    { startsAt: "13:00", endsAt: "14:00" },
+    { startsAt: "16:00", endsAt: "17:00" },
+  ]);
+  const changes = events(el, "grid-block-change");
+  const handle = el.shadowRoot!.querySelector<HTMLElement>(".resize[data-index='0']")!;
+  point(el, 480, "pointerdown", handle);
+  point(el, 720, "pointerup");
+  expect(changes).toEqual([{ columnKey: "fri", index: 0, startsAt: "13:00", endsAt: "16:00" }]);
+});
+
+test("closed layer without closures selects inside a faded period", async () => {
+  const el = await closedGrid([]);
+  const selected = events(el, "grid-range-select");
+  key(step(el, 360), "Enter");
+  expect(selected).toEqual([{ columnKey: "fri", startsAt: "12:00", endsAt: "12:15" }]);
+  el.columns = [{ ...el.columns[0]!, ...{ closed: undefined } }];
+  await el.updateComplete;
+  key(step(el, 360), "Enter");
+  expect(selected).toHaveLength(2);
+});
+
+test("closed layer read-only view keeps both kinds of block without interactive controls", async () => {
+  const el = await closedGrid();
+  el.readOnly = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".closed")!.textContent).toContain("13:00–14:00");
+  expect(el.shadowRoot!.querySelector(".faded")!.textContent).toContain("Night");
+  expect(el.shadowRoot!.querySelectorAll("button")).toHaveLength(0);
+});
+
+test("narrow columns leave more room for department columns", async () => {
+  const el = await grid([]);
+  el.style.width = "800px";
+  el.columns = [
+    el.columns[0]!,
+    { ...el.columns[0]!, key: "zone", label: "Terrace", ...{ narrow: true } },
+  ];
+  await el.updateComplete;
+  const normal = el
+    .shadowRoot!.querySelector<HTMLElement>("[data-column=fri]")!
+    .getBoundingClientRect();
+  const narrow = el
+    .shadowRoot!.querySelector<HTMLElement>("[data-column=zone]")!
+    .getBoundingClientRect();
+  expect(narrow.width).toBeLessThan(normal.width);
+  expect(narrow.width).toBeGreaterThanOrEqual(72);
+});

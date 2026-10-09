@@ -858,11 +858,12 @@ export interface GridColumn {
 ```
 
 With `layer: "closed"`, `slots` are drawn faded and take no pointer or keyboard input; `closed`
-blocks are drawn hatched with the word "Closed" and are what the events' `index` refers to. Faded
-means `--wt-opacity-disabled`; the hatch uses existing `--wt-color-*` tokens. Selection stops at a
-neighbouring closed block, never at a faded period.
+blocks are drawn hatched with the word "Closed" and are what the events' `index` refers to. The
+period fill fades through `--wt-opacity-disabled`; its text stays at full contrast. The hatch uses
+existing `--wt-color-*` tokens. Selection stops at a neighbouring closed block, never at a faded
+period.
 
-- [ ] Steps: failing tests (a drag over a faded Lunch block on a closed layer emits the range —
+- [x] Steps: failing tests (a drag over a faded Lunch block on a closed layer emits the range —
   fails today because a Lunch block stops the selection; a drag across a closed block stops at it;
   Enter on a closed block emits `grid-block-open` with its index; a narrow column's width; axe for
   a closed layer empty, filled and selected in both themes); watch them fail
