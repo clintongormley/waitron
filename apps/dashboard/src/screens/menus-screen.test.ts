@@ -3012,6 +3012,43 @@ function lunchWithoutFavourites(): MenuStructure {
   };
 }
 
+/** Dinner with a top-level Favourites under Lunch's own member id, so Lunch's path to Favourites
+ * also leads to Favourites on Dinner and only the menu tells the two places apart. */
+function dinnerWithLunchsFavourites(client: Api): void {
+  const lunchStructure = client.getMenuStructure.getMockImplementation() as (
+    id: string,
+  ) => Promise<MenuStructure>;
+  client.getMenuStructure.mockImplementation(async (id: string) =>
+    id === "menu-dinner"
+      ? {
+          rootSectionId: "root-dinner",
+          root: {
+            id: "root-dinner",
+            internalName: "Dinner Menu",
+            names: {},
+            image: null,
+            color: null,
+            members: [],
+          },
+          includable: [],
+          includedBy: [],
+          nodes: [
+            {
+              memberId: "m-fav",
+              ref: { kind: "section", sectionId: "s-fav" },
+              internalName: "Favourites",
+              names: {},
+              image: null,
+              color: null,
+              ownerMenuId: "menu-lunch",
+              children: [],
+            },
+          ],
+        }
+      : lunchStructure(id),
+  );
+}
+
 it("checks a move into another section's lists when it is sent, so one queued while its destination leaves the menu sends nothing and reads the menu again", async () => {
   const live = new LiveData();
   const reordering = deferred<SectionMember[]>();
@@ -3042,6 +3079,7 @@ it("checks a move into another section's lists when it is sent, so one queued wh
 it("sends nothing for a move into another section that was still queued when the person went to another menu", async () => {
   const reordering = deferred<SectionMember[]>();
   const client = api({ moveSectionMember: vi.fn(() => reordering.promise) });
+  dinnerWithLunchsFavourites(client);
   const el = await mountLunch(client);
   emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
@@ -3090,6 +3128,7 @@ it("says a move was saved into a section that another change took off the menu w
 it("finishes a move into another section quietly when the person has gone to another menu, leaving that menu's place alone", async () => {
   const moving = deferred<void>();
   const client = api({ moveSectionMembersInto: vi.fn(() => moving.promise) });
+  dinnerWithLunchsFavourites(client);
   const el = await mountLunch(client);
   emit(structure(el), "wt-member-move-into", {
     from: [],
