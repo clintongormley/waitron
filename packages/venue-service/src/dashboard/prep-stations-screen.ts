@@ -64,12 +64,21 @@ import type {
 } from "./routing-grid.js";
 import { t } from "./strings.js";
 import "./station-health-table.js";
+import "./station-editor.js";
+import {
+  refusalOf,
+  stationPrinterOptions,
+  stationRefusalField,
+  type StationEditorSave,
+  type StationRefusal,
+} from "./station-editor.js";
 
 type StationAction =
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
   | { kind: "switch_on"; stationId: string };
 
 type Editor = { kind: "station" };
+type NewStation = StationInput & { printerIds: string[] };
 const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
@@ -242,12 +251,13 @@ export class PrepStationsScreen extends LitElement {
   };
   @state() private watcherRemoval?: WatcherView;
   @state() private watcherRemoveError = "";
-  @state() private draft: StationInput = {
+  @state() private draft: NewStation = {
     name: "",
     displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    printerIds: [],
   };
   @state() private fieldError: Record<string, string> = {};
   @state() private error = "";
@@ -262,13 +272,10 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationOrder?: string[];
   @state() private stationAnnouncement = "";
   #stationDrag?: { id: string; pointerId: number; changed: boolean };
-  @state() private rename?: {
-    id: string;
-    name: string;
-    error: string;
-    invalid: boolean;
-    fieldError: boolean;
-  };
+  /** The station the editor opened for; `token` tells one opening from the next. */
+  @state() private stationEdit?: { token: object; station: PrepStation };
+  @state() private stationEditBusy = false;
+  @state() private stationEditRefusal?: StationRefusal;
   @state() private health?: StationHealthSnapshot;
   #healthTimer?: ReturnType<typeof setInterval>;
   #routingTimer?: ReturnType<typeof setInterval>;
@@ -321,12 +328,9 @@ export class PrepStationsScreen extends LitElement {
   /** A written choice the grid keeps showing until a read replaces the model. */
   #writtenChoice?: RoutingPending;
   #cellRun = 0;
-  #stationScope?: DraftScope<StationInput>;
-  #stationBaseline?: StationInput;
-  #renameScope?: DraftScope<{ name: string }>;
-  #renameBaseline?: { name: string };
+  #stationScope?: DraftScope<NewStation>;
+  #stationBaseline?: NewStation;
   #stationIdentity?: object;
-  #renameIdentity?: object;
   #watcherRenameScope?: DraftScope<{ name: string }>;
   #watcherRenameIdentity?: object;
   #watcherCellScope?: DraftScope<string[]>;
@@ -490,36 +494,19 @@ export class PrepStationsScreen extends LitElement {
       this.#stationScope = draftScopeFor(this, {
         id,
         current: () => this.draft,
-        snapshot: (value) => ({ ...value }),
+        snapshot: (value) => ({ ...value, printerIds: [...value.printerIds] }),
         equal: (a, b) =>
-          Object.keys(a).every((key) =>
-            Object.is(a[key as keyof StationInput], b[key as keyof StationInput]),
+          (Object.keys(a) as (keyof NewStation)[]).every((key) =>
+            key === "printerIds"
+              ? a.printerIds.length === b.printerIds.length &&
+                a.printerIds.every((printerId) => b.printerIds.includes(printerId))
+              : Object.is(a[key], b[key]),
           ),
         restore: (value) => {
-          this.draft = { ...value };
+          this.draft = { ...value, printerIds: [...value.printerIds] };
         },
       }).scope;
       this.#stationScope.commit(this.#stationBaseline);
-    }
-    if (!this.rename) {
-      this.#renameBaseline = undefined;
-      this.#renameScope?.dispose();
-      this.#renameScope = undefined;
-      this.#renameIdentity = undefined;
-    } else if (!this.#renameIdentity) {
-      const id = (this.#renameIdentity = {});
-      this.#renameBaseline ??= { name: this.rename.name };
-      this.#leave ??= leaveCoordinatorFor(this);
-      this.#renameScope = draftScopeFor(this, {
-        id,
-        current: () => ({ name: this.rename!.name }),
-        snapshot: (value) => ({ ...value }),
-        equal: (a, b) => a.name.trim() === b.name.trim(),
-        restore: (value) => {
-          if (this.rename) this.rename = { ...this.rename, name: value.name };
-        },
-      }).scope;
-      this.#renameScope.commit(this.#renameBaseline);
     }
     if (!this.watcherRename) {
       this.#watcherRenameScope?.dispose();
@@ -648,25 +635,14 @@ export class PrepStationsScreen extends LitElement {
     });
   }
 
-  async #beforeStationClose(
-    reason: LeaveReason,
-    rename: boolean,
-    identity: object | undefined,
-  ): Promise<boolean> {
+  readonly #beforeAddClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy) return false;
-    const scope = rename ? this.#renameScope : this.#stationScope;
+    const identity = this.#stationIdentity;
+    const scope = this.#stationScope;
     if (!scope || !this.#leave) return true;
-    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
-    return (
-      identity === (rename ? this.#renameIdentity : this.#stationIdentity) &&
-      outcome === "proceeded"
-    );
-  }
-
-  readonly #beforeAddClose = (reason: LeaveReason) =>
-    this.#beforeStationClose(reason, false, this.#stationIdentity);
-  readonly #beforeRenameClose = (reason: LeaveReason) =>
-    this.#beforeStationClose(reason, true, this.#renameIdentity);
+    const outcome = await this.#leave.request({ scopes: [scope.id], reason, proceed() {} });
+    return identity === this.#stationIdentity && outcome === "proceeded";
+  };
 
   /** Dirty from the moment a choice's preview opens until Confirm saves it or Cancel drops it. */
   #syncCellDraft(): void {
@@ -773,7 +749,6 @@ export class PrepStationsScreen extends LitElement {
     this.#cellRun++;
     if (
       this.#stationIdentity ||
-      this.#renameIdentity ||
       this.pending !== undefined ||
       this.cellChoice !== null ||
       this.stationAction !== undefined ||
@@ -807,7 +782,7 @@ export class PrepStationsScreen extends LitElement {
     this.#watcherRenameScope = undefined;
     this.#watcherRenameIdentity = undefined;
     this.#stationScope?.dispose();
-    this.#renameScope?.dispose();
+    this.stationEditBusy = false;
     this.pending = undefined;
     this.cellChoice = null;
     this.cellRefusal = null;
@@ -816,9 +791,7 @@ export class PrepStationsScreen extends LitElement {
     this.#cellRefreshing = undefined;
     this.#releaseCellScope();
     this.#stationScope = undefined;
-    this.#renameScope = undefined;
     this.#stationIdentity = undefined;
-    this.#renameIdentity = undefined;
     this.#leave = undefined;
     if (this.#healthTimer) clearInterval(this.#healthTimer);
     if (this.#routingTimer) clearInterval(this.#routingTimer);
@@ -1235,19 +1208,14 @@ export class PrepStationsScreen extends LitElement {
       >
         <wt-button
           align="start"
-          data-test=${`rename-${station.id}`}
+          data-test=${`edit-${station.id}`}
           ?disabled=${this.busy}
           @click=${() => {
-            this.#renameBaseline = undefined;
-            this.rename = {
-              id: station.id,
-              name: station.name,
-              error: "",
-              invalid: false,
-              fieldError: false,
-            };
+            this.stationEditBusy = false;
+            this.stationEditRefusal = undefined;
+            this.stationEdit = { token: {}, station };
           }}
-          >${t("venue.rename")}</wt-button
+          >${t("venue.edit")}</wt-button
         >
         ${
           station.active && !station.isDefault
@@ -1273,99 +1241,71 @@ export class PrepStationsScreen extends LitElement {
         >
       </wt-row-actions>`;
   }
-  async #saveStationName() {
-    if (saveActionState(this.#renameScope).unchanged) return;
-    const draft = this.rename;
-    if (!draft || this.busy || !this.view?.stations.some((station) => station.id === draft.id))
-      return;
-    if (!draft.name.trim()) {
-      this.rename = { ...draft, error: t("prep.name_required"), invalid: true, fieldError: true };
-      return;
-    }
-    const identity = this.#renameIdentity;
-    const scope = this.#renameScope;
-    this.busy = true;
-    this.rename = { ...draft, error: "", invalid: false, fieldError: false };
-    try {
-      await this.api.updateStation(draft.id, { name: draft.name.trim() });
-    } catch (error) {
-      if (!this.isConnected || identity !== this.#renameIdentity) return;
-      this.rename = {
-        ...this.rename!,
-        error: t(codeOf(error) === "station.name_taken" ? "prep.name_taken" : "prep.save_error"),
-        invalid: false,
-        fieldError: codeOf(error) === "station.name_taken",
-      };
-      this.busy = false;
-      return;
-    }
-    if (!this.isConnected || identity !== this.#renameIdentity) return;
-    this.#renameBaseline = { name: draft.name };
-    scope?.commit(this.#renameBaseline);
-    if (!scope?.isDirty()) {
-      this.renderRoot
-        .querySelector<HTMLElementTagNameMap["wt-modal"]>("[data-test=station-rename]")
-        ?.closeAfter("saved");
-      this.rename = undefined;
-    }
-    await this.#load();
-    this.busy = false;
+  #printersOf(stationId: string): string[] {
+    return this.view!.stationPrinters.filter((row) => row.stationId === stationId).map(
+      (row) => row.printerId,
+    );
   }
-  #renameDialog() {
-    const draft = this.rename;
-    if (!draft) return nothing;
-    const identity = this.#renameIdentity;
+  async #saveStationEdit(token: object, detail: StationEditorSave) {
+    const edit = this.stationEdit;
+    const current = () => this.isConnected && this.stationEdit?.token === token;
+    if (
+      !edit ||
+      !current() ||
+      this.stationEditBusy ||
+      !this.view?.stations.some((station) => station.id === edit.station.id)
+    )
+      return;
+    this.stationEditBusy = true;
+    this.stationEditRefusal = undefined;
+    try {
+      await this.api.updateStation(edit.station.id, detail);
+    } catch (error) {
+      if (!current()) return;
+      this.stationEditRefusal = refusalOf(error);
+      this.stationEditBusy = false;
+      return;
+    }
+    if (!current()) return;
+    this.stationEditBusy = false;
+    await this.updateComplete;
+    if (this.renderRoot.querySelector("prep-station-editor")?.saved()) this.stationEdit = undefined;
+    await this.#load();
+  }
+  #stationEditor() {
+    const edit = this.stationEdit;
+    if (!edit || !this.view) return nothing;
+    const station =
+      this.view.stations.find((candidate) => candidate.id === edit.station.id) ?? edit.station;
+    const { token } = edit;
+    // The load reads the printers through a route that needs printer.manage, so a loaded editable
+    // screen's person holds it; a refusal of it still lands under Printers.
+    const canManagePrinters = true;
     return keyed(
-      identity,
-      html`<wt-modal
-        open
-        size="compact"
-        data-test="station-rename"
-        .dismissible=${!this.busy}
-        .beforeClose=${this.#beforeRenameClose}
-        heading=${t("venue.rename")}
-        @wt-close=${(event: Event) => {
-          event.stopPropagation();
-          if (identity === this.#renameIdentity) this.rename = undefined;
+      token,
+      html`<prep-station-editor
+        .open=${true}
+        .busy=${this.stationEditBusy}
+        .station=${{
+          id: station.id,
+          name: station.name,
+          active: station.active,
+          showsRestOfOrder: station.showsRestOfOrder,
+          printerIds: this.#printersOf(station.id),
         }}
-      >
-        <wt-input
-          name="stationName"
-          label=${t("prep.name")}
-          required
-          .value=${draft.name}
-          .error=${draft.fieldError ? draft.error : ""}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            if (!this.isConnected || identity !== this.#renameIdentity) return;
-            this.rename = {
-              ...draft,
-              name: event.detail.value,
-              error: "",
-              invalid: false,
-              fieldError: false,
-            };
-            this.#renameScope?.changed();
-          }}
-          @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-station-name"]'))}
-        ></wt-input>
-        ${draft.error ? html`<p class="error" role="alert">${draft.invalid ? t("prep.fix_fields") : draft.error}</p>` : nothing}
-        <wt-form-actions slot="footer">
-          <wt-button
-            slot="cancel"
-            variant="secondary"
-            @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.requestClose("cancel")}
-            >${t("prep.cancel")}</wt-button
-          >
-          <wt-button
-            data-test="save-station-name"
-            variant=${saveActionState(this.#renameScope).variant}
-            ?disabled=${saveActionState(this.#renameScope).unchanged || this.busy || draft.invalid}
-            @click=${() => void this.#saveStationName()}
-            >${t("prep.save")}</wt-button
-          >
-        </wt-form-actions>
-      </wt-modal>`,
+        .printers=${this.view.printers}
+        .watchers=${this.view.watchers}
+        .canManagePrinters=${canManagePrinters}
+        .refusal=${this.stationEditRefusal}
+        @station-editor-save=${(event: CustomEvent<StationEditorSave>) => {
+          event.stopPropagation();
+          void this.#saveStationEdit(token, event.detail);
+        }}
+        @station-editor-cancel=${(event: Event) => {
+          event.stopPropagation();
+          if (this.stationEdit?.token === token) this.stationEdit = undefined;
+        }}
+      ></prep-station-editor>`,
     );
   }
   #openStation() {
@@ -1378,18 +1318,27 @@ export class PrepStationsScreen extends LitElement {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      printerIds: [],
     };
     this.fieldError = {};
     this.#showError("");
   }
-  #change(field: keyof StationInput, value: string) {
-    this.draft = { ...this.draft, [field]: field === "name" ? value : Number(value) };
+  #change(field: keyof StationInput | "printerIds", value: string | string[]) {
+    this.draft = {
+      ...this.draft,
+      [field]: field === "name" || field === "printerIds" ? value : Number(value),
+    };
     this.#stationScope?.changed();
-    this.fieldError = this.stationAttempted
-      ? this.#stationErrors()
-      : { ...this.fieldError, [field]: "" };
+    const refused = field === "printerIds" ? undefined : this.fieldError.printerIds;
+    this.fieldError = {
+      ...(this.stationAttempted ? this.#stationErrors() : { ...this.fieldError, [field]: "" }),
+      ...(refused ? { printerIds: refused } : {}),
+    };
+    if (!refused) delete this.fieldError.printerIds;
     this.#showError(
-      this.stationAttempted && Object.keys(this.fieldError).length ? t("prep.fix_fields") : "",
+      this.stationAttempted && Object.values(this.fieldError).some(Boolean)
+        ? t("prep.fix_fields")
+        : "",
     );
   }
   #stationErrors(): Record<string, string> {
@@ -1425,7 +1374,8 @@ export class PrepStationsScreen extends LitElement {
     this.busy = true;
     this.#showError("");
     try {
-      await this.api.createStation(d);
+      const { printerIds, ...station } = d;
+      await this.api.createStation(printerIds.length > 0 ? d : station);
       if (!this.isConnected || identity !== this.#stationIdentity) return;
       this.#stationBaseline = { ...d };
       scope?.commit(d);
@@ -1439,7 +1389,17 @@ export class PrepStationsScreen extends LitElement {
       await this.#load();
     } catch (e) {
       if (!this.isConnected || identity !== this.#stationIdentity) return;
-      if (codeOf(e) === "station.name_taken") this.fieldError = { name: t("prep.name_taken") };
+      const refusal = refusalOf(e);
+      const field = stationRefusalField(refusal);
+      if (field === "name") this.fieldError = { name: t("prep.name_taken") };
+      else if (field === "printers")
+        this.fieldError = {
+          printerIds: t(
+            refusal.code === "authorization.not_permitted"
+              ? "prep.printers_not_permitted"
+              : "prep.printers_refused",
+          ),
+        };
       else this.#showError(t("prep.save_error"));
     } finally {
       if (this.isConnected && (identity === this.#stationIdentity || !this.editor))
@@ -2822,6 +2782,31 @@ export class PrepStationsScreen extends LitElement {
       >${this.fieldError[field] ? html`<p class="error" data-field-error=${field} role="alert">${this.fieldError[field]}</p>` : nothing}
     </div>`;
   }
+  #newStationPrinters() {
+    const identity = this.#stationIdentity;
+    const printerIds = this.draft.printerIds;
+    const view = this.view!;
+    return html`<wt-combobox
+      name="printerIds"
+      label=${t("prep.printers")}
+      multiple
+      .values=${printerIds}
+      .options=${stationPrinterOptions(view.printers, view.watchers, printerIds)}
+      .error=${this.fieldError.printerIds ?? ""}
+      .countLabel=${() =>
+        printerIds
+          .map((id) => view.printers.find((printer) => printer.id === id)?.name ?? id)
+          .join(", ")}
+      .searchPlaceholder=${t("prep.printers")}
+      .noResultsLabel=${t("venue.combobox_no_results")}
+      ?disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+        event.stopPropagation();
+        if (this.isConnected && identity === this.#stationIdentity)
+          this.#change("printerIds", [...event.detail.values]);
+      }}
+    ></wt-combobox>`;
+  }
   #dialog() {
     if (!this.editor || this.pending) return nothing;
     const editor = this.editor;
@@ -2839,7 +2824,7 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
         }}
         ><div class="form">
-          ${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}
+          ${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer">
@@ -3184,6 +3169,6 @@ export class PrepStationsScreen extends LitElement {
               }
             </wt-tabs>`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.readOnly ? nothing : html`${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#renameDialog()}`}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.readOnly ? nothing : html`${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#stationEditor()}`}`;
   }
 }

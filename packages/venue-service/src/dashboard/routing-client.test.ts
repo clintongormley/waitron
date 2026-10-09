@@ -191,6 +191,28 @@ it("loadRouting reads …/routing passively from the background client", async (
   });
 });
 
+it("sends a station's printers in the station's own create and edit", async () => {
+  const request = vi.fn(async () => ({ id: "grill" }));
+  const api = new PrepStationsApi(request as unknown as DashboardRequest);
+  const station = {
+    name: "Grill",
+    displayOrder: 0,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  };
+  await api.createStation({ ...station, printerIds: ["epson"] });
+  await api.updateStation("grill", { name: "Hot grill", printerIds: ["epson", "star"] });
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations", "POST", { ...station, printerIds: ["epson"] }],
+    [
+      "/management-api/stations/grill",
+      "PATCH",
+      { name: "Hot grill", printerIds: ["epson", "star"] },
+    ],
+  ]);
+});
+
 it("writes station changes to core and cells to venue-service", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/stations" ? { id: "new-bar" } : undefined,

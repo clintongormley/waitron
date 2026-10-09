@@ -183,7 +183,10 @@ export class PrepStationsApi {
       change,
     );
   }
-  async createStation(input: StationInput): Promise<{ id: string }> {
+  /** `printerIds` needs `printer.manage` as well. */
+  async createStation(
+    input: StationInput & { printerIds?: readonly string[] },
+  ): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);
   }
   updateWatcher(id: string, input: WatcherInput): Promise<void> {
@@ -209,6 +212,9 @@ export class PrepStationsApi {
       Pick<StationInput, "name" | "displayOrder"> &
         Pick<PrepStation, "showsRestOfOrder"> & {
           [Field in keyof StationThresholds]: number | null;
+        } & {
+          /** Needs `printer.manage` as well, and an active station. */
+          printerIds: readonly string[];
         }
     >,
   ): Promise<void> {

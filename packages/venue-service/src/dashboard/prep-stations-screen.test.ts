@@ -6320,3 +6320,174 @@ it.each(["en", "es"] as const)(
     );
   },
 );
+
+describe("The station editor", () => {
+  const editorOf = (el: PrepStationsScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "prep-station-editor",
+    );
+  async function openEdit(overrides: Partial<PrepStationsApi> = {}) {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      updateStation: vi.fn().mockResolvedValue(undefined),
+      setStationPrinters: vi.fn(),
+      ...overrides,
+    });
+    const el = await mount(a);
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settle(el);
+    await editorOf(el)!.updateComplete;
+    return { el, a };
+  }
+  it("saves a station's name, printers and rest of order in one call and closes", async () => {
+    const { el, a } = await openEdit();
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual(["old"]);
+    await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Cocktail bar");
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["old", "next"]);
+    q(el, "wt-switch[name=showsRestOfOrder]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true } }),
+    );
+    await settle(el);
+    q(el, '[data-test="save-station-edit"]')!.click();
+    await settle(el);
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", {
+      name: "Cocktail bar",
+      printerIds: ["old", "next"],
+      showsRestOfOrder: true,
+    });
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    expect(a.setStationPrinters).not.toHaveBeenCalled();
+  });
+  it("puts a refused printer under Printers and keeps the editor open", async () => {
+    const { el, a } = await openEdit({
+      updateStation: vi.fn().mockRejectedValue({
+        code: "printer.makes_and_watches",
+        params: { printerId: "next" },
+      }),
+    });
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["next"]);
+    q(el, '[data-test="save-station-edit"]')!.click();
+    await settle(el);
+    await editorOf(el)!.updateComplete;
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printerIds: ["next"] });
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).error).toBe(
+      "Choose active printers that no watcher uses.",
+    );
+    expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
+    expect(q(el, '[data-test="save-station-edit"]')!.hasAttribute("disabled")).toBe(false);
+  });
+  it("offers a switched-off station's name for editing and its printers as a read-out", async () => {
+    const { el, a } = await openEdit({
+      load: vi.fn().mockResolvedValue({
+        ...ticketView,
+        stations: [...ticketView.stations, { ...upstairs, id: "retired", active: false }],
+        stationPrinters: [
+          ...ticketView.stationPrinters,
+          { stationId: "retired", printerId: "next" },
+        ],
+      }),
+    });
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    q(el, '[data-test="edit-retired"]')!.click();
+    await settle(el);
+    await editorOf(el)!.updateComplete;
+    expect(q(el, "wt-combobox[name=printerIds]")).toBeNull();
+    expect(q(el, '[data-test="station-printers"]')!.textContent).toContain("Next printer");
+    await editSaveField(el, q(el, 'wt-input[name="stationName"]')!, "Old bar");
+    q(el, '[data-test="save-station-edit"]')!.click();
+    await settle(el);
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("retired", { name: "Old bar" });
+  });
+  it("New station sends the printers chosen with the station", async () => {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      createStation: vi.fn().mockResolvedValue({ id: "grill" }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    const printers = q(el, "wt-combobox[name=printerIds]") as WtCombobox;
+    expect(printers.label).toBe("Printers");
+    expect(printers.options.find((option) => option.value === "watcher")!.disabled).toBe(true);
+    expect(printers.options.find((option) => option.value === "disabled")!.disabled).toBe(true);
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    await editSaveField(el, printers, ["next"]);
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+      name: "Grill",
+      displayOrder: 0,
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+      printerIds: ["next"],
+    });
+  });
+  it("ignores a departed editor's cancel and a departed New station's printers", async () => {
+    const { el, a } = await openEdit({ createStation: vi.fn() });
+    const old = editorOf(el)!;
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settle(el);
+    old.dispatchEvent(new CustomEvent("station-editor-cancel", { bubbles: true, composed: true }));
+    await settle(el);
+    expect(editorOf(el)).not.toBeNull();
+    q(el, '[data-test="cancel-station-edit"]')!.click();
+    await vi.waitFor(() => expect(editorOf(el)).toBeNull());
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    const departed = q(el, "wt-combobox[name=printerIds]")!;
+    await el
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!
+      .requestClose("cancel");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, departed, ["next"]);
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual([]);
+    expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(true);
+    expect(a.createStation).not.toHaveBeenCalled();
+  });
+  it("New station keeps a printer refusal until the printers change, and names printer.manage", async () => {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      createStation: vi.fn().mockRejectedValue({
+        code: "authorization.not_permitted",
+        params: { permission: "printer.manage" },
+      }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["next"]);
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    const printers = () => q(el, "wt-combobox[name=printerIds]") as WtCombobox;
+    expect(printers().error).toBe("You can't change printers.");
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill two");
+    expect(printers().error).toBe("You can't change printers.");
+    await editSaveField(el, printers(), []);
+    expect(printers().error).toBe("");
+  });
+  it("New station puts a refused printer under its printers field", async () => {
+    const a = api({
+      load: vi.fn().mockResolvedValue(ticketView),
+      createStation: vi.fn().mockRejectedValue({ code: "printer.not_found", params: {} }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["next"]);
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).error).toBe(
+      "Choose active printers that no watcher uses.",
+    );
+    expect(q(el, '[data-field-error="name"]')).toBeNull();
+    expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
+  });
+});
