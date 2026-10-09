@@ -74,6 +74,16 @@ const variants: ProductEditorDraft = {
       available: true,
       active: false,
     },
+    {
+      id: "inherited",
+      name: "Inherited portion",
+      customerName: { en: "Cup at the house price" },
+      kitchenName: "INH",
+      image: null,
+      unitPrice: null,
+      available: true,
+      active: true,
+    },
   ],
 };
 // A variant's own page with every inherited field left blank, so each one draws its hint.
@@ -327,9 +337,10 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       );
       await el.updateComplete;
       await table.updateComplete;
-      expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(2);
+      expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(3);
       expect(table.shadowRoot!.querySelector("[data-test=restore-0]")).not.toBeNull();
       expect(table.shadowRoot!.querySelector("[data-test=row-2]")).toBeNull();
+      expect(table.shadowRoot!.querySelector("[data-test=row-3] .inherited")).not.toBeNull();
     }
     if (state === "open-sections" || state === "variant-page") {
       for (const name of ["kitchen", "descriptors", "nutrition"]) {
