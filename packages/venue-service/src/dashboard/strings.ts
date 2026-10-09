@@ -2,6 +2,8 @@ import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
   "opening.title": "Opening hours",
+  "opening.all_departments": "All departments",
+  "opening.zone_placeholder": "{name}: closed times",
   "opening.clock_unreadable":
     "The venue time zone or changeover cannot be read, so today cannot be shown.",
   "opening.previous_day": "Previous day",
@@ -677,6 +679,8 @@ const en = {
 
 const es: Record<keyof typeof en, string> = {
   "opening.title": "Horario de apertura",
+  "opening.all_departments": "Todos los departamentos",
+  "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.clock_unreadable":
     "No se puede leer la zona horaria o el cambio de día del local, por lo que no se puede mostrar hoy.",
   "opening.previous_day": "Día anterior",

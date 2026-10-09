@@ -887,7 +887,7 @@ adds `zone`; `department=all` is All departments. All departments is read-only: 
 week, one narrow column per active department; a column heading opens that department. A chosen
 zone shows a placeholder until Task 17.
 
-- [ ] Steps: failing tests (the picker's options — fails today because it lists departments only;
+- [x] Steps: failing tests (the picker's options — fails today because it lists departments only;
   the URL round trip; All departments' columns and headings); watch them fail
   (`pnpm --filter @waitron/venue-service exec vitest run --project browser <files>` and
   `pnpm --filter @waitron/dashboard exec vitest run src/navigation.test.ts`); implement; the

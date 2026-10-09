@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "./period-editor.js";
 import "./opening-hours-week.js";
 import "./opening-hours-day.js";
+import "./opening-hours-all.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { MenuPeriodInput, MenuPeriodUse, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -67,6 +68,7 @@ export class OpeningHoursScreen extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   @state() private model?: OpeningHoursModel;
   @state() private departmentId = "";
+  @state() private zoneId = "";
   @state() private view: View = "week";
   @state() private weekMode = "week";
   @state() private specialDateId = "";
@@ -80,13 +82,14 @@ export class OpeningHoursScreen extends LitElement {
   private readonly url = new UrlStateController(this, () => this.followUrl(), {
     basePath: "/manage",
     primary: "dashboard",
-    children: { "opening-hours": { view: "view", department: "department" } },
+    children: { "opening-hours": { view: "view", department: "department", zone: "zone" } },
   });
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
     this.view = view === "periods" || view === "day" ? view : "week";
     this.departmentId = this.url.read("department") ?? "";
+    this.zoneId = this.url.read("zone") ?? "";
   }
   override connectedCallback() {
     super.connectedCallback();
@@ -115,6 +118,47 @@ export class OpeningHoursScreen extends LitElement {
       departments.find((d) => d.active) ??
       departments[0]
     );
+  }
+  private zone() {
+    return this.department()?.zones?.find((zone) => zone.id === this.zoneId);
+  }
+  private pickerOptions() {
+    const departments = this.model?.departments.filter((department) => department.active) ?? [];
+    return this.view === "week"
+      ? [
+          { value: "all", label: t("opening.all_departments") },
+          ...departments.flatMap((department) => [
+            { value: department.id, label: department.name },
+            ...(department.zones ?? []).map((zone) => ({
+              value: `zone:${zone.id}`,
+              label: `${department.name} › ${zone.name}`,
+            })),
+          ]),
+        ]
+      : departments.map((department) => ({ value: department.id, label: department.name }));
+  }
+  private pickerValue() {
+    if (this.view === "week" && this.departmentId === "all") return "all";
+    const zone = this.view === "week" ? this.zone() : undefined;
+    return zone ? `zone:${zone.id}` : (this.department()?.id ?? "");
+  }
+  private async chooseDepartment(value: string) {
+    if (!this.isConnected) return;
+    if (value === "all" && this.view === "week") {
+      await this.url.write({ dashboard: "opening-hours", department: "all", zone: null });
+    } else if (value.startsWith("zone:") && this.view === "week") {
+      const zoneId = value.slice(5);
+      const department = this.model?.departments.find(
+        (d) => d.active && d.zones?.some((z) => z.id === zoneId),
+      );
+      if (!department) return;
+      await this.url.write({ dashboard: "opening-hours", department: department.id, zone: zoneId });
+    } else {
+      const department = this.model?.departments.find((d) => d.id === value);
+      if (!department) return;
+      await this.url.write({ dashboard: "opening-hours", department: department.id, zone: null });
+    }
+    this.followUrl();
   }
   private async chooseWeek(value: string, date = false) {
     const generation = this.generation;
@@ -353,23 +397,25 @@ export class OpeningHoursScreen extends LitElement {
         !this.model
           ? nothing
           : html` ${
-                department && this.view !== "day"
+                (department || this.view === "week") && this.view !== "day"
                   ? html`<div class="chooser">
                       <wt-combobox
                         name="departmentId"
                         label=${t("menu.department")}
                         search="never"
-                        .options=${this.model.departments.map((d) => ({ value: d.id, label: d.active ? d.name : `${d.name} ${t("menu.inactive")}` }))}
-                        .value=${department.id}
+                        .options=${this.pickerOptions()}
+                        .value=${this.pickerValue()}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => {
                           event.stopPropagation();
+                          if (
+                            !this.isConnected ||
+                            event.currentTarget !==
+                              this.shadowRoot?.querySelector("[name=departmentId]")
+                          )
+                            return;
                           (event.currentTarget as HTMLElementTagNameMap["wt-combobox"]).value =
-                            department.id;
-                          void this.url.write({
-                            dashboard: "opening-hours",
-                            department: event.detail.value,
-                          });
-                          this.followUrl();
+                            this.pickerValue();
+                          void this.chooseDepartment(event.detail.value);
                         }}
                       ></wt-combobox>
                     </div>`
@@ -393,8 +439,40 @@ export class OpeningHoursScreen extends LitElement {
                 }}
               >
                 <div slot="week">
+                  ${this.view === "week" && !department ? html`<p>${t("menu.no_departments")}</p>` : nothing}
                   ${this.view === "week" ? this.weekChooser() : nothing}
-                  ${this.view === "week" && department && (this.weekMode === "week" || special) ? keyed(`${department.id}:${this.weekMode}:${special?.id ?? ""}`, html`<opening-hours-week .api=${this.api} .department=${department} .menus=${this.model!.menus} .dayCutover=${this.model!.dayCutover} .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined} .specialDate=${special} .readOnly=${this.readOnly}></opening-hours-week>`) : nothing}
+                  ${
+                    this.view === "week" && this.departmentId === "all"
+                      ? html`<opening-hours-all
+                          .departments=${this.model.departments}
+                          .dayCutover=${this.model.dayCutover}
+                          .specialDate=${special}
+                          @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
+                            event.stopPropagation();
+                            void this.chooseDepartment(event.detail.departmentId);
+                          }}
+                        ></opening-hours-all>`
+                      : this.view === "week" && this.zone()
+                        ? html`<p data-test="zone-placeholder">
+                            ${format("opening.zone_placeholder", { name: this.zone()!.name })}
+                          </p>`
+                        : this.view === "week" &&
+                            department &&
+                            (this.weekMode === "week" || special)
+                          ? keyed(
+                              `${department.id}:${this.weekMode}:${special?.id ?? ""}`,
+                              html`<opening-hours-week
+                                .api=${this.api}
+                                .department=${department}
+                                .menus=${this.model!.menus}
+                                .dayCutover=${this.model!.dayCutover}
+                                .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
+                                .specialDate=${special}
+                                .readOnly=${this.readOnly}
+                              ></opening-hours-week>`,
+                            )
+                          : nothing
+                  }
                 </div>
                 <div slot="periods">
                   ${this.view === "periods" && department ? this.periods(department) : nothing}

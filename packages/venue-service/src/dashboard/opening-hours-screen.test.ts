@@ -955,3 +955,133 @@ it("sends an offset-only edit through the real period client and closes before a
   await expect.poll(() => el.shadowRoot!.querySelector("period-editor")).toBeNull();
   await expect.poll(() => reads).toBe(2);
 });
+
+function pickerModel(): OpeningHoursModel {
+  const data = model();
+  data.departments[0]!.zones = [{ id: "terrace", name: "Terrace", week: [], dates: [] }];
+  return {
+    ...data,
+    departments: [
+      ...data.departments,
+      { id: "bar", name: "Bar", active: true, zones: [], periods: [], week: [], dates: [] },
+    ],
+  };
+}
+const picker = (el: Screen) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+function pick(el: Screen, value: string) {
+  picker(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+it("lists All departments then active departments with their zones on Week only", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week");
+  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+  expect(picker(el).options).toEqual([
+    { value: "all", label: "All departments" },
+    { value: "restaurant", label: "Restaurant" },
+    { value: "zone:terrace", label: "Restaurant › Terrace" },
+    { value: "bar", label: "Bar" },
+  ]);
+  const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
+  tabs.dispatchEvent(
+    new CustomEvent("wt-tab-change", {
+      detail: { value: "periods" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(picker(el).options).toEqual([
+    { value: "restaurant", label: "Restaurant" },
+    { value: "bar", label: "Bar" },
+  ]);
+});
+it("keeps a zone through Back and Forward and clears it when choosing a department", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/restaurant");
+  const guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async () => "proceeded",
+  });
+  try {
+    const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+    pick(el, "zone:terrace");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/department/restaurant/zone/terrace");
+    expect(picker(el).value).toBe("zone:terrace");
+    expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")?.textContent).toContain(
+      "Terrace",
+    );
+    expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
+    history.back();
+    await expect.poll(() => picker(el).value).toBe("restaurant");
+    history.forward();
+    await expect.poll(() => picker(el).value).toBe("zone:terrace");
+    pick(el, "bar");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/department/bar");
+    expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")).toBeNull();
+  } finally {
+    guard.dispose();
+  }
+});
+it("links All departments headings to a department and returns to the all view", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+  expect(picker(el).value).toBe("all");
+  const all = el.shadowRoot!.querySelector<LitElement>("opening-hours-all");
+  expect(all).not.toBeNull();
+  await all!.updateComplete;
+  const link = all!.shadowRoot!.querySelector<HTMLElement>("[data-department=bar]");
+  expect(link).not.toBeNull();
+  link!.click();
+  await expect.poll(() => picker(el).value).toBe("bar");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/bar");
+  pick(el, "all");
+  await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/week/department/all");
+  expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
+});
+it("ignores a zone belonging to another department and unknown picker values", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/bar/zone/terrace");
+  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+  expect(picker(el).value).toBe("bar");
+  expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")).toBeNull();
+  pick(el, "zone:missing");
+  await el.updateComplete;
+  expect(picker(el).value).toBe("bar");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/bar/zone/terrace");
+});
+
+it("still offers All departments when no department is available", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  const data = { ...model(), departments: [] };
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  expect(picker(el)).not.toBeNull();
+  expect(picker(el).options).toEqual([{ value: "all", label: "All departments" }]);
+  expect(el.shadowRoot!.textContent).toContain("No departments");
+});
+
+it("passes the chosen named day to All departments", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  const data = pickerModel();
+  const special = {
+    id: "named",
+    date: "2026-10-12",
+    name: "Own Monday",
+    colour: "purple" as const,
+    closeWholeVenue: false,
+  };
+  const el = await mount((async () =>
+    structuredClone({ ...data, specialDates: [special] })) as DashboardRequest);
+  el.shadowRoot!.querySelector("[name=weekMode]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "date" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const all =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-all"]>("opening-hours-all")!;
+  await all.updateComplete;
+  expect(all.specialDate).toEqual(special);
+  expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(2);
+});

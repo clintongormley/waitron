@@ -74,3 +74,23 @@ it("preserves the explicit menu price filter when the dashboard rewrites its des
   expect(location.pathname).toBe("/manage/menus/menu/drinks/view/prices/filter/clashes");
   expect(url.read("price-filter")).toBe("clashes");
 });
+
+it("preserves Opening hours zone and All departments URLs", async () => {
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  history.replaceState(
+    null,
+    "",
+    "/manage/opening-hours/view/week/department/restaurant/zone/terrace",
+  );
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  expect(url.read("zone")).toBe("terrace");
+  await url.write({ dashboard: "opening-hours" }, true);
+  expect(location.pathname).toBe(
+    "/manage/opening-hours/view/week/department/restaurant/zone/terrace",
+  );
+  await url.write({ department: "all", zone: null }, true);
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/all");
+  expect(url.read("department")).toBe("all");
+});
