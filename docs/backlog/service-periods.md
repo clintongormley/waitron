@@ -109,16 +109,10 @@ Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2
 
 ## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
 
-- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
-  implemented through A261.** The first department is named after the venue; the
-  four-value service style splits into separate settings, and a tab no longer needs a table; hours
-  come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
-  [Spec](../superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
-  open, including advisor questions Q21, Q14, Q27 and Q22.
-  Its §4 day types and §5 placement are revised by A261. A261 step 2 names the sole department on
-  Departments and zones; other screens still await their own one-department survey. Tab billing
-  remains open; the shared calendar is built by A261 step 5 (below), and its public holidays by
-  step 6.
+Tabs without tables and the remaining department-name survey stay open. Re-check the advisor
+questions in [the earlier spec](../superpowers/specs/2026-10-03-departments-service-styles-hours-design.md)
+and the compliance question list before carrying them forward. A366 supersedes its service-style
+and hours proposals; the historical spec keeps its dated pointers.
 
 ## Smaller notes from the Hours reviews
 

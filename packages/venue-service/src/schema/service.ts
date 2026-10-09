@@ -212,7 +212,6 @@ export const orderServiceContexts = table(
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
-    // Keep the checked vocabulary's SQL spelling: enumCheck adds spaces and would rebuild the table.
     serviceMode: label("service_mode").notNull(),
   },
   (t) => [

@@ -745,16 +745,22 @@ export async function listSalePolicies(tx: Transaction, cfg: VenueScope) {
   return {
     departments: departmentRows,
     zones: activeZones.map((zone) => {
-      const raw = zonesById.get(zone.id)!;
-      const inherited = departmentsById.get(zone.departmentId)!;
+      const raw = zonesById.get(zone.id) ?? {
+        zoneId: zone.id,
+        orderStart: null,
+        paidWhen: null,
+        collectionNumber: null,
+        receiptPrintMode: null,
+      };
+      const inherited = departmentsById.get(zone.departmentId);
       return {
         ...raw,
         effective: {
-          orderStart: raw.orderStart ?? inherited.orderStart,
-          paidWhen: raw.paidWhen ?? inherited.paidWhen,
-          collectionNumber: raw.collectionNumber ?? inherited.collectionNumber,
-          receiptPrintMode: raw.receiptPrintMode ?? inherited.receiptPrintMode,
-          printTradingName: inherited.printTradingName,
+          orderStart: raw.orderStart ?? inherited?.orderStart ?? "counter",
+          paidWhen: raw.paidWhen ?? inherited?.paidWhen ?? "prepay",
+          collectionNumber: raw.collectionNumber ?? inherited?.collectionNumber ?? "none",
+          receiptPrintMode: raw.receiptPrintMode ?? inherited?.receiptPrintMode ?? "auto",
+          printTradingName: inherited?.printTradingName ?? false,
         },
       };
     }),
@@ -780,9 +786,12 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
     );
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
   await tx
-    .update(departmentSalePolicies)
-    .set({ [field]: value })
-    .where(eq(departmentSalePolicies.departmentId, departmentId));
+    .insert(departmentSalePolicies)
+    .values({ departmentId, [field]: value })
+    .onConflictDoUpdate({
+      target: departmentSalePolicies.departmentId,
+      set: { [field]: value },
+    });
 }
 
 export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>(
@@ -796,9 +805,12 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     throw new AppError("service_zone.not_found", { zoneId });
   }
   await tx
-    .update(zoneSalePolicies)
-    .set({ [field]: value })
-    .where(eq(zoneSalePolicies.zoneId, zoneId));
+    .insert(zoneSalePolicies)
+    .values({ zoneId, [field]: value })
+    .onConflictDoUpdate({
+      target: zoneSalePolicies.zoneId,
+      set: { [field]: value },
+    });
 }
 
 export interface DepartmentSettingsInput extends DepartmentPolicyField {

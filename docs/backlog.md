@@ -1323,12 +1323,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
   the setting directly in the database. [Detail](backlog/service-periods.md#changing-the-business-day-start-after-saving-service-hours)
 
-- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
-  implemented through A261.** The first department is named after the venue; the
-  four-value service style splits into separate settings, and a tab no longer needs a table; hours
-  come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
-  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
-  open, including advisor questions Q21, Q14, Q27 and Q22. [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
+- **Departments, service styles and opening hours (A254, owner 2026-10-03) — residuals.**
+  Tabs without tables, the remaining department-name survey, and advisor questions stay open.
+  [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md);
+  [Detail](backlog/service-periods.md#departments-service-styles-and-opening-hours-a254-owner-2026-10-03--draft-spec-partly-implemented-through-a261)
 
 - **A rename refusal without a supplied name remains a database error, rather than returning an
   undefined name** — left open by A261-2d (#1274).
