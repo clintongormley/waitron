@@ -1331,7 +1331,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   A301 (#1335, A261 step 2). A zone with no department shows its "Not configured" note apart from
   its name, in the muted text colour. Left open for the owner: the "Disabled" note a zone or
   department can show in the same place is not muted (it was not before A301 either), so the two
-  notes now look different.
+  notes now look different. Slice 6A's standalone department list uses muted disabled notes;
+  its dashboard integration and the zone note remain to build.
 
 - **A rename refusal without a supplied name remains a database error, rather than returning an
   undefined name** — left open by A261-2d (#1274).

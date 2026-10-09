@@ -909,7 +909,7 @@ the name link and Open fire `open-department` with the id; Rename, Disable, Enab
 department" fire their own events (the dialogs are Task A7). Input: the `VenueServiceView` the page
 already loads (`client.ts:60-88`).
 
-- [ ] **Step 1: Failing tests** (Chromium): rows and columns for two departments, one disabled
+- [x] **Step 1: Failing tests** (Chromium): rows and columns for two departments, one disabled
   (its "Disabled" note muted — assert the computed colour equals `--wt-color-text-muted`'s); Setup
   shows "has no opening periods" with the path-form link, a zone's unpublished menu prefixed by its
   name, nothing for a ready department; the default-station line; the "No department is enabled"
@@ -920,8 +920,8 @@ already loads (`client.ts:60-88`).
   the end; at 390 px the menu stays on screen (carried from `venue-operations-screen.test.ts:3397`,
   "the venue tables at phone width", its assertion kept). a11y both themes, with and without
   issues. Run; watch them fail.
-- [ ] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the department list with a Setup column (A366)`.
+- [x] **Step 2: Implement; Step 3: run;** LOOK in EN and ES, both themes, 1280 and 390.
+- [x] **Step 4: Commit** — `feat(venue-service): the department list with a Setup column (A366)`.
 
 ---
 
