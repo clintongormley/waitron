@@ -1264,6 +1264,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
+- **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
+  own-hours dates and keep it beside only the action that failed, retaining its retry and draft.
+  [Detail](backlog/service-periods.md#opening-hours-dated-save-refusal-presentation)
+- **Opening hours real-week headings** — remove the repeated weekday while keeping the date and
+  Today marker readable in EN/ES, both themes, at 1280 and 390.
+  [Detail](backlog/service-periods.md#opening-hours-real-week-headings)
+
 - **Sending grace after a period extension is replaced or expires** — decide whether a positive
   end offset survives a later period's extension or the business-day changeover; two real-store
   probes observed it ending with the replaced/expired row. The current one-row/today-only rule is
