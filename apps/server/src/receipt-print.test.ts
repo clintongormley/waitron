@@ -452,7 +452,7 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   await configureReceipt(cfg, { printerId });
   await suite.db.execute(sql`
     update department_sale_policies
-    set paid_when = 'ticket_then_pay', collection_number = 'numbered'
+    set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'numbered'
     where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})
   `);
   const id = randomUUID();
@@ -462,6 +462,13 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
     lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
   });
 
+  expect(
+    (
+      await suite.db.execute(
+        sql`select service_mode from order_service_contexts where working_order_id = ${id}`,
+      )
+    ).rows,
+  ).toEqual([{ service_mode: "ticket_then_pay" }]);
   await placeOrder(deps(), cfg, id, OPERATOR);
 
   const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
@@ -483,6 +490,32 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
     code: "working_order.not_open",
   });
   expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toHaveLength(1);
+});
+
+it("a counter order paid at collection records its flow but prints no collection ticket when numbering is off", async () => {
+  const { cfg, each, zoneId } = await setupVenue("ticket_then_pay");
+  const printerId = await makePrinter(cfg);
+  await configureReceipt(cfg, { printerId });
+  await suite.db.execute(
+    sql`update department_sale_policies set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'none' where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})`,
+  );
+  const id = randomUUID();
+  await parkOrder({ db: suite.db }, cfg, {
+    id,
+    zoneId,
+    lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+  });
+  expect(
+    (
+      await suite.db.execute(
+        sql`select service_mode from order_service_contexts where working_order_id = ${id}`,
+      )
+    ).rows,
+  ).toEqual([{ service_mode: "ticket_then_pay" }]);
+  await placeOrder(deps(), cfg, id, OPERATOR);
+  expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toEqual([]);
+  expect(await registroCount(cfg)).toBe(0);
+  expect(await drawerOpensFor(cfg)).toEqual([]);
 });
 
 it("prints a separate numbered collection ticket when a prepaid order is paid", async () => {

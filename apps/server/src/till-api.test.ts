@@ -24,6 +24,8 @@ import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/se
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   departments,
+  createDepartment,
+  createServiceZone,
   setProfileServiceAccess,
   setRoutingCell,
   zoneServicePolicies,
@@ -70,6 +72,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { cardReaders, type PaymentProvider } from "@waitron/payments";
 import type { Logger, LogLevel } from "./logger.js";
 import { createTable } from "./tables.js";
+import { fireDishesAtPayment } from "./till-sale.js";
 import { mountTillApi, resolveCardCollector, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -4414,6 +4417,114 @@ describe("canonical modifier checkout refusal", () => {
       });
       const stored = await suite.db.execute(sql`select id from working_orders where id=${id}`);
       expect(stored.rows).toEqual([]);
+    },
+  );
+});
+
+describe("sale-policy order flow routes", () => {
+  it.each([false, true])(
+    "counter service refuses seating and stays in the counter list (zone override: %s)",
+    async (zoneOverride) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+      const zone = await withTransaction(suite.db, async (tx) => {
+        const department = await createDepartment(tx, cfg, {
+          name: `Counter flow ${randomUUID()}`,
+          defaultServiceMode: "table_tab",
+        });
+        const zone = await createServiceZone(tx, cfg, {
+          name: `Counter flow ${randomUUID()}`,
+          departmentId: department.id,
+        });
+        await tx.execute(
+          sql`update department_sale_policies set order_start = ${zoneOverride ? "table" : "counter"} where department_id = (select department_id from zone_service_policies where zone_id = ${zone.id})`,
+        );
+        await tx.execute(
+          sql`update zone_service_policies set service_mode = 'table_tab' where zone_id = ${zone.id}`,
+        );
+        await tx.execute(
+          sql`update zone_sale_policies set order_start = ${zoneOverride ? "counter" : null} where zone_id = ${zone.id}`,
+        );
+        return zone;
+      });
+      const table = await withTransaction(suite.db, (tx) =>
+        createTable(tx, cfg, { label: `Counter ${randomUUID()}`, zoneId: zone.id }),
+      );
+      const seated = await app.request(`/api/tables/${table.id}/seat`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(seated.status).toBe(409);
+      expect(await seated.json()).toMatchObject({
+        error: { code: "service_zone.mode_incompatible" },
+      });
+      const list = await app.request("/api/default-service-zone/offers", { headers: { cookie } });
+      expect(list.status).toBe(200);
+      expect(
+        ((await list.json()) as { zones: { id: string; serviceMode: string }[] }).zones,
+      ).toContainEqual(expect.objectContaining({ id: zone.id, serviceMode: "prepay" }));
+    },
+  );
+
+  it.each([
+    { start: "counter", paidWhen: "prepay", want: "prepay", sends: true },
+    { start: "counter", paidWhen: "ticket_then_pay", want: "ticket_then_pay", sends: true },
+    { start: "table", paidWhen: "prepay", want: "table_tab", sends: false },
+  ] as const)(
+    "parked $start / $paidWhen and the pay question agree that payment sends: $sends",
+    async ({ start, paidWhen, want, sends }) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+      const zoneId = await withTransaction(suite.db, async (tx) => {
+        const department = await createDepartment(tx, cfg, {
+          name: `Pay flow ${randomUUID()}`,
+          defaultServiceMode: "prepay",
+        });
+        const zone = await createServiceZone(tx, cfg, {
+          name: `Pay flow ${randomUUID()}`,
+          departmentId: department.id,
+        });
+        await tx.execute(
+          sql`update department_sale_policies set order_start = ${start} where department_id = (select department_id from zone_service_policies where zone_id = ${zone.id})`,
+        );
+        await tx.execute(
+          sql`update zone_sale_policies set order_start = null, paid_when = ${paidWhen} where zone_id = ${zone.id}`,
+        );
+        await offerMenuThroughZone(tx, cfg, zone.id, aguaProduct.catalogueId, {
+          makeDefault: true,
+        });
+        return zone.id;
+      });
+      const id = randomUUID();
+      const lines = [{ menuItemId: aguaOfferId, quantity: "1" }];
+      const question = await app.request("/api/dead-ends/sale", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ step: "pay", zoneId, lines }),
+      });
+      expect(question.status).toBe(200);
+      expect(await question.json()).toMatchObject({ sends });
+      const parked = await app.request("/api/working-orders", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ id, zoneId, lines }),
+      });
+      expect(parked.status).toBe(200);
+      expect(
+        (
+          await suite.db.execute(
+            sql`select service_mode from order_service_contexts where working_order_id = ${id}`,
+          )
+        ).rows,
+      ).toEqual([{ service_mode: want }]);
+      await withTransaction(suite.db, (tx) => fireDishesAtPayment(tx, cfg, id));
+      expect(
+        (await suite.db.execute(sql`select state from ticket_items where working_order_id = ${id}`))
+          .rows,
+      ).toEqual(sends ? [{ state: "queued" }] : []);
     },
   );
 });

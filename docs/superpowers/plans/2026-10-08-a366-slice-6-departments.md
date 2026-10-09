@@ -761,9 +761,9 @@ and read each hit — the grep also matches assertions, which are NOT changed):
   (Restaurant `table`; Deli and the two bars `counter`) so the demo keeps its table service once the
   readers switch
 
-- [ ] **Step 1:** make the changes; run focused affected server/venue-service behavioural files:
+- [x] **Step 1:** make the changes; run focused affected server/venue-service behavioural files:
   green, with `git diff` showing no changed `expect`.
-- [ ] **Step 2: Commit** — `test: fixtures that write the service style directly also say how orders start (A366)`.
+- [x] **Step 2: Commit** — `test: fixtures that write the service style directly also say how orders start (A366)`.
 
 ---
 
@@ -785,7 +785,7 @@ and read each hit — the grep also matches assertions, which are NOT changed):
 until Task A13a removes it. Nothing reads the old columns for behaviour after this task; Task A2's
 writers keep them in step for the old page.
 
-- [ ] **Step 1: Failing tests** — cases where the new and old words DISAGREE, written directly:
+- [x] **Step 1: Failing tests** — cases where the new and old words DISAGREE, written directly:
   `order_start = 'table'` with the old style `prepay`: seating a party works (fails today:
   `service_zone.mode_incompatible`); `order_start = 'counter'` with the old style `table_tab`:
   seating is refused `service_zone.mode_incompatible` (assert status and code) and the zone is in
@@ -800,9 +800,9 @@ writers keep them in step for the old page.
   expect a zone stored as `ticket_then_pay` with paid-when `prepay` to answer `ticket_then_pay`; they
   now expect `prepay`, and each gains a case where paid-when is `ticket_then_pay` answering
   `ticket_then_pay`, so the check stays as strict.
-- [ ] **Step 2: Implement; Step 3: run** focused affected venue-service/server node files; `git diff -- apps/till` contains only A2's
+- [x] **Step 2: Implement; Step 3: run** focused affected venue-service/server node files; `git diff -- apps/till` contains only A2's
   inventoried receipt changes (order-flow answers keep their shape); typecheck.
-- [ ] **Step 4: Commit** — `feat(venue-service): a zone's order flow follows how orders start and when counter orders are paid (A366)`.
+- [x] **Step 4: Commit** — `feat(venue-service): a zone's order flow follows how orders start and when counter orders are paid (A366)`.
 
 ---
 

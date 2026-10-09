@@ -97,6 +97,101 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
+describe("order flow from sale policies", () => {
+  it.each([
+    {
+      old: "prepay",
+      start: "table",
+      zoneStart: null,
+      paid: "prepay",
+      zonePaid: null,
+      want: "table_tab",
+      override: null,
+    },
+    {
+      old: "table_tab",
+      start: "counter",
+      zoneStart: null,
+      paid: "ticket_then_pay",
+      zonePaid: null,
+      want: "ticket_then_pay",
+      override: null,
+    },
+    {
+      old: "table_tab",
+      start: "table",
+      zoneStart: "counter",
+      paid: "ticket_then_pay",
+      zonePaid: null,
+      want: "ticket_then_pay",
+      override: "ticket_then_pay",
+    },
+    {
+      old: "table_tab",
+      start: "table",
+      zoneStart: "counter",
+      paid: "ticket_then_pay",
+      zonePaid: "prepay",
+      want: "prepay",
+      override: "prepay",
+    },
+    {
+      old: "prepay",
+      start: "counter",
+      zoneStart: "table",
+      paid: "prepay",
+      zonePaid: null,
+      want: "table_tab",
+      override: "table_tab",
+    },
+  ] as const)(
+    "uses $start / $zoneStart / $paid / $zonePaid rather than old $old",
+    async ({ old, start, zoneStart, paid, zonePaid, want, override }) => {
+      const cfg = { locationId: brandLocationId(await seedLocation(`Flow ${randomUUID()}`)) };
+      await scoped(async (tx) => {
+        const department = await createDepartment(tx, cfg, {
+          name: "Dining",
+          defaultServiceMode: old,
+        });
+        const zone = await createServiceZone(tx, cfg, {
+          name: "Flow",
+          departmentId: department.id,
+        });
+        await tx.execute(
+          sql`update department_sale_policies set order_start = ${start}, paid_when = ${paid} where department_id = ${department.id}`,
+        );
+        await tx.execute(
+          sql`update zone_sale_policies set order_start = ${zoneStart}, paid_when = ${zonePaid} where zone_id = ${zone.id}`,
+        );
+        expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: want });
+        expect(await listServiceZones(tx, cfg)).toMatchObject([
+          { id: zone.id, serviceMode: want, serviceModeOverride: override },
+        ]);
+      });
+    },
+  );
+
+  it("a department without a sale-policy row starts counter orders with default prepayment", async () => {
+    const cfg = {
+      locationId: brandLocationId(await seedLocation(`Missing policy ${randomUUID()}`)),
+    };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, {
+        name: "Dining",
+        defaultServiceMode: "table_tab",
+      });
+      const zone = await createServiceZone(tx, cfg, { name: "Flow", departmentId: department.id });
+      await tx.execute(
+        sql`delete from department_sale_policies where department_id = ${department.id}`,
+      );
+      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: "prepay" });
+      expect(await listServiceZones(tx, cfg)).toMatchObject([
+        { id: zone.id, serviceMode: "prepay", serviceModeOverride: null },
+      ]);
+    });
+  });
+});
+
 describe("new department service periods", () => {
   it("places the location's menu in Open on weekdays, and leaves a menu-less location without periods", async () => {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));

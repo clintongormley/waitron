@@ -241,7 +241,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       values (${locationId}, ${zoneId}, ${departmentId}, true)`);
       await tx.execute(sql`
       insert into department_sale_policies (department_id, order_start, paid_when)
-      values (${departmentId}, ${orderFlow === "table_tab" ? "table" : "counter"}, ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
+      values (${departmentId}, 'counter', ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
       await tx.execute(sql`
       insert into zone_sale_policies (zone_id) values (${zoneId})`);
       await offerMenuThroughZone(tx, { locationId: brandLocationId(locationId) }, zoneId, cat.id, {
@@ -1023,6 +1023,63 @@ describe("parkOrder", () => {
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(wo!.status).toBe("abandoned");
   });
+});
+
+describe("seating from order start", () => {
+  it("seats a party when order start is table and the old style is prepay", async () => {
+    const { cfg, zoneId } = await setupVenue();
+    const tableId = randomUUID();
+    await withTransaction(db, async (tx) => {
+      await tx.execute(
+        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+      );
+      await tx.execute(
+        sql`insert into dining_tables (id, location_id, label, zone_id, created_at) values (${tableId}, ${cfg.locationId}, 'New table service', ${zoneId}, ${nowIso()})`,
+      );
+      const opened = await openPartyTab(tx, cfg, { tableId });
+      expect(
+        (
+          await tx.execute(
+            sql`select service_mode from order_service_contexts where working_order_id = ${opened.tabId}`,
+          )
+        ).rows,
+      ).toEqual([{ service_mode: "table_tab" }]);
+    });
+  });
+
+  it.each([false, true])(
+    "refuses seating in counter service (zone override: %s) despite old table style",
+    async (zoneOverride) => {
+      const { cfg, zoneId } = await setupVenue();
+      await db.execute(
+        sql`update departments set default_service_mode = 'table_tab' where location_id = ${cfg.locationId}`,
+      );
+      await db.execute(
+        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+      );
+      const tableId = randomUUID();
+      await withTransaction(db, async (tx) => {
+        if (zoneOverride) {
+          await tx.execute(
+            sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${zoneId}`,
+          );
+        } else {
+          await tx.execute(
+            sql`update department_sale_policies set order_start = 'counter' where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+          );
+        }
+        await tx.execute(
+          sql`insert into dining_tables (id, location_id, label, zone_id, created_at) values (${tableId}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})`,
+        );
+      });
+      await expect(
+        withTransaction(db, (tx) => openPartyTab(tx, cfg, { tableId })),
+      ).rejects.toMatchObject({ code: "service_zone.mode_incompatible" });
+      expect(
+        (await db.execute(sql`select party_id from party_tables where table_id = ${tableId}`)).rows,
+      ).toEqual([]);
+    },
+  );
 });
 
 describe("openTab service context", () => {

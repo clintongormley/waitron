@@ -94,13 +94,17 @@ export async function listServiceZones(
       name: floorZones.name,
       departmentId: departments.id,
       departmentName: departments.name,
-      zoneMode: zoneServicePolicies.serviceMode,
-      departmentMode: departments.defaultServiceMode,
+      zoneOrderStart: zoneSalePolicies.orderStart,
+      departmentOrderStart: departmentSalePolicies.orderStart,
+      zonePaidWhen: zoneSalePolicies.paidWhen,
+      departmentPaidWhen: departmentSalePolicies.paidWhen,
       active: floorZones.active,
     })
     .from(zoneServicePolicies)
     .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
+    .leftJoin(zoneSalePolicies, eq(zoneSalePolicies.zoneId, zoneServicePolicies.zoneId))
     .where(
       options.includeInactive
         ? eq(zoneServicePolicies.locationId, cfg.locationId)
@@ -111,12 +115,28 @@ export async function listServiceZones(
           ),
     )
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
-  return rows.map(({ zoneMode, departmentMode, active, ...row }) => ({
-    ...row,
-    ...(options.includeInactive ? { active } : {}),
-    serviceMode: (zoneMode ?? departmentMode) as ServiceMode,
-    serviceModeOverride: zoneMode as ServiceMode | null,
-  }));
+  return rows.map(
+    ({
+      zoneOrderStart,
+      departmentOrderStart,
+      zonePaidWhen,
+      departmentPaidWhen,
+      active,
+      ...row
+    }) => {
+      const paidWhen = zonePaidWhen ?? departmentPaidWhen ?? "prepay";
+      const serviceMode: ServiceMode =
+        (zoneOrderStart ?? departmentOrderStart ?? "counter") === "table" ? "table_tab" : paidWhen;
+      const serviceModeOverride: ServiceMode | null =
+        zoneOrderStart === null ? null : zoneOrderStart === "table" ? "table_tab" : paidWhen;
+      return {
+        ...row,
+        ...(options.includeInactive ? { active } : {}),
+        serviceMode,
+        serviceModeOverride,
+      };
+    },
+  );
 }
 
 export async function assertDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
@@ -606,11 +626,15 @@ export async function resolveZoneContext(
       zoneId: zoneServicePolicies.zoneId,
       departmentId: departments.id,
       departmentName: departments.name,
-      zoneMode: zoneServicePolicies.serviceMode,
-      departmentMode: departments.defaultServiceMode,
+      zoneOrderStart: zoneSalePolicies.orderStart,
+      departmentOrderStart: departmentSalePolicies.orderStart,
+      zonePaidWhen: zoneSalePolicies.paidWhen,
+      departmentPaidWhen: departmentSalePolicies.paidWhen,
     })
     .from(zoneServicePolicies)
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
+    .leftJoin(zoneSalePolicies, eq(zoneSalePolicies.zoneId, zoneServicePolicies.zoneId))
     .where(
       and(
         eq(zoneServicePolicies.locationId, cfg.locationId),
@@ -623,7 +647,10 @@ export async function resolveZoneContext(
     zoneId: row.zoneId,
     departmentId: row.departmentId,
     departmentName: row.departmentName,
-    serviceMode: (row.zoneMode ?? row.departmentMode) as ServiceMode,
+    serviceMode:
+      (row.zoneOrderStart ?? row.departmentOrderStart ?? "counter") === "table"
+        ? "table_tab"
+        : (row.zonePaidWhen ?? row.departmentPaidWhen ?? "prepay"),
   };
 }
 
@@ -1079,16 +1106,12 @@ export async function recordOrderServiceContext(
   zoneId: string,
 ): Promise<void> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
-  const serviceMode =
-    context.serviceMode === "table_tab"
-      ? context.serviceMode
-      : (await resolveSalePolicy(tx, cfg, zoneId)).paidWhen;
   await tx.insert(orderServiceContexts).values({
     workingOrderId,
     locationId: cfg.locationId,
     zoneId: context.zoneId,
     departmentId: context.departmentId,
-    serviceMode,
+    serviceMode: context.serviceMode,
   });
 }
 
@@ -1103,16 +1126,12 @@ export async function retargetOrderServiceContext(
   const previous = await getOrderServiceContext(tx, cfg, workingOrderId);
   if (previous.departmentId !== context.departmentId)
     await withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
-  const serviceMode =
-    context.serviceMode === "table_tab"
-      ? context.serviceMode
-      : (await resolveSalePolicy(tx, cfg, zoneId)).paidWhen;
   const updated = await tx
     .update(orderServiceContexts)
     .set({
       zoneId: context.zoneId,
       departmentId: context.departmentId,
-      serviceMode,
+      serviceMode: context.serviceMode,
     })
     .where(
       and(
