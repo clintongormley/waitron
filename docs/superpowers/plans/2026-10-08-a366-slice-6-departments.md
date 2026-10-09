@@ -951,16 +951,27 @@ width (`:2131`, cited at `docs/developers/design-system.md:425`), "refreshing th
 `docs/developers/conventions-ui.md:276`); and the `.unsaved.test.ts` cases for the old department,
 zone and new-zone editors.
 
-- [ ] **Step 1: Failing tests** (Chromium), beside the carried ones: each dialog's Save is quiet and
+- [x] **Step 1: Failing tests** (Chromium), beside the carried ones: each dialog's Save is quiet and
   disabled until its draft changes; a real Escape pressed during a save leaves the dialog open
   (`userEvent.keyboard("{Escape}")` in Chromium, not a hand-built event); the move dialog lists only
   the other active departments and keeps the zone's override; renaming a disabled department and a
   disabled zone (decision 18: if a route refuses it, hide Rename for the disabled one and say so in
   the commit); the unsaved file's leave question and reconnect case. a11y each dialog, both themes.
   Assert Cancel precedes Save in every footer, including keyboard order. Run; watch the new ones fail.
-- [ ] **Step 2: Implement; Step 3: run** the browser files touched (old and new); LOOK in EN and
+- [x] **Step 2: Implement; Step 3: run** the browser files touched (old and new); LOOK in EN and
   ES, both themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the department and zone dialogs (A366)`.
+- [x] **Step 4: Commit** — `feat(venue-service): the department and zone dialogs (A366)`.
+
+**Checkpoint, 2026-10-09:** A7 is built at `033bfe599`, with reviewed reconnect and read-error
+recovery fixes at `bd8ef9327` and `eb89223cb`. The original form assertions remain intact until
+A10 retires the old screen. New dialog tests cover the surviving field, keyboard, draft and
+request behavior; Add focus and failed-refresh assertions stay with the shell for A10.
+Name-only department POST acceptance moved forward from A13a because the real route refused
+that request before the A7 change. Explicit invalid styles still refuse; A13a owns their
+retirement. The dialogs remain standalone until A10. The final focused dialog/unsaved/client
+run passed 115 tests; actual routes, accessibility, scoped types and deletion controls have
+separate receipts in the campaign's A7 report. Whole-branch review and current-head package
+coverage remain outstanding.
 
 ---
 
