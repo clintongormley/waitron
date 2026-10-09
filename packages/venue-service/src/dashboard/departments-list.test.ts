@@ -390,3 +390,29 @@ it("the Spanish empty department list says why it has no rows", async () => {
   const el = await setup({ ...model, departments: [] });
   expect(table(el).shadowRoot!.textContent).toContain("Todavía no hay departamentos.");
 });
+
+it("retains alphabetical department sorting without changing the supplied display order", async () => {
+  const el = await setup();
+  const names = () =>
+    rows(el).map((row) =>
+      row.querySelector("[data-test^=open-department-name]")!.textContent!.trim(),
+    );
+  expect(names()).toEqual(["Restaurant and bar", "Deli"]);
+  const sort = table(el).shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="name"]')!;
+  expect(sort).not.toBeNull();
+  sort.click();
+  await table(el).updateComplete;
+  expect(names()).toEqual(["Deli", "Restaurant and bar"]);
+  expect(el.model.departments.map((row) => row.name)).toEqual(["Restaurant and bar", "Deli"]);
+});
+
+it("retains the Spanish published-menu refusal in the owning department's Setup cell", async () => {
+  setLocale("es");
+  const el = await setup({
+    ...model,
+    readiness: [{ code: "zone.menu_unpublished", zoneId: "z1", zoneName: "Terraza" }],
+  });
+  const cells = rows(el).map((row) => row.querySelectorAll("td")[3]!);
+  expect(cells[0]!.textContent).toContain("Terraza necesita una carta activa y publicada.");
+  expect(cells[1]!.textContent).not.toContain("Terraza");
+});

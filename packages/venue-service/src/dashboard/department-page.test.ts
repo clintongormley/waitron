@@ -304,3 +304,29 @@ it.each(["plain", "ctrlKey", "metaKey", "shiftKey", "altKey"])(
     expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
   },
 );
+
+it("a native field change inside Zones cannot select another tab or change the address", async () => {
+  await mount();
+  el.view = "zones";
+  await el.updateComplete;
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  const input = document.createElement("wt-input");
+  input.name = "panel-filter";
+  input.label = "Filter zones";
+  input.slot = "zones";
+  el.append(input);
+  await input.updateComplete;
+  const changed: Event[] = [];
+  el.addEventListener("view-change", (event) => changed.push(event));
+  const before = location.href;
+  const native = input.shadowRoot!.querySelector("input")!;
+  native.value = "settings";
+  native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await input.updateComplete;
+  await el.updateComplete;
+  expect(location.href).toBe(before);
+  expect(el.view).toBe("zones");
+  expect(tabs.value).toBe("zones");
+  expect(changed).toEqual([]);
+});
