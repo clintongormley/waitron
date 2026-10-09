@@ -152,16 +152,7 @@ export async function markPassItems(
     )
     .where(inArray(ticketItems.id, [...ticketItemIds]));
   const zones =
-    scope.zoneIds === null
-      ? new Map<string, string | null>()
-      : await orderWatchZones(tx, cfg, [
-          ...new Map(
-            rows.map(({ orderId, partyId, deliveryTableId }) => [
-              orderId,
-              { id: orderId, partyId, deliveryTableId },
-            ]),
-          ).values(),
-        ]);
+    scope.zoneIds === null ? new Map<string, string | null>() : await rowsWatchZones(tx, cfg, rows);
   if (
     rows.some(
       (row) =>
@@ -228,18 +219,26 @@ async function scopedItems(
       ),
     );
   if (scope.zoneIds === null) return candidates;
-  const distinctOrders = [
+  const zones = await rowsWatchZones(tx, cfg, candidates);
+  return candidates.filter((item) =>
+    passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId)! }),
+  );
+}
+
+/** The watched zone of each order the rows belong to, each order asked about once. */
+function rowsWatchZones(
+  tx: Transaction,
+  cfg: TillConfig,
+  rows: readonly { orderId: string; partyId: string | null; deliveryTableId: string | null }[],
+): Promise<Map<string, string | null>> {
+  return orderWatchZones(tx, cfg, [
     ...new Map(
-      candidates.map(({ orderId, partyId, deliveryTableId }) => [
+      rows.map(({ orderId, partyId, deliveryTableId }) => [
         orderId,
         { id: orderId, partyId, deliveryTableId },
       ]),
     ).values(),
-  ];
-  const zones = await orderWatchZones(tx, cfg, distinctOrders);
-  return candidates.filter((item) =>
-    passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId)! }),
-  );
+  ]);
 }
 
 function withSections<C extends ExpoCourse, G extends ExpoGroup>(

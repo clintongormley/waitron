@@ -826,12 +826,13 @@ function requireTransfers(value: unknown): { lineNo: number; quantity?: string }
   return value as { lineNo: number; quantity?: string }[];
 }
 
-/** What every group command carries: its submission id, the party revision read, and who acts. */
-function groupCommand(personId: string, body: Record<string, unknown>): PartyCommandArgs {
+/** What every group command carries: its submission id, the party revision read, and who acts —
+ *  the signed-in person, or a kitchen display nobody is signed in on. */
+export function groupCommand(operatorId: string, body: Record<string, unknown>): PartyCommandArgs {
   return {
     submissionId: submissionIdOf(body),
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
-    operatorId: personId,
+    operatorId,
   };
 }
 

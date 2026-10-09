@@ -30,6 +30,7 @@ import type {
   ProfileKitchenScreens,
 } from "@waitron/module";
 import { settleDevice } from "./device-equipment.js";
+import { KITCHEN_SCREEN_KINDS } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -327,8 +328,6 @@ export async function switchActiveProfile(
   await endSessionsNotAdmitted(tx, device.id, input.profileId);
   return { activeProfileId: input.profileId };
 }
-
-const KITCHEN_SCREEN_KINDS: readonly KitchenScreenKind[] = ["station", "pass", "pass_monitor"];
 
 /**
  * The profile a manager chose for a device. One that names no profile — unknown, or deleted

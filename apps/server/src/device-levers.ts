@@ -9,8 +9,8 @@ import type { ProfileAction } from "@waitron/layouts";
 import { assertProfileAction, requireDevice, type DeviceBinding } from "./device-session.js";
 import { requestCfg } from "./request-config.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { asObject, submissionIdOf } from "./bill-payments-api.js";
-import { requirePartyParam, requireRevision } from "./till-api.js";
+import { asObject } from "./bill-payments-api.js";
+import { groupCommand, requirePartyParam } from "./till-api.js";
 import { isUuid } from "./till-session.js";
 import { orderWatchZones, partyWatchZones } from "./watch-zones.js";
 import { bumpCourseReady, fireCourse, markCourseAway } from "./working-order.js";
@@ -121,14 +121,7 @@ export function mountDeviceLevers(
         const body = asObject(await readRawJsonBody<unknown>(c));
         // The device's id stands where a person's would: a retry from it replays, and its
         // submission id from anyone else is refused as reused.
-        const args: PartyCommandArgs = {
-          submissionId: submissionIdOf(body),
-          expectedPartyRevision: requireRevision(
-            body.expectedPartyRevision,
-            "expectedPartyRevision",
-          ),
-          operatorId: device.deviceId,
-        };
+        const args = groupCommand(device.deviceId, body);
         const answer = await withTransaction(deps.db, async (tx) => {
           const zoneId = (await partyWatchZones(tx, deps.cfg, [partyId])).get(partyId) ?? null;
           await VENUE_SERVICE.assertPassScreenZone(tx, deps.cfg, device.deviceId, zoneId);
