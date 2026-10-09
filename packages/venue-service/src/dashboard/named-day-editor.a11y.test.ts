@@ -10,54 +10,69 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Named day (%s)", (theme) => {
-  test.each(["new", "edit", "leap", "closed", "refused", "invalid", "saving"])(
-    "%s",
-    async (state) => {
-      setLocale("en");
-      const el = (await mountThemed(
-        "<named-day-editor></named-day-editor>",
-        theme,
-      )) as NamedDayEditor;
-      if (state !== "new" && state !== "invalid")
-        el.day = {
-          id: "d1",
-          date: "2028-02-29",
-          name: "Anniversary",
-          kind: "holiday",
-          repeats: state === "leap",
-          ownHours: state === "leap",
-          closeWholeVenue: state === "closed",
-          hasStationHours: false,
-        };
-      el.open = true;
+  test.each([
+    "new",
+    "edit",
+    "leap",
+    "closed",
+    "refused",
+    "hidden-hours-refusal",
+    "invalid",
+    "saving",
+  ])("%s", async (state) => {
+    setLocale("en");
+    const el = (await mountThemed(
+      "<named-day-editor></named-day-editor>",
+      theme,
+    )) as NamedDayEditor;
+    if (state !== "new" && state !== "invalid")
+      el.day = {
+        id: "d1",
+        date: "2028-02-29",
+        name: "Anniversary",
+        kind: "holiday",
+        repeats: state === "leap",
+        ownHours: state === "leap",
+        closeWholeVenue: state === "closed" || state === "hidden-hours-refusal",
+        hasStationHours: false,
+      };
+    el.open = true;
+    await el.updateComplete;
+    if (state === "invalid") {
+      el.shadowRoot!.querySelector("[name=repeats]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true } }),
+      );
       await el.updateComplete;
-      if (state === "invalid") {
-        el.shadowRoot!.querySelector("[name=repeats]")!.dispatchEvent(
-          new CustomEvent("wt-change", { detail: { checked: true } }),
-        );
-        await el.updateComplete;
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
-      }
-      if (state === "refused") el.refusal = { code: "hours.invalid", params: { field: "repeats" } };
-      if (state === "saving") el.busy = true;
-      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+    }
+    if (state === "refused") el.refusal = { code: "hours.invalid", params: { field: "repeats" } };
+    if (state === "hidden-hours-refusal")
+      el.refusal = { code: "hours.invalid", params: { field: "ownHours" } };
+    if (state === "saving") el.busy = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.open).toBe(
+      true,
+    );
+    if (state === "invalid")
       expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.open,
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+      ).not.toBe("");
+    if (state === "closed") expect(el.shadowRoot!.querySelector("[name=ownHours]")).toBeNull();
+    if (state === "refused")
+      expect(el.shadowRoot!.querySelector("[data-error=repeats]")!.textContent).not.toBe("");
+    if (state === "saving")
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.disabled,
       ).toBe(true);
-      if (state === "invalid")
-        expect(
-          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
-        ).not.toBe("");
-      if (state === "closed") expect(el.shadowRoot!.querySelector("[name=ownHours]")).toBeNull();
-      if (state === "refused")
-        expect(el.shadowRoot!.querySelector("[data-error=repeats]")!.textContent).not.toBe("");
-      if (state === "saving")
-        expect(
-          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.disabled,
-        ).toBe(true);
-      await expectNoA11yViolations(host);
-    },
-  );
+    if (state === "hidden-hours-refusal") {
+      expect(el.shadowRoot!.querySelector("[name=ownHours]")).toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+          .error,
+      ).toBe("The change could not be saved.");
+    }
+    await expectNoA11yViolations(host);
+  });
 });
 describe.each(["en", "es"] as const)("visual %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {

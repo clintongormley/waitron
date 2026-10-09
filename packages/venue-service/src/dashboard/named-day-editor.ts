@@ -167,7 +167,9 @@ export class NamedDayEditor extends LitElement {
   private refusalField(): Field | undefined {
     if (this.refusal?.code === "special_date.date_taken") return "date";
     const field = this.refusal?.params?.field;
-    return this.refusal?.code === "hours.invalid" && fields.includes(field as Field)
+    return this.refusal?.code === "hours.invalid" &&
+      fields.includes(field as Field) &&
+      !(field === "ownHours" && this.draft.closeWholeVenue)
       ? (field as Field)
       : undefined;
   }

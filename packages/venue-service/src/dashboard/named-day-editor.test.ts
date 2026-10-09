@@ -169,3 +169,47 @@ it("places a taken date under Date and unknown refusals at the bottom", async ()
       .error,
   ).not.toBe("");
 });
+
+it.each([
+  ["en", "The change could not be saved.", "Check this field."],
+  ["es", "No se pudo guardar el cambio.", "Revisa este campo."],
+] as const)(
+  "keeps an Hours refusal visible through closure changes (%s)",
+  async (locale, bottom, fieldError) => {
+    await mount(true);
+    setLocale(locale);
+    await change("name", { value: "Changed" });
+    el.refusal = { code: "hours.invalid", params: { field: "ownHours" } };
+    await el.updateComplete;
+    expect(field("ownHours").error).toBe(fieldError);
+    await change("closeWholeVenue", { checked: true });
+    expect(field("ownHours")).toBeNull();
+    const footer =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!;
+    expect(footer.error).toBe(bottom);
+    expect(save().disabled).toBe(false);
+    await change("closeWholeVenue", { checked: false });
+    expect(field("ownHours").error).toBe(fieldError);
+  },
+);
+
+it.each([
+  ["en", "The change could not be saved."],
+  ["es", "No se pudo guardar el cambio."],
+] as const)(
+  "shows an Hours refusal supplied while already closed at the bottom (%s)",
+  async (locale, bottom) => {
+    await mount(true);
+    setLocale(locale);
+    await change("name", { value: "Changed" });
+    await change("closeWholeVenue", { checked: true });
+    el.refusal = { code: "hours.invalid", params: { field: "ownHours" } };
+    await el.updateComplete;
+    expect(field("ownHours")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+        .error,
+    ).toBe(bottom);
+    expect(save().disabled).toBe(false);
+  },
+);
