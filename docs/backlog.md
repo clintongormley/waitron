@@ -89,7 +89,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    that leaves without paying (#991).
    What Task 16 (counter handover, #981) and Task 17 left open is in their Task 16 and Task 17
    entries under that area.
-   **Send asesor Q27–Q29 now:** the owner decided Q28 without the asesor on 2026-10-01 and Task 17
+   **Send the asesor's [shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09) (S3, S6, S10 cover Q27–Q29):** the owner decided Q28 without the asesor on 2026-10-01 and Task 17
    is built on it, so Q28 is asked to confirm; how Task 11's discount appears on the invoice is
    Q29, and printing the invoice before payment is Q27.
 
@@ -150,6 +150,28 @@ under `docs/backlog/`.
 ### Fiscal records, invoices and the asesor
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
+
+- **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
+  the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
+  a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
+  Fiscal: the owner lands it.
+
+- **A445. A free item on a bill with mixed VAT rates should take a share of the price paid**, by
+  value, instead of being set to €0 (V0555-17, binding). Only bills mixing rates are affected (the
+  deli's 4%, 10% and 21%). A table given everything free may be self-supply taxed at cost
+  (V2347-24). Asked as [S10](compliance/asesor-questions.md#the-shortened-list-2026-10-09); decide before going live. Fiscal: the owner lands it.
+
+- **A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the
+  invoice that follows.** AEAT's FAQ calls a system without that link «susceptible de sanción»,
+  and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](compliance/asesor-questions.md#the-shortened-list-2026-10-09).
+
+- **A447. A guest's part-payment taken before the table is fully served may need its own
+  advance-payment invoice** (LIVA 75.Dos, RD 1619/2012 art. 2.1). The server (#721) holds such money
+  with no invoice until the bill is paid. Asked as [S3](compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
+
+- **A448. The email consent request for full invoices must say how the invoice will arrive and how
+  consent is withdrawn** (TRLGDCU art. 63.3). A231p's owner decision 2 records only that staff ask.
+  [Detail](backlog/fiscal.md#a231d-full-invoices-by-email-as-a-pdf-and-on-an-office-printer--part-1-landed-1399-part-2-open)
 
 - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
   matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
@@ -405,9 +427,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
-  filing.** Asesor question Q20 asks which intended cases belong in `S1` and which need `N1` or
-  `N2`, and whether the label should read "IVA 0%" rather than "Sin impuestos". **Non-blocking while
-  pre-production; blocking before going live.**
+  filing.** The 2026-10-09 research found the only 0% rate in the VAT Law is art. 91.Cuatro, goods
+  donated to non-profits; the 0% on basic foods ended on 30 September 2024. The advisor is asked only
+  to confirm (review item [R3](compliance/asesor-questions.md#the-shortened-list-2026-10-09)).
+  **Non-blocking while pre-production; blocking before going live.**
   [Detail](backlog/fiscal.md#no-tax-0-is-an-open-fiscal-question-and-it-must-be-answered-before-the-first-live-filing)
 
 ### The setup wizard, onboarding and the demo venue
@@ -5067,10 +5090,12 @@ diagnostics (Slice 1, #192).
 
 ## The advisor gap — not a build track
 
-**No fiscal advisor is engaged**, and [compliance/who-to-ask.md](compliance/who-to-ask.md) says every
-candidate turned out to be a marketing page — so engaging is itself a task with a lead time, in
-parallel, blocking nothing. Before paying for answers, re-read every question in
-[asesor-questions.md](compliance/asesor-questions.md) against the current Waitron architecture.
+**No fiscal advisor is engaged yet.** One quoted on 2026-10-09: €300 an hour and about an hour for
+each of the 106 bullets in the 6 October list. The same day every bullet was researched against
+primary sources and the list was cut to sixteen questions, S1–S16, and a review list, R1–R6:
+[the shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Send that, asking
+for a fixed price. Before paying for answers, re-read the list against the current Waitron
+architecture.
 Cloud archive and hosting questions, including the historical cloud-storage document's §8a,
 are now tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md).
 Keep core fiscal questions here and coordinate shared assumptions with that review.
@@ -5080,16 +5105,16 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q                                                                                                     | Assumption in the tree                                                                                                                                                                                     | Status                                                                                                                     |
 | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Q13 (tips outside VAT base)                                                                           | tip lives on `tenders.tip_amount`, never handed to the fiscal backend                                                                                                                                      | **Closed** on primary source                                                                                               |
-| Q15 (short payment = descuento)                                                                       | a _descuento_ agreed at/before issuance is outside the base (LIVA 78.Tres.2º)                                                                                                                              | **Closed** on primary source                                                                                               |
-| Q5(a) (one series per till)                                                                           | a series belongs to the server-SIF; two concurrent SIFs need **disjoint** series                                                                                                                           | needs advisor                                                                                                              |
-| Q5(c)/(d) (tickets and full invoices in one series)                                                   | A231's branch requires `full` for F1 and F3                                                                                                                                                                | (c) **answered** on primary source (art. 7.1.a): separate series; (d) confirms where F3 and R5 go; finish A1e through A231 |
-| **Q14 (precuenta → amendment log)**                                                                   | a printed pre-bill may oblige an amendment log                                                                                                                                                             | **Open** — the interpretive hinge                                                                                          |
-| Q21 (pre-bill, or the invoice when a table asks for the bill)                                         | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10)                                                                     | needs advisor                                                                                                              |
-| F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD)                                        | foreign recipient refused; A231's branch requires `full`                                                                                                                                                   | needs advisor / XSD before the first real filing                                                                           |
-| Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows)    | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17)                                                     | **send now** — Q28 to confirm the owner's 2026-10-01 decision                                                              |
-| Q31 (correct an issued ticket by differences or by substitution)                                      | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit)_                                              | needs advisor before the correction screen is designed                                                                     |
-| Q32 (how a cancelled order's already-issued simplified invoice is undone)                             | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126)                                                                                                  | built on the owner's 2026-10-02 decision; needs advisor to confirm                                                         |
-| Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | no till action issues an invoice for the customer to pay later (only invoice-first placing and an unpaid departure issue one before payment); a payment by transfer is refused (`sale.unsupported_tender`) | needs advisor before A275 is designed                                                                                      |
+| Q15 (short payment = descuento)                                                                       | a _descuento_ agreed at/before issuance is outside the base (LIVA 78.Tres.2º)                                                                                                                              | **Closed** on primary source; S5 asks whether a shortfall accepted after the meal is still a discount |
+| Q5(a) (one series per till)                                                                           | a series belongs to the server-SIF; two concurrent SIFs need **disjoint** series                                                                                                                           | S16 (restore) and R5; Q5(a)'s two-server case is shelved |
+| Q5(c)/(d) (tickets and full invoices in one series)                                                   | A231's branch requires `full` for F1 and F3                                                                                                                                                                | (c) **answered** (art. 7.1.a); R5 may stay in the ticket series (V2884-16); S14 asks F1+F3 and R5+R1–R4 |
+| **Q14 (precuenta → amendment log)**                                                                   | a printed pre-bill may oblige an amendment log                                                                                                                                                             | Narrowed: a printed pre-bill must be kept linked to the invoice (A446); S2 asks whether a precuenta counts |
+| Q21 (pre-bill, or the invoice when a table asks for the bill)                                         | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10)                                                                     | S1 |
+| F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD)                                        | foreign recipient refused; A231's branch requires `full`                                                                                                                                                   | fields and identity types answered from AEAT's technical rules; R4 |
+| Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows)    | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17)                                                     | S3, S6, S10 (A445, A447) |
+| Q31 (correct an issued ticket by differences or by substitution)                                      | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit)_                                              | **Answered**: the business's choice (art. 15.5; AEAT FAQ) |
+| Q32 (how a cancelled order's already-issued simplified invoice is undone)                             | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126)                                                                                                  | S7 |
+| Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | no till action issues an invoice for the customer to pay later (only invoice-first placing and an unpaid departure issue one before payment); a payment by transfer is refused (`sale.unsupported_tender`) | Option 2 not lawful for a consumer; deposits S8, unpaid debts S6 |
 
 **The laboral advisor** (a _graduado social / gestoría_) has its own list in
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;

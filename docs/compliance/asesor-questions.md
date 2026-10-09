@@ -6,6 +6,10 @@ primary texts. These are the items that research could not resolve.
 
 Each question has English context (for us) and a Spanish formulation (to hand over).
 
+On **2026-10-09**, after the advisor quoted about an hour per question at €300 an hour, every question was
+researched against primary sources and the list was cut to sixteen questions and a short review list:
+see [The shortened list (2026-10-09)](#the-shortened-list-2026-10-09). It replaces the 6 October Word copies.
+
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
@@ -208,6 +212,265 @@ substantive pass **2026-08-01**.
 >   for a *graduado social / asesor laboral*, not the fiscal asesor. They now live in their own
 >   [asesor-laboral-questions.md](asesor-laboral-questions.md); the tip one (L6) cross-references
 >   §11 findings because its IS/booking half is fiscal and its nómina/retención half is labour.
+
+---
+
+## The shortened list (2026-10-09)
+
+**Why.** The advisor quoted €300 an hour and about an hour per question for the 106 question
+bullets in the 6 October Word copy. The same day, three research passes checked every bullet against
+free primary sources: the BOE's consolidated texts, AEAT's taxpayer and developer FAQs, AEAT's
+technical documents and the DGT's own rulings database (PETETE). The findings, each Spanish quote
+checked word for word against the downloaded text, are in
+[research/2026-10-09-invoice-timing.md](research/2026-10-09-invoice-timing.md),
+[research/2026-10-09-vat-and-corrections.md](research/2026-10-09-vat-and-corrections.md) and
+[research/2026-10-09-operations.md](research/2026-10-09-operations.md). Of the bullets the passes scored,
+about a quarter were answered outright and most of the rest narrowed to a yes or no. What is left for the
+advisor is below: sixteen short questions, S1 to S16, and a review list, R1 to R6, for the advisor to
+read and correct only where we are wrong. **This list replaces the 6 October Word copies**; the
+question texts further down this file stay as the background and the record. No enquiry has been
+sent.
+
+Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, Q11, Q12 and Q16)
+are unchanged by this pass.
+
+### What happened to each question sent on 6 October
+
+| Word § | Q | Outcome |
+| --- | --- | --- |
+| 1.1 | Q21 | Changes before issue: answered (FAQ-DEV §6, §17). Invoicing at payment in the same visit, or earlier: **S1**. |
+| 1.2 | Q14 | Keeping a printed pre-bill linked to the invoice: answered (AEAT FAQ, "susceptible de sanción"). Whether a precuenta is one: **S2**. |
+| 1.3 | Q19 | **S9**. |
+| 1.4 | Q19(d) | **R1**. |
+| 1.5 | Q19(e) | **R2**. |
+| 1.6 | Q22 | **S11**. |
+| 1.7 | Q27 | Part-payment mid-meal: **S3**. The daily cash report: dropped, no fiscal rule governs an internal report. |
+| 1.8 | Q28 | Invoice owed on a walkout: answered, yes. Recovering the VAT: **S6**. |
+| 1.9 | Q29 | Discount lines, cent rounding and split lines: answered (RD 1619/2012 art. 7.1; V0602-26). Free items and the whole-bill share: **S10**. |
+| 1.10 | Q42 | Invoice now, paid later: answered, lawful. Pro forma first and invoice on payment: answered, not lawful for a consumer and only within art. 11's deadline for a business. Deposits: **S8**. Unpaid debts: **S6**. |
+| 1.11 | A231 | **S4**. The research points to the day the meal ends (V1476-13, by analogy), not the day the bill was opened. |
+| 2.1 | Q20 | Answered: the only 0% rate in the VAT Law is art. 91.Cuatro (donations to non-profits); the 0% on basic foods ended 30/09/2024. **R3**. |
+| 2.2 | Q26 | The legal test is the rate at devengo (LIVA art. 90.Dos). **S4** and **S13**. |
+| 3.1 | Q17 | Fields and identity types: answered from AEAT's technical documents (error codes 1111, 1126, 1131, 1189). A negatively credited F2 is replaced by an F1, not an F3 (AEAT FAQ). **R4**. |
+| 3.2 | Q18 | **R6**. The later 303 boxes: deferred. |
+| 3.3 | Q31 | Answered: free choice of method, repeated corrections allowed (RD 1619/2012 art. 15.5; AEAT FAQ). |
+| 3.4 | Q25 | Time limits: answered (none for a cancellation record; four years for a corrective, art. 15.3). Which period: **S12**. The cierre Z: dropped. |
+| 3.5 | Q32 | **S7**; a walkout bill later cancelled is in **S6**. |
+| 4.1 | Q6 | Dropped: we retry hourly; no source attaches a penalty to a missed retry as such. |
+| 4.2 | Q7 | Reinstall or wipe: new number; update: same number; another venue: its own number (FAQ-DEV §4). Nothing to communicate when a chain stops (AEAT FAQ on modelo 036). **R5**. |
+| 4.3 | Q5 | Tickets and full invoices in separate series: answered (art. 7.1.a, V2885-16). Ticket correctives may stay in the ticket series (V2884-16). **S14**. Formats: dropped, our decision. |
+| 4.4 | Q23 | **S15**. |
+| 4.5 | Q24 | Deferred: V1042-26 (2026) allows a test environment before production; the design already sends nothing to AEAT by default; ask when the environment is built. |
+| 4.6 | Q30 | Deferred until representatives are built; AEAT's standard forms cover sending only. |
+| 5.1 | Q15 | Art. 80.Cuatro's current conditions: answered at BOE. **S5**. |
+| 5.2 | Q15(c) | **S5**. |
+| 5.3 | — | **R4**. |
+| 5.4 | Q13 | Answered (2174-03, V2182-23). The corporate-tax treatment of card tips belongs to the venue's accountant and the labour list (L6). |
+| 6.1–6.9 | Q33–Q41 | No source addresses a restore from an old backup or two real invoices under one number. **S16**, one question about our cautious default. |
+| — | Q43 | Dropped: technical, and measured (two runs of up to 1,000 records answered in order). |
+| — | Q44 | **R5**, with the consent wording fixed first (TRLGDCU art. 63.3). |
+| — | Q45 | Answered: Orden HAC/1028/2026 is in force from 06/10/2026; RD 238/2026's periods give 6 Oct 2027 (turnover over €8m) and 6 Oct 2028 (the rest), counted date to date (Código Civil art. 5.1, our reading). Simplified invoices are outside it, except those naming a business customer under art. 7.2. |
+
+### Corrections to the 6 October text
+
+- **Q15 / 5.1:** the wording quoted as LIVA art. 78.Tres.2º was AEAT's manual's, not the law's.
+  Corrected at Q15 below.
+- **Q33 / 6.1:** the warning against «utilización dinámica del SIF» is in the developer FAQ's §3,
+  about one product offered for several regulations, not §4 and not about installation numbers.
+  Removed from Q33(a) below.
+- **Q5 / 4.3:** the premise that ticket correctives need a series of their own is wrong for R5
+  (V2884-16, binding).
+
+### The questions (English, for us)
+
+- **S1. When the simplified invoice is issued.** VAT on a service falls due when it is performed
+  (LIVA 75.Uno.2º), and AEAT's FAQ says the duty to invoice arises then. Is issuing the ticket when
+  the table pays, in the same visit and after the meal, "en el momento de realizarse la operación"
+  (RD 1619/2012 art. 11.1)? May it be issued earlier, when the order is placed, before the service
+  and with nothing paid?
+- **S2. The precuenta.** AEAT's FAQ allows "facturas simplificadas proforma o sin validez fiscal" if
+  the real invoice follows, and requires preparatory documents to be kept linked to it. Is a
+  restaurant precuenta such a document? Is a "this is not an invoice" line required or advisable?
+- **S3. A part-payment mid-meal.** Is money a guest pays towards the table's bill before the table
+  has been fully served an advance payment (LIVA 75.Dos) that needs its own invoice (art. 2.1)?
+  After the meal has been served, may part-payments be taken and the ticket issued once, at the last
+  payment, in the same visit?
+- **S4. When a meal is "provided".** Dish by dish, or when the meal ends? This decides the
+  operation date of a full invoice for a meal past midnight (we would use the day it ends, by
+  analogy to V1476-13) and the rate across a VAT change (LIVA 90.Dos). May we use the issue date
+  as the devengo date, given they almost always coincide?
+- **S5. Short payment and cash rounding.** Is accepting less at the till as payment in full, after
+  the meal but before the ticket is issued, a discount under LIVA 78.Tres.2º, given AEAT reads
+  "simultáneamente" as at devengo? On rounding a cash total up to 5 cents: do the extra cents go
+  into the taxable amount?
+- **S6. Debts never paid.** For an unidentified diner who leaves without paying, is the VAT
+  unrecoverable in practice (art. 80.Cuatro's €50 floor, the provable demand, sending the
+  corrective)? Is a foreign tourist "no establecido" under 80.Cinco.2ª? Can such a debt ever be
+  credited? For an invoice issued and paid later, what must the VAT record books show
+  (80.Cuatro.A.2ª)?
+- **S7. An order cancelled after its ticket was issued.** We would send a cancellation record when
+  nothing was served or paid (FAQ-DEV §17.2.d, operation never took place) and a corrective invoice
+  when it was prepaid (the advance payment made VAT due; LIVA 80.Dos). Right? Must the corrective be
+  delivered when the customer has gone (RIVA art. 24.1)?
+- **S8. Deposits.** A deposit for a meal is an advance payment with its own simplified invoice up
+  to €3,000 (by analogy to V0950-26, which excludes accommodation). How should the final invoice
+  show it: the remainder only, or the total less the deposit's base and VAT?
+- **S9. Separate tickets at one table.** Following V1002-22 (the recipient is whoever placed the
+  order), may each diner who orders their own dishes get their own ticket? Is their request for a
+  separate bill enough?
+- **S10. Free items and comps.** A free item given with a paid sale is a discount (V0555-17). On a
+  bill with items at different VAT rates, must the price paid be shared across all items by value,
+  the free one included, rather than the free item set to €0? Is a fully comped table, nothing paid,
+  self-supply at cost (V2347-24, LIVA 79.Cuatro), and what record should it produce? Is the menu
+  price an acceptable measure of market value (LIVA 79.Dos)?
+- **S11. Printing only on request, or never.** Given that the customer cannot waive delivery
+  (V1884-22), does a venue that prints the ticket only when asked, or never, comply? Does showing it
+  on a screen or by QR count as delivery without the consent art. 9 requires?
+- **S12. A cancellation in a later quarter.** Once the original quarter is declared, is the
+  cancellation regularised by a corrected return for that quarter (LGT 120.3), or in the current
+  one (LIVA 89.Cinco.b)?
+- **S13. A wrong VAT class found after sale.** After a drink was sold to consumers at 10% instead of
+  21%, LIVA 89.Tres.1º bars charging them extra. Does the venue issue R5 corrective invoices anyway,
+  or declare the difference itself?
+- **S14. Series.** May full invoices (F1) and their replacements for tickets (F3) share one series?
+  May correctives of tickets (R5) and of full invoices (R1–R4) share one?
+- **S15. Backups held abroad.** Is a continuous backup held in another country "conservación fuera
+  de España" (art. 22.2) when the master copy stays on the venue's server in Spain? If we hold it,
+  are we a third party under art. 19.3, and is a third party outside the EU a prior notice
+  (art. 19.4) or an authorisation (AEAT procedure GZ05)?
+- **S16. Restoring an old backup.** No source addresses a server restored from an old copy that
+  re-issues numbers. Our default: a new installation number and new series before trading resumes;
+  keep every record and AEAT reply; send nothing automatically for a conflict; list each case for the
+  venue's adviser. Is that reasonable, and is anything to be communicated to AEAT?
+
+**Review list: read, and correct only where we are wrong.**
+
+- **R1.** A ticket whose first print failed, so the customer never had it, prints as the original
+  when it first succeeds; a print after a delivered original is a «duplicado» (art. 14).
+- **R2.** A card payment slip with no invoice number and no QR, printed beside the ticket, is not an
+  invoice (V0298-26). We keep it unaltered and linked to its invoice.
+- **R3.** "No tax (0%)" is offered only for goods donated to non-profits (LIVA 91.Cuatro); an
+  amount outside the scope of VAT is recorded N1 with its reason.
+- **R4.** An F3 or a corrective invoice may be issued by another server of the same taxpayer (FAQ-DEV
+  §17; AEAT FAQ on traceability). A foreign consumer without a Spanish tax ID gets a full invoice
+  identified by passport (03), never 07 (V2305-24; error 1126).
+- **R5.** Installation numbers: replacing the hardware while keeping the database keeps the number;
+  nothing is communicated when a chain stops. And Q44's interim answers on emailed full invoices,
+  with the consent request saying how the invoice will arrive and how consent is withdrawn
+  (TRLGDCU 63.3).
+- **R6.** Modelo 303: where only part of a purchase's VAT is deductible, the full base is declared
+  and the percentage applied to the VAT only; the duplicate check on a supplier's invoice number
+  applies within a calendar year.
+
+### Las preguntas (español, para el asesor)
+
+> **Contexto.** Somos fabricantes de un software TPV para restauración en territorio común, en
+> modalidad VERI\*FACTU. El cliente es una SL que emite sobre todo facturas simplificadas. Hemos
+> investigado cada cuestión en las fuentes primarias (BOE, FAQ de la AEAT, consultas de la DGT) y
+> citamos lo que hemos encontrado. Solo le pedimos lo que esas fuentes no resuelven. Le agradeceríamos
+> un presupuesto cerrado para esta lista.
+>
+> **S1. Momento de expedición.** El IVA se devenga al prestarse el servicio (art. 75.Uno.2º LIVA) y la
+> FAQ de la AEAT sitúa ahí la obligación de facturar. ¿Expedir la factura simplificada cuando la mesa
+> paga, en la misma visita y tras el servicio, cumple el «momento de realizarse la operación» del
+> art. 11.1 del RD 1619/2012? ¿Puede expedirse antes, al tomar la comanda, sin servicio ni cobro?
+>
+> **S2. La precuenta.** La FAQ de la AEAT admite «facturas simplificadas proforma o sin validez
+> fiscal» si después se expide y entrega la factura, y exige conservar los documentos preparatorios
+> vinculados a ella. ¿Es la precuenta de un restaurante uno de esos documentos? ¿Es obligatoria o
+> aconsejable la leyenda «no es factura»?
+>
+> **S3. Pagos parciales durante la comida.** ¿Lo que un comensal paga a cuenta antes de que la mesa
+> haya sido servida del todo es un pago anticipado (art. 75.Dos LIVA) que exige su propia factura
+> (art. 2.1 RD 1619/2012)? Terminado el servicio, ¿pueden cobrarse pagos parciales y expedirse una
+> sola factura con el último pago, en la misma visita?
+>
+> **S4. Cuándo se presta el servicio de una comida.** ¿Plato a plato, o al terminar la comida? De ello
+> depende la fecha de operación de una factura completa de una cena que pasa de medianoche (usaríamos
+> el día en que termina, por analogía con la V1476-13) y el tipo aplicable si cambia el tipo de IVA
+> (art. 90.Dos LIVA). ¿Podemos tomar la fecha de expedición como fecha de devengo, ya que casi siempre
+> coinciden?
+>
+> **S5. Pago inferior y redondeo en efectivo.** Aceptar en caja un importe menor como pago total, tras
+> la comida pero antes de expedir la factura, ¿es un descuento del art. 78.Tres.2º LIVA, si la AEAT
+> entiende «simultáneamente» como el momento del devengo? Al redondear al alza un total en efectivo a
+> 5 céntimos, ¿esos céntimos forman parte de la base imponible?
+>
+> **S6. Deudas no cobradas.** Si un cliente no identificado se marcha sin pagar, ¿el IVA es en la
+> práctica irrecuperable (umbral de 50 euros, reclamación fehaciente y remisión de la rectificativa
+> del art. 80.Cuatro)? ¿Un turista extranjero es «no establecido» a efectos del art. 80.Cinco.2ª?
+> ¿Puede abonarse alguna vez esa deuda? Para una factura expedida y cobrada más tarde, ¿qué deben
+> reflejar los libros registro (art. 80.Cuatro.A.2ª)?
+>
+> **S7. Pedido anulado con la factura ya expedida.** Proponemos un registro de anulación si no se
+> sirvió ni se cobró nada (FAQ de desarrolladores, §17.2.d: la operación no llegó a existir) y una
+> rectificativa si se había cobrado por anticipado (el pago anticipado devengó el IVA; art. 80.Dos
+> LIVA). ¿Es correcto? ¿Debe remitirse la rectificativa si el cliente ya no está (art. 24.1 RIVA)?
+>
+> **S8. Señales.** La señal de una comida es un pago anticipado con su propia factura simplificada
+> hasta 3.000 euros (por analogía con la V0950-26, que excluye el alojamiento). ¿Cómo debe reflejarla
+> la factura final: solo el resto, o el total menos la base y la cuota de la señal?
+>
+> **S9. Facturas separadas en una misma mesa.** Según la V1002-22 (destinatario es quien hace el
+> encargo), ¿puede cada comensal que pide sus propios platos recibir su propia factura simplificada?
+> ¿Basta su petición de cuenta separada?
+>
+> **S10. Invitaciones.** Un producto regalado junto a una venta es un descuento (V0555-17). En una
+> cuenta con productos a distintos tipos de IVA, ¿debe repartirse el precio cobrado entre todos según
+> su valor, incluido el regalado, en lugar de dejar este a cero? Una mesa invitada por completo, sin
+> cobro, ¿es autoconsumo valorado a coste (V2347-24; art. 79.Cuatro LIVA), y qué registro debe
+> generar? ¿Es el precio de carta una medida aceptable del valor de mercado (art. 79.Dos LIVA)?
+>
+> **S11. Imprimir solo a petición, o nunca.** Dado que el destinatario no puede renunciar a la entrega
+> (V1884-22), ¿cumple un local que imprime la factura simplificada solo si el cliente la pide, o que
+> no la imprime nunca? ¿Mostrarla en pantalla o mediante un QR cuenta como entrega sin el
+> consentimiento del art. 9?
+>
+> **S12. Anulación en un trimestre posterior.** Declarado ya el trimestre de la factura, ¿la anulación
+> se regulariza mediante autoliquidación rectificativa de ese trimestre (art. 120.3 LGT) o en el
+> periodo corriente (art. 89.Cinco.b LIVA)?
+>
+> **S13. Tipo de IVA erróneo detectado después.** Vendida a consumidores una bebida al 10 % en lugar
+> del 21 %, el art. 89.Tres.1º LIVA impide repercutirles la diferencia. ¿Debe el local expedir
+> rectificativas R5 igualmente, o ingresar la diferencia sin repercutirla?
+>
+> **S14. Series.** ¿Pueden compartir serie las facturas completas (F1) y las de canje de
+> simplificadas (F3)? ¿Pueden compartir serie las rectificativas de simplificadas (R5) y las de
+> completas (R1 a R4)?
+>
+> **S15. Copias de seguridad en el extranjero.** Una copia continua guardada en otro país, mientras el
+> original sigue en el servidor del local en España, ¿es «conservación fuera de España» (art. 22.2)?
+> Si la guardamos nosotros, ¿somos un tercero del art. 19.3, y para un tercero fuera de la UE basta la
+> comunicación previa (art. 19.4) o hace falta autorización (procedimiento GZ05)?
+>
+> **S16. Restauración desde una copia antigua.** Ninguna fuente trata un servidor restaurado desde una
+> copia antigua que vuelve a usar números. Nuestro criterio: nuevo número de instalación y nuevas
+> series antes de volver a facturar; conservar todos los registros y respuestas de la AEAT; no enviar
+> nada automáticamente ante un conflicto; y dejar cada caso a la vista del asesor del local. ¿Es
+> razonable? ¿Hay que comunicar algo a la AEAT?
+>
+> **Para revisar: corríjanos solo si nos equivocamos.**
+>
+> - **R1.** Si la primera impresión falló y el cliente nunca recibió la factura, la primera impresión
+>   correcta es el original; una impresión tras un original ya entregado es «duplicado» (art. 14).
+> - **R2.** El justificante de pago con tarjeta, sin número de factura ni QR, impreso junto a la
+>   factura, no es factura (V0298-26). Lo conservamos inalterado y vinculado a la factura.
+> - **R3.** El tipo 0 % se ofrece solo para entregas de bienes donados a entidades sin fines
+>   lucrativos (art. 91.Cuatro LIVA); un importe no sujeto se registra como N1 con su causa.
+> - **R4.** Una F3 o una rectificativa puede expedirse desde otro servidor del mismo obligado (FAQ de
+>   desarrolladores §17; FAQ de la AEAT sobre trazabilidad). A un consumidor extranjero sin NIF
+>   español se le identifica en factura completa por pasaporte (03), nunca 07 (V2305-24; error 1126).
+> - **R5.** Sustituir el hardware conservando la base de datos mantiene el número de instalación; no
+>   se comunica nada cuando una cadena termina. Y las respuestas provisionales sobre facturas
+>   completas por correo electrónico (PDF como «duplicado» si sigue a un original en papel, y a la
+>   inversa; consentimiento recogido por el personal, indicando cómo se recibirá la factura y cómo
+>   revocarlo, art. 63.3 TRLGDCU; PDF sin firma válido para empresarios, V2891-18; un reintento sigue
+>   siendo el original).
+> - **R6.** Modelo 303: con deducción parcial declaramos la base completa y aplicamos el porcentaje
+>   solo a la cuota; el control de duplicados por número de factura del proveedor se aplica dentro de
+>   cada año natural.
+
+The English and Spanish Word copies of this list are dated 2026-10-09.
 
 ---
 
@@ -767,8 +1030,10 @@ decision and does not settle the question.
 
 > 🟢 **Core CLOSED 2026-08-01 on primary law — moved to [verifactu-findings.md §12](verifactu-findings.md).**
 > A reduction agreed as payment in full **before the factura is issued** is a *descuento* — LIVA
-> art. 78.Tres.2º (*"descuentos y bonificaciones concedidos previa o simultáneamente al momento en que
-> la operación se realice"*, verbatim from AEAT's own Manual práctico de IVA) keeps it **out of the
+> art. 78.Tres.2º (*«Los descuentos y bonificaciones que se justifiquen por cualquier medio de prueba
+> admitido en derecho y que se concedan previa o simultáneamente al momento en que la operación se
+> realice y en función de ella»*, the law's own text at BOE; corrected 2026-10-09, the wording first
+> quoted here was the Manual práctico de IVA's, not the law's) keeps it **out of the
 > base imponible**, so the invoice is issued for the amount actually agreed (€65 on a €70 bill), VAT
 > on €65. This confirms the design assumption *"the reduction has to reach the bill before the invoice
 > is issued"*. **(b)** once the factura is issued, correcting it needs a *factura rectificativa* —
@@ -2207,8 +2472,7 @@ being asked about the justification and evidence, not to validate an allocation 
 > respuestas de la AEAT y el motivo y momento del cambio. El cambio de identidad no demuestra por
 > sí solo que otro equipo haya dejado de facturar.
 >
-> **(a)** La FAQ §4 contempla un nº de instalación nuevo al reinstalar el software, y advierte que no
-> debe resultar posible una «utilización dinámica del SIF». ¿Es admisible que el propio sistema
+> **(a)** La FAQ §4 contempla un nº de instalación nuevo al reinstalar el software. ¿Es admisible que el propio sistema
 > cambie de nº de instalación al detectar un conflicto, como máximo una vez cada 24 horas, y que un
 > administrador pueda hacerlo también manualmente?
 >

@@ -611,6 +611,15 @@ RD 1619/2012 (BOE-A-2012-14696):
 The last one constrains delivery design: **electronic delivery cannot be the default**, so emailing
 or QR-only cannot replace paper without consent.
 
+> **Correction, 2026-10-09: art. 9 has since been rewritten** by RD 238/2026 (BOE 31/03/2026, in
+> force 20/04/2026), which also added art. 8 bis, mandatory structured invoices between businesses.
+> Art. 9.2 now reads: «La expedición, transmisión y recepción de la factura electrónica estará
+> condicionada a que su destinatario haya dado su consentimiento, excepto en los supuestos de factura
+> electrónica obligatoria establecidos en el artículo 8 bis.» Consent still governs a consumer's
+> invoice. The business regime's start dates are in [asesor-questions.md, Q45's row of the shortened
+> list](asesor-questions.md#the-shortened-list-2026-10-09); the receipts are in
+> [research/2026-10-09-operations.md](research/2026-10-09-operations.md).
+
 ---
 
 ## 10. Rectificativas need their own series — and F3 canje is not a rectificativa (added 2026-07-31)
@@ -647,6 +656,15 @@ Two consequences:
 > read 2026-09-29.) The remaining scope question is
 > [asesor-questions.md Q5(d)](asesor-questions.md); the build item is backlog A1e.
 
+> **Correction, 2026-10-09: the heading's "mandatory" holds for correctives of FULL invoices only.**
+> DGT binding ruling V2884-16 (22/06/2016), asked by a till vendor: «la expedición de las facturas
+> rectificativas debe efectuarse obligatoriamente con una serie específica, distinta de aquella que
+> identifica a las facturas completas. […] No obstante lo anterior, las facturas simplificadas
+> rectificativa podrán incluirse dentro de la misma serie con el resto de facturas simplificadas en
+> las que se documenten las operaciones efectuadas en el mismo año natura.» So a ticket corrective
+> (R5) may stay in the ticket series; a separate one is allowed, not required. Read on PETETE;
+> receipts in [research/2026-10-09-vat-and-corrections.md](research/2026-10-09-vat-and-corrections.md), 4.3.
+
 ### 10.2 F3 — the "make me a proper invoice" case, which we do not model
 
 A customer who received a simplified invoice and then asks for a full one with their tax details
@@ -682,6 +700,17 @@ an edge case.
 ---
 
 ## 11. Propinas — outside the base imponible del IVA, off the factura, off the huella (added 2026-08-01)
+
+> **Correction, 2026-10-09: PETETE was reached, and two things below change.** (1) V3095-17's
+> wording in the table is a legal database's paraphrase. The ruling's own text is: «Por lo tanto, las
+> propinas que de manera voluntaria y unilateral satisfagan los clientes de la consultante a los
+> crupieres trabajadores de la ésta no formarán parte de la base imponible del Impuesto sobre el
+> Valor Añadido.» (2) The stronger binding VAT authority for a tip collected electronically by the
+> business and passed on to staff is **V2182-23** (25/07/2023, SG de Impuestos sobre el Consumo):
+> such tips «no formarán parte de la base imponible del Impuesto sobre el Valor Añadido, no quedando,
+> por tanto, sujetas al mismo». The VAT conclusion stands. On corporate tax the rulings conflict:
+> V3095-17 treats tips the company books as income, 2174-03 (under the repealed law) does not.
+> Receipts: [research/2026-10-09-vat-and-corrections.md](research/2026-10-09-vat-and-corrections.md), 5.4.
 
 Confirms what the schema already encodes. Since **#39 (sale settlement)** the tip lives on
 `tenders.tip_amount`, documented as the payer's *"affirmed gratuity, non-taxable and on no invoice"*
@@ -752,6 +781,21 @@ or the base. The open items are product/accounting, not fiscal: (b)'s card-tip i
 ---
 
 ## 12. Short payment — a descuento reduces the base only if it reaches the bill before issuance (added 2026-08-01)
+
+> **Correction, 2026-10-09.** (1) The block quote below is the Manual práctico's paraphrase; the
+> law's own words (LIVA art. 78.Tres.2º, BOE consolidated text) are «Los descuentos y bonificaciones
+> que se justifiquen por cualquier medio de prueba admitido en derecho y que se concedan previa o
+> simultáneamente al momento en que la operación se realice y en función de ella». (2) Art. 80.Cuatro
+> was read at BOE: the version of Ley 31/2022, in force 01/01/2023. The waiting period is one year,
+> or six months at the creditor's option where its prior-year turnover did not exceed
+> €6,010,121.04; a consumer's base must exceed €50 excluding VAT; the demand may be by any means that
+> «acredite fehacientemente la reclamación del cobro»; the correction is made within the following
+> six months and notified to AEAT within one month of the corrective invoice (RIVA art. 24.2.a.2º).
+> Relief is excluded for a recipient not established in Spain (art. 80.Cinco.2ª). (3) AEAT's FAQ
+> reads "simultáneamente" as the moment VAT falls due, which for a meal is the service, so whether a
+> shortfall accepted at the till after the meal is a discount under 78.Tres.2º is asked as S5 of the
+> [shortened list](asesor-questions.md#the-shortened-list-2026-10-09). Receipts:
+> [research/2026-10-09-invoice-timing.md](research/2026-10-09-invoice-timing.md), 5.1.
 
 The counter case (Q15): bill €70, customer is €5 short, staff accept €65 as payment in full. Which of
 two treatments applies is decided by primary law, and the boundary is **whether the reduction is
@@ -1136,6 +1180,13 @@ customer who asks can always be handed paper under any mode. A venue running `ne
 issues invoices it never delivers, which is in tension with art. 1's «expedir **y entregar**». That is
 an operator configuration choice, not a code defect; flagged for the asesor, not fixed here.
 
+> **Update, 2026-10-09:** three binding DGT rulings (V0150-08, V1713-21, V1884-22) hold that the duty
+> to deliver the invoice cannot be altered by the parties, «incluso aunque el destinatario de las
+> mismas renunciara a su recepción» (V1884-22). None concerns a restaurant ticket. This is a strong
+> lead that **Never** does not comply and **On request** is doubtful; asked as S11 of the
+> [shortened list](asesor-questions.md#the-shortened-list-2026-10-09). Receipts:
+> [research/2026-10-09-operations.md](research/2026-10-09-operations.md), 1.6.
+
 ### 15.7 What this settles for the till
 
 - **Guests who split by ITEM** are each the recipient of their own operation → **N separate facturas
@@ -1174,6 +1225,44 @@ The evidence retains logged request projections and parsed replies, not raw SOAP
 duplicate fingerprints and targeted `SistemaInformatico` lookup results remain unverified. W41s-1
 also did not test number reuse on different dates (Q36) or recovery of missing invoices (Q41).
 You can use these observations to frame the adviser questions; they do not settle the remedies.
+
+---
+
+## 17. What the 2026-10-09 research settled (added 2026-10-09)
+
+Three research passes checked the advisor questionnaire against primary sources; every quote was
+matched word for word against the downloaded text. The full findings are in
+[research/2026-10-09-invoice-timing.md](research/2026-10-09-invoice-timing.md), [research/2026-10-09-vat-and-corrections.md](research/2026-10-09-vat-and-corrections.md)
+and [research/2026-10-09-operations.md](research/2026-10-09-operations.md). The points that change what we build:
+
+- **The duty to invoice arises when the service is performed, not when it is paid** (LIVA
+  75.Uno.2º; FAQ-DEV §20). Option 2 of Q42, a pro forma and the invoice only when a transfer
+  arrives, is not lawful for a consumer.
+- **Money received before the service is performed is an advance payment**: VAT falls due on
+  receipt (LIVA 75.Dos) and an invoice is required for it (RD 1619/2012 art. 2.1). This covers a
+  counter customer who pays first, and possibly a guest's part-payment mid-meal (S3).
+- **A printed pre-bill must be kept, linked to the invoice that follows.** AEAT's FAQ: a system that
+  generates preparatory documents without keeping them «de forma debidamente vinculada a las facturas
+  o a los registros de facturación que finalmente se emitan» «no sería legal y sería susceptible de
+  sanción». A pro forma carries no tax QR code.
+- **A service lasting past midnight is dated at its end**, by analogy to V1476-13 (binding): the
+  rate is the one in force «al finalizar la referida prestación si esta […] se extendiera durante
+  varios días». A231's "day the bill was opened" is likely wrong (S4).
+- **A free item given with a paid sale is a discount, but on a mixed-rate bill the price paid is
+  shared across every item by market value, the free one included** (V0555-17, binding). A table
+  given everything free is self-supply taxed on cost (V2347-24, binding) (S10).
+- **The only 0% rate in the VAT Law is art. 91.Cuatro**, goods donated to non-profits. The 0% on
+  basic foods ran 1 July to 30 September 2024 (RDL 4/2024); those foods have been at 4% since 2025.
+- **Correcting a ticket by differences or by substitution is the business's choice**, and repeated
+  corrections are allowed (RD 1619/2012 art. 15.5; AEAT FAQ). A cancellation record has no time
+  limit; a corrective invoice must be issued within four years (art. 15.3).
+- **A ticket credited with a negative F2 is replaced by an F1, not an F3** (AEAT FAQ, registros de
+  alta).
+- **A test environment before production is allowed; made-up companies in a live system are not**
+  (V1042-26, binding, 13/05/2026).
+- **Structured business e-invoicing** (RD 238/2026, triggered by Orden HAC/1028/2026, in force
+  06/10/2026) starts 12 months later for issuers over €8m turnover and 24 months later for the rest;
+  simplified invoices are outside it except those naming a business under art. 7.2.
 
 ---
 
