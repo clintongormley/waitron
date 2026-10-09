@@ -751,7 +751,8 @@ export interface ProfileScopeChoices {
   zones: { id: string; name: string; departmentId: string; active: boolean }[];
 }
 
-export type KitchenScreenKind = "station" | "pass" | "pass_monitor";
+export const KITCHEN_SCREEN_KINDS = ["station", "pass", "pass_monitor"] as const;
+export type KitchenScreenKind = (typeof KITCHEN_SCREEN_KINDS)[number];
 
 /** null is every station or every zone; a station screen has no zones and is always null. */
 export interface KitchenScreenScope {

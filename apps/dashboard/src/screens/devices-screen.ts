@@ -63,6 +63,8 @@ import type {
   ScreenSlot,
   Station,
 } from "../api/client.js";
+import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
+import { sameValue } from "../widgets/product-editor-model.js";
 
 /** `screen` is a kitchen display's Screen, or a till's Pass choice; `stations` and `zones` are that
  * screen's lists; `kitchenStations` is a till's Kitchen screen list. */
@@ -80,7 +82,6 @@ const NO_KITCHEN_ERRORS: Record<KitchenField, string> = {
 /** A device's kitchen screen choice by kind: a kitchen display holds one; a till or handheld may
  * hold a station screen and one of the pass screen and the pass monitor. */
 type KitchenDraft = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
-const KITCHEN_KINDS = ["station", "pass", "pass_monitor"] as const;
 const PASS_KINDS = ["pass", "pass_monitor"] as const;
 const SHARED_DISPLAY: FormFactor = "kds";
 const EVERY: KitchenScreenScope = { stationIds: null, zoneIds: null };
@@ -515,7 +516,7 @@ export class DevicesScreen extends LitElement {
       equal: (a, b) =>
         a.name === b.name &&
         a.profileId === b.profileId &&
-        JSON.stringify(a.kitchenScreens) === JSON.stringify(b.kitchenScreens),
+        sameValue(a.kitchenScreens, b.kitchenScreens),
       restore: () => {},
     });
   }
@@ -611,7 +612,7 @@ export class DevicesScreen extends LitElement {
       equal: (a, b) =>
         a.name === b.name &&
         a.profileId === b.profileId &&
-        JSON.stringify(a.kitchenScreens) === JSON.stringify(b.kitchenScreens) &&
+        sameValue(a.kitchenScreens, b.kitchenScreens) &&
         a.receiptPrinterId === b.receiptPrinterId &&
         a.paymentSlipPrinterId === b.paymentSlipPrinterId &&
         a.cashDrawerPrinterId === b.cashDrawerPrinterId &&
@@ -1915,7 +1916,7 @@ export class DevicesScreen extends LitElement {
   #offeredKinds(profileId: string): KitchenScreenKind[] {
     const profile = this.deviceProfiles.find((p) => p.id === profileId);
     if (profile === undefined) return [];
-    return KITCHEN_KINDS.filter(
+    return KITCHEN_SCREEN_KINDS.filter(
       (kind) =>
         this.#bound(profileId, kind) !== undefined &&
         (profile.formFactor === SHARED_DISPLAY ||
@@ -1935,7 +1936,7 @@ export class DevicesScreen extends LitElement {
 
   /** The kind the `screen` field holds: a kitchen display's one, or a till's pass kind. */
   #mainKind(screens: KitchenDraft, profileId: string): KitchenScreenKind | "" {
-    const kinds = this.#sharedDisplay(profileId) ? KITCHEN_KINDS : PASS_KINDS;
+    const kinds = this.#sharedDisplay(profileId) ? KITCHEN_SCREEN_KINDS : PASS_KINDS;
     return kinds.find((kind) => screens[kind] !== undefined) ?? "";
   }
 
@@ -1999,7 +2000,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #screensPayload(screens: KitchenDraft): DeviceKitchenScreen[] {
-    return KITCHEN_KINDS.flatMap((kind) => {
+    return KITCHEN_SCREEN_KINDS.flatMap((kind) => {
       const scope = screens[kind];
       return scope === undefined
         ? []

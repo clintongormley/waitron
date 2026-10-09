@@ -64,6 +64,7 @@ import type {
   ProfileServiceScope,
   Station,
 } from "../api/client.js";
+import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
 
 /** Every printer list and default a profile holds; the save sends the drawer and defaults apart. */
 type PrinterDraft = ProfilePrinterLists & ProfileEquipmentDefaults;
@@ -156,8 +157,6 @@ function equipmentOf(from: ProfileEquipmentDefaults): ProfileEquipmentDefaults {
     cashDrawerPrinterDefaultId: from.cashDrawerPrinterDefaultId,
   };
 }
-
-const KITCHEN_SCREEN_KINDS = ["station", "pass", "pass_monitor"] as const;
 
 const EVERY: KitchenScreenScope = { stationIds: null, zoneIds: null };
 
