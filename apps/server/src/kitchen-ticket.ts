@@ -311,8 +311,8 @@ export function crossRefText(ref: KitchenCrossRef, locale: string): string {
 }
 
 const ALSO_ON_ORDER_WORDS = {
-  en: { heading: "Also on this order (not for this station)", held: "(on hold)" },
-  es: { heading: "También en este pedido (no para esta estación)", held: "(en espera)" },
+  en: { heading: "Also on this order", held: "(on hold)" },
+  es: { heading: "También en este pedido", held: "(en espera)" },
 } as const;
 
 function ticketLanguage(locale: string): "en" | "es" {

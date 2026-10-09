@@ -2785,8 +2785,7 @@ rather than assuming this composition applies unchanged.
 ### Wording
 
 - **Keep text as short as its meaning allows** (owner, 2026-10-09, A443). Leave out what the reader
-  can infer: the kitchen ticket's heading is to become just "Also on this order", without "(not for
-  this station)" (A366-4A).
+  can infer: the kitchen ticket's rest-of-order heading reads just "Also on this order" (A366-4A).
 - **An action label starts with a verb** (owner, 2026-10-09, A443): Add, Delete, Move, Remove, Save. A
   button or menu item that creates something reads "Add …" / "Añadir …", never "New …" / "Nuevo …"
   — "Add" is a verb like "Delete"; "New" is an adjective. A create action never says "Create" /
