@@ -1122,8 +1122,8 @@ in Task A12b, which then removes the old input from the helpers. The demo seed's
 to `order_start` (changed test checks: the same departments and zones, the same table/counter
 split, read from the new column).
 
-- [ ] **Step 1:** change; run focused affected server files: green with no other `expect` changed.
-- [ ] **Step 2: Commit** — `test(server): helpers and the demo say how orders start (A366)`.
+- [x] **Step 1:** change; run focused affected server files: green with no other `expect` changed.
+- [x] **Step 2: Commit** — `test(server): helpers and the demo say how orders start (A366)`.
 
 ---
 
@@ -1506,3 +1506,23 @@ retained write; a corrected stalled-refresh case left Save enabled. The new case
 the dialog and shell changes. No original assertion has been retired or changed. The old
 public wrapper remains active. Continue A10's full kept-assertion audit and public switch,
 then mounted DashboardApp integration and A11–A15.
+
+### Implementation checkpoint — Task A12a (2026-10-09)
+
+A12a ran before the remaining A10 retirement audit because it uses the A3 writer contract and
+does not depend on the public screen switch. The server offer helper accepts `orderStart`,
+keeps its existing `serviceMode` callers until A12b, and leaves `paidWhen` separate. The table-zone
+helper and order-venue fixture now pass the new word. The demo floor writes its table/counter
+choices through sale policies; only the deli insert still supplies the required legacy column.
+
+Three new real-store cases initially recorded the wrong order snapshot when `orderStart` opposed
+the named zone's default. After the helper change, the complete offer suite passed 16 cases.
+The focused 16-file server run passed 442 cases, including both demo files and the direct
+service-zone/order-venue consumers. The unchanged fiscal golden and immutability files passed
+20 cases. Scoped server types passed after removing the unused legacy-policy import.
+
+Changed checks: the demo's exact department and zone rows now read `order_start` instead of
+legacy style columns, retaining every name, trading name, counter-default flag and menu list.
+The floor trading-name check orders departments by `order_start`, keeping its expected rows
+unchanged. These are the A12a checks authorised above; all other existing assertions remain.
+A10's audit/public switch and A12b–A15 remain unfinished.

@@ -215,6 +215,39 @@ describe("offerProducts", () => {
     }
   });
 
+  it.each([
+    { zone: "counter", orderStart: "table", paidWhen: "prepay", expected: "table_tab" },
+    { zone: "tables", orderStart: "counter", paidWhen: "prepay", expected: "prepay" },
+    {
+      zone: "tables",
+      orderStart: "counter",
+      paidWhen: "ticket_then_pay",
+      expected: "ticket_then_pay",
+    },
+  ] as const)(
+    "starts $zone offers as $orderStart with $paidWhen payment timing",
+    async ({ zone, orderStart, paidWhen, expected }) => {
+      const venue = await seedVenue(suite.db);
+      const offers = await withTransaction(suite.db, (tx) =>
+        offerProducts(tx, venue.cfg, { zone, orderStart, paidWhen }),
+      );
+      const id = randomUUID();
+      await parkOrder({ db: suite.db }, venue.cfg, {
+        id,
+        zoneId: offers.zoneId,
+        lines: offers.toOfferLines([{ productId: venue.cafe, quantity: "1" }]),
+      });
+      const context = await withTransaction(suite.db, (tx) =>
+        getOrderServiceContext(tx, venue.cfg, id),
+      );
+      expect(context).toEqual({
+        zoneId: offers.zoneId,
+        departmentId: expect.any(String),
+        serviceMode: expected,
+      });
+    },
+  );
+
   it("defaults quick-sale offers to prepay without reading the retired till setting", async () => {
     const venue = await seedVenue(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));

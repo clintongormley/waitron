@@ -15,7 +15,6 @@ import {
   replaceMenuWeek,
   setRoutingCell,
   setStationFallback,
-  zoneServicePolicies,
   zoneSalePolicies,
 } from "@waitron/venue-service";
 import {
@@ -81,8 +80,7 @@ export async function seedFloor(
   const restaurantName = floor.departmentNames.restaurant[locale];
   await tx.execute(sql`
     update departments
-    set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant},
-        default_service_mode = 'table_tab'
+    set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant}
     where id = ${defaultPolicy.department_id}`);
   await tx
     .update(departmentSalePolicies)
@@ -121,9 +119,6 @@ export async function seedFloor(
       await tx.execute(sql`
         update floor_zones set name = ${zone.name[locale]}, display_order = ${zone.displayOrder}
         where id = ${zoneId}`);
-      await tx.execute(sql`
-        update zone_service_policies set service_mode = 'prepay'
-        where zone_id = ${zoneId}`);
     }
     if (zone.key === "bar") {
       await tx
@@ -139,10 +134,6 @@ export async function seedFloor(
     name: floor.upstairsBarZone[locale],
     displayOrder: 3,
   });
-  await tx
-    .update(zoneServicePolicies)
-    .set({ serviceMode: "prepay" })
-    .where(eq(zoneServicePolicies.zoneId, upstairsBarZone.id));
   await tx
     .update(zoneSalePolicies)
     .set({ orderStart: "counter" })

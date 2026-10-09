@@ -50,7 +50,7 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
     await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, {
         zone: "counter",
-        serviceMode: "ticket_then_pay",
+        orderStart: "counter",
         paidWhen: "ticket_then_pay",
       }),
     )

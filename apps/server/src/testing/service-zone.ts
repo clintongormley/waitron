@@ -12,7 +12,7 @@ export async function createZone(
     existing ??
     (await createDepartment(tx, cfg, {
       name: "Test floor department",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     }));
   return createServiceZone(tx, cfg, { ...input, departmentId: department.id });
 }
