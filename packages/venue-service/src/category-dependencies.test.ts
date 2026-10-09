@@ -43,7 +43,7 @@ async function venue() {
 it("deleting a category removes its own and its subtree's category cells and keeps product cells", async () => {
   const { locationId } = await venue();
   const cfg = { locationId };
-  await withTransaction(suite.db, async (tx) => {
+  const { negroniId, barId, foodId } = await withTransaction(suite.db, async (tx) => {
     const [kitchen, bar] = (
       await tx
         .insert(kitchenStations)
@@ -102,13 +102,24 @@ it("deleting a category removes its own and its subtree's category cells and kee
       .where(eq(products.id, negroni.id));
     expect(vacated).toEqual({ categoryId: food.id, active: false });
 
-    await updateProduct(tx, negroni.id, { active: true });
-    await expect(
-      resolveMakers(tx, cfg, null, [negroni.id], new Date("2026-10-02T18:30:00Z")),
-    ).resolves.toEqual(
-      new Map([[negroni.id, { kind: "made", route: { kind: "station", stationId: bar } }]]),
-    );
+    return { negroniId: negroni.id, barId: bar, foodId: food.id };
   });
+  await expect(
+    withTransaction(suite.db, (tx) => updateProduct(tx, negroniId, { active: true })),
+  ).rejects.toMatchObject({ code: "product.archived", params: { productId: negroniId } });
+  expect(
+    await suite.db
+      .select({ categoryId: products.categoryId, active: products.active })
+      .from(products)
+      .where(eq(products.id, negroniId)),
+  ).toEqual([{ categoryId: foodId, active: false }]);
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      resolveMakers(tx, cfg, null, [negroniId], new Date("2026-10-02T18:30:00Z")),
+    ),
+  ).resolves.toEqual(
+    new Map([[negroniId, { kind: "made", route: { kind: "station", stationId: barId } }]]),
+  );
 });
 
 it("an open order keeps its copied category label after the category is deleted", async () => {

@@ -520,11 +520,13 @@ describe("a product that leaves a menu starts fresh there", () => {
     await expectFresh(f, settings);
   });
 
-  it("takes a product made inactive off every list and resets its settings on each menu, and making it Active again puts it back on none", async () => {
+  it("takes a product made inactive off every list and resets its settings on each menu, and refusing restoration puts it back on none", async () => {
     const { f, settings } = await lemonadeOnLunch();
     await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
-    await app((tx) => updateProduct(tx, f.lemonade, { active: true }));
+    await expect(
+      app((tx) => updateProduct(tx, f.lemonade, { active: true })),
+    ).rejects.toMatchObject({ code: "product.archived", params: { productId: f.lemonade } });
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
     expect(await offerNames(f.dinner)).toEqual([]);
     const { rows } = await fx.db.execute<{ id: string }>(

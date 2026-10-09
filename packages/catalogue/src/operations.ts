@@ -1153,11 +1153,8 @@ async function patchProduct(
   // The refusal order is pinned by the "a product's own colour" cases in operations.test.ts.
   if (categoryId === undefined) assertColor();
   if (categoryId !== undefined || color !== undefined) {
-    const [product] = await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(productWithId(id, "top-level"));
-    if (!product) throw new AppError("product.not_found", { productId: id });
+    if (row === undefined || row.parentId !== null)
+      throw new AppError("product.not_found", { productId: id });
   }
   if (categoryId != null) await readCategory(tx, categoryId);
   if (categoryId !== undefined) assertColor();

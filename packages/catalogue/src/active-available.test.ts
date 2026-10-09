@@ -111,23 +111,24 @@ describe("Active and Available", () => {
     expect((await reads()).editor).toEqual({ active: false, available: false });
   });
 
-  it("a product made Active and Available again is on no menu, and is sold again once put back on one", async () => {
+  it("an archived product refuses becoming Active and Available again or returning to a menu", async () => {
+    await save({ active: true, available: false });
     await save({ active: false, available: false });
-    await save({ active: true, available: true });
-
-    expect(await reads()).toEqual({
-      editor: { active: true, available: true },
-      listed: { active: true, available: true },
+    await expect(save({ active: true, available: true })).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId },
+    });
+    const archived = {
+      editor: { active: false, available: false },
+      listed: { active: false, available: false },
       offers: [],
-      sellable: [productId],
-    });
-    await run((tx) => addProductToMenu(tx, { menuId: catalogueId, productId }));
-    expect(await reads()).toEqual({
-      editor: { active: true, available: true },
-      listed: { active: true, available: true },
-      offers: [productId],
-      sellable: [productId],
-    });
+      sellable: [],
+    };
+    expect(await reads()).toEqual(archived);
+    await expect(
+      run((tx) => addProductToMenu(tx, { menuId: catalogueId, productId })),
+    ).rejects.toMatchObject({ code: "menu_section.membership_invalid" });
+    expect(await reads()).toEqual(archived);
   });
 
   it("a product created Unavailable is created Active", async () => {
