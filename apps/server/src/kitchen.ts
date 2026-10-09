@@ -25,8 +25,10 @@ import { assertStationTiming, getKitchenTimingDefaults } from "./kitchen-timing.
 import type { StationTimingPatch } from "./kitchen-timing.js";
 
 // Nothing here authorizes. The write verbs are called only from the kitchen routes, gated by
-// `venue.configure` (`withVenueAuth` in management-api.ts), and the product editor's save, gated by
-// `CATALOGUE_WRITE_PERMISSION` (catalogue-api.ts). The reads have other callers, not all gated.
+// `venue.configure` (`withVenueAuth` in management-api.ts) and, where a station's printers are
+// sent, `printer.manage` too (`authorizeStationPrinters`), and from the product editor's save,
+// gated by `CATALOGUE_WRITE_PERMISSION` (catalogue-api.ts). The reads have other callers, not all
+// gated.
 
 export interface Station {
   id: string;
@@ -257,6 +259,9 @@ export async function updateStation(
       { id, name: station.name },
     );
   }
+  // Printers are replaced only on a switched-on station, so they go in before a switch-off.
+  const printersFirst = printerIds !== undefined && set.active === false;
+  if (printersFirst) await replaceStationPrinters(tx, cfg, id, printerIds);
   try {
     if (Object.keys(set).length > 0) {
       await tx.update(kitchenStations).set(set).where(eq(kitchenStations.id, id));
@@ -273,7 +278,8 @@ export async function updateStation(
       .values({ stationId: id, ...timingPatch })
       .onConflictDoUpdate({ target: kitchenStationTiming.stationId, set: timingPatch });
   }
-  if (printerIds !== undefined) await replaceStationPrinters(tx, cfg, id, printerIds);
+  if (printerIds !== undefined && !printersFirst)
+    await replaceStationPrinters(tx, cfg, id, printerIds);
 }
 
 /** Deactivate a station — never a hard delete, since a `ticket_items.station_id` snapshot may

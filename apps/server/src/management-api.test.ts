@@ -3076,6 +3076,15 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(await printersOf(id)).toEqual([]);
     });
 
+    it("a PATCH that switches a station off or on saves the printers it carries", async () => {
+      const id = await createStation(unique("Switched"));
+      const [a, b] = [await addPrinter(), await addPrinter()];
+      expect((await patch(id, { active: false, printerIds: [a] })).status).toBe(204);
+      expect(await printersOf(id)).toEqual([a]);
+      expect((await patch(id, { active: true, printerIds: [b] })).status).toBe(204);
+      expect(await printersOf(id)).toEqual([b]);
+    });
+
     it("a switched-off station's name can still be edited when no printers are sent", async () => {
       const id = await createStation(unique("Retired"));
       expect((await req(`/stations/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);

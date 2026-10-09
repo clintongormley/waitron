@@ -422,7 +422,6 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
   return deps.venueCfg;
 }
 
-/** An absent `printerIds` stays `undefined`; a present one is a list of distinct printer ids. */
 function parseStationPrinterIds(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
   if (
