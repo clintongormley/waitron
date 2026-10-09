@@ -312,7 +312,7 @@ describe("venue-routing-grid", () => {
       ["Bar", false, false],
       ["Terrace bar", false, false],
       ["No preparation", false, false],
-      ["Old kitchen", true, true],
+      ["Old kitchen (Disabled)", true, true],
     ]);
     // Saving the disabled station again is not a change, so nothing is sent.
     editorButton(editor, "save-cell")!.click();

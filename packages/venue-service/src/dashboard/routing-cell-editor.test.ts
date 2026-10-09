@@ -266,7 +266,7 @@ it("shows a stored switched-off or unknown station as a disabled choice", async 
   const el = await mount({ target: { kind: "station", stationId: "off" } });
   expect(one<Combobox>(el, "[name=target]")!.options).toContainEqual({
     value: "station:off",
-    label: "Off",
+    label: "Off (Disabled)",
     disabled: true,
   });
   const gone = await mount({
