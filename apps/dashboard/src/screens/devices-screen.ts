@@ -50,7 +50,7 @@ import type {
   JoinRequestRow,
   PairingModeState,
   Printer,
-  ProfileKitchenLists,
+  ProfileKitchenScreens,
   ProfileReaderList,
   ReaderHolderRow,
   ReaderRow,
@@ -379,7 +379,7 @@ export class DevicesScreen extends LitElement {
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
   @state() private watchers: Watcher[] = [];
-  @state() private kitchenLists: ({ profileId: string } & ProfileKitchenLists)[] = [];
+  @state() private kitchenScreens: { profileId: string; screens: ProfileKitchenScreens }[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
   @state() private pairing: PairingModeState | undefined;
@@ -613,8 +613,8 @@ export class DevicesScreen extends LitElement {
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.deviceProfiles = value;
         }),
-        this.#queries.watch("listProfileKitchenLists", [], (value) => {
-          this.kitchenLists = value;
+        this.#queries.watch("listProfileKitchenScreens", [], (value) => {
+          this.kitchenScreens = value;
         }),
         this.#queries.watch("listPrinters", [], (value) => {
           this.printers = value;
@@ -1840,17 +1840,23 @@ export class DevicesScreen extends LitElement {
   }
 
   /**
-   * The switched-on stations and watchers `profileId` lists, plus `held` in its group, marked, when
-   * the profile lists it and it is switched off.
+   * The switched-on stations `profileId`'s station screen offers and, when it offers a pass screen,
+   * the switched-on watchers, plus `held` in its group, marked, when offered and switched off.
    */
   #bindingOptions(
     profileId: string,
     held: HeldBinding | null = null,
   ): { value: string; label: string; group: string }[] {
-    const lists = this.kitchenLists.find((entry) => entry.profileId === profileId);
+    const screens = this.kitchenScreens.find((entry) => entry.profileId === profileId)?.screens;
+    const stationIds =
+      screens?.station === undefined
+        ? []
+        : (screens.station.stationIds ?? this.stations.map((station) => station.id));
+    const watcherIds =
+      screens?.pass === undefined ? [] : this.watchers.map((watcher) => watcher.id);
     const listed = new Set([
-      ...(lists?.stationIds ?? []).map((id) => `station:${id}`),
-      ...(lists?.watcherIds ?? []).map((id) => `watcher:${id}`),
+      ...stationIds.map((id) => `station:${id}`),
+      ...watcherIds.map((id) => `watcher:${id}`),
     ]);
     if (held !== null && !listed.has(held.value)) held = null;
     const stationOptions = this.stations

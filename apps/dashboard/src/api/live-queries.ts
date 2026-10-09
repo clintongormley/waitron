@@ -280,7 +280,14 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_admission_roles",
     "device_profile_admission_persons",
   ],
-  listProfileKitchenLists: ["device_profiles", "kitchen_stations", "watchers"],
+  listProfileKitchenScreens: [
+    "device_profiles",
+    "device_profile_kitchen_screens",
+    "device_profile_kitchen_screen_stations",
+    "device_profile_kitchen_screen_zones",
+    "kitchen_stations",
+    "floor_zones",
+  ],
   listDevices: [
     "devices",
     "watchers",

@@ -219,11 +219,13 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listStations: vi.fn().mockResolvedValue(stations),
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
-    listProfileKitchenLists: vi.fn().mockResolvedValue([
+    listProfileKitchenScreens: vi.fn().mockResolvedValue([
       {
         profileId: "dp3",
-        stationIds: stations.map((station) => station.id),
-        watcherIds: watchers.map((watcher) => watcher.id),
+        screens: {
+          station: { stationIds: stations.map((station) => station.id), zoneIds: null },
+          pass: { stationIds: null, zoneIds: null },
+        },
       },
     ]),
     listPrinters: vi.fn().mockResolvedValue(printers),
@@ -654,7 +656,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await page.viewport(width, 900);
       const { el, host } = await mountWidget<DevicesScreen>(
         "dashboard-devices-screen",
-        { api: stubApi({ listProfileKitchenLists: vi.fn().mockResolvedValue([]) }) },
+        { api: stubApi({ listProfileKitchenScreens: vi.fn().mockResolvedValue([]) }) },
         theme,
       );
       await flush(el);

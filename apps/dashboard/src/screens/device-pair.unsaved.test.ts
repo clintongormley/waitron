@@ -132,7 +132,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     listStations: async () => [station],
     listWatchers: async () => [],
     listPrinters: async () => [],
-    listProfileKitchenLists: async () => [],
+    listProfileKitchenScreens: async () => [],
     listDeviceProfiles: async () => [
       profile,
       { ...profile, id: "p2", name: "Kitchen", canvasId: null, formFactor: "kds" },

@@ -98,7 +98,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listStations: async () => [station, { ...station, id: "s2", name: "Bar" }],
       listWatchers: async () => [],
       listPrinters: async () => [],
-      listProfileKitchenLists: async () => [],
+      listProfileKitchenScreens: async () => [],
       listDeviceProfiles: async () => [profile, { ...profile, id: "p2", name: "Phone" }],
       pairingMode: async () => ({
         open: false,

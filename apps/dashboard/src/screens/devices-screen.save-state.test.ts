@@ -196,11 +196,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi.fn().mockResolvedValue(stations),
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(profiles),
-    listProfileKitchenLists: vi.fn().mockResolvedValue(
+    listProfileKitchenScreens: vi.fn().mockResolvedValue(
       ["pk", "pl"].map((profileId) => ({
         profileId,
-        stationIds: ["s1", "s2", "s-off"],
-        watcherIds: ["w1", "w-off"],
+        screens: {
+          station: { stationIds: ["s1", "s2", "s-off"], zoneIds: null },
+          pass: { stationIds: null, zoneIds: null },
+        },
       })),
     ),
     listPrinters: vi.fn().mockResolvedValue(printers),

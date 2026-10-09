@@ -282,11 +282,13 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi.fn().mockResolvedValue(stations),
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
-    listProfileKitchenLists: vi.fn().mockResolvedValue(
+    listProfileKitchenScreens: vi.fn().mockResolvedValue(
       ["dp3", "pk"].map((profileId) => ({
         profileId,
-        stationIds: ["s1", "s2", "s-off"],
-        watcherIds: ["w1", "w-off"],
+        screens: {
+          station: { stationIds: ["s1", "s2", "s-off"], zoneIds: null },
+          pass: { stationIds: null, zoneIds: null },
+        },
       })),
     ),
     listPrinters: vi.fn().mockResolvedValue(printers),
@@ -1637,9 +1639,15 @@ describe("the Edit dialog", () => {
           ...editProfiles,
           { ...editProfiles[2]!, id: "pk2", name: "Bar screen" },
         ]),
-      listProfileKitchenLists: vi.fn().mockResolvedValue([
-        { profileId: "pk", stationIds: ["s1"], watcherIds: ["w1"] },
-        { profileId: "pk2", stationIds: ["s2"], watcherIds: [] },
+      listProfileKitchenScreens: vi.fn().mockResolvedValue([
+        {
+          profileId: "pk",
+          screens: {
+            station: { stationIds: ["s1"], zoneIds: null },
+            pass: { stationIds: null, zoneIds: null },
+          },
+        },
+        { profileId: "pk2", screens: { station: { stationIds: ["s2"], zoneIds: null } } },
       ]),
     });
     const el = await openEdit(api, "k1");
@@ -3983,9 +3991,15 @@ describe("add a device", () => {
           ...deviceProfiles,
           { ...deviceProfiles[2]!, id: "dp4", name: "Empty" },
         ]),
-      listProfileKitchenLists: vi
-        .fn()
-        .mockResolvedValue([{ profileId: "dp3", stationIds: ["s2"], watcherIds: ["w1"] }]),
+      listProfileKitchenScreens: vi.fn().mockResolvedValue([
+        {
+          profileId: "dp3",
+          screens: {
+            station: { stationIds: ["s2"], zoneIds: null },
+            pass: { stationIds: null, zoneIds: null },
+          },
+        },
+      ]),
     });
     const el = await openAdd(api);
     await toSettings(el);
@@ -4697,8 +4711,8 @@ describe("add a device", () => {
 
     it("whose station its profile no longer lists opens with Shows empty", async () => {
       const api = waiting();
-      vi.mocked(api.listProfileKitchenLists).mockResolvedValue([
-        { profileId: "dp3", stationIds: ["s2"], watcherIds: [] },
+      vi.mocked(api.listProfileKitchenScreens).mockResolvedValue([
+        { profileId: "dp3", screens: { station: { stationIds: ["s2"], zoneIds: null } } },
       ]);
       const el = await openAdd(api);
       await toEnableSettings(el);
