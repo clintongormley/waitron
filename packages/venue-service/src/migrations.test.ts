@@ -14,6 +14,7 @@ import {
   kitchenStations,
   locations,
   UNIQUE_VIOLATION,
+  withTransaction,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
@@ -386,6 +387,131 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       menuId: menu.id,
     };
   }
+
+  async function orderStartPolicies() {
+    const v = await venue();
+    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
+      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    return v;
+  }
+
+  it("order start defaults to counter for a department and null for a zone", async () => {
+    const v = await orderStartPolicies();
+    await db.execute(sql`insert into department_sale_policies (department_id)
+      values (${v.departmentId})`);
+    await db.execute(sql`insert into zone_sale_policies (zone_id) values (${v.zoneId})`);
+    expect(
+      (
+        await db.execute(sql`select order_start from department_sale_policies
+      where department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ order_start: "counter" }]);
+    expect(
+      (
+        await db.execute(sql`select order_start from zone_sale_policies
+      where zone_id = ${v.zoneId}`)
+      ).rows,
+    ).toEqual([{ order_start: null }]);
+  });
+
+  it("order start stores table and counter independently on each policy", async () => {
+    const v = await orderStartPolicies();
+    await db.execute(sql`insert into department_sale_policies (department_id, order_start)
+      values (${v.departmentId}, 'table')`);
+    await db.execute(sql`insert into zone_sale_policies (zone_id, order_start)
+      values (${v.zoneId}, 'counter')`);
+    expect(
+      (
+        await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
+      from department_sale_policies p join zone_sale_policies q on q.zone_id = ${v.zoneId}
+      where p.department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ department_start: "table", zone_start: "counter" }]);
+    await db.execute(sql`update department_sale_policies set order_start = 'counter'
+      where department_id = ${v.departmentId}`);
+    await db.execute(sql`update zone_sale_policies set order_start = 'table'
+      where zone_id = ${v.zoneId}`);
+    expect(
+      (
+        await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
+      from department_sale_policies p join zone_sale_policies q on q.zone_id = ${v.zoneId}
+      where p.department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([{ department_start: "counter", zone_start: "table" }]);
+    await db.execute(
+      sql`update zone_sale_policies set order_start = null where zone_id = ${v.zoneId}`,
+    );
+    expect(
+      (
+        await db.execute(sql`select order_start from zone_sale_policies
+      where zone_id = ${v.zoneId}`)
+      ).rows,
+    ).toEqual([{ order_start: null }]);
+  });
+
+  it.each(["department", "zone"] as const)(
+    "order start rejects an unknown value on %s policy insert and update",
+    async (policy) => {
+      const v = await orderStartPolicies();
+      const insert =
+        policy === "department"
+          ? sql`insert into department_sale_policies (department_id, order_start)
+            values (${v.departmentId}, 'tab')`
+          : sql`insert into zone_sale_policies (zone_id, order_start) values (${v.zoneId}, 'tab')`;
+      const insertError = await captureError(() => withTransaction(db, (tx) => tx.execute(insert)));
+      expect(isRefusal(insertError, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(insertError)).toContain(
+        policy === "department"
+          ? "department_sale_policies_order_start_ck"
+          : "zone_sale_policies_order_start_ck",
+      );
+      await db.execute(
+        policy === "department"
+          ? sql`insert into department_sale_policies (department_id, order_start)
+            values (${v.departmentId}, 'table')`
+          : sql`insert into zone_sale_policies (zone_id, order_start) values (${v.zoneId}, 'counter')`,
+      );
+      const update =
+        policy === "department"
+          ? sql`update department_sale_policies set order_start = 'tab' where department_id = ${v.departmentId}`
+          : sql`update zone_sale_policies set order_start = 'tab' where zone_id = ${v.zoneId}`;
+      const updateError = await captureError(() => withTransaction(db, (tx) => tx.execute(update)));
+      expect(isRefusal(updateError, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(updateError)).toContain(
+        policy === "department"
+          ? "department_sale_policies_order_start_ck"
+          : "zone_sale_policies_order_start_ck",
+      );
+      expect(
+        (
+          await db.execute(
+            policy === "department"
+              ? sql`select order_start from department_sale_policies where department_id = ${v.departmentId}`
+              : sql`select order_start from zone_sale_policies where zone_id = ${v.zoneId}`,
+          )
+        ).rows,
+      ).toEqual([{ order_start: policy === "department" ? "table" : "counter" }]);
+    },
+  );
+
+  it("order start refuses explicit department null instead of applying its default", async () => {
+    const v = await orderStartPolicies();
+    const error = await captureError(() =>
+      withTransaction(db, (tx) =>
+        tx.execute(sql`insert into department_sale_policies (department_id, order_start)
+        values (${v.departmentId}, null)`),
+      ),
+    );
+    expect(engineErrorMessage(error)).toContain(
+      "NOT NULL constraint failed: department_sale_policies.order_start",
+    );
+    expect(
+      (
+        await db.execute(sql`select department_id from department_sale_policies
+      where department_id = ${v.departmentId}`)
+      ).rows,
+    ).toEqual([]);
+  });
 
   /**
    * Asserts that `statement` is refused by a foreign key — but not WHICH one: SQLite's message names

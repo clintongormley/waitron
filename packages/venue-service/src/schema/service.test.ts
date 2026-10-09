@@ -45,6 +45,7 @@ const EXPECTED: Record<
     table: departmentSalePolicies,
     foreignKeys: ["department_sale_policies_department_fk"],
     checks: [
+      "department_sale_policies_order_start_ck",
       "department_sale_policies_paid_when_ck",
       "department_sale_policies_collection_number_ck",
       "department_sale_policies_receipt_mode_ck",
@@ -69,6 +70,7 @@ const EXPECTED: Record<
     table: zoneSalePolicies,
     foreignKeys: ["zone_sale_policies_zone_fk"],
     checks: [
+      "zone_sale_policies_order_start_ck",
       "zone_sale_policies_paid_when_ck",
       "zone_sale_policies_collection_number_ck",
       "zone_sale_policies_receipt_mode_ck",

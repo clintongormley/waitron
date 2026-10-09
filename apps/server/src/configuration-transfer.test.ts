@@ -5095,3 +5095,90 @@ it.each([-15, 14])(
     );
   },
 );
+
+it("transfers order start policies under new department and zone ids", async () => {
+  const source = await applyVenue(planVenue(venue("B13572478"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, scope, {
+      name: "Order start department",
+      defaultServiceMode: "table_tab",
+    });
+    const explicit = await createServiceZone(tx, scope, {
+      name: "Counter override",
+      departmentId: department.id,
+    });
+    const inherited = await createServiceZone(tx, scope, {
+      name: "Department follower",
+      departmentId: department.id,
+    });
+    await tx.execute(sql`update department_sale_policies set order_start = 'table'
+      where department_id = ${department.id}`);
+    await tx.execute(sql`update zone_sale_policies set order_start = 'counter'
+      where zone_id = ${explicit.id}`);
+    return { departmentId: department.id, explicitId: explicit.id, inheritedId: inherited.id };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const exported = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-09T10:00:00Z"),
+    versions,
+  );
+  expect(
+    exported.tables.department_sale_policies!.find(
+      (row) => row.department_id === sourceIds.departmentId,
+    )!.order_start,
+  ).toBe("table");
+  expect(
+    exported.tables.zone_sale_policies!.find((row) => row.zone_id === sourceIds.explicitId)!
+      .order_start,
+  ).toBe("counter");
+  expect(
+    exported.tables.zone_sale_policies!.find((row) => row.zone_id === sourceIds.inheritedId)!
+      .order_start,
+  ).toBeNull();
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(exported, "a strong passphrase"),
+    "a strong passphrase",
+  );
+  const target = await applyVenue(planVenue(venue("B13572479"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+  });
+  expect(target.locationId).not.toBe(source.locationId);
+  const imported = await targetSuite.db.execute<{
+    department_id: string;
+    zone_id: string;
+    name: string;
+    department_start: string;
+    zone_start: string | null;
+  }>(sql`select d.id as department_id, z.id as zone_id, z.name,
+    p.order_start as department_start, q.order_start as zone_start
+    from floor_zones z join zone_service_policies s on s.zone_id = z.id
+    join departments d on d.id = s.department_id
+    join department_sale_policies p on p.department_id = d.id
+    join zone_sale_policies q on q.zone_id = z.id
+    where d.name = 'Order start department' order by z.name`);
+  expect(
+    imported.rows.map(({ name, department_start, zone_start }) => ({
+      name,
+      department_start,
+      zone_start,
+    })),
+  ).toEqual([
+    { name: "Counter override", department_start: "table", zone_start: "counter" },
+    { name: "Department follower", department_start: "table", zone_start: null },
+  ]);
+  for (const row of imported.rows) {
+    expect(row.department_id).not.toBe(sourceIds.departmentId);
+    expect(row.zone_id).not.toBe(sourceIds.explicitId);
+    expect(row.zone_id).not.toBe(sourceIds.inheritedId);
+  }
+});

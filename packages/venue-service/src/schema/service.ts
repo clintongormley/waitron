@@ -90,6 +90,7 @@ export const zoneServicePolicies = table(
   ],
 );
 
+const orderStart = enumType(["table", "counter"]);
 const paidWhen = enumType(["prepay", "ticket_then_pay"]);
 const collectionNumber = enumType(["none", "numbered"]);
 const receiptMode = enumType(["auto", "on_request", "never"]);
@@ -98,6 +99,7 @@ export const departmentSalePolicies = table(
   "department_sale_policies",
   {
     departmentId: id("department_id").primaryKey(),
+    orderStart: orderStart("order_start").notNull().default("counter"),
     paidWhen: paidWhen("paid_when").notNull().default("prepay"),
     collectionNumber: collectionNumber("collection_number").notNull().default("none"),
     receiptPrintMode: receiptMode("receipt_print_mode").notNull().default("auto"),
@@ -109,6 +111,7 @@ export const departmentSalePolicies = table(
       foreignColumns: [departments.id],
       name: "department_sale_policies_department_fk",
     }),
+    check("department_sale_policies_order_start_ck", enumCheck(t.orderStart)),
     check("department_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
     check("department_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
     check("department_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
@@ -119,6 +122,7 @@ export const zoneSalePolicies = table(
   "zone_sale_policies",
   {
     zoneId: id("zone_id").primaryKey(),
+    orderStart: orderStart("order_start"),
     paidWhen: paidWhen("paid_when"),
     collectionNumber: collectionNumber("collection_number"),
     receiptPrintMode: receiptMode("receipt_print_mode"),
@@ -129,6 +133,7 @@ export const zoneSalePolicies = table(
       foreignColumns: [zoneServicePolicies.zoneId],
       name: "zone_sale_policies_zone_fk",
     }),
+    check("zone_sale_policies_order_start_ck", enumCheck(t.orderStart)),
     check("zone_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
     check("zone_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
     check("zone_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
