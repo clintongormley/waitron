@@ -1848,7 +1848,7 @@ moves the line),
 `working_order_lines_require_open_parent_update` with `make_at_station_id` in each of its three
 unchanged-column lists),
 `packages/db/drizzle/0072_device_binding_watcher_sql.sql` (re-creates the two device binding
-triggers so a kitchen display binds a station or a watcher),
+triggers so a kitchen display binds a station or a watcher; dropped by `0119`),
 `packages/db/drizzle/0080_money_records_drop_triggers.sql` and
 `packages/db/drizzle/0082_money_records_recreate_triggers.sql` (the triggers around `0081`'s rebuild
 of `sales`, `bill_payments`, `bill_payment_refunds` and `unpaid_departures`),

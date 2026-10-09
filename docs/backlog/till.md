@@ -893,9 +893,7 @@ use `wt-relative-time` is the owner's call.
 
 ## What W105 left open (#1235)
 
-Left OPEN by W105: (5) the Devices table's Shows column reads "— no station —" for a screen on a
-switched-off station, because it looks the name up in the switched-on list; `binding.name` could
-fill it. Review suggestions #1235 did not take, listed in its description: the edit
+Review suggestions #1235 did not take, listed in its description: the edit
 route checks permission before the device id where revoke checks the id first; its body is the
 whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
 `rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
