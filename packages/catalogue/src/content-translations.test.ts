@@ -375,7 +375,7 @@ describe("atomic content translations", () => {
         ),
       ),
     ).rejects.toMatchObject({
-      code: ["activity", "role", "child activity", "root ownership"].includes(change)
+      code: ["role", "child activity", "root ownership"].includes(change)
         ? "content.translation_unavailable"
         : "content.translation_stale",
     });
@@ -852,3 +852,60 @@ describe("atomic content translations", () => {
     expect(await app(snapshot)).toEqual(before);
   });
 });
+
+it("saves only customer names on an explicitly selected archived product", async () => {
+  const ids = await fixture();
+  await app((tx) => tx.update(products).set({ active: false }).where(eq(products.id, ids.product)));
+  const before = await app(snapshot);
+  const request = await batch(ids, ["product"]);
+  await app((tx) => saveContentTranslations(tx, "en", request, context));
+  const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.product));
+  expect(stored!.customerName).toEqual({ es: "CLIENT Pan", en: "CLIENT English product" });
+  const after = await app(snapshot);
+  expect(after).toEqual({
+    ...before,
+    products: before.products.map((row) =>
+      row.id === ids.product ? { ...row, customerName: stored!.customerName } : row,
+    ),
+  });
+});
+
+it.each(["variant", "parent"] as const)(
+  "saves a variant translation after its %s is archived",
+  async (archived) => {
+    const ids = await fixture();
+    await app((tx) =>
+      tx
+        .update(products)
+        .set({ active: false })
+        .where(eq(products.id, archived === "parent" ? ids.product : ids.variant)),
+    );
+    const request = await batch(ids, ["variant"]);
+    await app((tx) => saveContentTranslations(tx, "en", request, context));
+    const [stored] = await suite.db.select().from(products).where(eq(products.id, ids.variant));
+    expect(stored!.customerName).toEqual({ es: "CLIENT Pequeño", en: "CLIENT English variant" });
+  },
+);
+
+it.each(["option_list", "extra_list", "menu"] as const)(
+  "still refuses explicitly selected inactive %s translations without any write",
+  async (kind) => {
+    const ids = await fixture();
+    await app(async (tx) => {
+      if (kind === "option_list")
+        await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, ids[kind]));
+      else if (kind === "extra_list")
+        await tx.update(extraLists).set({ active: false }).where(eq(extraLists.id, ids[kind]));
+      else await tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, ids.menuId));
+    });
+    const before = await app(snapshot);
+    const request = await batch(ids, [kind]);
+    await expect(
+      app((tx) => saveContentTranslations(tx, "en", request, context)),
+    ).rejects.toMatchObject({
+      code: "content.translation_unavailable",
+      params: { kind, id: ids[kind] },
+    });
+    expect(await app(snapshot)).toEqual(before);
+  },
+);

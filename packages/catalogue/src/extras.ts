@@ -188,10 +188,11 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
   const named = [...new Set(input.items.map((item) => item.productId))];
   if (named.length === 0) return;
   const rows = await tx
-    .select({ id: products.id, active: products.active })
+    .select({ id: products.id, active: products.active, parentActive: parentProducts.active })
     .from(products)
+    .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.id, named));
-  const held = new Map(rows.map((row) => [row.id, row.active]));
+  const held = new Map(rows.map((row) => [row.id, row.active && row.parentActive !== false]));
   const at = input.items.findIndex((item) => !held.has(item.productId));
   if (at !== -1) throw new AppError("extras.invalid", { field: `items.${at}.productId` });
   const archived = input.items.findIndex((item) => held.get(item.productId) === false);

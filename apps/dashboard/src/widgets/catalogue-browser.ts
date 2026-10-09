@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import type {
+  ExtraList,
   CategorySummary,
   CatalogueSelection,
   FolderContents,
@@ -30,6 +31,7 @@ import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
 import { refusalText } from "./archive-refusal.js";
+import { archiveExtraListWarning } from "./archive-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
 
 interface OperationDraft {
@@ -80,6 +82,9 @@ export class CatalogueBrowser extends LitElement {
         margin: 0;
         accent-color: var(--wt-color-primary);
       }
+      .archive-extra-lists {
+        overflow-wrap: anywhere;
+      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -107,7 +112,7 @@ export class CatalogueBrowser extends LitElement {
   /** Whether the routing read failed, as against not having answered yet. */
   @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
+  @property({ attribute: false }) extraLists: ExtraList[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property() unitLanguage = "en";
   /** The category the address names; the browser opens it, and every category above it, once. */
@@ -722,6 +727,30 @@ export class CatalogueBrowser extends LitElement {
                     : nothing
                 }
               `
+        }
+        ${
+          this.operation === "delete"
+            ? archiveExtraListWarning(
+                this.products,
+                [
+                  ...selection.productIds,
+                  ...(this.contents === "delete"
+                    ? this.products
+                        .filter(
+                          (product) =>
+                            product.primaryCategoryId !== null &&
+                            selection.categoryIds.some((id) =>
+                              categoryWithDescendants(id, this.categories).has(
+                                product.primaryCategoryId!,
+                              ),
+                            ),
+                        )
+                        .map((product) => product.id)
+                    : []),
+                ],
+                this.extraLists,
+              )
+            : nothing
         }
         ${this.operationError ? html`<p role="alert" class="error">${this.operationError}</p>` : nothing}
       </form>

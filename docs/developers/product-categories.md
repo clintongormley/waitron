@@ -383,6 +383,11 @@ tile. View opens retained details instead of the editor. Archiving a variant on 
 menu prices and removes it from extras lists, without archiving its parent. Neither archive has
 an Enable action.
 
+The confirmation names each extras list losing an active product or variant. Choosing to move a
+category's contents up shows no such list for those products, because that choice archives none
+of them. An archived product can still move through the selection toolbar, on its own or with
+other products; that move changes its main reporting category.
+
 A configuration import refuses a bundle that puts an archived product in a list or shortcut
 (`setup.request_invalid`, `field: "section_members.product_id"`) or gives an archived size a menu
 price (`field: "menu_item_variant_overrides.variant_id"`).

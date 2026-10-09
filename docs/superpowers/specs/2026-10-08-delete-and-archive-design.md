@@ -243,10 +243,15 @@ sits, so one dialog shows the whole picture.
   (`checkRef`, `packages/catalogue/src/section-members.ts`), and keeps that code. The paths to close, from the 2026-10-08 inventory:
   `patchProduct` (`packages/catalogue/src/operations.ts`), `writeProductVariants`
   (`packages/catalogue/src/variants.ts`), the product editor save
-  (`PUT /management-api/products/:id/editor`), the product update route, and the extras-list save
+  (`PUT /management-api/products/:id/editor`), the `updateProduct` writer, and the extras-list save
   (`packages/catalogue/src/extras.ts`). Setting its course and setting its recipe are also refused.
   Translation fixes, the main reporting category and folder moves remain allowed; moving a folder
-  carries its archived products with it. The dashboard's Enable actions are removed.
+  carries its archived products with it. Explicitly selected product and variant targets accept
+  names-only fixes through `PUT /management-api/content-translations/:language`; the automatic
+  missing-translations list still leaves archived families out. A draft opened before archiving
+  must be reviewed against the new activity state before saving. The dashboard's Enable actions
+  are removed. A unit assigned to an archived product remains in use: neither deleting that unit
+  nor reassigning the archived product is allowed, so the retained details keep their unit.
 - **Removed when archived:** its places in menu drafts (as today) and in extras lists (new; the
   dialog names the extras lists in its warning rather than counting them). Its recipe, options and
   routing rules stay, for the read-only view.

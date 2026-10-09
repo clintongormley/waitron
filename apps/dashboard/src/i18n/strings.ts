@@ -1541,6 +1541,7 @@ export const en = {
   "product.disable_warning":
     "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.",
   "product.disabled_badge": "Disabled",
+  "product.archive_extra_lists": "Removed from these extras lists:",
   "product.archive": "Archive",
   "product.view": "View",
   "product.archive_named": "Archive {name}",
@@ -4047,6 +4048,7 @@ export const es: Record<StringKey, string> = {
   "product.disable_warning":
     "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan.",
   "product.disabled_badge": "Deshabilitado",
+  "product.archive_extra_lists": "Sale de estas listas de extras:",
   "product.archive": "Archivar",
   "product.view": "Ver",
   "product.archive_named": "Archivar {name}",

@@ -545,6 +545,13 @@ lists, archives its variants and clears their menu prices. Archiving a variant c
 prices and removes it from extras lists. Neither can be enabled again
 ([product-categories.md](product-categories.md), "Moving and deleting").
 
+You can fix an archived product's or variant's customer-facing translations by naming that target
+in the content-translations route. The automatic missing-translations list still leaves archived
+families out. An edit opened before archiving needs Review latest before it can save because the
+activity state is part of its saved baseline. Other inactive translation targets remain unavailable.
+The archived product keeps its unit assignment. You cannot delete a unit that it still uses or
+reassign it to another unit; the unit remains available for its retained details.
+
 A menu's Price overrides tab lists every Active product an active menu's working structure
 reaches, with its Active sizes. The working offers leave archived products and sizes out. The tab's Available
 column reads the product's, or a size's, own Available flag. The tab reads `menuPrices`; a

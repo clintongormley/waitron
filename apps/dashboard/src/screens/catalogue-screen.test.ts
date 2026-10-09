@@ -555,6 +555,30 @@ describe("catalogue-screen", () => {
     }
   });
 
+  it("names affected extras lists in the product Archive warning", async () => {
+    const offered = (id: string, name: string, productId: string): ExtraList => ({
+      ...extraLists[0]!,
+      id,
+      name,
+      items: [{ id: `${id}-item`, productId, maxQuantity: null, preselected: false, price: null }],
+    });
+    const api = stubApi({
+      listExtraLists: vi
+        .fn()
+        .mockResolvedValue([
+          offered("affected", "Archive affected sauces", "p1"),
+          offered("unrelated", "Archive unrelated drinks", "other"),
+        ]),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "delete-product", { productId: "p1" });
+    await flush(el);
+    const warning = el.shadowRoot!.querySelector("[data-test=delete-dialog]")!;
+    expect(warning.textContent).toContain("Archive affected sauces");
+    expect(warning.textContent).not.toContain("Archive unrelated drinks");
+  });
+
   it("keeps the Archive confirmation open and reports a refused save inside it", async () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -2748,6 +2772,85 @@ describe("catalogue-screen", () => {
       expect(editor(el).open).toBe(true);
       expect(editor(el).value).toEqual(variantValue);
       expect(location.pathname).toBe("/manage/catalogue/product/v1");
+    });
+
+    it("names extras removed for active variants with their parent and updates names after a live replacement and reopen", async () => {
+      const api = Object.assign(variantApi(), { liveData: new LiveData() });
+      const offered = (id: string, name: string, productId: string) => ({
+        ...extraLists[0]!,
+        id,
+        name,
+        usage: { products: 1 },
+        items: [
+          { id: `${id}-item`, productId, maxQuantity: null, preselected: false, price: null },
+        ],
+      });
+      vi.mocked(api.listExtraLists).mockResolvedValue([
+        offered("first", "Affected variant list", "v1"),
+        offered("second", "Affected variant list", "p1"),
+        offered("archived", "Archived baseline list", "old"),
+      ]);
+      vi.mocked(api.listProducts).mockResolvedValue([
+        {
+          ...withVariant[0]!,
+          variants: [
+            ...withVariant[0]!.variants,
+            { ...withVariant[0]!.variants[0]!, id: "old", active: false },
+          ],
+        },
+      ]);
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "p1" });
+      await flush(el);
+      const warning = () =>
+        el.shadowRoot!.querySelector("[data-test=delete-dialog] [data-test=archive-extra-lists]");
+      expect(warning()!.querySelectorAll("li")).toHaveLength(1);
+      expect(warning()!.textContent).toContain("Affected variant list");
+      expect(warning()!.textContent).not.toContain("Archived baseline list");
+      vi.mocked(api.listExtraLists).mockResolvedValue([
+        offered("latest", "Latest affected list", "v1"),
+      ]);
+      api.liveData.refresh();
+      await vi.waitFor(() => expect(warning()!.textContent).toContain("Latest affected list"));
+      expect(warning()!.textContent).not.toContain("Affected variant list");
+      emit(el.shadowRoot!.querySelector("[data-test=delete-dialog]")!, "wt-close", {});
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "v1" });
+      await flush(el);
+      expect(warning()!.textContent).toContain("Latest affected list");
+      expect(warning()!.textContent).not.toContain("Affected variant list");
+    });
+
+    it("names only the variant's affected extras lists in its Archive warning", async () => {
+      const api = variantApi();
+      vi.mocked(api.listExtraLists).mockResolvedValue([
+        ...[
+          ["variant-list", "Archive variant sauces", "v1"],
+          ["parent-list", "Archive parent sauces", "p1"],
+        ].map(([id, name, productId]) => ({
+          ...extraLists[0]!,
+          id: id!,
+          name: name!,
+          usage: { products: 1 },
+          items: [
+            {
+              id: `${id}-item`,
+              productId: productId!,
+              maxQuantity: null,
+              preselected: false,
+              price: null,
+            },
+          ],
+        })),
+      ]);
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "v1" });
+      await flush(el);
+      const warning = el.shadowRoot!.querySelector("[data-test=delete-dialog]")!;
+      expect(warning.textContent).toContain("Archive variant sauces");
+      expect(warning.textContent).not.toContain("Archive parent sauces");
     });
 
     it("confirms a variant's Archive and switches the variant off through its own write", async () => {

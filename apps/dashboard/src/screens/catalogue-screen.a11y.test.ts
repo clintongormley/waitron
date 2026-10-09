@@ -346,3 +346,146 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
     },
   );
 });
+
+describe.each(["light", "dark"] as const)("named extras archive warnings (%s)", (theme) => {
+  it.each(["product", "variant", "bulk", "folder"] as const)(
+    "renders %s warning names in both languages and widths",
+    async (entry) => {
+      const before = { locale: currentLocale(), width: innerWidth, height: innerHeight };
+      try {
+        for (const locale of ["en", "es"]) {
+          setLocale(locale);
+          for (const width of [390, 1280]) {
+            await page.viewport(width, 844);
+            expect(innerWidth).toBe(width);
+            const variant = {
+              id: "v1",
+              name: "Media ración",
+              customerName: null,
+              kitchenName: null,
+              unitPrice: null,
+              image: null,
+              active: true,
+              available: true,
+              effective: {
+                unitPrice: "8.50",
+                vatClass: "reduced" as const,
+                primaryCategoryId: "c1",
+              },
+            };
+            const product = {
+              ...products[0]!,
+              categoryId: entry === "folder" ? "c1" : null,
+              primaryCategoryId: entry === "folder" ? "c1" : null,
+              variants: [variant],
+            };
+            const names = [
+              "Salsas caseras y acompañamientos de temporada",
+              "ExtraordinarilyLongUnbrokenSauceListNameThatMustWrapAtPhoneWidth",
+            ];
+            const api = stubApi({
+              listProducts: vi.fn().mockResolvedValue([product]),
+              countProductMenus: vi.fn().mockResolvedValue(0),
+              summariseFolders: vi
+                .fn()
+                .mockResolvedValue([
+                  { id: "c1", folders: 0, products: 1, activeProducts: 1, routes: 0, ownRoutes: 0 },
+                ]),
+              listExtraLists: vi.fn().mockResolvedValue(
+                names.map((name, index) => ({
+                  id: `list-${index}`,
+                  name,
+                  customerName: null,
+                  kitchenName: null,
+                  minPicks: 0,
+                  maxPicks: null,
+                  active: true,
+                  usage: { products: 1 },
+                  items: [
+                    {
+                      id: `item-${index}`,
+                      productId: entry === "variant" ? "v1" : "p1",
+                      maxQuantity: null,
+                      preselected: false,
+                      price: null,
+                    },
+                  ],
+                })),
+              ),
+            });
+            const { el, host } = await mountWidget<CatalogueScreen>(
+              "dashboard-catalogue-screen",
+              { api },
+              theme,
+            );
+            await flush(el);
+            const browser = el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+            await vi.waitFor(() => expect(browser.products).toHaveLength(1));
+            if (entry === "product" || entry === "variant") {
+              browser.dispatchEvent(
+                new CustomEvent("delete-product", {
+                  detail: { productId: entry === "variant" ? "v1" : "p1" },
+                  bubbles: true,
+                  composed: true,
+                }),
+              );
+            } else {
+              browser.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
+              await browser.updateComplete;
+              const list = browser.shadowRoot!.querySelector("dashboard-product-list")!;
+              await list.updateComplete;
+              const table = list.shadowRoot!.querySelector("wt-data-table")!;
+              await table.updateComplete;
+              table
+                .shadowRoot!.querySelector<HTMLInputElement>(
+                  `tr[data-row-key="${entry === "folder" ? "folder:c1" : "p1"}"] input[type=checkbox]`,
+                )!
+                .click();
+              await browser.updateComplete;
+              browser.shadowRoot!.querySelector<HTMLElement>('[data-test="delete"]')!.click();
+              await browser.updateComplete;
+              if (entry === "folder") {
+                await vi.waitFor(() =>
+                  expect(browser.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+                );
+                browser.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+                await browser.updateComplete;
+              }
+            }
+            await flush(el);
+            const modal =
+              entry === "product" || entry === "variant"
+                ? el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+                    "[data-test=delete-dialog]",
+                  )!
+                : browser.shadowRoot!.querySelector("wt-modal")!;
+            await modal.updateComplete;
+            const native = modal.shadowRoot!.querySelector("dialog")!;
+            expect(native.open).toBe(true);
+            expect(modal.querySelector("[data-test=archive-extra-lists]")!.textContent).toContain(
+              names[0],
+            );
+            expect(modal.querySelector("[data-test=archive-extra-lists]")!.textContent).toContain(
+              locale === "en"
+                ? "Removed from these extras lists:"
+                : "Sale de estas listas de extras:",
+            );
+            const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+            expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
+            expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            await expectNoA11yViolations(host);
+            if (import.meta.env.VITE_A435_FINAL_CAPTURE === "1")
+              await page.screenshot({
+                element: page.getByRole("dialog", { name: modal.heading, exact: true }),
+                path: `__screenshots__/a435-final-fixes/${entry}-${locale}-${theme}-${width}.png`,
+              });
+            cleanupWidgets();
+          }
+        }
+      } finally {
+        setLocale(before.locale);
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+});

@@ -48,6 +48,7 @@ import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
 import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
+import { archiveExtraListWarning } from "../widgets/archive-extra-lists.js";
 import { refusalText } from "../widgets/archive-refusal.js";
 
 @customElement("dashboard-catalogue-screen")
@@ -75,6 +76,9 @@ export class CatalogueScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
         font-size: var(--wt-font-size-lg);
+      }
+      .archive-extra-lists {
+        overflow-wrap: anywhere;
       }
       .error {
         color: var(--wt-color-danger);
@@ -814,6 +818,7 @@ export class CatalogueScreen extends LitElement {
           )}
           ${offMenusSentence("product.off_menus", this.deletingMenus)}
         </p>
+        ${archiveExtraListWarning(this.products, this.deletingProduct ? [this.deletingProduct.id] : [], this.extraLists)}
         <wt-form-actions
           slot="footer"
           .error=${this.deleteErrorKey ? refusalText(this.deleteErrorKey, this.deleteErrorParams) : ""}

@@ -1,5 +1,11 @@
 # A420 Inline Translations Implementation Plan
 
+**2026-10-09 follow-up:** [A435's archive design](../specs/2026-10-08-delete-and-archive-design.md)
+keeps names-only fixes available for explicitly selected archived product and variant targets.
+The automatic missing-translations list still excludes archived families. Role, ownership,
+language configuration and saved-baseline checks still apply; other inactive targets remain
+unavailable. This updates the activity rule below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline, one whole task per firing. Do not dispatch agents. Spec and unattended execution are approved.
 
 **Goal:** Fill one language's missing customer-facing names in one staged, atomic save.
@@ -225,7 +231,6 @@ and root 3605 checks passed, with scoped types/lint/format. Restricted writer co
 assertions; restored read/write suites passed 47 cases. Existing assertions are unchanged.
 Tasks 3–8 remain unbuilt; no route or editable dialog is exposed.
 
-
 Task 3 local checkpoint (2026-10-08): all nine names-only commands and atomic domain saves
 are built. The expected token now records the selected language and inherited selected/default
 cells. Batch retries project this batch's root/default effects and issue no updates; conflicts
@@ -234,7 +239,6 @@ Five installed safeguard removals failed as expected (four controls produced ass
 removal refused the valid joint save); restored suites passed 111 cases. Restricted source
 coverage 99.56/97.5/100/100 is not package or CI coverage. Existing assertions remain unchanged.
 The authenticated route, staged dialog and Tasks 4–8 remain unbuilt.
-
 
 Task 4 local checkpoint (2026-10-08): authenticated selected-language GET/PUT routes,
 dashboard transport, ten live dependencies (including menu_details) and EN/ES refusal wording

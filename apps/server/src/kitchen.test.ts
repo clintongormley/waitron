@@ -609,6 +609,21 @@ describe("product-course config", () => {
     },
   );
 
+  it("the top-level course path refuses an archived family before its variant scope", async () => {
+    const cfg = await setupVenue();
+    const productId = await seedProduct();
+    const variantId = await seedVariant(productId);
+    await db.update(products).set({ active: false }).where(eq(products.id, productId));
+    const before = await db.select().from(products).where(eq(products.id, variantId));
+    await expect(
+      asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, null)),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: variantId },
+    });
+    expect(await db.select().from(products).where(eq(products.id, variantId))).toEqual(before);
+  });
+
   it("setProductCourse names the product before an unknown course", async () => {
     const cfg = await setupVenue();
     const missing = randomUUID();

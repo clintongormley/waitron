@@ -1,5 +1,11 @@
 # A420 part 2: fill missing translations in place
 
+**2026-10-09 follow-up:** [A435's archive design](2026-10-08-delete-and-archive-design.md)
+keeps names-only fixes available for explicitly selected archived product and variant targets.
+The automatic missing-translations list still excludes archived families. Role, ownership,
+language configuration and saved-baseline checks still apply; other inactive targets remain
+unavailable. This updates the activity rule below.
+
 **Approved by the owner 2026-10-08, Lane E. Part 2 implementation follows part 1.**
 
 You should be able to fill missing customer-facing names for one content language without opening

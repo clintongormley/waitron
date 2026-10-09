@@ -4326,3 +4326,119 @@ it.each([
     );
   },
 );
+
+it.each(["products", "folder"] as const)(
+  "names affected extras lists for %s Archive warnings",
+  async (entry) => {
+    const lists = [
+      ["affected", "Archive affected sauces", entry === "products" ? "bread" : "cola"],
+      ["unrelated", "Archive unrelated extras", "burger"],
+      ["archived", "Archive already archived extras", "lager"],
+    ].map(([id, name, productId]) => ({
+      id: id!,
+      name: name!,
+      customerName: null,
+      kitchenName: null,
+      active: true,
+      minPicks: 0,
+      maxPicks: null,
+      usage: { products: 1 },
+      items: [
+        {
+          id: `${id}-item`,
+          productId: productId!,
+          maxQuantity: null,
+          preselected: false,
+          price: null,
+        },
+      ],
+    }));
+    const el = await mountBrowser({ extraLists: lists });
+    await selectKeys(el, entry === "products" ? ["bread"] : ["folder:d"]);
+    await press(el, "delete");
+    if (entry === "folder") {
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+      );
+      expect(dialog(el)!.textContent).not.toContain("Archive affected sauces");
+      el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+      await el.updateComplete;
+    }
+    expect(dialog(el)!.textContent).toContain("Archive affected sauces");
+    expect(dialog(el)!.textContent).not.toContain("Archive unrelated extras");
+    expect(dialog(el)!.textContent).not.toContain("Archive already archived extras");
+  },
+);
+
+it("names active descendant and variant extras only when deleting folder contents, and clears them on Move up", async () => {
+  const child = product("child", "Child", "b");
+  child.variants = [
+    {
+      id: "size",
+      name: "Size",
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      active: true,
+      available: true,
+      effective: { unitPrice: "2.00", vatClass: "reduced", primaryCategoryId: "b" },
+    },
+    {
+      id: "old-size",
+      name: "Old size",
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      active: false,
+      available: true,
+      effective: { unitPrice: "2.00", vatClass: "reduced", primaryCategoryId: "b" },
+    },
+  ];
+  const lists = [
+    ["child", "Descendant extras"],
+    ["size", "Variant extras"],
+    ["old-size", "Archived variant extras"],
+    ["bread", "Selected product extras"],
+  ].map(([productId, name]) => ({
+    id: productId!,
+    name: name!,
+    customerName: null,
+    kitchenName: null,
+    minPicks: 0,
+    maxPicks: null,
+    active: false,
+    items: [
+      {
+        id: `${productId}-item`,
+        productId: productId!,
+        maxQuantity: null,
+        preselected: false,
+        price: null,
+      },
+    ],
+  }));
+  const el = await mountBrowser({ products: [...PRODUCTS, child], extraLists: lists });
+  await selectKeys(el, ["bread", "folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
+  );
+  const warning = () => dialog(el)!.querySelector("[data-test=archive-extra-lists]")!.textContent;
+  expect(warning()).toContain("Selected product extras");
+  expect(warning()).not.toContain("Descendant extras");
+  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await el.updateComplete;
+  expect(warning()).toContain("Descendant extras");
+  expect(warning()).toContain("Variant extras");
+  expect(warning()).not.toContain("Archived variant extras");
+  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
+  await el.updateComplete;
+  expect(warning()).toContain("Selected product extras");
+  expect(warning()).not.toContain("Descendant extras");
+  expect(warning()).not.toContain("Variant extras");
+  el.extraLists = [];
+  await el.updateComplete;
+  expect(dialog(el)!.querySelector("[data-test=archive-extra-lists]")).toBeNull();
+});

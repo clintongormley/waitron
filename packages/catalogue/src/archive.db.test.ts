@@ -16,7 +16,7 @@ import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js"
 import { eq } from "drizzle-orm";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
-import { deleteCatalogueItems } from "./catalogue-items.js";
+import { moveCatalogueItems, deleteCatalogueItems } from "./catalogue-items.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { menuItems } from "./schema/menu.js";
@@ -24,6 +24,8 @@ import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { offerOf } from "../test/menus-fixture.js";
 import { sectionMembers } from "./schema/sections.js";
 import { deactivateCatalogue, deactivateProduct, updateProduct } from "./operations.js";
+
+import { setMainReportingCategory } from "./categories.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -633,4 +635,99 @@ describe("variants and extras", () => {
       items: [{ productId: f.extraLemon }],
     });
   });
+});
+
+it.each(["create", "update"] as const)(
+  "refuses an active extras variant whose parent is archived in a %s body atomically",
+  async (mode) => {
+    const f = await menusFixture(fx.db);
+    await switchOff(f.lemonade);
+    expect((await row(f.large))!.active).toBe(true);
+    const before = await app(async (tx) => ({
+      lists: await tx.select().from(extraLists),
+      items: await tx.select().from(extraListItems),
+      tree: await tx.select().from(products),
+    }));
+    const input = {
+      name: "Changed parent-archived extras",
+      items: [{ productId: f.burger }, { productId: f.large }],
+    };
+    await expect(
+      app((tx) =>
+        mode === "create"
+          ? createExtraList(tx, input, "en")
+          : updateExtraList(tx, f.extrasList, input, "en"),
+      ),
+    ).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: f.large, field: "items.1.productId" },
+    });
+    expect(
+      await app(async (tx) => ({
+        lists: await tx.select().from(extraLists),
+        items: await tx.select().from(extraListItems),
+        tree: await tx.select().from(products),
+      })),
+    ).toEqual(before);
+  },
+);
+
+it.each(["create", "update"] as const)(
+  "keeps a variant with an active parent eligible for an extras %s",
+  async (mode) => {
+    const f = await menusFixture(fx.db);
+    const input = {
+      name: "Active parent extras",
+      items: [{ productId: f.burger }, { productId: f.large }],
+    };
+    const saved = await app((tx) =>
+      mode === "create"
+        ? createExtraList(tx, input, "en")
+        : updateExtraList(tx, f.extrasList, input, "en"),
+    );
+    expect(
+      (await app((tx) => getExtraList(tx, saved.id))).items.map((item) => item.productId),
+    ).toEqual([f.burger, f.large]);
+  },
+);
+
+it("keeps reporting-category and single-selection folder moves available after Archive", async () => {
+  const f = await menusFixture(fx.db);
+  await app((tx) => archiveProducts(tx, [f.burger]));
+  await app((tx) => setMainReportingCategory(tx, f.burger, f.softDrinks));
+  expect(await row(f.burger)).toMatchObject({ active: false, categoryId: f.softDrinks });
+  await app((tx) => moveCatalogueItems(tx, { productIds: [f.burger], categoryIds: [] }, null));
+  expect(await row(f.burger)).toMatchObject({ active: false, categoryId: null });
+});
+
+it("lets an active variant reuse an archived variant's staff name while preserving the archived row", async () => {
+  const f = await menusFixture(fx.db);
+  const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
+  await app((tx) => archiveProducts(tx, [f.large]));
+  const before = await row(f.large);
+  await app((tx) =>
+    setProductVariants(
+      tx,
+      f.lemonade,
+      [
+        { ...large!, active: false },
+        { ...large!, id: undefined, active: true },
+      ],
+      "en",
+    ),
+  );
+  expect(await row(f.large)).toEqual(before);
+  const family = await app((tx) => listProductVariants(tx, f.lemonade));
+  expect(family.filter((v) => v.active).map((v) => v.name)).toEqual(["Large"]);
+  const current = family.find((v) => v.active)!;
+  await expect(
+    app((tx) =>
+      setProductVariants(
+        tx,
+        f.lemonade,
+        [{ ...large!, active: false }, current, { ...current, id: undefined }],
+        "en",
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "product.name_taken" });
 });
