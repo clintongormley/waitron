@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
 
 describe("VENUE_SERVICE_CLASSIFICATION", () => {
+  it("copies today's zone extensions as state", () => {
+    expect(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "zone_extensions").map(
+        (entry) => [entry.table, entry.class],
+      ),
+    ).toEqual([["zone_extensions", "state"]]);
+  });
   it("copies today's period extensions as state", () => {
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "period_extensions").map(

@@ -1223,6 +1223,19 @@ Commit `docs: live station controls and keeping a period open (A366 slice 3)`.
 
 ## Part B — the zone extension (second pull request, after slice 2)
 
+> **Part B grounding, 2026-10-09 (Lane D).** Part A landed as
+> `87b46b024fcac68a6240949964768b9fbc7d4972` (#1469); slice 2 landed as
+> `974f7170e4c7bae0eb4199a20caafbdb94eaad00` (#1470), this branch's base.
+> The slice 2 interfaces below exist under the planned names: `zoneClosedTimes`,
+> `closedZoneIdsAt`, `assertZoneTakesNewOrders`, `service.zoneOpen`, and `/api/zones`'s `closed`.
+> Part A supplies `keep-open.ts`, `keep-open-api.ts` and the till's keep-open widgets.
+> Task B1 generates a new table and unique index; it does not rebuild a table.
+> The runner's focused local checks and CI package coverage rule overrides the earlier
+> whole-package-per-task instruction. Parts A and B use separate registered worktrees.
+> Slice 5 and slice 6 overlap schema, classification, migration and server paths; the queue's
+> explicit overlap waiver applies. The later branch regenerates colliding migration numbers.
+
+
 Re-ground every task against slice 2 as landed: `zone_closed_times`, `closedZoneIdsAt` and
 `assertZoneTakesNewOrders` (slice 2 Task 10), `service.zoneOpen`, the closed-zone notice (Task 13),
 `GET /api/zones`' `closed` and the floor (Task 14). Names below are slice 2's planned names.

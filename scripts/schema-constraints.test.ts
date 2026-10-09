@@ -294,6 +294,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["zone_service_policies", ["location_id"], "locations"],
   ["zone_service_policies", ["zone_id"], "floor_zones"],
   ["zone_closed_times", ["zone_id"], "zone_service_policies"],
+  ["zone_extensions", ["zone_id"], "zone_service_policies"],
   ["zone_closed_times", ["special_date_id"], "special_dates"],
 ];
 
@@ -370,6 +371,7 @@ const EXPECTED_UNIQUE_INDEXES = [
   "routing_cells_no_category_zone_key",
   "station_day_states_day_key",
   "period_extensions_day_key",
+  "zone_extensions_day_key",
   "print_agents_tenant_node_key",
   "printers_local_key_key",
   "product_modifiers_product_extra_uq",
@@ -466,6 +468,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "station_fallbacks_not_self_ck",
   "station_day_states_sends_to_not_self_ck",
   "period_extensions_step_ck",
+  "zone_extensions_step_ck",
   "hours_week_cells_weekday_ck",
   "hours_week_cells_one_owner_ck",
   "hours_week_cells_mode_ck",

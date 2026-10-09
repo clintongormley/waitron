@@ -36,6 +36,7 @@ const TABLES = [
   "departments",
   "zone_service_policies",
   "zone_closed_times",
+  "zone_extensions",
   "menu_period_staff_menus",
   "device_profile_service_access",
   "device_profile_zones",
@@ -178,6 +179,10 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(special_date_id) -> special_dates(id) on delete cascade",
           "(zone_id) -> zone_service_policies(zone_id)",
         ],
+      },
+      zone_extensions: {
+        primaryKey: ["id"],
+        foreignKeys: ["(zone_id) -> zone_service_policies(zone_id)"],
       },
       menu_period_staff_menus: {
         primaryKey: ["period_id", "menu_id"],
@@ -346,6 +351,81 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION), constraint).toBe(true);
     expect(engineErrorMessage(error), constraint).toContain("FOREIGN KEY constraint failed");
   }
+
+  async function zoneWithPolicy() {
+    const v = await venue();
+    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
+      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    return v;
+  }
+
+  it("keeps one zone extension per business day while other zones and days remain independent", async () => {
+    const v = await zoneWithPolicy();
+    const other = await zoneWithPolicy();
+    const extension = (zoneId: string, businessDay: string) =>
+      sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
+        values (${randomUUID()}, ${zoneId}, ${businessDay}, '23:30:00', '01:30:00')`;
+    await db.execute(extension(v.zoneId, "2026-10-09"));
+    await db.execute(extension(v.zoneId, "2026-10-10"));
+    await db.execute(extension(other.zoneId, "2026-10-09"));
+    expect(
+      (
+        await db.execute(sql`select business_day, starts_at, ends_at from zone_extensions
+      where zone_id = ${v.zoneId} order by business_day`)
+      ).rows,
+    ).toEqual([
+      { business_day: "2026-10-09", starts_at: "23:30:00", ends_at: "01:30:00" },
+      { business_day: "2026-10-10", starts_at: "23:30:00", ends_at: "01:30:00" },
+    ]);
+    expect(
+      (
+        await db.execute(sql`select business_day from zone_extensions
+      where zone_id = ${other.zoneId}`)
+      ).rows,
+    ).toEqual([{ business_day: "2026-10-09" }]);
+    const error = await captureError(() =>
+      db.transaction((tx) => tx.execute(extension(v.zoneId, "2026-10-09"))),
+    );
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain(
+      "zone_extensions.zone_id, zone_extensions.business_day",
+    );
+  });
+
+  it.each([
+    ["23:10:00", "01:30:00"],
+    ["23:30:00", "01:10:00"],
+  ])("refuses zone extension endpoints %s–%s between quarter-hours", async (start, end) => {
+    const v = await zoneWithPolicy();
+    const error = await captureError(() =>
+      db.transaction((tx) =>
+        tx.execute(
+          sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
+        values (${randomUUID()}, ${v.zoneId}, '2026-10-09', ${start}, ${end})`,
+        ),
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("zone_extensions_step_ck");
+  });
+
+  it("ties a zone extension to an existing zone service policy", async () => {
+    const v = await venue();
+    const extension = (zoneId: string) => sql`insert into zone_extensions
+      (id, zone_id, business_day, starts_at, ends_at)
+      values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`;
+    await refusal(extension(v.zoneId), "zone_extensions_zone_fk");
+    await refusal(extension(randomUUID()), "zone_extensions_zone_fk");
+    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
+      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    await db.execute(extension(v.zoneId));
+    expect(
+      (
+        await db.execute(sql`select zone_id from zone_extensions
+      where zone_id = ${v.zoneId}`)
+      ).rows,
+    ).toEqual([{ zone_id: v.zoneId }]);
+  });
 
   it("keeps only one period extension per department and business day", async () => {
     const v = await venue();

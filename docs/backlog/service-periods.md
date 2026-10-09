@@ -29,7 +29,7 @@ their full text.
   slice 6. Lane E's build follows slice 6 Part A before
   slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
   Slice 3's plan is written ahead of lane D (A366-3p, 2026-10-08): [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md),
-  with keeping a zone open after slice 2 remaining in Part B.
+  with the zone-extension writer, server route and till controls after slice 2 remaining in Part B.
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   in two pull requests — combined tickets on shared printers, period choices in routing cells and
   the station editor after slice 1; station hours, fallbacks and the tester removed, with each
