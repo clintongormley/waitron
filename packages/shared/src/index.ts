@@ -145,3 +145,17 @@ export {
   type SearchRank,
   type TextSearch,
 } from "./text-search.js";
+export {
+  receiptLogoSource,
+  resolveReceiptText,
+  resolveReceiptTrim,
+  untranslatedLanguages,
+} from "./receipt-text.js";
+export type {
+  DepartmentReceiptConfig,
+  PrintedReceiptTrim,
+  ReceiptPresentation,
+  ReceiptText,
+  VenueReceiptConfig,
+  VenueReceiptSettings,
+} from "./receipt-text.js";

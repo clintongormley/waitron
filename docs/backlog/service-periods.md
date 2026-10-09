@@ -31,7 +31,8 @@ their full text.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
   revised 2026-10-10 to the owner's later receipt overrides, in two pull requests: each department's
   receipt with translated subtitle and footer, then the department page's Receipt tab after
-  slice 6. Parts 3A and 6A have landed (#1469/#1488); Lane E's slice 7 build is open.
+  slice 6. Parts 3A and 6A have landed (#1469/#1488). Slice 7's pure shapes,
+  two-language resolver and validators are built; persistence, presentation and editors remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).

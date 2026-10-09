@@ -1,16 +1,15 @@
 import "@waitron/shared";
 import type { CardType } from "./canvas.js";
 
-// No param echoes a caller-supplied value, except `configKey`: for a key outside the card's
-// contract it is the caller's own key string (never its value). `reason` is a fixed enum, `field`
-// names a known receipt field, `maxLength` is the policy cap, `tabIndex` locates a tab by position,
-// `card` is only ever a valid CardType, and `token` only ever an allowlisted token.
+// Receipt params name known fields and approved languages, never authored text or unknown keys.
+// `configKey` may echo a card's unknown configuration key, never its value.
 declare module "@waitron/shared" {
   interface ErrorParams {
     "receipt.invalid": {
       reason:
         | "not_object"
         | "not_string"
+        | "invalid_language"
         | "too_long"
         | "unknown_field"
         | "invalid_phone"
@@ -19,6 +18,7 @@ declare module "@waitron/shared" {
         | "invalid_logo"
         | "image_not_found";
       field?: "headerSubtitle" | "footerMessage" | "phone" | "email" | "printAddress" | "logo";
+      language?: string;
       maxLength?: number;
     };
     // `bad_capabilities` is no longer thrown: a bad capability set is `device_profile.invalid`.

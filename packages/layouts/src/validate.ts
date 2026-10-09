@@ -1,6 +1,7 @@
 import { isValidEmail } from "@waitron/identity";
 import { AppError, isValidTelephone, MEDIA_FILENAME } from "@waitron/shared";
 import "./errors.js";
+import type { DepartmentReceiptConfig, ReceiptText, VenueReceiptSettings } from "@waitron/shared";
 import type { ReceiptConfig } from "./types.js";
 
 export const MAX_RECEIPT_FIELD_LENGTH = 200;
@@ -74,4 +75,82 @@ export function validateReceiptConfig(input: unknown): ReceiptConfig {
     result.printAddress = input.printAddress;
   }
   return result;
+}
+
+function requireAuthoredObject(input: unknown): Record<string, unknown> {
+  if (!isPlainObject(input) || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) {
+    throw new AppError("receipt.invalid", { reason: "not_object" });
+  }
+  return input;
+}
+
+function requireKnownFields(input: Record<string, unknown>, fields: readonly string[]): void {
+  for (const key of Reflect.ownKeys(input)) {
+    if (typeof key !== "string" || !fields.includes(key)) {
+      throw new AppError("receipt.invalid", { reason: "unknown_field" });
+    }
+  }
+}
+
+function validateReceiptText(
+  input: unknown,
+  field: (typeof TEXT_FIELDS)[number],
+  languages: readonly string[],
+): ReceiptText | undefined {
+  if (!isPlainObject(input) || ![Object.prototype, null].includes(Object.getPrototypeOf(input))) {
+    throw new AppError("receipt.invalid", { reason: "not_object", field });
+  }
+  const result: Record<string, string> = {};
+  for (const language of Reflect.ownKeys(input)) {
+    if (
+      typeof language !== "string" ||
+      ["__proto__", "constructor", "prototype"].includes(language) ||
+      !languages.includes(language)
+    ) {
+      throw new AppError("receipt.invalid", { reason: "invalid_language", field });
+    }
+    const value = input[language];
+    if (typeof value !== "string") {
+      throw new AppError("receipt.invalid", { reason: "not_string", field, language });
+    }
+    if (value.length > MAX_RECEIPT_FIELD_LENGTH) {
+      throw new AppError("receipt.invalid", {
+        reason: "too_long",
+        field,
+        language,
+        maxLength: MAX_RECEIPT_FIELD_LENGTH,
+      });
+    }
+    if (value.trim() !== "") result[language] = value;
+  }
+  return Object.keys(result).length === 0 ? undefined : result;
+}
+
+export function validateDepartmentReceipt(
+  input: unknown,
+  languages: readonly string[],
+): DepartmentReceiptConfig {
+  const authored = requireAuthoredObject(input);
+  requireKnownFields(authored, RECEIPT_STRING_FIELDS);
+  const contact: Record<string, unknown> = {};
+  for (const field of ["logo", "phone", "email"] as const) {
+    if (Object.hasOwn(authored, field)) contact[field] = authored[field];
+  }
+  const validatedContact = validateReceiptConfig(contact);
+  const result: DepartmentReceiptConfig = {};
+  for (const field of ["logo", "phone", "email"] as const) {
+    if (validatedContact[field] !== undefined) result[field] = validatedContact[field];
+  }
+  for (const field of TEXT_FIELDS) {
+    if (authored[field] === undefined) continue;
+    const text = validateReceiptText(authored[field], field, languages);
+    if (text !== undefined) result[field] = text;
+  }
+  return result;
+}
+
+export function validateVenueReceiptSettings(input: unknown): VenueReceiptSettings {
+  const authored = requireAuthoredObject(input);
+  requireKnownFields(authored, ["logo", ...TEXT_FIELDS, "printAddress"]);
+  return validateReceiptConfig(authored);
 }
