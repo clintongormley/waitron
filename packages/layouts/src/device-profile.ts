@@ -114,7 +114,7 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
     "hand-over-orders",
   ],
   "tablet-landscape": [],
-  kds: ["act-as-kds", "prepare-orders"],
+  kds: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
 };
 
 /** No `canvasId`: a seeded profile binds no canvas, so its canvas is resolved by form factor

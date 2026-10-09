@@ -52,7 +52,7 @@ export interface SeedDemoResult {
   passStationIds: { kitchen: string; deli: string };
 }
 
-/** So a kitchen display running the pass screen shows Fire, Ready and Away. */
+/** The default kitchen display profile does not run the pass; the demo's does. */
 async function giveKitchenDisplaysThePass(tx: Transaction): Promise<void> {
   const profiles = await tx
     .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
@@ -60,12 +60,7 @@ async function giveKitchenDisplaysThePass(tx: Transaction): Promise<void> {
     .where(eq(deviceProfiles.formFactor, "kds"));
   for (const profile of profiles) {
     const capabilities = validateCapabilities(
-      [
-        ...validateCapabilities(profile.capabilities),
-        "run-the-pass",
-        "take-orders",
-        "hand-over-orders",
-      ],
+      [...validateCapabilities(profile.capabilities), "run-the-pass"],
       "kds",
     );
     await tx.update(deviceProfiles).set({ capabilities }).where(eq(deviceProfiles.id, profile.id));

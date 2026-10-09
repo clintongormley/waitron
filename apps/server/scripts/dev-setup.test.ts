@@ -342,9 +342,9 @@ describe("devSetup against a real venue directory", () => {
         capabilities: [
           "act-as-kds",
           "prepare-orders",
-          "run-the-pass",
           "take-orders",
           "hand-over-orders",
+          "run-the-pass",
         ],
       },
     ]);

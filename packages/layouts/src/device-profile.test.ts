@@ -220,7 +220,12 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       "hand-over-orders",
       "run-the-pass",
     ]);
-    expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds", "prepare-orders"]);
+    expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual([
+      "act-as-kds",
+      "prepare-orders",
+      "take-orders",
+      "hand-over-orders",
+    ]);
     expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([
       "take-orders",
       "hand-keyed-card-payment",
@@ -233,9 +238,14 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
 });
 
 describe("DEFAULT_PROFILE_CAPABILITIES and running the pass", () => {
-  it("lets the default till run the pass, and leaves the default kitchen display as it was", () => {
+  it("lets the default till run the pass, and gives the default kitchen display the levers but not the pass", () => {
     expect(DEFAULT_PROFILE_CAPABILITIES.till).toContain("run-the-pass");
-    expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds", "prepare-orders"]);
+    expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual([
+      "act-as-kds",
+      "prepare-orders",
+      "take-orders",
+      "hand-over-orders",
+    ]);
   });
 });
 
