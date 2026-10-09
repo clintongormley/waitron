@@ -1010,9 +1010,13 @@ it("keeps a zone through Back and Forward and clears it when choosing a departme
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/week/department/restaurant/zone/terrace");
     expect(picker(el).value).toBe("zone:terrace");
-    expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")?.textContent).toContain(
-      "Terrace",
-    );
+    const zoneWeek =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-zone-week"]>(
+        "opening-hours-zone-week",
+      );
+    expect(zoneWeek?.zone.name).toBe("Terrace");
+    expect(zoneWeek?.zone.id).toBe("terrace");
+    expect(zoneWeek?.department.id).toBe("restaurant");
     expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
     history.back();
     await expect.poll(() => picker(el).value).toBe("restaurant");
