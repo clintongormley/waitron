@@ -1059,7 +1059,7 @@ describe("Hours: special dates", () => {
     const el = await mount(api);
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
-    expect(modal(el)!.getAttribute("heading")).toBe("Edit special date");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit named day");
     expect(field(el, "closeWholeVenue")).toBeNull();
     const editors = [
       ...el.shadowRoot!.querySelectorAll<HTMLElement & { label: string; fieldPrefix: string }>(
@@ -1144,7 +1144,7 @@ describe("Hours: special dates", () => {
     const el = await mount(api);
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
-    expect(modal(el)!.getAttribute("heading")).toBe("Edit special date");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit named day");
     expect(text(modal(el)!.querySelector('[data-test="named-day-date"]'))).toBe("Mon, 12 Oct 2026");
     expect(text(modal(el)!.querySelector('[data-test="named-day-name"]'))).toBe("Fiesta Nacional");
     expect(field(el, "colour")).toBeNull();
@@ -1182,10 +1182,10 @@ describe("Hours: special dates", () => {
     const el = await mount(api);
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Staff"), "edit-date");
-    expect(modal(el)!.getAttribute("heading")).toBe("Edit special date");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit named day");
     expect(field(el, "closeWholeVenue")).toBeNull();
     expect(text(el.shadowRoot!.querySelector('[data-test="whole-venue-note"]'))).toBe(
-      "Every department and prep station is closed on this date, except the default station, which is always open. The hours below are kept for when you turn this off.",
+      "Every department and prep station is closed on this named day, except the default station, which is always open. Manage this closure in Opening hours → Calendar.",
     );
     const editors = [
       ...el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
@@ -1532,7 +1532,7 @@ describe("Hours: special dates", () => {
     const el = await mount(api);
     await selectTab(el, "dates");
     const table = listTable(el) as ListTable & { emptyMessage: string };
-    expect(table.emptyMessage).toBe("No special dates yet.");
+    expect(table.emptyMessage).toBe("No named days yet.");
   });
 
   it("speaks Spanish in the list", async () => {
@@ -1930,5 +1930,52 @@ it.each(["date", "name", "colour", "kind", "repeats", "ownHours", "closeWholeVen
     await click(el, saveButton(el));
     expect(calls("PUT")).toHaveLength(2);
     expect(modal(el)).toBeNull();
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "Station named-day editor accessible heading uses named-day terminology in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(server().api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    const dialog = modal(el)!.shadowRoot!.querySelector("dialog")!;
+    const heading = modal(el)!.shadowRoot!.getElementById(dialog.getAttribute("aria-labelledby")!)!;
+    expect(heading.textContent).toBe(locale === "en" ? "Edit named day" : "Editar día con nombre");
+  },
+);
+it.each(["en", "es"] as const)(
+  "Station empty named-day list names the right concept in %s",
+  async (locale) => {
+    setLocale(locale);
+    const { api, state } = server();
+    state.model.specialDates = [];
+    state.model.specialCells = [];
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    const table = listTable(el);
+    await table.updateComplete;
+    expect(table.shadowRoot!.textContent).toContain(
+      locale === "en" ? "No named days yet." : "Todavía no hay días con nombre.",
+    );
+  },
+);
+it.each(["en", "es"] as const)(
+  "Station stored closure help names its Calendar owner in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(server().api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Staff"), "edit-date");
+    expect(text(modal(el)!.querySelector('[data-test="whole-venue-note"]'))).toBe(
+      locale === "en"
+        ? "Every department and prep station is closed on this named day, except the default station, which is always open. Manage this closure in Opening hours → Calendar."
+        : "Todos los departamentos y estaciones de preparación cierran este día con nombre, salvo la estación predeterminada, que siempre está abierta. Gestiona este cierre en Horario de apertura → Calendario.",
+    );
+    expect(field(el, "closeWholeVenue")).toBeNull();
+    expect(
+      [...modal(el)!.querySelectorAll("hours-cell-editor")].every((cell) => cell.disabled),
+    ).toBe(true);
   },
 );
