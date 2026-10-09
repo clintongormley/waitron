@@ -5092,7 +5092,8 @@ diagnostics (Slice 1, #192).
 
 **No fiscal advisor is engaged yet.** One quoted on 2026-10-09: €300 an hour and about an hour for
 each of the 106 bullets in the 6 October list. The same day every bullet was researched against
-primary sources and the list was cut to sixteen questions, S1–S16, and a review list, R1–R6:
+primary sources and the list was cut to seventeen questions, S1–S17 (S17, on selling by weight,
+is legal metrology rather than tax), and a review list, R1–R6:
 [the shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Send that, asking
 for a fixed price. Before paying for answers, re-read the list against the current Waitron
 architecture.

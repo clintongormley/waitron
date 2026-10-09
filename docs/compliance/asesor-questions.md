@@ -7,7 +7,7 @@ primary texts. These are the items that research could not resolve.
 Each question has English context (for us) and a Spanish formulation (to hand over).
 
 On **2026-10-09**, after the advisor quoted about an hour per question at €300 an hour, every question was
-researched against primary sources and the list was cut to sixteen questions and a short review list:
+researched against primary sources and the list was cut to seventeen questions and a short review list:
 see [The shortened list (2026-10-09)](#the-shortened-list-2026-10-09). It replaces the 6 October Word copies.
 
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
@@ -226,13 +226,13 @@ checked word for word against the downloaded text, are in
 [research/2026-10-09-vat-and-corrections.md](research/2026-10-09-vat-and-corrections.md) and
 [research/2026-10-09-operations.md](research/2026-10-09-operations.md). Of the bullets the passes scored,
 about a quarter were answered outright and most of the rest narrowed to a yes or no. What is left for the
-advisor is below: sixteen short questions, S1 to S16, and a review list, R1 to R6, for the advisor to
+advisor is below: seventeen short questions, S1 to S17, and a review list, R1 to R6, for the advisor to
 read and correct only where we are wrong. **This list replaces the 6 October Word copies**; the
 question texts further down this file stay as the background and the record. No enquiry has been
 sent.
 
 Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, Q11, Q12 and Q16)
-are unchanged by this pass.
+are unchanged by this pass. Q46, on selling by weight, was added afterwards the same day as S17.
 
 ### What happened to each question sent on 6 October
 
@@ -342,6 +342,13 @@ are unchanged by this pass.
   re-issues numbers. Our default: a new installation number and new series before trading resumes;
   keep every record and AEAT reply; send nothing automatically for a conflict; list each case for the
   venue's adviser. Is that reasonable, and is anything to be communicated to AEAT?
+- **S17. Selling by weight (Q46; legal metrology, not tax).** (a) A certified scale that works out
+  the price and sends weight, price per kilo and total to the till, which only records and prints
+  them: are the scale and the till one controlled instrument, does our software need a notified
+  body's assessment or certificate (and each release a new approval), and who signs the declaration
+  of conformity? (b) What Waitron does today, staff typing in the weight read off a certified scale
+  and the till pricing it: does it comply, and does it need anything more, such as the total shown
+  on the scale or a mention on the ticket? (c) If this is outside your field, whom should we ask?
 
 **Review list: read, and correct only where we are wrong.**
 
@@ -448,6 +455,34 @@ are unchanged by this pass.
 > series antes de volver a facturar; conservar todos los registros y respuestas de la AEAT; no enviar
 > nada automáticamente ante un conflicto; y dejar cada caso a la vista del asesor del local. ¿Es
 > razonable? ¿Hay que comunicar algo a la AEAT?
+>
+> **S17. Venta a peso: cálculo del importe en el TPV.** Nuestro TPV (Waitron) expide las facturas como
+> SIF y funciona en un navegador con un servidor local en el establecimiento. Algunos clientes venden
+> productos a peso. Le planteamos dos situaciones:
+>
+> **(a) Balanza conectada que calcula el importe.** Una balanza verificada (examen UE de tipo,
+> clase III, marcado M), con visor propio para el cliente, pesa, calcula el importe con su propio
+> precio por kilo y envía por cable al TPV el peso, el precio por kilo y el importe. El TPV solo los
+> registra e imprime, sin recalcular nada.
+>
+> - ¿Forman la balanza y el TPV un único instrumento sujeto a control metrológico (Directiva
+>   2014/31/UE, Real Decreto 244/2016, Orden ICT/155/2020)?
+> - ¿Necesita nuestro software una evaluación o un certificado de un organismo notificado, y cada
+>   nueva versión una nueva aprobación?
+> - ¿Quién debe firmar la declaración de conformidad del conjunto: el fabricante de la balanza,
+>   nosotros o el establecimiento?
+>
+> **(b) Sin conexión, peso introducido a mano.** El empleado pesa en una balanza verificada, lee el
+> peso en su visor y lo teclea en el TPV. El TPV lo multiplica por su propio precio por kilo e
+> imprime en el ticket el peso, el precio por kilo y el importe.
+>
+> - ¿Es esto conforme con la normativa de metrología legal y de protección del consumidor?
+> - ¿Exige algo adicional, por ejemplo que el cliente vea el importe en la propia balanza, o una
+>   mención concreta en el ticket?
+>
+> **(c)** Si estas cuestiones quedan fuera de su ámbito, ¿a quién nos recomienda consultar: un
+> organismo notificado, el Centro Español de Metrología o el órgano de metrología de la comunidad
+> autónoma?
 >
 > **Para revisar: corríjanos solo si nos equivocamos.**
 >
@@ -1486,6 +1521,58 @@ rest, and a restaurant's full invoices to businesses are inside the regime.
 > como factura electrónica estructurada desde esa fecha, también en hostelería? ¿Qué plazo aplica al
 > restaurante: el de su propio volumen de operaciones o el del cliente?
 ---
+
+### Q46. Selling by weight: when the till works out the price (added 2026-10-09)
+
+**Not a tax question.** This is legal metrology (the rules on weighing instruments used in trade),
+not tax. It is asked here because the advisor is the one contact engaged; part (c) lets them point us
+to the right body instead of researching it at their hourly rate.
+
+**Why it matters.** Some venues sell food by weight. Our reading of the rules, **not verified**: when
+a till works out a price from a connected scale's weight, the two may together count as one legally
+controlled weighing instrument. That would need an assessment of the combination, and possibly a
+certificate for the till's software, with every release re-approved. The European guide that
+approved testing bodies follow (WELMEC 2.10) is read as saying that pricing software running on a
+web server is, for now, outside its standard approach. We need to know which of two set-ups we can
+offer, and whether what Waitron already does is allowed.
+
+- **(a) A connected scale that works out the price itself.** The scale is certified (EU
+  type-examined, class III, with the M mark) and shows weight, price per kilo and total on its own
+  customer display. It sends those three figures by cable to Waitron, which records and prints them
+  without recalculating anything.
+- **(b) No connection, weight typed in.** This is what Waitron does today. Staff weigh on a
+  certified scale, read the weight off its display and type it into the till. Waitron multiplies it
+  by its own price per kilo and prints weight, price per kilo and total on the receipt.
+- **(c)** If this is outside the advisor's field, whom to ask: a notified body, the Centro Español
+  de Metrología, or the regional metrology office.
+
+> **Venta a peso: cálculo del importe en el TPV.** Nuestro TPV (Waitron) expide las facturas como
+> SIF y funciona en un navegador con un servidor local en el establecimiento. Algunos clientes venden
+> productos a peso. Le planteamos dos situaciones:
+>
+> **(a) Balanza conectada que calcula el importe.** Una balanza verificada (examen UE de tipo,
+> clase III, marcado M), con visor propio para el cliente, pesa, calcula el importe con su propio
+> precio por kilo y envía por cable al TPV el peso, el precio por kilo y el importe. El TPV solo los
+> registra e imprime, sin recalcular nada.
+>
+> - ¿Forman la balanza y el TPV un único instrumento sujeto a control metrológico (Directiva
+>   2014/31/UE, Real Decreto 244/2016, Orden ICT/155/2020)?
+> - ¿Necesita nuestro software una evaluación o un certificado de un organismo notificado, y cada
+>   nueva versión una nueva aprobación?
+> - ¿Quién debe firmar la declaración de conformidad del conjunto: el fabricante de la balanza,
+>   nosotros o el establecimiento?
+>
+> **(b) Sin conexión, peso introducido a mano.** El empleado pesa en una balanza verificada, lee el
+> peso en su visor y lo teclea en el TPV. El TPV lo multiplica por su propio precio por kilo e
+> imprime en el ticket el peso, el precio por kilo y el importe.
+>
+> - ¿Es esto conforme con la normativa de metrología legal y de protección del consumidor?
+> - ¿Exige algo adicional, por ejemplo que el cliente vea el importe en la propia balanza, o una
+>   mención concreta en el ticket?
+>
+> **(c)** Si estas cuestiones quedan fuera de su ámbito, ¿a quién nos recomienda consultar: un
+> organismo notificado, el Centro Español de Metrología o el órgano de metrología de la comunidad
+> autónoma?
 
 ## USEFUL — reduces uncertainty, not blocking
 
