@@ -715,7 +715,6 @@ const editedDateBody = [
     kind: "working_day",
     repeats: false,
     ownHours: false,
-    colour: "red",
     closeWholeVenue: false,
     cells: [
       {
