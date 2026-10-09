@@ -191,12 +191,12 @@ async function settingsFixture() {
   const department = await withTransaction(db, async (tx) => {
     const department = await createDepartment(tx, fx, {
       name: "Dining",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     await configureZone(tx, fx, {
       zoneId: fx.zoneId,
       departmentId: department.id,
-      serviceMode: "table_tab",
+      orderStart: "table",
     });
     return department;
   });
@@ -227,7 +227,7 @@ describe("whole service settings saves", () => {
     const destination = await withTransaction(db, (tx) =>
       createDepartment(tx, fx, {
         name: "Bar",
-        defaultServiceMode: "prepay",
+        orderStart: "counter",
       }),
     );
     const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
@@ -299,7 +299,7 @@ describe("whole service settings saves", () => {
     async (active) => {
       const fx = await settingsFixture();
       const other = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Taken", defaultServiceMode: "prepay" }),
+        createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
       );
       await db.update(departments).set({ active }).where(eq(departments.id, other.id));
       const before = await settingsSnapshot(fx);
@@ -319,7 +319,7 @@ describe("whole service settings saves", () => {
   it("rolls back the department and sale policy when a transfer names itself", async () => {
     const fx = await settingsFixture();
     const other = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Bar", defaultServiceMode: "prepay" }),
+      createDepartment(tx, fx, { name: "Bar", orderStart: "counter" }),
     );
     expect(
       (
@@ -399,7 +399,7 @@ describe("whole service settings saves", () => {
     if (kind === "foreign") {
       const foreign = await fixture();
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, foreign, { name: "Foreign", defaultServiceMode: "prepay" }),
+        createDepartment(tx, foreign, { name: "Foreign", orderStart: "counter" }),
       );
       path = `/management-api/venue-service/departments/${department.id}/settings`;
     } else
@@ -519,10 +519,10 @@ describe("venue service management routes", () => {
   it("saves directional transfer settings only for a manager", async () => {
     const fx = await fixture();
     const { source, destination } = await withTransaction(db, async (tx) => ({
-      source: await createDepartment(tx, fx, { name: "Deli", defaultServiceMode: "table_tab" }),
+      source: await createDepartment(tx, fx, { name: "Deli", orderStart: "table" }),
       destination: await createDepartment(tx, fx, {
         name: "Restaurant",
-        defaultServiceMode: "table_tab",
+        orderStart: "table",
       }),
     }));
     const path = `/management-api/venue-service/departments/${source.id}/transfers`;
@@ -577,7 +577,7 @@ describe("venue service management routes", () => {
   ])("refuses malformed transfer settings %j", async (body, field) => {
     const fx = await fixture();
     const source = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Deli", defaultServiceMode: "table_tab" }),
+      createDepartment(tx, fx, { name: "Deli", orderStart: "table" }),
     );
     const path = `/management-api/venue-service/departments/${source.id}/transfers`;
     const response = await send(fx.app, "PUT", path, fx.managerCookie, body);
@@ -767,7 +767,7 @@ describe("venue service management routes", () => {
   it("refuses the retired invoice-first style without changing departments or zones", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Dining", defaultServiceMode: "table_tab" }),
+      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
     );
     await withTransaction(db, (tx) =>
       configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: department.id }),
@@ -844,7 +844,7 @@ describe("venue service management routes", () => {
     async (displayOrder) => {
       const fx = await fixture();
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Order department", defaultServiceMode: "prepay" }),
+        createDepartment(tx, fx, { name: "Order department", orderStart: "counter" }),
       );
       const response = await send(
         fx.app,
@@ -883,7 +883,7 @@ describe("venue service management routes", () => {
     async (active) => {
       const fx = await fixture();
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Disabled department", defaultServiceMode: "prepay" }),
+        createDepartment(tx, fx, { name: "Disabled department", orderStart: "counter" }),
       );
       await withTransaction(db, async (tx) => {
         await tx
@@ -1166,7 +1166,7 @@ describe("venue service management routes", () => {
       const row = await createDepartment(
         tx,
         { locationId: fx.locationId },
-        { name: "Restaurant", defaultServiceMode: "prepay" },
+        { name: "Restaurant", orderStart: "counter" },
       );
       await configureZone(
         tx,
@@ -1268,7 +1268,7 @@ describe("venue service management routes", () => {
       const row = await createDepartment(
         tx,
         { locationId: fx.locationId },
-        { name: "Start route", defaultServiceMode: "prepay" },
+        { name: "Start route", orderStart: "counter" },
       );
       await configureZone(
         tx,
@@ -1322,7 +1322,7 @@ describe("venue service management routes", () => {
           { locationId: fx.locationId },
           {
             name: "Receipt boundary",
-            defaultServiceMode: "prepay",
+            orderStart: "counter",
           },
         );
         await configureZone(
@@ -1375,7 +1375,7 @@ describe("venue service management routes", () => {
         { locationId: fx.locationId },
         {
           name: "Restaurant",
-          defaultServiceMode: "prepay",
+          orderStart: "counter",
         },
       );
       await configureZone(
@@ -1728,7 +1728,7 @@ describe("venue service management routes", () => {
         { locationId: fx.locationId },
         {
           name: "Restaurant",
-          defaultServiceMode: "table_tab",
+          orderStart: "table",
         },
       ),
     );
@@ -1760,7 +1760,7 @@ describe("venue service management routes", () => {
     for (const venue of [fx, other]) {
       const scope = { locationId: venue.locationId };
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, scope, { name: "Restaurant", defaultServiceMode: "table_tab" }),
+        createDepartment(tx, scope, { name: "Restaurant", orderStart: "table" }),
       );
       await withTransaction(db, (tx) =>
         configureZone(tx, scope, { zoneId: venue.zoneId, departmentId: department.id }),
@@ -2390,7 +2390,7 @@ describe("routing cell route", () => {
       const department = await createDepartment(
         tx,
         { locationId: fx.locationId },
-        { name: "Dining", defaultServiceMode: "table_tab" },
+        { name: "Dining", orderStart: "table" },
       );
       await configureZone(
         tx,
@@ -2880,7 +2880,7 @@ describe("routing explanation route", () => {
       const department = await createDepartment(
         tx,
         { locationId: fx.locationId },
-        { name: "Dining", defaultServiceMode: "table_tab" },
+        { name: "Dining", orderStart: "table" },
       );
       await configureZone(
         tx,
@@ -3241,7 +3241,7 @@ describe("name-only department creation", () => {
       createDepartment(tx, fx, {
         name: "Closed",
         tradingName: "Shop",
-        defaultServiceMode: "prepay",
+        orderStart: "counter",
       }),
     );
     await db.update(departments).set({ active: false }).where(eq(departments.id, row.id));

@@ -53,10 +53,10 @@ async function venue() {
       })
       .returning();
     const cfg = { locationId: locationId(place!.id) };
-    const a = await createDepartment(tx, cfg, { name: "Deli", defaultServiceMode: "table_tab" });
+    const a = await createDepartment(tx, cfg, { name: "Deli", orderStart: "table" });
     const b = await createDepartment(tx, cfg, {
       name: "Restaurant",
-      defaultServiceMode: "table_tab",
+      orderStart: "table",
     });
     const az = await createServiceZone(tx, cfg, { name: "Deli counter", departmentId: a.id });
     const bz = await createServiceZone(tx, cfg, { name: "Restaurant counter", departmentId: b.id });
@@ -398,7 +398,7 @@ describe("departmental tab transfers", () => {
         const foreign = await createDepartment(
           tx,
           { locationId: locationId(other!.id) },
-          { name: "Other venue", defaultServiceMode: "table_tab" },
+          { name: "Other venue", orderStart: "table" },
         );
         target = foreign.id;
       }

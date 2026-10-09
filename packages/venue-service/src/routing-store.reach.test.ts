@@ -50,7 +50,7 @@ async function fixture(tx: Transaction) {
   const cfg = { locationId: locationId(loc!.id) };
   const department = await createDepartment(tx, cfg, {
     name: "Dining",
-    defaultServiceMode: "table_tab",
+    orderStart: "table",
   });
   const zones: string[] = [];
   for (const name of ["Terrace", "Patio"]) {

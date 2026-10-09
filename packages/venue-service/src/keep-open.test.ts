@@ -47,7 +47,7 @@ async function fixture(options: { afternoon?: boolean; spring?: boolean } = {}) 
       .returning();
     const cfg = { locationId: locationId(venue!.id) };
     const departmentId = (
-      await createDepartment(tx, cfg, { name: "Restaurant", defaultServiceMode: "table_tab" })
+      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
     const [zone] = await tx
       .insert(floorZones)
