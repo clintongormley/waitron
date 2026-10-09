@@ -357,6 +357,7 @@ describe("allergen-picker guards", () => {
     expect(await offered("cascara frutos")).toEqual(["nuts"]);
     expect(await offered("&")).toEqual([]);
     setLocale("en-GB");
+    expect(await offered("frutos")).toEqual([]);
     expect(await offered("nuts")).toEqual(["nuts", "peanuts"]);
     expect(await offered("nut")).toEqual(["nuts", "peanuts"]);
     expect(await offered("nut ")).toEqual([]);

@@ -2,7 +2,7 @@ import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { foldForSearch, textSearch } from "@waitron/shared";
+import { foldForSearch, textSearch, type TextSearch } from "@waitron/shared";
 import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -650,8 +650,24 @@ export class MenuStructureTable extends LitElement {
     if (row.readOnly) return false;
     if (row.node.ref.kind !== "section") return true;
     if (this.filtering) return false;
-    const search = textSearch(this.search);
-    return search === undefined || search.rank(foldForSearch(row.name)) !== undefined;
+    const { search, names } = this.#compiledSearch();
+    if (search === undefined) return true;
+    let matches = names.get(row.name);
+    if (matches === undefined) {
+      matches = search.rank(foldForSearch(row.name)) !== undefined;
+      names.set(row.name, matches);
+    }
+    return matches;
+  }
+
+  /** Asked once per row on every draw, so the query is compiled, and each name judged, once per
+   * search typed. */
+  #searchCache?: { query: string; search: TextSearch | undefined; names: Map<string, boolean> };
+
+  #compiledSearch(): { search: TextSearch | undefined; names: Map<string, boolean> } {
+    if (this.#searchCache?.query !== this.search)
+      this.#searchCache = { query: this.search, search: textSearch(this.search), names: new Map() };
+    return this.#searchCache;
   }
 
   readonly #filterChange = (event: CustomEvent<{ filters: Record<string, string | string[]> }>) => {
@@ -781,7 +797,7 @@ export class MenuStructureTable extends LitElement {
   /** A search draws closest matches first, not the menu's order, so nothing is reordered during
    * one. */
   get #reorderable(): boolean {
-    return this.reordering && textSearch(this.search) === undefined;
+    return this.reordering && this.#compiledSearch().search === undefined;
   }
 
   #grip(row: Row) {

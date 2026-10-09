@@ -3240,6 +3240,9 @@ describe("Select mode while a search or filter hides rows", () => {
     await settle(el);
     expect(shown(el)).toContain("m-stuff");
     expect(boxKeys(el)).toEqual(["m-drinks", "m-stuff/m-stuff-drinks"]);
+    el.search = "beer";
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-drinks/m-beer", "m-stuff/m-stuff-drinks/m-beer"]);
     el.search = "&";
     await settle(el);
     expect(boxKeys(el)).toEqual([]);
