@@ -1,0 +1,192 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { LitElement, html } from "lit";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { applyTokens, LeaveController } from "@waitron/ui";
+import type { DashboardRequest } from "@waitron/dashboard-kit";
+import { setLocale } from "@waitron/dashboard-kit";
+import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import type { DepartmentDialogs, DepartmentDialog } from "./department-dialogs.js";
+import "./department-dialogs.js";
+function testApi(request: unknown) {
+  return new VenueServiceApi(request as DashboardRequest);
+}
+const model: VenueServiceView = {
+  departments: [
+    {
+      id: "d1",
+      name: "Restaurant",
+      tradingName: "Casa",
+      defaultServiceMode: "prepay",
+      active: true,
+    },
+    { id: "d2", name: "Deli", tradingName: "Shop", defaultServiceMode: "prepay", active: true },
+  ],
+  zones: [],
+  floorZones: [],
+  salePolicies: { departments: [], zones: [] },
+  readiness: [],
+  settings: { editSentLines: true },
+  kitchenTicketGrouping: "combined",
+  printHeldWork: false,
+  releaseReminderMinutes: null,
+  clearingWorkflow: false,
+};
+class DialogLeaveApp extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`<department-dialogs></department-dialogs
+      >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
+  }
+}
+customElements.define("department-dialog-leave-test-app", DialogLeaveApp);
+let app: DialogLeaveApp;
+beforeEach(() => setLocale("en"));
+afterEach(() => {
+  app?.remove();
+  setLocale("en");
+});
+async function mount(dialog: DepartmentDialog) {
+  app = document.createElement("department-dialog-leave-test-app") as DialogLeaveApp;
+  applyTokens(app);
+  document.body.append(app);
+  await app.updateComplete;
+  const el = app.shadowRoot!.querySelector("department-dialogs")!;
+  el.api = testApi(vi.fn(async () => ({ id: "new" })));
+  el.model = model;
+  el.dialog = dialog;
+  await el.updateComplete;
+  return el;
+}
+function field(el: DepartmentDialogs) {
+  const box = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]");
+  expect(box).not.toBeNull();
+  return box!;
+}
+async function change(el: DepartmentDialogs, value: string) {
+  field(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+async function choose(decision: "keep" | "discard") {
+  await app.updateComplete;
+  const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await q.updateComplete;
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+  await expect.poll(() => q.open).toBe(false);
+}
+const cases: DepartmentDialog[] = [
+  { kind: "add-department" },
+  { kind: "rename-department", row: model.departments[0]! },
+  { kind: "add-zone", departmentId: "d1" },
+  { kind: "rename-zone", row: { id: "z1", name: "Patio" } },
+];
+it.each(cases)("$kind asks before closing, Keep preserves and Discard closes", async (dialog) => {
+  const el = await mount(dialog);
+  expect(unload()).toBe(false);
+  await change(el, "Draft");
+  expect(unload()).toBe(true);
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const close = modal.requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  expect(field(el).value).toBe("Draft");
+  const discard = modal.requestClose("escape");
+  await choose("discard");
+  expect(await discard).toBe(true);
+  await expect.poll(() => el.dialog).toBeUndefined();
+  expect(unload()).toBe(false);
+});
+it.each(cases)(
+  "$kind reconnect retains its draft against the original baseline",
+  async (dialog) => {
+    const el = await mount(dialog);
+    await change(el, "Retained draft");
+    el.remove();
+    expect(unload()).toBe(false);
+    await new Promise((r) => setTimeout(r, 0));
+    app.shadowRoot!.append(el);
+    await el.updateComplete;
+    expect(field(el).value).toBe("Retained draft");
+    expect(unload()).toBe(true);
+    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await choose("keep");
+    expect(await close).toBe(false);
+    await change(el, "row" in dialog ? dialog.row.name : "");
+    expect(unload()).toBe(false);
+  },
+);
+it("an old save cannot commit a draft reconnected while its request was pending", async () => {
+  const el = await mount(cases[1]!);
+  let finish!: () => void;
+  el.api = testApi(
+    vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    ),
+  );
+  await change(el, "Draft");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+  await el.updateComplete;
+  el.remove();
+  app.shadowRoot!.append(el);
+  await el.updateComplete;
+  finish();
+  await new Promise((r) => setTimeout(r, 0));
+  await el.updateComplete;
+  expect(field(el).value).toBe("Draft");
+  expect(unload()).toBe(true);
+  expect(el.dialog).toEqual(cases[1]);
+});
+it("replacing a dialog cancels its leave question and ignores retained old buttons", async () => {
+  const el = await mount(cases[1]!);
+  await change(el, "Draft");
+  const old = el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!;
+  const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+  await app.updateComplete;
+  el.dialog = cases[2];
+  await el.updateComplete;
+  expect(await close).toBe(false);
+  old.click();
+  await el.updateComplete;
+  expect(field(el).value).toBe("");
+  expect(unload()).toBe(false);
+});
+
+it.each(["move-zone", "add-to-department"] as const)(
+  "%s keeps its destination through the leave question and reconnect",
+  async (kind) => {
+    const el = await mount({ kind, row: { id: "z1", name: "Patio" } });
+    const box =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+    await chooseOption(box, "d2");
+    expect(unload()).toBe(true);
+    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await choose("keep");
+    expect(await close).toBe(false);
+    expect(box.value).toBe("d2");
+    el.remove();
+    expect(unload()).toBe(false);
+    await new Promise((r) => setTimeout(r, 0));
+    app.shadowRoot!.append(el);
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!
+        .value,
+    ).toBe("d2");
+    expect(unload()).toBe(true);
+    const discard = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    await choose("discard");
+    expect(await discard).toBe(true);
+    await expect.poll(() => el.dialog).toBeUndefined();
+    expect(unload()).toBe(false);
+  },
+);

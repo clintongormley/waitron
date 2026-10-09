@@ -179,8 +179,8 @@ export class VenueServiceApi {
 
   createDepartment(input: {
     name: string;
-    tradingName: string;
-    defaultServiceMode: ServiceMode;
+    tradingName?: string;
+    defaultServiceMode?: ServiceMode;
   }): Promise<Department> {
     return this.request("/management-api/venue-service/departments", "POST", input);
   }

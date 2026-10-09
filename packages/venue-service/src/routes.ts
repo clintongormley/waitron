@@ -860,7 +860,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               body.tradingName === undefined
                 ? undefined
                 : requireString(body.tradingName, "tradingName"),
-            defaultServiceMode: requireMode(body.defaultServiceMode, "defaultServiceMode"),
+            defaultServiceMode:
+              body.defaultServiceMode === undefined
+                ? undefined
+                : requireMode(body.defaultServiceMode, "defaultServiceMode"),
           }),
         );
         return c.json(department, 201);

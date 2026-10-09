@@ -474,3 +474,32 @@ describe("combined settings requests", () => {
     ]);
   });
 });
+
+it("creates a department through the real request with name only", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(
+    jsonResponse(
+      {
+        id: "d3",
+        name: "Brunch",
+        tradingName: "Brunch",
+        defaultServiceMode: "prepay",
+        active: true,
+      },
+      201,
+    ),
+  );
+  const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+  expect(await api.createDepartment({ name: "Brunch" })).toEqual({
+    id: "d3",
+    name: "Brunch",
+    tradingName: "Brunch",
+    defaultServiceMode: "prepay",
+    active: true,
+  });
+  expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/departments", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: '{"name":"Brunch"}',
+  });
+});

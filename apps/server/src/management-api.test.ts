@@ -3596,3 +3596,23 @@ it("a zone rename onto a disabled name answers 409 with the existing zone id", a
     error: { code: "zone.name_disabled", params: { name, zoneId: target.id } },
   });
 });
+
+it("renames a disabled zone through the management route without enabling it", async () => {
+  const created = await req(
+    "/venue-service/zones",
+    { method: "POST", body: JSON.stringify({ name: unique("Rename disabled") }) },
+    managerCookie,
+  );
+  expect(created.status).toBe(201);
+  const { id } = (await created.json()) as { id: string };
+  expect((await req(`/zones/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+  const name = unique("Renamed disabled");
+  expect(
+    (await req(`/zones/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }, managerCookie))
+      .status,
+  ).toBe(204);
+  const rows = (await (
+    await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
+  ).json()) as { id: string; name: string; active: boolean }[];
+  expect(rows.find((row) => row.id === id)).toMatchObject({ name, active: false });
+});

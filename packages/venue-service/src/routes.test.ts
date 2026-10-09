@@ -3004,3 +3004,77 @@ it.each([false, true])("answers department name clashes with 409 (active=%s)", a
   expect(rename.status).toBe(409);
   expect(await rename.json()).toEqual({ error: expected });
 });
+
+describe("name-only department creation", () => {
+  it("accepts a name alone and defaults trading name and counter service", async () => {
+    const fx = await fixture();
+    const response = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/departments",
+      fx.managerCookie,
+      { name: "Brunch" },
+    );
+    expect(response.status).toBe(201);
+    const made = await response.json();
+    expect(made).toMatchObject({
+      name: "Brunch",
+      tradingName: "Brunch",
+      defaultServiceMode: "prepay",
+      active: true,
+    });
+    const model = await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json();
+    expect(
+      model.salePolicies.departments.find(
+        (row: { departmentId: string }) => row.departmentId === made.id,
+      ),
+    ).toMatchObject({ orderStart: "counter" });
+  });
+  it.each([null, "invalid", [], 1])(
+    "refuses explicitly invalid style %j without creating a department",
+    async (defaultServiceMode) => {
+      const fx = await fixture();
+      const before = await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json();
+      const response = await send(
+        fx.app,
+        "POST",
+        "/management-api/venue-service/departments",
+        fx.managerCookie,
+        { name: "Invalid", defaultServiceMode },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "defaultServiceMode" } },
+      });
+      expect(
+        await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json(),
+      ).toEqual(before);
+    },
+  );
+  it("renames a disabled department through its existing full-body route", async () => {
+    const fx = await fixture();
+    const row = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, {
+        name: "Closed",
+        tradingName: "Shop",
+        defaultServiceMode: "prepay",
+      }),
+    );
+    await db.update(departments).set({ active: false }).where(eq(departments.id, row.id));
+    const response = await send(
+      fx.app,
+      "PATCH",
+      `/management-api/venue-service/departments/${row.id}`,
+      fx.managerCookie,
+      { name: "Renamed", tradingName: "Shop", defaultServiceMode: "prepay" },
+    );
+    expect(response.status).toBe(204);
+    expect(
+      (await db.select().from(departments).where(eq(departments.id, row.id)))[0],
+    ).toMatchObject({ name: "Renamed", active: false });
+  });
+});
