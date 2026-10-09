@@ -14,7 +14,6 @@ export type {
   GridCategory,
   GridProduct,
   GridRow,
-  RouteExplanation,
   RoutingCell,
   RoutingChange,
   RoutingDecision,

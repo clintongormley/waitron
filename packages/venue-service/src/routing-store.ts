@@ -32,12 +32,7 @@ import {
   type StationStatus,
 } from "./routing.js";
 import { readLocationClock } from "@waitron/reporting";
-import {
-  clockChangesBetween,
-  isReadableClock,
-  venueLocalMoment,
-  type VenueLocalMoment,
-} from "./hours-clock.js";
+import { clockChangesBetween, venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { readStationSchedules, stationsRestrictedFrom } from "./hours.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
@@ -46,7 +41,6 @@ import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
 import type {
   CellAddress,
   RoutingCell,
-  RouteExplanation,
   RoutingChange,
   RoutingModel,
   RoutingMove,
@@ -327,102 +321,6 @@ export async function loadRoutingRules(
   businessDay: string | null,
 ): Promise<RoutingRules> {
   return (await snapshot(tx, cfg, { businessDay, dates: null })).rules;
-}
-
-export type ExplainWhen = { kind: "now"; at: Date } | { kind: "at"; moment: RoutingMoment };
-
-export async function explainRoute(
-  tx: Transaction,
-  cfg: VenueScope,
-  productId: string,
-  zoneId: string | null,
-  when: ExplainWhen,
-  extraProductIds: readonly string[] = [],
-): Promise<RouteExplanation> {
-  const uuid = storedUuid(productId);
-  if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
-  let moment: RoutingMoment | null;
-  let scope = UNTIMED;
-  if (when.kind === "now") {
-    const now = (await clockAt(tx, cfg, when.at)).moment;
-    moment = now;
-    scope = scopeAt(now);
-  } else if (when.moment.civilDate !== undefined) {
-    const { civilDate, timeOfDay } = when.moment;
-    const clock = await readLocationClock(tx, cfg.locationId);
-    // A minute the clock skips on that date never happens, so there is nothing to preview.
-    if (
-      isReadableClock(clock) &&
-      localTimeOccurrences(civilDate, timeOfDay, clock.timeZone).length === 0
-    )
-      throw new AppError("management.request_invalid", { field: "time" });
-    moment = { civilDate, weekday: weekdayOf(civilDate), timeOfDay };
-    scope = { businessDay: null, dates: { from: addDays(civilDate, -1), to: civilDate } };
-  } else moment = when.moment;
-  const { rules, stations } = await snapshot(tx, cfg, scope);
-  const [product] = await tx
-    .select({
-      id: products.id,
-      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-      categoryId: effectiveProductColumns.categoryId,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(eq(products.id, uuid));
-  if (product === undefined)
-    throw new AppError("route.subject_not_found", { subject: "product", id: productId });
-  const choice = chooseMaker(
-    rules,
-    {
-      productId: uuid,
-      routedProductId: storedUuid(product.routedId),
-      categoryId: product.categoryId,
-    },
-    zoneId,
-    moment,
-  );
-  const extrasWaitOnDish = choice.route === null;
-  const extras: RouteExplanation["extras"] = [];
-  for (const id of extraProductIds) {
-    const extraId = storedUuid(id);
-    const [extra] = await tx
-      .select({
-        id: products.id,
-        routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-        categoryId: effectiveProductColumns.categoryId,
-      })
-      .from(products)
-      .leftJoin(parentProducts, parentJoin)
-      .where(eq(products.id, extraId));
-    if (extra === undefined)
-      throw new AppError("route.subject_not_found", { subject: "product", id });
-    const result = chooseExtraMakerBeside(
-      rules,
-      choice,
-      {
-        productId: extraId,
-        routedProductId: storedUuid(extra.routedId),
-        categoryId: extra.categoryId,
-      },
-      zoneId,
-      moment,
-    );
-    if (result === null) continue;
-    extras.push({
-      productId: id,
-      outcome: result.outcome,
-      decidedBy: result.decidedBy,
-      fallbacks: [...result.fallbacks],
-    });
-  }
-  return {
-    ...choice,
-    clockReadable: moment !== null,
-    fallbacks: [...choice.fallbacks],
-    stations: stations.map(({ id, name, active }) => ({ id, name, active })),
-    extras,
-    extrasWaitOnDish,
-  };
 }
 
 export async function previewRoutingChange(

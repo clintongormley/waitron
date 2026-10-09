@@ -2866,6 +2866,26 @@ describe("routing cell route", () => {
       expect(await response.text()).toBe("404 Not Found");
     }
   });
+
+  it("no longer serves the routing explanation", async () => {
+    const fx = await fixture();
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Lager",
+        categoryId: fx.categoryId,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = `${base}/explain?productId=${product.id}`;
+    for (const query of ["", "&weekday=5&time=22:00", "&date=2026-10-09&time=20:00"]) {
+      const response = await send(fx.app, "GET", `${path}${query}`, fx.managerCookie);
+      expect(response.status, query).toBe(404);
+      expect(await response.text()).toBe("404 Not Found");
+    }
+  });
 });
 
 describe("read-only station overview", () => {

@@ -59,14 +59,11 @@ import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/s
 import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
   clearRoutingCell,
-  explainRoute,
-  type ExplainWhen,
   routingModel,
   previewRoutingChange,
   setRoutingCell,
 } from "./routing-store.js";
 import type { RouteTarget } from "./routing.js";
-import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 import { duplicateHolidayNamedSpecialDates, readHolidays, saveHolidayArea } from "./holidays.js";
 import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
@@ -126,7 +123,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "holiday.invalid": 400,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
-const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
 const RECEIPT_PRINT_MODE = new Set(["auto", "on_request"]);
@@ -452,44 +448,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ...(await routingModel(tx, ctx.cfg, new Date())),
             canMakeDefault: roleHasPermission(role, "venue.configure"),
           })),
-        );
-      }),
-    );
-
-    app.get("/management-api/venue-service/routing/explain", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const productId = requireUuidParam(c.req.query("productId") ?? "", "ProductId");
-        const extraProductIds = (c.req.queries("extraId") ?? []).map((id) =>
-          requireUuidParam(id, "ProductId"),
-        );
-        const zone = c.req.query("zoneId");
-        const zoneId = zone ? requireUuidParam(zone, "ServiceZoneId") : null;
-        // A weekday previews the standard week; a date previews that date's own hours.
-        const weekday = c.req.query("weekday");
-        const date = c.req.query("date");
-        const time = c.req.query("time");
-        if (
-          (weekday !== undefined && date !== undefined) ||
-          (weekday === undefined && date === undefined) !== (time === undefined) ||
-          (weekday !== undefined && !/^[0-6]$/.test(weekday)) ||
-          (date !== undefined && !isLocalDate(date)) ||
-          (time !== undefined && !CLOCK_TIME.test(time))
-        )
-          throw new AppError("management.request_invalid", { field: "when" });
-        const when: ExplainWhen =
-          time === undefined
-            ? { kind: "now", at: new Date() }
-            : date === undefined
-              ? { kind: "at", moment: { weekday: Number(weekday), timeOfDay: time } }
-              : {
-                  kind: "at",
-                  moment: { civilDate: date, weekday: weekdayOf(date), timeOfDay: time },
-                };
-        return c.json(
-          await gated(sessionId, (tx) =>
-            explainRoute(tx, ctx.cfg, productId, zoneId, when, extraProductIds),
-          ),
         );
       }),
     );

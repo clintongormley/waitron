@@ -1,12 +1,10 @@
 import type {
-  FallbackStep,
   RouteTarget,
   RoutingRules,
   StationStatus,
   StationTransition,
   WeeklyInterval,
 } from "./routing.js";
-import type { ExtraMakerOutcome } from "@waitron/module";
 
 export type RoutingRow =
   | { kind: "all" }
@@ -58,24 +56,6 @@ export interface StationTimes {
   fallbackStationId: string | null;
   today: "open" | "closed" | null;
   closedSendsTo: string | null;
-}
-
-export interface RouteExplanation {
-  route: RouteTarget | null;
-  decidedBy: RoutingDecision | null;
-  fallbacks: FallbackStep[];
-  noReplacement: boolean;
-  clockReadable: boolean;
-  stations: { id: string; name: string; active: boolean }[];
-  extras: ExtraExplanation[];
-  extrasWaitOnDish: boolean;
-}
-
-export interface ExtraExplanation {
-  productId: string;
-  outcome: ExtraMakerOutcome;
-  decidedBy: RoutingDecision | null;
-  fallbacks: FallbackStep[];
 }
 
 /** `target: null` clears the cell; No preparation is an explicit saved value. */
