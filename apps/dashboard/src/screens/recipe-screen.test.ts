@@ -150,12 +150,14 @@ describe("recipe-screen", () => {
 
   // ── Ingredient authoring (list + form) ─────────────────────────────────────────────────────────
 
-  it("opens the ingredient form for a create when New ingredient is clicked", async () => {
+  it("opens the ingredient form for a create when Add ingredient is clicked", async () => {
     const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api: stubApi() });
     await flush(el);
 
     expect(form(el).open).toBe(false);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!.click();
+    const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!;
+    expect(add.textContent!.trim()).toBe("Añadir ingrediente");
+    add.click();
     await el.updateComplete;
 
     expect(form(el).open).toBe(true);

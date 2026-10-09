@@ -200,7 +200,7 @@ describe("units-screen", () => {
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const button = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
     expect(button.assignedSlot).not.toBeNull();
-    expect(button.textContent!.trim()).toBe(t("units.create"));
+    expect(button.textContent!.trim()).toBe("Añadir unidad");
     button.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("dashboard-unit-form")!.open).toBe(true);

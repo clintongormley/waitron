@@ -264,10 +264,12 @@ describe("device-profiles-screen list mode", () => {
 });
 
 describe("device-profiles-screen editor form", () => {
-  it("New profile opens a blank editor form (no id) and Save creates via createDeviceProfile", async () => {
+  it("Add profile opens a blank editor form (no id) and Save creates via createDeviceProfile", async () => {
     const api = stubApi();
     const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!;
+    expect(add.textContent!.trim()).toBe("Añadir perfil");
+    add.click();
     await el.updateComplete;
     const form = el.shadowRoot!.querySelector("[data-test=editor-form]")!;
     expect(form).toBeTruthy();
@@ -370,7 +372,7 @@ describe("device-profiles-screen editor form", () => {
     );
   });
 
-  it("New profile defaults the form factor to the cash register (till) when unchanged", async () => {
+  it("Add profile defaults the form factor to the cash register (till) when unchanged", async () => {
     const api = stubApi();
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();

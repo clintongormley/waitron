@@ -1117,7 +1117,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **Each list still reads "Extra bread · Extras", and under its heading the " · Extras" is now
   said twice** — left open by A218 (#1082).
 
-- **With three lists the dropdown already scrolls, so "+ New options list…" sits at or just below
+- **With three lists the dropdown already scrolls, so "+ Add options list…" sits at or just below
   its bottom edge when it opens** — left open by A218 (#1082).
 
 - **In Spanish the folded line reads "IVA: Reduced (10%)"** — left open by A219 (#1065). The VAT

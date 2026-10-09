@@ -2519,7 +2519,7 @@ it("a health snapshot ahead of routing metadata leaves Today blank until the sta
   expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
 });
 
-it("opens the default Stations tab and places New station, the only create action, beside the tabs", async () => {
+it("opens the default Stations tab and places Add station, the only create action, beside the tabs", async () => {
   setLocale("en");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());
@@ -2536,6 +2536,7 @@ it("opens the default Stations tab and places New station, the only create actio
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
   expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
+  expect(q(el, '[data-test="new-station"]')!.textContent!.trim()).toBe("Add station");
   expect(
     [...q(el, '[slot="actions"]')!.children].map((child) => child.getAttribute("data-test")),
   ).toEqual(["new-station"]);

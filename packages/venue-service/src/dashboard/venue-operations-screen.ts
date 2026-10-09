@@ -1801,7 +1801,7 @@ export class VenueOperationsScreen extends LitElement {
       }
       case "new-zone":
         return {
-          heading: t("venue.add_zone"),
+          heading: t("venue.new_zone"),
           body: html`${this.#input("new-zone-name", t("venue.zone_name"))}${this.#select(
             "new-zone-department",
             t("venue.department"),

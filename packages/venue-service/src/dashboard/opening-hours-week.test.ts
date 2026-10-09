@@ -196,7 +196,7 @@ it("keeps a refused draft retryable and marks the day carried by its field", asy
   save.click();
   await expect.poll(() => save.disabled).toBe(true);
 });
-it("returns from New period with the range times intact and the created period selected", async () => {
+it("returns from Add period with the range times intact and the created period selected", async () => {
   const writes: unknown[] = [];
   const week = await mount(async (url, method, body) => {
     writes.push({ url, method, body });
@@ -262,7 +262,7 @@ it("copies a day to chosen weekdays and clears locally", async () => {
   expect(grid(week).columns[1]!.slots).toHaveLength(1);
   expect(writes).toEqual([]);
 });
-it("cancelling New period keeps the proposed range without creating anything", async () => {
+it("cancelling Add period keeps the proposed range without creating anything", async () => {
   const writes: unknown[] = [];
   const week = await mount(async (...args) => {
     writes.push(args);
@@ -687,7 +687,7 @@ it("departed copy controls cannot alter a reopened chooser", async () => {
   ).toBe(true);
   expect(grid(week).columns[1]!.slots).toEqual([]);
 });
-it("departed range close and New period cannot act on a later opening", async () => {
+it("departed range close and Add period cannot act on a later opening", async () => {
   const week = await mount();
   const old = await range(week);
   emit(old, "range-close", {});

@@ -3327,7 +3327,7 @@ export class PrepStationsScreen extends LitElement {
                   ? nothing
                   : html`<div slot="actions">
                       <wt-button @click=${() => this.#openStation()} data-test="new-station"
-                        >${t("prep.new_station")}</wt-button
+                        >${t("prep.add_station")}</wt-button
                       >
                     </div>`
               }

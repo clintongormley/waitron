@@ -73,7 +73,7 @@ than folded away. One control adds either kind, and the section holds both kinds
 list; each row shows the list's staff name and which kind it is. Drag a row by the handle at its
 start to move it, or focus the handle and use the up and down arrow keys. That same control lists
 extras lists under an **Extras** heading and options lists under **Options**, and each group ends
-with its own choice to make a new one, **New extras list…** or **New options list…**, so you can
+with its own choice to make a new one, **Add extras list…** or **Add options list…**, so you can
 build a list without abandoning the product you are editing.
 
 Every menu offer carries the product's extras and options lists in the order you set here.

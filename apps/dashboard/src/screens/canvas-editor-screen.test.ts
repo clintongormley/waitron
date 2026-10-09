@@ -1042,7 +1042,9 @@ it("updates the created canvas when its draft was edited during the first save",
     api: stubApi({ createCanvas, updateCanvas }),
   });
   await flush(el);
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!.click();
+  const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!;
+  expect(add.textContent!.trim()).toBe("Añadir lienzo");
+  add.click();
   await el.updateComplete;
   el.shadowRoot!.querySelector('[data-test="create-name"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "New counter" }, bubbles: true }),
