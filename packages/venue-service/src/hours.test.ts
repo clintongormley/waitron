@@ -6,6 +6,7 @@ import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  floorZones,
   kitchenStations,
   locations,
   tenants,
@@ -24,6 +25,7 @@ import {
   readHoursModel,
   readSpecialDate,
   readStationSchedules,
+  stationsRestrictedFrom,
   readWeekHours,
   renameSpecialDate,
   replaceWeekHours,
@@ -62,7 +64,9 @@ import {
   specialDateHoursPeriods,
   specialDates,
 } from "./schema/hours.js";
-import { departments } from "./schema/service.js";
+import { departments, zoneServicePolicies } from "./schema/service.js";
+import { menuDayTimetables, menuSlots } from "./schema/menus.js";
+import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -218,7 +222,7 @@ async function storedWeek(subject: HoursSubject) {
 const specialInput = (overrides: Partial<SpecialDateInput> = {}): SpecialDateInput => ({
   date: "2026-10-09",
   name: "Harvest festival",
-  colour: "amber",
+
   closeWholeVenue: false,
   cells: [],
   ...overrides,
@@ -559,10 +563,13 @@ describe("special dates", () => {
       }),
     );
     expect(saved).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: expect.any(String),
       date: "2026-10-09",
       name: "Harvest festival",
-      colour: "amber",
+
       closeWholeVenue: false,
     });
 
@@ -600,16 +607,19 @@ describe("special dates", () => {
       specialInput({
         date: "2026-10-12",
         name: "Founders' day",
-        colour: "purple",
+
         closeWholeVenue: true,
         cells: [{ subject: f.deli, cell: { mode: "inherit", periods: [] } }],
       }),
     );
     expect(edited).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: first.id,
       date: "2026-10-12",
       name: "Founders' day",
-      colour: "purple",
+
       closeWholeVenue: true,
     });
     expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, first.id))).toEqual({
@@ -688,7 +698,11 @@ describe("special dates", () => {
     ["an impossible date", () => specialInput({ date: "2026-02-30" }), "date"],
     ["a date in another shape", () => specialInput({ date: "2026-2-3" }), "date"],
     ["a blank name", () => specialInput({ name: "  " }), "name"],
-    ["a colour outside the palette", () => specialInput({ colour: "pink" as never }), "colour"],
+    [
+      "a kind outside the named-day kinds",
+      () => ({ ...specialInput(), kind: "other" as never }),
+      "kind",
+    ],
     [
       "a closure flag that is not true or false",
       () => specialInput({ closeWholeVenue: "yes" as never }),
@@ -1023,10 +1037,13 @@ describe("hours either side of a special date", () => {
     const input = { ...lateFriday(f), closeWholeVenue: true };
     const saved = await saveDate(f, null, input);
     expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saved.id))).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: saved.id,
       date: "2026-10-09",
       name: "Harvest festival",
-      colour: "amber",
+
       closeWholeVenue: true,
       cells: input.cells,
     });
@@ -1413,14 +1430,14 @@ describe("the station hours model on one date", () => {
     });
   });
 
-  it("keeps a date's id and its cells when its name, colour and date change", async () => {
+  it("keeps a date's id and its cells when its name and date change", async () => {
     const f = await fixture();
     const closedDeli: DateHoursCell = { subject: f.deli, cell: { mode: "closed", periods: [] } };
     const first = await saveDate(f, null, specialInput({ cells: [closedDeli] }));
     const moved = await saveDate(
       f,
       first.id,
-      specialInput({ date: "2026-10-13", name: "Moved", colour: "blue", cells: [closedDeli] }),
+      specialInput({ date: "2026-10-13", name: "Moved", cells: [closedDeli] }),
     );
     expect(moved.id).toBe(first.id);
     expect(await dateSnapshot(f, f.deli, "2026-10-13")).toMatchObject({
@@ -1539,20 +1556,20 @@ describe("the calendar's Closed colour", () => {
     });
     expect(await tone(f, "2026-10-19")).toBe("standard");
     expect(await tone(f, "2026-10-20")).toBe("closed");
-    for (const [date, colour, open] of [
-      ["2026-10-21", "green", false],
-      ["2026-10-22", "purple", true],
-      ["2026-10-23", "red", true],
+    for (const [date, open] of [
+      ["2026-10-21", false],
+      ["2026-10-22", true],
+      ["2026-10-23", true],
     ] as const) {
       const special = await saveDate(
         f,
         null,
         specialInput({
           date,
-          colour,
           cells: [{ subject: f.bar, cell: { mode: "all_day", periods: [] } }],
         }),
       );
+      await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
       if (open)
         await withTransaction(db, (tx) =>
           saveSpecialDateMenus(
@@ -1564,7 +1581,7 @@ describe("the calendar's Closed colour", () => {
             AT,
           ),
         );
-      expect(await tone(f, date)).toBe(open ? colour : "closed");
+      expect(await tone(f, date)).toBe(open ? "blue" : "closed");
     }
     const { terraceDepartment: terrace } = await addSubjects(f);
     expect(await tone(f, "2026-10-21")).toBe("closed");
@@ -1586,14 +1603,10 @@ describe("the calendar's Closed colour", () => {
         AT,
       );
     });
-    expect(await tone(f, "2026-10-21")).toBe("green");
+    expect(await tone(f, "2026-10-21")).toBe("blue");
     await setDepartmentActive(terrace, false);
     expect(await tone(f, "2026-10-21")).toBe("closed");
-    await saveDate(
-      f,
-      null,
-      specialInput({ date: "2026-10-26", colour: "blue", closeWholeVenue: true }),
-    );
+    await saveDate(f, null, specialInput({ date: "2026-10-26", closeWholeVenue: true }));
     expect(await tone(f, "2026-10-26")).toBe("closed");
   });
 });
@@ -1679,23 +1692,22 @@ describe("holiday facts beside the calendar", () => {
     const added = await saveDate(
       f,
       null,
-      specialInput({ date: "2026-10-14", name: "Our own party", colour: "purple" }),
+      specialInput({ date: "2026-10-14", name: "Our own party" }),
     );
     let days = await calendar(f, reader);
     expect(days[1]!.specialDate).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: added.id,
       date: "2026-10-14",
       name: "Our own party",
-      colour: "purple",
+
       closeWholeVenue: false,
     });
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await saveDate(
-      f,
-      added.id,
-      specialInput({ date: "2026-10-14", name: "Renamed party", colour: "blue" }),
-    );
+    await saveDate(f, added.id, specialInput({ date: "2026-10-14", name: "Renamed party" }));
     days = await calendar(f, reader);
     expect(days[1]!.specialDate?.name).toBe("Renamed party");
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
@@ -1717,27 +1729,41 @@ describe("holiday facts beside the calendar", () => {
       {
         date: "2026-10-16",
         specialDate: {
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           id: added.id,
           date: "2026-10-16",
           name: "Harvest festival",
-          colour: "amber",
+
           closeWholeVenue: false,
         },
         holidays: [FACTS[2]],
-        tone: "amber",
+        tone: "blue",
       },
     ]);
   });
 
-  it("refuses the standard and Closed colours, which no special date may take", async () => {
+  it("ignores the old reserved colour values and stores only the kind", async () => {
     const f = await fixture();
-    for (const colour of ["standard", "closed"])
-      await expect(
-        saveDate(f, null, specialInput({ colour: colour as never })),
-      ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "colour" } });
+    for (const [index, colour] of ["standard", "closed"].entries()) {
+      const date = index === 0 ? "2026-10-09" : "2026-10-10";
+      const saved = await saveDate(f, null, {
+        ...specialInput({ date }),
+        colour,
+      } as SpecialDateInput);
+      expect(saved).toMatchObject({ date, kind: "working_day" });
+      const [row] = await db.select().from(specialDates).where(eq(specialDates.id, saved.id));
+      expect(row).toMatchObject({ date, kind: "working_day" });
+      expect(saved).not.toHaveProperty("colour");
+      expect(row).not.toHaveProperty("colour");
+    }
     expect(
-      await withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-09", "2026-10-09")),
-    ).toMatchObject([{ specialDate: null }]);
+      await withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-09", "2026-10-10")),
+    ).toMatchObject([
+      { date: "2026-10-09", tone: "blue" },
+      { date: "2026-10-10", tone: "blue" },
+    ]);
   });
 
   it("gives the page model the same facts", async () => {
@@ -1757,7 +1783,7 @@ describe("holiday facts beside the calendar", () => {
 });
 
 describe("duplicating a special date", () => {
-  it("copies the name, colour and every cell to each target under new ids, an inactive station's included", async () => {
+  it("copies the name and every cell to each target under new ids, an inactive station's included", async () => {
     const f = await fixture();
     const lunch = period("12:00", "15:00");
     const dinner = period("19:00", "23:00");
@@ -1765,7 +1791,6 @@ describe("duplicating a special date", () => {
       f,
       null,
       specialInput({
-        colour: "purple",
         cells: [
           { subject: f.restaurant, cell: { mode: "periods", periods: [lunch, dinner] } },
           { subject: f.deli, cell: { mode: "closed", periods: [] } },
@@ -2559,10 +2584,9 @@ describe("Hours with the holiday store", () => {
     });
   });
 
-  /** The fixture's venue, placed in the invented country with a local holiday of its own. */
-  async function placed(): Promise<Fixture & { town: string }> {
+  async function placed(): Promise<Fixture> {
     const f = await fixture();
-    const town = await withTransaction(db, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await tx
         .insert(tenants)
         .values({ id: 1, country: "ZZ", taxId: "X0000000", legalName: "Invented SL" })
@@ -2571,11 +2595,8 @@ describe("Hours with the holiday store", () => {
         .update(locations)
         .set({ province: "Northshire", city: "Villa Real" })
         .where(eq(locations.id, f.cfg.locationId));
-      return (
-        await store.saveLocalHoliday(tx, f.cfg, null, { date: "2026-12-25", name: "Town label" })
-      ).id;
     });
-    return { ...f, town };
+    return f;
   }
 
   const named = (
@@ -2619,7 +2640,6 @@ describe("Hours with the holiday store", () => {
           scope: "regional",
           sourceId: "ZZ-ANNEX",
         },
-        expect.objectContaining({ id: `local:${f.town}`, name: "Town label", scope: "local" }),
       ],
       tone: "standard",
     });
@@ -2639,11 +2659,7 @@ describe("Hours with the holiday store", () => {
     const days = await withTransaction(db, (tx) =>
       readCalendarDays(tx, f.cfg, "2026-12-25", "2026-12-25", repeating.readHolidayFacts),
     );
-    expect(days[0]!.holidays.map(({ id }) => id)).toEqual([
-      "shipped:feast",
-      "shipped:north",
-      `local:${f.town}`,
-    ]);
+    expect(days[0]!.holidays.map(({ id }) => id)).toEqual(["shipped:feast", "shipped:north"]);
   });
 
   it("keeps a holiday's facts while a special date there is saved, renamed, moved and deleted", async () => {
@@ -2657,7 +2673,7 @@ describe("Hours with the holiday store", () => {
     expect((await calendar())[1]).toEqual({
       ...before[1],
       specialDate: { ...added },
-      tone: "amber",
+      tone: "blue",
     });
     await saveDate(f, added.id, specialInput({ date: "2026-12-25", name: "Renamed" }));
     expect((await calendar())[1]!.holidays).toEqual(before[1]!.holidays);
@@ -2709,7 +2725,7 @@ describe("Hours with the holiday store", () => {
       specialInput({
         date: "2026-12-18",
         name: "Summer opening",
-        colour: "purple",
+
         closeWholeVenue: true,
         cells: [
           { subject: f.bar, cell: { mode: "periods", periods: [period("12:00", "15:00")] } },
@@ -2734,17 +2750,23 @@ describe("Hours with the holiday store", () => {
     });
     expect(copies).toEqual([
       {
+        kind: "working_day",
+        repeats: false,
+        ownHours: false,
         id: expect.any(String),
         date: "2026-12-25",
-        name: "National label · Regional label · Town label",
-        colour: "purple",
+        name: "National label · Regional label",
+
         closeWholeVenue: true,
       },
       {
+        kind: "working_day",
+        repeats: false,
+        ownHours: false,
         id: expect.any(String),
         date: "2026-12-29",
         name: "Summer opening",
-        colour: "purple",
+
         closeWholeVenue: true,
       },
     ]);
@@ -2776,43 +2798,19 @@ describe("Hours with the holiday store", () => {
     );
   });
 
-  it("reads holidays on the caller's transaction, so an entry it has not yet committed names the copy", async () => {
-    const f = await placed();
-    const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
-    const [copy] = await withTransaction(db, async (tx) => {
-      await store.saveLocalHoliday(tx, f.cfg, null, { date: "2026-12-29", name: "Uncommitted" });
-      return store.duplicateHolidayNamedSpecialDates(tx, f.cfg, source.id, ["2026-12-29"], AT);
-    });
-    expect(copy!.name).toBe("Uncommitted");
-  });
-
   it("names targets more than a year apart, keeping the source name where the year is not shipped", async () => {
     const f = await placed();
     const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
     const copies = await named(f, source.id, ["2028-01-05", "2026-12-25"]);
     expect(copies.map(({ date, name }) => [date, name])).toEqual([
       ["2028-01-05", "Summer opening"],
-      ["2026-12-25", "National label · Regional label · Town label"],
+      ["2026-12-25", "National label · Regional label"],
     ]);
     const read = await withTransaction(db, (tx) =>
       store.readHolidays(tx, f.cfg, "2028-01-05", "2028-01-05"),
     );
     expect(read.facts).toEqual([]);
     expect(read.coverage).toMatchObject([{ year: 2028, nationalRegional: "missing_year" }]);
-  });
-
-  it("names a copy after a local holiday in a year the pack does not ship, the others keeping the source name", async () => {
-    const f = await placed();
-    await withTransaction(db, (tx) =>
-      store.saveLocalHoliday(tx, f.cfg, null, { date: "2028-01-05", name: "Town 2028" }),
-    );
-    const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
-    const copies = await named(f, source.id, ["2028-01-05", "2028-01-06", "2026-12-29"]);
-    expect(copies.map(({ date, name }) => [date, name])).toEqual([
-      ["2028-01-05", "Town 2028"],
-      ["2028-01-06", "Summer opening"],
-      ["2026-12-29", "Summer opening"],
-    ]);
   });
 
   it("reads holidays once per calendar year the targets touch, not once per target", async () => {
@@ -2834,14 +2832,11 @@ describe("Hours with the holiday store", () => {
     expect(reads.sort()).toEqual(["2026-11-02..2026-12-29", "2028-01-05..2028-01-05"]);
   });
 
-  it("keeps a joined name of three 200-character labels whole", async () => {
+  it("keeps a joined name of two 200-character public labels whole", async () => {
     const f = await placed();
-    await withTransaction(db, (tx) =>
-      store.saveLocalHoliday(tx, f.cfg, null, { date: "2026-08-03", name: long("c") }),
-    );
     const source = await saveDate(f, null, specialInput());
     const [copy] = await named(f, source.id, ["2026-08-03"]);
-    const joined = `${long("a")} · ${long("b")} · ${long("c")}`;
+    const joined = `${long("a")} · ${long("b")}`;
     expect(copy!.name).toBe(joined);
     expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, copy!.id))).name).toBe(
       joined,
@@ -2991,4 +2986,590 @@ describe("Hours on a real Spanish public holiday", () => {
     });
     expect((await dateSnapshot(f, f.bar, ORDINARY)).specialCell).toBeUndefined();
   });
+});
+
+describe("named-day station occurrences", () => {
+  async function namedDay(f: Fixture, overrides: Partial<typeof specialDates.$inferInsert> = {}) {
+    return withTransaction(db, async (tx) => {
+      const [row] = await tx
+        .insert(specialDates)
+        .values({
+          locationId: f.cfg.locationId,
+          date: "2026-12-25",
+          name: "Navidad",
+
+          repeatOn: "12-25",
+          closeWholeVenue: true,
+          ...overrides,
+        })
+        .returning();
+      return row!;
+    });
+  }
+
+  it("closes every station on each yearly occurrence, without closing adjacent dates or earlier years", async () => {
+    const f = await fixture();
+    await namedDay(f);
+    await withTransaction(db, async (tx) => {
+      const ids = [f.bar.id, f.restaurant.id, f.kitchen.id];
+      const schedules = await readStationSchedules(tx, f.cfg, ids, {
+        from: "2027-12-20",
+        to: "2027-12-31",
+      });
+      for (const id of ids) expect(schedules.get(id)!.dates).toEqual(new Map([["2027-12-25", []]]));
+      const earlier = await readStationSchedules(tx, f.cfg, ids, {
+        from: "2025-12-20",
+        to: "2025-12-31",
+      });
+      for (const id of ids) expect(earlier.get(id)!.dates).toEqual(new Map());
+      const untimed = await readStationSchedules(tx, f.cfg, ids, null);
+      for (const id of ids) expect(untimed.get(id)!.dates).toEqual(new Map());
+    });
+  });
+
+  it("applies a repeating leap-day closure only in leap years and only at its venue", async () => {
+    const f = await fixture();
+    await namedDay(f, { date: "2024-02-29", repeatOn: "02-29" });
+    const [otherStation] = await withTransaction(db, (tx) =>
+      tx
+        .select({ locationId: kitchenStations.locationId })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, f.otherStation.id)),
+    );
+    await namedDay(f, { locationId: otherStation!.locationId, date: "2027-12-25" });
+    await withTransaction(db, async (tx) => {
+      expect(
+        (
+          await readStationSchedules(tx, f.cfg, [f.bar.id], {
+            from: "2027-02-28",
+            to: "2027-03-01",
+          })
+        ).get(f.bar.id)!.dates,
+      ).toEqual(new Map());
+      expect(
+        (
+          await readStationSchedules(tx, f.cfg, [f.bar.id], {
+            from: "2028-02-28",
+            to: "2028-03-01",
+          })
+        ).get(f.bar.id)!.dates,
+      ).toEqual(new Map([["2028-02-29", []]]));
+      expect(
+        (
+          await readStationSchedules(tx, f.cfg, [f.bar.id], {
+            from: "2027-12-25",
+            to: "2027-12-25",
+          })
+        ).get(f.bar.id)!.dates,
+      ).toEqual(new Map());
+    });
+  });
+
+  it("reports a future recurring venue closure even when its first date is before the requested range", async () => {
+    const f = await fixture();
+    await namedDay(f);
+    const result = await withTransaction(db, (tx) =>
+      stationsRestrictedFrom(tx, f.cfg, "2027-01-01"),
+    );
+    expect(result).toEqual({ wholeVenue: true, stationIds: new Set() });
+  });
+
+  it("does not report a repeating closure when no occurrence remains in the date range", async () => {
+    const f = await fixture();
+    await namedDay(f, { date: "2024-02-29", repeatOn: "02-29" });
+    expect(
+      await withTransaction(db, (tx) => stationsRestrictedFrom(tx, f.cfg, "9999-01-01")),
+    ).toEqual({ wholeVenue: false, stationIds: new Set() });
+  });
+
+  it("does not report an expired one-off closure as a future restriction", async () => {
+    const f = await fixture();
+    await namedDay(f, { repeatOn: null });
+    expect(
+      await withTransaction(db, (tx) => stationsRestrictedFrom(tx, f.cfg, "2027-01-01")),
+    ).toEqual({ wholeVenue: false, stationIds: new Set() });
+    expect(await withTransaction(db, (tx) => stationsRestrictedFrom(tx, f.cfg, null))).toEqual({
+      wholeVenue: true,
+      stationIds: new Set(),
+    });
+  });
+
+  it("lets dated late station hours reach a repeating closed neighbour", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 6: periods(period("01:00", "05:00")) }));
+    await namedDay(f);
+    const saved = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2027-12-24",
+        cells: [{ subject: f.bar, cell: { mode: "periods", periods: [period("22:00", "02:00")] } }],
+      }),
+    );
+    expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saved.id))).cells).toEqual(
+      [
+        {
+          subject: f.bar,
+          cell: {
+            mode: "periods",
+            periods: [expect.objectContaining({ opensAt: "22:00", closesAt: "02:00" })],
+          },
+        },
+      ],
+    );
+  });
+
+  it("still refuses the neighbour clash before a repeating closure's first year", async () => {
+    const f = await fixture();
+    await save(f, f.bar, week({ 6: periods(period("01:00", "05:00")) }));
+    await namedDay(f, { date: "2028-12-25" });
+    await expect(
+      saveDate(
+        f,
+        null,
+        specialInput({
+          date: "2027-12-24",
+          cells: [
+            { subject: f.bar, cell: { mode: "periods", periods: [period("22:00", "02:00")] } },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "cells.0.cell", date: "2027-12-25", subjectId: f.bar.id },
+    });
+  });
+});
+
+describe("named-day writes", () => {
+  it.each([
+    ["kind", null],
+    ["kind", ["holiday"]],
+    ["kind", "other"],
+    ["repeats", null],
+    ["repeats", 1],
+    ["repeats", "false"],
+    ["ownHours", null],
+    ["ownHours", 0],
+    ["ownHours", "true"],
+    ["closeWholeVenue", null],
+    ["closeWholeVenue", 1],
+  ])("refuses invalid %s (%j) before storing anything", async (field, value) => {
+    const f = await fixture();
+    await expect(saveDate(f, null, { ...specialInput(), [field]: value })).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field },
+    });
+    expect(
+      await db.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId)),
+    ).toEqual([]);
+  });
+
+  it("stores a kind, yearly repeat key and own-hours choice", async () => {
+    const f = await fixture();
+    const saved = await saveDate(f, null, {
+      ...specialInput({ date: "2026-12-25" }),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    const [row] = await db.select().from(specialDates).where(eq(specialDates.id, saved.id));
+    expect(row).toMatchObject({
+      date: "2026-12-25",
+      kind: "holiday",
+      repeatOn: "12-25",
+      ownHours: true,
+    });
+  });
+
+  it("defaults absent fields on create and retains stored values on update", async () => {
+    const f = await fixture();
+    const ordinary = await saveDate(f, null, specialInput());
+    const [created] = await db.select().from(specialDates).where(eq(specialDates.id, ordinary.id));
+    expect(created).toMatchObject({ kind: "working_day", repeatOn: null, ownHours: false });
+    await saveDate(f, ordinary.id, {
+      ...specialInput(),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    await saveDate(f, ordinary.id, specialInput({ date: "2026-10-10", name: "Renamed" }));
+    const [updated] = await db.select().from(specialDates).where(eq(specialDates.id, ordinary.id));
+    expect(updated).toMatchObject({
+      name: "Renamed",
+      kind: "holiday",
+      repeatOn: "10-10",
+      ownHours: true,
+    });
+    await saveDate(f, ordinary.id, {
+      ...specialInput({ date: "2026-10-10" }),
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
+    });
+    const [reset] = await db.select().from(specialDates).where(eq(specialDates.id, ordinary.id));
+    expect(reset).toMatchObject({ kind: "working_day", repeatOn: null, ownHours: false });
+  });
+
+  it("refuses own hours alongside whole-venue closure", async () => {
+    const f = await fixture();
+    await expect(
+      saveDate(f, null, { ...specialInput({ closeWholeVenue: true }), ownHours: true }),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "ownHours" } });
+  });
+
+  it("refuses repeating days with newly supplied station cells", async () => {
+    const f = await fixture();
+    await expect(
+      saveDate(f, null, {
+        ...specialInput({ cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }] }),
+        repeats: true,
+      }),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "repeats" } });
+  });
+
+  it("refuses making a day repeat while it retains a default station's dormant cell", async () => {
+    const f = await fixture();
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({ cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }] }),
+    );
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, f.kitchen.id));
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: true })
+        .where(eq(kitchenStations.id, f.bar.id));
+    });
+    await expect(
+      saveDate(f, source.id, { ...specialInput(), repeats: true }),
+    ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "repeats" } });
+  });
+
+  it.each([
+    ["2026-12-25", true, "2027-12-25", false, "2027-12-25"],
+    ["2027-12-25", false, "2026-12-25", true, "2027-12-25"],
+    ["2026-12-25", true, "2028-12-25", true, "2028-12-25"],
+    ["2028-02-29", true, "2032-02-29", false, "2032-02-29"],
+  ])(
+    "refuses intersecting occurrences %s/%s and %s/%s",
+    async (firstDate, firstRepeats, date, repeats, clash) => {
+      const f = await fixture();
+      await saveDate(f, null, { ...specialInput({ date: firstDate }), repeats: firstRepeats });
+      await expect(saveDate(f, null, { ...specialInput({ date }), repeats })).rejects.toMatchObject(
+        { code: "special_date.date_taken", params: { date: clash } },
+      );
+      expect(
+        await db.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId)),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("allows a one-off before a repeat starts and a matching date in another venue", async () => {
+    const f = await fixture();
+    const other = await fixture();
+    await saveDate(f, null, { ...specialInput({ date: "2028-12-25" }), repeats: true });
+    const earlier = await saveDate(f, null, specialInput({ date: "2027-12-25" }));
+    const elsewhere = await saveDate(other, null, {
+      ...specialInput({ date: "2028-12-25" }),
+      repeats: true,
+    });
+    expect(earlier.date).toBe("2027-12-25");
+    expect(elsewhere.date).toBe("2028-12-25");
+  });
+
+  it("ignores the edited row itself but refuses moving its repeat onto another day", async () => {
+    const f = await fixture();
+    const source = await saveDate(f, null, {
+      ...specialInput({ date: "2026-12-25" }),
+      repeats: true,
+    });
+    const edited = await saveDate(
+      f,
+      source.id,
+      specialInput({ date: "2026-12-25", name: "New name" }),
+    );
+    expect(edited.id).toBe(source.id);
+    await saveDate(f, null, specialInput({ date: "2027-12-26" }));
+    await expect(
+      saveDate(f, source.id, specialInput({ date: "2026-12-26" })),
+    ).rejects.toMatchObject({ code: "special_date.date_taken", params: { date: "2027-12-26" } });
+    const [row] = await db.select().from(specialDates).where(eq(specialDates.id, source.id));
+    expect(row).toMatchObject({ date: "2026-12-25", repeatOn: "12-25", name: "New name" });
+  });
+
+  it("copies a repeat as a one-off, retaining kind and own hours", async () => {
+    const f = await fixture();
+    const source = await saveDate(f, null, {
+      ...specialInput({ date: "2026-12-25" }),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    const [copy] = await withTransaction(db, (tx) =>
+      duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-26"], AT),
+    );
+    const [row] = await db.select().from(specialDates).where(eq(specialDates.id, copy!.id));
+    expect(row).toMatchObject({
+      date: "2027-12-26",
+      kind: "holiday",
+      repeatOn: null,
+      ownHours: true,
+      closeWholeVenue: false,
+    });
+    const [original] = await db.select().from(specialDates).where(eq(specialDates.id, source.id));
+    expect(original).toMatchObject({ repeatOn: "12-25" });
+  });
+
+  it("refuses copying onto a recurring day and rolls back the whole batch", async () => {
+    const f = await fixture();
+    const source = await saveDate(f, null, specialInput({ date: "2026-12-24" }));
+    await saveDate(f, null, { ...specialInput({ date: "2026-12-25" }), repeats: true });
+    await expect(
+      withTransaction(db, (tx) =>
+        duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-24", "2027-12-25"], AT),
+      ),
+    ).rejects.toMatchObject({ code: "special_date.date_taken", params: { date: "2027-12-25" } });
+    expect(
+      (await db.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId)))
+        .map((row) => row.date)
+        .sort(),
+    ).toEqual(["2026-12-24", "2026-12-25"]);
+  });
+});
+
+describe("named-day response and colour", () => {
+  it("returns the named-day kind without a stored colour", async () => {
+    const f = await fixture();
+    const saved = await saveDate(f, null, {
+      date: "2026-12-25",
+      name: "Christmas",
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+      closeWholeVenue: false,
+      cells: [],
+    });
+    expect(saved).toEqual({
+      id: expect.any(String),
+      date: "2026-12-25",
+      name: "Christmas",
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+      closeWholeVenue: false,
+    });
+    expect(saved).not.toHaveProperty("colour");
+    const edited = await saveDate(f, saved.id, {
+      ...specialInput({ date: "2026-12-25" }),
+      kind: "working_day",
+    });
+    expect(edited).toMatchObject({
+      kind: "working_day",
+      repeats: true,
+      ownHours: true,
+    });
+    expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, saved.id))).toEqual({
+      ...edited,
+      cells: [],
+    });
+    expect(
+      await withTransaction(db, (tx) => renameSpecialDate(tx, f.cfg, saved.id, "Dinner")),
+    ).toEqual({ ...edited, name: "Dinner" });
+  });
+});
+
+describe("named-day own-hours switching", () => {
+  async function setup() {
+    const f = await fixture();
+    const other = await fixture();
+    const seeded = await withTransaction(db, async (tx) => {
+      const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
+      const lunch = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
+        name: "Lunch",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      });
+      for (const [cfg, departmentId, periodId] of [
+        [f.cfg, f.departmentIds.restaurant, lunch.id],
+        [
+          other.cfg,
+          other.departmentIds.restaurant,
+          (
+            await saveMenuPeriod(tx, other.cfg, other.departmentIds.restaurant, {
+              name: "Other lunch",
+              menuId: menu!.id,
+              staffMenuIds: [],
+            })
+          ).id,
+        ],
+      ] as const) {
+        await replaceMenuWeek(
+          tx,
+          cfg,
+          departmentId,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            slots: weekday === 5 ? [{ periodId, startsAt: "12:00", endsAt: "15:00" }] : [],
+          })),
+          AT,
+        );
+        const [zone] = await tx
+          .insert(floorZones)
+          .values({ locationId: cfg.locationId, name: "Terrace" })
+          .returning();
+        await tx
+          .insert(zoneServicePolicies)
+          .values({ locationId: cfg.locationId, zoneId: zone!.id, departmentId });
+        await tx.insert(zoneClosedTimes).values([
+          { zoneId: zone!.id, weekday: 5, startsAt: "13:00:00", endsAt: "14:00:00" },
+          { zoneId: zone!.id, weekday: 1, startsAt: "10:00:00", endsAt: "11:00:00" },
+        ]);
+      }
+      return { lunch };
+    });
+    return { f, other, ...seeded };
+  }
+
+  async function snapshot(id: string) {
+    return withTransaction(db, async (tx) => {
+      const days = await tx
+        .select()
+        .from(menuDayTimetables)
+        .where(eq(menuDayTimetables.specialDateId, id));
+      const slots =
+        days.length === 0
+          ? []
+          : await tx
+              .select()
+              .from(menuSlots)
+              .where(
+                inArray(
+                  menuSlots.timetableId,
+                  days.map((d) => d.id),
+                ),
+              );
+      const closures = await tx
+        .select()
+        .from(zoneClosedTimes)
+        .where(eq(zoneClosedTimes.specialDateId, id));
+      return { days, slots, closures };
+    });
+  }
+
+  it("copies only the stored weekday and location when own hours are enabled", async () => {
+    const { f, lunch } = await setup();
+    const day = await saveDate(f, null, specialInput({ ownHours: true }));
+    const rows = await snapshot(day.id);
+    expect(rows.days.map((d) => [d.departmentId, d.weekday, d.specialDateId])).toEqual([
+      [f.departmentIds.restaurant, null, day.id],
+    ]);
+    expect(rows.slots.map((s) => [s.departmentId, s.periodId, s.startsAt, s.endsAt])).toEqual([
+      [f.departmentIds.restaurant, lunch.id, "12:00:00", "15:00:00"],
+    ]);
+    expect(rows.closures.map((c) => [c.weekday, c.specialDateId, c.startsAt, c.endsAt])).toEqual([
+      [null, day.id, "13:00:00", "14:00:00"],
+    ]);
+    const [policy] = await db
+      .select()
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, rows.closures[0]!.zoneId));
+    expect(policy!.locationId).toBe(f.cfg.locationId);
+  });
+
+  it("copies on an off-to-on update and leaves the standard week intact", async () => {
+    const { f } = await setup();
+    const day = await saveDate(f, null, specialInput());
+    expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
+    const before = await db.select().from(menuSlots);
+    await saveDate(f, day.id, specialInput({ ownHours: true }));
+    expect((await snapshot(day.id)).slots).toHaveLength(1);
+    expect(
+      (await db.select().from(menuSlots)).filter((s) => before.some((b) => b.id === s.id)),
+    ).toEqual(before);
+  });
+
+  it("removes all dated department and zone rows when own hours are disabled", async () => {
+    const { f } = await setup();
+    const day = await saveDate(f, null, specialInput({ ownHours: true }));
+    await withTransaction(db, async (tx) => {
+      await saveSpecialDateMenus(tx, f.cfg, day.id, f.departmentIds.deli, [], AT);
+      const [zone] = await tx
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.locationId, f.cfg.locationId));
+      await tx.insert(zoneClosedTimes).values({
+        zoneId: zone!.zoneId,
+        specialDateId: day.id,
+        startsAt: "15:00:00",
+        endsAt: "16:00:00",
+      });
+    });
+    const before = await snapshot(day.id);
+    expect(before.days).toHaveLength(2);
+    expect(before.slots).toHaveLength(1);
+    expect(before.closures).toHaveLength(2);
+    await saveDate(f, day.id, specialInput({ ownHours: false }));
+    expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
+    expect(
+      await db
+        .select()
+        .from(zoneClosedTimes)
+        .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
+        .where(
+          and(eq(zoneClosedTimes.weekday, 5), eq(zoneServicePolicies.locationId, f.cfg.locationId)),
+        ),
+    ).toHaveLength(1);
+  });
+
+  it("keeps dated edits and row identities when own hours remain on", async () => {
+    const { f, lunch } = await setup();
+    const day = await saveDate(f, null, specialInput({ ownHours: true }));
+    await withTransaction(db, (tx) =>
+      saveSpecialDateMenus(
+        tx,
+        f.cfg,
+        day.id,
+        f.departmentIds.restaurant,
+        [{ periodId: lunch.id, startsAt: "16:00", endsAt: "18:00" }],
+        AT,
+      ),
+    );
+    const before = await snapshot(day.id);
+    await saveDate(f, day.id, specialInput({ ownHours: true, name: "Renamed" }));
+    expect(await snapshot(day.id)).toEqual(before);
+  });
+
+  it("rolls back copied rows and the flag when a participant refuses the save", async () => {
+    const { f } = await setup();
+    const day = await saveDate(f, null, specialInput());
+    await expect(
+      withTransaction(db, (tx) =>
+        saveSpecialDate(tx, f.cfg, day.id, specialInput({ ownHours: true }), AT, [
+          {
+            async copy() {},
+            async beforeDelete() {},
+            async afterChange(tx) {
+              const rows = await tx
+                .select()
+                .from(menuDayTimetables)
+                .where(eq(menuDayTimetables.specialDateId, day.id));
+              expect(rows).toHaveLength(1);
+              throw new Error("participant refusal");
+            },
+          },
+        ]),
+      ),
+    ).rejects.toThrow("participant refusal");
+    expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
+    expect((await readSpecialDateAt(f, day.id)).ownHours).toBe(false);
+  });
+
+  async function readSpecialDateAt(f: Fixture, id: string) {
+    return withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, id));
+  }
 });

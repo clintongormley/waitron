@@ -135,7 +135,7 @@ async function fixture(): Promise<Fixture> {
       tx,
       { locationId: locationId(other!.id) },
       null,
-      { date: "2030-10-15", name: "Elsewhere", colour: "red", closeWholeVenue: false, cells: [] },
+      { date: "2030-10-15", name: "Elsewhere", closeWholeVenue: false, cells: [] },
       new Date(),
     );
     const person = async (role: "manager" | "supervisor" | "staff") => {
@@ -248,7 +248,6 @@ const unsetWeek = (): WeekDay[] =>
 const input = (overrides: Partial<SpecialDateInput> = {}): SpecialDateInput => ({
   date: "2030-10-15",
   name: "Staff party",
-  colour: "purple",
   closeWholeVenue: false,
   cells: [],
   ...overrides,
@@ -317,23 +316,27 @@ describe("reading Hours", () => {
         {
           date: "2030-10-15",
           specialDate: {
+            kind: "working_day",
+            repeats: false,
+            ownHours: false,
             id: party.id,
             date: "2030-10-15",
             name: "Staff party",
-            colour: "purple",
             closeWholeVenue: false,
           },
           holidays: [],
-          tone: "purple",
+          tone: "blue",
         },
         { date: "2030-10-16", specialDate: null, holidays: [], tone: "standard" },
       ],
       specialDates: [
         {
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           id: party.id,
           date: "2030-10-15",
           name: "Staff party",
-          colour: "purple",
           closeWholeVenue: false,
         },
       ],
@@ -425,7 +428,8 @@ describe("reading Hours", () => {
       );
       return period;
     });
-    const special = await createDate(fx, input({ date: "2030-10-14", colour: "green", cells: [] }));
+    const special = await createDate(fx, input({ date: "2030-10-14", cells: [] }));
+    await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
     await withTransaction(db, (tx) =>
       saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date()),
     );
@@ -556,10 +560,12 @@ describe("writing Hours", () => {
     expect(created.status).toBe(201);
     const date = (await created.json()) as SpecialDate;
     expect(date).toEqual({
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
       id: expect.any(String),
       date: "2030-10-15",
       name: "Staff party",
-      colour: "purple",
       closeWholeVenue: false,
     });
 
@@ -570,12 +576,11 @@ describe("writing Hours", () => {
       fx.manager,
       input({
         name: "Team dinner",
-        colour: "blue",
         cells: [{ subject: fx.bar, cell: { mode: "all_day", periods: [] } }],
       }),
     );
     expect(edited.status).toBe(200);
-    expect(await edited.json()).toEqual({ ...date, name: "Team dinner", colour: "blue" });
+    expect(await edited.json()).toEqual({ ...date, name: "Team dinner" });
 
     const copied = await send(fx, "POST", `/special-dates/${date.id}/duplicate`, fx.manager, {
       dates: ["2030-10-22", "2030-10-29"],
@@ -583,8 +588,8 @@ describe("writing Hours", () => {
     expect(copied.status).toBe(201);
     const copies = (await copied.json()) as SpecialDate[];
     expect(copies).toEqual([
-      { ...date, id: expect.any(String), date: "2030-10-22", name: "Team dinner", colour: "blue" },
-      { ...date, id: expect.any(String), date: "2030-10-29", name: "Team dinner", colour: "blue" },
+      { ...date, id: expect.any(String), date: "2030-10-22", name: "Team dinner" },
+      { ...date, id: expect.any(String), date: "2030-10-29", name: "Team dinner" },
     ]);
     expect(new Set([date.id, ...copies.map((copy) => copy.id)]).size).toBe(3);
     expect(
@@ -1062,4 +1067,113 @@ it("rolls back POST date and cells when an after-change participant refuses", as
   });
   expect(await venueDates(fx)).toEqual([]);
   expect(await db.select().from(specialDateHours)).toEqual(before);
+});
+
+describe("named-day HTTP writes", () => {
+  it("returns recurring named-day metadata and refuses a later clashing occurrence", async () => {
+    const fx = await fixture();
+    const created = await send(fx, "POST", "/special-dates", fx.manager, {
+      ...input({ date: "2030-12-25" }),
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({
+      date: "2030-12-25",
+      kind: "holiday",
+      repeats: true,
+      ownHours: true,
+    });
+    await refused(
+      await send(fx, "POST", "/special-dates", fx.manager, input({ date: "2031-12-25" })),
+      409,
+      { code: "special_date.date_taken", params: { date: "2031-12-25" } },
+    );
+    expect(await venueDates(fx)).toHaveLength(1);
+  });
+  it.each(["kind", "repeats", "ownHours"])(
+    "rejects an explicit null %s with a field refusal",
+    async (field) => {
+      const fx = await fixture();
+      await refused(
+        await send(fx, "POST", "/special-dates", fx.manager, { ...input(), [field]: null }),
+        400,
+        { code: "hours.invalid", params: { field } },
+      );
+      expect(await venueDates(fx)).toEqual([]);
+    },
+  );
+});
+
+describe("named-days Calendar route", () => {
+  it("returns the venue-scoped model for a venue viewer", async () => {
+    const fx = await fixture();
+    const day = await createDate(
+      fx,
+      input({ kind: "holiday", repeats: true, closeWholeVenue: true }),
+    );
+    const response = await send(
+      fx,
+      "GET",
+      "/named-days?from=2031-10-15&to=2031-10-16",
+      fx.supervisor,
+    );
+    expect(response.status).toBe(200);
+    const model = await response.json();
+    expect(model.days).toEqual([
+      {
+        date: "2031-10-15",
+        namedDay: {
+          id: day.id,
+          date: "2030-10-15",
+          name: "Staff party",
+          kind: "holiday",
+          repeats: true,
+          ownHours: false,
+          closeWholeVenue: true,
+          hasStationHours: false,
+        },
+        holidays: [],
+        tone: "own_holiday",
+        ownHours: false,
+        closed: true,
+      },
+      {
+        date: "2031-10-16",
+        namedDay: null,
+        holidays: [],
+        tone: "standard",
+        ownHours: false,
+        closed: false,
+      },
+    ]);
+  });
+  it("requires the existing venue view authorization", async () => {
+    const fx = await fixture();
+    await refused(
+      await send(fx, "GET", "/named-days?from=2030-10-15&to=2030-10-15", fx.staff),
+      403,
+      { code: "authorization.not_permitted" },
+    );
+    await refused(
+      await send(fx, "GET", "/named-days?from=2030-10-15&to=2030-10-15", undefined),
+      401,
+      { code: "management_session.required" },
+    );
+  });
+  it("refuses missing, malformed, reversed and overlong ranges", async () => {
+    const fx = await fixture();
+    for (const [query, field] of [
+      ["", "from"],
+      ["from=2030-02-30&to=2030-03-01", "from"],
+      ["from=2030-10-16&to=2030-10-15", "to"],
+      ["from=2030-01-01&to=2031-01-02", "to"],
+    ]) {
+      await refused(await send(fx, "GET", `/named-days?${query}`, fx.supervisor), 400, {
+        code: "hours.invalid",
+        params: { field },
+      });
+    }
+  });
 });

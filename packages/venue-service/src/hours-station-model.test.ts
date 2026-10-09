@@ -59,7 +59,6 @@ async function fixture() {
         locationId: cfg.locationId,
         date: "2026-10-09",
         name: "Festival",
-        colour: "green",
         closeWholeVenue: false,
       })
       .returning();
@@ -185,10 +184,12 @@ describe("station-only Hours page model", () => {
     ]);
     expect(model.specialDates).toEqual([
       {
+        kind: "working_day",
+        repeats: false,
+        ownHours: false,
         id: f.special,
         date: "2026-10-09",
         name: "Festival",
-        colour: "green",
         closeWholeVenue: false,
       },
     ]);
@@ -217,10 +218,12 @@ describe("station-only Hours page model", () => {
       {
         date: "2026-10-09",
         specialDate: {
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           id: f.special,
           date: "2026-10-09",
           name: "Festival",
-          colour: "green",
           closeWholeVenue: false,
         },
         holidays: [],
@@ -264,9 +267,11 @@ describe("station-only Hours writers", () => {
           f.cfg,
           f.special,
           {
+            kind: "working_day",
+            repeats: false,
+            ownHours: false,
             date: "2026-10-09",
             name: "Changed",
-            colour: "red",
             closeWholeVenue: false,
             cells: [
               {
@@ -282,7 +287,6 @@ describe("station-only Hours writers", () => {
     const saved = await suite.db.select().from(specialDates);
     expect(saved.find((row) => row.id === f.special)).toMatchObject({
       name: "Festival",
-      colour: "green",
     });
   });
 });
@@ -352,7 +356,6 @@ it("ignores retained department clashes when editing a station-hours named date"
         locationId: f.cfg.locationId,
         date: "2026-10-10",
         name: "Legacy",
-        colour: "blue",
         closeWholeVenue: false,
       })
       .returning();
@@ -376,7 +379,6 @@ it("ignores retained department clashes when editing a station-hours named date"
       {
         date: "2026-10-09",
         name: "Renamed",
-        colour: "purple",
         closeWholeVenue: false,
         cells: [],
       },
@@ -384,10 +386,12 @@ it("ignores retained department clashes when editing a station-hours named date"
     ),
   );
   expect(saved).toEqual({
+    kind: "working_day",
+    repeats: false,
+    ownHours: false,
     id: f.special,
     date: "2026-10-09",
     name: "Renamed",
-    colour: "purple",
     closeWholeVenue: false,
   });
   const read = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, f.special));

@@ -397,6 +397,40 @@ three fired lines. This checks batching at the service boundary, not a fixed dat
 
 ## Opening hours store "no claim" as no row
 
+**2026-10-09, A366 slice 2:** named days now own the calendar's dated choices. You give a day
+kind `holiday` or `working_day`, an optional annual repeat, and either the normal week, own
+hours or whole-venue closure. `saveSpecialDate` in `packages/venue-service/src/hours.ts` checks
+those choices and occurrence collisions; `namedDaysOn` in `named-days.ts` resolves annual
+occurrences from their first date onward. A repeated day retains one stored identity. February 29
+occurs only in leap years (`named-day-rules.ts`). One venue cannot hold two named days occurring
+on the same date: the writer checks repeat-versus-one-off collisions, beside the stored date and
+repeat-key indexes in `schema/hours.ts`.
+
+On an own-hours day, a department without a dated timetable row still follows its normal weekday;
+a dated row with no ranges closes that department. `resolveDepartmentService` in
+`packages/venue-service/src/menu-timetable.ts` selects the dated row only for own-hours days,
+then falls back to the weekday when there is no row. Whole-venue closure closes departments.
+Switching to own hours copies the normal week's department ranges and zone closed times;
+switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
+The individual department's Follow the normal week DELETE route is retired (`routes.ts` and
+`dashboard/opening-hours-client.ts`); change the named day's hours choice instead.
+
+Local holidays are own Holiday days, without an entry cap; annual repeats count as owner-entered
+local coverage in the year they occur (`readHolidays`, `holidays.ts`). They are separate from
+shipped public facts. The transitional `colour` column is gone from `schema/hours.ts`, and
+`packages/venue-service/drizzle/0038_clammy_klaw.sql` drops it and `local_holidays`; this change
+requires a venue reset. The earlier A261 storage account below is historical.
+
+The upgrade guard's reset list describes losses in its synthetic rows, rather than every table
+that can lose venue data. A 2026-10-09 probe on Node v26.7.0 / SQLite 3.53.4 applied the actual
+`0028_menu_timetables.sql` and `0038_clammy_klaw.sql` to a small schema, running the rebuild inside
+one transaction with foreign keys on: its dated `menu_day_timetables` row and `menu_slots` row
+were deleted, while the weekday timetable and its slot remained. The `local_holidays` table was
+absent afterwards. These losses are part of the reset requirement too.
+
+
+### Earlier A261 hours storage
+
 **2026-10-08, A366 slice 1:** department opening hours now come from service periods.
 The Hours grid described below now edits station restrictions only. Its `special_dates` calendar
 also anchors department period schedules. `readHoursModel` and the Station hours page omit
@@ -432,7 +466,7 @@ is in production" below).
   satisfies" above).
 - One special date per venue and date (`special_dates_location_date_key`).
 
-## Menu timetables share the special-date calendar
+## Menu timetables share the named-day calendar
 
 **2026-10-08, A366 slice 1:** the W98 account below records the earlier model. All-day
 menus, a zone's period-menu choices and separately authored department hours are retired.
@@ -444,7 +478,8 @@ a name, a colour, one customer menu and zero or more staff-only menus. Its range
 venue's business day, from one changeover to the next. With a 06:00 changeover, Friday's
 21:00–03:00 range ends on Saturday morning; 06:00–06:00 covers the whole business day.
 
-With a readable venue clock, a special date with no timetable row follows the normal weekday. A saved row with no ranges
+With a readable venue clock, a named day with own hours and no department timetable row follows
+the normal weekday. A saved dated row with no ranges
 closes that department for the date's business day. Closing the whole venue closes every
 department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these cases.
 
@@ -473,6 +508,37 @@ hours and links to that department in Opening hours only when its saved schedule
 A different authored or demo schedule is not described as that first weekday schedule. The checks are in
 `apps/server/src/setup-opening-hours.test.ts`, with the response and completed-request replay in
 `apps/server/src/setup-api.test.ts`.
+
+### Zone closed times
+
+You subtract a zone's closed times from its department's service day, rather than writing another
+opening schedule. `zone_closed_times` in `packages/venue-service/src/schema/zone-closed-times.ts`
+links each range to a zone and either a weekday or a named day. The writers `replaceZoneClosedWeek`
+and `saveZoneClosedDate` in `zone-closed-times.ts` validate the ranges against the business-day
+changeover, on quarter-hour boundaries. A date must have own hours before you can save its closed
+times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the normal
+weekday otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
+it does not inherit the zone's normal-week closure. The start is closed and the end is open.
+When the venue clock is unreadable, this zone check reports no closed zone; department checks
+remain separate.
+
+A closed zone refuses new service, new dish lines and quantity increases with `service_zone.closed`,
+including during a positive period end offset. `assertZoneTakesNewOrders` is called by
+`apps/server/src/table-actions.ts`, `working-order.ts` and `move-bill.ts`; the route cases in
+`apps/server/src/till-api.zone-closed.test.ts` check the resulting refusals. A move bringing an open
+bill or guests into that zone is refused. Accepting a department transfer into it is also refused,
+before resolving the request or changing its bill (`acceptDepartmentTransfer` in
+`packages/venue-service/src/department-transfers.ts`; the closed-destination case in
+`packages/venue-service/src/department-transfers.test.ts`). Notes, decreases, payment and splitting
+existing bills or joined tables remain possible. Bills and guests can move within the closed zone
+or out to an open zone (`moveGuests` in `table-actions.ts`, `adoptZone` in `move-bill.ts`, and the
+split and same-zone/outbound cases in `till-api.zone-closed.test.ts`). A presented bill can move
+into the closed zone while retaining its recorded service context. Printing existing orders remains
+possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks profile zone access through
+`apps/server/src/zone-access.ts` and enqueues through `reprintOrderTickets` in
+`apps/server/src/kitchen-print.ts`.
+Pricing still reads static offer membership; zone closures do not change recorded prices.
+`working-order.ts` performs the zone check when adding lines, separately from its offer read.
 
 ### Earlier W98 menu timetable model
 

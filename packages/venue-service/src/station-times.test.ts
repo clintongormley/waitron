@@ -375,7 +375,6 @@ async function saveDate(
     {
       date,
       name: `Special ${date}`,
-      colour: "amber",
       closeWholeVenue,
       cells: cells.map(([id, cell]) => ({ subject: station(id), cell })),
     },

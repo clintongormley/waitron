@@ -1,8 +1,9 @@
 import { venueMomentAt } from "@waitron/reporting";
-import { isUuid } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { invalidTimetable } from "./menu-timetable-rules.js";
+import "./errors.js";
 
 export interface ServiceRange {
   periodId: string;
@@ -38,35 +39,73 @@ export function rangeSpan(
   };
 }
 
-export function parseServiceDay(value: unknown, field: string, cutover: string): ServiceRange[] {
-  if (!Array.isArray(value)) invalidTimetable(field);
-  const ranges = value.map((entry: unknown, index): ServiceRange => {
+export interface ClosedRange {
+  startsAt: string;
+  endsAt: string;
+}
+type RangeReason = "empty" | "order" | "step" | "overlap";
+function parseRanges<T extends ClosedRange>(
+  value: unknown,
+  field: string,
+  cutover: string,
+  invalid: (field: string, reason?: RangeReason) => never,
+  read: (entry: Record<string, unknown>, at: string, range: ClosedRange) => T,
+): T[] {
+  if (!Array.isArray(value)) invalid(field);
+  const ranges = value.map((entry: unknown, index): T => {
     const at = `${field}.${index}`;
-    if (typeof entry !== "object" || entry === null) invalidTimetable(at);
-    const { periodId, startsAt, endsAt } = entry as Record<string, unknown>;
-    if (typeof periodId !== "string" || !isUuid(periodId)) invalidTimetable(`${at}.periodId`);
-    if (typeof startsAt !== "string" || !CLOCK_TIME.test(startsAt))
-      invalidTimetable(`${at}.startsAt`);
-    if (typeof endsAt !== "string" || !CLOCK_TIME.test(endsAt)) invalidTimetable(`${at}.endsAt`);
-    const range = { periodId: periodId.toLowerCase(), startsAt, endsAt };
+    if (typeof entry !== "object" || entry === null) invalid(at);
+    const { startsAt, endsAt } = entry as Record<string, unknown>;
+    if (typeof startsAt !== "string" || !CLOCK_TIME.test(startsAt)) invalid(`${at}.startsAt`);
+    if (typeof endsAt !== "string" || !CLOCK_TIME.test(endsAt)) invalid(`${at}.endsAt`);
+    const range = { startsAt, endsAt };
     const span = rangeSpan(range, cutover);
-    if (span.start === span.end) invalidTimetable(field, { reason: "empty" });
-    if (span.start > span.end) invalidTimetable(field, { reason: "order" });
+    if (span.start === span.end) invalid(field, "empty");
+    if (span.start > span.end) invalid(field, "order");
     if (
       clockMinutes(startsAt) % SERVICE_STEP_MINUTES !== 0 ||
       clockMinutes(endsAt) % SERVICE_STEP_MINUTES !== 0
     )
-      invalidTimetable(field, { reason: "step" });
-    return range;
+      invalid(field, "step");
+    return read(entry as Record<string, unknown>, at, range);
   });
   ranges.sort(
     (a, b) => minuteOfServiceDay(a.startsAt, cutover) - minuteOfServiceDay(b.startsAt, cutover),
   );
   for (let index = 1; index < ranges.length; index++) {
     if (rangeSpan(ranges[index]!, cutover).start < rangeSpan(ranges[index - 1]!, cutover).end)
-      invalidTimetable(field, { reason: "overlap" });
+      invalid(field, "overlap");
   }
   return ranges;
+}
+
+export function parseServiceDay(value: unknown, field: string, cutover: string): ServiceRange[] {
+  return parseRanges(
+    value,
+    field,
+    cutover,
+    (field, reason) => invalidTimetable(field, reason === undefined ? undefined : { reason }),
+    (entry, at, range) => {
+      const { periodId } = entry;
+      if (typeof periodId !== "string" || !isUuid(periodId)) invalidTimetable(`${at}.periodId`);
+      return { periodId: periodId.toLowerCase(), ...range };
+    },
+  );
+}
+
+export function parseClosedRanges(value: unknown, field: string, cutover: string): ClosedRange[] {
+  return parseRanges(
+    value,
+    field,
+    cutover,
+    (field, reason) => {
+      throw new AppError("zone_closed_time.invalid", {
+        field,
+        ...(reason === undefined ? {} : { reason }),
+      });
+    },
+    (_entry, _at, range) => range,
+  );
 }
 
 export function serviceMomentAt(

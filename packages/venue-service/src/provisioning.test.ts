@@ -13,7 +13,8 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { readHolidays, readLocalHolidayModel, saveLocalHoliday } from "./holidays.js";
+import { readHolidays, readHolidayAreaModel } from "./holidays.js";
+import { readNamedDaysModel } from "./named-days.js";
 import { readSpecialDate, readWeekHours, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
@@ -329,7 +330,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         {
           date: "2026-12-25",
           name: "Christmas",
-          colour: "red",
           closeWholeVenue: false,
           cells: [{ subject, cell: { mode: "closed", periods: [] } }],
         },
@@ -382,14 +382,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         await db.execute(sql`
           select
             (select count(*) from holiday_geographies) as geographies,
-            (select count(*) from local_holidays) as entries`)
+            (select count(*) from special_dates) as entries`)
       ).rows[0];
 
     await runSeed();
     expect(await stored()).toEqual({ geographies: 0, entries: 0 });
     const fresh = await db.transaction(async (tx) => ({
       read: await readHolidays(tx, cfg, "2026-01-01", "2026-01-31"),
-      model: await readLocalHolidayModel(tx, cfg),
+      model: await readHolidayAreaModel(tx, cfg),
     }));
     expect(fresh.read.facts.map(({ date, scope }) => ({ date, scope }))).toEqual([
       { date: "2026-01-01", scope: "national" },
@@ -403,16 +403,36 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         local: "none_entered",
       }),
     ]);
-    expect(fresh.model).toMatchObject({ geographies: [], entries: [] });
+    expect(fresh.model).toMatchObject({ chosen: null });
 
     const entry = await db.transaction((tx) =>
-      saveLocalHoliday(tx, cfg, null, { date: "2026-06-04", name: "Corpus Christi" }),
+      saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        {
+          date: "2026-06-04",
+          name: "Corpus Christi",
+          kind: "holiday",
+          closeWholeVenue: false,
+          cells: [],
+        },
+        new Date("2026-01-01T12:00:00Z"),
+      ),
     );
-    const before = await db.transaction((tx) => readLocalHolidayModel(tx, cfg));
+    const readDays = () =>
+      db.transaction((tx) =>
+        readNamedDaysModel(tx, cfg, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
+      );
+    const before = await readDays();
     await runSeed();
-    expect(await db.transaction((tx) => readLocalHolidayModel(tx, cfg))).toEqual(before);
-    expect(before.entries).toEqual([entry]);
-    expect(await stored()).toEqual({ geographies: 1, entries: 1 });
+    expect(await readDays()).toEqual(before);
+    expect(before.days[0]!.namedDay).toMatchObject({
+      id: entry.id,
+      name: "Corpus Christi",
+      kind: "holiday",
+    });
+    expect(await stored()).toEqual({ geographies: 0, entries: 1 });
   });
 
   describe("the venue's ordering profiles", () => {

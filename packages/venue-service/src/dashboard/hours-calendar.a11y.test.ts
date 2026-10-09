@@ -11,6 +11,10 @@ import {
   type SpecialDate,
 } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
+import { NamedDaysApi } from "./named-days-client.js";
+import { registerIcons } from "@waitron/ui";
+
+import type { NamedDaysModel } from "../holiday-types.js";
 import { HoursApi } from "./hours-client.js";
 import type { HoursCalendar } from "./hours-calendar.js";
 import "./hours-calendar.js";
@@ -21,16 +25,26 @@ afterEach(async () => {
   await page.viewport(1280, 800);
 });
 
-/** One special date in each palette colour, 12 to 17 October, and a whole-venue closure on the 19th. */
+/** Named days of both kinds, 12 to 17 October, and a whole-venue closure on the 19th. */
 const SPECIALS: SpecialDate[] = [
   ...CALENDAR_COLOURS.map((colour, index) => ({
     id: colour,
     date: addDays("2026-10-12", index),
     name: `${colour} day`,
-    colour,
+    kind: index % 2 === 0 ? ("holiday" as const) : ("working_day" as const),
+    repeats: false,
+    ownHours: false,
     closeWholeVenue: false,
   })),
-  { id: "shut", date: "2026-10-19", name: "Staff day off", colour: "red", closeWholeVenue: true },
+  {
+    id: "shut",
+    date: "2026-10-19",
+    name: "Staff day off",
+    kind: "working_day",
+    repeats: false,
+    ownHours: false,
+    closeWholeVenue: true,
+  },
 ];
 
 function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
@@ -47,7 +61,11 @@ function rangeModel(from: LocalDate, to: LocalDate): HoursModel {
       tone:
         specialDate?.closeWholeVenue || date === "2026-10-26"
           ? "closed"
-          : (specialDate?.colour ?? "standard"),
+          : specialDate === null
+            ? "standard"
+            : specialDate.kind === "holiday"
+              ? "purple"
+              : "blue",
     });
   }
   return {
@@ -164,7 +182,7 @@ async function open(el: HoursCalendar, date: LocalDate) {
 }
 
 const states: Record<string, (theme: "light" | "dark") => Promise<HoursCalendar>> = {
-  "the month, every palette colour, Closed dates, a holiday and today, nothing chosen": (theme) =>
+  "the month, both named-day kinds, Closed dates, a holiday and today, nothing chosen": (theme) =>
     mount(theme),
   "a special date's panel with an inherited value": async (theme) => {
     const el = await mount(theme);
@@ -211,6 +229,77 @@ describe.each(["light", "dark"] as const)("Hours calendar accessibility (%s)", (
   test.each(Object.keys(states))("%s", async (state) => {
     setLocale("en");
     await states[state]!(theme);
+    await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("Named month accessibility (%s)", (theme) => {
+  test("each kind, own hours, closed public holiday and area picker", async () => {
+    registerIcons({
+      clock:
+        "M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5a5.5 5.5 0 1 1 0 11A5.5 5.5 0 0 1 8 2.5ZM7.25 4H8.75V7.5L11 9 10.2 10.2 7.25 8.25Z",
+    });
+    await mountThemed("<div></div>", theme);
+    const model: NamedDaysModel = {
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      civilDate: "2026-10-07",
+      clockReadable: true,
+      days: ["public_holiday", "own_holiday", "working_day", "closed", "standard"].map(
+        (tone, index) => ({
+          date: `2026-10-${12 + index}`,
+          namedDay:
+            index < 3
+              ? {
+                  id: String(index),
+                  date: `2026-10-${12 + index}`,
+                  name: "Anniversary",
+                  kind: index === 1 ? "holiday" : "working_day",
+                  repeats: false,
+                  ownHours: index < 2,
+                  closeWholeVenue: false,
+                  hasStationHours: false,
+                }
+              : null,
+          holidays:
+            index === 0
+              ? [
+                  {
+                    id: "h",
+                    date: "2026-10-12",
+                    name: "Public feast",
+                    scope: "national",
+                    sourceId: "test",
+                  },
+                ]
+              : [],
+          tone: tone as NamedDaysModel["days"][number]["tone"],
+          ownHours: index < 2,
+          closed: index === 0 || index === 3,
+        }),
+      ),
+      holidayCoverage: [],
+      holidaySources: [],
+      area: {
+        addressKey: "fixture-address",
+        readiness: "ready",
+        options: [{ key: "aran", name: "Aran" }],
+        required: true,
+        chosen: null,
+      },
+      localHolidaysPerYear: 2,
+    };
+    const el = document.createElement("hours-calendar");
+    Object.assign(el, {
+      namedApi: new NamedDaysApi((async () => model) as DashboardRequest),
+      today: "2026-10-07",
+    });
+    host.append(el);
+    await settle(el);
+    for (const tone of ["public_holiday", "own_holiday", "working_day", "closed", "standard"])
+      expect(el.shadowRoot!.querySelector(`td[data-tone="${tone}"]`)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-icon[name=clock]")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("Closed");
     await expectNoA11yViolations(host);
   });
 });

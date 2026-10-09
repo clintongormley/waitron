@@ -3845,7 +3845,6 @@ describe("a sale on a Spanish public holiday", () => {
         {
           date: HOLIDAY,
           name: "Upstairs closed",
-          colour: "amber",
           closeWholeVenue: false,
           cells: [
             {

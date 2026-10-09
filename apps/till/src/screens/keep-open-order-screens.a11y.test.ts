@@ -46,6 +46,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                 const shared = {
                   service: {
                     open: state !== "closed",
+                    zoneOpen: true,
                     periodName: state === "closed" ? null : name,
                     keepOpen: subject,
                   },

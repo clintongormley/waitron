@@ -2423,7 +2423,6 @@ it("previews a date and local time with that date's special hours through the ex
       {
         date: "2026-10-09",
         name: "Staff party",
-        colour: "purple",
         closeWholeVenue: true,
         cells: [],
       },

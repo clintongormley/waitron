@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 2, 3 Part B, and 4–7, each planned then built without
+  APPROVED 2026-10-07; remaining work is slice 3 Part B and slices 4–7, each planned then built without
   stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -39,6 +39,21 @@ their full text.
   settings shared by departments and zones, now (it needs slice 1 only); each zone's closed times
   on its Zones tab after slice 2; the floor plan on the Zones tab after A429's editor — with its
   open decisions at its top.
+
+## Opening hours dated-save refusal presentation
+
+Reproduce a server refusal with no field on a week with multiple own-hours named days. The slice 2
+Task 22 review reported the same general refusal beside unrelated dates' Save actions
+(`opening-hours-week.ts` / `opening-hours-zone-week.ts`). Keep the failed date's retry and draft
+scope while limiting the message to the action that failed. Receipt: Lane D
+`receipts/a366-2/task22-review.md`; final reviewers did not run this presentation case.
+
+## Opening hours real-week headings
+
+Remove the repeated weekday from a real-week row's heading: it combines the full weekday with a
+formatted date that also names the weekday. Keep the date and Today marker readable in EN/ES,
+both themes, at 1280 and 390. Receipt: Lane D `receipts/a366-2/task22-review.md` and final visual
+captures under `receipts/a366-2/finish-visuals`.
 
 ## Who authorised today's station or period change
 
@@ -105,10 +120,7 @@ Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2
 
 - **Smaller notes from the reviews:** there is no control to clear a chosen area back to "not
   chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
-  Arán" are Spanish data labels shown untranslated in English; the database does not count local
-  holidays, so only the writer and the import hold the yearly allowance; the local-holidays editor
-  decides "not available" from an allowance of 0 and the calendar from an unsupported country,
-  which differ only for a country shipping an allowance of 0 (none does); and `renameSpecialDate`
+  Arán" are Spanish data labels shown untranslated in English; `renameSpecialDate`
   checks the name before the date's id, so a blank name for another venue's date answers
   `hours.invalid` rather than not found.
 

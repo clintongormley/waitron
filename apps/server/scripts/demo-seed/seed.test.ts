@@ -24,6 +24,7 @@ import { readWeekHours, resolveMakers, setRoutingCell } from "@waitron/venue-ser
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
+import * as salesSeed from "./seed-sales.js";
 import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -48,6 +49,54 @@ describe("seedDemoRestaurant", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
+
+  it.each(["06:00", "05:00"])(
+    "closes only the Terrace from 23:00 to the %s changeover after its sales",
+    async (cutover) => {
+      const venue = await provisionVenue();
+      await withTransaction(suite.db, (tx) =>
+        tx.execute(
+          sql`update locations set day_cutover = ${cutover} where id = ${venue.locationId}`,
+        ),
+      );
+      const readClosures = () =>
+        suite.db.execute<{ zone: string; weekday: number; starts_at: string; ends_at: string }>(sql`
+          select z.name as zone, c.weekday, c.starts_at, c.ends_at
+          from zone_closed_times c join floor_zones z on z.id = c.zone_id
+          where z.location_id = ${venue.locationId}
+          order by z.name, c.weekday`);
+      const realSeedSales = salesSeed.seedSales;
+      let closuresAfterSales: unknown;
+      let saleCount = 0;
+      const salesStep = vi.spyOn(salesSeed, "seedSales").mockImplementation(async (...args) => {
+        const result = await realSeedSales(...args);
+        saleCount = result.count;
+        closuresAfterSales = (await readClosures()).rows;
+        return result;
+      });
+      try {
+        await seedDemoRestaurant(suite.db, {
+          venue,
+          locale: LOCALE,
+          salesDays: 3,
+          departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+          dataSet: CASA_DELGADO_ES,
+        });
+        expect(saleCount).toBeGreaterThan(0);
+        expect(closuresAfterSales).toEqual([]);
+        expect((await readClosures()).rows).toEqual(
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            zone: "Terrace",
+            weekday,
+            starts_at: "23:00:00",
+            ends_at: cutover === "06:00" ? "06:00:00" : "05:00:00",
+          })),
+        );
+      } finally {
+        salesStep.mockRestore();
+      }
+    },
+  );
 
   it("seeds department service periods instead of a second opening-hours grid", async () => {
     const venue = await provisionVenue();

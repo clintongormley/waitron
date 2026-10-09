@@ -1,5 +1,6 @@
 // Browser-safe: types only, no database or server imports.
-import type { ServiceRange } from "./service-day.js";
+import type { ClosedRange, ServiceRange } from "./service-day.js";
+import type { NamedDay } from "./holiday-types.js";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
 
 export interface MenuPeriodInput {
@@ -48,17 +49,17 @@ export interface OpeningHoursModel {
   clockReadable: boolean;
   dayCutover: string;
   menus: readonly { id: string; name: string; active: boolean; includes: readonly string[] }[];
-  specialDates: readonly {
-    id: string;
-    date: string;
-    name: string;
-    colour: CalendarColour;
-    closeWholeVenue: boolean;
-  }[];
+  namedDays: readonly NamedDay[];
   departments: readonly {
     id: string;
     name: string;
     active: boolean;
+    zones: readonly {
+      id: string;
+      name: string;
+      week: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
+      dates: readonly { specialDateId: string; ranges: readonly ClosedRange[] }[];
+    }[];
     periods: readonly {
       id: string;
       name: string;

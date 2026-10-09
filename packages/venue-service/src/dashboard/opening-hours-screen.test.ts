@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -9,6 +9,7 @@ import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodEditor } from "./period-editor.js";
 
 import "./opening-hours-screen.js";
+import { parseSpecialDateInput } from "../hours-rules.js";
 
 type Screen = LitElement & { api: OpeningHoursApi; readOnly: boolean };
 const hosts: HTMLElement[] = [];
@@ -18,6 +19,7 @@ beforeEach(() => {
   history.replaceState(null, "", "/manage/opening-hours/view/periods");
 });
 afterEach(() => {
+  vi.useRealTimers();
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
@@ -34,12 +36,13 @@ function model(): OpeningHoursModel {
       { id: "drinks", name: "Drinks", active: true, includes: [] },
       { id: "staff", name: "Staff snacks", active: true, includes: [] },
     ],
-    specialDates: [],
+    namedDays: [],
     departments: [
       {
         id: "restaurant",
         name: "Restaurant",
         active: true,
+        zones: [],
         periods: [
           {
             id: "p1",
@@ -54,7 +57,7 @@ function model(): OpeningHoursModel {
         week: Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: [] })),
         dates: [],
       },
-      { id: "deli", name: "Deli", active: false, periods: [], week: [], dates: [] },
+      { id: "deli", name: "Deli", active: false, zones: [], periods: [], week: [], dates: [] },
     ],
   };
 }
@@ -117,7 +120,7 @@ it("selects a linked inactive department and keeps view and department in the ad
   await el.updateComplete;
   expect(location.pathname).toBe("/manage/opening-hours/view/periods/department/restaurant");
   const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
-  expect(tabs.items.map((item) => item.key)).toEqual(["week", "periods", "day"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["week", "periods", "day", "calendar"]);
   tabs.dispatchEvent(
     new CustomEvent("wt-tab-change", { detail: { value: "day" }, bubbles: true, composed: true }),
   );
@@ -575,7 +578,7 @@ it("explains an empty venue and falls back to an inactive department when there 
   expect(el.shadowRoot!.textContent).toContain("No departments yet.");
   expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull();
   data.departments = [
-    { id: "deli", name: "Deli", active: false, periods: [], week: [], dates: [] },
+    { id: "deli", name: "Deli", active: false, zones: [], periods: [], week: [], dates: [] },
   ];
   el.api.rereadWatches();
   await expect
@@ -953,4 +956,564 @@ it("sends an offset-only edit through the real period client and closes before a
     ]);
   await expect.poll(() => el.shadowRoot!.querySelector("period-editor")).toBeNull();
   await expect.poll(() => reads).toBe(2);
+});
+
+function pickerModel(): OpeningHoursModel {
+  const data = model();
+  data.departments[0]!.zones = [{ id: "terrace", name: "Terrace", week: [], dates: [] }];
+  return {
+    ...data,
+    departments: [
+      ...data.departments,
+      { id: "bar", name: "Bar", active: true, zones: [], periods: [], week: [], dates: [] },
+    ],
+  };
+}
+const picker = (el: Screen) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
+function pick(el: Screen, value: string) {
+  picker(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+it("lists All departments then active departments with their zones on Week only", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week");
+  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+  expect(picker(el).options).toEqual([
+    { value: "all", label: "All departments" },
+    { value: "restaurant", label: "Restaurant" },
+    { value: "zone:terrace", label: "Restaurant › Terrace" },
+    { value: "bar", label: "Bar" },
+  ]);
+  const tabs = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
+  tabs.dispatchEvent(
+    new CustomEvent("wt-tab-change", {
+      detail: { value: "periods" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(picker(el).options).toEqual([
+    { value: "restaurant", label: "Restaurant" },
+    { value: "bar", label: "Bar" },
+  ]);
+});
+it("keeps a zone through Back and Forward and clears it when choosing a department", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/restaurant");
+  const guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async () => "proceeded",
+  });
+  try {
+    const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+    pick(el, "zone:terrace");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/department/restaurant/zone/terrace");
+    expect(picker(el).value).toBe("zone:terrace");
+    const zoneWeek =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-zone-week"]>(
+        "opening-hours-zone-week",
+      );
+    expect(zoneWeek?.zone.name).toBe("Terrace");
+    expect(zoneWeek?.zone.id).toBe("terrace");
+    expect(zoneWeek?.department.id).toBe("restaurant");
+    expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
+    history.back();
+    await expect.poll(() => picker(el).value).toBe("restaurant");
+    history.forward();
+    await expect.poll(() => picker(el).value).toBe("zone:terrace");
+    pick(el, "bar");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/department/bar");
+    expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")).toBeNull();
+  } finally {
+    guard.dispose();
+  }
+});
+it("links All departments headings to a department and returns to the all view", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+  expect(picker(el).value).toBe("all");
+  const all = el.shadowRoot!.querySelector<LitElement>("opening-hours-all");
+  expect(all).not.toBeNull();
+  await all!.updateComplete;
+  const link = all!.shadowRoot!.querySelector<HTMLElement>("[data-department=bar]");
+  expect(link).not.toBeNull();
+  link!.click();
+  await expect.poll(() => picker(el).value).toBe("bar");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/bar");
+  pick(el, "all");
+  await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/week/department/all");
+  expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
+});
+it("ignores a zone belonging to another department and unknown picker values", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/bar/zone/terrace");
+  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+  expect(picker(el).value).toBe("bar");
+  expect(el.shadowRoot!.querySelector("[data-test=zone-placeholder]")).toBeNull();
+  pick(el, "zone:missing");
+  await el.updateComplete;
+  expect(picker(el).value).toBe("bar");
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/bar/zone/terrace");
+});
+
+it("still offers All departments when no department is available", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  const data = { ...model(), departments: [] };
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  expect(picker(el)).not.toBeNull();
+  expect(picker(el).options).toEqual([{ value: "all", label: "All departments" }]);
+  expect(el.shadowRoot!.textContent).toContain("No departments");
+});
+
+it("passes the chosen named day to All departments", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  const data = pickerModel();
+  const special = {
+    id: "named",
+    date: "2026-10-12",
+    name: "Own Monday",
+    kind: "working_day" as const,
+    repeats: false,
+    ownHours: true,
+    hasStationHours: false,
+    closeWholeVenue: false,
+  };
+  const el = await mount((async () =>
+    structuredClone({ ...data, namedDays: [special] })) as DashboardRequest);
+  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+  el.shadowRoot!.querySelector("[name=realWeek]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  );
+  await expect.poll(() => location.search).toBe("?week=2026-10-12");
+  const all = el.shadowRoot!.querySelector("opening-hours-all")!;
+  await all.updateComplete;
+  expect(all.weekStart).toBe("2026-10-12");
+  expect(all.namedDays).toEqual([special]);
+  expect(all.shadowRoot!.querySelector("service-grid")!.columns).toHaveLength(14);
+});
+
+it("restores the Calendar month URL and writes month navigation without a department picker", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02?keep=yes");
+  const ranges: string[] = [];
+  const el = await mount((async (path: string) => {
+    if (path.includes("named-days?")) {
+      ranges.push(path);
+      return {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        days: [],
+        holidayCoverage: [],
+        holidaySources: [],
+        area: {
+          addressKey: "fixture-address",
+          readiness: "ready",
+          options: [],
+          required: false,
+          chosen: null,
+        },
+        localHolidaysPerYear: 2,
+      };
+    }
+    return model();
+  }) as DashboardRequest);
+  expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!.value).toBe(
+    "calendar",
+  );
+  const calendar =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["hours-calendar"]>("hours-calendar");
+  expect(calendar).not.toBeNull();
+  await expect.poll(() => calendar!.shadowRoot?.textContent).toContain("February 2027");
+  expect(el.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
+  expect(ranges[0]).toContain("from=2027-02-01&to=2027-02-28");
+  (calendar!.shadowRoot!.querySelector("[data-test=next-month]") as HTMLElement).click();
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/opening-hours/view/calendar/month/2027-03");
+  expect(location.search).toBe("?keep=yes");
+  expect(el.shadowRoot!.querySelector("hours-calendar")).toBe(calendar);
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-12");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => calendar!.shadowRoot?.textContent).toContain("December 2026");
+  expect(el.shadowRoot!.querySelector("hours-calendar")).toBe(calendar);
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => calendar!.shadowRoot?.textContent).not.toContain("Invalid Date");
+});
+
+describe("Calendar venue month fallback", () => {
+  function calendarModel(civilDate: string | null = "2026-10-31") {
+    return {
+      timeZone: "America/New_York",
+      dayCutover: "06:00",
+      civilDate,
+      clockReadable: civilDate !== null,
+      days: [],
+      holidayCoverage: [],
+      holidaySources: [],
+      area: {
+        addressKey: "fixture-address",
+        readiness: "ready",
+        options: [],
+        required: false,
+        chosen: null,
+      },
+      localHolidaysPerYear: 2,
+    };
+  }
+  const heading = (el: Screen) =>
+    el.shadowRoot!.querySelector("hours-calendar")?.shadowRoot?.querySelector("[data-test=month]")
+      ?.textContent;
+  it("replaces the browser bootstrap month with the venue's month when no month is selected", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+    const reads: string[] = [];
+    const el = await mount((async (path: string) => {
+      if (path.includes("named-days?")) {
+        reads.push(path);
+        return calendarModel();
+      }
+      return model();
+    }) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("October 2026");
+    expect(reads[0]).toContain("from=2026-10-26&to=2026-12-06");
+    expect(reads.at(-1)).toContain("from=2026-09-28&to=2026-11-01");
+    expect(reads).toHaveLength(2);
+    expect(location.pathname).toBe("/manage/opening-hours/view/calendar");
+  });
+  it("uses the venue month after an invalid-month popstate", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02");
+    const el = await mount((async (path: string) =>
+      path.includes("named-days?") ? calendarModel() : model()) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("February 2027");
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect.poll(() => heading(el)).toContain("October 2026");
+  });
+  it("keeps a valid explicit month across later venue-date reads", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-02");
+    let civilDate = "2026-10-31";
+    const el = await mount((async (path: string) =>
+      path.includes("named-days?") ? calendarModel(civilDate) : model()) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("February 2027");
+    civilDate = "2026-09-30";
+    el.api.namedDays.rereadWatches();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(heading(el)).toContain("February 2027");
+  });
+  it("keeps an operator's month choice when the venue's first readable date arrives", async () => {
+    vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+    let civilDate: string | null = null;
+    const el = await mount((async (path: string) =>
+      path.includes("named-days?") ? calendarModel(civilDate) : model()) as DashboardRequest);
+    await expect.poll(() => heading(el)).toContain("November 2026");
+    el.shadowRoot!.querySelector("hours-calendar")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=next-month]")!
+      .click();
+    await expect.poll(() => heading(el)).toContain("December 2026");
+    civilDate = "2026-10-31";
+    el.api.namedDays.rereadWatches();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(heading(el)).toContain("December 2026");
+    expect(location.pathname).toBe("/manage/opening-hours/view/calendar/month/2026-12");
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2027-13");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect.poll(() => heading(el)).toContain("October 2026");
+  });
+});
+
+describe("Calendar named-day actions", () => {
+  const source = {
+    id: "annual/day",
+    date: "2025-10-13",
+    name: "Anniversary",
+    kind: "holiday" as const,
+    repeats: true,
+    ownHours: false,
+    closeWholeVenue: false,
+    hasStationHours: false,
+  };
+  async function calendarMount(closed = false) {
+    history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
+    const writes: unknown[][] = [];
+    let reads = 0;
+    const day = { ...source, closeWholeVenue: closed };
+    const el = await mount((async (path, method, body) => {
+      if (method !== "GET") {
+        if (method === "PUT" || (method === "POST" && !path.endsWith("/duplicate")))
+          parseSpecialDateInput(body);
+        writes.push([path, method, body]);
+        return { id: "new" };
+      }
+      if (path.includes("/hours?"))
+        return {
+          timeZone: "Europe/Madrid",
+          clockReadable: true,
+          dayCutover: "06:00",
+          civilDate: "2026-10-07",
+          departments: [],
+          subjects: [],
+          week: [],
+          days: [],
+          specialDates: [],
+          specialCells: [],
+          holidayCoverage: [],
+          holidaySources: [],
+        };
+      if (path.includes("/named-days?")) {
+        reads++;
+        return {
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00",
+          civilDate: "2026-10-07",
+          clockReadable: true,
+          days: [
+            {
+              date: "2026-10-13",
+              namedDay: day,
+              holidays: [],
+              tone: "own_holiday",
+              ownHours: false,
+              closed,
+            },
+            {
+              date: "2026-10-12",
+              namedDay: null,
+              holidays: [
+                {
+                  id: "public",
+                  date: "2026-10-12",
+                  name: "Public feast",
+                  scope: "national",
+                  sourceId: "official",
+                },
+              ],
+              tone: "public_holiday",
+              ownHours: false,
+              closed: false,
+            },
+          ],
+          holidayCoverage: [],
+          holidaySources: [],
+          area: {
+            addressKey: "fixture-address",
+            readiness: "ready",
+            options: [],
+            required: false,
+            chosen: null,
+          },
+          localHolidaysPerYear: 2,
+        };
+      }
+      return model();
+    }) as DashboardRequest);
+    const cal = el.shadowRoot!.querySelector("hours-calendar")!;
+    await expect
+      .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13']"))
+      .not.toBeNull();
+    return { el, cal, day, writes, reads: () => reads };
+  }
+  async function action(cal: HTMLElementTagNameMap["hours-calendar"], date: string, kind: string) {
+    const trigger = cal.shadowRoot!.querySelector<HTMLElement>(`td[data-date='${date}'] button`);
+    expect(trigger, "named calendar offers a date menu").not.toBeNull();
+    trigger!.click();
+    await cal.updateComplete;
+    const button = cal.shadowRoot!.querySelector<HTMLElement>(`[data-test=named-${kind}]`);
+    expect(button, `${kind} offered for ${date}`).not.toBeNull();
+    button!.click();
+  }
+  async function editor(el: Screen) {
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("named-day-editor");
+    expect(form).not.toBeNull();
+    await form!.updateComplete;
+    return form!;
+  }
+  function field(form: HTMLElementTagNameMap["named-day-editor"], name: string) {
+    return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!;
+  }
+  async function change(
+    form: HTMLElementTagNameMap["named-day-editor"],
+    name: string,
+    value: string,
+  ) {
+    field(form, name).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await form.updateComplete;
+  }
+  it("Edit on a repeating occurrence opens the stored record and saves to its id", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-13", "edit");
+    const form = await editor(el);
+    expect(field(form, "date").value).toBe("2025-10-13");
+    expect(form.day?.id).toBe("annual/day");
+    await change(form, "name", "New anniversary");
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates/annual%2Fday",
+          "PUT",
+          {
+            date: "2025-10-13",
+            name: "New anniversary",
+            kind: "holiday",
+            repeats: true,
+            ownHours: false,
+            closeWholeVenue: false,
+            cells: [],
+          },
+        ],
+      ]);
+    await expect.poll(() => el.shadowRoot!.querySelector("named-day-editor")).toBeNull();
+    await expect.poll(reads).toBe(2);
+  });
+  it.each([false, true])(
+    "own hours stages the same repeating day, clearing closure %s",
+    async (closed) => {
+      const { el, cal, day, writes } = await calendarMount(closed);
+      await action(cal, "2026-10-13", "own");
+      const form = await editor(el);
+      expect(form.day?.id).toBe("annual/day");
+      expect(
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=ownHours]")
+          ?.value,
+      ).toBe("own");
+      expect(
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "[name=closeWholeVenue]",
+        )!.checked,
+      ).toBe(false);
+      expect(form.shadowRoot!.textContent).toContain("This changes the day every year");
+      expect(day.closeWholeVenue).toBe(closed);
+      expect(writes).toEqual([]);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+      await expect
+        .poll(() => writes)
+        .toEqual([
+          [
+            "/management-api/venue-service/special-dates/annual%2Fday",
+            "PUT",
+            {
+              date: "2025-10-13",
+              name: "Anniversary",
+              kind: "holiday",
+              repeats: true,
+              ownHours: true,
+              closeWholeVenue: false,
+              cells: [],
+            },
+          ],
+        ]);
+    },
+  );
+  it("public holiday own hours prefills its name and holiday kind and creates a day", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-12", "own");
+    const form = await editor(el);
+    expect(field(form, "name").value).toBe("Public feast");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=kind]")!.value,
+    ).toBe("holiday");
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates",
+          "POST",
+          {
+            date: "2026-10-12",
+            name: "Public feast",
+            kind: "holiday",
+            repeats: false,
+            ownHours: true,
+            closeWholeVenue: false,
+            cells: [],
+          },
+        ],
+      ]);
+    await expect.poll(reads).toBe(2);
+  });
+  it("Add on a plain date creates a named working day and refreshes the month", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-16", "add");
+    const form = await editor(el);
+    expect(field(form, "date").value).toBe("2026-10-16");
+    await change(form, "name", "World cup final");
+    form.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates",
+          "POST",
+          {
+            date: "2026-10-16",
+            name: "World cup final",
+            kind: "working_day",
+            repeats: false,
+            ownHours: false,
+            closeWholeVenue: false,
+            cells: [],
+          },
+        ],
+      ]);
+    await expect.poll(reads).toBe(2);
+  });
+  it("Copy submits target dates for the stored repeating id and refreshes the month", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-13", "copy");
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector<LitElement>("named-day-copy");
+    expect(form).not.toBeNull();
+    await form!.updateComplete;
+    form!.shadowRoot!.querySelector("[name='dates.0']")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "2026-10-20" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await form!.updateComplete;
+    form!.shadowRoot!.querySelector<HTMLElement>("[data-test=save-copy]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates/annual%2Fday/duplicate",
+          "POST",
+          { dates: ["2026-10-20"] },
+        ],
+      ]);
+    await expect.poll(() => el.shadowRoot!.querySelector("named-day-copy")).toBeNull();
+    await expect.poll(reads).toBe(2);
+  });
+  it("Delete names the repeating day, warns that every year goes and refreshes", async () => {
+    const { el, cal, writes, reads } = await calendarMount();
+    await action(cal, "2026-10-13", "delete");
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("[data-test=delete-named-day]");
+    expect(dialog).not.toBeNull();
+    expect(dialog!.textContent).toContain("Anniversary");
+    expect(dialog!.textContent).toContain("every year");
+    expect(writes).toEqual([]);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-named-delete]")!.click();
+    await expect
+      .poll(() => writes)
+      .toEqual([["/management-api/venue-service/special-dates/annual%2Fday", "DELETE", undefined]]);
+    await expect.poll(reads).toBe(2);
+  });
 });

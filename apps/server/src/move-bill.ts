@@ -397,6 +397,8 @@ async function adoptZone(
   zoneId: string,
 ): Promise<void> {
   const previous = await VENUE_SERVICE.findOrderContext(tx, cfg, billId);
+  if (previous?.zoneId !== zoneId)
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, zoneId, new Date());
   if (previous === null) {
     await VENUE_SERVICE.recordOrderContext(tx, cfg, billId, zoneId);
   } else {

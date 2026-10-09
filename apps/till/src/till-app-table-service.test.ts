@@ -45,7 +45,13 @@ const cafe: TillProduct = {
   catalogueName: "Carta",
 };
 
-const floorZone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+const floorZone: FloorZone = {
+  id: "z1",
+  name: "Comedor",
+  displayOrder: 0,
+  active: true,
+  closed: false,
+};
 
 const openTable: TableState = {
   id: "t2",
@@ -176,7 +182,7 @@ const till = {
 
 function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    service: { open: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId: floorZone.id,
@@ -2454,7 +2460,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const menuState = vi.fn(async (zoneId: string) => ({
-        service: { open: true, periodName: null, keepOpen: null },
+        service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
         menus: (zoneId === floorZone.id ? diningOffers : counterOffers).menus.map((menu) => ({
           menuId: menu.id,
           versionId: menu.versionId,
@@ -2501,7 +2507,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
         .mockResolvedValueOnce(diningOffers)
         .mockResolvedValue(republished);
       const menuState = vi.fn(async (zoneId: string) => ({
-        service: { open: true, periodName: null, keepOpen: null },
+        service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
         menus:
           zoneId === floorZone.id
             ? [{ menuId: "menu-dinner", versionId: "v2", orderable: true, sendable: true }]

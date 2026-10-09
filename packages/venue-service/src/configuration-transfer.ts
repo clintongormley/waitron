@@ -1,7 +1,7 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { civilDateOf } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { holidayCityKey, localHolidayName } from "./holiday-rules.js";
+import { holidayCityKey } from "./holiday-rules.js";
 import type { PackLookup } from "./holidays.js";
 import {
   addDays,
@@ -17,9 +17,10 @@ import {
 } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock, isReadableZone, skippedEndpoint } from "./hours-clock.js";
+import { occursOn, repeatKey } from "./named-day-rules.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
-import { calendarDateOfTime, parseServiceDay } from "./service-day.js";
+import { calendarDateOfTime, parseClosedRanges, parseServiceDay } from "./service-day.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import { HOURS_CELL_MODES } from "./schema/hours.js";
@@ -43,7 +44,8 @@ function parsedAs<T>(table: string, parse: () => T): T {
       error instanceof AppError &&
       (error.code === "hours.invalid" ||
         error.code === "menu_timetable.invalid" ||
-        error.code === "menu_period.invalid")
+        error.code === "menu_period.invalid" ||
+        error.code === "zone_closed_time.invalid")
     )
       refuse(table);
     throw error;
@@ -168,14 +170,43 @@ export function validateHoursConfiguration(
   }
 
   const dates = new Map<unknown, { date: LocalDate; closeWholeVenue: boolean; row: Row }>();
-  const taken = new Set<LocalDate>();
+  const taken: { locationId: unknown; date: LocalDate; repeats: boolean }[] = [];
   for (const row of tables.special_dates ?? []) {
-    if (!isLocalDate(row.date) || taken.has(row.date)) refuse("special_dates.date");
-    taken.add(row.date);
+    if (!isLocalDate(row.date)) refuse("special_dates.date");
+    if (
+      row.repeat_on !== undefined &&
+      row.repeat_on !== null &&
+      row.repeat_on !== repeatKey(row.date)
+    )
+      refuse("special_dates.repeat_on");
+    if (row.own_hours !== undefined && row.own_hours !== 0 && row.own_hours !== 1)
+      refuse("special_dates.own_hours");
+    const repeats = row.repeat_on !== undefined && row.repeat_on !== null;
+    const rule = { date: row.date, repeats };
+    for (const other of taken)
+      if (
+        other.locationId === row.location_id &&
+        ((repeats && other.repeats && repeatKey(rule.date) === repeatKey(other.date)) ||
+          occursOn(other, rule.date) ||
+          occursOn(rule, other.date))
+      )
+        refuse("special_dates.date");
+    taken.push({ locationId: row.location_id, ...rule });
     if (typeof row.name !== "string" || row.name.trim() === "") refuse("special_dates.name");
-    if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("special_dates.colour");
     if (row.close_whole_venue !== 0 && row.close_whole_venue !== 1)
       refuse("special_dates.close_whole_venue");
+    parsedAs("special_dates", () =>
+      parseSpecialDateInput({
+        date: row.date,
+        name: row.name,
+        kind: row.kind,
+        repeats,
+        ownHours: row.own_hours === 1,
+        closeWholeVenue: row.close_whole_venue === 1,
+        cells: [],
+      }),
+    );
+    if (row.own_hours === 1 && row.close_whole_venue === 1) refuse("special_dates");
     dates.set(row.id, { date: row.date, closeWholeVenue: row.close_whole_venue === 1, row });
   }
   const dateCells = tables.special_date_hours ?? [];
@@ -202,11 +233,15 @@ export function validateHoursConfiguration(
   const states = new Map<LocalDate, DateState>();
   for (const [id, { date, closeWholeVenue, row }] of dates) {
     const cells = cellsByDate.get(id) ?? [];
+    if (row.repeat_on !== undefined && row.repeat_on !== null && cells.length > 0)
+      refuse("special_date_hours");
     const input = parsedAs("special_date_hours", () =>
       parseSpecialDateInput({
         date,
         name: row.name,
-        colour: row.colour,
+        kind: row.kind,
+        repeats: row.repeat_on !== undefined && row.repeat_on !== null,
+        ownHours: row.own_hours === 1,
         closeWholeVenue,
         cells: cells.map(({ key, cell }) => {
           const [kind, ...rest] = key.split(":");
@@ -256,10 +291,10 @@ export function validateHolidayConfiguration(
   tables: Tables,
   findPack: PackLookup = getCountryPack,
 ): void {
-  const allowance = new Map<unknown, number>();
+  const geographyIds = new Set<unknown>();
   const places = new Set<string>();
   for (const row of tables.holiday_geographies ?? []) {
-    if (typeof row.id !== "string" || allowance.has(row.id)) refuse("holiday_geographies.id");
+    if (typeof row.id !== "string" || geographyIds.has(row.id)) refuse("holiday_geographies.id");
     const pack = typeof row.country === "string" ? findPack(row.country) : undefined;
     if (pack === undefined || pack.countryCode !== row.country)
       refuse("holiday_geographies.country");
@@ -279,26 +314,7 @@ export function validateHolidayConfiguration(
       !(calendar?.areasForProvince(province as string) ?? []).some(({ key }) => key === area)
     )
       refuse("holiday_geographies.area_key");
-    allowance.set(row.id, calendar?.localEntryLimit ?? 0);
-  }
-
-  const entryIds = new Set<unknown>();
-  const taken = new Set<string>();
-  const perYear = new Map<string, number>();
-  for (const row of tables.local_holidays ?? []) {
-    if (typeof row.id !== "string" || entryIds.has(row.id)) refuse("local_holidays.id");
-    entryIds.add(row.id);
-    const limit = allowance.get(row.geography_id);
-    if (limit === undefined) refuse("local_holidays.geography_id");
-    if (!isLocalDate(row.date)) refuse("local_holidays.date");
-    const day = JSON.stringify([row.geography_id, row.date]);
-    if (taken.has(day)) refuse("local_holidays.date");
-    taken.add(day);
-    if (localHolidayName(row.name) !== row.name) refuse("local_holidays.name");
-    const year = JSON.stringify([row.geography_id, row.date.slice(0, 4)]);
-    const count = (perYear.get(year) ?? 0) + 1;
-    if (count > limit) refuse("local_holidays");
-    perYear.set(year, count);
+    geographyIds.add(row.id);
   }
 }
 
@@ -555,6 +571,43 @@ function validateZoneDepartments(tables: Tables): void {
   }
 }
 
+function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover: string }): void {
+  const rows = tables.zone_closed_times ?? [];
+  if (rows.length === 0) return;
+  if (bundle === undefined || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(bundle.dayCutover))
+    refuse("zone_closed_times");
+  const zones = ids(tables.floor_zones);
+  const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
+  const days = new Map((tables.special_dates ?? []).map((row) => [row.id, row]));
+  const groups = new Map<string, { startsAt: string; endsAt: string }[]>();
+  for (const row of rows) {
+    if (!zones.has(row.zone_id) || !configured.has(row.zone_id))
+      refuse("zone_closed_times.zone_id");
+    const weekday = row.weekday;
+    const day = row.special_date_id;
+    if ((weekday === null) === (day === null)) refuse("zone_closed_times");
+    if (
+      weekday !== null &&
+      (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
+    )
+      refuse("zone_closed_times.weekday");
+    if (day !== null && days.get(day)?.own_hours !== 1) refuse("zone_closed_times.special_date_id");
+    for (const column of ["starts_at", "ends_at"] as const) {
+      if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
+        refuse(`zone_closed_times.${column}`);
+    }
+    const key = JSON.stringify([row.zone_id, weekday, day]);
+    const ranges = groups.get(key) ?? [];
+    ranges.push({
+      startsAt: (row.starts_at as string).slice(0, 5),
+      endsAt: (row.ends_at as string).slice(0, 5),
+    });
+    groups.set(key, ranges);
+  }
+  for (const ranges of groups.values())
+    parsedAs("zone_closed_times", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
@@ -562,6 +615,7 @@ function validateVenueServiceConfiguration(
   validateHoursConfiguration(tables, bundle);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);
+  validateZoneClosedTimes(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
   // After the routing check, whose refusal of such a zone's cell also names the cell's row.
@@ -592,9 +646,9 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
     { name: "special_date_hours" },
+    { name: "zone_closed_times" },
     { name: "special_date_hours_periods" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },
-    { name: "local_holidays" },
   ],
   validate: validateVenueServiceConfiguration,
 } as const;

@@ -42,7 +42,6 @@ import {
   writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import {
-  clearSpecialDateMenus,
   deleteMenuPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
@@ -65,16 +64,7 @@ import {
 import type { RouteTarget } from "./routing.js";
 import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
-import {
-  deleteLocalHoliday,
-  deleteRetainedHolidayGeography,
-  duplicateHolidayNamedSpecialDates,
-  readHolidays,
-  readLocalHolidayModel,
-  saveHolidayArea,
-  saveLocalHoliday,
-} from "./holidays.js";
-import type { LocalHolidayInput } from "./holiday-types.js";
+import { duplicateHolidayNamedSpecialDates, readHolidays, saveHolidayArea } from "./holidays.js";
 import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { CellAddress, RoutingChange } from "./routing-types.js";
@@ -85,6 +75,7 @@ import {
   setDepartmentTransferSettings,
 } from "./department-transfers.js";
 import "./errors.js";
+import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -123,13 +114,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "hours.invalid": 400,
   "special_date.not_found": 404,
   "special_date.date_taken": 409,
+  "zone_closed_time.invalid": 400,
+  "special_date.keeps_week": 409,
   "station.always_open": 409,
   "holiday.invalid": 400,
-  "holiday.not_found": 404,
-  "holiday_geography.not_found": 404,
-  "holiday.date_taken": 409,
-  "holiday.local_limit": 409,
-  "holiday.geography_current": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);
@@ -270,6 +258,8 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
   };
 }
 
+import { readNamedDaysModel } from "./named-days.js";
+
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gatedAs = <T>(
@@ -308,19 +298,24 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.get("/management-api/venue-service/named-days", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const from = c.req.query("from") ?? "";
+        const to = c.req.query("to") ?? "";
+        const at = new Date();
+        return c.json(
+          await viewed(sessionId, (tx) => readNamedDaysModel(tx, ctx.cfg, from, to, at)),
+        );
+      }),
+    );
+
     app.get("/management-api/venue-service/holidays", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const from = c.req.query("from") ?? "";
         const to = c.req.query("to") ?? "";
         return c.json(await viewed(sessionId, (tx) => readHolidays(tx, ctx.cfg, from, to)));
-      }),
-    );
-
-    app.get("/management-api/venue-service/local-holidays", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        return c.json(await viewed(sessionId, (tx) => readLocalHolidayModel(tx, ctx.cfg)));
       }),
     );
 
@@ -333,50 +328,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           return saveHolidayArea(tx, ctx.cfg, body);
         });
         return geography === null ? c.body(null, 204) : c.json(geography);
-      }),
-    );
-
-    app.post("/management-api/venue-service/local-holidays", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<LocalHolidayInput>(c);
-        const saved = await gated(sessionId, (tx) => {
-          onlyKeys(body, ["date", "name"]);
-          return saveLocalHoliday(tx, ctx.cfg, null, body);
-        });
-        return c.json(saved, 201);
-      }),
-    );
-
-    app.put("/management-api/venue-service/local-holidays/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "LocalHolidayId");
-        const body = await readJsonBody<LocalHolidayInput>(c);
-        return c.json(
-          await gated(sessionId, (tx) => {
-            onlyKeys(body, ["date", "name"]);
-            return saveLocalHoliday(tx, ctx.cfg, id, body);
-          }),
-        );
-      }),
-    );
-
-    app.delete("/management-api/venue-service/local-holidays/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "LocalHolidayId");
-        await gated(sessionId, (tx) => deleteLocalHoliday(tx, ctx.cfg, id));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.delete("/management-api/venue-service/holiday-geographies/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "HolidayGeographyId");
-        await gated(sessionId, (tx) => deleteRetainedHolidayGeography(tx, ctx.cfg, id));
-        return c.body(null, 204);
       }),
     );
 
@@ -999,6 +950,28 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
+    app.put("/management-api/venue-service/zones/:zoneId/closed-week", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["days"]);
+        await gated(sessionId, (tx) => replaceZoneClosedWeek(tx, ctx.cfg, zoneId, body.days));
+        return c.body(null, 204);
+      }),
+    );
+    app.put("/management-api/venue-service/special-dates/:id/zone-closed-times/:zoneId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["ranges"]);
+        await gated(sessionId, (tx) => saveZoneClosedDate(tx, ctx.cfg, id, zoneId, body.ranges));
+        return c.body(null, 204);
+      }),
+    );
+
     const dateTimetable =
       "/management-api/venue-service/special-dates/:id/menu-timetables/:departmentId";
     app.put(dateTimetable, (c) =>
@@ -1012,17 +985,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await gated(sessionId, (tx) =>
           saveSpecialDateMenus(tx, ctx.cfg, id, departmentId, body.slots as MenuSlot[], at),
         );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.delete(dateTimetable, (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const at = new Date();
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        await gated(sessionId, (tx) => clearSpecialDateMenus(tx, ctx.cfg, id, departmentId, at));
         return c.body(null, 204);
       }),
     );

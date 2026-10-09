@@ -17,7 +17,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
-import { deleteRetainedHolidayGeography, saveHolidayArea, saveLocalHoliday } from "./holidays.js";
+import { saveHolidayArea } from "./holidays.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import {
   deleteSpecialDate,
@@ -122,7 +122,6 @@ it("refreshes Hours and routing after every schedule, date, clock, subject and o
         {
           date: "2030-10-15",
           name: "Party",
-          colour: "red",
           closeWholeVenue: false,
           cells: [
             { subject: deli, cell: { mode: "closed", periods: [] } },
@@ -173,7 +172,7 @@ it("refreshes Hours and routing after every schedule, date, clock, subject and o
   expect(reaches(unrelated, hours)).toEqual([]);
 });
 
-it("refreshes Hours and the local holidays after every holiday, area, address and country change", async () => {
+it("refreshes Hours and holiday coverage after every named day, area, address and country change", async () => {
   const before = await db.select().from(tenants);
   onTestFinished(() =>
     withTransaction(db, async (tx) => {
@@ -203,13 +202,16 @@ it("refreshes Hours and the local holidays after every holiday, area, address an
   const holidays = QUERY_DEPENDENCIES.holidays;
   const both = (types: Set<string>) => [reaches(types, hours), reaches(types, holidays)];
 
-  let geographyId = "";
-  const entry = await announced(async (tx) => {
-    geographyId = (await saveLocalHoliday(tx, cfg, null, { date: "2026-06-17", name: "Arán" }))
-      .geographyId;
-  });
-  const created = ["holiday_geographies", "local_holidays"];
-  expect(both(entry)).toEqual([created, created]);
+  const named = await announced((tx) =>
+    saveSpecialDate(
+      tx,
+      cfg,
+      null,
+      { date: "2026-06-17", name: "Arán", kind: "holiday", closeWholeVenue: false, cells: [] },
+      new Date("2026-01-01T12:00:00Z"),
+    ),
+  );
+  expect(both(named)).toEqual([["special_dates"], ["special_dates"]]);
   const area = await announced((tx) => saveHolidayArea(tx, cfg, { areaKey: "aran" }));
   expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
   const moved = await announced((tx) =>
@@ -218,6 +220,4 @@ it("refreshes Hours and the local holidays after every holiday, area, address an
   expect(both(moved)).toEqual([["locations"], ["locations"]]);
   const country = await announced((tx) => tx.update(tenants).set({ country: "PT" }));
   expect(both(country)).toEqual([["tenants"], ["tenants"]]);
-  const removed = await announced((tx) => deleteRetainedHolidayGeography(tx, cfg, geographyId));
-  expect(both(removed)).toEqual([created, created]);
 });

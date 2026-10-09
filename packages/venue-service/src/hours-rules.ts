@@ -1,9 +1,7 @@
 // Browser-safe structural rules for opening hours, shared by the writers in `./hours.ts`.
 import { AppError, isUuid } from "@waitron/shared";
 import {
-  CALENDAR_COLOURS,
   HOURS_RANGE_MAX_DAYS,
-  type CalendarColour,
   type DateCell,
   type DateHoursCell,
   type HourPeriod,
@@ -12,6 +10,7 @@ import {
   type SpecialDateInput,
   type WeekCell,
 } from "./hours-types.js";
+import { NAMED_DAY_KINDS, type NamedDayKind } from "./named-day-rules.js";
 import "./errors.js";
 
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -217,10 +216,19 @@ export function specialDateName(value: unknown): string {
 /** A special date's own fields and cells, structurally; ownership and clashes are the writer's. */
 export function parseSpecialDateInput(value: unknown): SpecialDateInput {
   if (typeof value !== "object" || value === null) invalidHours("input");
-  const { date, name, colour, closeWholeVenue, cells } = value as Record<string, unknown>;
+  const { date, name, kind, repeats, ownHours, closeWholeVenue, cells } = value as Record<
+    string,
+    unknown
+  >;
   if (!isLocalDate(date)) invalidHours("date");
   const trimmed = specialDateName(name);
-  if (!CALENDAR_COLOURS.includes(colour as CalendarColour)) invalidHours("colour");
+  if (
+    kind !== undefined &&
+    (typeof kind !== "string" || !NAMED_DAY_KINDS.includes(kind as NamedDayKind))
+  )
+    invalidHours("kind");
+  if (repeats !== undefined && typeof repeats !== "boolean") invalidHours("repeats");
+  if (ownHours !== undefined && typeof ownHours !== "boolean") invalidHours("ownHours");
   if (typeof closeWholeVenue !== "boolean") invalidHours("closeWholeVenue");
   if (!Array.isArray(cells)) invalidHours("cells");
   const seen = new Set<string>();
@@ -244,7 +252,9 @@ export function parseSpecialDateInput(value: unknown): SpecialDateInput {
   return {
     date,
     name: trimmed,
-    colour: colour as CalendarColour,
+    kind: kind as NamedDayKind | undefined,
+    repeats: repeats as boolean | undefined,
+    ownHours: ownHours as boolean | undefined,
     closeWholeVenue,
     cells: parsed,
   };

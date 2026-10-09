@@ -1257,12 +1257,19 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 2, 3 Part B, and 4–7.** Zone closed times
-  and named days remain in slice 2; keeping a zone open later remains in slice 3 Part B.
+  APPROVED 2026-10-07; remaining work is slice 3 Part B and slices 4–7.** Keeping a
+  zone open later remains in slice 3 Part B.
   Station-hours and fallback retirement, period routing, combined tickets, monitors, department
   pages and department receipts remain in slices 4–7. Slice 7's plan/spec apply the owner's
   2026-10-08 receipt answers; its build follows slice 6 Part A (two PRs; Part B needs slice 6).
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
+
+- **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
+  own-hours dates and keep it beside only the action that failed, retaining its retry and draft.
+  [Detail](backlog/service-periods.md#opening-hours-dated-save-refusal-presentation)
+- **Opening hours real-week headings** — remove the repeated weekday while keeping the date and
+  Today marker readable in EN/ES, both themes, at 1280 and 390.
+  [Detail](backlog/service-periods.md#opening-hours-real-week-headings)
 
 - **Sending grace after a period extension is replaced or expires** — decide whether a positive
   end offset survives a later period's extension or the business-day changeover; two real-store

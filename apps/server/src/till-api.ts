@@ -472,6 +472,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "service_zone.not_found": 404,
   // The request is sound; the device's profile may not work in that zone.
   "service_zone.not_allowed": 403,
+  "service_zone.closed": 409,
   "device_profile.no_service_zone": 409,
   "service_zone.default_missing": 409,
   "service_zone.offer_not_allowed": 400,
@@ -2246,7 +2247,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const zones = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
-        return (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
+        const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
+        const closed = await VENUE_SERVICE.closedZoneIdsAt(
+          tx,
+          deps.cfg,
+          new Date(),
+          visible.map((zone) => zone.id),
+        );
+        return visible.map((zone) => ({ ...zone, closed: closed.has(zone.id) }));
       });
       return c.json(zones);
     }),

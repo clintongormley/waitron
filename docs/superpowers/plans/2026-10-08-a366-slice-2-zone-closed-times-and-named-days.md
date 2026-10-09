@@ -40,6 +40,12 @@
 > **Revised 2026-10-08** after a fresh-context review; the coordinator's rulings changed decisions
 > 6 and 13, and added the station readers, the guest moves and the task splits.
 
+> **Rebase 2026-10-09:** main added slice 3 Part A migrations 0035 and 0036.
+> Regeneration moved this slice’s add-only step to `0037_first_doctor_doom.sql` and
+> its rebuild to `0038_clammy_klaw.sql`; the original task receipts below retain their
+> original names. The upgrade run measured the same loss of `special_date_hours`,
+> `special_date_hours_periods` and `zone_closed_times` at the regenerated rebuild.
+
 **Goal:** a zone can be closed for part of its department's open time; while it is, the till
 starts no order and adds no item there. The venue's own named days — unlimited, each with a kind,
 a yearly repeat and either the normal week's hours or its own — replace the special dates and the
@@ -347,7 +353,7 @@ it("a repeating 29 February falls only in leap years", () => {
 
 ---
 
-### Task 2: Migration 0034 — named-day columns and zone closed times (add only)
+### Task 2: Migration 0035 — named-day columns and zone closed times (add only)
 
 **Files:**
 - Modify: `packages/venue-service/src/schema/hours.ts` (`specialDates :85-109`), a new
@@ -355,11 +361,14 @@ it("a repeating 29 February falls only in leap years", () => {
   `migrations.test.ts` (`TABLES`), `scripts/schema-constraints.test.ts`,
   `apps/server/src/testing/clear-provision-fixture.ts` (add `zone_closed_times` before
   `zone_service_policies :32`)
-- Create (generated): `packages/venue-service/drizzle/0034_*.sql`, its snapshot, journal entry
+- Create (generated): `packages/venue-service/drizzle/0035_*.sql`, its snapshot, journal entry
 
 **Interfaces — produces:**
-- `specialDates.kind`: `enumType(NAMED_DAY_KINDS)("kind").notNull().default("working_day")`,
-  **no CHECK yet**; `specialDates.repeatOn`: `label("repeat_on")`, nullable, no CHECK yet;
+- `specialDates.kind`: `label("kind").$type<NamedDayKind>().notNull().default("working_day")`,
+  **no CHECK yet**. Use typed text until Task 27 adds the enum declaration and its CHECK
+  together: `schema/schema-conformance.test.ts` requires every declared enum to have its
+  vocabulary enforced in the migrated database. `specialDates.repeatOn`: `label("repeat_on")`,
+  nullable, no CHECK yet;
   `specialDates.ownHours`: `flag("own_hours").notNull().default(false)`. `colour` stays for now.
 - `zoneClosedTimes` (table `zone_closed_times`): `id` (primary key), `zoneId` not null,
   `weekday` (`count`, nullable), `specialDateId` (nullable), `startsAt`, `endsAt` (`timeOfDay`, not
@@ -416,9 +425,14 @@ Each reads `special_dates` once: rows whose `date` is asked for, or whose `repea
 and day of an asked date and whose `date` is not after it; `occursOn` (Task 1) decides. Until
 Task 5 writes `repeat_on`, tests insert rows directly.
 
-`OpeningHoursModel.specialDates` becomes `namedDays: { id; date; name; kind; repeats; ownHours;
+`OpeningHoursModel.specialDates` becomes (in Task 18, together with its browser consumers) `namedDays: { id; date; name; kind; repeats; ownHours;
 closeWholeVenue }[]`, listing every repeating day, every one-off day from the business day before
 today on, and any day holding dated rows (as `:686-696` does for timetables).
+
+Task 3 keeps the existing wire shape while including old repeats in the list; Task 18 changes the
+shape together with `opening-hours-screen.ts`, `opening-hours-day.ts` and their fixtures.
+`duplicateSpecialDate` copies `ownHours` in Task 3 so the existing dated-timetable copy assertions
+keep their behavior; Task 5 owns the remaining named-day copy fields and validation.
 
 The resolver and `calendarDays`: for the business day (and, in the resolver, the day before) the
 named day on that date decides — whole-venue closure: closed; own hours: the department's dated
@@ -524,8 +538,11 @@ Rules the tests pin:
   repeating Navidad from 2026-12-25 expects `special_date.date_taken` `{ date: "2027-12-25" }` and
   fails today because only the exact date `2026-12-25` is compared (`hours.ts:639-649`).
 - [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/hours.test.ts src/hours-routes.test.ts`.
-- [ ] **Step 3: Implement.** Fixtures that send `colour` keep working; no existing assertion
-  changes, including `hours-screen.test.ts:1097-1104`.
+- [ ] **Step 3: Implement.** Fixtures that send `colour` keep working; the Station hours POST
+  assertion at `hours-screen.test.ts:1097-1104` stays unchanged. Under the owner’s 2026-10-05
+  test-change ruling, checks of the removed hand-picked colour now assert the kind-derived
+  colour, and exact named-day response shapes gain `kind`, `repeats` and `ownHours`. Inventory
+  every changed check in the PR and campaign FYI. Read models carry the same metadata.
 - [ ] **Step 4: Run; see them pass;** the venue-service node project and the touched browser
   files; typecheck.
 - [ ] **Step 5: Commit** — `feat(venue-service): named days with a kind and a yearly repeat (A366)`.
@@ -542,9 +559,10 @@ and refuses (`setup.request_invalid`) a bad kind, a `repeat_on` other than the d
 day, decision 5's clashes and own hours with a whole-venue closure. An export round-trips the three
 columns.
 
-- [ ] Steps: failing tests (an export holding a repeating own-hours day re-imports with
-  `repeat_on` and `own_hours` intact — fails today because the parse call at `:203-210` passes
-  neither; each refusal); watch them fail
+- [ ] Steps: add a real export/import round-trip for a repeating own-hours day, checking
+  `kind`, `repeat_on` and `own_hours` intact. The raw-table transfer already preserves the columns;
+  the new refusal cases must fail before implementation because the validator ignores them.
+  Watch each refusal fail
   (`pnpm --filter @waitron/venue-service exec vitest run --project node src/configuration-transfer.test.ts`
   and `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts`);
   implement; the venue-service node project and the server package; commit
@@ -566,20 +584,20 @@ Rules: turning `ownHours` on copies, in the same transaction, each department's
 `menu_day_timetables` row for the stored date's weekday (with its slots) and each zone's
 `zone_closed_times` rows for that weekday onto the date; turning it off removes them; a save that
 leaves `ownHours` unchanged leaves them alone. `saveSpecialDateMenus` on a day without own hours →
-`special_date.keeps_week` (409); its clock-skip check runs on `nextOccurrence(day, today)`
-(decision 16). The `DELETE …/menu-timetables/:departmentId` route answers 404. Dashboard wording
+`special_date.keeps_week` (409); a repeating day’s clock-skip check runs on `nextOccurrence(day, today)`
+(decision 16). One-off dates retain their stored-date endpoint checks. The `DELETE …/menu-timetables/:departmentId` route answers 404. Dashboard wording
 for `special_date.keeps_week`: "This named day keeps the normal week. Give it its own hours first."
 / "Este día especial sigue la semana normal. Dale primero su propio horario."
 
-- [ ] **Step 1: Failing tests:** on with Lunch on Fridays copies Friday's Lunch onto a Friday named
+- [x] **Step 1: Failing tests:** on with Lunch on Fridays copies Friday's Lunch onto a Friday named
   day (fails today: nothing copies); off removes the dated rows; a dated save on a day keeping the
   week is refused `special_date.keeps_week`; the DELETE route answers 404.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/hours.test.ts src/menu-timetable.test.ts src/menu-timetable-routes.test.ts`.
-- [ ] **Step 3: Implement.** Every `clearSpecialDateMenus` and `clearDateMenus` use listed under
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/hours.test.ts src/menu-timetable.test.ts src/menu-timetable-routes.test.ts`.
+- [x] **Step 3: Implement.** Every `clearSpecialDateMenus` and `clearDateMenus` use listed under
   "Behaviour this slice removes" changes here: the pins of the removed function go in the
   changed-checks commit; the step-only uses get the "own hours off" step.
-- [ ] **Step 4: Run; see them pass;** the package's node project; typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): a named day's own hours start from the normal week (A366)`.
+- [x] **Step 4: Run; see them pass;** the package's node project; typecheck.
+- [x] **Step 5: Commit** — `feat(venue-service): a named day's own hours start from the normal week (A366)`.
 
 ---
 
@@ -619,15 +637,15 @@ Routes (manager, `venue.configure` as the other writers): `PUT
 `zone_closed_times`, `zone_service_policies` and `floor_zones`. The calendar participant copies a
 date's zone rows.
 
-- [ ] **Step 1: Failing tests:** a week saved and read back (fails today: no such route); a
+- [x] **Step 1: Failing tests:** a week saved and read back (fails today: no such route); a
   06:00–06:00 range is the whole day; overlap, order, step and empty refusals name the field and
   reason; another venue's zone is refused `service_zone.not_found`; a dated save on a day keeping
   the week is refused; a copy of a day carries its zone rows; the live query's list.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/service-day.test.ts src/menu-timetable-routes.test.ts src/dashboard/live-queries.test.ts`.
-- [ ] **Step 3: Implement.** Register `zone_closed_time.invalid` (400).
-- [ ] **Step 4: Run; see them pass;** the venue-service node project and the server package;
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/service-day.test.ts src/menu-timetable-routes.test.ts src/dashboard/live-queries.test.ts`.
+- [x] **Step 3: Implement.** Register `zone_closed_time.invalid` (400).
+- [x] **Step 4: Run; see them pass;** the venue-service node project and the server package;
   typecheck.
-- [ ] **Step 5: Commit** — `feat(venue-service): zone closed times for the week and for a named day (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): zone closed times for the week and for a named day (A366)`.
 
 ---
 
@@ -640,7 +658,7 @@ list `:550-575`); tests both `configuration-transfer.test.ts`.
 bundle, both or neither of weekday and named day, a dated row on a day without own hours, or ranges
 `parseClosedRanges` refuses.
 
-- [ ] Steps: failing tests (a Terrace week round-trips — fails today because the table list at
+- [x] Steps: failing tests (a Terrace week round-trips — fails today because the table list at
   `:550-575` omits `zone_closed_times`; each refusal); watch them fail; implement; the venue-service
   node project and the server package; commit
   `feat(venue-service): configuration transfer carries zone closed times (A366)`.
@@ -677,17 +695,24 @@ one named-day read, one closed-times read, however many zones. `listZoneOffers` 
 every period menu without reading ranges, dates or the venue clock" (`menu-timetable.test.ts:1702-1742`)
 passes unchanged, and a new case beside it asserts no statement names `zone_closed_times`.
 
-- [ ] **Step 1: Failing tests:** review focus 1 at 23:29, 23:30, 02:00 and 06:00 (fails today:
+- [x] **Step 1: Failing tests:** review focus 1 at 23:29, 23:30, 02:00 and 06:00 (fails today:
   `closedZoneIdsAt` does not exist); a named day with own hours and no Terrace ranges leaves the
   Terrace open while its weekday would close it; a whole-venue closure leaves `zoneOpen` true; an
   unreadable time zone → open; `assertZoneTakesNewOrders` throws `service_zone.closed`
   `{ zoneId }`; `menuState` and `listZoneOffers` answer `zoneOpen`; the new pricing case.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/operations.test.ts src/menu-timetable.test.ts`.
-- [ ] **Step 3: Implement.** Register `service_zone.closed`.
-- [ ] **Step 4: Run; see them pass;** the venue-service node project and the server package;
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/venue-service exec vitest run --project node src/zone-closed-times.test.ts src/operations.test.ts src/menu-timetable.test.ts`.
+- [x] **Step 3: Implement.** Register `service_zone.closed`.
+- [x] **Step 4: Run; see them pass;** the venue-service node project and the server package;
   the till's whole suite; typecheck `@waitron/module`, `@waitron/catalogue`,
   `@waitron/venue-service`, `@waitron/server` and `@waitron/till`.
-- [ ] **Step 5: Commit** — `feat(venue-service): which zones are closed now (A366)`.
+- [x] **Step 5: Commit** — `feat(venue-service): which zones are closed now (A366)`.
+
+Task 10 receipt (2026-10-09): closure state is a separate `zoneOpen` field; the till client
+already derives both response service types from `MenuState["service"]`, so its type alias needs
+no edit. Counter and table screen indicators remain Task 13. New real-database cases cover the
+start, an overnight end inside the day, changeover, own-hours replacement, location and zone
+selection, whole-venue closure, unreadable clock, refusal and a three-statement batch. Existing
+service shapes gain the field; the availability batch count gains those three reads.
 
 ---
 
@@ -718,7 +743,7 @@ passes unchanged, and a new case beside it asserts no statement names `zone_clos
   is added, so neither route map in `till-api.profile-actions.test.ts` or
   `till-api.profile-zones.test.ts` changes.
 
-- [ ] **Step 1: Failing tests** through the real routes with `vi.setSystemTime`, Terrace closed
+- [x] **Step 1: Failing tests** through the real routes with `vi.setSystemTime`, Terrace closed
   23:30–06:00: seat a Terrace table at 23:29 → 200, at 23:30 → 409 `service_zone.closed` (fails
   today with 200: nothing checks closed times); a walk-up sale, a park and a pay in the Terrace at
   23:45 → refused and no `working_orders` row written; a walk-up sale with a Terrace delivery table
@@ -726,10 +751,10 @@ passes unchanged, and a new case beside it asserts no statement names `zone_clos
   edit → accepted; payment → accepted; a split → accepted; a party seated at 23:00 with no bill
   orders its first item at 23:45 → refused and no bill row left; a handheld draft for that party
   submitted at 23:45 → refused; `/api/zones` answers `closed: true` for the Terrace at 23:45.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts`.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run; see them pass;** the server package; `pnpm --filter @waitron/server typecheck`.
-- [ ] **Step 5: Commit** — `feat(server): a closed zone takes no new order or item (A366)`.
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run; see them pass;** the server package; `pnpm --filter @waitron/server typecheck`.
+- [x] **Step 5: Commit** — `feat(server): a closed zone takes no new order or item (A366)`.
 
 ---
 
@@ -752,16 +777,16 @@ the target table's zone is closed and differs from the party's zone (`partyZone`
 no open bill cannot move in either. Moving within the closed zone, or out of it, is allowed.
 Accepting a department transfer into a closed zone is refused; the request stays pending.
 
-- [ ] **Step 1: Failing tests** at 23:45: a Dining room bill → free Terrace table → refused (fails
+- [x] **Step 1: Failing tests** at 23:45: a Dining room bill → free Terrace table → refused (fails
   today: the move succeeds); a Terrace bill → Dining room → accepted; a Terrace bill → another
   Terrace table → accepted; guests moved from the Dining room to a free Terrace table → refused;
   a Dining room party moved onto a table a Terrace party holds (merge) → refused; a Dining room
   party with no bill moved to a free Terrace table → refused; a transfer accepted into the Terrace →
   refused and still pending.
-- [ ] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts` and `pnpm --filter @waitron/venue-service exec vitest run --project node src/department-transfers.test.ts`.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run; see them pass;** the server package and the venue-service node project.
-- [ ] **Step 5: Commit** — `feat(server): no bill or party moves into a closed zone (A366)`.
+- [x] **Step 2: Run; watch them fail** — `pnpm --filter @waitron/server exec vitest run src/till-api.zone-closed.test.ts` and `pnpm --filter @waitron/venue-service exec vitest run --project node src/department-transfers.test.ts`.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run; see them pass;** the server package and the venue-service node project.
+- [x] **Step 5: Commit** — `feat(server): no bill or party moves into a closed zone (A366)`.
 
 ---
 
@@ -773,7 +798,9 @@ Accepting a department transfer into a closed zone is refused; the request stays
   menu-state comparisons `:2952-2954` and `:2970-2972`, which look only at `open` and
   `periodName`; add `zoneOpen` so an open order screen notices the zone closing), `i18n/codes.ts` (beside
   `service_zone.not_allowed :74`), `i18n/strings.ts` (beside `menu.department_closed :1059`)
-- Test: `till-counter-screen.test.ts`, `till-table-order-screen.test.ts`,
+- Modify: `apps/till/src/widgets/card-grid.ts` (the counter product-card gate and table
+  screen properties; the zone name travels from the app’s existing zone lists)
+- Test: `i18n/codes.test.ts`, `till-app-menu-refresh.test.ts`, `till-counter-screen.test.ts`, `till-table-order-screen.test.ts`,
   `screens/service-periods.a11y.test.ts`
 
 **Behaviour:** decision 17's notice replaces the add buttons on both screens when
@@ -782,7 +809,7 @@ Accepting a department transfer into a closed zone is refused; the request stays
 there can still be paid or moved." / "Esa zona está cerrada ahora, así que no se puede pedir nada
 nuevo. Las cuentas se pueden cobrar o mover."
 
-- [ ] Steps: failing tests (with `zoneOpen: false` the counter screen shows the notice and no add
+- [x] Steps: failing tests (with `zoneOpen: false` the counter screen shows the notice and no add
   button — fails today because the screen reads only `service.open`; a menu-state poll that
   changes only `zoneOpen` redraws the open order screen (`till-app-menu-refresh.test.ts`); the
   table bill keeps Pay and Move; the refusal's sentence; axe for both notices in both themes); watch them fail
@@ -804,11 +831,18 @@ nuevo. Las cuentas se pueden cobrar o mover."
 table there answers a tap with the refusal sentence; any `service_zone.closed` refusal reloads the
 floor.
 
-- [ ] Steps: failing tests (a zone with `closed: true` labels its tab — fails today because
+- [x] Steps: failing tests (a zone with `closed: true` labels its tab — fails today because
   `FloorZone` has no `closed`; tapping its free table shows the sentence and no seat dialog; a
   seat refused by the server reloads the floor); watch them fail; implement; the till's whole
   suite; LOOK at the floor in EN and ES, both themes, 1280 and 390; commit
   `feat(till): the floor shows a closed zone (A366)`.
+
+The app's table and counter refusal lists both retain `service_zone.closed`. When that refusal
+is displayed, reload through `#loadFloorData` so the zone flags and tables are refreshed together;
+ignore the result after disconnect or an operator-session change. Placement refreshes remain
+table-only. The floor keeps occupied tables openable, clears the notice on a zone change and stops
+showing it after that zone reopens. Typed open-zone fixtures gain `closed: false` without changing
+any existing check.
 
 ---
 
@@ -830,11 +864,12 @@ export interface GridColumn {
 ```
 
 With `layer: "closed"`, `slots` are drawn faded and take no pointer or keyboard input; `closed`
-blocks are drawn hatched with the word "Closed" and are what the events' `index` refers to. Faded
-means `--wt-opacity-disabled`; the hatch uses existing `--wt-color-*` tokens. Selection stops at a
-neighbouring closed block, never at a faded period.
+blocks are drawn hatched with the word "Closed" and are what the events' `index` refers to. The
+period fill fades through `--wt-opacity-disabled`; its text stays at full contrast. The hatch uses
+existing `--wt-color-*` tokens. Selection stops at a neighbouring closed block, never at a faded
+period.
 
-- [ ] Steps: failing tests (a drag over a faded Lunch block on a closed layer emits the range —
+- [x] Steps: failing tests (a drag over a faded Lunch block on a closed layer emits the range —
   fails today because a Lunch block stops the selection; a drag across a closed block stops at it;
   Enter on a closed block emits `grid-block-open` with its index; a narrow column's width; axe for
   a closed layer empty, filled and selected in both themes); watch them fail
@@ -858,7 +893,7 @@ adds `zone`; `department=all` is All departments. All departments is read-only: 
 week, one narrow column per active department; a column heading opens that department. A chosen
 zone shows a placeholder until Task 17.
 
-- [ ] Steps: failing tests (the picker's options — fails today because it lists departments only;
+- [x] Steps: failing tests (the picker's options — fails today because it lists departments only;
   the URL round trip; All departments' columns and headings); watch them fail
   (`pnpm --filter @waitron/venue-service exec vitest run --project browser <files>` and
   `pnpm --filter @waitron/dashboard exec vitest run src/navigation.test.ts`); implement; the
@@ -880,11 +915,22 @@ range; opening a block reuses slice 1's `range-dialog` with its period choice hi
 Wording for `zone_closed_time.invalid`: "These closed times overlap or are not in 15-minute steps."
 / "Estas horas de cierre se solapan o no van de 15 en 15 minutos."
 
-- [ ] Steps: failing tests (a drag 23:30→06:00 on Friday stages it — fails today because the
+- [x] Steps: failing tests (a drag 23:30→06:00 on Friday stages it — fails today because the
   element does not exist; `range-dialog` in `closedTimes` mode shows no period field; copy and
   clear; Save sends seven days; unchanged Save is quiet and disabled; reconnect still asks); watch
   them fail; implement; the package's node project; LOOK in EN and ES, both themes, 1280 and 390;
   commit `feat(venue-service): a zone's closed times in Opening hours (A366)`.
+
+Verified 2026-10-09: the focused zone/range/screen browser family ran 163 tests, the whole
+venue-service node project ran 1463, and the unchanged fiscal write-path/inmutabilidad suites
+ran 20. Types, touched-file lint/format and six relevant root guards (70 tests) passed.
+Seven independent guard changes failed their selected assertions in an installed disposable
+checkout; restoring it passed 46 behavioral cases. EN/ES light/dark captures at measured
+1280/390 CSS pixels covered the week, copy chooser, two-time dialog, refusal and the overnight
+range's start and changeover end in separate scroll positions. The normal-week zone placeholder
+assertion was deliberately replaced by strict zone name/id and department-id wiring assertions
+in signed-off `ace9d08c1`; its navigation assertions remain. Date mode retains its safe
+placeholder until the later dated-hours editor, so it cannot write the normal week's closed times.
 
 ---
 
@@ -921,7 +967,7 @@ Live query `named-days`: `special_dates`, `special_date_hours`, `menu_day_timeta
 `menu_slots`, `departments`, `tenants`, `locations`, `holiday_geographies`. The existing
 `readHolidays` callers keep working until Task 26 removes the local entries.
 
-- [ ] Steps: failing tests (a public holiday and a working day on one date: tone
+- [x] Steps: failing tests (a public holiday and a working day on one date: tone
   `public_holiday`, both names — fails today: no such read; a repeating own holiday in a later year;
   own-hours mark; a closed public holiday keeps its tone and `closed: true`; coverage
   `owner_entered` for a year holding an own holiday and no local entry, and `none_entered` for a
@@ -949,7 +995,7 @@ station cells unchanged (decision 9). Refusals: `special_date.date_taken` under 
 in Station hours first."); others at the bottom. A331 save rule; `{ savableAtOpen: true }` when
 opened by "Give this date its own hours".
 
-- [ ] Steps: failing tests (Save without a name marks Name — fails today because the element does
+- [x] Steps: failing tests (Save without a name marks Name — fails today because the element does
   not exist; each refusal's placement; leap-year hint; the every-year note; closure hides hours;
   unchanged Save quiet and disabled; reconnect; axe in both themes); watch them fail
   (`pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/named-day-editor.test.ts src/dashboard/named-day-editor.unsaved.test.ts src/dashboard/named-day-editor.a11y.test.ts`);
@@ -974,7 +1020,7 @@ in words; the holiday area picker shows when the region has areas and saves thro
 /holiday-area`; the yearly coverage notes stay; the local-holiday hint quotes
 `localHolidaysPerYear` (decision 10). No actions yet.
 
-- [ ] Steps: failing tests (an own holiday's date is purple — fails today because the calendar
+- [x] Steps: failing tests (an own holiday's date is purple — fails today because the calendar
   colours by the stored `colour`; the mark; the area choice saves; axe for each tone in both
   themes); watch them fail; implement; the package's node project; LOOK in EN and ES, both themes,
   1280 and 390; commit `feat(venue-service): the Calendar month in Opening hours (A366)`.
@@ -985,9 +1031,9 @@ in words; the holiday area picker shows when the region has areas and saves thro
 
 **Files:**
 - Modify: `dashboard/hours-calendar.ts` (the date menu), `dashboard/opening-hours-screen.ts`,
-  `strings.ts`
+  `strings.ts`, `dashboard/named-days-client.ts`, `dashboard/named-day-editor.ts`
 - Create: `dashboard/named-day-copy.ts` (the copy form moved from `hours-screen.ts:1239-1297`),
-  `.test.ts`, `.unsaved.test.ts`
+  `.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`
 - Test: `hours-calendar.test.ts`, `opening-hours-screen.test.ts`, `opening-hours-screen.unsaved.test.ts`
 
 **Behaviour:** a date's menu offers "Add a named day" on a plain date, "Give this date its own
@@ -995,9 +1041,11 @@ hours" (decision 21), and on a named day Edit, "Copy to other dates" and Delete 
 naming the day; a repeating day says every year goes). The moved copy form follows the A331 save
 rule in full: `draftScopeFor`, `saveActionState`, the early return, its `*.unsaved.test.ts` and
 the reconnect case. It opens with one empty date, which is not savable, so it does not pass
-`{ savableAtOpen: true }`.
+`{ savableAtOpen: true }`. The explicit own-hours action clears whole-venue closure in the
+staged draft. Metadata edits preserve station cells through the existing passive Hours read;
+copy uses that read for the retained station repeated-clock warnings.
 
-- [ ] Steps: failing tests (Edit on a repeating day opens it, not a new day — fails today because
+- [x] Steps: failing tests (Edit on a repeating day opens it, not a new day — fails today because
   the calendar emits no such action; "Give this date its own hours" on a stored day opens it with
   own hours on and on a public holiday pre-fills kind holiday and its name; add, copy and delete
   call the client and the month refreshes; the copy form's quiet Save, discard and reconnect);
@@ -1010,7 +1058,9 @@ the reconnect case. It opens with one empty date, which is not savable, so it do
 
 **Files:** modify `dashboard/opening-hours-screen.ts`, `dashboard/opening-hours-week.ts`,
 `dashboard/opening-hours-zone-week.ts`, `dashboard/opening-hours-all.ts`, `strings.ts`; tests
-beside each (`.test.ts`, `.unsaved.test.ts`).
+beside each (`.test.ts`, `.unsaved.test.ts`), plus `real-week.ts` occurrence/action helpers,
+`opening-hours-day.ts` exporting its existing business-date derivation, a shared browser-safe
+test model and real-week axe/capture tests.
 
 **Behaviour:** decision 18. A `wt-switch` "Real week" (off: the normal week) with ‹ › and the dates
 in the column headings; the URL holds `week=<Monday's date>` in a real week. Columns apply the
@@ -1022,13 +1072,24 @@ closure, which offers no action (decision 7). **(unbuilt in slice
 1)** If slice 1 lands with Task 13's "Special date" switch, this task replaces it; its tests go in
 the changed-checks commit.
 
-- [ ] Steps: failing tests (a real week with a repeating own day shows it — fails today because
+- [x] Steps: failing tests (a real week with a repeating own day shows it — fails today because
   there is no real week; ‹ stops at the current week; an own-hours date saves only that date; a
   plain date offers "Give this date its own hours"; a staged edit asks before stepping weeks);
   watch them fail; implement; the package's node project; LOOK in EN and ES, both themes, 1280 and
   390; commit `feat(venue-service): real weeks with named days applied (A366)`.
 
 ---
+
+Task 22 rulings (2026-10-09): dated Save uses one shared draft scope per own-hours date;
+a successful date commits only its submitted baseline, retaining every other staged date.
+Normal week keeps one scope and one Save. Reconnect registers those retained baselines before
+comparing a fresh model snapshot. Public-holiday own-hours actions wait for the week's passive
+calendar read, rather than treating missing facts as a plain working day. Invalid week queries
+are removed; earlier Mondays are replaced by the current business Monday. Explicit valid week
+URLs remain usable when the venue clock is unreadable, with Previous and the switch disabled.
+The old one-date selector and Station hours link are retired by decision 18/spec §9.2; their
+behavioral checks migrate to full weeks and independent date saves in the changed-checks commit.
+Tasks 23–29 remain.
 
 ### Task 23: Zones on the Day tab
 
@@ -1041,10 +1102,31 @@ zone rows; otherwise they save the weekday (with slice 1's note "Changes every {
 heading offers "Give this date its own hours". A whole-venue closure shows "Closed" and nothing is
 editable. ‹ stops at today's business day. A331 rule for the staged day.
 
-- [ ] Steps: failing tests (the Terrace column follows the Restaurant column — fails today because
+- [x] Steps: failing tests (the Terrace column follows the Restaurant column — fails today because
   the Day view draws departments only; edits on an own-hours day save the date; ‹ stops at today);
   watch them fail; implement; the package's node project; LOOK in EN and ES, both themes, 1280 and
   390; commit `feat(venue-service): zones on the Day tab (A366)`.
+
+2026-10-09 Task 23 checkpoint: implemented in the existing `dashboard/opening-hours-day.ts`
+extraction, with screen integration for the named-day editor. The Day grid now places each zone’s
+narrow closed-time layer after its department; its combined staged draft saves changed department
+rows and zone rows to the weekday or named-day occurrence. Previous stops at the venue’s business
+Today, and a whole-venue closure offers no editing action. Calendar facts gate the heading’s own-hours
+action, preserving existing repeating-day identity and public-holiday prefills. Dirty drafts retain
+cloned department, zone and named-day facts through background reads and reconnect. Each successful
+write commits its own baseline before the next request; refusals remain retryable.
+
+Implementation validation: the node project passed 1475 tests; the unchanged fiscal pair passed 20.
+The screen/Day/Calendar regression wave passed 207 tests before the final Day-only error cleanup;
+focused Day tests and lifecycle controls verify that cleanup and the added zone cases. Existing Day,
+unsaved and accessibility assertions were retained. Eight installed-checkout deletion controls
+failed at the intended assertions and passed after restoration; the source hashes and discarded
+initial probes are retained in the campaign’s Task 23 receipts. LOOK captured normal/own/closed
+states once across EN/ES, light/dark and actual CSS widths 1280/390; the visible hour range is roughly
+09:00–13:00, not the full business day. Task-scoped review approved the implementation at
+`188e0a6c6720053b526cef17d7a187072a284d17`, with no Critical or Important findings. The disclosed
+Lit and experimental Web Crypto warnings remain a Minor finding for whole-branch review. Remaining
+slice work starts at Task 24; this checkpoint does not complete slice 2.
 
 ---
 
@@ -1058,12 +1140,20 @@ editable. ‹ stops at today's business day. A331 rule for the staged day.
 **Behaviour:** tabs Week and Named days; adding, copying and deleting named days link to Opening
 hours → Calendar. The local-holiday editor stays on this screen until Task 26 removes it.
 
-- [ ] Steps: failing tests (no Calendar tab; the Named days tab links to the Calendar — fails
+- [x] Steps: failing tests (no Calendar tab; the Named days tab links to the Calendar — fails
   today because the tab is "Special dates" with Add buttons); watch them fail; implement; the
   removed tabs' tests go in the changed-checks commit; the package's node project; LOOK in EN and
   ES, both themes, 1280 and 390; commit `feat(venue-service): Station hours leaves named days to the Calendar (A366)`.
 
 ---
+
+2026-10-09 Task 24 implementation checkpoint: Station hours now offers Week and Named days.
+The Named days list links creation, copying and deletion to Opening hours → Calendar; existing
+station-date Edit and the local-holiday section remain. Retired entry-point assertions and migrated
+station behavior are inventoried in the separate changed-checks commit and Task 24 report. This
+checkpoint passed task-scoped spec and quality review. The stale suggestion comment found during
+review was deleted in a comment-only commit; disclosed runtime warnings remain for whole-branch
+review. This checkpoint does not complete Tasks 25–29.
 
 ### Task 25: Station hours edits only station cells on a named day
 
@@ -1080,12 +1170,25 @@ day's other fields back as stored (the `hidden` pattern the `date` editor uses f
 not show, the other way round). A note says repeating named days follow each station's week. A331
 rule for the rewritten editor.
 
-- [ ] Steps: failing tests (the editor has no Date or Name field and its save sends the stored
+- [x] Steps: failing tests (the editor has no Date or Name field and its save sends the stored
   name and kind — fails today because the editor edits them); watch them fail; implement; the
   package's node project; LOOK in EN and ES, both themes, 1280 and 390; commit
   `feat(venue-service): Station hours edits station cells on a named day (A366)`.
 
 ---
+
+2026-10-09 Task 25 implementation checkpoint: Station Named days lists one-off days from yesterday
+onward. Edit shows the date and name as text, changes station cells only, and carries every stored
+metadata value back unchanged. Repeating days have a localized standard-week note. Whole-venue
+closures retain locked station cells and unchanged Save protection. The shared `HoursModel` calendar
+and holiday fields remain because the Opening hours calendar still reads them; Task 25's conditional
+removal has not become applicable. Verification and changed-check receipts are in the campaign's
+Task 25 report. Controller review is pending; Tasks 26–29 remain.
+
+2026-10-09 Task 25 review checkpoint: the task and its EN/ES wording correction are approved.
+The editor and empty list now say named day, and the closure note points to the Calendar in
+Opening hours. The outgoing request retains the opened day’s metadata. Continue with Task 26.
+Tasks 26–29 and whole-branch validation remain before finish-branch.
 
 ### Task 26: Retire local holidays
 
@@ -1113,12 +1216,32 @@ rule for the rewritten editor.
   the venue-service node project, its touched browser files and the server package; commit
   `refactor(venue-service): local holidays are own named days (A366)`.
 
+**2026-10-09 implementation checkpoint, pending controller review:** local API/editor/facts,
+owner geography source, cap enforcement and transfer entries retired. Calendar retains area
+choice, public holidays and own named-day coverage, including repeats. `local_holidays` schema
+and classification remain for Task 27. Required project runs and retained-assertion supplements,
+controls and LOOK receipts are in `task26-report.md` in the campaign receipts directory. Task 26
+has not been marked reviewed or complete; Tasks 27–29 remain, and the branch has not landed.
+
+**2026-10-09 reviewed Task 26 checkpoint:** supersedes the pending-review checkpoint above.
+The first review found lost area readiness/refusal behavior and retained route/constraint
+assertions. Both corrections are approved at `a4482aeb1a8816bb01df5eb33485af514661a54f`;
+`task26-fix-review.md` records scoped spec compliance and quality approval. Final focused runs
+report node 59, browser 173, readiness fixture 2 and restored guards 5 passing tests. Earlier
+server evidence reports 10,124 passing and six binary-dependent skips, detailed in
+`task26-report.md`; it is not a current-head full-package result. Changed-check and fixture
+inventories, controls and inspected captures remain in the lane's receipts directory.
+Tasks 27–29 remain. Task 29 also fixes the unsupported-country Calendar coverage label and
+EN/ES wording (`hours-calendar.ts`, both coverage paths; `dashboard/strings.ts`) to preserve
+owner-entered coverage for own holidays. No PR, push or landing has occurred.
+
 ---
 
-### Task 27: Migration 0035 — named days lose their colour; local holidays go
+### Task 27: Migration 0036 — named days lose their colour; local holidays go
 
 **Files:**
-- Modify: `schema/hours.ts` (`specialDates`: drop `colour`; add `special_dates_kind_ck`
+- Modify: `schema/hours.ts` (`specialDates`: drop `colour`; change `kind` to
+  `enumType(NAMED_DAY_KINDS)("kind").notNull().default("working_day")`; add `special_dates_kind_ck`
   (`enumCheck`), `special_dates_repeat_ck` (`repeat_on is null or repeat_on = substr(date, 6, 5)`),
   unique `special_dates_location_repeat_key` on (`location_id`, `repeat_on`) where `repeat_on is
   not null`), `schema/holidays.ts` (delete `localHolidays :37-58`), `classification.ts` (+ test),
@@ -1128,7 +1251,7 @@ rule for the rewritten editor.
   `apps/server/src/testing/clear-provision-fixture.ts` (`local_holidays :8` goes); fixtures in
   `apps/server/src/configuration-transfer.test.ts` that send a special date's `colour` (for
   example `:4287`) drop it — a fixture change
-- Create (generated): `drizzle/0035_*.sql`, snapshot, journal entry
+- Create (generated): `drizzle/0036_*.sql`, snapshot, journal entry
 
 The rebuild adds no column. Before generating, list the foreign keys pointing at `special_dates`:
 at S1 they are `special_date_hours_date_fk` and `menu_day_timetables_date_fk`, both on delete
@@ -1137,18 +1260,28 @@ empty all three on a box that has rows; that is the venue reset the pull request
 partial unique index is not an expression index; read the generated SQL to confirm drizzle wrote
 it as declared.
 
-- [ ] **Step 1: Failing test** in `migrations.test.ts`: `local_holidays` gone from `TABLES`; a
+- [x] **Step 1: Failing test** in `migrations.test.ts`: `local_holidays` gone from `TABLES`; a
   special date with `repeat_on` `12-24` and date `2026-12-25` is refused by the database; two
   repeating days on `12-25` in one venue are refused; a `kind` of `party` is refused.
-- [ ] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. Read the SQL.
-- [ ] **Step 3:** remove the transitional colour writes, the `colour` field and the transfer's
+- [x] **Step 2: Generate** — `pnpm --filter @waitron/venue-service db:generate`. Read the SQL.
+- [x] **Step 3:** remove the transitional colour writes, the `colour` field and the transfer's
   colour check.
-- [ ] **Step 4: Run** Step 1's test, Task 2's guard list,
+- [x] **Step 4: Run** Step 1's test, Task 2's guard list,
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`, the
   venue-service node project and the server package; typecheck venue-service and server. If
   `scripts/migration-upgrade.test.ts` fails on this step, record the measured refusal or loss in
   `RESETS` with the words the run printed, as slice 1 did for `0033_aromatic_slapstick`.
-- [ ] **Step 5: Commit** — `feat(venue-service): named days are coloured by kind; local holidays table goes (A366) — venue reset needed`.
+- [x] **Step 5: Commit** — `feat(venue-service): named days are coloured by kind; local holidays table goes (A366) — venue reset needed`.
+
+Task 27 reviewed complete at signed `bbf72c66bdc96d4965dc9f21dc9583a673bd5a05` (2026-10-09).
+Generated `0036_hard_jubilee.sql` and the measured reset entries are retained. Four database
+constraint controls failed as intended and restoration passed 30 tests. Venue node 1,441 and
+root guards 439 passed; fiscal immutability 2 and golden 18 passed unedited. The full server
+run had 10,124 passes, one transfer-helper failure and six binary-dependent skips; after the
+helper correction, 105 focused server tests passed. This records the required run, rather than
+claiming a complete current-head server pass. Review closed a formatting failure and two stale
+test titles; final focused Prettier check passed. No venue was reset. Durable receipts are in
+Lane D `receipts/a366-2/task27-*`; Tasks 28–29 and whole-branch gates remain.
 
 ---
 
@@ -1159,7 +1292,8 @@ it as declared.
 **Behaviour:** decision 23: after its sales, the seed gives the Terrace (`floor.ts:34`, M) a closed
 time from 23:00 to the changeover on every weekday.
 
-- [ ] Steps: failing test (the seeded Terrace week holds 23:00–06:00 on all seven days — fails
+- [x] Steps: failing test (the seeded Terrace week holds 23:00–06:00 on all seven days with an
+  explicit 06:00 fixture, and 23:00–05:00 with the existing demo's 05:00 changeover — fails
   today: no closed times are seeded; the step runs after the sales); watch it fail
   (`pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.test.ts`); implement; the
   server package; commit `feat(demo): the Terrace closes at 23:00 (A366)`.
@@ -1198,22 +1332,58 @@ Run `/finish-branch` with this worktree and this plan. The branch touches risk t
 one on this plan's checklist, one told to set the checklist aside and test what it does not name.
 The pull request's first line: **"venue reset needed"**. Do not merge; the owner lands it.
 
-## Facts that come from slice 1's unbuilt tasks
+## Start-up recheck against landed slice 1 and A432
 
-Re-check each when slice 1 lands, before Task 1:
+Checked 2026-10-09 against `685a6074b152eeb904a66cfac9f83e8f432196ab` (slice 1)
+and `e70b68915607a1a0f3b1861bc003197c3636ed5c` (A432), the implementation branch's base.
+The original S1 citations above remain historical; find assertions by their text.
 
-- **Slice 1 Task 12 (partial):** the Menu timetable screen, client and slot editor still exist at
-  `79bffeca9`; this plan assumes slice 1 deletes them. `apps/dashboard/src/navigation.ts`'s
-  `opening-hours` children are taken as `{ view, department }` (slice 1 plan, Task 12).
-- **Slice 1 Task 13 (partial):** the special-date switch, its picker, "Closed all day" and
-  "Follow the normal week" are not built; this plan's Task 22 replaces them and its Task 7 retires
-  the `DELETE` route they would call. `opening-hours-week.ts`'s save and refusal flow and
-  `range-dialog.ts` (which Task 17 reuses) are as built at `79bffeca9`.
-- **Slice 1 Task 14 (not started):** the Day tab (one column per active department, ‹ ›, slice
-  1's decision 9 note) is planned, not built; this plan's Task 23 adds zones to it. The Departments
-  page's links to Opening hours are slice 1's and untouched here.
-- **Slice 1 Task 15 (not started):** the rewritten `conventions-data.md` sections, any
-  `design-system.md` entry for Opening hours and `public-holidays.md:4`'s new wording are slice
-  1's; this plan's Task 29 edits on top of them.
-- **Numbers:** migrations `0034` and `0035` assume slice 1 ends at `0033_aromatic_slapstick`.
-  Line numbers marked S1 move if slice 1 changes those files again.
+- The menu timetable screen, client and slot editor are retired. Navigation declares
+  `opening-hours: { view, department }` in `apps/dashboard/src/navigation.ts`.
+- `opening-hours-screen.ts` now selects a special date; `opening-hours-week.ts` implements
+  its dated ranges and Follow the normal week flow through `clearDateMenus`. Tasks 7 and 22
+  retire and replace these landed flows. `range-dialog.ts` is present for Task 17.
+- `opening-hours-day.ts` implements the department Day view. Task 23 adds zones to it.
+- The service-period sections in `conventions-data.md` and Opening hours entries in
+  `design-system.md` have landed. `public-holidays.md` still describes Station hours and
+  local holidays; Task 29 changes these current claims and retains historical pointers.
+- A432 added `0034_period_end_offset.sql`. Tasks 2 and 27 now propose 0035 and 0036;
+  generate the actual next numbers, and regenerate on a collision after rebase.
+- A432 added selection/sending state and signed period offsets. Tasks 3, 5–7 and 9 must retain
+  offset placement validation when replacing date resolution or writing/importing named days.
+  Tasks 10–14 add zone state alongside the existing selection and sending fields, preserving
+  cutoff refusal tests and the pricing path's static-only reads. Zone closed times remain an
+  independent refusal; positive period grace never overrides a zone closure (decision 13).
+
+The queue's 2026-10-05 test-change decision governs changed assertions, and its authorisation
+for finish-branch and land-branch replaces the historical "owner lands it" instruction above.
+
+## Task 28 reviewed checkpoint (2026-10-09)
+
+Task 28 is complete at signed implementation `7164de81efd015f3d72bdbad7a4ab7a46a6a37be`,
+with the test-first commit `9cac78227dc4375ed0b78703d0778ffb1c4d484e`. The task review approved
+spec compliance and quality. The focused run passed 17 tests after the two added cases failed
+with missing closure rows. The server run passed 10127 tests and skipped six optional-binary
+cases; venue-service node passed 1441, and the unedited fiscal pair passed 20. Runtime warnings
+and the skipped cases are listed in Lane D receipts `receipts/a366-2/task28-report.md`.
+No new visual check was made for the seeded content. Task 29, whole-branch reviews, the push
+hook, current-head CI and authorised landing remain.
+
+
+## Task 29 reviewed checkpoint (2026-10-09)
+
+Task 29 is complete at signed correction `363ad9d1c3c6a395248fcafcacab550dc9e2c800`.
+The task review and scoped correction review approve spec compliance and quality. The Calendar
+keeps local coverage independent of official-country coverage in both renderers, and English and
+Spanish guidance permits own holidays without a resolved holiday address. The documentation
+describes named days and zone closures, including transfer admission and existing work.
+
+The Calendar reproduction failed seven checks before the correction; the final focused file
+passed 64. The installed deletion control failed four checks and passed four after restoration.
+The closed-zone reprint probe passed one case through the real route. Eight final native captures
+cover English and Spanish, both themes, and 1280/390 CSS widths. Earlier incomplete or inconsistent
+captures, runtime notices and test-check inventories remain in Lane D Task 29 receipts.
+
+Tasks 1–29 are reviewed and complete. The final matrix, necessary rebase and migration
+regeneration, two Claude whole-branch reviews, the normal push hook, current-head CI and authorised
+landing remain. The slice requires a venue reset; no venue was reset in this task.

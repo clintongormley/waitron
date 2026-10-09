@@ -22,22 +22,16 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import {
-  CALENDAR_COLOURS,
   HOURS_RANGE_MAX_DAYS,
   WEEK_DISPLAY_ORDER,
-  type CalendarColour,
-  type CalendarDay,
-  type HolidayFact,
   type DateHoursCell,
   type HoursModel,
   type HoursModelSubject,
   type HoursSubject,
-  type LocalDate,
   type SpecialDate,
   type WeekCell,
   type WeekDay,
 } from "../hours-types.js";
-import { holidayDateName } from "../holiday-naming.js";
 import { repeatedTimes } from "../hours-occurrences.js";
 import { addDays, isLocalDate, weekdayOf } from "../hours-rules.js";
 import type { HoursApi } from "./hours-client.js";
@@ -49,10 +43,7 @@ import {
   type HoursCellEditor,
 } from "./hours-cell-editor.js";
 import "./hours-cell-editor.js";
-import type { CalendarAction } from "./hours-calendar.js";
-import "./hours-calendar.js";
 import { datesListStyles, renderDatesList } from "./hours-dates-list.js";
-import "./local-holidays-editor.js";
 import {
   browserToday,
   format,
@@ -68,7 +59,7 @@ import { t } from "./strings.js";
 
 export { formatDate } from "./hours-view.js";
 
-type View = "week" | "dates" | "calendar";
+type View = "week" | "dates";
 type Subject = HoursModelSubject;
 type Key = Parameters<typeof t>[0];
 
@@ -85,10 +76,6 @@ const WEEK_MODES: CellMode[] = ["closed", "all_day", "periods"];
 const DATE_MODES: CellMode[] = ["inherit", "closed", "all_day", "periods"];
 
 interface DateDraft {
-  date: string;
-  name: string;
-  colour: string;
-  closeWholeVenue: boolean;
   /** One per subject the editor shows, in the page's order; `prefix` names its fields. */
   cells: { subject: Subject; prefix: string; cell: CellDraft }[];
 }
@@ -99,26 +86,12 @@ type Editor =
   | { kind: "clear"; subject: Subject }
   | {
       kind: "date";
-      id: string | null;
+      day: SpecialDate;
       heading: Key;
       draft: DateDraft;
-      /** The date's stored cells, the default station's apart, as the editor opened. */
-      stored: DateHoursCell[];
       /** Cells of subjects the editor does not show, sent back as they were. */
       hidden: DateHoursCell[];
-      /**
-       * A new date's name taken from `date`'s holidays, followed until the name is edited at all.
-       */
-      suggested?: { date: LocalDate; name: string };
-    }
-  | {
-      kind: "duplicate";
-      source: SpecialDate;
-      dates: string[];
-      /** The source's stored cells when the caller read them itself, as the calendar does. */
-      cells?: DateHoursCell[];
-    }
-  | { kind: "delete"; source: SpecialDate };
+    };
 
 const dayName = (weekday: number) => t(`hours.day.${weekday}` as Key);
 const draftOf = (cell: { mode: string; periods: readonly { id: string }[] }): CellDraft =>
@@ -231,18 +204,6 @@ export class HoursScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
       }
-      .targets {
-        display: grid;
-        gap: var(--wt-space-2);
-      }
-      .target {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--wt-space-2);
-      }
-      .target wt-input {
-        flex: 1;
-      }
     `,
     datesListStyles,
   ];
@@ -279,8 +240,6 @@ export class HoursScreen extends LitElement {
   #weekBaseline?: CellDraft[];
   #dateScope?: DraftScope<DateDraft>;
   #dateBaseline?: DateDraft;
-  #duplicateScope?: DraftScope<string[]>;
-  #duplicateBaseline?: string[];
   #leave?: LeaveCoordinator;
   #editorBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
@@ -289,7 +248,7 @@ export class HoursScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "hours") return;
       const view = this.#url.read("view");
-      this.view = view === "dates" || view === "calendar" ? view : "week";
+      this.view = view === "dates" ? view : "week";
       const station = this.#url.read("station");
       this.#linked = station !== null ? `station:${station}` : undefined;
       void this.#focusLinked();
@@ -325,8 +284,6 @@ export class HoursScreen extends LitElement {
     this.#weekScope = undefined;
     this.#dateScope?.dispose();
     this.#dateScope = undefined;
-    this.#duplicateScope?.dispose();
-    this.#duplicateScope = undefined;
     this.#leave = undefined;
     this.busy = false;
     super.disconnectedCallback();
@@ -336,7 +293,6 @@ export class HoursScreen extends LitElement {
   #apply(model: HoursModel): void {
     this.model = model;
     this.readError = "";
-    this.#followHolidays(model.days);
     void this.#focusLinked();
   }
 
@@ -395,8 +351,6 @@ export class HoursScreen extends LitElement {
     this.#weekScope = undefined;
     this.#dateScope?.dispose();
     this.#dateScope = undefined;
-    this.#duplicateScope?.dispose();
-    this.#duplicateScope = undefined;
     this.#weekBaseline =
       editor.kind === "cell"
         ? [structuredClone(editor.draft)]
@@ -404,7 +358,6 @@ export class HoursScreen extends LitElement {
           ? structuredClone(editor.drafts)
           : undefined;
     this.#dateBaseline = editor.kind === "date" ? structuredClone(editor.draft) : undefined;
-    this.#duplicateBaseline = editor.kind === "duplicate" ? [...editor.dates] : undefined;
     this.#registerWeekScope();
     this.#registerDateScope();
   }
@@ -459,7 +412,7 @@ export class HoursScreen extends LitElement {
   }
 
   #activeScope() {
-    return this.#weekScope ?? this.#dateScope ?? this.#duplicateScope;
+    return this.#weekScope ?? this.#dateScope;
   }
 
   #registerDateScope(): void {
@@ -468,10 +421,6 @@ export class HoursScreen extends LitElement {
     let registering = true;
     if (editor.kind === "date") {
       const payload = (draft: DateDraft) => ({
-        date: draft.date,
-        name: draft.name.trim(),
-        colour: draft.colour,
-        closeWholeVenue: draft.closeWholeVenue,
         cells: draft.cells
           .filter(({ cell }) => cell.mode !== "inherit")
           .map(({ subject, cell }) => ({
@@ -497,22 +446,6 @@ export class HoursScreen extends LitElement {
       });
       this.#leave = coordinator;
       this.#dateScope = scope;
-    } else if (editor.kind === "duplicate") {
-      const { coordinator, scope } = draftScopeFor(this, {
-        id: {},
-        parent: this,
-        current: () =>
-          registering || this.editor?.kind !== "duplicate"
-            ? this.#duplicateBaseline!
-            : this.editor.dates,
-        snapshot: (value) => [...value],
-        equal: (a, b) => a.length === b.length && a.every((date, index) => date === b[index]),
-        restore: (dates) => {
-          if (this.editor?.kind === "duplicate") this.editor = { ...this.editor, dates };
-        },
-      });
-      this.#leave = coordinator;
-      this.#duplicateScope = scope;
     }
     registering = false;
     this.#activeScope()?.changed();
@@ -523,11 +456,8 @@ export class HoursScreen extends LitElement {
     this.#weekScope = undefined;
     this.#dateScope?.dispose();
     this.#dateScope = undefined;
-    this.#duplicateScope?.dispose();
-    this.#duplicateScope = undefined;
     this.#weekBaseline = undefined;
     this.#dateBaseline = undefined;
-    this.#duplicateBaseline = undefined;
     this.#generation++;
     this.editor = undefined;
     this.attempted = false;
@@ -583,23 +513,9 @@ export class HoursScreen extends LitElement {
     );
   }
 
-  /**
-   * `options.cells` are the date's stored cells when the caller read them itself, as the calendar
-   * does for a month outside the page's own range; `options.date` fills in a new date.
-   */
-  #openDate(
-    special: SpecialDate | null,
-    heading: Key,
-    returnTo: () => HTMLElement | null,
-    options: {
-      closeWholeVenue?: boolean;
-      cells?: DateHoursCell[];
-      date?: LocalDate;
-      /** The date's holidays, which name a new date. */
-      holidays?: readonly HolidayFact[];
-    } = {},
-  ): void {
-    const stored = special === null ? [] : (options.cells ?? storedCells(this.model!, special.id));
+  #openDate(special: SpecialDate, heading: Key, returnTo: () => HTMLElement | null): void {
+    if (special.repeats) return;
+    const stored = storedCells(this.model!, special.id);
     const shown = this.model!.subjects.filter(
       (subject) => subject.active && !isDefaultStation(subject),
     );
@@ -614,50 +530,20 @@ export class HoursScreen extends LitElement {
     });
     const defaults = new Set(this.model!.subjects.filter(isDefaultStation).map(keyOf));
     const kept = stored.filter((entry) => !defaults.has(keyOf(entry.subject)));
-    const suggested =
-      special === null && options.holidays !== undefined && options.date !== undefined
-        ? {
-            date: options.date,
-            name: holidayDateName(options.holidays, options.date, options.date),
-          }
-        : undefined;
     this.#open(
       {
         kind: "date",
-        id: special?.id ?? null,
+        day: structuredClone(special),
         heading,
         draft: {
-          date: special?.date ?? options.date ?? "",
-          name: special?.name ?? suggested?.name ?? "",
-          colour: special?.colour ?? "",
-          closeWholeVenue: special?.closeWholeVenue ?? options.closeWholeVenue ?? false,
           cells,
         },
-        stored: kept,
         hidden: kept.filter((entry) => !shownKeys.has(keyOf(entry.subject))),
-        suggested,
       },
       returnTo,
     );
   }
 
-  /** A new read of `days`: a new date's suggested name follows its holidays. */
-  #followHolidays(days: readonly CalendarDay[]): void {
-    const editor = this.editor;
-    if (editor?.kind !== "date" || editor.suggested === undefined) return;
-    const { date, name } = editor.suggested;
-    const day = days.find((entry) => entry.date === date);
-    if (day === undefined) return;
-    const next = holidayDateName(day.holidays, date, date);
-    if (next === name) return;
-    this.editor = {
-      ...editor,
-      draft: { ...editor.draft, name: next },
-      suggested: { date, name: next },
-    };
-  }
-
-  /** Every field the editor's own checks find wrong, by field name. */
   #check(editor: Editor): Record<string, string> {
     switch (editor.kind) {
       case "cell": {
@@ -680,21 +566,9 @@ export class HoursScreen extends LitElement {
         ) as Record<string, string>;
       case "date": {
         const { draft } = editor;
-        const errors: Record<string, string> = draft.closeWholeVenue
+        const errors: Record<string, string> = editor.day.closeWholeVenue
           ? {}
           : Object.assign({}, ...draft.cells.map(({ prefix, cell }) => cellChecks(prefix, cell)));
-        if (draft.date === "") errors.date = t("hours.date_required");
-        if (draft.name.trim() === "") errors.name = t("hours.name_required");
-        if (draft.colour === "") errors.colour = t("hours.colour_required");
-        return errors;
-      }
-      case "duplicate": {
-        const errors: Record<string, string> = {};
-        editor.dates.forEach((date, index) => {
-          if (date === "") errors[`dates.${index}`] = t("hours.date_required");
-          else if (editor.dates.indexOf(date) < index)
-            errors[`dates.${index}`] = t("hours.date_twice");
-        });
         return errors;
       }
       default:
@@ -750,18 +624,12 @@ export class HoursScreen extends LitElement {
             cell: wire(cell),
           }));
         this.#sentCells = [...shown, ...editor.hidden] as DateHoursCell[];
-        return this.api.saveDate(editor.id, {
-          date: draft.date,
-          name: draft.name.trim(),
-          colour: draft.colour as CalendarColour,
-          closeWholeVenue: draft.closeWholeVenue,
+        const { id, ...metadata } = editor.day;
+        return this.api.saveDate(id, {
+          ...metadata,
           cells: this.#sentCells,
         });
       }
-      case "duplicate":
-        return this.api.duplicateDate(editor.source.id, editor.dates);
-      case "delete":
-        return this.api.deleteDate(editor.source.id);
     }
   }
 
@@ -770,9 +638,7 @@ export class HoursScreen extends LitElement {
     const current = () => this.isConnected && generation === this.#generation;
     const scope = this.#weekScope;
     const dateScope = this.#dateScope;
-    const duplicateScope = this.#duplicateScope;
     const submittedDate = editor.kind === "date" ? structuredClone(editor.draft) : undefined;
-    const submittedDates = editor.kind === "duplicate" ? [...editor.dates] : undefined;
     const submitted =
       editor.kind === "cell"
         ? [structuredClone(editor.draft)]
@@ -782,7 +648,6 @@ export class HoursScreen extends LitElement {
     this.busy = true;
     if (scope) scope.commit(this.#weekBaseline!);
     dateScope?.commit(this.#dateBaseline!);
-    duplicateScope?.commit(this.#duplicateBaseline!);
     try {
       await this.#send(editor);
     } catch (error) {
@@ -800,10 +665,7 @@ export class HoursScreen extends LitElement {
       dateScope.commit(submittedDate);
       this.#dateBaseline = submittedDate;
     }
-    if (duplicateScope && submittedDates) {
-      duplicateScope.commit(submittedDates);
-      this.#duplicateBaseline = submittedDates;
-    }
+
     this.busy = false;
     if (!this.#activeScope()?.isDirty()) this.#close();
     this.api.rereadWatches();
@@ -820,10 +682,10 @@ export class HoursScreen extends LitElement {
     };
     const placed = this.#place(editor, code, params);
     if (placed === undefined) {
-      this.bottomRefusal = this.#sentence(editor, code, params);
+      this.bottomRefusal = this.#sentence(code, params);
       return;
     }
-    this.refused = { [placed]: this.#fieldSentence(editor, code, params, placed) };
+    this.refused = { [placed]: this.#fieldSentence(editor, params, placed) };
     void this.#focusInvalid();
   }
 
@@ -831,7 +693,7 @@ export class HoursScreen extends LitElement {
   #place(
     editor: Editor,
     code: string,
-    { field = "", date, subjectId }: { field?: string; date?: string; subjectId?: string },
+    { field = "", subjectId }: { field?: string; date?: string; subjectId?: string },
   ): string | undefined {
     if (editor.kind === "cell" || editor.kind === "configure") {
       const match = /^days\.(\d)\.cell(?:\.(.+))?$/.exec(field);
@@ -841,9 +703,11 @@ export class HoursScreen extends LitElement {
       return this.#cellField(DAY_KEYS[weekday]!, match[2]);
     }
     if (editor.kind === "date") {
-      if (code === "special_date.date_taken" || code === "menu_timetable.invalid") return "date";
       if (code !== "hours.invalid") return undefined;
-      if (["date", "name", "colour"].includes(field)) return field;
+      if (
+        ["date", "name", "colour", "kind", "repeats", "ownHours", "closeWholeVenue"].includes(field)
+      )
+        return undefined;
       const match = /^cells\.(\d+)\.cell(?:\.(.+))?$/.exec(field);
       const sent = match === null ? undefined : this.#sentCells[Number(match[1])]!;
       const entry = editor.draft.cells.find(({ subject }) =>
@@ -852,13 +716,7 @@ export class HoursScreen extends LitElement {
       if (entry === undefined) return undefined;
       return this.#cellField(entry.prefix, match?.[2]);
     }
-    if (editor.kind === "duplicate") {
-      if (code === "special_date.date_taken" || code === "menu_timetable.invalid") {
-        const index = editor.dates.indexOf(date!);
-        return index === -1 ? undefined : `dates.${index}`;
-      }
-      return code === "hours.invalid" && /^dates\.\d+$/.test(field) ? field : undefined;
-    }
+
     return undefined;
   }
 
@@ -868,33 +726,18 @@ export class HoursScreen extends LitElement {
     return /^periods\.\d+\.(opensAt|closesAt)$/.test(rest) ? `${prefix}.${rest}` : undefined;
   }
 
-  /**
-   * The sentence under a refused field. A duplicate's refusal names its target date when the
-   * clock skips a time there, and the neighbouring date when the hours clash with it.
-   */
-  #fieldSentence(
-    editor: Editor,
-    code: string,
-    { date, departmentId, reason }: { date?: string; departmentId?: string; reason?: string },
-    name: string,
-  ): string {
-    if (code === "special_date.date_taken")
-      return format("hours.date_taken", { date: formatDate(date!) });
-    if (code === "menu_timetable.invalid") return this.#menuSentence(departmentId, reason);
+  #fieldSentence(editor: Editor, { date }: { date?: string }, name: string): string {
     if (name.includes(".periods."))
       return t(editor.kind === "date" ? "hours.time_skipped" : "hours.field_refused");
     if (date === undefined)
       return t(name.endsWith(".mode") ? "hours.invalid" : "hours.field_refused");
-    if (editor.kind === "duplicate" && editor.dates[Number(name.split(".")[1])] === date)
-      return t("hours.duplicate_skipped");
-    return format(name === "date" ? "hours.date_moved_clash" : "hours.invalid_clash", {
+    return format("hours.invalid_clash", {
       date: formatDate(date),
     });
   }
 
   /** The bottom message for a refusal that names no field the editor shows. */
   #sentence(
-    editor: Editor,
     code: string,
     {
       field = "",
@@ -904,13 +747,7 @@ export class HoursScreen extends LitElement {
     }: { field?: string; date?: string; departmentId?: string; reason?: string },
   ): string {
     if (code === "special_date.not_found") return t("hours.date_not_found");
-    if (code === "menu_timetable.invalid")
-      return editor.kind === "delete" && date !== undefined
-        ? format("hours.menu_delete_clash", {
-            department: this.#departmentName(departmentId),
-            date: formatDate(date),
-          })
-        : this.#menuSentence(departmentId, reason);
+    if (code === "menu_timetable.invalid") return this.#menuSentence(departmentId, reason);
     if (code === "station.always_open") return t("hours.always_open");
     if (code === "special_date.date_taken")
       return format("hours.date_taken", { date: formatDate(date!) });
@@ -921,7 +758,7 @@ export class HoursScreen extends LitElement {
       if (/^days\.\d\.cell\.mode$/.test(field)) return t("hours.week_mixed");
       return t("hours.invalid");
     }
-    return format(editor.kind === "delete" ? "hours.delete_clash" : "hours.invalid_clash", {
+    return format("hours.invalid_clash", {
       date: formatDate(date),
     });
   }
@@ -979,32 +816,6 @@ export class HoursScreen extends LitElement {
         },
       });
     }
-  }
-
-  /**
-   * Switching the closure on locks the cells, so a cell its own checks refuse goes back to its
-   * stored hours, where it can be seen; a cell they accept keeps the edit.
-   */
-  #setClosure(checked: boolean): void {
-    const editor = this.editor as Extract<Editor, { kind: "date" }>;
-    const cells = editor.draft.cells.map((entry) => {
-      if (!checked || Object.keys(cellChecks(entry.prefix, entry.cell)).length === 0) return entry;
-      const stored = editor.stored.find(({ subject }) => keyOf(subject) === keyOf(entry.subject));
-      return {
-        ...entry,
-        cell: stored ? draftOf(stored.cell) : ({ mode: "inherit", periods: [] } as CellDraft),
-      };
-    });
-    this.#setDate({ closeWholeVenue: checked, cells }, "closeWholeVenue");
-  }
-
-  #setDate(patch: Partial<DateDraft>, name: string): void {
-    const editor = this.editor as Extract<Editor, { kind: "date" }>;
-    const draft = { ...editor.draft, ...patch };
-    // The suggestion names the date it was taken from; on any other date it would rename wrongly.
-    const suggested =
-      "name" in patch || draft.date !== editor.suggested?.date ? undefined : editor.suggested;
-    this.#changed(name, { ...editor, draft, suggested });
   }
 
   #content(editor: Editor, errors: Record<string, string>) {
@@ -1071,42 +882,14 @@ export class HoursScreen extends LitElement {
       case "date":
         return {
           heading: t(editor.heading),
-          body: this.#dateForm(editor, errors, cellEditor),
+          body: this.#dateForm(editor, cellEditor),
           save: t("hours.save"),
-        };
-      case "duplicate":
-        return {
-          heading: format("hours.duplicate_heading", { name: editor.source.name }),
-          body: this.#duplicateForm(editor, errors),
-          save: t("hours.duplicate"),
-        };
-      case "delete":
-        return {
-          heading: t("hours.delete_heading"),
-          body: html`<p data-test="confirm-text">
-            ${format("hours.delete_confirm", {
-              name: editor.source.name,
-              date: formatDate(editor.source.date),
-            })}
-          </p>`,
-          save: t("hours.delete"),
-          danger: true,
         };
     }
   }
 
-  #currentControl(event: Event, generation: number): boolean {
-    return (
-      this.isConnected &&
-      generation === this.#generation &&
-      event.currentTarget instanceof Element &&
-      this.renderRoot.contains(event.currentTarget)
-    );
-  }
-
   #dateForm(
     editor: Extract<Editor, { kind: "date" }>,
-    errors: Record<string, string>,
     cellEditor: (
       label: string,
       prefix: string,
@@ -1117,61 +900,14 @@ export class HoursScreen extends LitElement {
     ) => TemplateResult,
   ) {
     const { draft } = editor;
-    const generation = this.#generation;
-    const set = (event: Event, patch: Partial<DateDraft>, name: string) => {
-      if (!this.#currentControl(event, generation)) return;
-      this.#setDate(patch, name);
-    };
-    const weekday = draft.date === "" ? null : weekdayOf(draft.date);
+    const weekday = weekdayOf(editor.day.date);
     const defaults = this.model!.subjects.filter(
       (subject) => subject.active && isDefaultStation(subject),
     );
-    return html`<wt-input
-        type="date"
-        name="date"
-        required
-        label=${t("hours.date")}
-        .value=${draft.date}
-        error=${errors.date ?? ""}
-        ?disabled=${this.busy}
-        @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          set(event, { date: event.detail.value }, "date")}
-      ></wt-input>
-      <wt-input
-        name="name"
-        required
-        label=${t("hours.name")}
-        .value=${draft.name}
-        error=${errors.name ?? ""}
-        ?disabled=${this.busy}
-        @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          set(event, { name: event.detail.value }, "name")}
-      ></wt-input>
-      <wt-combobox
-        name="colour"
-        required
-        search="never"
-        label=${t("hours.colour")}
-        .options=${CALENDAR_COLOURS.map((colour) => ({
-          value: colour,
-          label: t(`hours.colour.${colour}` as Key),
-        }))}
-        .value=${draft.colour}
-        error=${errors.colour ?? ""}
-        ?disabled=${this.busy}
-        @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          set(event, { colour: event.detail.value }, "colour")}
-      ></wt-combobox>
-      <wt-switch
-        name="closeWholeVenue"
-        label=${t("hours.close_whole_venue")}
-        ?checked=${draft.closeWholeVenue}
-        ?disabled=${this.busy}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) =>
-          this.#currentControl(event, generation) && this.#setClosure(event.detail.checked)}
-      ></wt-switch>
+    return html`<p data-test="named-day-date">${formatDate(editor.day.date)}</p>
+      <p data-test="named-day-name">${editor.day.name}</p>
       ${
-        draft.closeWholeVenue
+        editor.day.closeWholeVenue
           ? html`<p class="note" data-test="whole-venue-note">${t("hours.whole_venue_note")}</p>`
           : nothing
       }
@@ -1182,9 +918,9 @@ export class HoursScreen extends LitElement {
             prefix,
             DATE_MODES,
             cell,
-            weekday === null ? "" : this.#standardText(subject, weekday),
-            draft.closeWholeVenue,
-          )}${this.#repeatNotes(draft, subject, cell)}`,
+            this.#standardText(subject, weekday),
+            editor.day.closeWholeVenue,
+          )}${this.#repeatNotes(editor.day, subject, cell)}`,
       )}
       ${defaults.map(
         (subject) =>
@@ -1195,7 +931,7 @@ export class HoursScreen extends LitElement {
   }
 
   /** A period time the clock shows twice is explained, not refused: both occurrences follow it. */
-  #repeatNotes(draft: DateDraft, subject: Subject, cell: CellDraft) {
+  #repeatNotes(draft: SpecialDate, subject: Subject, cell: CellDraft) {
     const model = this.model!;
     if (
       draft.closeWholeVenue ||
@@ -1210,90 +946,6 @@ export class HoursScreen extends LitElement {
           ${format("hours.time_repeats", { subject: subject.name, time })}
         </p>`,
     );
-  }
-
-  /** As {@link #repeatNotes}, for the source date's shown cells copied onto one target date. */
-  #duplicateRepeatNotes(editor: Extract<Editor, { kind: "duplicate" }>, date: string) {
-    const model = this.model!;
-    const { source } = editor;
-    if (source.closeWholeVenue || !model.clockReadable || !isLocalDate(date)) return nothing;
-    const cells = editor.cells ?? storedCells(model, source.id);
-    return model.subjects
-      .filter((subject) => subject.active && !isDefaultStation(subject))
-      .flatMap((subject) => {
-        const cell = cells.find((entry) => keyOf(entry.subject) === keyOf(subject))?.cell;
-        if (cell?.mode !== "periods") return [];
-        return repeatedTimes(date, cell.periods, model.timeZone).map(
-          (time) =>
-            html`<p class="note" data-test="duplicate-repeat-note">
-              ${format("hours.duplicate_time_repeats", {
-                subject: subject.name,
-                date: formatDate(date),
-                time,
-              })}
-            </p>`,
-        );
-      });
-  }
-
-  #duplicateForm(editor: Extract<Editor, { kind: "duplicate" }>, errors: Record<string, string>) {
-    const generation = this.#generation;
-    const set = (event: Event, dates: string[], name: string) => {
-      if (this.#currentControl(event, generation)) this.#changed(name, { ...editor, dates });
-    };
-    return html`<p class="note" data-test="duplicate-note">${t("hours.duplicate_note")}</p>
-      <div class="targets">
-        ${editor.dates.map(
-          (date, index) =>
-            html`<div class="target">
-                <wt-input
-                  type="date"
-                  required
-                  name=${`dates.${index}`}
-                  label=${format("hours.target_date", { n: String(index + 1) })}
-                  .value=${date}
-                  error=${errors[`dates.${index}`] ?? ""}
-                  ?disabled=${this.busy}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) =>
-                    set(
-                      event,
-                      editor.dates.map((value, at) => (at === index ? event.detail.value : value)),
-                      `dates.${index}`,
-                    )}
-                ></wt-input>
-                ${
-                  editor.dates.length > 1
-                    ? html`<wt-button
-                        variant="ghost"
-                        data-test=${`remove-target-${index}`}
-                        aria-label=${format("hours.remove_target", { n: String(index + 1) })}
-                        ?disabled=${this.busy}
-                        @click=${(event: Event) => {
-                          if (!this.#currentControl(event, generation)) return;
-                          this.refused = {};
-                          set(
-                            event,
-                            editor.dates.filter((_, at) => at !== index),
-                            "dates",
-                          );
-                        }}
-                        >${t("hours.remove")}</wt-button
-                      >`
-                    : nothing
-                }
-              </div>
-              ${this.#duplicateRepeatNotes(editor, date)}`,
-        )}
-        <div>
-          <wt-button
-            variant="secondary"
-            data-test="add-target"
-            ?disabled=${this.busy}
-            @click=${(event: Event) => set(event, [...editor.dates, ""], "dates")}
-            >${t("hours.add_target")}</wt-button
-          >
-        </div>
-      </div>`;
   }
 
   #modal() {
@@ -1311,9 +963,7 @@ export class HoursScreen extends LitElement {
       html`<wt-modal
         open
         size=${
-          editor.kind === "clear" ||
-          editor.kind === "delete" ||
-          (editor.kind === "configure" && editor.confirming)
+          editor.kind === "clear" || (editor.kind === "configure" && editor.confirming)
             ? "compact"
             : "standard"
         }
@@ -1495,40 +1145,14 @@ export class HoursScreen extends LitElement {
     </div>`;
   }
 
-  // --- Special dates and the calendar ------------------------------------------------------
-
   #dates() {
     return renderDatesList({
       model: this.model!,
       readOnly: this.readOnly,
       subjects: this.#subjects(),
-      root: this.renderRoot,
       menuTrigger: (event) => this.#menuTrigger(event),
-      add: (returnTo, closeWholeVenue) =>
-        this.#openDate(
-          null,
-          closeWholeVenue ? "hours.close_heading" : "hours.add_heading",
-          returnTo,
-          { closeWholeVenue },
-        ),
       edit: (special, returnTo) => this.#openDate(special, "hours.edit_heading", returnTo),
-      duplicate: (source, returnTo) =>
-        this.#open({ kind: "duplicate", source, dates: [""] }, returnTo),
-      remove: (source, returnTo) => this.#open({ kind: "delete", source }, returnTo),
     });
-  }
-
-  #calendarAction(event: CustomEvent<CalendarAction>): void {
-    const { kind, special, cells, date, returnTo } = event.detail;
-    if (kind === "make_special")
-      this.#openDate(null, "hours.add_heading", returnTo, {
-        date,
-        holidays: event.detail.holidays ?? [],
-      });
-    else if (kind === "edit") this.#openDate(special!, "hours.edit_heading", returnTo, { cells });
-    else if (kind === "duplicate")
-      this.#open({ kind: "duplicate", source: special!, dates: [""], cells }, returnTo);
-    else this.#open({ kind: "delete", source: special! }, returnTo);
   }
 
   override render() {
@@ -1563,45 +1187,19 @@ export class HoursScreen extends LitElement {
                 label=${t("hours.title")}
                 .value=${this.view}
                 .items=${[
-                  { key: "week", label: t("hours.tab.week") },
-                  { key: "dates", label: t("hours.tab.dates") },
-                  { key: "calendar", label: t("hours.tab.calendar") },
+                  { key: "week", label: t("hours.tab.station_week") },
+                  { key: "dates", label: t("hours.tab.named_days") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
                   if (event.target !== event.currentTarget) return;
                   (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.view;
                   void this.#url.write({ dashboard: "hours", view: event.detail.value });
                   const view = this.#url.read("view");
-                  this.view = view === "dates" || view === "calendar" ? view : "week";
+                  this.view = view === "dates" ? view : "week";
                 }}
               >
                 <div slot="week">${this.view === "week" ? this.#week() : nothing}</div>
-                <div slot="dates">
-                  ${
-                    this.view === "dates"
-                      ? html`${this.#dates()}
-                          <local-holidays-editor
-                            .api=${this.api}
-                            ?readOnly=${this.readOnly}
-                            .today=${model.civilDate}
-                          ></local-holidays-editor>`
-                      : nothing
-                  }
-                </div>
-                <div slot="calendar">
-                  ${
-                    this.view === "calendar"
-                      ? html`<hours-calendar
-                          .api=${this.api}
-                          ?readOnly=${this.readOnly}
-                          .today=${model.civilDate}
-                          @hours-calendar-action=${this.#calendarAction}
-                          @hours-calendar-read=${(event: CustomEvent<{ days: CalendarDay[] }>) =>
-                            this.#followHolidays(event.detail.days)}
-                        ></hours-calendar>`
-                      : nothing
-                  }
-                </div>
+                <div slot="dates">${this.view === "dates" ? this.#dates() : nothing}</div>
               </wt-tabs>
               ${this.#modal()}`
       }`;

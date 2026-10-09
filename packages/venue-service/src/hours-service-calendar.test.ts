@@ -14,7 +14,8 @@ import { locationId } from "@waitron/shared";
 import { readCalendarDays, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { hoursWeekCells, specialDateHours } from "./schema/hours.js";
+import { hoursWeekCells, specialDateHours, specialDates } from "./schema/hours.js";
+import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
@@ -136,7 +137,6 @@ describe("station-hours calendar follows department service periods", () => {
         {
           date: "2026-10-20",
           name: "Retained hours",
-          colour: "red",
           closeWholeVenue: false,
           cells: [],
         },
@@ -160,12 +160,12 @@ describe("station-hours calendar follows department service periods", () => {
         {
           date: "2026-10-19",
           name: "Closed Monday",
-          colour: "green",
           closeWholeVenue: false,
           cells: [],
         },
         at,
       );
+      await tx.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
       await saveSpecialDateMenus(tx, f.cfg, special.id, f.department, [], at);
       await saveSpecialDate(
         tx,
@@ -174,7 +174,6 @@ describe("station-hours calendar follows department service periods", () => {
         {
           date: "2026-10-26",
           name: "Normal Monday",
-          colour: "purple",
           closeWholeVenue: false,
           cells: [],
         },
@@ -182,7 +181,7 @@ describe("station-hours calendar follows department service periods", () => {
       );
     });
     expect(await tones(f.cfg, "2026-10-19")).toEqual({ calendar: ["closed"], model: ["closed"] });
-    expect(await tones(f.cfg, "2026-10-26")).toEqual({ calendar: ["purple"], model: ["purple"] });
+    expect(await tones(f.cfg, "2026-10-26")).toEqual({ calendar: ["blue"], model: ["blue"] });
   });
 
   it("uses special-day ranges to open a closed weekday, and whole-venue closure wins", async () => {
@@ -196,17 +195,35 @@ describe("station-hours calendar follows department service periods", () => {
           tx,
           f.cfg,
           null,
-          { date, name: "Special Tuesday", colour: "blue", closeWholeVenue, cells: [] },
+          { date, name: "Special Tuesday", closeWholeVenue, cells: [] },
           at,
         );
-        await saveSpecialDateMenus(
-          tx,
-          f.cfg,
-          special.id,
-          f.department,
-          [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }],
-          at,
-        );
+        await tx
+          .update(specialDates)
+          .set({ ownHours: !closeWholeVenue })
+          .where(eq(specialDates.id, special.id));
+        if (closeWholeVenue) {
+          const [day] = await tx
+            .insert(menuDayTimetables)
+            .values({ departmentId: f.department, specialDateId: special.id })
+            .returning();
+          await tx.insert(menuSlots).values({
+            timetableId: day!.id,
+            departmentId: f.department,
+            periodId: f.period,
+            startsAt: "10:00:00",
+            endsAt: "14:00:00",
+          });
+        } else {
+          await saveSpecialDateMenus(
+            tx,
+            f.cfg,
+            special.id,
+            f.department,
+            [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }],
+            at,
+          );
+        }
       }
     });
     expect(await tones(f.cfg, "2026-10-20")).toEqual({ calendar: ["blue"], model: ["blue"] });

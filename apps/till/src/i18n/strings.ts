@@ -475,6 +475,7 @@ export const en = {
   "schedule.status.rejected": "Rejected",
   // Live floor. The count labels are suffix words, rendered as `${n} ${t(key)}`.
   "floor.open": "Floor",
+  "floor.closed": "Closed",
   "floor.title": "Floor",
   "floor.back": "Back to counter",
   "floor.zones": "Zones",
@@ -1089,6 +1090,8 @@ export const en = {
   "basket.blocked.period_ended": "Last orders have ended",
   "basket_refresh.period_ended": "{name}: last orders have ended",
   "menu.department_closed": "{department} is closed: no period is running",
+  "menu.zone_closed":
+    "{zone} is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
   "menu.switcher": "Menu",
   // The menu browser: search, the Device Home Page's shortcuts and the menu's sections.
   "menu.search": "Search",
@@ -1588,6 +1591,7 @@ export const es: Record<StringKey, string> = {
   "schedule.status.approved": "Aprobado",
   "schedule.status.rejected": "Rechazado",
   "floor.open": "Sala",
+  "floor.closed": "Cerrada",
   "floor.title": "Sala",
   "floor.back": "Volver a la caja",
   "floor.zones": "Zonas",
@@ -2186,6 +2190,8 @@ export const es: Record<StringKey, string> = {
   "basket.blocked.period_ended": "Ya no se admiten pedidos",
   "basket_refresh.period_ended": "{name}: ya no se admiten pedidos",
   "menu.department_closed": "{department} está cerrado: no hay ningún periodo en curso",
+  "menu.zone_closed":
+    "{zone} está cerrada: no se puede pedir nada nuevo aquí. Las cuentas se pueden cobrar o mover a otra zona.",
   "menu.switcher": "Carta",
   "menu.search": "Buscar",
   "menu.shortcuts": "Accesos directos",

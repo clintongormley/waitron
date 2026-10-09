@@ -57,7 +57,7 @@ async function discardUnsavedLeave(el: TillApp): Promise<void> {
   await flush(el);
 }
 
-const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true, closed: false };
 
 function partyOf(over: Partial<TableParty> = {}): TableParty {
   return {
@@ -265,7 +265,7 @@ const till = {
 };
 
 const offers: ZoneOfferCatalogue = {
-  service: { open: true, periodName: null, keepOpen: null },
+  service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
   context: {
     departmentName: "Restaurant",
     zoneId: zone.id,

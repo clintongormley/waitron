@@ -1738,11 +1738,9 @@ describe("TillApi", () => {
   // --- Live floor: zones, occupancy read-model, served markers, tab open/round ---
 
   it("listZones GETs the venue's active floor-plan zones and returns them", async () => {
-    // Typed `FloorZone[]` so the mock is a compile-time proof the client shape carries every field
-    // the server sends (`id`, `name`, `displayOrder`, `active`).
     const zones: FloorZone[] = [
-      { id: "z1", name: "Terraza", displayOrder: 0, active: true },
-      { id: "z2", name: "Interior", displayOrder: 1, active: true },
+      { id: "z1", name: "Terraza", displayOrder: 0, active: true, closed: false },
+      { id: "z2", name: "Interior", displayOrder: 1, active: true, closed: false },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(zones));
 

@@ -137,7 +137,11 @@ export async function partyMainBill(
   }
   const billId = randomUUID();
   const zoneId = await partyZone(tx, cfg, partyId);
-  await createOpenOrder(tx, cfg, billId, [], null, { zoneId: zoneId ?? undefined, partyId });
+  await createOpenOrder(tx, cfg, billId, [], null, {
+    zoneId: zoneId ?? undefined,
+    partyId,
+    existingService: true,
+  });
   await setMainBill(tx, partyId, billId);
   if (revision === "move") await bumpPartyRevision(tx, partyId);
   return billId;

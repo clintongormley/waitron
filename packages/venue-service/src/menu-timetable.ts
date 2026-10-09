@@ -28,10 +28,14 @@ import type {
   MenuSlot,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDates, specialDateHours } from "./schema/hours.js";
+import { namedDaysOn } from "./named-days.js";
+import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { periodExtensions } from "./schema/period-extensions.js";
+import { readZoneClosedTimes } from "./zone-closed-times.js";
+import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import "./errors.js";
 
 const wire = (time: string) => time.slice(0, 5);
@@ -68,7 +72,12 @@ export async function placeOpenPeriod(
 
 async function requireSpecialDate(tx: Transaction, cfg: VenueScope, id: string) {
   const [row] = await tx
-    .select({ id: specialDates.id, date: specialDates.date })
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      ownHours: specialDates.ownHours,
+      repeatOn: specialDates.repeatOn,
+    })
     .from(specialDates)
     .where(and(eq(specialDates.id, id), eq(specialDates.locationId, cfg.locationId)));
   if (row === undefined) throw new AppError("special_date.not_found", { specialDateId: id });
@@ -302,19 +311,8 @@ export async function departmentDay(
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   if (moment === null) return { periods, staff, ranges: [], previousRanges: [], extension: null };
   const yesterday = addDays(moment.businessDay, -1);
-  const dates = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      closeWholeVenue: specialDates.closeWholeVenue,
-    })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        inArray(specialDates.date, [yesterday, moment.businessDay]),
-      ),
-    );
+  const named = await namedDaysOn(tx, cfg, [yesterday, moment.businessDay]);
+  const dates = [...named.values()];
   const timetables = await tx
     .select({
       id: menuDayTimetables.id,
@@ -337,10 +335,10 @@ export async function departmentDay(
       ),
     );
   const timetableOn = (date: string) => {
-    const special = dates.find((entry) => entry.date === date);
+    const special = named.get(date);
     if (special?.closeWholeVenue) return undefined;
     return (
-      (special === undefined
+      (!special?.ownHours
         ? undefined
         : timetables.find((entry) => entry.specialDateId === special.id)) ??
       timetables.find((entry) => entry.weekday === weekdayOf(date))
@@ -753,8 +751,13 @@ export async function saveSpecialDateMenus(
   const parsed = parseServiceDay(slots, "slots", clock.cutover);
   const special = await requireSpecialDate(tx, cfg, specialDateId);
   await assertDepartment(tx, cfg, departmentId);
+  if (!special.ownHours) throw new AppError("special_date.keeps_week", { specialDateId });
   await assertOwnPeriods(tx, departmentId, [{ field: "slots", slots: parsed }]);
-  const skipped = skippedSlot(clock, special.date, parsed);
+  const occurrence = nextOccurrence(
+    { date: special.date, repeats: special.repeatOn !== null },
+    clock.today ?? special.date,
+  );
+  const skipped = skippedSlot(clock, occurrence ?? special.date, parsed);
   if (skipped !== null)
     invalidTimetable(`slots.${skipped.position}.${skipped.end}`, { reason: "clock_skips" });
   const [existing] = await tx
@@ -768,31 +771,6 @@ export async function saveSpecialDateMenus(
     );
   await writeDay(tx, existing?.id, { departmentId, specialDateId }, parsed);
   const clash = await endOffsetClash(tx, cfg, departmentId, clock.cutover);
-  if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
-}
-
-export async function clearSpecialDateMenus(
-  tx: Transaction,
-  cfg: VenueScope,
-  specialDateId: string,
-  departmentId: string,
-  at: Date,
-): Promise<void> {
-  void at;
-  await requireSpecialDate(tx, cfg, specialDateId);
-  await assertDepartment(tx, cfg, departmentId);
-  const [existing] = await tx
-    .select({ id: menuDayTimetables.id })
-    .from(menuDayTimetables)
-    .where(
-      and(
-        eq(menuDayTimetables.specialDateId, specialDateId),
-        eq(menuDayTimetables.departmentId, departmentId),
-      ),
-    );
-  if (existing === undefined) return;
-  await tx.delete(menuDayTimetables).where(eq(menuDayTimetables.id, existing.id));
-  const clash = await endOffsetClash(tx, cfg, departmentId);
   if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
 }
 
@@ -826,6 +804,18 @@ async function assertPlaced(
  */
 export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
   async copy(tx, _cfg, sourceId, targetId) {
+    const closures = await tx
+      .select({
+        zoneId: zoneClosedTimes.zoneId,
+        startsAt: zoneClosedTimes.startsAt,
+        endsAt: zoneClosedTimes.endsAt,
+      })
+      .from(zoneClosedTimes)
+      .where(eq(zoneClosedTimes.specialDateId, sourceId));
+    if (closures.length > 0)
+      await tx
+        .insert(zoneClosedTimes)
+        .values(closures.map((row) => ({ ...row, specialDateId: targetId })));
     for (const { departmentId, slots } of await dateTimetables(tx, sourceId))
       await writeDay(tx, undefined, { departmentId, specialDateId: targetId }, slots);
   },
@@ -898,12 +888,15 @@ export async function readOpeningHoursModel(
       .get(id)!
       .slice()
       .sort((a, b) => rangeSpan(a, clock.dayCutover).start - rangeSpan(b, clock.dayCutover).start);
-  const dates = await tx
+  const zones = await readZoneClosedTimes(tx, cfg, clock.dayCutover);
+  const dateRows = await tx
     .select({
       id: specialDates.id,
       date: specialDates.date,
       name: specialDates.name,
-      colour: specialDates.colour,
+      kind: specialDates.kind,
+      repeatOn: specialDates.repeatOn,
+      ownHours: specialDates.ownHours,
       closeWholeVenue: specialDates.closeWholeVenue,
     })
     .from(specialDates)
@@ -914,6 +907,7 @@ export async function readOpeningHoursModel(
           ? undefined
           : or(
               gte(specialDates.date, addDays(moment.businessDay, -1)),
+              isNotNull(specialDates.repeatOn),
               inArray(
                 specialDates.id,
                 timetables.flatMap((row) =>
@@ -924,6 +918,21 @@ export async function readOpeningHoursModel(
       ),
     )
     .orderBy(asc(specialDates.date));
+  const stationRows = await tx
+    .select({ specialDateId: specialDateHours.specialDateId })
+    .from(specialDateHours)
+    .where(
+      inArray(
+        specialDateHours.specialDateId,
+        dateRows.map(({ id }) => id),
+      ),
+    );
+  const stationDays = new Set(stationRows.map(({ specialDateId }) => specialDateId));
+  const dates = dateRows.map(({ repeatOn, ...row }) => ({
+    ...row,
+    repeats: repeatOn !== null,
+    hasStationHours: stationDays.has(row.id),
+  }));
   const menus = await tx
     .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
     .from(catalogues)
@@ -938,11 +947,14 @@ export async function readOpeningHoursModel(
       ...menu,
       includes: directIncludedMenus(graph, menu.id).map((id) => menuNames.get(id)!),
     })),
-    specialDates: dates,
+    namedDays: dates,
     departments: departmentRows.map((department) => {
       const days = timetables.filter((row) => row.departmentId === department.id);
       return {
         ...department,
+        zones: zones
+          .filter((zone) => zone.departmentId === department.id)
+          .map(({ id, name, week, dates }) => ({ id, name, week, dates })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
           .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({

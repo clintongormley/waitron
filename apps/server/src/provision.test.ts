@@ -21,10 +21,9 @@ import { parseModuleConfig } from "@waitron/module";
 import { createCategory } from "@waitron/catalogue";
 import {
   readHolidays,
-  readLocalHolidayModel,
+  readHolidayAreaModel,
   replaceWeekHours,
   saveHolidayArea,
-  saveLocalHoliday,
   saveSpecialDate,
   setRoutingCell,
 } from "@waitron/venue-service";
@@ -131,11 +130,11 @@ describe("provisionVenue", () => {
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
         (select cast(count(*) as int) from holiday_geographies) as geographies,
-        (select cast(count(*) as int) from local_holidays) as entries`);
+        (select cast(count(*) as int) from special_dates) as entries`);
     expect(rows[0]).toEqual({ geographies: 0, entries: 0 });
     const read = await withTransaction(db, async (tx) => ({
       may: await readHolidays(tx, cfg, "2026-05-01", "2026-05-31"),
-      model: await readLocalHolidayModel(tx, cfg),
+      model: await readHolidayAreaModel(tx, cfg),
     }));
     // Madrid's 2026: 1 May everywhere, and 2 May, the Comunidad de Madrid's own day.
     expect(read.may.facts.map(({ date, scope }) => ({ date, scope }))).toEqual([
@@ -152,9 +151,8 @@ describe("provisionVenue", () => {
     ]);
     expect(read.model).toMatchObject({
       venue: { country: "ES", provinceCode: "28", city: "Madrid" },
-      localEntryLimit: 2,
-      geographies: [],
-      entries: [],
+      localHolidaysPerYear: 2,
+      chosen: null,
     });
   });
 
@@ -422,7 +420,7 @@ describe("provisionVenue", () => {
 });
 
 describe("clearProvisionFixture", () => {
-  it("clears a venue's local holidays and their geographies before the venue", async () => {
+  it("clears a venue's holiday area geography before the venue", async () => {
     const db = ownerDb();
     const request = venueRequest(nextNif());
     request.location.city = "Vielha e Mijaran";
@@ -434,14 +432,13 @@ describe("clearProvisionFixture", () => {
     const cfg = { locationId: brandLocationId(result.locationId) };
     await withTransaction(db, async (tx) => {
       await saveHolidayArea(tx, cfg, { areaKey: "aran" });
-      await saveLocalHoliday(tx, cfg, null, { date: "2026-07-20", name: "Santa Margarida" });
     });
 
     await clearProvisionFixture(db);
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from local_holidays) as entries,
+        (select cast(count(*) as int) from special_dates) as entries,
         (select cast(count(*) as int) from holiday_geographies) as geographies,
         (select cast(count(*) as int) from locations) as locations`);
     expect(rows[0]).toEqual({ entries: 0, geographies: 0, locations: 0 });
@@ -485,7 +482,6 @@ describe("clearProvisionFixture", () => {
         {
           date: "2026-12-24",
           name: "Christmas Eve",
-          colour: "amber",
           closeWholeVenue: false,
           cells: [
             { subject: restaurant, cell: lunch() },

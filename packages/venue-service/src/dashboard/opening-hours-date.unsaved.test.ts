@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -21,9 +21,27 @@ class DateLeaveApp extends LitElement {
       clockReadable: true,
       dayCutover: "06:00",
       menus: [],
-      specialDates: [
-        { id: "s1", date: "2026-10-12", name: "Holiday", colour: "red", closeWholeVenue: false },
-        { id: "s2", date: "2026-10-13", name: "Party", colour: "blue", closeWholeVenue: false },
+      namedDays: [
+        {
+          id: "s1",
+          date: "2026-10-12",
+          name: "Holiday",
+          kind: "working_day" as const,
+          repeats: false,
+          ownHours: true,
+          hasStationHours: false,
+          closeWholeVenue: false,
+        },
+        {
+          id: "s2",
+          date: "2026-10-20",
+          name: "Party",
+          kind: "working_day" as const,
+          repeats: false,
+          ownHours: true,
+          hasStationHours: false,
+          closeWholeVenue: false,
+        },
       ],
       departments: [
         {
@@ -61,10 +79,12 @@ customElements.define("date-leave-test-app", DateLeaveApp);
 let app: DateLeaveApp;
 const originalUrl = location.href;
 beforeEach(() => {
-  history.replaceState(null, "", "/manage/opening-hours");
+  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+  history.replaceState(null, "", "/manage/opening-hours?week=2026-10-12");
 });
 afterEach(() => {
   app?.remove();
+  vi.useRealTimers();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
 });
@@ -79,9 +99,7 @@ async function mount() {
   const screen = app.shadowRoot!.querySelector<
     HTMLElementTagNameMap["dashboard-opening-hours-screen"]
   >("dashboard-opening-hours-screen")!;
-  await expect.poll(() => screen.shadowRoot?.querySelector("[name=weekMode]")).not.toBeNull();
-  emit(screen.shadowRoot!.querySelector("[name=weekMode]")!, "wt-change", { value: "date" });
-  await expect.poll(() => screen.shadowRoot!.querySelector("[name=specialDateId]")).not.toBeNull();
+  await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
   const week =
     screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
       "opening-hours-week",
@@ -105,35 +123,34 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-describe.each(["en", "es"])("Special-date draft (%s)", (locale) => {
-  it("asks before changing dates and Keep retains the date and staged closed day", async () => {
+describe.each(["en", "es"])("Real-week date draft (%s)", (locale) => {
+  it("asks before stepping weeks and Keep retains the week and staged closed day", async () => {
     setLocale(locale);
     const { screen, week } = await mount();
     week.shadowRoot!.querySelector<HTMLElement>("[data-test=close-date]")!.click();
     await week.updateComplete;
     expect(unload()).toBe(true);
-    const picker =
-      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-        "[name=specialDateId]",
-      )!;
-    emit(picker, "wt-change", { value: "s2" });
+    const next = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!;
+    next.click();
     await choose("keep");
-    expect(picker.value).toBe("s1");
+    expect(location.search).toBe("?week=2026-10-12");
     expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
-    expect(
-      week.shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!
-        .columns[0]!.slots,
-    ).toEqual([]);
-    emit(picker, "wt-change", { value: "s2" });
+    expect(week.shadowRoot!.querySelector("service-grid")!.columns[0]!.slots).toEqual([]);
+    next.click();
     await choose("discard");
-    await expect.poll(() => picker.value).toBe("s2");
+    await expect.poll(() => location.search).toBe("?week=2026-10-19");
     expect(unload()).toBe(false);
   });
-  it.each(["before", "after"])("counts a follow-week edit made %s reconnect", async (when) => {
+  it.each(["before", "after"])("counts a range edit made %s reconnect", async (when) => {
     setLocale(locale);
     const { screen, week } = await mount();
     if (when === "before")
-      week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+      emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+        columnKey: "1",
+        index: 0,
+        startsAt: "12:00",
+        endsAt: "17:00",
+      });
     await week.updateComplete;
     const parent = screen.parentNode!;
     screen.remove();
@@ -143,10 +160,15 @@ describe.each(["en", "es"])("Special-date draft (%s)", (locale) => {
     await screen.updateComplete;
     await week.updateComplete;
     if (when === "after")
-      week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+      emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+        columnKey: "1",
+        index: 0,
+        startsAt: "12:00",
+        endsAt: "17:00",
+      });
     await week.updateComplete;
     expect(unload()).toBe(true);
-    emit(screen.shadowRoot!.querySelector("[name=weekMode]")!, "wt-change", { value: "week" });
+    emit(screen.shadowRoot!.querySelector("[name=realWeek]")!, "wt-change", { checked: false });
     await choose("keep");
     expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
     expect(unload()).toBe(true);
@@ -166,7 +188,7 @@ describe.each(["en", "es"])("Retained date save contract (%s)", (locale) => {
     await week.updateComplete;
     expect(unload()).toBe(true);
     app.failRead = true;
-    week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
+    week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='1']")!.click();
     await expect
       .poll(() => screen.shadowRoot!.querySelector("[data-test=read-error]"))
       .not.toBeNull();
@@ -190,7 +212,7 @@ describe.each(["en", "es"])("Retained date save contract (%s)", (locale) => {
     });
     await week.updateComplete;
     app.failWrite = true;
-    week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
+    week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='1']")!.click();
     await expect
       .poll(
         () =>
@@ -218,18 +240,11 @@ describe.each(["en", "es"])("Retained date save contract (%s)", (locale) => {
   });
 });
 
-it("an inherited date becomes clean again after drafted ranges are returned to Follow", async () => {
+it("discarding an inherited date restores its clean draft", async () => {
   setLocale("en");
   const { screen } = await mount();
-  emit(screen.shadowRoot!.querySelector("[name=specialDateId]")!, "wt-change", { value: "s2" });
-  await expect
-    .poll(
-      () =>
-        screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-          "[name=specialDateId]",
-        )!.value,
-    )
-    .toBe("s2");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
+  await expect.poll(() => location.search).toBe("?week=2026-10-19");
   const week =
     screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
       "opening-hours-week",
@@ -253,17 +268,22 @@ it("an inherited date becomes clean again after drafted ranges are returned to F
   dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
   await week.updateComplete;
   expect(unload()).toBe(true);
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
-  await week.updateComplete;
-  expect(unload()).toBe(false);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-week]")!.click();
+  await choose("discard");
+  await expect.poll(() => unload()).toBe(false);
   expect(app.writes).toEqual([]);
 });
 
-it("a saved date stays dirty on Follow until its original own ranges are restored", async () => {
+it("a saved date stays dirty until its original own ranges are restored", async () => {
   setLocale("en");
   const { week } = await mount();
   expect(unload()).toBe(false);
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=follow-week]")!.click();
+  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+    columnKey: "1",
+    index: 0,
+    startsAt: "12:00",
+    endsAt: "17:00",
+  });
   await week.updateComplete;
   expect(unload()).toBe(true);
   emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
@@ -275,4 +295,54 @@ it("a saved date stays dirty on Follow until its original own ranges are restore
   await week.updateComplete;
   expect(unload()).toBe(false);
   expect(app.writes).toEqual([]);
+});
+
+it("Keep preserves a staged normal week when the Real week switch is selected", async () => {
+  const { screen } = await mount();
+  emit(screen.shadowRoot!.querySelector("[name=realWeek]")!, "wt-change", { checked: false });
+  await expect.poll(() => location.search).toBe("");
+  const week = screen.shadowRoot!.querySelector("opening-hours-week")!;
+  await week.updateComplete;
+  emit(week.shadowRoot!.querySelector("service-grid")!, "grid-block-change", {
+    columnKey: "1",
+    index: 0,
+    startsAt: "10:00",
+    endsAt: "15:00",
+  });
+  await week.updateComplete;
+  emit(screen.shadowRoot!.querySelector("[name=realWeek]")!, "wt-change", { checked: true });
+  await choose("keep");
+  expect(location.search).toBe("");
+  expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
+  expect(week.shadowRoot!.querySelector("service-grid")!.columns[0]!.slots).toEqual([
+    { periodId: "p1", startsAt: "10:00", endsAt: "15:00" },
+  ]);
+  expect(unload()).toBe(true);
+  expect(app.writes).toEqual([]);
+});
+
+it("keeps a real-date draft when a fresh snapshot is supplied before reconnect scopes register", async () => {
+  const { week } = await mount();
+  const grid = week.shadowRoot!.querySelector("service-grid")!;
+  grid.dispatchEvent(
+    new CustomEvent("grid-block-change", {
+      detail: { columnKey: "1", index: 0, startsAt: "12:00", endsAt: "17:00" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await week.updateComplete;
+  const parent = week.parentNode!;
+  week.remove();
+  week.department = structuredClone(week.department);
+  parent.appendChild(week);
+  await week.updateComplete;
+  expect(week.shadowRoot!.querySelector("service-grid")!.columns[0]!.slots).toEqual([
+    { periodId: "p1", startsAt: "12:00", endsAt: "17:00" },
+  ]);
+  expect(
+    week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-date][data-day='1']",
+    )!.disabled,
+  ).toBe(false);
 });

@@ -84,7 +84,6 @@ function validTables(): Tables {
         location_id: "location",
         date: "2026-12-25",
         name: "Christmas",
-        colour: "red",
         close_whole_venue: 0,
       },
     ],
@@ -112,6 +111,71 @@ function validTables(): Tables {
 function refusal(field: string) {
   return expect.objectContaining({ code: "setup.request_invalid", params: { field } });
 }
+
+describe("named days in configuration transfer", () => {
+  function namedTables(): Tables {
+    return {
+      special_dates: [
+        {
+          id: "day",
+          location_id: "venue",
+          date: "2026-12-25",
+          name: "Christmas",
+          kind: "holiday",
+          repeat_on: null,
+          own_hours: 0,
+          close_whole_venue: 0,
+        },
+      ],
+    };
+  }
+
+  it.each([
+    ["kind", "other", "special_dates"],
+    ["kind", null, "special_dates"],
+    ["repeat_on", "12-24", "special_dates.repeat_on"],
+    ["repeat_on", true, "special_dates.repeat_on"],
+    ["own_hours", true, "special_dates.own_hours"],
+    ["own_hours", null, "special_dates.own_hours"],
+  ])("refuses named-day %s=%s", (key, value, field) => {
+    const tables = namedTables();
+    tables.special_dates![0]![key as string] = value;
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal(field as string));
+  });
+
+  it("refuses own hours combined with whole-venue closure", () => {
+    const tables = namedTables();
+    Object.assign(tables.special_dates![0]!, { own_hours: 1, close_whole_venue: 1 });
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_dates"));
+  });
+
+  it("refuses station cells on a repeating named day", () => {
+    const tables = validTables();
+    tables.special_dates![0]!.repeat_on = "12-25";
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_date_hours"));
+  });
+
+  it.each([
+    ["2026-12-25", "12-25", "2027-12-25", null],
+    ["2027-12-25", null, "2026-12-25", "12-25"],
+    ["2026-12-25", "12-25", "2028-12-25", "12-25"],
+  ])("refuses colliding occurrences %s/%s and %s/%s", (a, ar, b, br) => {
+    const tables = namedTables();
+    const row = tables.special_dates![0]!;
+    Object.assign(row, { date: a, repeat_on: ar });
+    tables.special_dates!.push({ ...row, id: "other", date: b, repeat_on: br });
+    expect(() => validateHoursConfiguration(tables)).toThrowError(refusal("special_dates.date"));
+  });
+
+  it("accepts a one-off before the repeat begins and independent venues", () => {
+    const tables = namedTables();
+    const row = tables.special_dates![0]!;
+    Object.assign(row, { date: "2027-12-25", repeat_on: "12-25", own_hours: 1 });
+    tables.special_dates!.push({ ...row, id: "past", date: "2026-12-25", repeat_on: null });
+    tables.special_dates!.push({ ...row, id: "elsewhere", location_id: "other" });
+    expect(() => validateHoursConfiguration(tables)).not.toThrow();
+  });
+});
 
 describe("validateHoursConfiguration", () => {
   it.each(["hours_week_cells", "special_date_hours"] as const)(
@@ -302,9 +366,9 @@ describe("validateHoursConfiguration", () => {
     ],
     ["a blank name", (t) => (t.special_dates![0]!.name = "  "), "special_dates.name"],
     [
-      "a colour outside the palette",
-      (t) => (t.special_dates![0]!.colour = "pink"),
-      "special_dates.colour",
+      "a kind outside the vocabulary",
+      (t) => (t.special_dates![0]!.kind = "party"),
+      "special_dates",
     ],
     [
       "a whole-venue flag other than 0 or 1",
@@ -372,7 +436,6 @@ describe("validateHoursConfiguration", () => {
       location_id: "location",
       date: "2026-12-24",
       name: "Christmas Eve",
-      colour: "amber",
       close_whole_venue: 0,
     });
     tables.special_date_hours!.push({
@@ -602,12 +665,6 @@ const ISLE = "g-isle";
  * with its area chosen. Each has two entries in 2026 and one in 2027.
  */
 function holidayTables(): Tables {
-  const entry = (geographyId: string, date: string, name = `Fiesta ${date}`): Row => ({
-    id: randomUUID(),
-    geography_id: geographyId,
-    date,
-    name,
-  });
   return {
     holiday_geographies: [
       {
@@ -629,19 +686,11 @@ function holidayTables(): Tables {
         area_key: "isle-a",
       },
     ],
-    local_holidays: [
-      entry(NORTH, "2026-05-15"),
-      entry(NORTH, "2026-09-08"),
-      entry(NORTH, "2027-05-15"),
-      entry(ISLE, "2026-05-15"),
-      entry(ISLE, "2026-06-24"),
-      entry(ISLE, "2027-06-24"),
-    ],
   };
 }
 
 describe("validateHolidayConfiguration", () => {
-  it("accepts every geography's entries at the allowance, and a bundle with no holiday tables", () => {
+  it("accepts holiday area geographies and a bundle with no holiday tables", () => {
     expect(() => validateHolidayConfiguration(holidayTables(), packs(2))).not.toThrow();
     expect(() => validateHolidayConfiguration({}, packs(2))).not.toThrow();
   });
@@ -651,82 +700,6 @@ describe("validateHolidayConfiguration", () => {
       holiday_geographies: [{ ...holidayTables().holiday_geographies![0]!, country: "ZY" }],
     };
     expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
-  });
-
-  describe.each([1, 3])("with an allowance of %i", (limit) => {
-    const days = (geographyId: string, year: number, count: number): Row[] =>
-      Array.from({ length: count }, (_, index) => ({
-        id: randomUUID(),
-        geography_id: geographyId,
-        date: `${year}-03-${String(index + 1).padStart(2, "0")}`,
-        name: `Day ${index + 1}`,
-      }));
-    const places = [
-      [NORTH, 2026],
-      [NORTH, 2027],
-      [ISLE, 2026],
-      [ISLE, 2027],
-    ] as const;
-
-    it("accepts every geography and year holding exactly that many", () => {
-      const tables = holidayTables();
-      tables.local_holidays = places.flatMap(([geography, year]) => days(geography, year, limit));
-      expect(() => validateHolidayConfiguration(tables, packs(limit))).not.toThrow();
-    });
-
-    it.each(places)(
-      "refuses one more for %s in %i, the retained geography included",
-      (over, overYear) => {
-        const tables = holidayTables();
-        tables.local_holidays = places.flatMap(([geography, year]) =>
-          days(geography, year, geography === over && year === overYear ? limit + 1 : limit),
-        );
-        expect(() => validateHolidayConfiguration(tables, packs(limit))).toThrowError(
-          refusal("local_holidays"),
-        );
-      },
-    );
-  });
-
-  it("refuses any entry of a geography whose country has no holiday capability", () => {
-    const tables = holidayTables();
-    tables.holiday_geographies![0]!.country = "ZY";
-    tables.holiday_geographies![1]!.country = "ZY";
-    tables.holiday_geographies![1]!.area_key = null;
-    tables.local_holidays = tables.local_holidays!.slice(0, 1);
-    expect(() => validateHolidayConfiguration(tables, packs(2))).toThrowError(
-      refusal("local_holidays"),
-    );
-  });
-
-  it("lets a Spanish geography carry Spain's two local days a year, and refuses a third", () => {
-    const sevilla: Tables = {
-      holiday_geographies: [
-        {
-          id: "g-sevilla",
-          location_id: "location",
-          country: "ES",
-          province_code: "41",
-          city: "Sevilla",
-          city_key: "sevilla",
-          area_key: null,
-        },
-      ],
-      local_holidays: ["2026-05-28", "2026-06-04"].map((date) => ({
-        id: randomUUID(),
-        geography_id: "g-sevilla",
-        date,
-        name: "Fiesta local",
-      })),
-    };
-    expect(() => validateHolidayConfiguration(sevilla)).not.toThrow();
-    sevilla.local_holidays!.push({
-      id: randomUUID(),
-      geography_id: "g-sevilla",
-      date: "2026-10-12",
-      name: "Fiesta local",
-    });
-    expect(() => validateHolidayConfiguration(sevilla)).toThrowError(refusal("local_holidays"));
   });
 
   it.each<[string, (tables: Tables) => void, string]>([
@@ -790,45 +763,8 @@ describe("validateHolidayConfiguration", () => {
       "an area of a country with no holiday capability",
       (t) => {
         t.holiday_geographies![1]!.country = "ZY";
-        t.local_holidays = [];
       },
       "holiday_geographies.area_key",
-    ],
-    [
-      "an entry id used twice",
-      (t) => (t.local_holidays![1]!.id = t.local_holidays![0]!.id),
-      "local_holidays.id",
-    ],
-    [
-      "an entry whose geography is not in the bundle",
-      (t) => (t.local_holidays![0]!.geography_id = "g-elsewhere"),
-      "local_holidays.geography_id",
-    ],
-    [
-      "an impossible date",
-      (t) => (t.local_holidays![0]!.date = "2026-02-30"),
-      "local_holidays.date",
-    ],
-    [
-      "a date not written as YYYY-MM-DD",
-      (t) => (t.local_holidays![0]!.date = "2026-5-15"),
-      "local_holidays.date",
-    ],
-    [
-      "two entries of one geography on one date, under different names",
-      (t) => (t.local_holidays![1]!.date = "2026-05-15"),
-      "local_holidays.date",
-    ],
-    ["a blank name", (t) => (t.local_holidays![0]!.name = " "), "local_holidays.name"],
-    [
-      "a name the writer would have trimmed",
-      (t) => (t.local_holidays![0]!.name = " Fiesta "),
-      "local_holidays.name",
-    ],
-    [
-      "a name past the limit",
-      (t) => (t.local_holidays![0]!.name = "x".repeat(201)),
-      "local_holidays.name",
     ],
   ])("refuses %s", (_, edit, field) => {
     const tables = holidayTables();
@@ -843,12 +779,6 @@ describe("validateHolidayConfiguration", () => {
     expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
   });
 
-  it("accepts the same date for two geographies", () => {
-    const tables = holidayTables();
-    expect(tables.local_holidays!.filter((row) => row.date === "2026-05-15")).toHaveLength(2);
-    expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
-  });
-
   it("is run by the venue-service transfer's validate callback, beside the Hours check", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
     const both = { ...validTables(), ...holidayTables() };
@@ -859,22 +789,16 @@ describe("validateHolidayConfiguration", () => {
     both.holiday_geographies![1]!.province_code = "25";
     both.holiday_geographies![1]!.area_key = "aran";
     expect(() => validate(both)).not.toThrow();
-    both.local_holidays![0]!.date = "2026-02-30";
-    expect(() => validate(both)).toThrowError(refusal("local_holidays.date"));
   });
 
-  it("declares geographies after the location they remap to, and entries after their geography", () => {
+  it("declares holiday geographies and excludes the retired local entries", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names.slice(-3)).toEqual([
-      "special_date_hours_periods",
-      "holiday_geographies",
-      "local_holidays",
-    ]);
-    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-2)).toEqual({
+    expect(names.slice(-2)).toEqual(["special_date_hours_periods", "holiday_geographies"]);
+    expect(names).not.toContain("local_holidays");
+    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-1)).toEqual({
       name: "holiday_geographies",
       locationColumns: ["location_id"],
     });
-    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-1)).toEqual({ name: "local_holidays" });
   });
 });
 
@@ -1870,9 +1794,7 @@ describe("service-period configuration", () => {
     "checks skipped endpoints on the next calendar morning (%s %s–%s)",
     (date, startsAt, endsAt, dayCutover, field) => {
       const t = tables();
-      t.special_dates = [
-        { id: "spring", date, name: "Spring", colour: "red", close_whole_venue: 0 },
-      ];
+      t.special_dates = [{ id: "spring", date, name: "Spring", close_whole_venue: 0 }];
       t.menu_day_timetables![0]!.weekday = null;
       t.menu_day_timetables![0]!.special_date_id = "spring";
       t.menu_slots![0]!.starts_at = startsAt;
@@ -1884,9 +1806,7 @@ describe("service-period configuration", () => {
   );
   it("checks a start exactly at changeover on the business date", () => {
     const t = tables();
-    t.special_dates = [
-      { id: "spring", date: "2027-03-27", name: "Spring", colour: "red", close_whole_venue: 0 },
-    ];
+    t.special_dates = [{ id: "spring", date: "2027-03-27", name: "Spring", close_whole_venue: 0 }];
     t.menu_day_timetables![0]!.weekday = null;
     t.menu_day_timetables![0]!.special_date_id = "spring";
     t.menu_slots![0]!.starts_at = "02:30:00";
@@ -1894,5 +1814,117 @@ describe("service-period configuration", () => {
     expect(() =>
       VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, { ...context, dayCutover: "02:30" }),
     ).not.toThrow();
+  });
+});
+
+describe("zone closed times in configuration transfer", () => {
+  const clock = {
+    createdAt: new Date("2026-10-08T12:00:00Z"),
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+  };
+  function closureTables(): Tables {
+    return {
+      floor_zones: [{ id: "terrace", active: 1 }],
+      zone_service_policies: [{ zone_id: "terrace" }],
+      special_dates: [
+        {
+          id: "own-day",
+          location_id: "venue",
+          date: "2026-12-25",
+          name: "Christmas",
+          kind: "holiday",
+          colour: "red",
+          repeat_on: null,
+          own_hours: 1,
+          close_whole_venue: 0,
+        },
+      ],
+      zone_closed_times: [
+        {
+          id: "closed",
+          zone_id: "terrace",
+          weekday: 5,
+          special_date_id: null,
+          starts_at: "23:00:00",
+          ends_at: "04:00:00",
+        },
+      ],
+    };
+  }
+  it("accepts adjacent ranges, a cutover end and separate weekday/date scopes", () => {
+    const tables = closureTables();
+    tables.zone_closed_times!.push(
+      {
+        id: "early",
+        zone_id: "terrace",
+        weekday: 5,
+        special_date_id: null,
+        starts_at: "22:00:00",
+        ends_at: "23:00:00",
+      },
+      {
+        id: "dated",
+        zone_id: "terrace",
+        weekday: null,
+        special_date_id: "own-day",
+        starts_at: "23:00:00",
+        ends_at: "04:00:00",
+      },
+      {
+        id: "other-weekday",
+        zone_id: "terrace",
+        weekday: 6,
+        special_date_id: null,
+        starts_at: "23:00:00",
+        ends_at: "04:00:00",
+      },
+    );
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).not.toThrow();
+  });
+  it.each([
+    ["foreign zone", { zone_id: "foreign" }, "zone_closed_times.zone_id"],
+    ["both day selectors", { special_date_id: "own-day" }, "zone_closed_times"],
+    ["neither day selector", { weekday: null }, "zone_closed_times"],
+    [
+      "foreign date",
+      { weekday: null, special_date_id: "foreign" },
+      "zone_closed_times.special_date_id",
+    ],
+    ["string weekday", { weekday: "5" }, "zone_closed_times.weekday"],
+    ["fractional weekday", { weekday: 1.5 }, "zone_closed_times.weekday"],
+    ["negative weekday", { weekday: -1 }, "zone_closed_times.weekday"],
+    ["late weekday", { weekday: 7 }, "zone_closed_times.weekday"],
+    ["noncanonical start", { starts_at: "23:00" }, "zone_closed_times.starts_at"],
+    ["nonzero seconds", { ends_at: "04:00:01" }, "zone_closed_times.ends_at"],
+    ["empty range", { ends_at: "23:00:00" }, "zone_closed_times"],
+    ["backwards range", { ends_at: "22:00:00" }, "zone_closed_times"],
+    ["off-step start", { starts_at: "23:05:00" }, "zone_closed_times"],
+    ["off-step end", { ends_at: "03:55:00" }, "zone_closed_times"],
+  ])("refuses %s", (_name, changes, field) => {
+    const tables = closureTables();
+    Object.assign(tables.zone_closed_times![0]!, changes);
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
+      refusal(field as string),
+    );
+  });
+  it("refuses a dated closure while the named day keeps the week", () => {
+    const tables = closureTables();
+    tables.special_dates![0]!.own_hours = 0;
+    Object.assign(tables.zone_closed_times![0]!, { weekday: null, special_date_id: "own-day" });
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
+      refusal("zone_closed_times.special_date_id"),
+    );
+  });
+  it("refuses overlapping ranges in the same zone and weekday", () => {
+    const tables = closureTables();
+    tables.zone_closed_times!.push({
+      ...tables.zone_closed_times![0]!,
+      id: "overlap",
+      starts_at: "23:15:00",
+    });
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
+      refusal("zone_closed_times"),
+    );
   });
 });

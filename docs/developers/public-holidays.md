@@ -1,103 +1,92 @@
 # Public holidays
 
-A venue manager planning opening hours needs to know which days are public holidays where the venue
-is. Waitron shows them on the Station hours page (`/manage/hours`) in two layers. The national and regional
-holidays come from the official list, transcribed into the country's pack and shipped with the
-application. The town's own local holidays are entered by the venue, because Spain publishes them
-separately for each municipality and Waitron holds no municipality list.
+You plan holidays in Opening hours → Calendar (`/manage/opening-hours/view/calendar`). The official
+national and regional dates come from the country's shipped calendar. Add your town's holidays
+as your own named days with kind Holiday, alongside other holidays you choose for your venue.
+Your own days belong to the venue, rather than to a saved town address. Their dates can repeat
+annually, and the country's local-holiday number does not cap them.
 
-Holidays are information. Reading them writes nothing, and no holiday closes the venue, changes
-its hours or creates a special date by itself. The one thing a holiday affects is a name a manager
-is already writing: "Make this a special date" starts its draft with the day's holiday names, and
-duplicating a special date onto a holiday names each copy after that holiday
-(`duplicateHolidayNamedSpecialDates`, `packages/venue-service/src/holidays.ts`). The manager still
-decides whether the venue closes.
+A public holiday is information: reading one does not write a named day or change opening hours.
+Add on a public date starts the named-day draft with its public name and Holiday kind; you decide
+whether to keep the normal week, give the date its own hours, or close the venue. The reader is
+`readNamedDaysModel` in `packages/venue-service/src/named-days.ts`; the editor and Calendar actions
+are in `packages/venue-service/src/dashboard/named-day-editor.ts` and `hours-calendar.ts`.
 
 ## Where each part lives
 
-- **The country contract**, `CountryHolidayCalendar`, is in `packages/country/src/holidays.ts`. A
-  country pack that has holiday data sets `holidayCalendar`; a pack without it has no shipped
-  holidays and allows no local entries.
-- **Spain's data** is in `packages/country-es/src/data/`: `es-2026.ts` holds the 2026 rows,
-  `regions.ts` maps each province code to its region and lists the territorial areas, and
-  `sources.ts` names each official source with its address and SHA-256. The official pages
-  themselves are archived byte for byte in `packages/country-es/src/data/sources/`, whose
-  `README.md` says where each was fetched and what it is used for.
-- **A venue's local holidays** are in two venue-service tables (migration
-  `packages/venue-service/drizzle/0023_public_holidays.sql`). `holiday_geographies` holds one row
-  for each address the venue has entered holidays or chosen an area for, keyed by country, province
-  code and a normalized city, with the city as it was spelled and the territorial area chosen there.
-  `local_holidays` holds the entries, each a date and a name.
-- **The reader and writers** are in `packages/venue-service/src/holidays.ts`, and the routes under
-  `/management-api/venue-service/` in `routes.ts` beside it. Reading needs `venue.view`; every
-  write needs `venue_service.manage`.
+- `CountryHolidayCalendar` in `packages/country/src/holidays.ts` describes shipped facts and their
+  coverage. A pack without it supplies no official holidays; you can still add your own days.
+- Spain's data lives in `packages/country-es/src/data/`: `es-2026.ts` holds the rows, `regions.ts`
+  maps provinces and territorial areas, and `sources.ts` holds source addresses and hashes.
+  The archived pages and their provenance remain in `packages/country-es/src/data/sources/`.
+- Own days live in `special_dates`, declared in `packages/venue-service/src/schema/hours.ts`.
+  `saveSpecialDate` in `hours.ts` validates their kind, repeat, own-hours and closure choices.
+  `packages/venue-service/drizzle/0036_hard_jubilee.sql` retires `local_holidays` and the transitional colour.
+- `holiday_geographies` in `packages/venue-service/src/schema/holidays.ts` retains the holiday-area
+  choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in `holidays.ts` read and write
+  that choice; the area control is in Calendar. The routes in `routes.ts` require `venue.view`
+  for reads and `venue_service.manage` for writes.
 
-## How a venue's holidays are worked out
+## Official dates follow your address; own days follow your venue
 
-The venue's address decides everything, and Waitron never guesses a missing part. The country comes
-from the taxpayer row, the province from `locations.province` through the pack's province list, and
-the city from `locations.city`. A province maps to a region, and the region selects that year's
-national and regional rows. A province the pack does not recognise gets no shipped holidays at all,
-rather than a guess at "all of Spain".
+`readAddress` and `readHolidays` in `packages/venue-service/src/holidays.ts` resolve the country
+from the taxpayer, the province from the pack's province list, and the city from the location.
+A missing or unknown province supplies no official facts. If the official calendar offers a
+territorial choice, choose it in Calendar; until then, only facts certain for the whole province
+are shown. The 2026 territorial source notes remain in the archived sources README.
 
-Two places need more than the province. In the 2026 annex, each Canary island has a holiday of its
-own, and Arán has 17 June where the rest of Lleida has 26 December. A venue in one of those
-provinces chooses its area under Special dates. Until it does, it sees only the holidays that apply
-to the whole province, and the calendar says the area is needed. Canary provinces are refused at
-setup today, so in practice only the Lleida choice is reachable.
+An area's identity uses country, province and normalized city. Changing the address stops using
+that area's choice, but keeps it stored for a later matching address. `holidayCityKey` normalizes
+Unicode, trims and collapses spaces, and lowercases; accents and punctuation still count.
+Your own holidays are not filtered by that identity (`readHolidays` reads `special_dates` by
+`locationId`). You can add them even without a recognized holiday address or country calendar.
 
-Local holidays belong to the address they were entered for. When the city or province changes, the
-old entries stay stored and are hidden, with a note naming the old city; when the address matches
-again, they come back under the same ids. The city is compared after normalizing Unicode, trimming,
-collapsing spaces and lowercasing, so "Villa  Real" and "villa real" are the same place, while
-accents and punctuation still count.
+Each read supplies coverage for every year it spans. Calendar reports official and local coverage
+independently (`hours-calendar.ts`, the named-month and retained date-panel renderers).
 
-Each year of a read carries a coverage entry that says how complete it is, and the Hours calendar
-puts each state into words for the manager (the `hours.calendar.coverage.*` strings):
+| `nationalRegional` | Meaning |
+| --- | --- |
+| `complete` | The year's applicable shipped official dates are included. |
+| `area_required` | Only whole-province facts are shown until you choose an area. |
+| `missing_year` | No official data is shipped for that year. |
+| `unknown_region` | The province cannot be resolved for official data. |
+| `unsupported_country` | The country has no shipped holiday calendar. |
 
-| `nationalRegional`    | Meaning                                                                         |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `complete`            | The year is shipped and every shipped holiday that applies is shown.            |
-| `area_required`       | Only holidays certain for the whole province are shown until an area is chosen. |
-| `missing_year`        | The year is not shipped, so no official holiday is shown.                       |
-| `unknown_region`      | The province is missing or not recognised, so no official holiday is shown.     |
-| `unsupported_country` | The country's pack has no holiday data.                                         |
+`local` is `owner_entered` if an own Holiday occurs anywhere in that year, including a yearly
+repeat. Otherwise the reader reports `address_unresolved`, `unsupported_country` or `none_entered`
+from the holiday address and calendar. Those states say that no own holidays have been entered;
+none prevents you adding one. A January read can therefore report owner-entered coverage for an
+own holiday in December. `holidays.test.ts` exercises that year-wide read and annual repeats.
+Working days do not count as local holidays, and own holidays do not become official facts.
 
-`local` is `address_unresolved` whenever the address does not resolve: no installed pack for the
-country, a missing or unrecognised province, or a missing city. Only for a resolved address is it
-`unsupported_country`, when the pack has no holiday data, and otherwise `owner_entered` or
-`none_entered`. "None entered" means only that nobody entered any; it does not say the town has
-none.
+## The local number is information
 
-## The local allowance
-
-A country's `localEntryLimit` caps how many local holidays one address may hold in a civil year.
-Spain's is 2, from BOE-A-2025-21667: "hasta dos días de cada año natural con carácter de fiestas
-locales". The writer refuses one more with `holiday.local_limit`, and a configuration import
-refuses a bundle holding more with `setup.request_invalid`. The database does not count them, so a
-raw write outside those two paths can store more.
-
-A local holiday is the venue's own assertion. Nothing checks it against the town council's list.
+`localEntryLimit` remains in the country contract and reaches Calendar as `localHolidaysPerYear`.
+Spain's 2 comes from BOE-A-2025-21667: "hasta dos días de cada año natural con carácter de fiestas
+locales". The source is archived in `packages/country-es/src/data/sources/BOE-A-2025-21667.xml`.
+It is guidance about the public calendar, not a limit on your own named holidays.
+`saveSpecialDate` and configuration validation do not count own holidays against it; the
+three-own-holidays case in `packages/venue-service/src/holidays.test.ts` exercises the writer.
+An own holiday is your assertion; these paths do not check a municipal list.
 
 ## What a configuration transfer carries
 
-An export carries every geography of the venue, matching or retained, with its area choice and all
-its entries (`VENUE_SERVICE_CONFIGURATION_TRANSFER`, `packages/venue-service/src/configuration-transfer.ts`).
-It carries no shipped holiday, no source hash and no data version: the receiving build reads its
-own. On import every row gets a new id and belongs to the receiving venue, and which geography is
-current follows the receiving venue's own address.
+`VENUE_SERVICE_CONFIGURATION_TRANSFER` in `packages/venue-service/src/configuration-transfer.ts`
+carries named days and retained holiday-area geographies, without local-holiday entries or the
+retired colour. It also carries dated department schedules and zone closed times. Public facts,
+source hashes and shipped data versions come from the receiving build's pack.
 
-`validateHolidayConfiguration`, beside the file's Hours check, judges the holiday rows by the
-receiving build's packs. It refuses a country or province code the pack does not have, a blank city
-or one with spaces around it (the writer trims the city), a city key that is not the city's
-normalized form, two geographies for one place, an area the pack does not offer for that province,
-an entry whose geography is not in the bundle, an impossible or repeated date, a name the writer
-would trim or refuse, and more entries in a civil year than the pack allows. A refusal is
-`setup.request_invalid` naming the table or column, and the venue is not created. The cases are in that file's tests and in "public
-holidays in a configuration transfer" in `apps/server/src/configuration-transfer.test.ts`. A bundle
-from before the holiday tables existed is refused by the module schema version check.
+`validateHolidayConfiguration` validates geographies and area choices against the receiving packs;
+`validateHoursConfiguration` validates named days, their occurrences and station cells. Named-day
+and zone configuration tests are in `packages/venue-service/src/configuration-transfer.test.ts`.
+Retiring the old table and colour requires a venue reset; it does not migrate the old local entries
+into named days. Historical plans describe the earlier allowance and address-owned entries; their
+2026-10-09 pointers identify this replacement.
 
-## What has been verified, and what has not
+## Earlier source verification and its limits
+
+The dated observations below retain the 2026-10-06 source receipts. For the current named-day
+model, use the sections above; the old local-entry storage and allowance no longer apply.
 
 The 2026 data was checked against the archived annex by a test, not by reading:
 
@@ -168,7 +157,17 @@ These steps assume Spain; another country follows the same shape with its own of
    pass. Record the counts and the comparison result in the pull request. A data-only update needs
    no database migration.
 6. **Ship.** Open a signed-off pull request through the usual review, hook and CI. Update the
-   coverage only for the years and regions you compared. A release changes no stored row: "reads a
+   coverage only for the years and regions you compared. Reading the new shipped data does not
+   author named days: `readHolidays` in `packages/venue-service/src/holidays.ts` reads the country
+   calendar and stored named days, and returns facts and coverage. Run the holiday suites above
+   to check the current reader; the earlier local-table receipt below is historical.
+
+### Earlier data-revision receipt
+
+**2026-10-09, A366 slice 2:** the 2026-10-06 data-revision experiment described here used
+`local_holidays`, which the slice now retires. It is not evidence about today's named-day writes.
+
+The earlier receipt asserted: "reads a
    data revision's facts, version and allowance, leaving every stored row as it was"
    (`packages/venue-service/src/holidays.test.ts`) reads a venue through a revised pack and finds its
    `local_holidays`, `holiday_geographies` and `special_dates` rows unchanged. It does not compare a

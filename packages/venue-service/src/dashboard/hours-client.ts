@@ -1,11 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type {
-  HolidayGeography,
-  HolidayRead,
-  LocalHoliday,
-  LocalHolidayInput,
-  LocalHolidayModel,
-} from "../holiday-types.js";
+import type { HolidayGeography, HolidayRead } from "../holiday-types.js";
 import type {
   HoursModel,
   HoursSubject,
@@ -56,22 +50,6 @@ export class HoursApi {
     );
   }
 
-  /** {@link watchHours} for the local holiday model. */
-  watchLocalHolidays(
-    apply: (model: LocalHolidayModel) => void,
-    failed: (error: unknown) => void,
-    recovered: () => void,
-  ): () => void {
-    return this.#watches.watch(
-      "venue-service:local-holidays",
-      QUERY_DEPENDENCIES.holidays,
-      () => this.loadLocalHolidays(),
-      apply,
-      failed,
-      recovered,
-    );
-  }
-
   /**
    * After a write, has every attached watch read again, so the write shows even when the change
    * feed delivers nothing. With live data it invalidates the change types Hours reads, which
@@ -109,12 +87,6 @@ export class HoursApi {
     });
   }
 
-  loadLocalHolidays(): Promise<LocalHolidayModel> {
-    return this.request<LocalHolidayModel>(`${BASE}/local-holidays`, "GET", undefined, {
-      passive: true,
-    });
-  }
-
   /** Null when the server cleared a choice it had never stored, and so saved nothing. */
   async saveHolidayArea(areaKey: string | null): Promise<HolidayGeography | null> {
     return (
@@ -122,20 +94,5 @@ export class HoursApi {
         areaKey,
       })) ?? null
     );
-  }
-
-  /** Creates a local holiday when `id` is null, otherwise edits it in place. */
-  saveLocalHoliday(id: string | null, input: LocalHolidayInput): Promise<LocalHoliday> {
-    return id === null
-      ? this.request(`${BASE}/local-holidays`, "POST", input)
-      : this.request(`${BASE}/local-holidays/${encodeURIComponent(id)}`, "PUT", input);
-  }
-
-  deleteLocalHoliday(id: string): Promise<void> {
-    return this.request(`${BASE}/local-holidays/${encodeURIComponent(id)}`, "DELETE");
-  }
-
-  deleteRetainedGeography(id: string): Promise<void> {
-    return this.request(`${BASE}/holiday-geographies/${encodeURIComponent(id)}`, "DELETE");
   }
 }

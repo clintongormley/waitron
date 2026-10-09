@@ -73,8 +73,12 @@ it("refreshes Opening hours from its periods, ranges, dates and menu names", () 
     "menu_day_timetables",
     "menu_slots",
     "special_dates",
+    "special_date_hours",
     "departments",
     "catalogues",
     "locations",
+    "zone_closed_times",
+    "zone_service_policies",
+    "floor_zones",
   ]);
 });

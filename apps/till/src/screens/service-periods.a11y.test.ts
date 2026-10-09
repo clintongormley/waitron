@@ -39,6 +39,67 @@ for (const locale of ["en-GB", "es-ES"] as const) {
     for (const width of [390, 1280]) {
       describe(`${locale} ${theme} ${width}px`, () => {
         for (const kind of ["counter", "table"] as const) {
+          it(`${kind} announces a closed zone and keeps its basket accessible`, async () => {
+            const previousLocale = currentLocale();
+            try {
+              setLocale(locale);
+              await page.viewport(width, 900);
+              expect(window.innerWidth).toBe(width);
+              const store = new WorkingOrderStore();
+              store.addProduct(coffee, "2");
+              const shared = {
+                service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
+                zoneName: "Terrace",
+                departmentName: "Restaurant",
+                products: [coffee],
+                menus: menus.map((menu) => ({ ...menu, orderable: true })),
+              };
+              const { el, host } =
+                kind === "counter"
+                  ? await mountWidget<TillCounterScreen>(
+                      "till-counter-screen",
+                      {
+                        ...shared,
+                        embedded: true,
+                        store,
+                        counterTab: {
+                          key: "counter",
+                          title: "Counter",
+                          columns: 4,
+                          cards: [
+                            { type: "product-grid", colSpan: 2, rowSpan: 2, config: {} },
+                            { type: "basket", colSpan: 2, rowSpan: 2, config: {} },
+                          ],
+                        },
+                      },
+                      theme,
+                    )
+                  : await mountWidget<TillTableOrderScreen>(
+                      "till-table-order-screen",
+                      { ...shared, draftStore: store },
+                      theme,
+                    );
+              const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-zone-closed]");
+              expect(notice?.textContent?.trim()).toBe(
+                locale === "en-GB"
+                  ? "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area."
+                  : "Terrace está cerrada: no se puede pedir nada nuevo aquí. Las cuentas se pueden cobrar o mover a otra zona.",
+              );
+              expect(notice!.getAttribute("role")).toBe("status");
+              expect(notice!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+              expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+              expect(store.lines.map((line) => [line.product.id, line.quantity])).toEqual([
+                ["coffee", "2"],
+              ]);
+              await expectNoA11yViolations(host);
+              await page.screenshot({
+                path: `../__screenshots__/a366-zone-closed/${kind}-${locale}-${theme}-${width}.png`,
+              });
+            } finally {
+              setLocale(previousLocale);
+              await page.viewport(1280, 768);
+            }
+          });
           it(`${kind} announces the closed department and keeps a readable basket`, async () => {
             const previousLocale = currentLocale();
             try {
@@ -47,7 +108,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               const store = new WorkingOrderStore();
               store.addProduct(coffee, "2");
               const shared = {
-                service: { open: false, periodName: null, keepOpen: null },
+                service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
                 departmentName: "Restaurant",
                 products: [coffee],
                 menus,
@@ -111,6 +172,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                 const shared = {
                   service: {
                     open: state === "last-orders",
+                    zoneOpen: true,
                     periodName: state === "last-orders" ? "Breakfast" : null,
                     keepOpen: null,
                   },

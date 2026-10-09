@@ -1,5 +1,11 @@
 # Public holidays implementation plan (A261 step 6)
 
+> **2026-10-09, A366 slice 2:** this earlier account of address-owned local entries, their cap
+> or individually coloured special dates is historical. Local holidays are now own named days
+> without an entry cap; named-day kinds and public facts determine Calendar fills. See
+> [public holidays](../../developers/public-holidays.md) and
+> [the current Calendar contract](../../developers/design-system.md). The slice is awaiting review.
+
 > **For agentic workers:** use `superpowers:executing-plans` for routine inline execution. Observe each new behavioral test failing for its intended reason before implementing it, then rerun it green. The driver owns signed-off commits, review and landing. This document authorizes no build.
 
 **Goal:** Show shipped national/regional holidays and your entered city holidays on Hours, and use their names when you create or duplicate special dates, through one read capability for Hours and future wages.

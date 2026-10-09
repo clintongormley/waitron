@@ -960,6 +960,7 @@ describe("GET /api/menu-state", () => {
     expect(await state(v)).toEqual({
       service: {
         open: true,
+        zoneOpen: true,
         periodName: "Always",
         keepOpen: {
           periodId: expect.any(String),
@@ -980,6 +981,7 @@ describe("GET /api/menu-state", () => {
     expect(await state(v)).toEqual({
       service: {
         open: true,
+        zoneOpen: true,
         periodName: "Always",
         keepOpen: {
           periodId: expect.any(String),

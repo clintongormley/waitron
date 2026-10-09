@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { t } from "./strings.js";
 import type { CalendarColour } from "../hours-types.js";
-import type { ServiceRange } from "../service-day.js";
+import type { ClosedRange, ServiceRange } from "../service-day.js";
 
 export interface GridPeriod {
   id: string;
@@ -16,6 +16,9 @@ export interface GridColumn {
   slots: readonly ServiceRange[];
   periods: readonly GridPeriod[];
   editable: boolean;
+  layer?: "periods" | "closed";
+  closed?: readonly ClosedRange[];
+  narrow?: boolean;
 }
 
 export interface GridRangeSelection {
@@ -68,10 +71,7 @@ export class ServiceGrid extends LitElement {
     }
     .layout {
       display: grid;
-      grid-template-columns: calc(var(--wt-space-6) * 3) repeat(
-          var(--columns),
-          minmax(calc(var(--wt-space-6) * 5), 1fr)
-        );
+      grid-template-columns: calc(var(--wt-space-6) * 3) var(--column-tracks);
     }
     .heading {
       position: sticky;
@@ -136,6 +136,24 @@ export class ServiceGrid extends LitElement {
       font-size: var(--wt-font-size-sm);
       overflow: hidden;
     }
+    .faded::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: var(--period-fill);
+      opacity: var(--wt-opacity-disabled);
+    }
+    .closed {
+      background: repeating-linear-gradient(
+        135deg,
+        var(--wt-color-surface),
+        var(--wt-color-surface) var(--wt-space-1),
+        var(--wt-color-border) var(--wt-space-1),
+        var(--wt-color-border) var(--wt-space-2)
+      );
+      color: var(--wt-color-text);
+    }
     .selection {
       position: absolute;
       inset-inline: var(--wt-space-1);
@@ -166,28 +184,40 @@ export class ServiceGrid extends LitElement {
       overflow-wrap: anywhere;
     }
     .block[data-colour="red"] {
-      background: var(--wt-color-palette-red);
+      --period-fill: var(--wt-color-palette-red);
+      background: var(--period-fill);
       color: var(--wt-color-on-palette-red);
     }
     .block[data-colour="amber"] {
-      background: var(--wt-color-palette-amber);
+      --period-fill: var(--wt-color-palette-amber);
+      background: var(--period-fill);
       color: var(--wt-color-on-palette-amber);
     }
     .block[data-colour="grey"] {
-      background: var(--wt-color-palette-grey);
+      --period-fill: var(--wt-color-palette-grey);
+      background: var(--period-fill);
       color: var(--wt-color-on-palette-grey);
     }
     .block[data-colour="blue"] {
-      background: var(--wt-color-palette-blue);
+      --period-fill: var(--wt-color-palette-blue);
+      background: var(--period-fill);
       color: var(--wt-color-on-palette-blue);
     }
     .block[data-colour="green"] {
-      background: var(--wt-color-palette-green);
+      --period-fill: var(--wt-color-palette-green);
+      background: var(--period-fill);
       color: var(--wt-color-on-palette-green);
     }
     .block[data-colour="purple"] {
-      background: var(--wt-color-palette-purple);
+      --period-fill: var(--wt-color-palette-purple);
+      background: var(--period-fill);
       color: var(--wt-color-on-palette-purple);
+    }
+    .block.faded {
+      isolation: isolate;
+      background: transparent;
+      color: var(--wt-color-text);
+      pointer-events: none;
     }
   `;
 
@@ -232,15 +262,18 @@ export class ServiceGrid extends LitElement {
   #abort = (event: PointerEvent): void => {
     if (event.pointerId === this.#gesture?.pointerId) this.#cancel();
   };
+  #ranges(column: GridColumn): readonly ClosedRange[] {
+    return column.layer === "closed" ? (column.closed ?? []) : column.slots;
+  }
   #occupied(column: GridColumn, minute: number): number {
-    return column.slots.findIndex(
+    return this.#ranges(column).findIndex(
       (slot) =>
         this.#minute(slot.startsAt) <= minute && minute < (this.#minute(slot.endsAt) || DAY),
     );
   }
   #gap(column: GridColumn, anchor: number): { min: number; max: number } {
     let { min, max } = this.#limits();
-    for (const slot of column.slots) {
+    for (const slot of this.#ranges(column)) {
       const start = this.#minute(slot.startsAt);
       const end = this.#minute(slot.endsAt) || DAY;
       if (end <= anchor) min = Math.max(min, end);
@@ -254,14 +287,14 @@ export class ServiceGrid extends LitElement {
     event.preventDefault();
     event.stopPropagation();
     this.#cancel();
-    const slot = index === undefined ? undefined : column.slots[index]!;
+    const slot = index === undefined ? undefined : this.#ranges(column)[index]!;
     const start = slot === undefined ? anchor : this.#minute(slot.startsAt);
     const gap = this.#gap(column, start);
     if (slot !== undefined) {
       gap.min = start + STEP;
       gap.max = Math.min(
         this.#limits().max,
-        ...column.slots
+        ...this.#ranges(column)
           .filter((_, i) => i !== index)
           .map((other) => this.#minute(other.startsAt))
           .filter((minute) => minute > start),
@@ -322,7 +355,7 @@ export class ServiceGrid extends LitElement {
       endsAt: this.#time(selected.end),
     };
     if (gesture.index === undefined) this.#emit("grid-range-select", detail);
-    else if (detail.endsAt !== gesture.column.slots[gesture.index]!.endsAt)
+    else if (detail.endsAt !== this.#ranges(gesture.column)[gesture.index]!.endsAt)
       this.#emit("grid-block-change", { ...detail, index: gesture.index });
   };
   #focus(columnKey: string, minute: number): void {
@@ -422,34 +455,38 @@ export class ServiceGrid extends LitElement {
     return styleMap({ top: `${(start / DAY) * 100}%`, height: `${((end - start) / DAY) * 100}%` });
   }
   #cellLabel(column: GridColumn, minute: number): string {
-    const slot = column.slots[this.#occupied(column, minute)];
-    const period =
-      slot === undefined ? undefined : column.periods.find(({ id }) => id === slot.periodId);
-    return `${column.label}, ${this.#time(minute)}${slot === undefined ? "" : `, ${period!.name}, ${slot.startsAt}–${slot.endsAt}`}`;
+    const index = this.#occupied(column, minute);
+    const slot = this.#ranges(column)[index];
+    const name =
+      column.layer === "closed"
+        ? t("hours.closed")
+        : column.periods.find(({ id }) => id === column.slots[index]?.periodId)?.name;
+    return `${column.label}, ${this.#time(minute)}${slot === undefined ? "" : `, ${name}, ${slot.startsAt}–${slot.endsAt}`}`;
   }
-  #block(column: GridColumn, slot: ServiceRange, index: number) {
-    const period = column.periods.find(({ id }) => id === slot.periodId)!;
+  #block(column: GridColumn, slot: ClosedRange, index: number, period?: GridPeriod, faded = false) {
+    const name = period?.name ?? t("hours.closed");
+    const classes = `block${faded ? " faded" : period ? "" : " closed"}`;
     const start = this.#minute(slot.startsAt);
     const end =
-      this.selection?.columnKey === column.key && this.selection.index === index
+      !faded && this.selection?.columnKey === column.key && this.selection.index === index
         ? this.selection.end
         : this.#minute(slot.endsAt) || DAY;
-    const text = html`<span>${period.name}</span><span>${slot.startsAt}–${slot.endsAt}</span>`;
-    return this.readOnly || !column.editable
+    const text = html`<span>${name}</span><span>${slot.startsAt}–${slot.endsAt}</span>`;
+    return faded || this.readOnly || !column.editable
       ? html`<div
-          class="block"
+          class=${classes}
           data-index=${index}
-          data-colour=${period.colour}
+          data-colour=${period?.colour ?? nothing}
           style=${this.#position(start, end)}
         >
           ${text}
         </div>`
       : html`<button
             type="button"
-            class="block"
+            class=${classes}
             tabindex="-1"
             data-index=${index}
-            data-colour=${period.colour}
+            data-colour=${period?.colour ?? nothing}
             style=${this.#position(start, end)}
             @click=${(event: Event) => this.#open(event, column, index)}
           >
@@ -460,7 +497,7 @@ export class ServiceGrid extends LitElement {
             class="resize"
             tabindex="-1"
             data-index=${index}
-            aria-label=${`${column.label}, ${t("service.adjust_range").replace("{name}", period.name)}, ${slot.startsAt}–${slot.endsAt}`}
+            aria-label=${`${column.label}, ${t("service.adjust_range").replace("{name}", name)}, ${slot.startsAt}–${slot.endsAt}`}
             style=${styleMap({ top: `${(end / DAY) * 100}%` })}
             @pointerdown=${(event: PointerEvent) => this.#start(event, column, start, index)}
             @click=${(event: MouseEvent) => {
@@ -493,7 +530,10 @@ export class ServiceGrid extends LitElement {
       aria-label=${t("service.grid")}
       tabindex=${this.readOnly || !this.columns.some((column) => column.editable) ? 0 : nothing}
     >
-      <div class="layout" style=${styleMap({ "--columns": String(this.columns.length) })}>
+      <div
+        class="layout"
+        style=${styleMap({ "--column-tracks": this.columns.map((column) => (column.narrow ? "minmax(calc(var(--wt-space-6) * 3), .6fr)" : "minmax(calc(var(--wt-space-6) * 5), 1fr)")).join(" ") })}
+      >
         <div class="heading"></div>
         ${this.columns.map((column) => html`<div class="heading">${column.label}<slot name=${`header-${column.key}`}></slot></div>`)}
         <div class="times" aria-hidden="true">
@@ -528,7 +568,16 @@ export class ServiceGrid extends LitElement {
                       @pointerdown=${(event: PointerEvent) => this.#start(event, column, start)}
                     ></button>`,
               )}
-              ${column.slots.map((slot, index) => this.#block(column, slot, index))}
+              ${column.slots.map((slot, index) =>
+                this.#block(
+                  column,
+                  slot,
+                  index,
+                  column.periods.find(({ id }) => id === slot.periodId),
+                  column.layer === "closed",
+                ),
+              )}
+              ${column.layer === "closed" ? (column.closed ?? []).map((slot, index) => this.#block(column, slot, index)) : nothing}
               ${this.selection?.columnKey === column.key && this.selection.index === undefined ? html`<div class="selection" role="status" style=${this.#position(this.selection.start, this.selection.end)}>${this.#time(this.selection.start)}–${this.#time(this.selection.end)}</div>` : nothing}
             </div>`,
         )}

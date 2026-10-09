@@ -1,9 +1,9 @@
 import { currentLocale } from "@waitron/dashboard-kit";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import type { HolidayCoverage } from "../holiday-types.js";
+import type { HolidayCoverage, NamedDay, NamedDaysModel } from "../holiday-types.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type {
   CalendarDay,
@@ -24,6 +24,9 @@ import {
   storedCells,
   unbrokenRanges,
 } from "./hours-view.js";
+import type { NamedDaysApi } from "./named-days-client.js";
+import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "./strings.js";
 
 /** A month, `YYYY-MM`. */
@@ -40,6 +43,14 @@ export interface CalendarAction {
   cells?: DateHoursCell[];
   /** The date's public holidays, which name a date made special from the panel. */
   holidays?: HolidayFact[];
+  returnTo: () => HTMLElement | null;
+}
+
+export interface NamedCalendarAction {
+  kind: "add" | "edit" | "own" | "copy" | "delete";
+  date: LocalDate;
+  day?: NamedDay;
+  holidays: readonly HolidayFact[];
   returnTo: () => HTMLElement | null;
 }
 
@@ -167,6 +178,18 @@ export class HoursCalendar extends LitElement {
       .grid td[data-tone="closed"] {
         background: var(--wt-color-day-closed);
       }
+      .grid td[data-tone="public_holiday"] {
+        background: var(--wt-color-palette-red);
+        color: var(--wt-color-on-palette-red);
+      }
+      .grid td[data-tone="own_holiday"] {
+        background: var(--wt-color-palette-purple);
+        color: var(--wt-color-on-palette-purple);
+      }
+      .grid td[data-tone="working_day"] {
+        background: var(--wt-color-palette-blue);
+        color: var(--wt-color-on-palette-blue);
+      }
       .day {
         display: flex;
         flex-direction: column;
@@ -189,6 +212,16 @@ export class HoursCalendar extends LitElement {
       }
       td[data-tone="closed"] .day {
         color: var(--wt-color-on-day-closed);
+      }
+      .named-day {
+        color: inherit;
+        cursor: default;
+      }
+      .own-hours wt-icon {
+        color: inherit;
+      }
+      .own-hours {
+        display: inline-flex;
       }
       .day:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
@@ -312,10 +345,16 @@ export class HoursCalendar extends LitElement {
   ];
 
   @property({ attribute: false }) api!: HoursApi;
+  @property({ attribute: false }) namedApi?: NamedDaysApi;
+  @state() private namedModel?: NamedDaysModel;
+  @state() private areaError = "";
+  @state() private areaBusy = false;
   @property({ type: Boolean }) readOnly = false;
   /** The venue's date, which opens the calendar on its month; null while it cannot be read. */
   @property({ attribute: false }) today: LocalDate | null = null;
-  @state() private month: Month = "";
+  /** Empty keeps named mode on the venue date; a selected month survives later date reads. */
+  @property() month: Month = "";
+  @state() private shownMonth: Month = "";
   @state() private model?: HoursModel;
   @state() private readError = "";
   @state() private selected: LocalDate | null = null;
@@ -323,13 +362,17 @@ export class HoursCalendar extends LitElement {
   @state() private focusDate: LocalDate | null = null;
 
   #detach?: () => void;
+  #connection = {};
+  #areaRequest = {};
+  #watchedMonth = "";
+  #venueMonth?: Month;
   #days = new Map<LocalDate, CalendarDay>();
   /** A date to focus once the month that holds it has drawn. */
   #focusAfterRender?: LocalDate;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.month === "") this.month = (this.today ?? browserToday()).slice(0, 7);
+    this.shownMonth = this.month || this.#venueMonth || (this.today ?? browserToday()).slice(0, 7);
     this.#watch();
   }
 
@@ -337,11 +380,41 @@ export class HoursCalendar extends LitElement {
     super.disconnectedCallback();
     this.#detach?.();
     this.#detach = undefined;
+    this.#connection = {};
+    this.areaBusy = false;
   }
 
   #watch(): void {
     this.#detach?.();
-    const dates = monthGrid(this.month);
+    this.#watchedMonth = this.shownMonth;
+    const dates = monthGrid(this.shownMonth);
+    if (this.namedApi) {
+      this.#detach = this.namedApi.watchNamedDays(
+        dates[0]!,
+        dates.at(-1)!,
+        (model) => {
+          if (model.civilDate !== null) this.#venueMonth = model.civilDate.slice(0, 7);
+          if (this.month === "" && this.#venueMonth && this.shownMonth !== this.#venueMonth) {
+            this.#show(this.#venueMonth, undefined, false);
+            return;
+          }
+          if (this.namedModel?.area.addressKey !== model.area.addressKey) {
+            this.#areaRequest = {};
+            this.areaBusy = false;
+            this.areaError = "";
+          }
+          this.namedModel = model;
+          this.readError = "";
+        },
+        () => {
+          this.readError = t("hours.load_error");
+        },
+        () => {
+          this.readError = "";
+        },
+      );
+      return;
+    }
     this.#detach = this.api.watchHours(
       dates[0]!,
       dates.at(-1)!,
@@ -376,15 +449,37 @@ export class HoursCalendar extends LitElement {
     });
   }
 
-  #show(month: Month, focus?: LocalDate): void {
+  #show(month: Month, focus?: LocalDate, selected = true): void {
     this.#focusAfterRender = focus;
     if (focus !== undefined) this.focusDate = focus;
-    if (month === this.month) return;
-    this.month = month;
+    if (selected) this.month = month;
+    if (month === this.shownMonth) return;
+    this.shownMonth = month;
     this.model = undefined;
+    this.namedModel = undefined;
     this.#days = new Map();
     if (this.selected !== null && !monthGrid(month).includes(this.selected)) this.selected = null;
     this.#watch();
+    if (this.namedApi && selected)
+      this.dispatchEvent(
+        new CustomEvent("calendar-month-change", {
+          detail: { month },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+  }
+
+  protected override willUpdate(changes: PropertyValues): void {
+    if (this.namedApi && changes.has("month")) {
+      this.shownMonth =
+        this.month || this.#venueMonth || (this.today ?? browserToday()).slice(0, 7);
+      if (this.#watchedMonth !== this.shownMonth) {
+        this.namedModel = undefined;
+        this.readError = "";
+        this.#watch();
+      }
+    }
   }
 
   protected override updated(): void {
@@ -423,7 +518,7 @@ export class HoursCalendar extends LitElement {
     if (step === undefined || date === undefined) return;
     event.preventDefault();
     const target = addDays(date, step);
-    if (monthGrid(this.month).includes(target)) {
+    if (monthGrid(this.shownMonth).includes(target)) {
       this.focusDate = target;
       this.#dayButton(target)?.focus();
     } else this.#show(target.slice(0, 7), target);
@@ -473,7 +568,7 @@ export class HoursCalendar extends LitElement {
 
   #day(date: LocalDate, stop: LocalDate) {
     const day = this.#dayOf(date);
-    const outside = !date.startsWith(this.month);
+    const outside = !date.startsWith(this.shownMonth);
     const today = date === (this.model?.civilDate ?? null);
     const words = this.#dayWords(day);
     const special = day.specialDate;
@@ -500,7 +595,10 @@ export class HoursCalendar extends LitElement {
         <span class="number">${number}</span>
         ${words.map((word, index) =>
           index === 0 && coloured
-            ? html`<span class="label" data-test="special-name" data-colour=${special.colour}
+            ? html`<span
+                class="label"
+                data-test="special-name"
+                data-colour=${special.kind === "holiday" ? "purple" : "blue"}
                 >${word}</span
               > `
             : html`<span>${word}</span> `,
@@ -510,12 +608,12 @@ export class HoursCalendar extends LitElement {
   }
 
   #grid() {
-    const dates = monthGrid(this.month);
+    const dates = monthGrid(this.shownMonth);
     const today = this.model?.civilDate ?? null;
     const stop =
       [this.focusDate, this.selected, today].find(
         (date) => date !== null && dates.includes(date),
-      ) ?? dates.find((date) => date.startsWith(this.month))!;
+      ) ?? dates.find((date) => date.startsWith(this.shownMonth))!;
     const weeks = Array.from({ length: dates.length / 7 }, (_, row) =>
       dates.slice(row * 7, row * 7 + 7),
     );
@@ -569,7 +667,7 @@ export class HoursCalendar extends LitElement {
             ? nothing
             : html`<span
                 class="swatch"
-                data-colour=${day.tone === "closed" ? "closed" : special.colour}
+                data-colour=${day.tone === "closed" ? "closed" : special.kind === "holiday" ? "purple" : "blue"}
               ></span>`
         }<span
           >${special === null ? formatDate(date) : `${formatDate(date)} · ${special.name}`}</span
@@ -661,14 +759,7 @@ export class HoursCalendar extends LitElement {
           coverage === undefined
             ? nothing
             : html`<li>
-                ${format(
-                  `hours.calendar.local.${
-                    coverage.nationalRegional === "unsupported_country"
-                      ? "unsupported_country"
-                      : coverage.local
-                  }` as Key,
-                  { year: String(year) },
-                )}
+                ${format(`hours.calendar.local.${coverage.local}` as Key, { year: String(year) })}
               </li>`
         }
       </ul>`;
@@ -678,7 +769,7 @@ export class HoursCalendar extends LitElement {
   #monthCoverage() {
     const model = this.model;
     if (model === undefined) return nothing;
-    const dates = monthGrid(this.month);
+    const dates = monthGrid(this.shownMonth);
     const years = [...new Set(dates.map((date) => Number(date.slice(0, 4))))];
     const lines = years
       .map((year) => [year, this.#coverage(model, year)] as const)
@@ -690,13 +781,228 @@ export class HoursCalendar extends LitElement {
     </ul>`;
   }
 
+  #namedMonth() {
+    const model = this.namedModel;
+    const nav = (
+      step: number,
+      label: "hours.calendar.previous_month" | "hours.calendar.next_month",
+      glyph: string,
+    ) =>
+      html`<wt-button
+        variant="secondary"
+        data-test=${step < 0 ? "previous-month" : "next-month"}
+        aria-label=${t(label)}
+        @click=${() => this.#show(addMonths(this.shownMonth, step))}
+        >${glyph}</wt-button
+      >`;
+    const dates = monthGrid(this.shownMonth);
+    const stop =
+      [this.focusDate, this.selected, model?.civilDate].find(
+        (date) => date != null && dates.includes(date),
+      ) ?? `${this.shownMonth}-01`;
+    const years = [...new Set(dates.map((date) => Number(date.slice(0, 4))))];
+    return html`<div class="month">
+      <div class="nav">
+        ${nav(-1, "hours.calendar.previous_month", "‹")}
+        <h2 id="month-heading" data-test="month" aria-live="polite">
+          ${formatUtc(`${this.shownMonth}-01`, { month: "long", year: "numeric" })}
+        </h2>
+        ${nav(1, "hours.calendar.next_month", "›")}
+      </div>
+      <ul class="legend">
+        ${[
+          ["red", "calendar.public"],
+          ["purple", "calendar.own_holiday"],
+          ["blue", "calendar.working"],
+          ["closed", "hours.calendar.legend_closed"],
+          ["standard", "hours.calendar.legend_standard"],
+        ].map(
+          ([colour, label]) =>
+            html`<li><span class="swatch" data-colour=${colour!}></span>${t(label as Key)}</li>`,
+        )}
+      </ul>
+      ${this.readError ? html`<p role="alert">${this.readError}</p>` : nothing}
+      ${
+        model === undefined
+          ? nothing
+          : html` ${model.area.options.length || model.area.readiness !== "ready" ? this.#namedArea(model) : nothing}
+              <ul class="note coverage" data-test="month-coverage">
+                ${years.map((year) => {
+                  const coverage = model.holidayCoverage.find((item) => item.year === year);
+                  return html`<li>
+                      ${coverage?.nationalRegional === "area_required" ? format("calendar.area_required", { year: String(year) }) : nationalCoverage(year, coverage)}
+                    </li>
+                    ${coverage ? html`<li>${format(`hours.calendar.local.${coverage.local}` as Key, { year: String(year) })}</li>` : nothing}`;
+                })}
+              </ul>
+              ${model.localHolidaysPerYear > 0 ? html`<p class="note" data-test="local-holiday-hint">${format("calendar.local_hint", { count: String(model.localHolidaysPerYear) })}</p>` : nothing}
+              <table class="grid" aria-labelledby="month-heading" @keydown=${this.#keydown}>
+                <thead>
+                  <tr>
+                    ${dates.slice(0, 7).map((date) => html`<th scope="col" abbr=${formatUtc(date, { weekday: "long" })}>${formatUtc(date, { weekday: "short" })}</th>`)}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${Array.from(
+                    { length: dates.length / 7 },
+                    (_, row) =>
+                      html`<tr>
+                        ${dates.slice(row * 7, row * 7 + 7).map((date) => {
+                          const day = model.days.find((item) => item.date === date);
+                          return html`<td
+                            data-date=${date}
+                            data-tone=${day?.tone ?? "standard"}
+                            ?data-outside=${!date.startsWith(this.shownMonth)}
+                          >
+                            <button
+                              type="button"
+                              class="day named-day"
+                              tabindex=${date === stop ? 0 : -1}
+                              aria-label=${[formatLongDate(date), day?.namedDay?.name, holidayDateName([...(day?.holidays ?? [])], date, ""), day?.closed ? t("hours.closed") : "", day?.ownHours ? t("calendar.own_hours") : ""].filter(Boolean).join(", ")}
+                              aria-pressed=${date === this.selected ? "true" : "false"}
+                              aria-current=${date === model.civilDate ? "date" : nothing}
+                              @click=${() => this.#open(date)}
+                              @focus=${() => {
+                                this.focusDate = date;
+                              }}
+                            >
+                              <span class="number"
+                                >${formatUtc(date, date.startsWith(this.shownMonth) ? { day: "numeric" } : { day: "numeric", month: "short" })}</span
+                              >${day?.namedDay ? html`<span>${day.namedDay.name}</span>` : nothing}${day?.holidays.length ? html`<span>${holidayDateName([...day.holidays], date, "")}</span>` : nothing}${day?.closed ? html`<span>${t("hours.closed")}</span>` : nothing}${day?.ownHours ? html`<span class="own-hours"><wt-icon name="clock" size="sm"></wt-icon><span class="visually-hidden">${t("calendar.own_hours")}</span></span>` : nothing}
+                            </button>
+                          </td>`;
+                        })}
+                      </tr>`,
+                  )}
+                </tbody>
+              </table>
+              ${this.selected ? html`<section class="panel" data-test="date-panel">${this.#namedPanel(model)}</section>` : nothing}`
+      }
+    </div>`;
+  }
+  #namedPanel(model: NamedDaysModel) {
+    const date = this.selected;
+    if (!date) return html`<p>${t("hours.calendar.pick")}</p>`;
+    const entry = model.days.find((day) => day.date === date);
+    const day = entry?.namedDay ?? undefined;
+    const action = (kind: NamedCalendarAction["kind"], label: Key) =>
+      html`<wt-button
+        variant="secondary"
+        data-test=${`named-${kind}`}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          if (this.readOnly || !this.isConnected || !this.namedModel) return;
+          const trigger = event.currentTarget as HTMLElement;
+          this.dispatchEvent(
+            new CustomEvent<NamedCalendarAction>("named-calendar-action", {
+              detail: {
+                kind,
+                date,
+                day: day ? structuredClone(day) : undefined,
+                holidays: structuredClone(entry?.holidays ?? []),
+                returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
+              },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }}
+        >${t(label)}</wt-button
+      >`;
+    return html`<h2 tabindex="-1">${formatDate(date)}${day ? ` · ${day.name}` : ""}</h2>
+      ${entry?.holidays.map((holiday) => html`<p>${holiday.name}</p>`)}
+      ${this.readOnly ? nothing : html`<div class="actions">${day ? html`${action("edit", "hours.edit")}${action("copy", "named.copy")}${action("delete", "hours.delete")}` : action("add", "named.add")}${action("own", "named.give_own")}</div>`}`;
+  }
+  #areaAddress(readiness: NamedDaysModel["area"]["readiness"]): string {
+    switch (readiness) {
+      case "missing_city":
+        return t("holidays.area_needs_city");
+      case "unresolved_province":
+        return t("holidays.area_needs_province");
+      case "unresolved_address":
+        return t("holidays.area_needs_address");
+      case "unsupported_country":
+        return t("holidays.area_unsupported");
+      case "ready":
+        return "";
+    }
+  }
+  #namedArea(model: NamedDaysModel) {
+    const explanation =
+      model.area.readiness === "ready"
+        ? nothing
+        : html`<p class="note" data-test="area-address">
+            ${this.#areaAddress(model.area.readiness)}
+          </p>`;
+    if (!model.area.options.length) return explanation;
+    if (this.readOnly)
+      return html`${explanation}
+        <p class="note" data-test="area-chosen">
+          ${model.area.options.find((item) => item.key === model.area.chosen)?.name ?? t("holidays.area_none")}
+        </p>`;
+    return html`${explanation}<wt-combobox
+        name="holidayArea"
+        label=${t("holidays.area")}
+        hint=${t("holidays.area_hint")}
+        search="never"
+        ?required=${model.area.required}
+        .value=${model.area.chosen ?? ""}
+        .options=${model.area.options.map(({ key, name }) => ({ value: key, label: name }))}
+        ?disabled=${this.areaBusy || model.area.readiness !== "ready"}
+        error=${this.areaError}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          const chooser = event.currentTarget as HTMLElementTagNameMap["wt-combobox"];
+          chooser.value = this.namedModel?.area.chosen ?? "";
+          const value = event.detail.value;
+          if (
+            !this.isConnected ||
+            this.readOnly ||
+            this.areaBusy ||
+            this.namedModel?.area.readiness !== "ready" ||
+            chooser !== this.shadowRoot?.querySelector("[name=holidayArea]") ||
+            value === model.area.chosen ||
+            !model.area.options.some((item) => item.key === value)
+          )
+            return;
+          void this.#saveNamedArea(value);
+        }}
+      ></wt-combobox>`;
+  }
+  async #saveNamedArea(value: string) {
+    const connection = this.#connection;
+    const request = (this.#areaRequest = {});
+    const current = () =>
+      this.isConnected && connection === this.#connection && request === this.#areaRequest;
+    this.areaBusy = true;
+    this.areaError = "";
+    try {
+      await this.namedApi!.saveHolidayArea(value);
+    } catch (error) {
+      if (current()) {
+        const refusal = error as { code?: string; params?: { field?: string } } | null;
+        this.areaError =
+          refusal?.code === "holiday.invalid" && refusal.params?.field === "geography"
+            ? t("holidays.area_needs_address")
+            : refusal?.code === "holiday.invalid" && refusal.params?.field === "areaKey"
+              ? t("holidays.area_refused")
+              : t("hours.save_error");
+      }
+      return;
+    } finally {
+      if (current()) this.areaBusy = false;
+    }
+    if (current()) this.namedApi!.rereadWatches();
+  }
+
   override render() {
+    if (this.namedApi) return this.#namedMonth();
     const nav = (test: string, label: Parameters<typeof t>[0], glyph: string, months: number) =>
       html`<wt-button
         variant="ghost"
         data-test=${test}
         aria-label=${t(label)}
-        @click=${() => this.#show(addMonths(this.month, months))}
+        @click=${() => this.#show(addMonths(this.shownMonth, months))}
         >${glyph}</wt-button
       >`;
     const legend = (colour: string, label: Parameters<typeof t>[0]) =>
@@ -707,7 +1013,7 @@ export class HoursCalendar extends LitElement {
           ${nav("previous-year", "hours.calendar.previous_year", "«", -12)}
           ${nav("previous-month", "hours.calendar.previous_month", "‹", -1)}
           <h2 id="month-heading" data-test="month" aria-live="polite">
-            ${formatUtc(`${this.month}-01`, { month: "long", year: "numeric" })}
+            ${formatUtc(`${this.shownMonth}-01`, { month: "long", year: "numeric" })}
           </h2>
           ${nav("next-month", "hours.calendar.next_month", "›", 1)}
           ${nav("next-year", "hours.calendar.next_year", "»", 12)}
@@ -720,11 +1026,8 @@ export class HoursCalendar extends LitElement {
         </div>
         <ul class="legend">
           ${legend("standard", "hours.calendar.legend_standard")}
-          ${legend("closed", "hours.calendar.legend_closed")}
-          <li>
-            <span class="swatch" data-colour="red"></span
-            ><span class="swatch" data-colour="amber"></span>${t("hours.calendar.legend_special")}
-          </li>
+          ${legend("closed", "hours.calendar.legend_closed")} ${legend("purple", "named.holiday")}
+          ${legend("blue", "named.working_day")}
         </ul>
         ${this.#monthCoverage()}
         ${this.readError ? html`<p role="alert">${this.readError}</p>` : nothing} ${this.#grid()}

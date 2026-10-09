@@ -92,6 +92,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those tables are in different service areas, so they cannot be joined",
     es: "Esas mesas están en zonas de servicio distintas, así que no se pueden unir",
   },
+  "service_zone.closed": {
+    en: "That area is closed now, so nothing new can be ordered there. Bills there can still be paid or moved.",
+    es: "Esa zona está cerrada ahora, así que no se puede pedir nada nuevo. Las cuentas se pueden cobrar o mover.",
+  },
   "service_zone.not_allowed": {
     en: "This device's profile does not work in that area. Choose one of its own areas",
     es: "El perfil de este dispositivo no trabaja en esa zona. Elige una de sus zonas",

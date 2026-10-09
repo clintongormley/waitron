@@ -382,6 +382,7 @@ export interface ServedMenu {
 export interface MenuState {
   service: {
     open: boolean;
+    zoneOpen: boolean;
     periodName: string | null;
     keepOpen: {
       periodId: string;

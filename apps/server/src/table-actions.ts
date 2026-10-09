@@ -13,6 +13,7 @@ import {
   type BillState,
   type OtherPartyRead,
 } from "./move-bill.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { moveDraftsToParty } from "./order-drafts.js";
 import { groupArrivingDishes, moveGroupsToParty, printHoldTickets } from "./order-groups.js";
 import {
@@ -70,6 +71,9 @@ export async function moveGuests(
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, cfg, toTableId, partyId, options);
+  const zoneBefore = await partyZone(tx, cfg, partyId);
+  if (table.zoneId !== null && table.zoneId !== zoneBefore)
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, table.zoneId, new Date());
   if (table.holding !== null && table.holding !== partyId) {
     return combineAt(tx, cfg, partyId, table.holding, "leave", options);
   }
@@ -80,7 +84,6 @@ export async function moveGuests(
   if (table.holding === null) await refuseUnseatable(tx, cfg, table);
 
   const before = await readPartiesSentWork(tx, cfg, [partyId]);
-  const zoneBefore = await partyZone(tx, cfg, partyId);
   const leaving = held.filter((id) => id !== toTableId);
   await leaveForClearing(tx, leaving, nowIso());
   const mainBillId = await readMainBill(tx, partyId);

@@ -1,4 +1,5 @@
 // Browser-safe: types and constants only, no database or server imports.
+import type { NamedDayKind } from "./named-day-rules.js";
 import type { HolidayCoverage, HolidaySource } from "./holiday-types.js";
 
 /** A real venue-local calendar date, `YYYY-MM-DD`. */
@@ -47,13 +48,18 @@ export interface SpecialDate {
   id: string;
   date: LocalDate;
   name: string;
-  colour: CalendarColour;
+  kind: NamedDayKind;
+  repeats: boolean;
+  ownHours: boolean;
   closeWholeVenue: boolean;
 }
 
-export type SpecialDateInput = Omit<SpecialDate, "id"> & { cells: DateHoursCell[] };
+export type SpecialDateInput = Pick<SpecialDate, "date" | "name" | "closeWholeVenue"> &
+  Partial<Pick<SpecialDate, "kind" | "repeats" | "ownHours">> & {
+    cells: DateHoursCell[];
+  };
 
-/** How the calendar colours a date: a special date's own colour, or one of the two reserved. */
+/** Calendar tones derive from named-day kinds and the venue's open state. */
 export type CalendarTone = CalendarColour | "standard" | "closed";
 
 /** A public holiday fact for a date, supplied by a `HolidayReader` (`./hours.ts`) when one is given. */

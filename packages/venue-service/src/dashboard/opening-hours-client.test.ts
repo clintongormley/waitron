@@ -9,7 +9,7 @@ const model: OpeningHoursModel = {
   dayCutover: "06:00",
   menus: [],
   departments: [],
-  specialDates: [],
+  namedDays: [],
 };
 const base = "/management-api/venue-service";
 
@@ -31,14 +31,12 @@ describe("OpeningHoursApi", () => {
     await api.deletePeriod("p/1");
     await api.saveWeek("d/1", [{ weekday: 1, slots: [slot] }]);
     await api.saveDateMenus("s/1", "d/1", [slot]);
-    await api.clearDateMenus("s/1", "d/1");
     expect(request.mock.calls).toEqual([
       [`${base}/departments/d%2F1/menu-periods`, "POST", input],
       [`${base}/menu-periods/p%2F1`, "PATCH", input],
       [`${base}/menu-periods/p%2F1`, "DELETE"],
       [`${base}/departments/d%2F1/menu-week`, "PUT", { days: [{ weekday: 1, slots: [slot] }] }],
       [`${base}/special-dates/s%2F1/menu-timetables/d%2F1`, "PUT", { slots: [slot] }],
-      [`${base}/special-dates/s%2F1/menu-timetables/d%2F1`, "DELETE"],
     ]);
   });
 
@@ -57,9 +55,13 @@ describe("OpeningHoursApi", () => {
           "menu_day_timetables",
           "menu_slots",
           "special_dates",
+          "special_date_hours",
           "departments",
           "catalogues",
           "locations",
+          "zone_closed_times",
+          "zone_service_policies",
+          "floor_zones",
         ].map((type) => ({ type })),
       );
       expect(request.mock.calls).toEqual([
@@ -99,4 +101,17 @@ describe("OpeningHoursApi", () => {
     api.rereadWatches();
     expect(request).toHaveBeenCalledTimes(3);
   });
+});
+
+it("encodes zone closing-time writes and preserves their bodies", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new OpeningHoursApi(request as DashboardRequest);
+  const ranges = [{ startsAt: "23:00", endsAt: "06:00" }];
+  const days = [{ weekday: 1, ranges }];
+  await api.saveZoneWeek("z/1", days);
+  await api.saveZoneDate("s/1", "z/1", ranges);
+  expect(request.mock.calls).toEqual([
+    [`${base}/zones/z%2F1/closed-week`, "PUT", { days }],
+    [`${base}/special-dates/s%2F1/zone-closed-times/z%2F1`, "PUT", { ranges }],
+  ]);
 });

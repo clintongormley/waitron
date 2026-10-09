@@ -4485,6 +4485,43 @@ describe("till-table-order-screen — printing problems", () => {
 });
 
 describe("closed department ordering", () => {
+  it("keeps the bill payable and movable when the zone stops new dishes", async () => {
+    const previous = currentLocale();
+    try {
+      setLocale("en-GB");
+      const draft = new WorkingOrderStore();
+      draft.addProduct(cafe, "2");
+      const { el } = await mount({
+        draftStore: draft,
+        lines: [pendingLine],
+        orderId: "wo-closed-zone",
+        zoneName: "Terrace",
+        service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
+      });
+      expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
+        "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
+      );
+      expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+      expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([["cafe", "2"]]);
+      await openDrawer(el);
+      const payment = el.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!;
+      expect(payment).not.toBeNull();
+      const paid = vi.fn();
+      el.addEventListener("bill-pay", paid);
+      payment.click();
+      expect(paid).toHaveBeenCalledOnce();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-action="move"]')!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
+      expect(el.lines.map((line) => line.id)).toEqual(["line-1"]);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("does not claim the department is closed while its offers are unread", async () => {
     const draft = new WorkingOrderStore();
     draft.addProduct(cafe, "2");
@@ -4500,7 +4537,7 @@ describe("closed department ordering", () => {
     const { el } = await mount({
       draftStore: draft,
       lines: [pendingLine],
-      service: { open: false, periodName: null, keepOpen: null },
+      service: { open: false, zoneOpen: true, periodName: null, keepOpen: null },
       departmentName: "Restaurant",
     });
     expect(el.shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim()).toBe(

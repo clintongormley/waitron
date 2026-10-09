@@ -174,18 +174,19 @@ their own values, so a deployment rule that overrides `--wt-color-primary` or `-
 must set the matching hover token too, in both
 themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
 
-The Hours calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints dates
-with eight fills. A special date picks one of six palette colours, `--wt-color-palette-red`,
-`-amber`, `-grey`, `-blue`, `-green` and `-purple`: the six keys of `CALENDAR_COLOURS`
-(`packages/venue-service/src/hours-types.ts`), the six names the owner approved with the Hours
-plan (`docs/superpowers/plans/2026-10-05-hours.md`, choice 6). The values below were picked for
-these contrast checks, not copied from the `hours-v3.html` mockup.
-Two more are reserved, so no special date can look like them: `--wt-color-day-standard` for a
-standard day and `--wt-color-day-closed` for a business day with no service ranges in any active
-department, or a whole-venue closure. Text on
-each fill uses its own `--wt-color-on-palette-…` or `--wt-color-on-day-…` colour. A coloured date
-always carries its name in words too, and a Closed one the word Closed, so colour is never the
-only signal.
+Opening hours → Calendar (`packages/venue-service/src/dashboard/hours-calendar.ts`) paints a
+public holiday red, an own Holiday purple and an own Working day blue. Public-holiday facts take
+precedence for the fill when an own day shares their date; both names remain visible. An ordinary
+open day uses `--wt-color-day-standard`, and an ordinary closed day `--wt-color-day-closed`.
+A named or public date keeps its kind's fill even when closed, adding Closed in words. An own-hours
+date also shows a clock icon and an accessible Own hours label. Text uses the corresponding
+`--wt-color-on-palette-…` or `--wt-color-on-day-…` token. Colour is never the only signal.
+
+**2026-10-09, A366 slice 2:** the date colour picker and transitional stored `colour` are retired
+(`packages/venue-service/src/schema/hours.ts` and migration `0038_clammy_klaw.sql`). The palette
+below remains available as shared tokens; Calendar's named mode uses only the red, purple, blue,
+standard and Closed fills. The earlier six-colour date choice is recorded in the historical
+[Hours plan](../superpowers/plans/2026-10-05-hours.md).
 
 | Fill                        | Light     | Text on it | Dark      | Text on it |
 | --------------------------- | --------- | ---------- | --------- | ---------- |
@@ -1556,24 +1557,46 @@ form's own checks disable the action; an error that comes back from a request ne
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
 
+The zone's normal-week editor draws seven closed-time columns over its department's periods.
+Dragging stages a closed range; opening a closed block edits its two times or deletes it, with
+no period choice. Copy this day and Clear change only the closed ranges. One Save writes all
+seven weekdays; a refusal naming a submitted day appears in that day's header and leaves the
+staged week available to retry. Its Save follows the draft comparison below, including after
+removal and reconnect. In a real week, a named day with own hours shows its dated closed
+times over the department’s dated periods. Each date has its own Save; plain dates stay read-only
+and offer Give this date its own hours. A whole-venue closure says Closed and offers no action.
+
 The Opening hours normal-week editor stages its seven days before one Save. Each day's menu
 copies its ranges to selected weekdays or clears them locally. A range dialog stages its two
 times and period; New period opens the period editor above it, then returns to the same range.
 Save on the week waits while a child chooser is open. A server refusal that names a day sits in
 that day's header, with the form's generic message immediately above Save; the refusal leaves
-Save available for retry. A venue viewer gets the grid without day menus or Save. A special date
-uses one column and stages Closed all day or Follow the normal week before Save. These choices
-compare the override's presence as well as its ranges, so choosing Closed on an inherited empty
-weekday still enables Save. Changing the date or returning to the normal week asks before
-discarding a staged draft. A special-date range explains endpoints the venue clock repeats on
-their calendar morning; its ending changeover belongs to the next morning. A skipped-time refusal
-names the clock gap at the date header and keeps Save available for retry. The Day tab starts on the venue's business date and shows one editable column per active
-department in a shared grid. Previous/next date actions ask before discarding a staged draft.
-An ordinary date shows “Changes every {weekday}” and saves that weekday in the normal week;
-a special date saves only that date's ranges. One Save writes changed departments in order.
-If a later department is refused, earlier successful writes stay saved and the remaining draft
-stays available to retry. A dirty draft keeps its original departments and date target through
-background reads and reconnect.
+Save available for retry. A venue viewer gets the grid without day menus or Save. Real week
+starts at the venue's current business week, Monday first; Previous cannot go earlier. The URL
+holds `week=<Monday's date>`, and each column names its calendar date. Named days apply on their
+occurrences, including later years of a repeat. A whole-venue closure says Closed and has no
+action. Only a named day with own hours can be edited; each date has its own draft scope and Save,
+so saving it leaves another staged date protected. Closed all day stages an empty department
+override. Its comparison includes the override's presence as well as its ranges, so choosing
+Closed on an inherited empty weekday still enables Save. Other dates offer Give this date its own
+hours after the calendar facts load: a public holiday prefills its name and kind; an existing
+named day opens its own editor, with own hours staged and its original repeating identity kept.
+Changing weeks or returning to the normal week asks before discarding staged drafts. A dated
+range explains endpoints the venue clock repeats on their calendar morning; its ending
+changeover belongs to the next morning. A skipped-time refusal
+names the clock gap at the date header and keeps Save available for retry. The Day tab starts on your venue's business date; Previous cannot go earlier. Each active
+department is followed by a narrow column for each of its active zones. Dragging in a zone stages
+closed times over the department's periods; opening a closed block edits its times or deletes it.
+Previous/next date actions ask before discarding a staged draft. A date without own hours shows
+“Changes every {weekday}” and saves that weekday in the normal week. Its heading offers Give this
+date its own hours after its calendar facts load, opening an existing named day's editor or
+prefilling a public holiday's name and kind. A named day with own hours saves that date's
+department ranges and zone closed times. A whole-venue closure says Closed and offers no editing
+action. One Save writes changed departments, then changed zones. If a later write is refused,
+earlier successful writes stay saved and the remaining draft stays available to retry. A refusal
+naming a shown field sits beside its department or zone, with the generic message above Save.
+A dirty draft keeps its original department, zone and named-day facts through background reads
+and reconnect.
 
 A form that saves opens with its primary action (Save, Create, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
@@ -1671,8 +1694,8 @@ and nothing guards it across screens:
   canvas editor;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
-- A366 slice 1: Station hours' weekday and Configure editors, special-date Add/Edit and Duplicate.
-  Clear hours and Delete stay confirmations. The weekday and special-date editors retain an edit
+- A366 slice 2: Station hours' weekday, Configure and named-day station-cell editors.
+  Clear hours stays a confirmation. The weekday and named-day editors retain an edit
   made before removal and ask before discarding an edit made after reconnect; their cases are in
   `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`. Opening hours' normal week,
   a day, the period editor and the date range dialog follow it too;
@@ -2961,6 +2984,14 @@ Composition, held keys, and Enter with Shift, Control, Alt, or Meta do not submi
 filters and controls that persist each edit immediately unbound. If a field edits a draft that you
 commit with Save, bind it to that Save even when its preview updates as you type.
 
+### Station hours named days
+
+Station hours offers Week and Named days. Create, copy or delete a named day through the links
+in Named days to Opening hours → Calendar. You see one-off days from the venue’s yesterday
+onward; repeating days follow each station’s standard week. Edit shows the stored date and name
+as text and saves station cells with the day’s other fields unchanged. A stored whole-venue closure
+locks those cells; the default station stays open. Station hours has no local-holiday editor (Task 26 implementation checkpoint, 2026-10-09).
+
 ### Tabbed management pages
 
 When a management page separates concerns into selectable panels, use `wt-tabs`.
@@ -3022,10 +3053,10 @@ Make default and Disable/Enable actions belong to the Stations row menu; Routing
 Every zone cell also sets the default station, for someone with `venue.configure`. A supervisor sees only
 Stations.
 
-Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week`, `dates`
-and `calendar` at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
+Station hours (`packages/venue-service/src/dashboard/hours-screen.ts`) uses `week` and `dates`
+at `/manage/hours/view/<key>`. `/manage/hours/station/<id>` opens the week
 with focus on the station's heading once it is read. Department opening hours belong to
-`/manage/opening-hours`, with Week, Periods and Day tabs; `/department/<id>` selects the
+`/manage/opening-hours`, with Week, Periods, Day and Calendar tabs; `/department/<id>` selects the
 department and `/view/periods` selects its periods. The Week and Day editing contract is in
 Forms above. After provisioning, setup's completion screen shows the first saved Open schedule,
 when it is still Monday to Friday, 09:00–17:00, with a link to that department's Opening hours.
@@ -3038,33 +3069,30 @@ when it is still Monday to Friday, 09:00–17:00, with a link to that department
   reads "No hours restriction"; Prep stations says
   "Always open" for that station state. A cell opens that day's editor; a subject with no hours
   opens a seven-day draft that starts Closed and saves only after a confirmation.
-- **Special dates.** A `wt-data-table` of every current and future special date, with prep station
-  columns; a value kept from the standard week is muted. Its row menu holds
-  Edit, Duplicate and Delete, above it sit Add a date and Close the whole venue on a date. With the
-  whole-venue closure on, the date editor shows the subjects' cells locked.
-- **Calendar** (`hours-calendar.ts`). A Monday-first month beside the chosen date's panel; on a
-  phone the panel sits under the month. Each date says in words what its colour means (its special
-  date's name, Closed, a holiday), coloured by the calendar tokens above. The panel lists each active
-  subject's hours on that date, muted where kept from the standard week, then Edit, Duplicate and
-  Delete for a special date or Make this a special date for an ordinary one; a viewer gets no
-  actions.
+- **Named days.** A `wt-data-table` of one-off named days from yesterday onward, with prep station
+  columns; a value kept from the standard week is muted. Edit changes station cells only; the date
+  and name are text, and the save carries the stored kind, repeat, own-hours, closure
+  values unchanged. A whole-venue closure keeps the station cells locked. Create, copy and delete
+  lead you to Opening hours → Calendar. Repeating named days follow the stations' standard weeks.
 
-Under the Special dates table sits the Local holidays section (`local-holidays-editor.ts`), with
-its own `h2`. A line names the venue's city and yearly allowance, or says why none can be entered
-yet. Where the province's official list needs an area, a dropdown chooses it (a viewer reads the
-choice as text). Then come the year's count against the allowance, Add a local holiday, and a
-`wt-data-table` of the current address's entries whose row menu holds Edit and Remove. Last, each
-earlier address still stored gets a line naming its city, with a Remove button. A viewer gets
-none of these actions: no Add a local holiday, no row menu and no Remove. In the Calendar,
-the date panel lists each holiday on the chosen date under its heading, with its kind (national,
-regional or local) and its source: the official source, linked where it has an address, or
-"Entered by you for" the city. A line follows on how complete that year's official holidays are,
-and a second on its local holidays when the calendar's read includes that year's coverage. Above
-the month grid, a line names each year shown whose official holidays are not known to be complete.
+- **Calendar.** Add, edit, copy and delete named days here. The editor asks for Holiday or
+  Working day, annual repeat and the day's hours choice; name and date are required. Own hours
+  replace that day's schedules as a shared choice, while Keep the normal week follows the week.
+  Copy opens a staged draft for a new date. `named-day-editor.ts`, `named-day-copy.ts` and
+  `opening-hours-screen.ts`, under `packages/venue-service/src/dashboard/`, own these actions.
+  Calendar keeps a selected month across date refreshes and offers one keyboard Tab stop in its
+  grid. Public names remain visible beside your own name.
+- **Local holidays.** Add your town's holidays as own Holiday days in Calendar. There is no separate
+  Local holidays editor. The country's yearly number is information and caps no own entries;
+  a holiday occurring in a year, including a repeat, supplies owner-entered local coverage for
+  that year. Calendar reports official and owner-entered coverage independently, even without
+  official country data or a completed holiday address. Choose a holiday area here when the
+  official list needs it. `hours-calendar.ts` renders the area control and coverage, and
+  `packages/venue-service/src/holidays.ts` reads both sources.
 
-In the week grid and the date panel a period stays on one line, so hours wrap only between
-periods. The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
-Delete and Clear schedule are `compact`, as are the local holiday dialogs.
+In the week grid and date panel a period stays on one line, so hours wrap only between periods.
+The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
+Delete and Clear schedule are `compact`.
 
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.

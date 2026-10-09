@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
@@ -6,11 +6,15 @@ import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  history.replaceState(null, "", "/manage/opening-hours");
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) => {
   test.each(["date", "following", "closed", "viewer", "refused", "empty"])("%s", async (state) => {
     setLocale("en");
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours?week=2026-10-12");
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen");
     screen.readOnly = state === "viewer";
@@ -18,7 +22,7 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
       timeZone: "Europe/Madrid",
       clockReadable: true,
       dayCutover: "06:00",
-      specialDates:
+      namedDays:
         state === "empty"
           ? []
           : [
@@ -26,7 +30,10 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
                 id: "s1",
                 date: "2026-10-12",
                 name: "Holiday",
-                colour: "red",
+                kind: "working_day" as const,
+                repeats: false,
+                ownHours: true,
+                hasStationHours: false,
                 closeWholeVenue: false,
               },
             ],
@@ -65,10 +72,7 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
       throw { code: "menu_timetable.invalid", params: { field: "slots.0.endsAt" } };
     }) as DashboardRequest);
     wrapper.appendChild(screen);
-    await expect.poll(() => screen.shadowRoot?.querySelector("[name=weekMode]")).not.toBeNull();
-    screen
-      .shadowRoot!.querySelector("[name=weekMode]")!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "date" } }));
+    await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
     await screen.updateComplete;
     const week =
       screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
@@ -87,7 +91,7 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
           }),
         );
         await week.updateComplete;
-        week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
+        week.shadowRoot!.querySelector<HTMLElement>("[data-test=save-date][data-day='1']")!.click();
         await expect
           .poll(() => week.shadowRoot!.querySelector("[data-day-error='1']"))
           .not.toBeNull();

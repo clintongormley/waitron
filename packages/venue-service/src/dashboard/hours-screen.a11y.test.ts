@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { chooseOption, cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import type { LocalHolidayModel } from "../holiday-types.js";
 import type { HoursModel, WeekCell, WeekDay } from "../hours-types.js";
 import { HoursApi } from "./hours-client.js";
 import type { HoursScreen } from "./hours-screen.js";
@@ -22,6 +21,9 @@ const special = {
   date: "2026-10-12",
   name: "Fiesta Nacional",
   colour: "red" as const,
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: false,
 };
 
@@ -80,29 +82,11 @@ function model(clockReadable = true): HoursModel {
   };
 }
 
-function localModel(): LocalHolidayModel {
-  const geography = {
-    id: "g",
-    country: "ES",
-    provinceCode: "41",
-    city: "Sevilla",
-    areaKey: null,
-    matchesVenue: true,
-  };
-  return {
-    venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
-    localEntryLimit: 2,
-    areaOptions: [],
-    areaRequired: false,
-    geographies: [geography, { ...geography, id: "old", city: "Utrera", matchesVenue: false }],
-    entries: [{ id: "e1", geographyId: "g", date: "2026-05-30", name: "San Fernando" }],
-  };
-}
-
 async function mount(
   theme: "light" | "dark",
   options: {
     readOnly?: boolean;
+    closeWholeVenue?: boolean;
     clockReadable?: boolean;
     refuse?: unknown;
     failRead?: boolean;
@@ -111,11 +95,16 @@ async function mount(
 ): Promise<HoursScreen> {
   history.replaceState(null, "", "/manage/hours");
   await mountThemed("<div></div>", theme);
-  const request = async (path: string, method: string) => {
+  const request = async (_path: string, method: string) => {
     if (method === "GET") {
       if (options.pendingRead) return new Promise(() => {});
       if (options.failRead) throw { code: "connection.failed" };
-      return path.endsWith("/local-holidays") ? localModel() : model(options.clockReadable);
+      const hours = model(options.clockReadable);
+      hours.specialDates = hours.specialDates.map((day) => ({
+        ...day,
+        closeWholeVenue: options.closeWholeVenue ?? day.closeWholeVenue,
+      }));
+      return hours;
     }
     if (options.refuse !== undefined) throw options.refuse;
     return undefined;
@@ -196,22 +185,27 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
   },
   "a read-only week whose clock cannot be read": (theme) =>
     mount(theme, { readOnly: true, clockReadable: false }),
-  "the special dates list with local holidays at its foot": async (theme) => {
+  "the named days list": async (theme) => {
     const el = await mount(theme);
     await showTab(el, "dates");
-    expect(deep(el, '[data-test="local-entries"]')).not.toBeNull();
+    expect(deep(el, "local-holidays-editor")).toBeNull();
+    expect(deep(el, "wt-data-table")).not.toBeNull();
     return el;
   },
-  "the special dates list and local holidays, read-only": async (theme) => {
+  "the named days list, read-only": async (theme) => {
     const el = await mount(theme, { readOnly: true });
     await showTab(el, "dates");
     return el;
   },
-  "the calendar with a special date open": async (theme) => {
+  "the named days Calendar links in an open row menu": async (theme) => {
     const el = await mount(theme);
-    await showTab(el, "calendar");
-    await press(el, 'td[data-date="2026-10-12"] button');
-    expect(deep(el, '[data-test="calendar-edit"]')).not.toBeNull();
+    await showTab(el, "dates");
+    const link = deep(el, '[data-test="duplicate-date"]')!;
+    link.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/calendar");
+    expect(deep(el, '[data-test="delete-date"]')!.getAttribute("href")).toBe(
+      "/manage/opening-hours/view/calendar",
+    );
     return el;
   },
   "a day's editor after a failed press": async (theme) => {
@@ -238,38 +232,34 @@ const states: Record<string, (theme: "light" | "dark") => Promise<HoursScreen>> 
     expect(deep(el, '[data-test="confirm-text"]')).not.toBeNull();
     return el;
   },
-  "a whole-venue closure refused for its date": async (theme) => {
+  "a named day edit refused for its date": async (theme) => {
     const el = await mount(theme, {
       refuse: { code: "special_date.date_taken", params: { date: "2026-10-12" } },
     });
     await showTab(el, "dates");
-    await press(el, '[data-test="close-venue"]');
-    await set(el, "date", "2026-10-12");
-    await set(el, "name", "Closed");
-    await chooseOption(deep(el, '[name="colour"]')!, "grey");
+    await press(el, '[data-test="edit-date"]');
+    await chooseOption(deep(el, '[name="station.deli.mode"]')!, "all_day");
     await settle(el);
     await press(el, '[data-test="save-editor"]');
-    expect((deep(el, '[name="date"]') as HTMLElement & { error: string }).error).not.toBe("");
+    expect(deep(el, '[role="alert"]')!.textContent).toContain("already has special hours");
     return el;
   },
-  "a duplicate with a target date missing": async (theme) => {
+  "a named-day editor with no metadata fields": async (theme) => {
     const el = await mount(theme);
     await showTab(el, "dates");
-    await press(el, '[data-test="duplicate-date"]');
-    await press(el, '[data-test="add-target"]');
-    await press(el, '[data-test="save-editor"]');
+    await press(el, '[data-test="edit-date"]');
+    expect(deep(el, '[name="closeWholeVenue"]')).toBeNull();
+    expect(deep(el, '[data-test="named-day-date"]')).not.toBeNull();
+    expect(deep(el, '[data-test="named-day-name"]')).not.toBeNull();
     return el;
   },
-  "a refused delete": async (theme) => {
-    const el = await mount(theme, {
-      refuse: {
-        code: "hours.invalid",
-        params: { field: "date", date: "2026-10-13", subjectId: "bar" },
-      },
-    });
+  "a stored whole-venue closure with locked station cells": async (theme) => {
+    const el = await mount(theme, { closeWholeVenue: true });
     await showTab(el, "dates");
-    await press(el, '[data-test="delete-date"]');
-    await press(el, '[data-test="save-editor"]');
+    await press(el, '[data-test="edit-date"]');
+    expect(deep(el, '[name="closeWholeVenue"]')).toBeNull();
+    expect(deep(el, '[data-test="whole-venue-note"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("hours-cell-editor")!.disabled).toBe(true);
     return el;
   },
 };

@@ -1,4 +1,5 @@
 import { readKeepOpen, keepPeriodOpen } from "./keep-open.js";
+import { assertZoneTakesNewOrders, closedZoneIdsAt } from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
   listDepartmentTransferDestinations,
@@ -72,6 +73,8 @@ import {
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
   assertPeriodEndOffsets,
+  assertZoneTakesNewOrders,
+  closedZoneIdsAt,
   withdrawPendingDepartmentTransfers,
   listDepartmentTransferDestinations,
   listIncomingDepartmentTransfers,

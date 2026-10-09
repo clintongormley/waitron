@@ -7,7 +7,6 @@ export type { MenuUse } from "./errors.js";
 export {
   MENU_TIMETABLE_CALENDAR_PARTICIPANT,
   assertPeriodEndOffsets,
-  clearSpecialDateMenus,
   deleteMenuPeriod,
   readOpeningHoursModel,
   replaceMenuWeek,
@@ -49,17 +48,13 @@ export {
 } from "./hours.js";
 export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 export {
-  deleteLocalHoliday,
-  deleteRetainedHolidayGeography,
   duplicateHolidayNamedSpecialDates,
   readHolidayFacts,
   readHolidays,
-  readLocalHolidayModel,
+  readHolidayAreaModel,
   saveHolidayArea,
-  saveLocalHoliday,
 } from "./holidays.js";
 export type * from "./holiday-types.js";
-export { LOCAL_HOLIDAY_NAME_MAX } from "./holiday-types.js";
 export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export { localTimeOccurrences, offsetMinutes } from "./hours-occurrences.js";
 export { isLocalDate } from "./hours-rules.js";
@@ -67,3 +62,7 @@ export type * from "./hours-types.js";
 export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./hours-types.js";
 export * from "./department-transfers.js";
 export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
+
+export { readNamedDaysModel, namedDaysOn, namedDaysBetween } from "./named-days.js";
+
+export { replaceZoneClosedWeek } from "./zone-closed-times.js";

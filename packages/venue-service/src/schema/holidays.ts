@@ -1,11 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { day, id, label, locations, newId, table } from "@waitron/db";
+import { id, label, locations, newId, table } from "@waitron/db";
 
-/**
- * The address a venue's local holidays were entered for. `city` keeps the spelling the address had
- * when the row was made; `city_key` is the normalized form the current address is compared with.
- */
 export const holidayGeographies = table(
   "holiday_geographies",
   {
@@ -30,29 +26,5 @@ export const holidayGeographies = table(
       t.cityKey,
     ),
     check("holiday_geographies_city_ck", sql`trim(${t.city}) <> '' and ${t.cityKey} <> ''`),
-  ],
-);
-
-// The yearly allowance is checked by the writer in `../holidays.ts`; no constraint here counts it.
-export const localHolidays = table(
-  "local_holidays",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    geographyId: id("geography_id").notNull(),
-    date: day("date").notNull(),
-    name: label("name").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.geographyId],
-      foreignColumns: [holidayGeographies.id],
-      name: "local_holidays_geography_fk",
-    }).onDelete("cascade"),
-    uniqueIndex("local_holidays_geography_date_key").on(t.geographyId, t.date),
-    check(
-      "local_holidays_date_ck",
-      sql`${t.date} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`,
-    ),
-    check("local_holidays_name_ck", sql`trim(${t.name}) <> ''`),
   ],
 );

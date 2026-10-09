@@ -666,6 +666,24 @@ function shownNames(browser: TillMenuBrowser, region: string): string[] {
 }
 
 describe("till-card-grid's product-grid card: the menu browser", () => {
+  it("hides products in a closed zone even while the department's period runs", async () => {
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: productCard(),
+      store: new WorkingOrderStore(),
+      menus: [lunchMenu],
+      products: [salad, steak],
+      selectedMenuId: "lunch",
+      service: { open: true, zoneOpen: false, periodName: "Lunch", keepOpen: null },
+    });
+    expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    el.service = { open: true, zoneOpen: true, periodName: "Lunch", keepOpen: null };
+    await el.updateComplete;
+    const browser = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+    expect(browser).not.toBeNull();
+    await browser.updateComplete;
+    expect(shownNames(browser, "shortcuts")).toEqual(["Salad", "Steak"]);
+  });
+
   it("shows the selected menu, only that menu's products, and hands it the store", async () => {
     const store = new WorkingOrderStore();
     const { browser } = await mountBrowser({ store });

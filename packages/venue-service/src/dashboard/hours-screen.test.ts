@@ -4,7 +4,6 @@ import { LiveConnection, LiveData, setLocale, type DashboardRequest } from "@wai
 import { applyTokens } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { WtFormActions } from "@waitron/ui";
-import type { LocalHolidayModel } from "../holiday-types.js";
 import type {
   CalendarDay,
   HourPeriod,
@@ -64,14 +63,18 @@ const FIESTA = {
   id: "fiesta",
   date: "2026-10-12",
   name: "Fiesta Nacional",
-  colour: "red" as const,
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: false,
 };
 const STAFF = {
   id: "staff",
   date: "2026-10-13",
   name: "Staff day off",
-  colour: "grey" as const,
+  kind: "working_day" as const,
+  repeats: false,
+  ownHours: false,
   closeWholeVenue: true,
 };
 
@@ -80,7 +83,7 @@ function model(): HoursModel {
     date,
     specialDate,
     holidays: [],
-    tone: specialDate?.colour ?? "standard",
+    tone: specialDate === null ? "standard" : specialDate.kind === "holiday" ? "purple" : "blue",
   });
   return {
     timeZone: "Europe/Madrid",
@@ -131,35 +134,10 @@ function model(): HoursModel {
 /** A value to answer with, a promise of one, or `{ reject }` to refuse with. */
 type Answer = unknown;
 
-function localModel(): LocalHolidayModel {
-  const geography = {
-    id: "g-sevilla",
-    country: "ES",
-    provinceCode: "41",
-    city: "Sevilla",
-    areaKey: null,
-    matchesVenue: true,
-  };
-  return {
-    venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
-    localEntryLimit: 2,
-    areaOptions: [],
-    areaRequired: false,
-    geographies: [geography],
-    entries: [{ id: "e1", geographyId: geography.id, date: "2026-10-15", name: "Feria" }],
-  };
-}
-
-/**
- * A request stub: Hours reads answer the current model (or a queued failure), local holiday reads
- * the current local model (or their own queue); writes answer their queue.
- */
 function server(liveData?: LiveData) {
   const state = {
-    model: model(),
-    local: localModel(),
+    model: structuredClone(model()),
     reads: [] as Answer[],
-    localReads: [] as Answer[],
     writes: [] as Answer[],
   };
   const request = vi.fn<
@@ -169,10 +147,9 @@ function server(liveData?: LiveData) {
       body?: unknown,
       options?: { passive?: boolean },
     ) => Promise<unknown>
-  >(async (path, method) => {
-    const local = method === "GET" && path.endsWith("/local-holidays");
-    const queue = local ? state.localReads : method === "GET" ? state.reads : state.writes;
-    const answer = local ? state.local : method === "GET" ? state.model : undefined;
+  >(async (_path, method) => {
+    const queue = method === "GET" ? state.reads : state.writes;
+    const answer = method === "GET" ? state.model : undefined;
     const next = queue.length > 0 ? queue.shift() : answer;
     const value = await next;
     if (typeof value === "object" && value !== null && "reject" in value)
@@ -1035,34 +1012,26 @@ describe("Hours: special dates", () => {
     expect(listRows(el).map((row) => row.slice(0, 6))).toEqual([
       [
         "Mon, 12 Oct 2026",
-        "Fiesta Nacional Red",
+        "Fiesta Nacional Blue",
         "12:00–23:00",
         "Closed",
         "Always open",
         "Standard hours: 17:00–23:00",
       ],
-      ["Tue, 13 Oct 2026", "Staff day off Grey", "Closed", "Closed", "Always open", "Closed"],
+      ["Tue, 13 Oct 2026", "Staff day off Blue", "Closed", "Closed", "Always open", "Closed"],
     ]);
     expect(rowOf(el, "Fiesta").querySelector('[part~="inherited"]')).not.toBeNull();
     expect(rowOf(el, "Staff").querySelector('[part~="inherited"]')).toBeNull();
   });
 
-  it("adds a date whose blank cells keep the standard hours, shown in grey for that date", async () => {
-    const { api, calls } = server();
+  it("edits a date whose inherited cells keep the standard hours, shown in grey for that date", async () => {
+    const { api, calls, state } = server();
+    state.model.specialCells[0]!.cells = [];
     const el = await mount(api);
     await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    expect(modal(el)!.getAttribute("heading")).toBe("Add a special date");
-    expect(field(el, "closeWholeVenue")).not.toBeNull();
-    const colour = field(el, "colour") as Field & { options: { value: string; label: string }[] };
-    expect(colour.options.map((o) => [o.value, o.label])).toEqual([
-      ["red", "Red"],
-      ["amber", "Amber"],
-      ["grey", "Grey"],
-      ["blue", "Blue"],
-      ["green", "Green"],
-      ["purple", "Purple"],
-    ]);
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit named day");
+    expect(field(el, "closeWholeVenue")).toBeNull();
     const editors = [
       ...el.shadowRoot!.querySelectorAll<HTMLElement & { label: string; fieldPrefix: string }>(
         "wt-modal hours-cell-editor",
@@ -1081,26 +1050,25 @@ describe("Hours: special dates", () => {
       options: { value: string }[];
     };
     expect(mode.options.map((o) => o.value)).toEqual(["", "closed", "all_day", "periods"]);
-    expect(mode.placeholder).toBe("Standard hours");
-    await setField(el, "date", "2026-10-19");
+    expect(mode.placeholder).toBe("Standard hours (17:00–23:00)");
     expect(mode.placeholder).toBe("Standard hours (17:00–23:00)");
     expect(
       (field(el, "station.restaurant.mode") as Field & { placeholder: string }).placeholder,
     ).toBe("Standard hours (Closed)");
-    await setField(el, "name", "Puente");
-    await choose(el, "colour", "amber");
     await choose(el, "station.restaurant.mode", "closed");
     await choose(el, "station.bar.mode", "periods");
     await setField(el, "station.bar.periods.0.opensAt", "18:00");
     await setField(el, "station.bar.periods.0.closesAt", "22:00");
     await click(el, saveButton(el));
-    expect(calls("POST")).toEqual([
+    expect(calls("PUT")).toEqual([
       [
-        "/management-api/venue-service/special-dates",
+        "/management-api/venue-service/special-dates/fiesta",
         {
-          date: "2026-10-19",
-          name: "Puente",
-          colour: "amber",
+          date: "2026-10-12",
+          name: "Fiesta Nacional",
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           closeWholeVenue: false,
           cells: [
             {
@@ -1127,22 +1095,18 @@ describe("Hours: special dates", () => {
     expect(modal(el)).toBeNull();
   });
 
-  it("marks every missing field of a new date and the bottom of the form", async () => {
-    const { api, calls } = server();
+  it("marks every missing field of an edited date and the bottom of the form", async () => {
+    const { api, calls, state } = server();
+    state.model.specialCells[0]!.cells = [];
     const el = await mount(api);
     await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     await choose(el, "station.deli.mode", "periods");
     await click(el, saveButton(el));
-    expect(field(el, "date")!.error).toBe("Enter a date.");
-    expect(field(el, "name")!.error).toBe("Enter a name.");
-    expect(field(el, "colour")!.error).toBe("Choose a colour.");
     expect(field(el, "station.deli.periods.0.opensAt")!.error).toBe("Enter a time.");
     expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
     expect(saveButton(el).disabled).toBe(true);
-    await setField(el, "name", "   ");
-    expect(field(el, "name")!.error).toBe("Enter a name.");
-    expect(calls("POST")).toEqual([]);
+    expect(calls("PUT")).toEqual([]);
   });
 
   it("edits a date in place, keeping the cells of stations it does not show", async () => {
@@ -1150,21 +1114,22 @@ describe("Hours: special dates", () => {
     const el = await mount(api);
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
-    expect(modal(el)!.getAttribute("heading")).toBe("Edit special date");
-    expect(field(el, "date")!.value).toBe("2026-10-12");
-    expect(field(el, "name")!.value).toBe("Fiesta Nacional");
-    expect(field(el, "colour")!.value).toBe("red");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit named day");
+    expect(text(modal(el)!.querySelector('[data-test="named-day-date"]'))).toBe("Mon, 12 Oct 2026");
+    expect(text(modal(el)!.querySelector('[data-test="named-day-name"]'))).toBe("Fiesta Nacional");
+    expect(field(el, "colour")).toBeNull();
     expect(field(el, "station.restaurant.periods.0.closesAt")!.value).toBe("23:00");
     await choose(el, "station.deli.mode", "");
-    await setField(el, "name", "Fiesta");
     await click(el, saveButton(el));
     expect(calls("PUT")).toEqual([
       [
         "/management-api/venue-service/special-dates/fiesta",
         {
           date: "2026-10-12",
-          name: "Fiesta",
-          colour: "red",
+          name: "Fiesta Nacional",
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           closeWholeVenue: false,
           cells: [
             {
@@ -1181,230 +1146,96 @@ describe("Hours: special dates", () => {
     ]);
   });
 
-  it("closes the whole venue on a date, explaining the locked cells and the default station", async () => {
+  it("shows a stored whole-venue closure with locked cells and cannot change it or save unchanged", async () => {
     const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="close-venue"]'));
-    expect(modal(el)!.getAttribute("heading")).toBe("Close the whole venue");
-    expect((field(el, "closeWholeVenue") as Field & { checked: boolean }).checked).toBe(true);
-    expect(text(el.shadowRoot!.querySelector('[data-test="whole-venue-note"]'))).toBe(
-      "Every department and prep station is closed on this date, except the default station, which is always open. The hours below are kept for when you turn this off.",
-    );
-    const editors = [
-      ...el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
-        "wt-modal hours-cell-editor",
-      ),
-    ];
-    expect(editors.every((editor) => editor.disabled)).toBe(true);
-    await setField(el, "date", "2026-12-25");
-    await setField(el, "name", "Christmas");
-    await choose(el, "colour", "green");
-    await click(el, saveButton(el));
-    expect(calls("POST")[0]![1]).toEqual({
-      date: "2026-12-25",
-      name: "Christmas",
-      colour: "green",
-      closeWholeVenue: true,
-      cells: [],
-    });
-  });
-
-  it("unlocks the cells when the whole-venue closure is turned off", async () => {
-    const { api } = server();
     const el = await mount(api);
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Staff"), "edit-date");
-    const toggle = field(el, "closeWholeVenue")!;
-    toggle.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit named day");
+    expect(field(el, "closeWholeVenue")).toBeNull();
+    expect(text(el.shadowRoot!.querySelector('[data-test="whole-venue-note"]'))).toBe(
+      "Every department and prep station is closed on this named day, except the default station, which is always open. Manage this closure in Opening hours → Calendar.",
     );
-    await settle(el);
-    expect(el.shadowRoot!.querySelector('[data-test="whole-venue-note"]')).toBeNull();
     const editors = [
       ...el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
         "wt-modal hours-cell-editor",
       ),
     ];
-    expect(editors.some((editor) => editor.disabled)).toBe(false);
-  });
-
-  const switchClosure = async (el: HoursScreen, checked: boolean) => {
-    field(el, "closeWholeVenue")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+    expect(editors).toHaveLength(3);
+    expect(editors.every((editor) => editor.disabled)).toBe(true);
+    expect(saveButton(el).disabled).toBe(true);
+    await click(el, saveButton(el));
+    expect(calls("PUT")).toEqual([]);
+    expect(text(el.shadowRoot!.querySelector('[data-test="default-station"]'))).toBe(
+      "Kitchen: Always open (default station)",
     );
-    await settle(el);
-  };
-
-  it("resets each half-filled cell to its stored hours when the closure is switched on, so Save is not held", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
-    await choose(el, "station.bar.mode", "periods");
-    await setField(el, "station.bar.periods.0.opensAt", "18:00");
-    await setField(el, "station.restaurant.periods.0.closesAt", "");
-    await switchClosure(el, true);
-    expect(field(el, "station.bar.mode")!.value).toBe("");
-    expect(field(el, "station.bar.periods.0.opensAt")).toBeNull();
-    expect(field(el, "station.restaurant.periods.0.closesAt")!.value).toBe("23:00");
-    expect(saveButton(el).disabled).toBe(false);
-    await click(el, saveButton(el));
-    expect(calls("PUT")).toEqual([
-      [
-        "/management-api/venue-service/special-dates/fiesta",
-        {
-          date: "2026-10-12",
-          name: "Fiesta Nacional",
-          colour: "red",
-          closeWholeVenue: true,
-          cells: model().specialCells[0]!.cells,
-        },
-      ],
-    ]);
-    expect(modal(el)).toBeNull();
   });
 
-  it("saves a valid edit made before the closure is switched on, as the locked cell shows it", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
-    await choose(el, "station.bar.mode", "periods");
-    await setField(el, "station.bar.periods.0.opensAt", "18:00");
-    await setField(el, "station.bar.periods.0.closesAt", "22:00");
-    await switchClosure(el, true);
-    expect(field(el, "station.bar.periods.0.closesAt")!.value).toBe("22:00");
-    await click(el, saveButton(el));
-    const [stored] = model().specialCells;
-    expect(calls("PUT")).toEqual([
-      [
-        "/management-api/venue-service/special-dates/fiesta",
-        {
-          date: "2026-10-12",
-          name: "Fiesta Nacional",
-          colour: "red",
-          closeWholeVenue: true,
-          cells: [
-            stored!.cells[0],
-            stored!.cells[1],
-            {
-              subject: { kind: "station", id: "bar" },
-              cell: {
-                mode: "periods",
-                periods: [
-                  {
-                    id: expect.stringMatching(/^[0-9a-f-]{36}$/),
-                    opensAt: "18:00",
-                    closesAt: "22:00",
-                  },
-                ],
+  it.each(["date", "dayBefore", "weekBefore"] as const)(
+    "explains and saves repeated times on the stored %s without moving the date",
+    async (which) => {
+      const back = clocksBack();
+      const { api, state, calls } = server();
+      state.model.specialDates[0]!.date = back[which];
+      state.model.specialCells[0]!.cells = [];
+      const el = await mount(api);
+      await selectTab(el, "dates");
+      await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+      await choose(el, "station.bar.mode", "periods");
+      const opens = which === "dayBefore" ? "22:00" : back.twice;
+      const closes = which === "dayBefore" ? back.twice : "04:00";
+      await setField(el, "station.bar.periods.0.opensAt", opens);
+      await setField(el, "station.bar.periods.0.closesAt", closes);
+      const notes = () =>
+        [...el.shadowRoot!.querySelectorAll('[data-test="repeat-note"]')].map((note) => text(note));
+      const expected =
+        which === "weekBefore"
+          ? []
+          : [
+              `Bar: the clock goes back, so ${back.twice} happens twice. These hours apply both times.`,
+            ];
+      expect(notes()).toEqual(expected);
+      await setField(el, "station.bar.periods.0.closesAt", "");
+      expect(notes()).toEqual([]);
+      await setField(el, "station.bar.periods.0.closesAt", closes);
+      expect(notes()).toEqual(expected);
+      await click(el, saveButton(el));
+      expect(calls("PUT")).toEqual([
+        [
+          "/management-api/venue-service/special-dates/fiesta",
+          {
+            date: back[which],
+            name: "Fiesta Nacional",
+            kind: "working_day",
+            repeats: false,
+            ownHours: false,
+            closeWholeVenue: false,
+            cells: [
+              {
+                subject: { kind: "station", id: "bar" },
+                cell: {
+                  mode: "periods",
+                  periods: [{ id: expect.any(String), opensAt: opens, closesAt: closes }],
+                },
               },
-            },
-            stored!.cells[2],
-          ],
-        },
-      ],
-    ]);
-  });
-
-  it("saves the hours entered on a new date before the closure is switched on", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    await setField(el, "date", "2026-12-24");
-    await setField(el, "name", "Christmas Eve");
-    await choose(el, "colour", "green");
-    await choose(el, "station.restaurant.mode", "all_day");
-    await choose(el, "station.bar.mode", "closed");
-    await switchClosure(el, true);
-    await click(el, saveButton(el));
-    expect(calls("POST")).toEqual([
-      [
-        "/management-api/venue-service/special-dates",
-        {
-          date: "2026-12-24",
-          name: "Christmas Eve",
-          colour: "green",
-          closeWholeVenue: true,
-          cells: [
-            {
-              subject: { kind: "station", id: "restaurant" },
-              cell: { mode: "all_day", periods: [] },
-            },
-            { subject: { kind: "station", id: "bar" }, cell: { mode: "closed", periods: [] } },
-          ],
-        },
-      ],
-    ]);
-  });
-
-  it("explains before saving that a time the clock shows twice follows these hours both times, and still saves", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    const notes = () =>
-      [...el.shadowRoot!.querySelectorAll('[data-test="repeat-note"]')].map((note) => text(note));
-    const back = clocksBack();
-    const barTwice = `Bar: the clock goes back, so ${back.twice} happens twice. These hours apply both times.`;
-    await setField(el, "name", "Clocks back");
-    await choose(el, "colour", "red");
-    await choose(el, "station.bar.mode", "periods");
-    await setField(el, "station.bar.periods.0.opensAt", back.twice);
-    await setField(el, "station.bar.periods.0.closesAt", "04:00");
-    expect(notes()).toEqual([]);
-    await setField(el, "date", back.date);
-    expect(notes()).toEqual([barTwice]);
-    await setField(el, "station.bar.periods.0.closesAt", "");
-    expect(notes()).toEqual([]);
-    await setField(el, "station.bar.periods.0.closesAt", "04:00");
-    expect(notes()).toEqual([barTwice]);
-
-    await setField(el, "date", back.weekBefore);
-    expect(notes()).toEqual([]);
-
-    await setField(el, "date", back.dayBefore);
-    await setField(el, "station.bar.periods.0.opensAt", "22:00");
-    expect(notes()).toEqual([]);
-    await setField(el, "station.bar.periods.0.closesAt", back.twice);
-    expect(notes()).toEqual([barTwice]);
-
-    await switchClosure(el, true);
-    expect(notes()).toEqual([]);
-    await switchClosure(el, false);
-    expect(notes()).toEqual([barTwice]);
-
-    await click(el, saveButton(el));
-    expect(calls("POST")).toEqual([
-      [
-        "/management-api/venue-service/special-dates",
-        expect.objectContaining({
-          date: back.dayBefore,
-          cells: [
-            {
-              subject: { kind: "station", id: "bar" },
-              cell: {
-                mode: "periods",
-                periods: [{ id: expect.any(String), opensAt: "22:00", closesAt: back.twice }],
-              },
-            },
-          ],
-        }),
-      ],
-    ]);
-    expect(modal(el)).toBeNull();
-  });
+            ],
+          },
+        ],
+      ]);
+      expect(modal(el)).toBeNull();
+    },
+  );
 
   it("explains a time the clock shows twice in Spanish", async () => {
     setLocale("es");
     const back = clocksBack();
-    const { api } = server();
+    const { api, state } = server();
+    state.model.specialDates[0]!.date = back.date;
     const el = await mount(api);
     await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    await setField(el, "date", back.date);
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    await choose(el, "station.restaurant.mode", "inherit");
+    await choose(el, "station.deli.mode", "inherit");
     await choose(el, "station.bar.mode", "periods");
     await setField(el, "station.bar.periods.0.opensAt", "01:00");
     await setField(el, "station.bar.periods.0.closesAt", back.alsoTwice);
@@ -1436,85 +1267,35 @@ describe("Hours: special dates", () => {
     );
   }
 
-  const duplicateNotes = (el: HoursScreen) =>
-    [...el.shadowRoot!.querySelectorAll('[data-test="duplicate-repeat-note"]')].map((note) =>
-      text(note),
-    );
-
-  it("explains under each duplicate target where the clock shows a copied time twice, and still saves", async () => {
-    const { date, weekBefore, twice } = clocksBack();
-    const { api, state, calls } = server();
-    fiestaFrom(state, twice);
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
-    await setField(el, "dates.0", weekBefore);
-    expect(duplicateNotes(el)).toEqual([]);
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-target"]'));
-    await setField(el, "dates.1", date);
-    // The default kitchen is always open, so its copied period is not explained.
-    expect(duplicateNotes(el)).toEqual([
-      `Bar on ${formatDate(date)}: the clock goes back, so ${twice} happens twice. These hours apply both times.`,
-    ]);
-    const note = el.shadowRoot!.querySelector('[data-test="duplicate-repeat-note"]')!;
-    expect(note.previousElementSibling!.querySelector('[name="dates.1"]')).not.toBeNull();
-    await setField(el, "dates.1", "not a date");
-    expect(duplicateNotes(el)).toEqual([]);
-    await setField(el, "dates.1", date);
-    await click(el, saveButton(el));
-    expect(calls("POST")).toEqual([
-      [
-        "/management-api/venue-service/special-dates/fiesta/duplicate",
-        { dates: [weekBefore, date] },
-      ],
-    ]);
-    expect(modal(el)).toBeNull();
-  });
-
-  it("explains a duplicated time the clock shows twice in Spanish", async () => {
-    setLocale("es");
-    const { date, twice } = clocksBack();
-    const { api, state } = server();
-    fiestaFrom(state, twice);
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
-    await setField(el, "dates.0", date);
-    expect(duplicateNotes(el)).toEqual([
-      `Bar el ${formatDate(date)}: el reloj se atrasa, así que la hora ${twice} se da dos veces. Este horario se aplica las dos veces.`,
-    ]);
-  });
-
   it("explains no repeated time while the venue's clock cannot be read", async () => {
     const { date, twice } = clocksBack();
     const { api, state } = server();
+    state.model.specialDates[0]!.date = date;
     state.model.clockReadable = false;
     state.model.civilDate = null;
     state.model.dayCutover = "not a time";
     fiestaFrom(state, twice);
     const el = await mount(api);
     await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    await setField(el, "date", date);
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    expect(text(modal(el)!.querySelector('[data-test="named-day-date"]'))).toBe(formatDate(date));
     await choose(el, "station.bar.mode", "periods");
     await setField(el, "station.bar.periods.0.opensAt", twice);
     await setField(el, "station.bar.periods.0.closesAt", minutesAfter(twice, 60));
     expect(field(el, "station.bar.periods.0.closesAt")!.value).toBe(minutesAfter(twice, 60));
     expect(el.shadowRoot!.querySelectorAll('[data-test="repeat-note"]')).toHaveLength(0);
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
-    await setField(el, "dates.0", date);
-    expect(field(el, "dates.0")!.value).toBe(date);
-    expect(duplicateNotes(el)).toEqual([]);
   });
 
-  it("lists, edits and deletes a date saved beyond the calendar's year", async () => {
+  it("lists and edits a date saved beyond the calendar's year", async () => {
     const { api, state, calls } = server();
     const far = {
       id: "far",
       date: "2028-12-25",
       name: "Christmas 2028",
-      colour: "green" as const,
+      kind: "working_day" as const,
+      repeats: false,
+      ownHours: false,
       closeWholeVenue: false,
     };
     state.model.specialDates.push(far);
@@ -1526,34 +1307,35 @@ describe("Hours: special dates", () => {
     await selectTab(el, "dates");
     await listTable(el).updateComplete;
     expect(listRows(el).map((row) => row.slice(0, 2))).toEqual([
-      ["Mon, 12 Oct 2026", "Fiesta Nacional Red"],
-      ["Tue, 13 Oct 2026", "Staff day off Grey"],
-      ["Mon, 25 Dec 2028", "Christmas 2028 Green"],
+      ["Mon, 12 Oct 2026", "Fiesta Nacional Blue"],
+      ["Tue, 13 Oct 2026", "Staff day off Blue"],
+      ["Mon, 25 Dec 2028", "Christmas 2028 Blue"],
     ]);
     await menuAction(el, rowOf(el, "Christmas 2028"), "edit-date");
-    expect(field(el, "date")!.value).toBe("2028-12-25");
+    expect(text(modal(el)!.querySelector('[data-test="named-day-date"]'))).toBe("Mon, 25 Dec 2028");
     expect(field(el, "station.bar.mode")!.value).toBe("closed");
-    await setField(el, "name", "Christmas Day 2028");
+    await choose(el, "station.bar.mode", "all_day");
     await click(el, saveButton(el));
     expect(calls("PUT")).toEqual([
       [
         "/management-api/venue-service/special-dates/far",
         {
           date: "2028-12-25",
-          name: "Christmas Day 2028",
-          colour: "green",
+          name: "Christmas 2028",
+          kind: "working_day",
+          repeats: false,
+          ownHours: false,
           closeWholeVenue: false,
           cells: [
-            { subject: { kind: "station", id: "bar" }, cell: { mode: "closed", periods: [] } },
+            { subject: { kind: "station", id: "bar" }, cell: { mode: "all_day", periods: [] } },
           ],
         },
       ],
     ]);
-    await menuAction(el, rowOf(el, "Christmas 2028"), "delete-date");
-    await click(el, saveButton(el));
-    expect(calls("DELETE")).toEqual([
-      ["/management-api/venue-service/special-dates/far", undefined],
-    ]);
+    expect(
+      rowOf(el, "Christmas 2028").querySelector("a[data-test=delete-date]")!.getAttribute("href"),
+    ).toBe("/manage/opening-hours/view/calendar");
+    expect(calls("DELETE")).toEqual([]);
   });
 
   it.each([
@@ -1583,9 +1365,13 @@ describe("Hours: special dates", () => {
     [
       { code: "hours.invalid", params: { field: "date", date: "2026-10-12", subjectId: "bar" } },
       "date",
-      "Moving this date away from Mon, 12 Oct 2026 would leave its standard hours overlapping a neighbouring date.",
+      "These hours overlap the hours on Mon, 12 Oct 2026.",
     ],
-    [{ code: "hours.invalid", params: { field: "name" } }, "name", "Check this value."],
+    [
+      { code: "hours.invalid", params: { field: "name" } },
+      "name",
+      "Check the highlighted hours: periods must not overlap, including past midnight.",
+    ],
     [
       {
         code: "menu_timetable.invalid",
@@ -1625,26 +1411,30 @@ describe("Hours: special dates", () => {
       "date",
       "Restaurant's menu timetable uses a time the clock skips on this date.",
     ],
-  ])("puts a refusal beside the field it names: %j", async (refusal, name, message) => {
-    const { api, state, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
-    state.writes.push({ reject: refusal });
-    await setField(el, "colour", "blue");
-    await click(el, saveButton(el));
-    expect(field(el, name)!.error).toBe(message);
-    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
-    expect(saveButton(el).disabled).toBe(false);
-    await setField(
-      el,
-      name === "date" ? "date" : "name",
-      name === "date" ? "2026-10-20" : "Fiesta",
-    );
-    if (name === "date") expect(field(el, name)!.error).toBe("");
-    await click(el, saveButton(el));
-    expect(calls("PUT")).toHaveLength(2);
-  });
+  ])(
+    "places a refusal beside a shown cell or at the bottom for metadata: %j",
+    async (refusal, name, message) => {
+      const { api, state, calls } = server();
+      const el = await mount(api);
+      await selectTab(el, "dates");
+      await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+      state.writes.push({ reject: refusal });
+      await setField(el, "station.restaurant.periods.0.opensAt", "13:00");
+      await click(el, saveButton(el));
+      if (name === "date" || name === "name") {
+        expect(field(el, name)).toBeNull();
+        expect(await bottomMessage(el)).toBe(message);
+      } else {
+        expect(field(el, name)!.error).toBe(message);
+        expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+      }
+      expect(saveButton(el).disabled).toBe(false);
+      await setField(el, "station.restaurant.periods.0.opensAt", "14:00");
+      if (name.startsWith("station.restaurant")) expect(field(el, name)!.error).toBe("");
+      await click(el, saveButton(el));
+      expect(calls("PUT")).toHaveLength(2);
+    },
+  );
 
   it.each([
     [
@@ -1677,7 +1467,7 @@ describe("Hours: special dates", () => {
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     state.writes.push({ reject: refusal });
-    await setField(el, "colour", "blue");
+    await setField(el, "station.restaurant.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe(message);
     expect(
@@ -1687,140 +1477,6 @@ describe("Hours: special dates", () => {
     ).toEqual([]);
     expect(saveButton(el).disabled).toBe(false);
   });
-
-  it("duplicates a date to several target dates in one batch, asking for nothing else", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
-    expect(modal(el)!.getAttribute("heading")).toBe("Duplicate Fiesta Nacional");
-    expect(text(el.shadowRoot!.querySelector('[data-test="duplicate-note"]'))).toBe(
-      "Copies the colour and every cell to each date. A date that is a public holiday, local ones included, takes the holiday's name; any other date keeps this name.",
-    );
-    expect(field(el, "name")).toBeNull();
-    expect(field(el, "colour")).toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-modal hours-cell-editor")).toBeNull();
-    await setField(el, "dates.0", "2026-11-02");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-target"]'));
-    await setField(el, "dates.1", "2026-11-02");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-target"]'));
-    await click(el, saveButton(el));
-    expect(field(el, "dates.1")!.error).toBe("This date is listed twice.");
-    expect(field(el, "dates.2")!.error).toBe("Enter a date.");
-    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
-    await click(el, el.shadowRoot!.querySelector('[data-test="remove-target-2"]'));
-    await setField(el, "dates.1", "2026-11-09");
-    await click(el, saveButton(el));
-    expect(calls("POST")).toEqual([
-      [
-        "/management-api/venue-service/special-dates/fiesta/duplicate",
-        { dates: ["2026-11-02", "2026-11-09"] },
-      ],
-    ]);
-    expect(modal(el)).toBeNull();
-  });
-
-  it.each([
-    [
-      { code: "special_date.date_taken", params: { date: "2026-11-09" } },
-      "dates.1",
-      "Mon, 9 Nov 2026 already has special hours.",
-    ],
-    [
-      { code: "hours.invalid", params: { field: "dates.0", date: "2026-11-02", subjectId: "bar" } },
-      "dates.0",
-      "The clock skips a time these hours use on this date.",
-    ],
-    [
-      { code: "hours.invalid", params: { field: "dates.1", date: "2026-11-08", subjectId: "bar" } },
-      "dates.1",
-      "These hours overlap the hours on Sun, 8 Nov 2026.",
-    ],
-    [
-      {
-        code: "menu_timetable.invalid",
-        params: { field: "date", date: "2026-11-09", departmentId: "restaurant" },
-      },
-      "dates.1",
-      "Restaurant's menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
-    ],
-    [
-      {
-        code: "menu_timetable.invalid",
-        params: {
-          field: "date",
-          date: "2026-11-09",
-          departmentId: "restaurant",
-          reason: "overlap",
-        },
-      },
-      "dates.1",
-      "Restaurant's menu timetable would overlap a neighbouring date's menus here.",
-    ],
-    [
-      {
-        code: "menu_timetable.invalid",
-        params: {
-          field: "date",
-          date: "2026-11-02",
-          departmentId: "restaurant",
-          reason: "clock_skips",
-        },
-      },
-      "dates.0",
-      "Restaurant's menu timetable uses a time the clock skips on this date.",
-    ],
-  ])(
-    "puts a duplicate's refusal beside the target date it names: %j",
-    async (refusal, name, message) => {
-      const { api, state } = server();
-      const el = await mount(api);
-      await selectTab(el, "dates");
-      await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
-      await setField(el, "dates.0", "2026-11-02");
-      await click(el, el.shadowRoot!.querySelector('[data-test="add-target"]'));
-      await setField(el, "dates.1", "2026-11-09");
-      state.writes.push({ reject: refusal });
-      await click(el, saveButton(el));
-      expect(field(el, name)!.error).toBe(message);
-      const other = name === "dates.0" ? "dates.1" : "dates.0";
-      expect(field(el, other)!.error).toBe("");
-      expect(saveButton(el).disabled).toBe(false);
-    },
-  );
-
-  it.each([
-    [
-      { code: "special_date.date_taken", params: { date: "2026-11-01" } },
-      "Sun, 1 Nov 2026 already has special hours.",
-    ],
-    [
-      { code: "hours.invalid", params: { field: "dates" } },
-      "Check the highlighted hours: periods must not overlap, including past midnight.",
-    ],
-    [{ code: "connection.failed" }, "The change could not be saved."],
-    [
-      {
-        code: "menu_timetable.invalid",
-        params: { field: "date", date: "2026-12-01", departmentId: "restaurant" },
-      },
-      "Restaurant's menu timetable would overlap a neighbouring date's menus here, or use a time the clock skips.",
-    ],
-  ])(
-    "says a duplicate's refusal that names no target at the bottom: %j",
-    async (refusal, message) => {
-      const { api, state } = server();
-      const el = await mount(api);
-      await selectTab(el, "dates");
-      await menuAction(el, rowOf(el, "Fiesta"), "duplicate-date");
-      await setField(el, "dates.0", "2026-11-02");
-      state.writes.push({ reject: refusal });
-      await click(el, saveButton(el));
-      expect(await bottomMessage(el)).toBe(message);
-      expect(field(el, "dates.0")!.error).toBe("");
-      expect(saveButton(el).disabled).toBe(false);
-    },
-  );
 
   it("names inactive columns when they are shown", async () => {
     const { api } = server();
@@ -1834,52 +1490,6 @@ describe("Hours: special dates", () => {
     expect(terrace?.label).toBe("Terrace (inactive)");
   });
 
-  it("deletes a date after confirming, and names the neighbouring date when that is refused", async () => {
-    const { api, state, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Staff"), "delete-date");
-    expect(modal(el)!.getAttribute("heading")).toBe("Delete special date");
-    expect(text(el.shadowRoot!.querySelector('[data-test="confirm-text"]'))).toBe(
-      "Delete Staff day off on Tue, 13 Oct 2026? Its hours go back to the standard week.",
-    );
-    state.writes.push({
-      reject: {
-        code: "hours.invalid",
-        params: { field: "date", date: "2026-10-14", subjectId: "bar" },
-      },
-    });
-    await click(el, saveButton(el));
-    expect(await bottomMessage(el)).toBe(
-      "Deleting this date would leave the standard hours overlapping the hours on Wed, 14 Oct 2026.",
-    );
-    expect(saveButton(el).disabled).toBe(false);
-    await click(el, saveButton(el));
-    expect(calls("DELETE")).toEqual([
-      ["/management-api/venue-service/special-dates/staff", undefined],
-      ["/management-api/venue-service/special-dates/staff", undefined],
-    ]);
-    expect(modal(el)).toBeNull();
-  });
-
-  it("says at the bottom when deleting would leave a department's menu week overlapping a neighbour's menus", async () => {
-    const { api, state } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await menuAction(el, rowOf(el, "Staff"), "delete-date");
-    state.writes.push({
-      reject: {
-        code: "menu_timetable.invalid",
-        params: { field: "date", date: "2026-10-14", departmentId: "restaurant" },
-      },
-    });
-    await click(el, saveButton(el));
-    expect(await bottomMessage(el)).toBe(
-      "Deleting this date would leave Restaurant's normal menu week overlapping the menu timetable on Wed, 14 Oct 2026.",
-    );
-    expect(saveButton(el).disabled).toBe(false);
-  });
-
   it("says there are no special dates yet", async () => {
     const { api, state } = server();
     state.model.days = state.model.days.map((day) => ({ ...day, specialDate: null }));
@@ -1888,7 +1498,7 @@ describe("Hours: special dates", () => {
     const el = await mount(api);
     await selectTab(el, "dates");
     const table = listTable(el) as ListTable & { emptyMessage: string };
-    expect(table.emptyMessage).toBe("No special dates yet.");
+    expect(table.emptyMessage).toBe("No named days yet.");
   });
 
   it("speaks Spanish in the list", async () => {
@@ -1899,7 +1509,7 @@ describe("Hours: special dates", () => {
     await listTable(el).updateComplete;
     expect(listRows(el)[0]!.slice(0, 6)).toEqual([
       "lun, 12 oct 2026",
-      "Fiesta Nacional Rojo",
+      "Fiesta Nacional Azul",
       "12:00–23:00",
       "Cerrado",
       "Siempre abierta",
@@ -1908,21 +1518,7 @@ describe("Hours: special dates", () => {
   });
 });
 
-describe("Hours: the calendar", () => {
-  const calendar = (el: HoursScreen) =>
-    el.shadowRoot!.querySelector<
-      HTMLElement & { readOnly: boolean; updateComplete: Promise<unknown> }
-    >("hours-calendar");
-  const day = (el: HoursScreen, date: string) =>
-    calendar(el)!.shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button`)!;
-  async function openDay(el: HoursScreen, date: string) {
-    await click(el, day(el, date));
-    await settle(el);
-  }
-  async function panelAction(el: HoursScreen, kind: string) {
-    await click(el, calendar(el)!.shadowRoot!.querySelector(`[data-test="calendar-${kind}"]`));
-    await settle(el);
-  }
+describe("Hours: named-day live reads", () => {
   const renamed = (name: string): HoursModel => {
     const next = structuredClone(model());
     next.specialDates[0]!.name = name;
@@ -1930,299 +1526,7 @@ describe("Hours: the calendar", () => {
     return next;
   };
 
-  it("opens from its link, and records choosing it in the address", async () => {
-    history.replaceState(null, "", "/manage/hours/view/calendar");
-    const { api } = server();
-    const el = await mount(api);
-    expect(calendar(el)).not.toBeNull();
-    await selectTab(el, "week");
-    expect(calendar(el)).toBeNull();
-    await selectTab(el, "calendar");
-    expect(location.pathname).toBe("/manage/hours/view/calendar");
-    expect(text(calendar(el)!.shadowRoot!.querySelector('[data-test="month"]'))).toBe(
-      "October 2026",
-    );
-    expect(calendar(el)!.readOnly).toBe(false);
-  });
-
-  it("edits a date from the calendar, and without live updates the calendar and the list read it at once under the same id", async () => {
-    const { api, state, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await openDay(el, "2026-10-12");
-    await panelAction(el, "edit");
-    expect(modal(el)!.getAttribute("heading")).toBe("Edit special date");
-    expect(field(el, "name")!.value).toBe("Fiesta Nacional");
-    await setField(el, "name", "Fiesta renamed");
-    state.model = renamed("Fiesta renamed");
-    await click(el, saveButton(el));
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    await settle(el);
-    expect(calls("PUT")).toEqual([
-      [
-        "/management-api/venue-service/special-dates/fiesta",
-        {
-          date: "2026-10-12",
-          name: "Fiesta renamed",
-          colour: "red",
-          closeWholeVenue: false,
-          cells: model().specialCells[0]!.cells,
-        },
-      ],
-    ]);
-    // Still on the calendar, which has read its month again.
-    expect(text(day(el, "2026-10-12"))).toBe("12 Fiesta renamed");
-    await selectTab(el, "dates");
-    await listTable(el).updateComplete;
-    const table = listTable(el) as ListTable & {
-      rows: { special: { id: string } }[];
-      rowKey: (row: unknown) => string;
-    };
-    expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Red"]);
-    expect(table.rowKey(table.rows[0])).toBe("fiesta");
-  });
-
-  it("shows a date added in the list on the calendar at once", async () => {
-    const { api, state } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    await setField(el, "date", "2026-10-21");
-    await setField(el, "name", "Market day");
-    await choose(el, "colour", "blue");
-    const market = {
-      id: "market",
-      date: "2026-10-21",
-      name: "Market day",
-      colour: "blue" as const,
-      closeWholeVenue: false,
-    };
-    state.writes.push(market);
-    state.model.specialDates.push(market);
-    state.model.days.push({ date: market.date, specialDate: market, holidays: [], tone: "blue" });
-    state.model.specialCells.push({ specialDateId: "market", cells: [] });
-    await click(el, saveButton(el));
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    await selectTab(el, "calendar");
-    await settle(el);
-    expect(text(day(el, "2026-10-21"))).toBe("21 Market day");
-  });
-
-  it("makes an ordinary date special with the date already filled in", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await openDay(el, "2026-10-15");
-    await panelAction(el, "make_special");
-    expect(modal(el)!.getAttribute("heading")).toBe("Add a special date");
-    expect(field(el, "date")!.value).toBe("2026-10-15");
-    expect(field(el, "name")!.value).toBe("2026-10-15");
-    await setField(el, "name", "Our party");
-    await choose(el, "colour", "green");
-    await click(el, saveButton(el));
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    expect(calls("POST")).toEqual([
-      [
-        "/management-api/venue-service/special-dates",
-        {
-          date: "2026-10-15",
-          name: "Our party",
-          colour: "green",
-          closeWholeVenue: false,
-          cells: [],
-        },
-      ],
-    ]);
-  });
-
-  it("edits a date outside the page's own window with the cells the calendar read for it", async () => {
-    const { api, state, calls } = server();
-    const past = {
-      id: "past",
-      date: "2026-10-01",
-      name: "Past party",
-      colour: "amber" as const,
-      closeWholeVenue: false,
-    };
-    const deliClosed = {
-      subject: { kind: "station" as const, id: "deli" },
-      cell: { mode: "closed" as const, periods: [] as [] },
-    };
-    // The page's first read starts at yesterday; the calendar's month read holds the past date.
-    state.reads.push(model());
-    state.model.days.push({ date: past.date, specialDate: past, holidays: [], tone: "amber" });
-    state.model.specialCells.push({ specialDateId: "past", cells: [deliClosed] });
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await openDay(el, "2026-10-01");
-    await panelAction(el, "edit");
-    expect(field(el, "name")!.value).toBe("Past party");
-    await setField(el, "name", "Past party edited");
-    await click(el, saveButton(el));
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    expect(calls("PUT")).toEqual([
-      [
-        "/management-api/venue-service/special-dates/past",
-        {
-          date: "2026-10-01",
-          name: "Past party edited",
-          colour: "amber",
-          closeWholeVenue: false,
-          cells: [deliClosed],
-        },
-      ],
-    ]);
-  });
-
-  it("explains a repeated time when duplicating a date outside the page's own window, from the cells the calendar read for it", async () => {
-    const back = clockChangeAfter("Europe/Madrid", "2026-10-08T00:00:00Z", "backward");
-    const twice = minutesAfter(back.after, 30);
-    const { api, state } = server();
-    const past = {
-      id: "past",
-      date: "2026-10-01",
-      name: "Past party",
-      colour: "amber" as const,
-      closeWholeVenue: false,
-    };
-    // The page's first read starts at yesterday; the calendar's month read holds the past date.
-    state.reads.push(model());
-    state.model.days.push({ date: past.date, specialDate: past, holidays: [], tone: "amber" });
-    state.model.specialCells.push({
-      specialDateId: "past",
-      cells: [
-        {
-          subject: { kind: "station", id: "bar" },
-          cell: { mode: "periods", periods: [P("p1", twice, minutesAfter(twice, 60))] },
-        },
-      ],
-    });
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await openDay(el, "2026-10-01");
-    await panelAction(el, "duplicate");
-    expect(modal(el)!.getAttribute("heading")).toBe("Duplicate Past party");
-    await setField(el, "dates.0", back.date);
-    expect(
-      [...el.shadowRoot!.querySelectorAll('[data-test="duplicate-repeat-note"]')].map((note) =>
-        text(note),
-      ),
-    ).toEqual([
-      `Bar on ${formatDate(back.date)}: the clock goes back, so ${twice} happens twice. These hours apply both times.`,
-    ]);
-  });
-
-  it("duplicates and deletes the date the calendar shows, returning focus to the panel", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await openDay(el, "2026-10-12");
-    await panelAction(el, "duplicate");
-    expect(modal(el)!.getAttribute("heading")).toBe("Duplicate Fiesta Nacional");
-    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    await vi.waitFor(() =>
-      expect(calendar(el)!.shadowRoot!.activeElement).toBe(
-        calendar(el)!.shadowRoot!.querySelector('[data-test="calendar-duplicate"]'),
-      ),
-    );
-    await panelAction(el, "delete");
-    expect(text(el.shadowRoot!.querySelector('[data-test="confirm-text"]'))).toBe(
-      "Delete Fiesta Nacional on Mon, 12 Oct 2026? Its hours go back to the standard week.",
-    );
-    await click(el, saveButton(el));
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    expect(calls("DELETE")).toEqual([
-      ["/management-api/venue-service/special-dates/fiesta", undefined],
-    ]);
-  });
-
-  it.each([
-    ["without live updates", () => undefined],
-    ["with live updates that deliver nothing", () => new LiveData()],
-  ])(
-    "shows a date added in the list on a calendar the address brought back beneath the editor, %s",
-    async (_, liveData) => {
-      history.replaceState(null, "", "/manage/hours/view/calendar");
-      const { api, state } = server(liveData());
-      const el = await mount(api);
-      await selectTab(el, "dates");
-      await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-      await setField(el, "date", "2026-10-21");
-      await setField(el, "name", "Market day");
-      await choose(el, "colour", "blue");
-      // The browser's Back button while the editor is open.
-      history.replaceState(null, "", "/manage/hours/view/calendar");
-      dispatchEvent(new PopStateEvent("popstate"));
-      await settle(el);
-      expect(text(day(el, "2026-10-21"))).toBe("21");
-      expect(modal(el)).not.toBeNull();
-      const market = {
-        id: "market",
-        date: "2026-10-21",
-        name: "Market day",
-        colour: "blue" as const,
-        closeWholeVenue: false,
-      };
-      state.writes.push(market);
-      state.model.specialDates.push(market);
-      state.model.days.push({ date: market.date, specialDate: market, holidays: [], tone: "blue" });
-      state.model.specialCells.push({ specialDateId: "market", cells: [] });
-      await click(el, saveButton(el));
-      await vi.waitFor(() => expect(modal(el)).toBeNull());
-      await settle(el);
-      expect(text(day(el, "2026-10-21"))).toBe("21 Market day");
-    },
-  );
-
-  it.each([
-    ["without live updates", () => undefined],
-    ["with live updates that deliver nothing", () => new LiveData()],
-  ])(
-    "returns focus to the date in the grid once a date deleted from the calendar is gone, %s",
-    async (_, liveData) => {
-      const { api, state } = server(liveData());
-      const el = await mount(api);
-      await selectTab(el, "calendar");
-      await openDay(el, "2026-10-12");
-      await panelAction(el, "delete");
-      const gone = model();
-      gone.specialDates = [STAFF];
-      gone.days = gone.days.filter((entry) => entry.date !== "2026-10-12");
-      gone.specialCells = [];
-      state.model = gone;
-      await click(el, saveButton(el));
-      await vi.waitFor(() => expect(modal(el)).toBeNull());
-      await settle(el);
-      expect(text(day(el, "2026-10-12"))).toBe("12");
-      expect(calendar(el)!.shadowRoot!.activeElement).toBe(day(el, "2026-10-12"));
-    },
-  );
-
-  it("returns focus to the date in the grid when live updates remove the date before the delete answers", async () => {
-    const liveData = new LiveData();
-    const { api, state } = server(liveData);
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await openDay(el, "2026-10-12");
-    await panelAction(el, "delete");
-    const late = deferred();
-    state.writes.push(late.promise);
-    await click(el, saveButton(el));
-    const gone = model();
-    gone.specialDates = [STAFF];
-    gone.days = gone.days.filter((entry) => entry.date !== "2026-10-12");
-    gone.specialCells = [];
-    state.model = gone;
-    liveData.invalidate([{ type: "special_dates" }]);
-    await vi.waitFor(() => expect(text(day(el, "2026-10-12"))).toBe("12"));
-    expect(modal(el)).not.toBeNull();
-    late.resolve(undefined);
-    await vi.waitFor(() => expect(modal(el)).toBeNull());
-    await settle(el);
-    expect(calendar(el)!.shadowRoot!.activeElement).toBe(day(el, "2026-10-12"));
-  });
-
-  it("shows a save on the page and the calendar when the live stream is open but delivers nothing", async () => {
+  it("shows a save in Named days when the live stream is open but delivers nothing", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const liveData = new LiveData();
     const stream = Object.assign(new EventTarget(), { readyState: 1, close: () => {} });
@@ -2231,31 +1535,30 @@ describe("Hours: the calendar", () => {
     try {
       const { api, state, calls } = server(liveData);
       const el = await mount(api);
-      await selectTab(el, "calendar");
-      await openDay(el, "2026-10-12");
-      await panelAction(el, "edit");
-      await setField(el, "name", "Fiesta renamed");
+      await selectTab(el, "dates");
+      await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+      await setField(el, "station.restaurant.periods.0.opensAt", "13:00");
       state.model = renamed("Fiesta renamed");
       const before = calls("GET").length;
       await click(el, saveButton(el));
       await vi.waitFor(() => expect(modal(el)).toBeNull());
-      await vi.waitFor(() => expect(text(day(el, "2026-10-12"))).toBe("12 Fiesta renamed"));
+      await vi.waitFor(() => expect(listRows(el)[0]![1]).toBe("Fiesta renamed Blue"));
       await settle(el);
       const reads = calls("GET")
         .slice(before)
         .map(([path]) => path);
-      expect(reads).toHaveLength(2);
-      expect(reads).toContain("/management-api/venue-service/hours?from=2026-09-28&to=2026-11-01");
+      expect(reads).toHaveLength(1);
+      expect(reads.filter((path) => String(path).endsWith("/local-holidays"))).toHaveLength(0);
       await selectTab(el, "dates");
       await listTable(el).updateComplete;
-      expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Red"]);
+      expect(listRows(el)[0]!.slice(0, 2)).toEqual(["Mon, 12 Oct 2026", "Fiesta renamed Blue"]);
     } finally {
       connection.stop();
       vi.useRealTimers();
     }
   });
 
-  it("reads a save at most twice for each open view when live updates also announce it", async () => {
+  it("reads a save at most twice for its open view when live updates also announce it", async () => {
     const liveData = new LiveData();
     const stream = Object.assign(new EventTarget(), { readyState: 1, close: () => {} });
     const connection = new LiveConnection(liveData, { open: () => stream });
@@ -2263,10 +1566,9 @@ describe("Hours: the calendar", () => {
     try {
       const { api, state, calls } = server(liveData);
       const el = await mount(api);
-      await selectTab(el, "calendar");
-      await openDay(el, "2026-10-12");
-      await panelAction(el, "edit");
-      await setField(el, "name", "Fiesta renamed");
+      await selectTab(el, "dates");
+      await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+      await setField(el, "station.restaurant.periods.0.opensAt", "13:00");
       state.model = renamed("Fiesta renamed");
       const before = calls("GET").length;
       await click(el, saveButton(el));
@@ -2277,17 +1579,14 @@ describe("Hours: the calendar", () => {
           data: JSON.stringify([{ type: "special_dates" }, { type: "special_date_hours" }]),
         }),
       );
-      await vi.waitFor(() => expect(text(day(el, "2026-10-12"))).toBe("12 Fiesta renamed"));
+      await vi.waitFor(() => expect(listRows(el)[0]![1]).toBe("Fiesta renamed Blue"));
       await settle(el);
       const reads = calls("GET")
         .slice(before)
         .map(([path]) => path);
-      // One read each after the save, and one more each for the change event, which the shared
-      // cache cannot tell apart from a later write by someone else.
-      expect(reads).toHaveLength(4);
-      const month = "/management-api/venue-service/hours?from=2026-09-28&to=2026-11-01";
-      expect(reads.filter((path) => path === month)).toHaveLength(2);
-      expect(new Set(reads).size).toBe(2);
+      expect(reads).toHaveLength(2);
+      expect(reads.filter((path) => String(path).endsWith("/local-holidays"))).toHaveLength(0);
+      expect(new Set(reads).size).toBe(1);
     } finally {
       connection.stop();
     }
@@ -2312,20 +1611,13 @@ describe("Hours: the calendar", () => {
   });
 
   it("keeps its view while the address moves to another screen", async () => {
-    history.replaceState(null, "", "/manage/hours/view/calendar");
+    history.replaceState(null, "", "/manage/hours/view/dates");
     const { api } = server();
     const el = await mount(api);
     history.pushState(null, "", "/manage/printers");
     dispatchEvent(new PopStateEvent("popstate"));
     await settle(el);
-    expect(calendar(el)).not.toBeNull();
-  });
-
-  it("offers a read-only viewer the calendar with nothing to change", async () => {
-    const { api } = server();
-    const el = await mount(api, true);
-    await selectTab(el, "calendar");
-    expect(calendar(el)!.readOnly).toBe(true);
+    expect(listTable(el)).not.toBeNull();
   });
 
   it("paints each special date's colour beside its name in the list", async () => {
@@ -2335,250 +1627,12 @@ describe("Hours: the calendar", () => {
     await listTable(el).updateComplete;
     const swatch = rowOf(el, "Fiesta").querySelector<HTMLElement>('[part~="colour-swatch"]')!;
     const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-palette-red)";
+    probe.style.color = "var(--wt-color-palette-blue)";
     el.shadowRoot!.append(probe);
     expect(getComputedStyle(swatch).backgroundColor).toBe(getComputedStyle(probe).color);
     probe.remove();
   });
 });
-
-describe("Hours: public holidays", () => {
-  const calendar = (el: HoursScreen) =>
-    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-      "hours-calendar",
-    )!;
-  const day = (el: HoursScreen, date: string) =>
-    calendar(el).shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button`)!;
-  const monthCoverage = (el: HoursScreen) =>
-    [...calendar(el).shadowRoot!.querySelectorAll('[data-test="month-coverage"] li')].map(text);
-  async function makeSpecial(el: HoursScreen, date: string) {
-    await click(el, day(el, date));
-    await click(el, calendar(el).shadowRoot!.querySelector('[data-test="calendar-make_special"]'));
-  }
-  /** The model as the server reads it once 15 October holds `names`, and 2026's coverage. */
-  function withHolidays(
-    names: string[],
-    nationalRegional: "complete" | "area_required" = "complete",
-  ): HoursModel {
-    const next = model();
-    next.days.push({
-      date: "2026-10-15",
-      specialDate: null,
-      holidays: names.map((name, index) => ({
-        id: `local:${index}`,
-        date: "2026-10-15",
-        name,
-        scope: "local",
-        sourceId: "owner:g-sevilla",
-      })),
-      tone: "standard",
-    });
-    next.holidaySources = [
-      { id: "owner:g-sevilla", kind: "owner", title: "Sevilla", url: null, sha256: null },
-    ];
-    next.holidayCoverage = [
-      {
-        year: 2026,
-        country: "ES",
-        provinceCode: "25",
-        regionCode: "09",
-        nationalRegional,
-        local: "owner_entered",
-        dataVersion: "ES-2026.1",
-        sourceIds: [],
-      },
-    ];
-    return next;
-  }
-
-  it("puts Local holidays at the foot of the Special dates tab, read-only for a viewer", async () => {
-    const { api } = server();
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    const section = el.shadowRoot!.querySelector<HTMLElement & { readOnly: boolean }>(
-      "local-holidays-editor",
-    )!;
-    expect(section).not.toBeNull();
-    const table = listTable(el);
-    expect(table.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(section.readOnly).toBe(false);
-    await selectTab(el, "week");
-    expect(el.shadowRoot!.querySelector("local-holidays-editor")).toBeNull();
-
-    const viewer = await mount(server().api, true);
-    await selectTab(viewer, "dates");
-    expect(
-      viewer.shadowRoot!.querySelector<HTMLElement & { readOnly: boolean }>(
-        "local-holidays-editor",
-      )!.readOnly,
-    ).toBe(true);
-  });
-
-  it("names a date made special after its holidays, and follows another client's rename until the name is edited", async () => {
-    const liveData = new LiveData();
-    const { api, state } = server(liveData);
-    state.model = withHolidays(["Feria", "Fiesta común"]);
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    expect(text(day(el, "2026-10-15"))).toBe("15 Feria · Fiesta común · standard hours");
-    await makeSpecial(el, "2026-10-15");
-    expect(field(el, "name")!.value).toBe("Feria · Fiesta común");
-
-    state.model = withHolidays(["Feria de otoño"]);
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() =>
-      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de otoño · standard hours"),
-    );
-    await settle(el);
-    expect(field(el, "name")!.value).toBe("Feria de otoño");
-
-    await setField(el, "name", "Our own name");
-    state.model = withHolidays(["Feria de invierno"]);
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() =>
-      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de invierno · standard hours"),
-    );
-    await settle(el);
-    expect(field(el, "name")!.value).toBe("Our own name");
-    expect(modal(el)).not.toBeNull();
-  });
-
-  it("follows the holidays through a colour change, and stops once the name is edited, even back to the suggested text", async () => {
-    const liveData = new LiveData();
-    const { api, state } = server(liveData);
-    state.model = withHolidays(["Feria"]);
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await makeSpecial(el, "2026-10-15");
-    expect(field(el, "name")!.value).toBe("Feria");
-    await choose(el, "colour", "amber");
-    state.model = withHolidays(["Feria de otoño"]);
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() =>
-      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de otoño · standard hours"),
-    );
-    await settle(el);
-    expect(field(el, "name")!.value).toBe("Feria de otoño");
-
-    await setField(el, "name", "My choice");
-    await setField(el, "name", "Feria de otoño");
-    state.model = withHolidays(["Feria de invierno"]);
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() =>
-      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de invierno · standard hours"),
-    );
-    await settle(el);
-    expect(field(el, "name")!.value).toBe("Feria de otoño");
-  });
-
-  it("keeps a suggested name when a read covers a range without its date", async () => {
-    const liveData = new LiveData();
-    const { api, state } = server(liveData);
-    state.model = withHolidays(["Feria"]);
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await makeSpecial(el, "2026-10-15");
-    state.model = model();
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() => expect(text(day(el, "2026-10-15"))).not.toContain("Feria"));
-    await settle(el);
-    expect(field(el, "name")!.value).toBe("Feria");
-  });
-
-  it("turns an untouched suggested name into the date when a read lists the date with no holidays", async () => {
-    const liveData = new LiveData();
-    const { api, state } = server(liveData);
-    state.model = withHolidays(["Feria"]);
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await makeSpecial(el, "2026-10-15");
-    state.model = withHolidays([]);
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() => expect(text(day(el, "2026-10-15"))).not.toContain("Feria"));
-    await settle(el);
-    expect(field(el, "name")!.value).toBe("2026-10-15");
-  });
-
-  it("drops the holiday name's link to its date once the draft's date changes, so a later read cannot rename it", async () => {
-    const liveData = new LiveData();
-    const { api, state } = server(liveData);
-    state.model = withHolidays(["Feria"]);
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await makeSpecial(el, "2026-10-15");
-    expect(field(el, "name")!.value).toBe("Feria");
-    await setField(el, "date", "2026-10-16");
-    state.model = withHolidays(["Feria de otoño"]);
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() =>
-      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de otoño · standard hours"),
-    );
-    await settle(el);
-    expect(field(el, "name")!.value).toBe("Feria");
-    expect(field(el, "date")!.value).toBe("2026-10-16");
-  });
-
-  it("opening Make this a special date creates nothing until saved", async () => {
-    const { api, calls } = server();
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    await makeSpecial(el, "2026-10-15");
-    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    expect(requestWrites(calls)).toEqual([]);
-  });
-
-  it("follows another client's area choice into the calendar's coverage", async () => {
-    const liveData = new LiveData();
-    const { api, state } = server(liveData);
-    state.model = withHolidays([], "area_required");
-    const el = await mount(api);
-    await selectTab(el, "calendar");
-    expect(monthCoverage(el)).toEqual([
-      "2026: only official holidays for the whole province are shown until the holiday area is chosen under Special dates.",
-    ]);
-    state.model = withHolidays([]);
-    liveData.invalidate([{ type: "holiday_geographies" }]);
-    await vi.waitFor(() => expect(monthCoverage(el)).toEqual([]));
-  });
-
-  it("follows another client's address change into the local section, reading passively and posting nothing", async () => {
-    const liveData = new LiveData();
-    const { api, state, request } = server(liveData);
-    const el = await mount(api);
-    await selectTab(el, "dates");
-    const section = () => el.shadowRoot!.querySelector("local-holidays-editor")!;
-    await vi.waitFor(() =>
-      expect(text(section().shadowRoot!.querySelector('[data-test="local-allowance"]'))).toBe(
-        "2026: 1 of 2 local holidays entered.",
-      ),
-    );
-    state.local = {
-      ...localModel(),
-      venue: { country: "ES", provinceCode: "41", city: "Utrera" },
-      geographies: [{ ...localModel().geographies[0]!, matchesVenue: false }],
-      entries: [],
-    };
-    liveData.invalidate([{ type: "locations" }]);
-    await vi.waitFor(() =>
-      expect(text(section().shadowRoot!.querySelector('[data-test="retained"]'))).toBe(
-        "These local holidays were for Sevilla. Remove",
-      ),
-    );
-    expect(request.mock.calls.every(([, method]) => method === "GET")).toBe(true);
-    expect(request.mock.calls.every((call) => call[3]?.passive === true)).toBe(true);
-
-    const reads = request.mock.calls.length;
-    el.remove();
-    liveData.invalidate([{ type: "local_holidays" }, { type: "locations" }]);
-    liveData.refresh();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(request.mock.calls.length).toBe(reads);
-  });
-});
-
-function requestWrites(calls: (method: string) => unknown[][]) {
-  return [...calls("POST"), ...calls("PUT"), ...calls("DELETE")];
-}
 
 it("a retired department URL cannot override the station named alongside it", async () => {
   history.replaceState(null, "", "/manage/hours/department/deli/station/bar");
@@ -2612,9 +1666,231 @@ it.each([
         },
       },
     });
-    await setField(el, "colour", "blue");
+    await setField(el, "station.restaurant.periods.0.opensAt", "13:00");
     await click(el, saveButton(el));
-    expect(field(el, "date")!.error).toBe(message);
+    expect(field(el, "date")).toBeNull();
+    expect(await bottomMessage(el)).toBe(message);
     expect(saveButton(el).disabled).toBe(false);
   },
 );
+
+it.each(["en", "es"] as const)("Station hours offers Week and Named days in %s", async (locale) => {
+  setLocale(locale);
+  const { api } = server();
+  const el = await mount(api);
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  expect(tabs.items.map(({ key, label }) => [key, label])).toEqual(
+    locale === "en"
+      ? [
+          ["week", "Week"],
+          ["dates", "Named days"],
+        ]
+      : [
+          ["week", "Semana"],
+          ["dates", "Días con nombre"],
+        ],
+  );
+  expect(el.shadowRoot!.querySelector("hours-calendar")).toBeNull();
+});
+
+it.each([false, true])(
+  "Station named days links management to Opening hours Calendar (viewer=%s)",
+  async (readOnly) => {
+    const { api, calls } = server();
+    const el = await mount(api, readOnly);
+    await selectTab(el, "dates");
+    await listTable(el).updateComplete;
+    const links = findAll<HTMLAnchorElement>(el, "a[data-test]");
+    expect(links.map((link) => [link.dataset.test, link.getAttribute("href")])).toEqual(
+      readOnly
+        ? [["calendar-link", "/manage/opening-hours/view/calendar"]]
+        : [
+            ["calendar-link", "/manage/opening-hours/view/calendar"],
+            ["duplicate-date", "/manage/opening-hours/view/calendar"],
+            ["delete-date", "/manage/opening-hours/view/calendar"],
+            ["duplicate-date", "/manage/opening-hours/view/calendar"],
+            ["delete-date", "/manage/opening-hours/view/calendar"],
+          ],
+    );
+    for (const link of links) {
+      link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+      link.click();
+      await settle(el);
+      expect(modal(el)).toBeNull();
+    }
+    expect(findAll(el, "[data-test=add-date], [data-test=close-venue]")).toEqual([]);
+    expect(calls("POST")).toEqual([]);
+    expect(calls("PUT")).toEqual([]);
+    expect(calls("DELETE")).toEqual([]);
+    expect(el.shadowRoot!.querySelector("local-holidays-editor")).toBeNull();
+  },
+);
+
+it("a retired Station Calendar address opens Week and ignores a forged Calendar selection", async () => {
+  history.replaceState(null, "", "/manage/hours/view/calendar");
+  const el = await mount(server().api);
+  expect(el.shadowRoot!.querySelector('table[data-test="week-grid"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("hours-calendar")).toBeNull();
+  el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+    new CustomEvent("wt-tab-change", {
+      detail: { value: "calendar" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settle(el);
+  expect(el.shadowRoot!.querySelector('table[data-test="week-grid"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("hours-calendar")).toBeNull();
+});
+
+it.each([false, true])(
+  "Station named-day editor preserves all metadata while editing only cells, ownHours=%s",
+  async (ownHours) => {
+    const { api, state, calls } = server();
+    Object.assign(state.model.specialDates[0]!, {
+      name: "  Fiesta Nacional  ",
+      kind: "holiday",
+      ownHours,
+    });
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    expect(
+      modal(el)!.querySelectorAll(
+        '[name="date"], [name="name"], [name="colour"], [name="closeWholeVenue"]',
+      ),
+    ).toHaveLength(0);
+    expect(text(modal(el)!.querySelector('[data-test="named-day-date"]'))).toBe("Mon, 12 Oct 2026");
+    expect(modal(el)!.querySelector('[data-test="named-day-name"]')!.textContent).toBe(
+      "  Fiesta Nacional  ",
+    );
+    await choose(el, "station.deli.mode", "all_day");
+    await click(el, saveButton(el));
+    expect(calls("PUT")).toEqual([
+      [
+        "/management-api/venue-service/special-dates/fiesta",
+        {
+          date: "2026-10-12",
+          name: "  Fiesta Nacional  ",
+          kind: "holiday",
+          repeats: false,
+          ownHours,
+          closeWholeVenue: false,
+          cells: [
+            {
+              subject: { kind: "station", id: "restaurant" },
+              cell: { mode: "periods", periods: [P("f1", "12:00", "23:00")] },
+            },
+            { subject: { kind: "station", id: "deli" }, cell: { mode: "all_day", periods: [] } },
+            { subject: { kind: "station", id: "terrace" }, cell: { mode: "closed", periods: [] } },
+          ],
+        },
+      ],
+    ]);
+  },
+);
+it.each(["en", "es"] as const)(
+  "Station named days lists one-offs from yesterday and explains repeats in %s",
+  async (locale) => {
+    setLocale(locale);
+    const { api, state } = server();
+    state.model.specialDates.push(
+      { ...FIESTA, id: "repeat", name: "Repeating feast", repeats: true },
+      { ...FIESTA, id: "old", name: "Old day", date: "2026-10-05" },
+      { ...FIESTA, id: "yesterday", name: "Yesterday", date: "2026-10-06" },
+    );
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await listTable(el).updateComplete;
+    expect(listRows(el).map((row) => row[1])).toEqual(
+      locale === "en"
+        ? ["Fiesta Nacional Blue", "Staff day off Blue", "Yesterday Blue"]
+        : ["Fiesta Nacional Azul", "Staff day off Azul", "Yesterday Azul"],
+    );
+    expect(text(el.shadowRoot!.querySelector('[data-test="repeating-days-note"]'))).toBe(
+      locale === "en"
+        ? "Repeating named days follow each prep station’s standard week."
+        : "Los días con nombre que se repiten siguen la semana habitual de cada estación de preparación.",
+    );
+  },
+);
+
+it.each(["date", "name", "colour", "kind", "repeats", "ownHours", "closeWholeVenue"])(
+  "a refusal of hidden stored metadata %s stays visible and retryable",
+  async (fieldName) => {
+    const { api, state, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    state.writes.push({
+      reject: { code: "hours.invalid", params: { field: fieldName, subjectId: "restaurant" } },
+    });
+    await setField(el, "station.restaurant.periods.0.opensAt", "13:00");
+    await click(el, saveButton(el));
+    expect(await bottomMessage(el)).toBe(
+      "Check the highlighted hours: periods must not overlap, including past midnight.",
+    );
+    expect(field(el, "station.restaurant.mode")!.error).toBe("");
+    expect(saveButton(el).disabled).toBe(false);
+    await setField(el, "station.restaurant.periods.0.opensAt", "14:00");
+    await click(el, saveButton(el));
+    expect(calls("PUT")).toHaveLength(2);
+    expect(modal(el)).toBeNull();
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "Station named-day editor accessible heading uses named-day terminology in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(server().api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    const dialog = modal(el)!.shadowRoot!.querySelector("dialog")!;
+    const heading = modal(el)!.shadowRoot!.getElementById(dialog.getAttribute("aria-labelledby")!)!;
+    expect(heading.textContent).toBe(locale === "en" ? "Edit named day" : "Editar día con nombre");
+  },
+);
+it.each(["en", "es"] as const)(
+  "Station empty named-day list names the right concept in %s",
+  async (locale) => {
+    setLocale(locale);
+    const { api, state } = server();
+    state.model.specialDates = [];
+    state.model.specialCells = [];
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    const table = listTable(el);
+    await table.updateComplete;
+    expect(table.shadowRoot!.textContent).toContain(
+      locale === "en" ? "No named days yet." : "Todavía no hay días con nombre.",
+    );
+  },
+);
+it.each(["en", "es"] as const)(
+  "Station stored closure help names its Calendar owner in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(server().api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Staff"), "edit-date");
+    expect(text(modal(el)!.querySelector('[data-test="whole-venue-note"]'))).toBe(
+      locale === "en"
+        ? "Every department and prep station is closed on this named day, except the default station, which is always open. Manage this closure in Opening hours → Calendar."
+        : "Todos los departamentos y estaciones de preparación cierran este día con nombre, salvo la estación predeterminada, que siempre está abierta. Gestiona este cierre en Horario de apertura → Calendario.",
+    );
+    expect(field(el, "closeWholeVenue")).toBeNull();
+    expect(
+      [...modal(el)!.querySelectorAll("hours-cell-editor")].every((cell) => cell.disabled),
+    ).toBe(true);
+  },
+);
+
+it("Station named days makes no local-holiday request and shows no retired editor", async () => {
+  const { api, request } = server();
+  const el = await mount(api);
+  await selectTab(el, "dates");
+  expect(el.shadowRoot!.querySelector("local-holidays-editor")).toBeNull();
+  expect(request.mock.calls.some(([path]) => path.includes("local-holidays"))).toBe(false);
+  expect(listTable(el)).not.toBeNull();
+});

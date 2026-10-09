@@ -108,7 +108,13 @@ const heldSummary: HeldOrderSummary = {
   signals: [],
 };
 
-const floorZone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+const floorZone: FloorZone = {
+  id: "z1",
+  name: "Comedor",
+  displayOrder: 0,
+  active: true,
+  closed: false,
+};
 
 const freeTable: TableState = {
   id: "t1",
@@ -405,7 +411,7 @@ function fixtureOffers(
     courseId: product.courseId ?? null,
   }));
   return {
-    service: { open: true, periodName: null, keepOpen: null },
+    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
     context: {
       departmentName: "Restaurant",
       zoneId: "zone-counter",
@@ -1460,7 +1466,7 @@ describe("till-app", () => {
 
   it("loads the default zone's offers and orders two menu identities for one product", async () => {
     const listDefaultZoneOffers = vi.fn().mockResolvedValue({
-      service: { open: true, periodName: null, keepOpen: null },
+      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-counter",
@@ -5639,7 +5645,7 @@ describe("till-app", () => {
       },
     };
     const catalogue = {
-      service: { open: true, periodName: null, keepOpen: null },
+      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-counter",
@@ -5730,7 +5736,7 @@ describe("till-app", () => {
     };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
-        service: { open: true, periodName: null, keepOpen: null },
+        service: { open: true, zoneOpen: true, periodName: null, keepOpen: null },
         context: {
           departmentName: "Restaurant",
           zoneId: "zone-counter",
@@ -7630,9 +7636,6 @@ describe("till-app", () => {
         emit(screen, "back-to-floor");
         await flush(el);
 
-        // On the shell, back-to-floor pops the table-order drill and REFRESHES the floor tables-only
-        // (`#refreshFloor`) — a just-paid table shows free — but NOT the zones, which are static within a
-        // session. So tables re-read (twice total), zones untouched (once).
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(listZones).toHaveBeenCalledTimes(1);
         expect(floor(el)).not.toBeNull();
@@ -17684,4 +17687,232 @@ it("a completed sale can start the next basket while its held-list refresh is st
   await flush(el);
   expect(counter(el)!.store.id).toBe(next!.store.id);
   expect(currentApi.recordSale).toHaveBeenCalledOnce();
+});
+
+describe("closed floor zone refusals", () => {
+  it("refreshes a closed floor zone on the live tick so a reopened table can be seated", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const listZones = vi.fn().mockResolvedValue([{ ...floorZone, closed: true }]);
+      const { el } = await mountApp({
+        listZones,
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      const screen = floor(el)!;
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-table=t1]")!.click();
+      await screen.updateComplete;
+      expect(screen.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+      expect(screen.zones[0]!.closed).toBe(true);
+      listZones.mockResolvedValue([{ ...floorZone, closed: false }]);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(screen.zones[0]!.closed).toBe(false);
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-table=t1]")!.click();
+      await screen.updateComplete;
+      expect(screen.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a newer zone snapshot when an older live read finishes late", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let answer!: (zones: FloorZone[]) => void;
+      const listZones = vi
+        .fn()
+        .mockResolvedValueOnce([{ ...floorZone, closed: true }])
+        .mockImplementationOnce(
+          () =>
+            new Promise<FloorZone[]>((resolve) => {
+              answer = resolve;
+            }),
+        )
+        .mockResolvedValue([{ ...floorZone, closed: false }]);
+      const { el } = await mountApp({
+        listZones,
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(floor(el)!.zones[0]!.closed).toBe(false);
+      answer([{ ...floorZone, closed: true }]);
+      await flush(el);
+      expect(floor(el)!.zones[0]!.closed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores a live zone read from the previous operator session", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let answer!: (zones: FloorZone[]) => void;
+      const listZones = vi
+        .fn()
+        .mockResolvedValueOnce([{ ...floorZone, closed: true }])
+        .mockImplementationOnce(
+          () =>
+            new Promise<FloorZone[]>((resolve) => {
+              answer = resolve;
+            }),
+        )
+        .mockResolvedValue([{ ...floorZone, closed: false }]);
+      const { el } = await mountApp({
+        listZones,
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      emit(floor(el)!, "logout");
+      await flush(el);
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      expect(floor(el)!.zones[0]!.closed).toBe(false);
+      answer([{ ...floorZone, closed: true }]);
+      await flush(el);
+      expect(floor(el)!.zones[0]!.closed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the last zone snapshot after a failed live read and follows the next closure", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const listZones = vi
+        .fn()
+        .mockResolvedValueOnce([{ ...floorZone, closed: false }])
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue([{ ...floorZone, closed: true }]);
+      const { el } = await mountApp({
+        listZones,
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(floor(el)!.zones[0]!.closed).toBe(false);
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect(floor(el)!.zones[0]!.closed).toBe(true);
+      floor(el)!.shadowRoot!.querySelector<HTMLElement>("[data-table=t1]")!.click();
+      await floor(el)!.updateComplete;
+      expect(floor(el)!.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes zone closures when returning to the floor", async () => {
+    const listZones = vi.fn().mockResolvedValue([{ ...floorZone, closed: true }]);
+    const { el } = await mountApp({
+      listZones,
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+    });
+    await toCounter(el);
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.zones[0]!.closed).toBe(true);
+    selectTab(el, "counter");
+    await flush(el);
+    listZones.mockResolvedValue([{ ...floorZone, closed: false }]);
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.zones[0]!.closed).toBe(false);
+    floor(el)!.shadowRoot!.querySelector<HTMLElement>("[data-table=t1]")!.click();
+    await floor(el)!.updateComplete;
+    expect(floor(el)!.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
+  });
+
+  it("reloads the zones after a seat refusal and retains its explanation", async () => {
+    const listZones = vi.fn().mockResolvedValue([floorZone]);
+    const { el } = await mountApp({
+      listZones,
+      getTablesState: vi.fn().mockResolvedValue([freeTable]),
+      seatTable: vi.fn().mockRejectedValue({ code: "service_zone.closed", zoneId: "z1" }),
+    });
+    await toCounter(el);
+    selectTab(el, "floor");
+    await flush(el);
+    listZones.mockResolvedValue([{ ...floorZone, closed: true }]);
+    const count = listZones.mock.calls.length;
+    emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false, guestCount: 2 });
+    await flush(el);
+    await expect.poll(() => listZones.mock.calls.length).toBeGreaterThan(count);
+    await flush(el);
+    expect(currentApi.seatTable).toHaveBeenCalledWith(freeTable.id, 2);
+    expect(floor(el)!.zones[0]).toMatchObject({ closed: true });
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      codeMessage("service_zone.closed", "es"),
+    );
+    expect(tableOrder(el)).toBeNull();
+  });
+});
+
+describe("closed floor zone counter refusals", () => {
+  it("reloads floor zones on a counter refusal and keeps the basket", async () => {
+    const listZones = vi.fn().mockResolvedValue([{ ...floorZone, closed: true }]);
+    const { el } = await mountApp({
+      listZones,
+      parkOrder: vi.fn().mockRejectedValue({ code: "service_zone.closed" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "park-order", { label: "Later" });
+    await flush(el);
+    await expect.poll(() => listZones.mock.calls.length).toBe(1);
+    expect(c.store.lines.map((line) => [line.product.id, line.quantity])).toEqual([[cafe.id, "2"]]);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      codeMessage("service_zone.closed", "es"),
+    );
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.zones[0]).toMatchObject({ closed: true });
+  });
+
+  it("ignores a refusal's floor read after the operator session changes", async () => {
+    let answer!: (zones: FloorZone[]) => void;
+    const listZones = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<FloorZone[]>((resolve) => {
+            answer = resolve;
+          }),
+      )
+      .mockResolvedValue([{ ...floorZone, name: "Fresh floor", closed: false }]);
+    const { el } = await mountApp({
+      listZones,
+      parkOrder: vi.fn().mockRejectedValue({ code: "service_zone.closed" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    emit(c, "park-order", {});
+    await flush(el);
+    await expect.poll(() => listZones.mock.calls.length).toBe(1);
+    emit(c, "logout");
+    await flush(el);
+    await toCounter(el);
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.zones[0]?.name).toBe("Fresh floor");
+    answer([{ ...floorZone, name: "Previous session", closed: true }]);
+    await flush(el);
+    expect(floor(el)!.zones[0]).toMatchObject({ name: "Fresh floor", closed: false });
+  });
 });

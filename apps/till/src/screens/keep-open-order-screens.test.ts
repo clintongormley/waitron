@@ -79,6 +79,7 @@ for (const kind of ["counter", "table"] as const) {
     ])("shows the effective endpoint: $want", async ({ extendedUntil, want }) => {
       const { el } = await mount({
         open: true,
+        zoneOpen: true,
         periodName: "Lunch",
         keepOpen: { ...subject, extendedUntil },
       });
@@ -95,6 +96,7 @@ for (const kind of ["counter", "table"] as const) {
     it("keeps recovery reachable in the closed-department notice and uses this screen's zone", async () => {
       const { el, calls } = await mount({
         open: false,
+        zoneOpen: true,
         periodName: null,
         keepOpen: { ...subject, running: false },
       });
@@ -118,7 +120,7 @@ for (const kind of ["counter", "table"] as const) {
       ]);
     });
     it("omits both the period line and recovery control when no period ran today", async () => {
-      const { el } = await mount({ open: false, periodName: null, keepOpen: null });
+      const { el } = await mount({ open: false, zoneOpen: true, periodName: null, keepOpen: null });
       expect(el.shadowRoot!.querySelector("[data-service-period]")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
     });

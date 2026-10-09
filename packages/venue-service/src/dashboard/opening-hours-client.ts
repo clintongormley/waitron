@@ -5,7 +5,9 @@ import type {
   MenuWeekDay,
   OpeningHoursModel,
 } from "../menu-timetable-types.js";
+import type { ClosedRange } from "../service-day.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { NamedDaysApi } from "./named-days-client.js";
 import { ModelWatches } from "./model-watch.js";
 
 const BASE = "/management-api/venue-service";
@@ -13,11 +15,13 @@ const at = (id: string) => encodeURIComponent(id);
 
 export class OpeningHoursApi {
   readonly #watches: ModelWatches;
+  readonly namedDays: NamedDaysApi;
   constructor(
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
   ) {
     this.#watches = new ModelWatches(liveData);
+    this.namedDays = new NamedDaysApi(request, liveData);
   }
   watchOpeningHours(
     apply: (model: OpeningHoursModel) => void,
@@ -51,6 +55,23 @@ export class OpeningHoursApi {
   saveWeek(departmentId: string, days: readonly MenuWeekDay[]): Promise<void> {
     return this.request(`${BASE}/departments/${at(departmentId)}/menu-week`, "PUT", { days });
   }
+  saveZoneWeek(
+    zoneId: string,
+    days: readonly { weekday: number; ranges: readonly ClosedRange[] }[],
+  ): Promise<void> {
+    return this.request(`${BASE}/zones/${at(zoneId)}/closed-week`, "PUT", { days });
+  }
+  saveZoneDate(
+    specialDateId: string,
+    zoneId: string,
+    ranges: readonly ClosedRange[],
+  ): Promise<void> {
+    return this.request(
+      `${BASE}/special-dates/${at(specialDateId)}/zone-closed-times/${at(zoneId)}`,
+      "PUT",
+      { ranges },
+    );
+  }
   saveDateMenus(
     specialDateId: string,
     departmentId: string,
@@ -60,12 +81,6 @@ export class OpeningHoursApi {
       `${BASE}/special-dates/${at(specialDateId)}/menu-timetables/${at(departmentId)}`,
       "PUT",
       { slots },
-    );
-  }
-  clearDateMenus(specialDateId: string, departmentId: string): Promise<void> {
-    return this.request(
-      `${BASE}/special-dates/${at(specialDateId)}/menu-timetables/${at(departmentId)}`,
-      "DELETE",
     );
   }
 }

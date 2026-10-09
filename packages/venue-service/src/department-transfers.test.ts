@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   addProductToMenu,
@@ -77,6 +77,8 @@ async function venue() {
     return { cfg, a: a.id, b: b.id, az: az.id, bz: bz.id, profile: profile!.id, tab: tab!.id };
   });
 }
+
+afterEach(() => vi.useRealTimers());
 
 describe("departmental tab transfers", () => {
   it("offers only active usable receiving profiles in this department", async () => {
@@ -498,6 +500,46 @@ describe("departmental tab transfers", () => {
         tableId,
       }),
     );
+
+  it("refuses a closed destination without resolving its transfer or changing its bill", async () => {
+    const v = await pending();
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "Europe/Madrid", dayCutover: "06:00" })
+        .where(eq(locations.id, v.cfg.locationId));
+      await tx.insert(service.zoneClosedTimes).values(
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          zoneId: v.bz,
+          weekday,
+          startsAt: "23:30:00",
+          endsAt: "06:00:00",
+        })),
+      );
+    });
+    const before = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab));
+    vi.setSystemTime(new Date("2026-10-05T23:45:00+02:00"));
+    await expect(accept(v)).rejects.toMatchObject({
+      code: "service_zone.closed",
+      params: { zoneId: v.bz },
+    });
+    expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab))).toEqual(
+      before,
+    );
+    expect(
+      await suite.db
+        .select()
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.id, v.request.id)),
+    ).toEqual([v.request]);
+    expect(await getOrderServiceContext(suite.db, v.cfg, v.tab)).toEqual({
+      zoneId: v.az,
+      departmentId: v.a,
+      serviceMode: "table_tab",
+    });
+    vi.setSystemTime(new Date("2026-10-06T06:00:00+02:00"));
+    expect(await accept(v)).toMatchObject({ status: "accepted", destinationZoneId: v.bz });
+  });
 
   it("keeps every pending request but bounds department-wide resolved history to the newest 100", async () => {
     const v = await pending();

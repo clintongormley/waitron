@@ -14,6 +14,7 @@ export interface MenuStatePollOptions {
   /** The zones whose offers the till holds now, read afresh at every tick. */
   zones(): readonly string[];
   onState(zoneId: string, state: MenuStateAnswer): void;
+  onTick?(): void;
 }
 
 /**
@@ -53,6 +54,7 @@ export class MenuStatePoll {
   }
 
   #tick(): void {
+    this.#options.onTick?.();
     for (const zoneId of this.#options.zones()) void this.#readZone(zoneId, ++this.#requested);
   }
 

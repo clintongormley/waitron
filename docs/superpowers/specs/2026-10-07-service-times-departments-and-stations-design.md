@@ -1,5 +1,11 @@
 # Service times, departments, zones and prep stations
 
+> **2026-10-09, A366 slice 2:** this earlier account of address-owned local entries, their cap
+> or individually coloured special dates is historical. Local holidays are now own named days
+> without an entry cap; named-day kinds and public facts determine Calendar fills. See
+> [public holidays](../../developers/public-holidays.md) and
+> [the current Calendar contract](../../developers/design-system.md). The slice is awaiting review.
+
 > **2026-10-08:** A366 slice 1 Task 10 retires `resolveOpeningDateHours`; its station week,
 > named-date and default-opening checks move to the retained Hours model and station-state
 > readers. See [slice 1 plan](../plans/2026-10-07-a366-slice-1-service-periods.md).

@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRequest, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
-import type {
-  HolidayGeography,
-  HolidayRead,
-  LocalHoliday,
-  LocalHolidayModel,
-} from "../holiday-types.js";
+import type { HolidayGeography, HolidayRead } from "../holiday-types.js";
 import type { HoursModel, SpecialDateInput, WeekDay } from "../hours-types.js";
 import { HoursApi } from "./hours-client.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -38,7 +33,15 @@ async function settled(): Promise<void> {
 
 describe("HoursApi writes", () => {
   it("sends each write to its route and returns what the server saved", async () => {
-    const saved = { id: "d1", date: "2030-10-15", name: "Party", colour: "red" };
+    const saved = {
+      id: "d1",
+      date: "2030-10-15",
+      name: "Party",
+      kind: "working_day",
+      repeats: false,
+      ownHours: false,
+      closeWholeVenue: false,
+    };
     const request = vi.fn(async (path: string, method: string) =>
       method === "POST" && path.endsWith("/duplicate")
         ? [saved]
@@ -52,7 +55,6 @@ describe("HoursApi writes", () => {
     const input: SpecialDateInput = {
       date: "2030-10-15",
       name: "Party",
-      colour: "red",
       closeWholeVenue: false,
       cells: [],
     };
@@ -113,7 +115,6 @@ describe("HoursApi.watchHours", () => {
       "station_fallbacks",
       "tenants",
       "holiday_geographies",
-      "local_holidays",
     ]);
     expect(request.mock.calls).toEqual([[HOURS_PATH, "GET", undefined, { passive: true }]]);
     detach();
@@ -400,30 +401,6 @@ describe("HoursApi.rereadWatches", () => {
   });
 });
 
-const LOCAL_PATH = "/management-api/venue-service/local-holidays";
-
-/** A local-holiday model as a server would answer it; `limit` stands for the country's allowance. */
-const localModel = (limit: number, entries: LocalHoliday[] = []): LocalHolidayModel => ({
-  venue: { country: "ZZ", provinceCode: "10", city: "Villa Real" },
-  localEntryLimit: limit,
-  areaOptions: [],
-  areaRequired: false,
-  geographies:
-    entries.length === 0
-      ? []
-      : [
-          {
-            id: "g1",
-            country: "ZZ",
-            provinceCode: "10",
-            city: "Villa Real",
-            areaKey: null,
-            matchesVenue: true,
-          },
-        ],
-  entries,
-});
-
 /** The dashboard's real request primitive over a fetch that answers `status` with `body`. */
 function answering(status: number, body?: unknown) {
   const fetchImpl = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
@@ -433,20 +410,11 @@ function answering(status: number, body?: unknown) {
 }
 
 describe("HoursApi holidays", () => {
-  it("reads holidays and the local holiday model passively, with nothing but the range in the path", async () => {
+  it("reads public holidays passively, with nothing but the range in the path", async () => {
     const read: HolidayRead = { facts: [], coverage: [], sources: [] };
-    const fresh: LocalHolidayModel = {
-      venue: { country: "ES", provinceCode: "41", city: "Sevilla" },
-      localEntryLimit: 2,
-      areaOptions: [],
-      areaRequired: false,
-      geographies: [],
-      entries: [],
-    };
-    const request = vi.fn(async (path: string) => (path.includes("/holidays?") ? read : fresh));
+    const request = vi.fn(async () => read);
     const api = new HoursApi(request as DashboardRequest);
     expect(await api.loadHolidays("2026-10-01", "2026-10-31")).toEqual(read);
-    expect(await api.loadLocalHolidays()).toEqual(fresh);
     expect(request.mock.calls).toEqual([
       [
         "/management-api/venue-service/holidays?from=2026-10-01&to=2026-10-31",
@@ -454,21 +422,10 @@ describe("HoursApi holidays", () => {
         undefined,
         { passive: true },
       ],
-      [LOCAL_PATH, "GET", undefined, { passive: true }],
     ]);
   });
 
-  it("passes each allowance through unchanged, 0 included for a country without the capability", async () => {
-    for (const limit of [1, 3, 0]) {
-      const request = vi.fn(async () => localModel(limit));
-      expect(await new HoursApi(request as DashboardRequest).loadLocalHolidays()).toEqual(
-        localModel(limit),
-      );
-    }
-  });
-
-  it("sends each holiday write with exactly its body and returns what the server saved", async () => {
-    const entry: LocalHoliday = { id: "e1", geographyId: "g1", date: "2026-05-30", name: "Feria" };
+  it("sends the holiday area write with exactly its body and returns what the server saved", async () => {
     const geography: HolidayGeography = {
       id: "g1",
       country: "ES",
@@ -477,22 +434,11 @@ describe("HoursApi holidays", () => {
       areaKey: "aran",
       matchesVenue: true,
     };
-    const request = vi.fn(async (path: string, method: string) =>
-      method === "DELETE" ? undefined : path.endsWith("/holiday-area") ? geography : entry,
-    );
+    const request = vi.fn(async () => geography);
     const api = new HoursApi(request as DashboardRequest);
-    const input = { date: "2026-05-30", name: "Feria" };
     expect(await api.saveHolidayArea("aran")).toEqual(geography);
-    expect(await api.saveLocalHoliday(null, input)).toEqual(entry);
-    expect(await api.saveLocalHoliday("e/1", input)).toEqual(entry);
-    expect(await api.deleteLocalHoliday("e/1")).toBeUndefined();
-    expect(await api.deleteRetainedGeography("g/1")).toBeUndefined();
     expect(request.mock.calls).toEqual([
       ["/management-api/venue-service/holiday-area", "PUT", { areaKey: "aran" }],
-      [LOCAL_PATH, "POST", input],
-      [`${LOCAL_PATH}/e%2F1`, "PUT", input],
-      [`${LOCAL_PATH}/e%2F1`, "DELETE"],
-      ["/management-api/venue-service/holiday-geographies/g%2F1", "DELETE"],
     ]);
   });
 
@@ -502,89 +448,18 @@ describe("HoursApi holidays", () => {
     expect(fetchImpl.mock.calls[0]![1]!.body).toBe(JSON.stringify({ areaKey: null }));
   });
 
-  it("hands on a refusal's code, field and status, for an unresolved address, a retained id and a foreign id", async () => {
+  it("hands on a refusal's code, field and status, for an unresolved address and an invalid area", async () => {
     const refusals = [
       [400, "holiday.invalid", { field: "geography" }],
-      [400, "holiday.invalid", { field: "id" }],
-      [404, "holiday.not_found", { holidayId: "e1" }],
-      [409, "holiday.local_limit", { limit: 0, year: 2026 }],
+      [400, "holiday.invalid", { field: "areaKey" }],
     ] as const;
     for (const [status, code, params] of refusals) {
       const { request } = answering(status, { error: { code, params } });
-      await expect(
-        new HoursApi(request).saveLocalHoliday("e1", { date: "2026-05-30", name: "Feria" }),
-      ).rejects.toEqual({ code, params, status });
+      await expect(new HoursApi(request).saveHolidayArea("aran")).rejects.toEqual({
+        code,
+        params,
+        status,
+      });
     }
-  });
-});
-
-describe("HoursApi.watchLocalHolidays", () => {
-  it("subscribes to exactly the holiday sources, reads passively, recovers and stops once detached", async () => {
-    const liveData = new LiveData();
-    const answers: (LocalHolidayModel | Error)[] = [
-      localModel(2),
-      new Error("offline"),
-      localModel(2, [{ id: "e1", geographyId: "g1", date: "2026-05-30", name: "Feria" }]),
-    ];
-    const request = vi.fn(async () => {
-      const next = answers.shift()!;
-      if (next instanceof Error) throw next;
-      return next;
-    });
-    const apply = vi.fn();
-    const failed = vi.fn();
-    const recovered = vi.fn();
-    const detach = new HoursApi(request as DashboardRequest, liveData).watchLocalHolidays(
-      apply,
-      failed,
-      recovered,
-    );
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(localModel(2)));
-    expect(QUERY_DEPENDENCIES.holidays).toEqual([
-      "tenants",
-      "locations",
-      "holiday_geographies",
-      "local_holidays",
-    ]);
-    expect(liveData.interests).toEqual(QUERY_DEPENDENCIES.holidays.map((type) => ({ type })));
-    expect(request.mock.calls).toEqual([[LOCAL_PATH, "GET", undefined, { passive: true }]]);
-
-    liveData.invalidate([{ type: "locations" }]);
-    await vi.waitFor(() => expect(failed).toHaveBeenCalledWith(new Error("offline")));
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
-    expect(recovered).toHaveBeenCalledTimes(1);
-
-    // Hours' own tables are not a holiday source.
-    liveData.invalidate([{ type: "special_dates" }]);
-    detach();
-    expect(liveData.interests).toEqual([]);
-    liveData.invalidate([{ type: "local_holidays" }]);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(request).toHaveBeenCalledTimes(3);
-  });
-
-  it("is read again after a write, through live data and without it", async () => {
-    const liveData = new LiveData();
-    const live = vi.fn(async () => localModel(2));
-    const liveApi = new HoursApi(live as DashboardRequest, liveData);
-    const liveApply = vi.fn();
-    const detachLive = liveApi.watchLocalHolidays(liveApply, vi.fn(), vi.fn());
-    await vi.waitFor(() => expect(liveApply).toHaveBeenCalledTimes(1));
-    liveApi.rereadWatches();
-    await vi.waitFor(() => expect(liveApply).toHaveBeenCalledTimes(2));
-    detachLive();
-
-    const plain = vi.fn(async () => localModel(2));
-    const plainApi = new HoursApi(plain as DashboardRequest);
-    const plainApply = vi.fn();
-    const detachPlain = plainApi.watchLocalHolidays(plainApply, vi.fn(), vi.fn());
-    await vi.waitFor(() => expect(plainApply).toHaveBeenCalledTimes(1));
-    plainApi.rereadWatches();
-    await vi.waitFor(() => expect(plainApply).toHaveBeenCalledTimes(2));
-    detachPlain();
-    plainApi.rereadWatches();
-    await settled();
-    expect(plain).toHaveBeenCalledTimes(2);
   });
 });

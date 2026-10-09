@@ -335,3 +335,17 @@ it("retained fields and Cancel cannot change or close the next opening", async (
   expect(field(el, "endsAt").value).toBe("10:00");
   expect(save(el).disabled).toBe(true);
 });
+
+it("closedTimes edits a range with no period choice or period id in its output", async () => {
+  const el = await mount(true);
+  Object.assign(el, { closedTimes: true, range: { startsAt: "09:00", endsAt: "10:00" } });
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[name=periodId]")).toBeNull();
+  const results = writes(el);
+  await change(el, "endsAt", "11:00");
+  save(el).click();
+  expect(results).toEqual([{ input: { startsAt: "09:00", endsAt: "11:00" } }]);
+});

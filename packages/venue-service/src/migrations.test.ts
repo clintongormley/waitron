@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import {
@@ -20,6 +20,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments } from "./schema/service.js";
+import { specialDates } from "./schema/hours.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -34,6 +35,7 @@ beforeAll(() => {
 const TABLES = [
   "departments",
   "zone_service_policies",
+  "zone_closed_times",
   "menu_period_staff_menus",
   "device_profile_service_access",
   "device_profile_zones",
@@ -168,6 +170,13 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(department_id) -> departments(id)",
           "(location_id) -> locations(id)",
           "(zone_id) -> floor_zones(id)",
+        ],
+      },
+      zone_closed_times: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(special_date_id) -> special_dates(id) on delete cascade",
+          "(zone_id) -> zone_service_policies(zone_id)",
         ],
       },
       menu_period_staff_menus: {
@@ -445,6 +454,175 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     );
     expect(isRefusal(self, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(self)).toContain("station_day_states_sends_to_not_self_ck");
+  });
+
+  async function namedDayZone() {
+    const v = await venue();
+    await db.execute(sql`insert into zone_service_policies (zone_id, location_id, department_id)
+      values (${v.zoneId}, ${v.locationId}, ${v.departmentId})`);
+    const dateId = randomUUID();
+    await db.execute(sql`insert into special_dates (id, location_id, date, name)
+      values (${dateId}, ${v.locationId}, '2026-12-25', 'Christmas')`);
+    return { ...v, dateId };
+  }
+
+  it("removes the retired local-holiday table and named-day colour column", async () => {
+    expect(
+      (await db.execute(sql`select name from sqlite_master where name = 'local_holidays'`)).rows,
+    ).toEqual([]);
+    expect((await columnsOf("special_dates")).map((column) => column.name)).not.toContain("colour");
+  });
+
+  it.each([
+    ["repeat", "2026-12-25", "12-24", "holiday", "special_dates_repeat_ck"],
+    ["kind", "2026-12-25", null, "party", "special_dates_kind_ck"],
+  ])(
+    "refuses an invalid named-day %s at the database",
+    async (_, date, repeatOn, kind, constraint) => {
+      const v = await venue();
+      const error = await captureError(() =>
+        db.transaction((tx) =>
+          tx.execute(sql`insert into special_dates
+      (id, location_id, date, name, repeat_on, kind)
+      values (${randomUUID()}, ${v.locationId}, ${date}, 'Named day', ${repeatOn}, ${kind})`),
+        ),
+      );
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toContain(constraint);
+    },
+  );
+
+  it("refuses two repeating named days on the same month and day in one venue", async () => {
+    const v = await venue();
+    await db.execute(sql`insert into special_dates (id, location_id, date, name, repeat_on)
+      values (${randomUUID()}, ${v.locationId}, '2026-12-25', 'First', '12-25')`);
+    const error = await captureError(() =>
+      db.transaction((tx) =>
+        tx.execute(sql`insert into special_dates
+      (id, location_id, date, name, repeat_on)
+      values (${randomUUID()}, ${v.locationId}, '2027-12-25', 'Second', '12-25')`),
+      ),
+    );
+    expect(engineErrorMessage(error)).toContain(
+      "UNIQUE constraint failed: special_dates.location_id, special_dates.repeat_on",
+    );
+  });
+
+  it("allows the same repeating day in different venues and distinct one-off days in one venue", async () => {
+    const first = await venue();
+    const second = await venue();
+    for (const locationId of [first.locationId, second.locationId])
+      await db.execute(sql`insert into special_dates (id, location_id, date, name, repeat_on)
+        values (${randomUUID()}, ${locationId}, '2026-12-25', 'Repeating', '12-25')`);
+    for (const date of ["2026-12-26", "2026-12-27"])
+      await db.execute(sql`insert into special_dates (id, location_id, date, name)
+        values (${randomUUID()}, ${first.locationId}, ${date}, 'One-off')`);
+    expect(
+      (
+        await db.execute(
+          sql`select date, repeat_on from special_dates where location_id = ${first.locationId} order by date`,
+        )
+      ).rows,
+    ).toEqual([
+      { date: "2026-12-25", repeat_on: "12-25" },
+      { date: "2026-12-26", repeat_on: null },
+      { date: "2026-12-27", repeat_on: null },
+    ]);
+    expect(
+      (
+        await db.execute(
+          sql`select date, repeat_on from special_dates where location_id = ${second.locationId}`,
+        )
+      ).rows,
+    ).toEqual([{ date: "2026-12-25", repeat_on: "12-25" }]);
+  });
+
+  it("defaults a named day to the normal week without a repeat", async () => {
+    const v = await namedDayZone();
+    const [row] = await db.select().from(specialDates).where(eq(specialDates.id, v.dateId));
+    expect(row).toMatchObject({ kind: "working_day", ownHours: false, repeatOn: null });
+  });
+
+  it("stores weekly and named-day closures independently", async () => {
+    const v = await namedDayZone();
+    await db.execute(sql`insert into zone_closed_times
+      (id, zone_id, weekday, starts_at, ends_at)
+      values (${randomUUID()}, ${v.zoneId}, 0, '23:00:00', '06:00:00')`);
+    await db.execute(sql`insert into zone_closed_times
+      (id, zone_id, special_date_id, starts_at, ends_at)
+      values (${randomUUID()}, ${v.zoneId}, ${v.dateId}, '12:15:00', '14:45:00')`);
+    expect(
+      (
+        await db.execute(sql`select weekday, special_date_id, starts_at, ends_at
+      from zone_closed_times where zone_id = ${v.zoneId} order by starts_at`)
+      ).rows,
+    ).toEqual([
+      { weekday: null, special_date_id: v.dateId, starts_at: "12:15:00", ends_at: "14:45:00" },
+      { weekday: 0, special_date_id: null, starts_at: "23:00:00", ends_at: "06:00:00" },
+    ]);
+    const indexes = await indexesOf("zone_closed_times");
+    expect(indexes.zone_closed_times_week_idx).toMatchObject({
+      columns: ["zone_id", "weekday"],
+      unique: false,
+    });
+    expect(indexes.zone_closed_times_date_idx).toMatchObject({
+      columns: ["special_date_id", "zone_id"],
+      unique: false,
+    });
+  });
+
+  it.each([
+    { weekday: 1, dated: true, start: "12:00:00", end: "14:00:00", check: "one_day" },
+    { weekday: null, dated: false, start: "12:00:00", end: "14:00:00", check: "one_day" },
+    { weekday: -1, dated: false, start: "12:00:00", end: "14:00:00", check: "weekday" },
+    { weekday: 7, dated: false, start: "12:00:00", end: "14:00:00", check: "weekday" },
+    { weekday: 1, dated: false, start: "12:10:00", end: "14:00:00", check: "step" },
+    { weekday: 1, dated: false, start: "12:00:00", end: "14:10:00", check: "step" },
+  ])("refuses a closure with $weekday/$dated/$start/$end ($check)", async (c) => {
+    const v = await namedDayZone();
+    const error = await captureError(() =>
+      db.transaction((tx) =>
+        tx.execute(sql`
+      insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
+      values (${randomUUID()}, ${v.zoneId}, ${c.weekday}, ${c.dated ? v.dateId : null},
+        ${c.start}, ${c.end})`),
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain(`zone_closed_times_${c.check}_ck`);
+  });
+
+  it("refuses an unconfigured zone and a missing named day", async () => {
+    const v = await namedDayZone();
+    const other = await venue();
+    await refusal(
+      sql`insert into zone_closed_times (id, zone_id, weekday, starts_at, ends_at)
+      values (${randomUUID()}, ${other.zoneId}, 1, '12:00:00', '14:00:00')`,
+      "zone_closed_times_zone_fk",
+    );
+    await refusal(
+      sql`insert into zone_closed_times
+      (id, zone_id, special_date_id, starts_at, ends_at)
+      values (${randomUUID()}, ${v.zoneId}, ${randomUUID()}, '12:00:00', '14:00:00')`,
+      "zone_closed_times_date_fk",
+    );
+  });
+
+  it("deletes a named day's closures while keeping the zone's normal week", async () => {
+    const v = await namedDayZone();
+    await db.execute(sql`insert into zone_closed_times
+      (id, zone_id, weekday, starts_at, ends_at)
+      values (${randomUUID()}, ${v.zoneId}, 1, '23:00:00', '06:00:00')`);
+    await db.execute(sql`insert into zone_closed_times
+      (id, zone_id, special_date_id, starts_at, ends_at)
+      values (${randomUUID()}, ${v.zoneId}, ${v.dateId}, '12:00:00', '14:00:00')`);
+    await db.execute(sql`delete from special_dates where id = ${v.dateId}`);
+    expect(
+      (
+        await db.execute(sql`select weekday, special_date_id from zone_closed_times
+      where zone_id = ${v.zoneId}`)
+      ).rows,
+    ).toEqual([{ weekday: 1, special_date_id: null }]);
   });
 
   it("retires the department and zone menu lists", async () => {

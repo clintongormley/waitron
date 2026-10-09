@@ -63,18 +63,6 @@ function partyPaid(table: TableState): boolean {
   );
 }
 
-/**
- * The TILL live-floor screen. Tapping a free table asks for the party's guest count and then asks the
- * app to seat it; tapping a seated table asks the app to resume it. A table that needs clearing
- * offers Mark cleared instead. The screen itself owns NO fiscal path, because a
- * tab is a PRE-FISCAL working order.
- *
- * Each zone tab has a MAP view (the shared `<wt-floor-canvas>`, with the zone's unplaced tables in a
- * tray beneath) and a LIST view; the map is the default when the zone has at least one placed table.
- * The map is deliberately terser than the list card.
- *
- * `t()` takes no params, so a count-bearing label is `${n} ${t(key)}`.
- */
 @customElement("till-floor-screen")
 export class TillFloorScreen extends LitElement {
   static override styles = [
@@ -431,6 +419,7 @@ export class TillFloorScreen extends LitElement {
   @state() private editing = false;
   /** The free table whose guest count is being asked for. */
   @state() private seating: TableState | null = null;
+  @state() private refusedZoneId: string | null = null;
   /** The table tapped on the map that needs clearing. */
   @state() private clearing: TableState | null = null;
 
@@ -490,6 +479,12 @@ export class TillFloorScreen extends LitElement {
       return;
     }
     if (table.party === null && !table.hasOpenTab) {
+      const zone = this.zones.find((candidate) => candidate.id === table.zoneId);
+      if (zone?.closed) {
+        this.refusedZoneId = zone.id;
+        return;
+      }
+      this.refusedZoneId = null;
       this.seating = table;
       return;
     }
@@ -517,6 +512,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   #selectZone(key: string | null): void {
+    this.refusedZoneId = null;
     this.activeZone = key;
     this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key ?? "" });
   }
@@ -627,7 +623,15 @@ export class TillFloorScreen extends LitElement {
 
   override render() {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
-    const tabs = buildZoneTabs(this.zones, this.tables, t("floor.no_zone"));
+    const tabs = buildZoneTabs(
+      this.zones.map((zone) => ({
+        ...zone,
+        name: zone.closed ? `${zone.name} · ${t("floor.closed")}` : zone.name,
+      })),
+      this.tables,
+      t("floor.no_zone"),
+    );
+    const refusedZone = this.zones.find((zone) => zone.id === this.refusedZoneId && zone.closed);
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
     // The no-zone tab (activeKey === null) gathers the zoneless AND the deactivated-zone tables.
     const visible = this.tables.filter((table) =>
@@ -686,6 +690,7 @@ export class TillFloorScreen extends LitElement {
               </nav>`
             : nothing
         }
+        ${refusedZone === undefined ? nothing : html`<p data-zone-closed role="status">${t("menu.zone_closed").replace("{zone}", () => refusedZone.name)}</p>`}
         ${this.#stationSummary()}
         ${
           view === "map"

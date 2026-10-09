@@ -87,6 +87,7 @@ declare module "@waitron/shared" {
     };
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
     /** The device's active profile may not work in this zone. Names only the zone tried. */
+    "service_zone.closed": { zoneId: string };
     "service_zone.not_allowed": { zoneId: string };
     "route.subject_not_found": { subject: string; id: string };
     "route.station_inactive": { stationId: string };
@@ -134,15 +135,10 @@ declare module "@waitron/shared" {
     "hours.invalid": { field: string; date?: string; subjectId?: string };
     "special_date.not_found": { specialDateId: string };
     "special_date.date_taken": { date: string };
+    "zone_closed_time.invalid": { field: string; reason?: "empty" | "order" | "step" | "overlap" };
+    "special_date.keeps_week": { specialDateId: string };
     "station.always_open": { stationId: string };
     "holiday.invalid": { field: string };
-    "holiday.not_found": { holidayId: string };
-    "holiday_geography.not_found": { geographyId: string };
-    "holiday.date_taken": { date: string };
-    /** `limit` is the country's allowance of local holidays per address and civil year; `year` is
-     * absent only when the refused input carried no real date. */
-    "holiday.local_limit": { limit: number; year?: number };
-    "holiday.geography_current": { geographyId: string };
     /** A configuration import's hours or holiday row holds a value a save would refuse; `field` is
      * the table or `<table>.<column>`. */
     "setup.request_invalid": { field: string };

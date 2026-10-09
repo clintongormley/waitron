@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte, ne, type SQL } from "drizzle-orm";
+import { and, asc, eq, lte } from "drizzle-orm";
 import {
   findAdministrativeArea,
   type CountryHolidayCalendar,
@@ -9,17 +9,15 @@ import { getCountryPack } from "@waitron/country-packs";
 import { locations, readTenant, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { compareHolidayFacts, holidayDateName } from "./holiday-naming.js";
-import { holidayCityKey, localHolidayName } from "./holiday-rules.js";
+import { holidayCityKey } from "./holiday-rules.js";
 import {
   type HolidayCoverage,
   type HolidayGeography,
   type HolidayRead,
   type HolidaySource,
-  type LocalHoliday,
-  type LocalHolidayInput,
-  type LocalHolidayModel,
+  type HolidayAreaModel,
 } from "./holiday-types.js";
-import { isLocalDate, rangeDates } from "./hours-rules.js";
+import { rangeDates } from "./hours-rules.js";
 import type { HolidayFact, LocalDate, SpecialDate } from "./hours-types.js";
 import {
   duplicateSpecialDate,
@@ -27,8 +25,10 @@ import {
   type HolidayReader,
   type SpecialDateParticipant,
 } from "./hours.js";
+import { occursOn } from "./named-day-rules.js";
+import { specialDates } from "./schema/hours.js";
 import type { VenueScope } from "./operations.js";
-import { holidayGeographies, localHolidays } from "./schema/holidays.js";
+import { holidayGeographies } from "./schema/holidays.js";
 import "./errors.js";
 
 export type PackLookup = (country: string) => CountryPack | undefined;
@@ -50,17 +50,7 @@ function invalid(field: string): never {
 }
 
 const yearOf = (date: LocalDate) => Number(date.slice(0, 4));
-const yearStart = (year: number) => `${String(year).padStart(4, "0")}-01-01`;
 const yearEnd = (year: number) => `${String(year).padStart(4, "0")}-12-31`;
-
-function parseLocalHoliday(value: unknown): LocalHolidayInput {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) invalid("input");
-  const { date, name } = value as Record<string, unknown>;
-  if (!isLocalDate(date)) invalid("date");
-  const trimmed = localHolidayName(name);
-  if (trimmed === null) invalid("name");
-  return { date, name: trimmed };
-}
 
 function parseAreaKey(value: unknown): string | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) invalid("areaKey");
@@ -69,8 +59,6 @@ function parseAreaKey(value: unknown): string | null {
   if (areaKey !== null && typeof areaKey !== "string") invalid("areaKey");
   return areaKey;
 }
-
-const ownerSourceId = (geographyId: string) => `owner:${geographyId}`;
 
 function geographyOf(row: GeographyRow, address: Address): HolidayGeography {
   return {
@@ -133,14 +121,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
       .orderBy(asc(holidayGeographies.cityKey), asc(holidayGeographies.id));
   }
 
-  async function entriesOf(tx: Transaction, geographyId: string, ...filters: (SQL | undefined)[]) {
-    return tx
-      .select()
-      .from(localHolidays)
-      .where(and(eq(localHolidays.geographyId, geographyId), ...filters))
-      .orderBy(asc(localHolidays.date), asc(localHolidays.id));
-  }
-
   async function createGeography(
     tx: Transaction,
     cfg: VenueScope,
@@ -179,29 +159,26 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
       facts.push(...read.facts);
       for (const coverage of read.coverage) shipped.set(coverage.year, coverage);
     }
-    const entries =
-      calendar !== undefined && current !== undefined
-        ? await entriesOf(
-            tx,
-            current.id,
-            gte(localHolidays.date, yearStart(firstYear)),
-            lte(localHolidays.date, yearEnd(lastYear)),
-          )
-        : [];
-    for (const entry of entries)
-      if (entry.date >= from && entry.date <= to)
-        facts.push({
-          id: `local:${entry.id}`,
-          date: entry.date,
-          name: entry.name,
-          scope: "local",
-          sourceId: ownerSourceId(entry.geographyId),
-        });
-
+    const ownHolidays = await tx
+      .select({ date: specialDates.date, repeatOn: specialDates.repeatOn })
+      .from(specialDates)
+      .where(
+        and(
+          eq(specialDates.locationId, cfg.locationId),
+          eq(specialDates.kind, "holiday"),
+          lte(specialDates.date, yearEnd(lastYear)),
+        ),
+      );
+    const namedSourceId = `owner:named-days:${cfg.locationId}`;
     const coverage: HolidayCoverage[] = [];
     for (let year = firstYear; year <= lastYear; year++) {
       const ofYear = shipped.get(year);
-      const entered = entries.some(({ date }) => yearOf(date) === year);
+      const ownEntered = ownHolidays.some(({ date, repeatOn }) =>
+        occursOn(
+          { date, repeats: repeatOn !== null },
+          `${String(year).padStart(4, "0")}-${date.slice(5)}`,
+        ),
+      );
       coverage.push({
         year,
         country: address.country,
@@ -209,16 +186,15 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
         regionCode: ofYear?.regionCode ?? null,
         nationalRegional:
           calendar === undefined ? "unsupported_country" : (ofYear?.state ?? "unknown_region"),
-        local:
-          address.key === null
+        local: ownEntered
+          ? "owner_entered"
+          : address.key === null
             ? "address_unresolved"
             : calendar === undefined
               ? "unsupported_country"
-              : entered
-                ? "owner_entered"
-                : "none_entered",
+              : "none_entered",
         dataVersion: ofYear?.dataVersion ?? null,
-        sourceIds: [...(ofYear?.sourceIds ?? []), ...(entered ? [ownerSourceId(current!.id)] : [])],
+        sourceIds: [...(ofYear?.sourceIds ?? []), ...(ownEntered ? [namedSourceId] : [])],
       });
     }
 
@@ -232,11 +208,11 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     const sources: HolidaySource[] = (calendar?.sources ?? [])
       .filter(({ id }) => referenced.has(id))
       .map(({ id, title, url, sha256 }) => ({ id, kind: "official", title, url, sha256 }));
-    if (current !== undefined && referenced.has(ownerSourceId(current.id)))
+    if (referenced.has(namedSourceId))
       sources.push({
-        id: ownerSourceId(current.id),
+        id: namedSourceId,
         kind: "owner",
-        title: current.city,
+        title: "Venue's own holidays",
         url: null,
         sha256: null,
       });
@@ -246,10 +222,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   const readHolidayFacts: HolidayReader = async (tx, cfg, from, to) =>
     (await readHolidays(tx, cfg, from, to)).facts;
 
-  async function readLocalHolidayModel(
-    tx: Transaction,
-    cfg: VenueScope,
-  ): Promise<LocalHolidayModel> {
+  async function readHolidayAreaModel(tx: Transaction, cfg: VenueScope): Promise<HolidayAreaModel> {
     const address = await readAddress(tx, cfg);
     const rows = await geographiesOf(tx, cfg);
     const current = rows.find((row) => matches(row, address));
@@ -260,14 +233,22 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
             name,
           }))
         : [];
-    const entries = current === undefined ? [] : await entriesOf(tx, current.id);
     return {
       venue: { country: address.country, provinceCode: address.provinceCode, city: address.city },
-      localEntryLimit: address.calendar?.localEntryLimit ?? 0,
+      readiness:
+        address.calendar === undefined
+          ? "unsupported_country"
+          : address.provinceCode === null && address.city === null
+            ? "unresolved_address"
+            : address.provinceCode === null
+              ? "unresolved_province"
+              : address.city === null
+                ? "missing_city"
+                : "ready",
+      localHolidaysPerYear: address.calendar?.localEntryLimit ?? 0,
       areaOptions,
       areaRequired: areaOptions.length > 0 && (current?.areaKey ?? null) === null,
-      geographies: rows.map((row) => geographyOf(row, address)),
-      entries: entries.map(({ id, geographyId, date, name }) => ({ id, geographyId, date, name })),
+      chosen: current?.areaKey ?? null,
     };
   }
 
@@ -292,91 +273,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
       .where(eq(holidayGeographies.id, row.id))
       .returning();
     return geographyOf(updated!, address);
-  }
-
-  /** The entry `id` within the venue, with its geography, or `holiday.not_found`. */
-  async function requireEntry(tx: Transaction, cfg: VenueScope, id: string) {
-    const [found] = await tx
-      .select({ id: localHolidays.id, geographyId: localHolidays.geographyId })
-      .from(localHolidays)
-      .innerJoin(holidayGeographies, eq(holidayGeographies.id, localHolidays.geographyId))
-      .where(and(eq(localHolidays.id, id), eq(holidayGeographies.locationId, cfg.locationId)));
-    if (found === undefined) throw new AppError("holiday.not_found", { holidayId: id });
-    return found;
-  }
-
-  async function saveLocalHoliday(
-    tx: Transaction,
-    cfg: VenueScope,
-    id: string | null,
-    input: LocalHolidayInput,
-  ): Promise<LocalHoliday> {
-    const existing = id === null ? null : await requireEntry(tx, cfg, id);
-    const address = await readAddress(tx, cfg);
-    if (address.key === null) invalid("geography");
-    const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
-    if (existing !== null && existing.geographyId !== current?.id) invalid("id");
-    const { calendar } = address;
-    if (calendar === undefined) {
-      const date = (input as { date?: unknown } | null)?.date;
-      throw new AppError(
-        "holiday.local_limit",
-        isLocalDate(date) ? { limit: 0, year: yearOf(date) } : { limit: 0 },
-      );
-    }
-    const { date, name } = parseLocalHoliday(input);
-    const year = yearOf(date);
-    const others = existing === null ? undefined : ne(localHolidays.id, existing.id);
-    if (current !== undefined) {
-      if ((await entriesOf(tx, current.id, eq(localHolidays.date, date), others)).length > 0)
-        throw new AppError("holiday.date_taken", { date });
-    }
-    const counted =
-      current === undefined
-        ? 0
-        : (
-            await entriesOf(
-              tx,
-              current.id,
-              gte(localHolidays.date, yearStart(year)),
-              lte(localHolidays.date, yearEnd(year)),
-              others,
-            )
-          ).length;
-    if (counted >= calendar.localEntryLimit)
-      throw new AppError("holiday.local_limit", { limit: calendar.localEntryLimit, year });
-
-    if (existing !== null) {
-      await tx.update(localHolidays).set({ date, name }).where(eq(localHolidays.id, existing.id));
-      return { id: existing.id, geographyId: existing.geographyId, date, name };
-    }
-    const geography = current ?? (await createGeography(tx, cfg, address));
-    const [row] = await tx
-      .insert(localHolidays)
-      .values({ geographyId: geography.id, date, name })
-      .returning();
-    return { id: row!.id, geographyId: row!.geographyId, date, name };
-  }
-
-  async function deleteLocalHoliday(tx: Transaction, cfg: VenueScope, id: string): Promise<void> {
-    const entry = await requireEntry(tx, cfg, id);
-    await tx.delete(localHolidays).where(eq(localHolidays.id, entry.id));
-  }
-
-  async function deleteRetainedHolidayGeography(
-    tx: Transaction,
-    cfg: VenueScope,
-    id: string,
-  ): Promise<void> {
-    const [row] = await tx
-      .select()
-      .from(holidayGeographies)
-      .where(and(eq(holidayGeographies.id, id), eq(holidayGeographies.locationId, cfg.locationId)));
-    if (row === undefined) throw new AppError("holiday_geography.not_found", { geographyId: id });
-    if (matches(row, await readAddress(tx, cfg)))
-      throw new AppError("holiday.geography_current", { geographyId: row.id });
-    await tx.delete(localHolidays).where(eq(localHolidays.geographyId, row.id));
-    await tx.delete(holidayGeographies).where(eq(holidayGeographies.id, row.id));
   }
 
   /**
@@ -413,11 +309,8 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     readHolidays,
     readHolidayFacts,
     duplicateHolidayNamedSpecialDates,
-    readLocalHolidayModel,
+    readHolidayAreaModel,
     saveHolidayArea,
-    saveLocalHoliday,
-    deleteLocalHoliday,
-    deleteRetainedHolidayGeography,
   };
 }
 
@@ -425,11 +318,8 @@ const INSTALLED = createHolidayStore();
 
 export const {
   readHolidays,
-  readLocalHolidayModel,
+  readHolidayAreaModel,
   saveHolidayArea,
-  saveLocalHoliday,
-  deleteLocalHoliday,
-  deleteRetainedHolidayGeography,
   duplicateHolidayNamedSpecialDates,
 } = INSTALLED;
 export const readHolidayFacts: HolidayReader = INSTALLED.readHolidayFacts;

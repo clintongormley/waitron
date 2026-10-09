@@ -4,6 +4,7 @@ import {
   clockTimeSkipped,
   minuteOfServiceDay,
   parseServiceDay,
+  parseClosedRanges,
   rangeInForce,
   rangeSpan,
   serviceMomentAt,
@@ -180,4 +181,60 @@ describe("period extensions over the service day", () => {
 it("dates an end at the changeover on the next calendar day when checking skipped times", () => {
   expect(clockTimeSkipped("2027-03-27", "02:30", "02:30", "Europe/Madrid", true)).toBe(true);
   expect(clockTimeSkipped("2027-03-27", "02:30", "02:30", "Europe/Madrid", false)).toBe(false);
+});
+
+describe("closed ranges", () => {
+  it("accepts the whole business day, empty days, and touching sorted ranges without period ids", () => {
+    expect(parseClosedRanges([{ startsAt: "06:00", endsAt: "06:00" }], "ranges", "06:00")).toEqual([
+      { startsAt: "06:00", endsAt: "06:00" },
+    ]);
+    expect(parseClosedRanges([], "ranges", "06:00")).toEqual([]);
+    expect(
+      parseClosedRanges(
+        [
+          { startsAt: "00:00", endsAt: "02:00" },
+          { startsAt: "23:00", endsAt: "00:00" },
+        ],
+        "ranges",
+        "06:00",
+      ),
+    ).toEqual([
+      { startsAt: "23:00", endsAt: "00:00" },
+      { startsAt: "00:00", endsAt: "02:00" },
+    ]);
+  });
+  it.each([
+    ["empty", [{ startsAt: "12:00", endsAt: "12:00" }]],
+    ["order", [{ startsAt: "14:00", endsAt: "12:00" }]],
+    ["step", [{ startsAt: "12:10", endsAt: "14:00" }]],
+    ["step", [{ startsAt: "12:00", endsAt: "14:10" }]],
+    [
+      "overlap",
+      [
+        { startsAt: "12:00", endsAt: "14:00" },
+        { startsAt: "13:45", endsAt: "16:00" },
+      ],
+    ],
+  ])("refuses %s closed ranges with field and reason", (reason, ranges) => {
+    expect(() => parseClosedRanges(ranges, "ranges", "06:00")).toThrowError(
+      expect.objectContaining({
+        code: "zone_closed_time.invalid",
+        params: { field: "ranges", reason },
+      }),
+    );
+  });
+  it.each([
+    [null, "ranges"],
+    [{}, "ranges"],
+    [[null], "ranges.0"],
+    [["night"], "ranges.0"],
+    [[{ startsAt: null, endsAt: "14:00" }], "ranges.0.startsAt"],
+    [[{ startsAt: "24:00", endsAt: "14:00" }], "ranges.0.startsAt"],
+    [[{ startsAt: "12:00", endsAt: null }], "ranges.0.endsAt"],
+    [[{ startsAt: "12:00", endsAt: "14:60" }], "ranges.0.endsAt"],
+  ])("refuses malformed closed ranges %j", (value, field) => {
+    expect(() => parseClosedRanges(value, "ranges", "06:00")).toThrowError(
+      expect.objectContaining({ code: "zone_closed_time.invalid", params: { field } }),
+    );
+  });
 });
