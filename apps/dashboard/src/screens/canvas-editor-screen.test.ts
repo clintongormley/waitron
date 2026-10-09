@@ -1684,3 +1684,64 @@ it("keeps a failed delete's message when an earlier delete completes after it", 
   await flush(el);
   expect(alert()).toBe(codeMessage("canvas.not_found"));
 });
+
+describe("canvas editor sub-page heading", () => {
+  it("places the parent link above the canvas name and tabs", async () => {
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+    await flush(el);
+    const root = el.shadowRoot!;
+    const nav = root.querySelector("nav")!;
+    expect(nav).not.toBeNull();
+    expect(nav.getAttribute("aria-label")).toBe(t("canvas_editor.title"));
+    const link = nav.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("/manage/canvas-editor");
+    expect(link.textContent!.trim()).toBe(t("canvas_editor.title"));
+    const headings = root.querySelectorAll("h1");
+    expect(headings).toHaveLength(1);
+    expect(headings[0]!.textContent).toBe("Counter till");
+    expect(nav.querySelector("h1")).toBeNull();
+    expect(nav.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      headings[0]!.getBoundingClientRect().top,
+    );
+    expect(headings[0]!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      root.querySelector(".tabbar")!.getBoundingClientRect().top,
+    );
+    link.click();
+    await flush(el);
+    expect(root.querySelector("[data-test=editor-placeholder]")).toBeNull();
+    expect(root.querySelector("[data-test=canvas-row-c1]")).not.toBeNull();
+  });
+
+  it.each(["ctrlKey", "metaKey", "shiftKey", "altKey"] as const)(
+    "leaves a %s parent link click to the browser",
+    async (modifier) => {
+      const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+      await flush(el);
+      const link = el.shadowRoot!.querySelector("nav a");
+      expect(link).not.toBeNull();
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true, [modifier]: true });
+      // Cancel the default at the test boundary after observing the screen's decision.
+      let prevented: boolean | undefined;
+      link!.addEventListener(
+        "click",
+        (event) => {
+          prevented = event.defaultPrevented;
+          event.preventDefault();
+        },
+        { once: true },
+      );
+      link!.dispatchEvent(event);
+      await flush(el);
+      expect(prevented).toBe(false);
+      expect(el.shadowRoot!.querySelector("[data-test=editor-placeholder]")).not.toBeNull();
+    },
+  );
+});

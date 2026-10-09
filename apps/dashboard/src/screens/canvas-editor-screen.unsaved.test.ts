@@ -752,3 +752,25 @@ it("canvas page departed Save and name controls cannot submit or alter its retai
   expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Evening");
   expect(unload()).toBe(true);
 });
+
+it("canvas parent link keeps the edited name until Discard returns to its list", async () => {
+  const { app, screen } = await editor();
+  history.replaceState(null, "", "/manage/canvas-editor/canvas/c1");
+  const input = await canvasName(screen, "Evening");
+  const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>("nav a");
+  expect(link).not.toBeNull();
+  link!.click();
+  expect((await question(app)).open).toBe(true);
+  await choose(app, "keep");
+  expect(input.value).toBe("Evening");
+  expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe("Evening");
+  expect(location.pathname).toBe("/manage/canvas-editor/canvas/c1");
+  link!.click();
+  await choose(app, "discard");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
+    .not.toBeNull();
+  expect(location.pathname).toBe("/manage/canvas-editor");
+  expect(unload()).toBe(false);
+  expect(app.api.updateCanvas).not.toHaveBeenCalled();
+});

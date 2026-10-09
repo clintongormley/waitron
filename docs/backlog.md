@@ -2982,6 +2982,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 ### Users, sign-in and the dashboard shell
 
+- **A398 — device-profile editor heading remains to align with the sub-page pattern.**
+  The editor repeats the list title and has no parent link above the heading
+  (`apps/dashboard/src/screens/device-profiles-screen.ts`, `#renderEditor`). Deferred from lane E's
+  canvas-heading change because lane A's A366-5A changes that screen. Re-check its landed editor,
+  then apply the parent link and one item-name `h1` while retaining the unsaved-changes check.
+
+
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **`date-utils.test.ts` has a test titled as guarding "against a vacuous pass"** — found by #612
