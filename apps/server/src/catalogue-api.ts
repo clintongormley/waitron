@@ -41,6 +41,9 @@ import {
   addProducts,
   removeMember,
   moveMember,
+  moveMembersInto,
+  removeMembers,
+  type MemberAt,
   replaceMember,
   HOME_DEVICES,
   readMenuHome,
@@ -220,6 +223,26 @@ function idList(value: unknown, field: string, kind: string): string[] {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string"))
     throw new AppError("management.request_invalid", { field });
   return value.map((entry: string) => requireUuidParam(entry, kind));
+}
+
+/** Members named by the list holding each, every member at most once. */
+function membersBody(value: unknown): MemberAt[] {
+  const invalid = () => new AppError("management.request_invalid", { field: "members" });
+  if (!Array.isArray(value) || value.length === 0) throw invalid();
+  const members = value.map((entry: unknown): MemberAt => {
+    if (
+      !isPlainObject(entry) ||
+      typeof entry.listId !== "string" ||
+      typeof entry.memberId !== "string"
+    )
+      throw invalid();
+    return {
+      listId: requireUuidParam(entry.listId, "SectionId"),
+      memberId: requireUuidParam(entry.memberId, "SectionMemberId"),
+    };
+  });
+  if (new Set(members.map(({ memberId }) => memberId)).size !== members.length) throw invalid();
+  return members;
 }
 
 function selectionBody(body: Record<string, unknown>): CatalogueSelection {
@@ -627,6 +650,25 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const id = sectionId(c);
       const held = memberId(c);
       await gated(c, session, (tx) => removeMember(tx, id, held));
+      return c.body(null, 204);
+    }),
+  );
+  app.post(`${members}/move-in`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const body = await readJsonBody<{ members?: unknown; position?: unknown }>(c);
+      const moved = membersBody(body.members);
+      const position =
+        body.position === undefined ? undefined : numberField(body.position, "position");
+      return c.json(await gated(c, session, (tx) => moveMembersInto(tx, id, moved, position)));
+    }),
+  );
+  app.post("/management-api/section-members/remove", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const removed = membersBody((await readJsonBody<{ members?: unknown }>(c)).members);
+      await gated(c, session, (tx) => removeMembers(tx, removed));
       return c.body(null, 204);
     }),
   );

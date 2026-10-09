@@ -5625,6 +5625,54 @@ test("a filter alone holds open only a branch kept to place a match, not one tha
   expect(treeKeys(el)).toEqual(["food", "break", "eggs"]);
 });
 
+test("shownKeys lists the rows the search and filters leave, including those a closed branch hides", async () => {
+  const el = await treeTable({
+    initiallyCollapsed: true,
+    rows: [...treeRows, { id: "cola", parent: "drinks", name: "Cola" }],
+  });
+  expect(treeKeys(el)).toEqual(["food", "drinks"]);
+  expect(el.shownKeys()).toEqual(["food", "break", "eggs", "drinks", "cola"]);
+  el.searchTerm = "eggs";
+  await el.updateComplete;
+  expect(el.shownKeys()).toEqual(["food", "break", "eggs"]);
+  el.searchTerm = "breakfast";
+  await el.updateComplete;
+  expect(el.shownKeys()).toEqual(["food", "break"]);
+  el.searchOpensPath = true;
+  await el.updateComplete;
+  expect(el.shownKeys()).toEqual(["food", "break", "eggs"]);
+  el.searchTerm = "";
+  el.columns = [
+    {
+      ...treeColumns[0]!,
+      filter: {
+        label: "Kind",
+        allLabel: "Any kind",
+        value: (row) => (row.id === "cola" ? "keep" : "drop"),
+        options: [
+          { value: "keep", label: "Keep" },
+          { value: "drop", label: "Drop" },
+        ],
+      },
+    },
+  ];
+  await el.updateComplete;
+  el.chooseFilter("name", ["keep"]);
+  await el.updateComplete;
+  expect(el.shownKeys()).toEqual(["drinks", "cola"]);
+});
+
+test("shownKeys lists a flat table's rows the search leaves, in the order they are drawn", async () => {
+  const el = await table({ rows: [...rows, { id: "c", name: "Adam", count: 1 }] });
+  expect(el.shownKeys()).toEqual(["b", "a", "c"]);
+  el.sortKey = "name";
+  await el.updateComplete;
+  expect(el.shownKeys()).toEqual(["a", "c", "b"]);
+  el.searchTerm = "ad";
+  await el.updateComplete;
+  expect(el.shownKeys()).toEqual(["a", "c"]);
+});
+
 test("remembers the branches a person opens under the view key, and opens them on the next visit", async () => {
   const props = { initiallyCollapsed: true, viewKey: "test.tree", rememberExpanded: true };
   const first = await treeTable(props);

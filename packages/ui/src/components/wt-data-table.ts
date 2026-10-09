@@ -1536,11 +1536,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
   }
 
-  #emitSelection(next: string[]): void {
+  #shownRows(): readonly Row[] {
     const visible = this.#visibleRows();
-    const keyedRows = this.rowParent
+    return this.rowParent
       ? this.#treeVisible(visible).rows
       : this.#sortedRows(visible, this.#sortColumn(this.#shownColumns()));
+  }
+
+  #emitSelection(next: string[]): void {
+    const keyedRows = this.#shownRows();
     const selectable = new Map(
       this.rows.map((row, index) => [this.rowKey(row, index), this.rowSelectable(row)]),
     );
@@ -1829,6 +1833,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const row = this.#rowsByKey().get(key);
     if (!expanded && row !== undefined && !this.rowCollapsible(row)) return;
     this.#setOpen([key], expanded);
+  }
+
+  /** The keys of the rows the search and filters show now, including rows a closed branch hides. */
+  shownKeys(): string[] {
+    return this.#shownRows().map((row, index) => this.rowKey(row, index));
   }
 
   /** The values the filter on the column with this key narrows rows by now; none for all. */

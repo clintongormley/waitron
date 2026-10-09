@@ -893,6 +893,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   flow. **Next action:** the owner decides whether §10.2's flow replaces §2's copy.
   [Detail](backlog/catalogue.md#copying-some-of-a-sections-products-into-another-section-is-not-built)
 
+- **The Structure tab's Select mode cannot delete sections in bulk (A337)** — Remove from menu stays
+  disabled while a section the menu owns is selected, because such a section is deleted, not
+  removed; each is still deleted from its own row's ⋮. **Next action:** the owner says whether a bulk
+  Delete is wanted.
+
 - **Content languages and the image library (#339, #344) — what is left open.**
   [Operator guide](content-and-images.md). **A new picture consumer has to add a real database
   reference, not just store a filename.** **The online language selector has nothing to select for
@@ -3081,8 +3086,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
 - **The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not a
-  `wt-icon-button` component** — Select is a native `<button>` because `wt-button` does not pass
-  `aria-pressed` through, and the Structure tab's Reorder toggle is a second hand-built icon button
+  `wt-icon-button` component** — the Products table's Select is a native `<button>` because `wt-button` does not pass
+  `aria-pressed` through, and the Structure tab's Reorder and Select toggles are hand-built icon buttons
   for the same reason. Left open by W83's review (#1193), not started.
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 

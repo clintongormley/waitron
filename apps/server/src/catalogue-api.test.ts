@@ -5201,6 +5201,156 @@ describe("mountCatalogueApi — sections", () => {
     });
   });
 
+  it("moves several members into one list and removes several at once", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
+    const root = await menuRootVia(app, menuId);
+    const members = (id: string) => `/management-api/sections/${id}/members`;
+    const owned = async (name: string) =>
+      (
+        await json<{ id: string }>(
+          await send(app, "POST", `/management-api/sections/${root}/sections`, {
+            body: { internalName: `${name} ${crypto.randomUUID()}` },
+          }),
+          201,
+        )
+      ).id;
+    const add = async (list: string, productId: string) =>
+      (
+        await json<Member>(
+          await send(app, "POST", members(list), { body: { ref: product(productId) } }),
+          201,
+        )
+      ).id;
+    const refs = async (list: string) =>
+      (await json<Member[]>(await send(app, "GET", members(list)), 200)).map(({ ref }) => ref);
+    const a = await owned("A");
+    const b = await owned("B");
+    const water = await createNamedProductVia(app, "Agua");
+    const juice = await createNamedProductVia(app, "Zumo");
+    const tea = await createNamedProductVia(app, "Té");
+    const waterMember = await add(a, water);
+    const juiceMember = await add(b, juice);
+    expect(await refs(root)).toEqual([section(a), section(b)]);
+
+    const moved = await json<Member[]>(
+      await send(app, "POST", `${members(root)}/move-in`, {
+        body: {
+          members: [
+            { listId: a, memberId: waterMember },
+            { listId: b, memberId: juiceMember },
+          ],
+          position: 1,
+        },
+      }),
+      200,
+    );
+    expect(moved.map(({ ref }) => ref)).toEqual([
+      section(a),
+      product(water),
+      product(juice),
+      section(b),
+    ]);
+    expect(moved.map(({ position }) => position)).toEqual([0, 1, 2, 3]);
+    expect(moved[1]!.id).toBe(waterMember);
+    expect(await refs(root)).toEqual(moved.map(({ ref }) => ref));
+    expect(await refs(a)).toEqual([]);
+    expect(await refs(b)).toEqual([]);
+
+    const atEnd = await json<Member[]>(
+      await send(app, "POST", `${members(b)}/move-in`, {
+        body: { members: [{ listId: root, memberId: waterMember }] },
+      }),
+      200,
+    );
+    expect(atEnd.map(({ ref }) => ref)).toEqual([product(water)]);
+
+    const teaMember = await add(a, tea);
+    expect(
+      (
+        await send(app, "POST", "/management-api/section-members/remove", {
+          body: {
+            members: [
+              { listId: b, memberId: waterMember },
+              { listId: a, memberId: teaMember },
+            ],
+          },
+        })
+      ).status,
+    ).toBe(204);
+    expect(await refs(a)).toEqual([]);
+    expect(await refs(b)).toEqual([]);
+    expect(await refs(root)).toEqual([section(a), product(juice), section(b)]);
+  });
+
+  it("answers a refused bulk member write with its code and status", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
+    const root = await menuRootVia(app, menuId);
+    const members = (id: string) => `/management-api/sections/${id}/members`;
+    const { id: a } = await json<{ id: string }>(
+      await send(app, "POST", `/management-api/sections/${root}/sections`, {
+        body: { internalName: `A ${crypto.randomUUID()}` },
+      }),
+      201,
+    );
+    const juice = await createNamedProductVia(app, "Zumo");
+    const juiceInRoot = await json<Member>(
+      await send(app, "POST", members(root), { body: { ref: product(juice) } }),
+      201,
+    );
+    await json(await send(app, "POST", members(a), { body: { ref: product(juice) } }), 201);
+    const aInRoot = (await json<Member[]>(await send(app, "GET", members(root)), 200)).find(
+      ({ ref }) => ref.kind === "section" && ref.sectionId === a,
+    )!;
+    const before = await json<Member[]>(await send(app, "GET", members(root)), 200);
+    const moveIn = (list: string) => `${members(list)}/move-in`;
+    const remove = "/management-api/section-members/remove";
+    for (const [path, body, status, code] of [
+      [
+        moveIn(a),
+        { members: [{ listId: root, memberId: aInRoot.id }] },
+        409,
+        "menu_section.member_cycle",
+      ],
+      [
+        moveIn(a),
+        { members: [{ listId: root, memberId: juiceInRoot.id }] },
+        409,
+        "menu_section.member_duplicate",
+      ],
+      [
+        moveIn(a),
+        { members: [{ listId: root, memberId: crypto.randomUUID() }] },
+        404,
+        "menu_section.not_found",
+      ],
+      [
+        moveIn(root),
+        { members: [{ listId: root, memberId: juiceInRoot.id }], position: -1 },
+        400,
+        "menu_section.invalid",
+      ],
+      [
+        remove,
+        { members: [{ listId: root, memberId: aInRoot.id }] },
+        409,
+        "menu_section.wrong_role",
+      ],
+      [
+        remove,
+        { members: [{ listId: root, memberId: crypto.randomUUID() }] },
+        404,
+        "menu_section.not_found",
+      ],
+    ] as const) {
+      const response = await send(app, "POST", path, { body });
+      expect(response.status, code).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+    expect(await json<Member[]>(await send(app, "GET", members(root)), 200)).toEqual(before);
+  });
+
   it("screens every section body's shape and ids", async () => {
     const app = mountApp();
     const s = await createSectionVia(app, `S ${crypto.randomUUID()}`);
@@ -5273,6 +5423,35 @@ describe("mountCatalogueApi — sections", () => {
         ],
         ["PUT", `/management-api/sections/${id}/members/${member}/position`, {}, "to"],
         ["POST", `/management-api/sections/${id}/members/${member}/replace`, {}, "ref"],
+        ...[
+          `/management-api/sections/${id}/members/move-in`,
+          "/management-api/section-members/remove",
+        ].flatMap((path): [method: "POST", path: string, body: unknown, field: string][] => [
+          ["POST", path, {}, "members"],
+          ["POST", path, { members: [] }, "members"],
+          ["POST", path, { members: "nope" }, "members"],
+          ["POST", path, { members: [7] }, "members"],
+          ["POST", path, { members: [{ listId: id }] }, "members"],
+          ["POST", path, { members: [{ listId: 7, memberId: uuid }] }, "members"],
+          ["POST", path, { members: [{ listId: id, memberId: 7 }] }, "members"],
+          [
+            "POST",
+            path,
+            {
+              members: [
+                { listId: id, memberId: uuid },
+                { listId: id, memberId: uuid },
+              ],
+            },
+            "members",
+          ],
+        ]),
+        [
+          "POST",
+          `/management-api/sections/${id}/members/move-in`,
+          { members: [{ listId: id, memberId: uuid }], position: "0" },
+          "position",
+        ],
       ];
     for (const [method, path, body, field] of cases) {
       const response = await send(app, method, path, { body });
@@ -5306,6 +5485,18 @@ describe("mountCatalogueApi — sections", () => {
         `/management-api/sections/${id}/members/products`,
         { productIds: [uuid, "nope"] },
         "ProductId",
+      ],
+      [
+        "POST",
+        `/management-api/sections/${id}/members/move-in`,
+        { members: [{ listId: "nope", memberId: uuid }] },
+        "SectionId",
+      ],
+      [
+        "POST",
+        "/management-api/section-members/remove",
+        { members: [{ listId: uuid, memberId: "nope" }] },
+        "SectionMemberId",
       ],
     ];
     for (const [method, path, body, kind] of idCases) {
@@ -5349,6 +5540,16 @@ describe("mountCatalogueApi — sections", () => {
       ["PUT", `/management-api/sections/${id}/members/${member}/position`, { to: 0 }],
       ["POST", `/management-api/sections/${id}/members/${member}/replace`, { ref: section(id) }],
       ["PUT", `/management-api/sections/${id}/members/${member}/folder`, { showAsFolder: false }],
+      [
+        "POST",
+        `/management-api/sections/${id}/members/move-in`,
+        { members: [{ listId: id, memberId: member }] },
+      ],
+      [
+        "POST",
+        "/management-api/section-members/remove",
+        { members: [{ listId: id, memberId: member }] },
+      ],
     ];
     for (const [method, path, body] of routes) {
       const options = body === undefined ? {} : { body };

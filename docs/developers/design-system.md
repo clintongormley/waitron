@@ -661,8 +661,8 @@ leaves the slot empty. A widget that draws a table with an Add button for a scre
 (`<slot name="empty-action" slot="empty-action">`), while the Products screen has no Add button in its table: its tree always shows the All products
 row, whose menu holds the screen's adds (spec `docs/superpowers/specs/2026-10-02-products-category-tree-design.md`
 §3), so its box appears only when a search matches nothing, holding the no-matches sentence. A
-menu's Structure tab works the same way: its tree always shows the menu's own row, whose menu holds
-the adds (below, after tree mode). When the first item made from the slotted button empties the slot,
+menu's Structure tab has no such row (owner, A337, 2026-10-07): its toolbar's Add menu holds the
+menu's top-level adds, and an empty menu's box repeats them as buttons (below, after tree mode). When the first item made from the slotted button empties the slot,
 the screen moves focus to its other Add button rather than leaving it on the page; the Printers
 screen does this by naming that button as the dialog's `opener` (see the `wt-modal` entry). When
 rows exist but the table's own search or filters hide them all, the same box holds
@@ -909,13 +909,19 @@ tests ran rows 30.3 px tall at a device pixel ratio of 1, each revealed from the
 correction.
 
 Any table, flat or a tree, answers `filterValues(key)` and takes a filter choice with
-`chooseFilter(key, values)` (below, "Remembered, searchable, filterable tables").
+`chooseFilter(key, values)` (below, "Remembered, searchable, filterable tables"). `shownKeys()`
+lists the keys of the rows the search and filters show now, in a tree with the rows it keeps around
+a match, and including rows a closed branch hides.
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
-`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is the
-menu's own row, "Menu: <name>". It has no grip (in Reorder mode, only
-the grip's blank space) and cannot be closed, and its ⋮ holds the adds: New section here, Include a
-menu and Add products. Under it the menu's members follow in menu order, with no sort. A row's key
+`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). It draws no row for
+the menu itself (owner, A337, 2026-10-07: that row only repeated the page heading and made the
+hierarchy read wrongly): the menu's members are the top-level rows, in menu order, with no sort, and
+any of them can close. The menu's own adds — New section here, Include a menu and Add products — are
+in a menu behind a plus button at the toolbar's end, "Add to this menu" ("Añadir a esta carta"), before
+Reorder's Done; while the menu is empty there is no toolbar, so the table's empty box says
+"Nothing is on this menu yet." with the same three adds as buttons under it, and Reorder and Select
+turn off. A row's key
 is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
 of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
 section from whichever place it was chosen, and makes that row the current one, whose name is drawn
@@ -929,16 +935,48 @@ and photo, each following the included menu until it is changed; and "Remove fro
 rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name; in
 Reorder mode each keeps an unseen grip-sized space. Only an owned row has a grip.
 In Reorder mode, put every grip in one leading column before the tree arrow and indentation.
-Reserve that column on the menu's and read-only rows. Keep the arrow and media slot inside
+Reserve that column on read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
-holds a section's colour square, a product's colour square or photo, or nothing on the menu's
-row. A photo has a ring in the product's own colour, falling back to its category's inherited
+holds a section's colour square or a product's colour square or photo. A photo has a ring in the product's own colour, falling back to its category's inherited
 colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Catalogue
 screen, which opens with its photo field focused; on an included menu's row, or for a product the
 library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
 media in both trees when the tree's box is at most 440px wide. In the Products list the product
 editor remains available through the row's Actions menu, and a Menus Structure product row's
 Actions menu offers Edit product at every width.
+
+The toolbar has a search box ("Search this menu" / "Buscar en esta carta") that matches the names the
+rows show and opens the sections above a match, and the Available column has a Yes / No filter; a
+section or an included menu answers neither, so it stays only on the way to a match. There is no
+filter on Type: its three values are already told apart by the folder frame and the arrow. While a
+search or filter hides rows, ArrowUp and ArrowDown move a member past the next sibling that is
+drawn, never past a hidden one. The search clears when another menu opens or the menu empties.
+
+Beside Reorder is a Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
+mode every row the menu owns has a box named "<name>, in <list>" (rows inside an included menu have
+none), and a bar under the toolbar shows how many rows are ticked with three buttons: **Move to
+section…**, **Remove from menu** and Done, which leaves the mode and puts focus back on Select.
+Select and Done cannot be pressed while a change is being saved. While a search or filter is on, a section
+shown only because something inside it matches has no box, so Select all never ticks a section whose
+hidden rows would go with it; a section whose own name matches keeps its box, and none has one under
+the Available filter, which no section answers. The selection clears when the mode turns off, the
+search or a filter changes, another menu opens, or a bulk change succeeds; a re-read of the menu or its products (a live update, or the screen's own after a save) drops a
+ticked row it takes away, or one the search or the Available filter no longer shows with a box (a
+row inside a section the person closed stays), from the selection and from an open confirm or
+dialog, which closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
+travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
+the confirm and the dialog count what is sent. Remove from menu asks first, naming how many items
+leave their sections and listing each with the list it leaves; it stays quiet and disabled while a section the menu owns is selected, with a line saying a
+section is deleted from its own row's ⋮, because a section the menu owns is deleted, never removed.
+Move to section… opens a dialog with one required destination: "Top level" first, then every section
+the menu owns, by its path joined with " › ", leaving out each selected section and every section
+below it; never a list inside an included menu. Its Move action is quiet until a destination is
+chosen, and again if a live update takes the chosen one away; closing it with one chosen asks
+first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Both send one request: `POST
+/management-api/section-members/remove` and `POST /management-api/sections/:id/members/move-in`,
+which moves the member rows themselves, so a moved product keeps the menu's price for it and an
+included menu keeps its folder setting (`moveMembersInto`, `packages/catalogue/src/sections.ts`).
+Copying products into another section is not built.
 
 The grips show only in Reorder mode, so a menu is not rearranged by a stray drag while you browse
 it. The tab's toolbar starts with a Reorder icon button (a grip mark, Reordenar in Spanish; "Icon
@@ -952,7 +990,7 @@ it; a pointer drag starts from the grip only, and offers only places among the m
 with Products' ghost and gap (the shared `apps/dashboard/src/widgets/tree-drag.ts`). When a window
 opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
 the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
-member. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
+member; at the top level, which has no row, to the toolbar's Add menu, or in an empty menu to the empty box's first add. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
 `menu-structure-table.a11y.test.ts` beside it, and the "the Structure tree" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`.
 
@@ -1364,10 +1402,12 @@ nothing about contents; otherwise offer moving their contents up as the default,
 ### Icon buttons with a tooltip (`iconButtonStyles`, `trackIconTooltip`)
 
 The `wt-data-table` Filters button, the Products Select button and the Structure tab's
-Reorder button each take the `icon-button` class from `iconButtonStyles` (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
+Reorder and Select buttons each take the `icon-button` class from `iconButtonStyles` (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
 least `--wt-tap-min` each way, with the toolbar's border and surface, and pressed —
 `--wt-color-primary` border, `--wt-color-surface-lifted` fill, `--wt-color-primary-text` icon —
-while the button's `aria-pressed` or `aria-expanded` is `true`. Its name is its `aria-label`. An
+while the button's `aria-pressed` or `aria-expanded` is `true`; disabled, it is drawn at
+`--wt-opacity-disabled` with the default cursor, as the Structure tab's Select is while a change is
+being saved. Its name is its `aria-label`. An
 `aria-hidden` `.icon-tooltip` inside it repeats that name on one line under the button, from its leading edge, on keyboard focus,
 and on hover where the primary pointer can hover (a touch screen leaves a tapped button in
 `:hover`), drawn above a sticky table's headings. It stays shown while the pointer is on the tooltip
@@ -1377,7 +1417,7 @@ condition); a hidden tooltip is `display: none`. Bind `trackIconTooltip` to the 
 Escape hides the tooltip, which can show again once both have left (WCAG 1.4.13). Binding it also
 means a click on a showing tooltip does not press its button. The table's
 Customise columns button, icon-only in the same toolbar, does not use it yet: it has no tooltip and
-no pressed look. Guards: `packages/ui/src/icon-button.test.ts`, and the tooltip cases in
+no pressed look; nor does the Structure tab's Add to this menu button (`wt-row-actions` with `icon="plus"`). Guards: `packages/ui/src/icon-button.test.ts`, and the tooltip cases in
 `packages/ui/src/components/wt-data-table.test.ts`,
 `apps/dashboard/src/widgets/catalogue-browser.test.ts` and
 `apps/dashboard/src/screens/menus-screen.a11y.test.ts`.
@@ -1717,7 +1757,7 @@ and nothing guards it across screens:
   The screen's other windows, the menu price fields and Publish act at once, confirm an operation or
   only show, so they have no Save to gate, except the Add products window and the publication
   schedule, which are batch 2a's, and the Home page tab's shortcut window, whose Add follows the rule
-  since A336; the list is in
+  since A336, and the Structure tab's Move to section… dialog, whose Move follows the rule since A337; the list is in
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
@@ -3175,9 +3215,9 @@ buttons (New station and New watcher) on every tab rather than only on their own
 half the row through the `tab-actions` part so its tabs keep that half (the "keeps half of a … px
 tab row for the tabs" cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
 Keep actions for other tabs out of sight until their tab is selected.
-A tab whose list is a tree puts its adds in row menus instead, as the Products tree does in its All products row: a menu's
-Structure tab puts them in the ⋮ of the menu's own row and of each section the menu owns, and
-nothing in the `actions` slot (the "the Structure tree" cases in
+A tab whose list is a tree puts its adds in the tree rather than the tab's `actions` slot: the Products tree in its All products row's ⋮, and a menu's
+Structure tab in its toolbar's Add menu (A337) and in the ⋮ of
+each section the menu owns (the "the Structure tree" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`).
 
 Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a

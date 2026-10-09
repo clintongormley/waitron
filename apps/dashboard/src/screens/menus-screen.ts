@@ -9,6 +9,9 @@ import {
   iconButtonStyles,
   trackIconTooltip,
   leaveCoordinatorFor,
+  draftScopeFor,
+  saveActionState,
+  type DraftScope,
   type LeaveReason,
   focusFirstInvalid,
   setContentLanguages,
@@ -29,11 +32,7 @@ import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
-import {
-  ROOT_KEY,
-  ownPresentation,
-  type StructureAddAction,
-} from "../widgets/menu-structure-table.js";
+import { ownPresentation, type StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
@@ -197,6 +196,54 @@ function trailOf(structure: MenuStructure | null, path: readonly string[]): Menu
   return trail;
 }
 
+/** The node at `path`, of any kind, or undefined when the path leaves the structure. */
+function nodeAt(
+  structure: MenuStructure | null,
+  path: readonly string[],
+): MenuStructureNode | undefined {
+  let nodes = structure?.nodes ?? [];
+  let node: MenuStructureNode | undefined;
+  for (const memberId of path) {
+    node = nodes.find((candidate) => candidate.memberId === memberId);
+    if (!node) return undefined;
+    nodes = node.children ?? [];
+  }
+  return node;
+}
+
+/** The keys of the tree rows the menu owns: everything but what an included menu holds. */
+function ownedKeys(nodes: readonly MenuStructureNode[], parent = ""): string[] {
+  return nodes.flatMap((node) => {
+    const key = parent ? `${parent}/${node.memberId}` : node.memberId;
+    return [key, ...(node.includedMenuId ? [] : ownedKeys(node.children ?? [], key))];
+  });
+}
+
+/** Every section the menu owns, once each, by the path to its first row, in tree order. */
+function ownedSections(
+  nodes: readonly MenuStructureNode[],
+  trail: readonly MenuStructureNode[] = [],
+): { sectionId: string; trail: MenuStructureNode[] }[] {
+  const seen = new Set<string>();
+  return nodes
+    .flatMap((node) => {
+      if (node.includedMenuId || node.ref.kind !== "section") return [];
+      const here = [...trail, node];
+      return [
+        { sectionId: node.ref.sectionId, trail: here },
+        ...ownedSections(node.children ?? [], here),
+      ];
+    })
+    .filter(({ sectionId }) => !seen.has(sectionId) && !!seen.add(sectionId));
+}
+
+/** The ids of every section at or below `node`, wherever it appears inside it. */
+function sectionIdsWithin(node: MenuStructureNode): string[] {
+  return node.ref.kind === "section"
+    ? [node.ref.sectionId, ...(node.children ?? []).flatMap(sectionIdsWithin)]
+    : [];
+}
+
 function listIdOf(structure: MenuStructure | null, trail: MenuStructureNode[]): string | null {
   const last = trail.at(-1);
   return last?.ref.kind === "section" ? last.ref.sectionId : (structure?.rootSectionId ?? null);
@@ -289,6 +336,19 @@ export class MenusScreen extends LitElement {
       }
       :host {
         display: block;
+      }
+      .selection-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3) 0;
+      }
+      .selection-note {
+        flex-basis: 100%;
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       h1 {
         margin: 0 0 var(--wt-space-4);
@@ -463,8 +523,18 @@ export class MenusScreen extends LitElement {
         color: var(--wt-color-danger);
       }
       .list,
-      .sizer {
+      .sizer,
+      dashboard-menu-structure-table {
         container-type: inline-size;
+      }
+      wt-input[name="structure-search"] {
+        flex: 1 1 calc(var(--wt-tap-min) * 7);
+        min-width: min(100%, calc(var(--wt-tap-min) * 7));
+      }
+      @container (max-width: 40rem) {
+        wt-input[name="structure-search"] {
+          flex-basis: 100%;
+        }
       }
       .narrow-probe,
       .wide-probe {
@@ -571,6 +641,20 @@ export class MenusScreen extends LitElement {
   @state() private busy = false;
   /** Whether the Structure tree shows its grips; each menu opens with it off. */
   @state() private structureReordering = false;
+  @state() private structureSearch = "";
+  @state() private structureSelecting = false;
+  /** The Structure tree's ticked rows, as row keys. */
+  @state() private structureSelected: string[] = [];
+  /** The row keys the open Remove confirm sends, or null while it is shut. */
+  @state() private removingSelected: string[] | null = null;
+  @state() private removeSelectedError = "";
+  /** The row keys the open Move dialog sends, or null while it is shut. */
+  @state() private movingSelected: string[] | null = null;
+  /** The chosen destination list's id; empty until one is chosen. */
+  @state() private moveDestination = "";
+  @state() private moveSelectedError = "";
+  #moveScope?: DraftScope<string>;
+  readonly #moveId = {};
   @state() private memberError: string | null = null;
   @state() private view: Tab = TABS[0];
 
@@ -749,6 +833,7 @@ export class MenusScreen extends LitElement {
    * name order. */
   protected override updated(changed: PropertyValues): void {
     this.#returnFocus();
+    if (changed.has("structure") || changed.has("products")) void this.#keepSelectionShown();
     if (!changed.has("layout") || this.layout !== "narrow") return;
     const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
       'wt-data-table[data-test="menus"]',
@@ -771,6 +856,8 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
+    if (changed.has("structure")) this.#keepSelectionOwned();
+    this.#trackMoveDraft();
     if (changed.has("structure") || changed.has("path")) {
       this.#resolvePath();
       this.#closeLostList();
@@ -1169,6 +1256,11 @@ export class MenusScreen extends LitElement {
     this.statusResetRequired = false;
     this.path = [];
     this.structureReordering = false;
+    this.structureSearch = "";
+    this.structureSelecting = false;
+    this.structureSelected = [];
+    this.removingSelected = null;
+    this.movingSelected = null;
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
@@ -1232,6 +1324,8 @@ export class MenusScreen extends LitElement {
   // ── Menus ────────────────────────────────────────────────────────────────────────────────────
 
   override disconnectedCallback(): void {
+    this.#moveScope?.dispose();
+    this.#moveScope = undefined;
     this.#menuFormGeneration++;
     this.#menuReadGeneration++;
     this.#menuReadKey = "";
@@ -1456,7 +1550,7 @@ export class MenusScreen extends LitElement {
   }
 
   #returnFocusTo(path: string[], shut = false): void {
-    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") || ROOT_KEY };
+    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") };
     this.#windowShut = shut;
   }
 
@@ -2249,7 +2343,18 @@ export class MenusScreen extends LitElement {
         .current=${this.path}
         .busy=${this.busy}
         .reordering=${this.structureReordering}
+        .search=${this.structureSearch}
+        .selecting=${this.structureSelecting}
+        .selected=${this.structureSelected}
         menuName=${this.#menuName()}
+        @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
+          event.stopPropagation();
+          this.structureSelected = event.detail.selected;
+        }}
+        @wt-filter-change=${(event: Event) => {
+          event.stopPropagation();
+          this.structureSelected = [];
+        }}
         @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
           event.stopPropagation();
           this.#edit(event.detail.path);
@@ -2313,8 +2418,41 @@ export class MenusScreen extends LitElement {
           @blur=${trackIconTooltip}
         >
           <wt-icon name="grip"></wt-icon
-          ><span class="icon-tooltip" aria-hidden="true">${t("menus.reorder")}</span>
+          ><span class="icon-tooltip" aria-hidden="true">${t("menus.reorder")}</span></button
+        ><button
+          type="button"
+          slot="toolbar-start"
+          class="icon-button"
+          data-test="select"
+          aria-label=${t("folders.select")}
+          aria-pressed=${String(this.structureSelecting)}
+          ?disabled=${this.busy}
+          @click=${() => {
+            if (this.busy) return;
+            this.structureSelected = [];
+            this.structureSelecting = !this.structureSelecting;
+          }}
+          @pointerenter=${trackIconTooltip}
+          @pointerleave=${trackIconTooltip}
+          @focus=${trackIconTooltip}
+          @blur=${trackIconTooltip}
+        >
+          <wt-icon name="select-rows"></wt-icon
+          ><span class="icon-tooltip" aria-hidden="true">${t("folders.select")}</span>
         </button>
+        <wt-input
+          slot="toolbar-search"
+          name="structure-search"
+          type="search"
+          label=${t("menus.search_structure")}
+          .value=${this.structureSearch}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.structureSearch = event.detail.value;
+            this.structureSelected = [];
+          }}
+        ></wt-input>
+        ${this.structureSelecting ? this.#renderSelectionBar() : nothing}
         ${
           this.structureReordering
             ? html`<wt-button
@@ -2327,6 +2465,273 @@ export class MenusScreen extends LitElement {
             : nothing
         }</dashboard-menu-structure-table
       >`;
+  }
+
+  #renderSelectionBar() {
+    const count = this.structureSelected.length;
+    const sectionSelected = this.structureSelected.some((key) => {
+      const node = nodeAt(this.structure, key.split("/"));
+      return node?.ref.kind === "section" && !node.includedMenuId;
+    });
+    const removable = count > 0 && !sectionSelected;
+    return html`<div
+      slot="toolbar-bottom"
+      class="selection-bar"
+      data-test="selection-bar"
+      role="group"
+      aria-label=${t("folders.select")}
+    >
+      <span data-test="selected-count" aria-live="polite"
+        >${t(count === 1 ? "folders.selected_one" : "folders.selected").replace(
+          "{count}",
+          String(count),
+        )}</span
+      >
+      <wt-button
+        data-test="selection-move"
+        variant=${count > 0 ? "primary" : "secondary"}
+        .disabled=${count === 0 || this.busy}
+        @click=${() => {
+          if (count === 0 || this.busy) return;
+          this.moveSelectedError = "";
+          this.moveDestination = "";
+          this.movingSelected = this.#sentKeys(this.#inTreeOrder(this.structureSelected));
+        }}
+        >${t("menus.move_selected")}</wt-button
+      >
+      <wt-button
+        data-test="selection-remove"
+        variant=${removable ? "danger" : "secondary"}
+        .disabled=${!removable || this.busy}
+        @click=${() => {
+          if (!removable || this.busy) return;
+          this.removeSelectedError = "";
+          this.removingSelected = this.#sentKeys(this.structureSelected);
+        }}
+        >${t("menus.remove_selected")}</wt-button
+      >
+      <wt-button
+        data-test="selection-done"
+        variant="secondary"
+        .disabled=${this.busy}
+        @click=${() => {
+          if (!this.busy) void this.#leaveSelecting();
+        }}
+        >${t("action.done")}</wt-button
+      >
+      ${
+        sectionSelected
+          ? html`<p class="selection-note" data-test="selection-sections-note">
+              ${t("menus.selection_sections_note")}
+            </p>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the menu still
+   * owns. */
+  #keepSelectionOwned(): void {
+    // An empty menu's table draws no toolbar, so nothing could turn a mode off or clear the search.
+    if (this.structure?.nodes.length === 0) {
+      this.structureReordering = false;
+      this.structureSelecting = false;
+      this.structureSearch = "";
+    }
+    const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
+    this.#keepSelection((key) => owned.has(key));
+  }
+
+  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the search and the
+   * Available filter still show (a closed section hides none), once the tree has drawn a change: a
+   * row renamed out of the search, or a product the filter now hides, can no longer be unticked. */
+  async #keepSelectionShown(): Promise<void> {
+    if (this.structureSelected.length === 0 && !this.removingSelected && !this.movingSelected)
+      return;
+    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
+    if (!tree) return;
+    await tree.updateComplete;
+    const shown = tree.shownSelectableKeys();
+    this.#keepSelection((key) => shown.has(key));
+  }
+
+  #keepSelection(keep: (key: string) => boolean): void {
+    const kept = this.structureSelecting ? this.structureSelected.filter(keep) : [];
+    if (kept.length !== this.structureSelected.length) this.structureSelected = kept;
+    const trim = (keys: string[] | null): string[] | null => {
+      const left = keys?.filter(keep) ?? [];
+      if (left.length === keys?.length) return keys;
+      return left.length > 0 ? left : null;
+    };
+    this.removingSelected = trim(this.removingSelected);
+    this.movingSelected = trim(this.movingSelected);
+    if (
+      this.movingSelected !== null &&
+      !this.#moveDestinations(this.movingSelected).some(
+        ({ value }) => value === this.moveDestination,
+      )
+    )
+      this.moveDestination = "";
+  }
+
+  /** The selected rows a bulk change sends. A row inside a selected section travels with it, in
+   * every place that section is shown, and a member shown in two places is sent once: the server
+   * refuses a request naming one member twice. */
+  #sentKeys(selected: readonly string[]): string[] {
+    const sections = new Set(
+      selected.flatMap((key) => {
+        const node = nodeAt(this.structure, key.split("/"));
+        return node?.ref.kind === "section" && !node.includedMenuId ? [node.ref.sectionId] : [];
+      }),
+    );
+    const members = new Set<string>();
+    return selected.filter((key) => {
+      const path = key.split("/");
+      const above = trailOf(this.structure, path.slice(0, -1));
+      if (above.some(({ ref }) => ref.kind === "section" && sections.has(ref.sectionId)))
+        return false;
+      const member = JSON.stringify([this.#targetAt(path.slice(0, -1)).listId, path.at(-1)]);
+      if (members.has(member)) return false;
+      members.add(member);
+      return true;
+    });
+  }
+
+  /** Each selected row as the list holding it and its member id, with the names the confirm shows. */
+  #selectedMembers(keys: readonly string[]) {
+    const productNames = new Map(this.products.map(({ id, name }) => [id, name]));
+    return keys.flatMap((key) => {
+      const path = key.split("/");
+      const node = nodeAt(this.structure, path);
+      if (!node) return [];
+      const target = this.#targetAt(path.slice(0, -1));
+      const name = memberName(node.ref, productNames, this.#sectionNames);
+      return [
+        {
+          listId: target.listId,
+          memberId: node.memberId,
+          name: node.includedMenuId ? t("menus.menu_prefix").replace("{name}", name) : name,
+          list: target.name,
+        },
+      ];
+    });
+  }
+
+  async #removeSelected(): Promise<void> {
+    const keys = this.removingSelected;
+    if (!keys || this.busy) return;
+    const members = this.#selectedMembers(keys).map(({ listId, memberId }) => ({
+      listId,
+      memberId,
+    }));
+    this.busy = true;
+    this.removeSelectedError = "";
+    try {
+      await this.api.removeSectionMembers(members);
+    } catch (error) {
+      this.removeSelectedError = codeMessage(codeOf(error));
+      this.busy = false;
+      return;
+    }
+    this.removingSelected = null;
+    this.structureSelected = [];
+    await this.#refresh();
+    this.busy = false;
+    await this.updateComplete;
+    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
+    if (this.structureSelecting)
+      this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+    else tree?.focusRowMenu("");
+  }
+
+  #inTreeOrder(keys: readonly string[]): string[] {
+    return ownedKeys(this.structure?.nodes ?? []).filter((key) => keys.includes(key));
+  }
+
+  /** Top level first, then the sections the menu owns, less each moved section and all below it. */
+  #moveDestinations(keys: readonly string[]): { value: string; label: string; path: string[] }[] {
+    const nodes = this.structure?.nodes ?? [];
+    const excluded = new Set(
+      keys.flatMap((key) => {
+        const node = nodeAt(this.structure, key.split("/"));
+        return node && !node.includedMenuId ? sectionIdsWithin(node) : [];
+      }),
+    );
+    return [
+      { value: this.#targetAt([]).listId, label: t("menus.move_top_level"), path: [] },
+      ...ownedSections(nodes)
+        .filter(({ sectionId }) => !excluded.has(sectionId))
+        .map(({ sectionId, trail }) => ({
+          value: sectionId,
+          label: trail.map((node) => this.#nodeName(node)).join(PATH_SEPARATOR),
+          path: trail.map((node) => node.memberId),
+        })),
+    ];
+  }
+
+  #trackMoveDraft(): void {
+    if (this.movingSelected === null || !this.isConnected) {
+      this.#moveScope?.dispose();
+      this.#moveScope = undefined;
+      return;
+    }
+    if (this.#moveScope) return;
+    this.#moveScope = draftScopeFor<string>(this, {
+      id: this.#moveId,
+      parent: this,
+      current: () => this.moveDestination,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.moveDestination = value;
+      },
+    }).scope;
+    this.#moveScope.commit("");
+  }
+
+  readonly #beforeMoveClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy) return false;
+    const leave = leaveCoordinatorFor(this);
+    return (
+      !leave ||
+      (await leave.request({ scopes: [this.#moveId], reason, proceed() {} })) === "proceeded"
+    );
+  };
+
+  async #moveSelected(): Promise<void> {
+    const keys = this.movingSelected;
+    const destination = this.moveDestination;
+    if (!keys || this.busy || !destination || saveActionState(this.#moveScope).unchanged) return;
+    const members = this.#selectedMembers(keys).map(({ listId, memberId }) => ({
+      listId,
+      memberId,
+    }));
+    this.busy = true;
+    this.moveSelectedError = "";
+    try {
+      await this.api.moveSectionMembersInto(destination, members);
+    } catch (error) {
+      this.moveSelectedError = codeMessage(codeOf(error));
+      this.busy = false;
+      return;
+    }
+    this.#moveScope?.commit(destination);
+    this.movingSelected = null;
+    this.structureSelected = [];
+    await this.#refresh();
+    const path = this.#moveDestinations([]).find(({ value }) => value === destination)?.path;
+    if (path) this.#edit(path);
+    this.busy = false;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+  }
+
+  /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
+  async #leaveSelecting(): Promise<void> {
+    this.structureSelected = [];
+    this.structureSelecting = false;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
 
   /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
@@ -2816,7 +3221,108 @@ export class MenusScreen extends LitElement {
         },
         closed: () => this.#windowClosed(),
         submit: () => void this.#deleteSection(),
-      })}`;
+      })}
+      ${this.#renderRemoveSelected()} ${this.#renderMoveSelected()}`;
+  }
+
+  #renderMoveSelected() {
+    const keys = this.movingSelected ?? [];
+    const open = this.movingSelected !== null;
+    const save = saveActionState(this.#moveScope);
+    const blocked = save.unchanged || !this.moveDestination;
+    const close = () => {
+      this.movingSelected = null;
+    };
+    const message = open ? this.moveSelectedError : "";
+    return html`<wt-modal
+      size="compact"
+      data-test="move-selected"
+      .open=${open}
+      .beforeClose=${leaveCoordinatorFor(this) ? this.#beforeMoveClose : undefined}
+      heading=${t(keys.length === 1 ? "folders.move_heading_one" : "folders.move_heading").replace(
+        "{count}",
+        String(keys.length),
+      )}
+      @keydown=${this.#guardEscape}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (event.target !== event.currentTarget) return;
+        if (!this.busy) close();
+      }}
+    >
+      ${
+        open
+          ? html`<wt-combobox
+              name="destination"
+              required
+              label=${t("folders.destination")}
+              searchPlaceholder=${t("categories.combobox_search")}
+              noResultsLabel=${t("categories.combobox_no_results")}
+              .options=${this.#moveDestinations(keys).map(({ value, label }) => ({ value, label }))}
+              .value=${this.moveDestination}
+              .disabled=${this.busy}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                if (this.busy || this.movingSelected === null) return;
+                this.moveDestination = event.detail.value;
+                this.#moveScope?.changed();
+              }}
+            ></wt-combobox>`
+          : nothing
+      }
+      <p class="field-error" role="alert" data-test="form-error">${message || nothing}</p>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="move-selected-cancel"
+          .disabled=${this.busy}
+          @click=${() => {
+            if (this.busy) return;
+            if (leaveCoordinatorFor(this))
+              void this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+                '[data-test="move-selected"]',
+              )!.requestClose("cancel");
+            else close();
+          }}
+          >${t("action.cancel")}</wt-button
+        ><wt-button
+          variant=${save.variant}
+          data-test="move-selected-save"
+          .disabled=${this.busy || blocked}
+          @click=${() => void this.#moveSelected()}
+          >${t("menus.move_selected_confirm")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
+  }
+
+  #renderRemoveSelected() {
+    const keys = this.removingSelected ?? [];
+    const members = this.#selectedMembers(keys);
+    return this.#formModal({
+      test: "remove-selected",
+      open: this.removingSelected !== null,
+      heading: t(
+        keys.length === 1 ? "menus.remove_selected_heading_one" : "menus.remove_selected_heading",
+      ).replace("{count}", String(keys.length)),
+      body: html`<ul data-test="remove-selected-items">
+        ${members.map(
+          ({ name, list }) =>
+            html`<li>
+              ${t("menus.remove_selected_from").replace("{name}", name).replace("{list}", list)}
+            </li>`,
+        )}
+      </ul>`,
+      save: "remove-selected-save",
+      saveLabel: t("menus.remove_selected_confirm"),
+      saveVariant: "danger",
+      errors: { blocked: false, bottom: this.removeSelectedError },
+      close: () => {
+        this.removingSelected = null;
+      },
+      submit: () => void this.#removeSelected(),
+    });
   }
 
   #ownedDescendants(nodes: readonly MenuStructureNode[]): number {

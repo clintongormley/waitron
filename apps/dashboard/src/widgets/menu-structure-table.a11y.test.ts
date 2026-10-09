@@ -1,6 +1,7 @@
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-input.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
@@ -64,7 +65,8 @@ const states = [
   "open",
   "current",
   "menu open",
-  "root menu open",
+  "toolbar add menu open",
+  "empty",
   "included menu open",
   "included shown directly",
   "busy",
@@ -72,7 +74,6 @@ const states = [
 
 const MENU_OF: Partial<Record<(typeof states)[number], string>> = {
   "menu open": "actions-m-drinks",
-  "root menu open": "actions-root",
   "included menu open": "actions-included-wine",
   "included shown directly": "actions-included-wine",
 };
@@ -86,7 +87,7 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     const { el, host } = await mountWidget<MenuStructureTable>(
       "dashboard-menu-structure-table",
       {
-        nodes: state === "included shown directly" ? shownDirectly : nodes,
+        nodes: state === "included shown directly" ? shownDirectly : state === "empty" ? [] : nodes,
         products,
         menuName: "Lunch Menu",
         current: state === "current" ? ["m-drinks", "m-beer"] : [],
@@ -114,12 +115,87 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
       if (state.startsWith("included"))
         expect(menu.querySelector('[data-test="edit-included-wine"]')).not.toBeNull();
     }
+    if (state === "toolbar add menu open") {
+      const menu = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="toolbar-adds"]',
+      )!;
+      await menu.updateComplete;
+      menu.show();
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect(menu.querySelector('[data-test="new-section-top"]')).not.toBeNull();
+    }
+    if (state === "empty") {
+      expect(table.shadowRoot!.querySelector(".empty .message")!.textContent!.trim()).toBe(
+        t("menus.structure_empty"),
+      );
+      expect(el.shadowRoot!.querySelector('[data-test="new-section-empty"]')).not.toBeNull();
+    }
     if (state === "included shown directly" || state === "closed") {
       const note = inTable('[data-test="folder-setting-included-wine"]');
       expect(note.textContent!.trim()).toBe(
         t(state === "closed" ? "menus.include_as_folder" : "menus.include_direct"),
       );
     }
+    await expectNoA11yViolations(host);
+  });
+
+  it.each(["a match", "no match"])(
+    "renders accessibly with a search typed in its slotted box, finding %s",
+    async (found) => {
+      const term = found === "a match" ? "lager" : "zzz";
+      const { el, host } = await mountWidget<MenuStructureTable>(
+        "dashboard-menu-structure-table",
+        { nodes, products, menuName: "Lunch Menu", search: term },
+        theme,
+      );
+      const box = document.createElement("wt-input");
+      box.slot = "toolbar-search";
+      box.setAttribute("name", "structure-search");
+      box.setAttribute("type", "search");
+      box.setAttribute("label", t("menus.search_structure"));
+      box.value = term;
+      el.append(box);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      for (let round = 0; round < 3; round++) {
+        await el.updateComplete;
+        await table.updateComplete;
+        await box.updateComplete;
+      }
+      expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
+      const keys = [
+        ...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr[data-row-key]"),
+      ].map((tr) => tr.dataset.rowKey);
+      if (found === "a match") expect(keys).toContain("m-drinks/m-beer/m-lager-2");
+      else expect(keys).toEqual([]);
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it("renders accessibly selecting, with rows ticked, open sections, and read-only rows without a box", async () => {
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      {
+        nodes,
+        products,
+        menuName: "Lunch Menu",
+        selecting: true,
+        selected: ["m-burger", "m-drinks/m-lager"],
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    for (let round = 0; round < 3; round++) await table.updateComplete;
+    for (const key of ["m-drinks", "included-wine"]) {
+      table
+        .shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .row-activate`)!
+        .click();
+      await table.updateComplete;
+    }
+    const box = (key: string) =>
+      table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`);
+    expect(box("m-drinks/m-lager")!.checked).toBe(true);
+    expect(box("included-wine")).not.toBeNull();
+    expect(box("included-wine/wine-lager")).toBeNull();
     await expectNoA11yViolations(host);
   });
 

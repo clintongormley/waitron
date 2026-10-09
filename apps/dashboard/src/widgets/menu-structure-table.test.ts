@@ -1,12 +1,13 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
 import type { CategorySummary, MenuHome, MenuStructureNode, Product } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -168,9 +169,7 @@ function shown(el: MenuStructureTable): string[] {
 }
 
 function nameOf(el: MenuStructureTable, key: string): string {
-  return row(el, key)!
-    .querySelector('[data-test="name"], [data-test="root-name"]')!
-    .textContent!.trim();
+  return row(el, key)!.querySelector('[data-test="name"]')!.textContent!.trim();
 }
 
 async function toggle(el: MenuStructureTable, key: string): Promise<void> {
@@ -205,22 +204,36 @@ function listen(el: MenuStructureTable, name: string): unknown[] {
 
 const menuLabel = (name: string) => t("menus.menu_prefix").replace("{name}", name);
 
-it("draws the menu first, then its members a level deeper, in menu order", async () => {
+it("draws the menu's members as the top-level rows, in menu order, with no row for the menu itself", async () => {
   const el = await mount();
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
-  expect(nameOf(el, "root")).toBe(menuLabel("Lunch Menu"));
-  expect(row(el, "root")!.getAttribute("aria-level")).toBe("1");
+  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
   for (const key of ["m-burger", "m-drinks", "m-fav"])
-    expect(row(el, key)!.getAttribute("aria-level")).toBe("2");
+    expect(row(el, key)!.getAttribute("aria-level")).toBe("1");
   expect(["m-burger", "m-drinks", "m-fav"].map((key) => nameOf(el, key))).toEqual([
     "Burger",
     "Drinks",
     "Favourites",
   ]);
+  expect(inTable(el, '[data-test="root-name"]')).toBeNull();
+  expect(table(el).shadowRoot!.textContent!).not.toContain(menuLabel("Lunch Menu"));
+  // A top-level section has its arrow; a product has none.
+  for (const key of ["m-drinks", "m-fav"])
+    expect(row(el, key)!.getAttribute("aria-expanded"), key).toBe("false");
+  expect(row(el, "m-burger")!.hasAttribute("aria-expanded")).toBe(false);
+  // Every top-level row's swatch sits in one column.
+  const lefts = ["m-burger", "m-drinks", "m-fav"].map(
+    (key) =>
+      row(el, key)!
+        .querySelector(
+          '[part~="folder-frame"], [part~="thumb-frame"], [part~="thumb-placeholder"]',
+        )!
+        .getBoundingClientRect().left,
+  );
+  for (const left of lefts) expect(left).toBeCloseTo(lefts[0]!, 0);
 
   el.nodes = [favourites(), productNode("m-burger", "p-burger"), drinksNode("m-drinks")];
   await settle(el);
-  expect(shown(el)).toEqual(["root", "m-fav", "m-burger", "m-drinks"]);
+  expect(shown(el)).toEqual(["m-fav", "m-burger", "m-drinks"]);
 });
 
 it("starts with sections closed and opens and closes one by a click on its row, by staff names", async () => {
@@ -228,7 +241,6 @@ it("starts with sections closed and opens and closes one by a click on its row, 
   expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
   await toggle(el, "m-drinks");
   expect(shown(el)).toEqual([
-    "root",
     "m-burger",
     "m-drinks",
     "m-drinks/m-lager",
@@ -239,7 +251,7 @@ it("starts with sections closed and opens and closes one by a click on its row, 
   expect(
     ["m-drinks/m-lager", "m-drinks/m-beer", "m-drinks/m-lemonade"].map((key) => nameOf(el, key)),
   ).toEqual(["Lager", "Beer", "Lemonade"]);
-  expect(row(el, "m-drinks/m-lager")!.getAttribute("aria-level")).toBe("3");
+  expect(row(el, "m-drinks/m-lager")!.getAttribute("aria-level")).toBe("2");
   const text = table(el).shadowRoot!.textContent!;
   for (const wrong of ["Bebidas", "Something to drink", "for guests", "COCINA"])
     expect(text).not.toContain(wrong);
@@ -247,7 +259,7 @@ it("starts with sections closed and opens and closes one by a click on its row, 
     t("menus.collapse").replace("{name}", "Drinks"),
   );
   await toggle(el, "m-drinks");
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
   expect(row(el, "m-drinks")!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
     t("menus.expand").replace("{name}", "Drinks"),
   );
@@ -258,7 +270,6 @@ it("opens and closes each place a section is shown on its own", async () => {
   await toggle(el, "m-fav");
   await toggle(el, "m-fav/m-fav-drinks");
   expect(shown(el)).toEqual([
-    "root",
     "m-burger",
     "m-drinks",
     "m-fav",
@@ -271,7 +282,6 @@ it("opens and closes each place a section is shown on its own", async () => {
   await toggle(el, "m-drinks");
   await toggle(el, "m-fav/m-fav-drinks");
   expect(shown(el)).toEqual([
-    "root",
     "m-burger",
     "m-drinks",
     "m-drinks/m-lager",
@@ -283,22 +293,35 @@ it("opens and closes each place a section is shown on its own", async () => {
   ]);
 });
 
-it("offers the adds on the root and on each place an owned section is shown, naming that list", async () => {
+/** What the widget draws itself, outside its table: the toolbar's Add ⋮ and the empty box's adds. */
+function own<T extends Element = HTMLElement>(el: MenuStructureTable, test: string): T | null {
+  return el.shadowRoot!.querySelector<T>(`[data-test="${CSS.escape(test)}"]`);
+}
+
+it("offers the top-level adds in the toolbar's Add ⋮ and on each place an owned section is shown, naming that list", async () => {
   const el = await mount();
   const adds = listen(el, "wt-structure-add");
-  expect(menuItems(el, "root")).toEqual([
-    "new-section-root",
-    "include-menu-root",
-    "open-add-products-root",
-  ]);
+  const toolbar = own<HTMLElementTagNameMap["wt-row-actions"]>(el, "toolbar-adds")!;
+  expect(toolbar.localName).toBe("wt-row-actions");
+  expect(toolbar.getAttribute("slot")).toBe("toolbar-end");
+  expect(toolbar.icon).toBe("plus");
+  expect(toolbar.getAttribute("label")).toBe(t("menus.add_to_menu"));
   expect(
-    ["new-section-root", "include-menu-root", "open-add-products-root"].map((test) =>
-      item(el, test).textContent!.trim(),
+    [...toolbar.children]
+      .filter((child) => child.hasAttribute("data-test"))
+      .map((child) => child.getAttribute("data-test")),
+  ).toEqual(["new-section-top", "include-menu-top", "open-add-products-top"]);
+  expect(
+    ["new-section-top", "include-menu-top", "open-add-products-top"].map((test) =>
+      own(el, test)!.textContent!.trim(),
     ),
   ).toEqual([t("menus.new_section"), t("menus.include_menu"), t("sections.add_products")]);
-  item(el, "new-section-root").click();
-  item(el, "include-menu-root").click();
-  item(el, "open-add-products-root").click();
+  // The table draws the toolbar's end slot, so the Add ⋮ is on screen.
+  expect(toolbar.assignedSlot).not.toBeNull();
+  expect(toolbar.getBoundingClientRect().width).toBeGreaterThan(0);
+  own(el, "new-section-top")!.click();
+  own(el, "include-menu-top")!.click();
+  own(el, "open-add-products-top")!.click();
   item(el, "open-add-products-m-drinks").click();
   await toggle(el, "m-fav");
   item(el, "new-section-m-fav/m-fav-drinks").click();
@@ -309,9 +332,23 @@ it("offers the adds on the root and on each place an owned section is shown, nam
     { action: "add-products", path: ["m-drinks"] },
     { action: "new-section", path: ["m-fav", "m-fav-drinks"] },
   ]);
-  expect(inTable(el, '[data-test="actions-root"]')!.getAttribute("label")).toBe(
-    `${t("members.actions")}: ${menuLabel("Lunch Menu")}`,
-  );
+  expect(inTable(el, '[data-test="actions-root"]')).toBeNull();
+});
+
+it("keeps a button the host puts in the toolbar's end after the Add ⋮", async () => {
+  const el = await mount();
+  const done = document.createElement("button");
+  done.slot = "toolbar-end";
+  done.textContent = "Done";
+  el.append(done);
+  await settle(el);
+  const toolbar = own(el, "toolbar-adds")!;
+  expect(done.getBoundingClientRect().width).toBeGreaterThan(0);
+  expect(done.getBoundingClientRect().left).toBeGreaterThan(toolbar.getBoundingClientRect().right);
+  // In the order a keyboard reaches them, too.
+  expect(
+    toolbar.compareDocumentPosition(done.assignedSlot!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 
 it("offers Edit and Delete on an owned section and Remove on a product, naming the holding list", async () => {
@@ -510,7 +547,9 @@ it("opens the way to the current section and marks only its name current", async
 
   el.current = [];
   await settle(el);
-  expect(all(el, '[aria-current="true"]').map((name) => name.dataset.test)).toEqual(["root-name"]);
+  // The menu's own top level has no row, so nothing is marked.
+  expect(all(el, '[aria-current="true"]')).toEqual([]);
+  expect(all(el, '[part~="current"]')).toEqual([]);
 });
 
 it("reports opening a section, and closing the current one or one holding it, as the place to edit", async () => {
@@ -541,7 +580,7 @@ it("reports the top level as the place to edit when Collapse all hides the curre
   expect(button().textContent!.trim()).toBe(t("folders.collapse_all"));
   button().click();
   await settle(el);
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
   expect(edits).toEqual([{ path: [] }]);
 });
 
@@ -596,21 +635,63 @@ it("disables every row action and grip while busy, and a click on one sends noth
   ).toBe(true);
 });
 
-it("shows an empty menu as its root row, saying so, with its menu of adds", async () => {
+it("shows an empty menu as the table's empty box, saying so, with the three adds under it", async () => {
   const el = await mount({ nodes: [] });
-  expect(shown(el)).toEqual(["root"]);
-  expect(nameOf(el, "root")).toBe(menuLabel("Lunch Menu"));
-  expect(item(el, "empty").textContent!.trim()).toBe(t("menus.structure_empty"));
-  expect(menuItems(el, "root")).toEqual([
-    "new-section-root",
-    "include-menu-root",
-    "open-add-products-root",
+  const adds = listen(el, "wt-structure-add");
+  expect(shown(el)).toEqual([]);
+  expect(inTable(el, ".empty .message")!.textContent!.trim()).toBe(t("menus.structure_empty"));
+  expect(table(el).shadowRoot!.textContent!).not.toContain(menuLabel("Lunch Menu"));
+  // The table draws no toolbar while empty, so the adds are in the box instead.
+  expect(own(el, "toolbar-adds")).toBeNull();
+  const tests = ["new-section-empty", "include-menu-empty", "open-add-products-empty"];
+  const buttons = tests.map((test) => own(el, test)!);
+  for (const button of buttons) {
+    expect(button.localName).toBe("wt-button");
+    expect(button.closest('[slot="empty-action"]')!.assignedSlot).not.toBeNull();
+    expect(button.getBoundingClientRect().width).toBeGreaterThan(0);
+  }
+  expect(buttons.map((button) => button.textContent!.trim())).toEqual([
+    t("menus.new_section"),
+    t("menus.include_menu"),
+    t("sections.add_products"),
   ]);
+  for (const button of buttons) button.click();
+  expect(adds).toEqual([
+    { action: "new-section", path: [] },
+    { action: "include-menu", path: [] },
+    { action: "add-products", path: [] },
+  ]);
+
+  el.busy = true;
+  await settle(el);
+  for (const button of buttons) {
+    expect((button as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    button.click();
+  }
+  expect(adds).toHaveLength(3);
+
+  el.busy = false;
+  el.nodes = lunchNodes();
+  await settle(el);
+  for (const test of tests) expect(own(el, test), test).toBeNull();
+  expect(own(el, "toolbar-adds")).not.toBeNull();
 });
 
-it("focuses a row's menu, or its nearest drawn ancestor's when the row is gone", async () => {
+it("disables the toolbar's adds while busy, and a click on one sends nothing", async () => {
+  const el = await mount({ busy: true });
+  const adds = listen(el, "wt-structure-add");
+  for (const test of ["new-section-top", "include-menu-top", "open-add-products-top"]) {
+    const button = own<HTMLElement & { disabled: boolean }>(el, test)!;
+    expect(button.disabled, test).toBe(true);
+    button.click();
+  }
+  expect(adds).toEqual([]);
+});
+
+it("focuses a row's menu, or its nearest drawn ancestor's, or the toolbar's Add ⋮ for the top level or when none is drawn", async () => {
   const el = await mount({ current: ["m-drinks", "m-beer"] });
   const focused = () => (table(el).shadowRoot!.activeElement as HTMLElement | null)?.dataset.test;
+  const focusedOwn = () => (el.shadowRoot!.activeElement as HTMLElement | null)?.dataset.test;
   el.focusRowMenu("m-drinks/m-beer");
   expect(focused()).toBe("actions-m-drinks/m-beer");
 
@@ -618,14 +699,29 @@ it("focuses a row's menu, or its nearest drawn ancestor's when the row is gone",
   await settle(el);
   el.focusRowMenu("m-drinks/m-beer");
   expect(focused()).toBe("actions-m-drinks");
+  expect(focusedOwn()).toBe(undefined);
 
   el.focusRowMenu("m-gone/m-also-gone");
-  expect(focused()).toBe("actions-root");
+  expect(focusedOwn()).toBe("toolbar-adds");
   el.focusRowMenu("m-drinks");
-  el.focusRowMenu("root");
-  expect(focused()).toBe("actions-root");
+  expect(focused()).toBe("actions-m-drinks");
+  el.focusRowMenu("");
+  expect(focusedOwn()).toBe("toolbar-adds");
   // Before it is drawn there is no menu to focus, and asking is harmless.
-  document.createElement("dashboard-menu-structure-table").focusRowMenu("root");
+  document.createElement("dashboard-menu-structure-table").focusRowMenu("");
+});
+
+it("focuses the empty box's first add when the menu is empty", async () => {
+  const el = await mount();
+  el.nodes = [];
+  await settle(el);
+  for (const key of ["", "m-drinks/m-beer"]) {
+    (document.activeElement as HTMLElement | null)?.blur();
+    el.focusRowMenu(key);
+    expect((el.shadowRoot!.activeElement as HTMLElement | null)?.dataset.test, key).toBe(
+      "new-section-empty",
+    );
+  }
 });
 
 it("keeps every row's menu on a phone's screen", async () => {
@@ -639,9 +735,15 @@ it("keeps every row's menu on a phone's screen", async () => {
       products: [...products, product("p-long", "Menú-del-mediodía-de-lunes-a-viernes-con-postre")],
       current: ["m-drinks"],
     });
-    // Nine rows fit in the phone's height, so each menu can be found where it is drawn.
-    expect(shown(el)).toHaveLength(9);
-    expectRowMenusOnScreen(table(el), 9, 'wt-row-actions[data-test^="actions-"]');
+    // Eight rows fit in the phone's height, so each menu can be found where it is drawn.
+    expect(shown(el)).toHaveLength(8);
+    expectRowMenusOnScreen(table(el), 8, 'wt-row-actions[data-test^="actions-"]');
+    // The toolbar's Add ⋮ too.
+    const adds = own(el, "toolbar-adds")!.shadowRoot!.querySelector("button")!;
+    const at = adds.getBoundingClientRect();
+    expect(at.width).toBeGreaterThan(0);
+    expect(at.left).toBeGreaterThanOrEqual(0);
+    expect(at.right).toBeLessThanOrEqual(window.innerWidth);
   } finally {
     await page.viewport(width, height);
   }
@@ -652,15 +754,12 @@ it("names a section it has no name for as no longer available", async () => {
     nodes: [{ memberId: "m-lost", ref: { kind: "section", sectionId: "s-lost" } }],
   });
   expect(nameOf(el, "m-lost")).toBe(t("members.missing"));
-  expect(shown(el)).toEqual(["root", "m-lost"]);
+  expect(shown(el)).toEqual(["m-lost"]);
 });
 
-it("names the root apart from its members", async () => {
+it("names only the members, with no name drawn for the menu itself", async () => {
   const el = await mount();
-  expect(row(el, "root")!.querySelector('[data-test="root-name"]')!.textContent!.trim()).toBe(
-    menuLabel("Lunch Menu"),
-  );
-  expect(row(el, "root")!.querySelector('[data-test="name"]')).toBeNull();
+  expect(all(el, '[data-test="root-name"]')).toEqual([]);
   expect(all(el, '[data-test="name"]').map((name) => name.textContent!.trim())).toEqual([
     "Burger",
     "Drinks",
@@ -668,10 +767,9 @@ it("names the root apart from its members", async () => {
   ]);
 });
 
-/** Every kind of row the tree draws, four levels deep: the menu, a product with a photo and ones
- * without, owned sections, an included menu, and a section and products inside it. */
+/** Every kind of row the tree draws, three levels deep: a product with a photo and ones without,
+ * owned sections, an included menu, and a section and products inside it. */
 const DEEP_ROWS = [
-  "root",
   "m-burger",
   "m-drinks",
   "m-drinks/m-lager",
@@ -701,7 +799,7 @@ function pieces(el: MenuStructureTable, key: string) {
   const box = (rect: DOMRect | undefined) =>
     rect && { left: rect.left, middle: rect.top + rect.height / 2 };
   const text = document.createRange();
-  text.selectNodeContents(tr.querySelector('[data-test="name"], [data-test="root-name"]')!);
+  text.selectNodeContents(tr.querySelector('[data-test="name"]')!);
   return {
     level: Number(tr.getAttribute("aria-level")),
     grip: box(
@@ -718,7 +816,7 @@ function pieces(el: MenuStructureTable, key: string) {
 }
 
 it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))))(
-  "starts every name one even step further in per level, the menu, sections, included menus and products alike ($width px, reordering: $reordering)",
+  "starts every name one even step further in per level, sections, included menus and products alike ($width px, reordering: $reordering)",
   async ({ width, reordering }) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
@@ -744,17 +842,20 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
   },
 );
 
-it("keeps a blank grip slot on the menu's row, so its name starts where the Products tree's All products does", async () => {
+it("puts a real grip on every top-level row, the included menu's too, and starts each name after the arrow and media slots", async () => {
   const el = await mountDeep();
-  const tr = row(el, "root")!;
-  expect(tr.querySelector('[part~="grip-space"]')).not.toBeNull();
+  const offsets = ["m-burger", "m-drinks", "m-fav", "included-wine"].map((key) => {
+    const tr = row(el, key)!;
+    expect(tr.querySelector('[part~="drag-grip"]'), key).not.toBeNull();
+    expect(tr.querySelector('[part~="grip-space"]'), key).toBeNull();
+    return pieces(el, key).name.left - tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
+  });
   const tokens = getComputedStyle(el);
   const tap = parseFloat(tokens.getPropertyValue("--wt-tap-min"));
   const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
   expect(tap).toBeGreaterThan(0);
-  const start = tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
-  // The control column precedes the name cell; its arrow and media slot stay inside it.
-  expect(pieces(el, "root").name.left - start).toBeCloseTo(2 * tap + gap, 0);
+  // The control column precedes the name cell; the arrow and media slot stay inside it.
+  for (const offset of offsets) expect(offset).toBeCloseTo(2 * tap + gap, 0);
 });
 
 // The name and any note under it (an included menu's "read only here") are centred as one.
@@ -809,7 +910,7 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
 );
 
 it.each([1280, 390])(
-  "puts the Name heading over the menu's name, also at phone width, where the tree's arrow slot narrows (%ipx)",
+  "puts the Name heading over the first top-level name, also at phone width, where the tree's arrow slot narrows (%ipx)",
   async (width) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
@@ -819,7 +920,7 @@ it.each([1280, 390])(
       expect(table(el).hasAttribute("narrow")).toBe(width === 390);
       const heading = inTable(el, 'thead [part~="tree-heading"]')!;
       expect(heading.textContent!.trim()).toBe(t("members.name"));
-      expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
+      expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "m-burger").name.left, 0);
     } finally {
       await page.viewport(before.width, before.height);
     }
@@ -856,7 +957,7 @@ it("moves a member a place with the arrow keys on its grip, shown at once and an
   const moves = listen(el, "wt-member-move");
   await press(el, "m-burger", "ArrowDown");
   expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 1 }]);
-  expect(shown(el)).toEqual(["root", "m-drinks", "m-burger", "m-fav"]);
+  expect(shown(el)).toEqual(["m-drinks", "m-burger", "m-fav"]);
   expect(focusedInTable(el)).toBe("drag-m-burger");
   expect(announced(el)).toBe(reordered("Burger", 2, 3));
 
@@ -864,7 +965,7 @@ it("moves a member a place with the arrow keys on its grip, shown at once and an
   await userEvent.keyboard("{ArrowDown}");
   await settle(el);
   expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 2 });
-  expect(shown(el)).toEqual(["root", "m-drinks", "m-fav", "m-burger"]);
+  expect(shown(el)).toEqual(["m-drinks", "m-fav", "m-burger"]);
   expect(focusedInTable(el)).toBe("drag-m-burger");
 
   await userEvent.keyboard("{ArrowUp}");
@@ -874,7 +975,7 @@ it("moves a member a place with the arrow keys on its grip, shown at once and an
   await userEvent.keyboard("{ArrowUp}");
   await settle(el);
   expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 0 });
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
   expect(announced(el)).toBe(reordered("Burger", 1, 3));
   expect(moves).toHaveLength(4);
 });
@@ -885,7 +986,7 @@ it("sends nothing for ArrowUp on the first member or ArrowDown on the last", asy
   await press(el, "m-burger", "ArrowUp");
   await press(el, "m-fav", "ArrowDown");
   expect(moves).toEqual([]);
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
 });
 
 it("moves a member within its own section, leaving the top level alone", async () => {
@@ -895,7 +996,6 @@ it("moves a member within its own section, leaving the top level alone", async (
   await press(el, "m-drinks/m-lager", "ArrowDown");
   expect(moves).toEqual([{ path: ["m-drinks"], memberId: "m-lager", to: 1 }]);
   expect(shown(el)).toEqual([
-    "root",
     "m-burger",
     "m-drinks",
     "m-drinks/m-beer",
@@ -925,7 +1025,6 @@ it("carries an open section's members with it when it moves", async () => {
   await toggle(el, "m-drinks");
   await press(el, "m-drinks", "ArrowUp");
   expect(shown(el)).toEqual([
-    "root",
     "m-drinks",
     "m-drinks/m-lager",
     "m-drinks/m-beer",
@@ -939,10 +1038,10 @@ it("carries an open section's members with it when it moves", async () => {
 it("draws what a new nodes value says, dropping the moves it showed before", async () => {
   const el = await mount();
   await press(el, "m-burger", "ArrowDown");
-  expect(shown(el)).toEqual(["root", "m-drinks", "m-burger", "m-fav"]);
+  expect(shown(el)).toEqual(["m-drinks", "m-burger", "m-fav"]);
   el.nodes = lunchNodes();
   await settle(el);
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
 });
 
 function keyOn(el: MenuStructureTable, key: string, which: string): KeyboardEvent {
@@ -969,7 +1068,7 @@ it("moves nothing by key while busy", async () => {
   keyOn(el, "m-burger", "ArrowDown");
   await settle(el);
   expect(moves).toEqual([]);
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
+  expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
 });
 
 /** Sends a pointer event from `target`, placed over `over` (by default the target itself). */
@@ -995,7 +1094,7 @@ function pointer(
 
 /** Where a pointer over the row lands: its name. */
 function nameAt(el: MenuStructureTable, key: string): HTMLElement {
-  return row(el, key)!.querySelector<HTMLElement>('[data-test="name"], [data-test="root-name"]')!;
+  return row(el, key)!.querySelector<HTMLElement>('[data-test="name"]')!;
 }
 
 /** The rows with `part` on themselves or one of their cells. */
@@ -1011,7 +1110,7 @@ function ghost(el: MenuStructureTable): HTMLElement | null {
 
 describe("with reordering off", () => {
   it.each([1280, 390])(
-    "draws no grip or grip space on any row, and puts the Name heading over the menu's name (%ipx)",
+    "draws no grip or grip space on any row, and puts the Name heading over the first top-level name (%ipx)",
     async (width) => {
       const before = { width: window.innerWidth, height: window.innerHeight };
       try {
@@ -1022,7 +1121,10 @@ describe("with reordering off", () => {
         expect(all(el, '[part~="drag-grip"], [part~="grip-space"]')).toEqual([]);
         expect(table(el).hasAttribute("narrow")).toBe(width === 390);
         const heading = inTable(el, 'thead [part~="tree-heading"]')!;
-        expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
+        expect(heading.getBoundingClientRect().left).toBeCloseTo(
+          pieces(el, "m-burger").name.left,
+          0,
+        );
       } finally {
         await page.viewport(before.width, before.height);
       }
@@ -1073,7 +1175,6 @@ it("drags a member below a sibling, marking it, with a ghost and a gap, and send
   await settle(el);
   expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 2 }]);
   expect(shown(el)).toEqual([
-    "root",
     "m-drinks",
     "m-fav",
     "m-fav/m-fav-lemonade",
@@ -1109,12 +1210,12 @@ it("offers no gap over a row outside the dragged member's own list, and a releas
   pointer(from, "pointermove", nameAt(el, "m-drinks/m-lemonade"));
   await settle(el);
   expect(marked(el, "drop-gap-after")).toEqual(["m-drinks/m-lemonade"]);
-  for (const key of ["m-fav/m-fav-lemonade", "m-burger", "m-drinks", "root"]) {
+  for (const key of ["m-fav/m-fav-lemonade", "m-burger", "m-drinks", "m-fav"]) {
     pointer(from, "pointermove", nameAt(el, key));
     await settle(el);
     expect([...marked(el, "drop-gap-after"), ...marked(el, "drop-gap-before")], key).toEqual([]);
   }
-  pointer(from, "pointerup", nameAt(el, "root"));
+  pointer(from, "pointerup", nameAt(el, "m-burger"));
   await settle(el);
   expect(moves).toEqual([]);
   expect(shown(el).filter((key) => key.startsWith("m-drinks/"))).toEqual([
@@ -1214,10 +1315,12 @@ it("maps a row to the sibling holding it by whole member ids, not by a shared pr
   expect(moves).toEqual([{ path: [], memberId: "m-burger", to: 2 }]);
 });
 
-it("has no grip on the menu's own row, only the grip's blank space", async () => {
+it("draws a grip on every top-level row, and no grip space on any", async () => {
   const el = await mount();
-  expect(row(el, "root")!.querySelector('[part~="drag-grip"]')).toBeNull();
-  expect(row(el, "root")!.querySelector('[part~="grip-space"]')).not.toBeNull();
+  for (const key of ["m-burger", "m-drinks", "m-fav"]) {
+    expect(row(el, key)!.querySelector('[part~="drag-grip"]'), key).not.toBeNull();
+    expect(row(el, key)!.querySelector('[part~="grip-space"]'), key).toBeNull();
+  }
 });
 
 it("starts no drag while busy or from a button other than the main one", async () => {
@@ -1397,7 +1500,7 @@ it("sends nothing when released after a refresh removed the sibling it would hav
   await settle(el);
   expect(moves).toEqual([]);
   expect(document.body.style.cursor).not.toBe("grabbing");
-  expect(shown(el)).toEqual(["root", "m-burger", "m-drinks"]);
+  expect(shown(el)).toEqual(["m-burger", "m-drinks"]);
 });
 
 function popupOpen(el: MenuStructureTable, key: string): boolean {
@@ -1768,12 +1871,14 @@ describe("without the Device Home Page", () => {
     till: { columns: 6, tiles: "colours", order: "home_first" },
   };
 
-  it("draws the menu's own row first, even when a home is handed to it", async () => {
+  it("draws the menu's members as the top-level rows, even when a home is handed to it", async () => {
     const el = await mount();
     Object.assign(el, { home: handedHome });
     await settle(el);
-    expect(shown(el)).toEqual(["root", "m-burger", "m-drinks", "m-fav"]);
-    expect(nameOf(el, "root")).toBe(t("menus.menu_prefix").replace("{name}", "Lunch Menu"));
+    expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+    for (const key of ["m-burger", "m-drinks", "m-fav"])
+      expect(row(el, key)!.getAttribute("aria-level"), key).toBe("1");
+    expect(all(el, '[data-test="root-name"]')).toEqual([]);
   });
 
   it("offers no shortcut add on any row", async () => {
@@ -1889,8 +1994,7 @@ describe("a product row's Available and Edit product", () => {
     expect(availableOf(el, "m-burger")).toBe(t("menus.available_yes"));
     expect(availableOf(el, "m-drinks/m-lemonade")).toBe(t("menus.available_no"));
     expect(availableOf(el, "m-drinks/m-lager")).toBe(t("menus.available_yes"));
-    for (const key of ["root", "m-drinks", "m-drinks/m-beer"])
-      expect(availableOf(el, key), key).toBe("");
+    for (const key of ["m-drinks", "m-drinks/m-beer"]) expect(availableOf(el, key), key).toBe("");
   });
 
   it("draws Available in the muted colour of the Type word beside it", async () => {
@@ -2169,4 +2273,337 @@ it("releases on the menu sibling under the pointer after leaving the edge", asyn
     send("pointercancel");
     restoreFrames();
   }
+});
+
+describe("search and the Available filter", () => {
+  async function search(el: MenuStructureTable, term: string): Promise<void> {
+    el.search = term;
+    await settle(el);
+  }
+
+  async function chooseAvailable(el: MenuStructureTable, value: string): Promise<void> {
+    const select = inTable(el, 'wt-combobox[data-filter="available"]')!;
+    await chooseOption(select, value);
+    await settle(el);
+  }
+
+  it("finds a product inside a closed section by its staff name, opening the way to it", async () => {
+    const el = await mount();
+    expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+    await search(el, "lemonade");
+    expect(shown(el)).toEqual([
+      "m-drinks",
+      "m-drinks/m-lemonade",
+      "m-fav",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    for (const key of ["m-drinks", "m-fav", "m-fav/m-fav-drinks"])
+      expect(row(el, key)!.getAttribute("aria-expanded"), key).toBe("true");
+    // The staff name, never the customer-facing or kitchen one.
+    await search(el, "for guests");
+    expect(shown(el)).toEqual([]);
+    await search(el, "COCINA");
+    expect(shown(el)).toEqual([]);
+    await search(el, "");
+    expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  });
+
+  it("finds a section and an included menu by the name the row shows", async () => {
+    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+    await search(el, "beer");
+    expect(shown(el)).toEqual([
+      "m-drinks",
+      "m-drinks/m-beer",
+      "m-fav",
+      "m-fav/m-fav-drinks",
+      "m-fav/m-fav-drinks/m-beer",
+    ]);
+    await search(el, menuLabel("Wines"));
+    expect(shown(el)).toEqual(["included-wine"]);
+  });
+
+  it("says nothing matches when the search finds no row", async () => {
+    const el = await mount();
+    await search(el, "zzz");
+    expect(shown(el)).toEqual([]);
+    expect(
+      table(el).shadowRoot!.querySelector('p.message[role="status"]')!.textContent!.trim(),
+    ).toBe(tableNoMatches());
+  });
+
+  it("filters Available to Yes or No; sections and included menus stay only on the way to a match", async () => {
+    const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
+    const el = await mount({
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((each) => (each.id === "p-lemonade" ? lemonade : each)),
+    });
+    const filter = table(el).columns.find((column) => column.key === "available")!.filter!;
+    expect(filter.label).toBe(t("editor.available"));
+    expect(filter.allLabel).toBe(t("menus.filter_available_all"));
+    expect(filter.options).toEqual([
+      { value: "yes", label: t("menus.available_yes") },
+      { value: "no", label: t("menus.available_no") },
+    ]);
+
+    await chooseAvailable(el, "no");
+    expect(shown(el)).toEqual([
+      "m-drinks",
+      "m-drinks/m-lemonade",
+      "m-fav",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+
+    await chooseAvailable(el, "yes");
+    expect(shown(el)).not.toContain("m-drinks/m-lemonade");
+    expect(shown(el)).toContain("m-burger");
+    expect(shown(el)).toContain("included-wine/wine-lager");
+    expect(shown(el)).toContain("included-wine/wine-red/wine-rioja");
+  });
+
+  it("answers no option for a section, an included menu or a product it has no record of", async () => {
+    const el = await mount({
+      nodes: [...lunchNodes(), wines(), productNode("m-gone", "p-gone")],
+    });
+    await chooseAvailable(el, "yes");
+    expect(shown(el)).not.toContain("m-gone");
+    await chooseAvailable(el, "no");
+    expect(shown(el)).toEqual([]);
+  });
+
+  it("passes the table the filter labels the Products tree passes", async () => {
+    const el = await mount();
+    const tree = table(el);
+    expect(tree.filtersLabel).toBe(t("table.filters"));
+    expect(tree.filteredColumnLabel).toBe(t("table.filtered_column"));
+    expect(tree.filtersClearAllLabel).toBe(t("table.filters_clear_all"));
+    expect(tree.filtersCloseLabel).toBe(t("table.filters_close"));
+    expect(tree.filterSearchPlaceholder).toBe(t("categories.combobox_search"));
+    expect(tree.filterNoResultsLabel).toBe(t("categories.combobox_no_results"));
+  });
+
+  it("forwards a slotted search box into the table's toolbar", async () => {
+    const el = await mount();
+    const box = document.createElement("input");
+    box.slot = "toolbar-search";
+    el.append(box);
+    await settle(el);
+    expect(box.assignedSlot?.name).toBe("toolbar-search");
+    expect(box.assignedSlot!.assignedSlot?.name).toBe("toolbar-search");
+    expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
+
+  it("moves a grip past only the siblings drawn, sending the full list's index", async () => {
+    const el = await mount();
+    const moves = listen(el, "wt-member-move");
+    // Burger and Favourites match; Drinks, between them, is hidden.
+    await search(el, "u");
+    expect(shown(el)).toEqual(["m-burger", "m-fav"]);
+    await press(el, "m-fav", "ArrowUp");
+    expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 0 }]);
+    expect(shown(el)).toEqual(["m-fav", "m-burger"]);
+    expect(announced(el)).toBe(reordered("Favourites", 1, 2));
+    expect(focusedInTable(el)).toBe("drag-m-fav");
+    // The full order is now Favourites, Burger, Drinks; Burger is the last one drawn.
+    await press(el, "m-burger", "ArrowDown");
+    expect(moves).toHaveLength(1);
+    await press(el, "m-burger", "ArrowUp");
+    expect(moves.at(-1)).toEqual({ path: [], memberId: "m-burger", to: 0 });
+    await search(el, "");
+    expect(shown(el)).toEqual(["m-burger", "m-fav", "m-drinks"]);
+  });
+
+  it("sends the full list's index when a hidden sibling sits before the shown ones", async () => {
+    const el = await mount();
+    const moves = listen(el, "wt-member-move");
+    // Drinks and Favourites match; Burger, first in the list, is hidden.
+    await search(el, "i");
+    expect(shown(el).filter((key) => !key.includes("/"))).toEqual(["m-drinks", "m-fav"]);
+    await press(el, "m-fav", "ArrowUp");
+    expect(moves).toEqual([{ path: [], memberId: "m-fav", to: 1 }]);
+  });
+});
+
+describe("Select mode while a search or filter hides rows", () => {
+  const boxKeys = (el: MenuStructureTable) =>
+    all<HTMLInputElement>(el, 'input[type="checkbox"][data-test^="select-"]')
+      .map((box) => box.dataset.test!)
+      .filter((test) => test !== "select-all")
+      .map((test) => test.slice("select-".length));
+
+  async function selectAll(el: MenuStructureTable): Promise<unknown[]> {
+    const changes = listen(el, "wt-selection-change");
+    item(el, "select-all").click();
+    await settle(el);
+    return changes;
+  }
+
+  it("gives a section kept only on the way to a match no box, so select all ticks only the matches", async () => {
+    const el = await mount({ selecting: true, search: "Lemonade" });
+    expect(boxKeys(el)).toEqual([
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    expect(await selectAll(el)).toEqual([
+      {
+        selected: ["m-drinks/m-lemonade", "m-fav/m-fav-lemonade", "m-fav/m-fav-drinks/m-lemonade"],
+      },
+    ]);
+  });
+
+  it("names the rows the search and filter leave a box on, closed sections' rows included", async () => {
+    const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
+    const el = await mount({
+      selecting: true,
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((each) => (each.id === "p-lemonade" ? lemonade : each)),
+    });
+    expect(shown(el)).not.toContain("m-drinks/m-lager");
+    expect([...el.shownSelectableKeys()]).toEqual([
+      "m-burger",
+      "m-drinks",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer",
+      "m-drinks/m-beer/m-lager-2",
+      "m-drinks/m-lemonade",
+      "m-fav",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks",
+      "m-fav/m-fav-drinks/m-lager",
+      "m-fav/m-fav-drinks/m-beer",
+      "m-fav/m-fav-drinks/m-beer/m-lager-2",
+      "m-fav/m-fav-drinks/m-lemonade",
+      "included-wine",
+    ]);
+    el.search = "Lemonade";
+    await settle(el);
+    expect([...el.shownSelectableKeys()]).toEqual([
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    el.search = "";
+    await settle(el);
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "yes");
+    await settle(el);
+    expect([...el.shownSelectableKeys()]).toEqual([
+      "m-burger",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer/m-lager-2",
+      "m-fav/m-fav-drinks/m-lager",
+      "m-fav/m-fav-drinks/m-beer/m-lager-2",
+    ]);
+  });
+
+  it("keeps a box on a section whose own name matches", async () => {
+    const el = await mount({ selecting: true, search: "drinks" });
+    expect(boxKeys(el)).toContain("m-drinks");
+    expect(boxKeys(el)).toContain("m-fav/m-fav-drinks");
+    expect(boxKeys(el)).not.toContain("m-fav");
+    el.search = "";
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
+  });
+
+  it("gives no section or included menu a box while the Available filter is on", async () => {
+    const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
+    const el = await mount({
+      selecting: true,
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((each) => (each.id === "p-lemonade" ? lemonade : each)),
+    });
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "no");
+    await settle(el);
+    expect(boxKeys(el)).toEqual([
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "");
+    await settle(el);
+    expect(boxKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav", "included-wine"]);
+  });
+});
+
+describe("Select mode", () => {
+  const boxes = (el: MenuStructureTable) =>
+    all<HTMLInputElement>(el, 'input[type="checkbox"][data-test^="select-"]').filter(
+      (box) => box.dataset.test !== "select-all",
+    );
+
+  it("draws no row box until selecting, then one on every row the menu owns, labelled by its name", async () => {
+    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+    await toggle(el, "m-drinks");
+    await toggle(el, "included-wine");
+    expect(boxes(el)).toEqual([]);
+
+    el.selecting = true;
+    await settle(el);
+    expect(boxes(el).map((box) => box.dataset.test)).toEqual([
+      "select-m-burger",
+      "select-m-drinks",
+      "select-m-drinks/m-lager",
+      "select-m-drinks/m-beer",
+      "select-m-drinks/m-lemonade",
+      "select-m-fav",
+      "select-included-wine",
+    ]);
+    const inList = (name: string, list: string) =>
+      t("menus.selection_label").replace("{name}", name).replace("{list}", list);
+    expect(item(el, "select-m-drinks/m-lager").getAttribute("aria-label")).toBe(
+      inList("Lager", "Drinks"),
+    );
+    expect(item(el, "select-m-burger").getAttribute("aria-label")).toBe(
+      inList("Burger", "Lunch Menu"),
+    );
+    expect(item(el, "select-included-wine").getAttribute("aria-label")).toBe(
+      inList(menuLabel("Wines"), "Lunch Menu"),
+    );
+    // Rows inside an included menu are edited only from that menu's own page.
+    expect(shown(el)).toContain("included-wine/wine-lager");
+    expect(inTable(el, '[data-test="select-included-wine/wine-lager"]')).toBeNull();
+    expect(inTable(el, '[data-test="select-included-wine/wine-red"]')).toBeNull();
+  });
+
+  it("ticks the rows it is given and reports a person's tick once, from itself", async () => {
+    const el = await mount({ selecting: true, selected: ["m-burger"] });
+    expect(
+      boxes(el)
+        .filter((box) => box.checked)
+        .map((box) => box.dataset.test),
+    ).toEqual(["select-m-burger"]);
+    const changes: { target: EventTarget | null; detail: unknown }[] = [];
+    el.addEventListener("wt-selection-change", (event) =>
+      changes.push({ target: event.target, detail: (event as CustomEvent).detail }),
+    );
+    item(el, "select-m-fav").click();
+    await settle(el);
+    expect(changes).toEqual([{ target: el, detail: { selected: ["m-burger", "m-fav"] } }]);
+  });
+
+  it("names the select-all box in the screen's language", async () => {
+    const before = currentLocale();
+    setLocale("es");
+    onTestFinished(() => setLocale(before));
+    const el = await mount({ selecting: true });
+    expect(item(el, "select-all").getAttribute("aria-label")).toBe(
+      "Seleccionar todos los elementos",
+    );
+  });
+
+  it("forwards a slotted selection bar into the table's toolbar-bottom slot", async () => {
+    const el = await mount({ selecting: true });
+    const bar = document.createElement("div");
+    bar.slot = "toolbar-bottom";
+    bar.textContent = "bar";
+    el.append(bar);
+    await settle(el);
+    expect(bar.assignedSlot?.name).toBe("toolbar-bottom");
+    expect(bar.assignedSlot!.assignedSlot?.name).toBe("toolbar-bottom");
+    expect(bar.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
 });

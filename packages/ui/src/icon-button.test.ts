@@ -155,3 +155,15 @@ test("on a touch screen a tapped icon button shows no tooltip over what lies ben
     await session.send("Emulation.setEmulatedMedia", { features: [] });
   }
 });
+
+test("a disabled icon button is drawn faded, with no pointer cursor", () => {
+  const { button } = iconButton();
+  expect(getComputedStyle(button).opacity).toBe("1");
+  button.disabled = true;
+  const faded = getComputedStyle(button.parentElement!)
+    .getPropertyValue("--wt-opacity-disabled")
+    .trim();
+  expect(Number(faded)).toBeLessThan(1);
+  expect(Number(getComputedStyle(button).opacity)).toBeCloseTo(Number(faded), 5);
+  expect(getComputedStyle(button).cursor).toBe("default");
+});

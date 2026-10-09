@@ -9,6 +9,7 @@ import {
   menuDocument,
   mountWidget,
 } from "../widgets/test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type { MenuDocumentTree } from "../widgets/menu-document-tree.js";
 import type {
@@ -559,6 +560,67 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await vi.waitFor(() =>
       expect(treeRows(el).querySelector('[part~="drag-grip"]')).not.toBeNull(),
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible Structure tab in Select mode, the bar showing with a section selected and its note", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    q(el, '[data-test="select"]').click();
+    await vi.waitFor(() => expect(q(el, '[data-test="selection-bar"]')).not.toBeNull());
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLInputElement>('[data-test="select-m-drinks"]')!.click(),
+    );
+    await vi.waitFor(() => expect(q(el, '[data-test="selection-sections-note"]')).not.toBeNull());
+    expect(q(el, '[data-test="select"]').getAttribute("aria-pressed")).toBe("true");
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible Remove confirm for the selected rows", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    q(el, '[data-test="select"]').click();
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
+    );
+    await vi.waitFor(() =>
+      treeRows(el)
+        .querySelector<HTMLInputElement>('[data-test="select-m-drinks/m-lager"]')!
+        .click(),
+    );
+    await vi.waitFor(() =>
+      expect(
+        (q(el, '[data-test="selection-remove"]') as HTMLElement & { disabled: boolean }).disabled,
+      ).toBe(false),
+    );
+    q(el, '[data-test="selection-remove"]').click();
+    await vi.waitFor(() =>
+      expect(
+        (q(el, 'wt-modal[data-test="remove-selected"]') as HTMLElement & { open: boolean }).open,
+      ).toBe(true),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible Move dialog for the selected rows, a destination chosen", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    q(el, '[data-test="select"]').click();
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
+    );
+    await vi.waitFor(() =>
+      treeRows(el)
+        .querySelector<HTMLInputElement>('[data-test="select-m-drinks/m-lager"]')!
+        .click(),
+    );
+    await vi.waitFor(() =>
+      expect(
+        (q(el, '[data-test="selection-move"]') as HTMLElement & { disabled: boolean }).disabled,
+      ).toBe(false),
+    );
+    q(el, '[data-test="selection-move"]').click();
+    const dialog = () =>
+      q(el, 'wt-modal[data-test="move-selected"]') as HTMLElement & { open: boolean };
+    await vi.waitFor(() => expect(dialog().open).toBe(true));
+    await chooseOption(dialog().querySelector('wt-combobox[name="destination"]')!, "s-beer");
     await expectNoA11yViolations(host);
   });
 
