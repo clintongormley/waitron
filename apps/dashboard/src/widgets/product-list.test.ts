@@ -4317,6 +4317,40 @@ describe("a refresh during a drag", () => {
     expect(look("folder:f")).toEqual(look("folder:d"));
   });
 
+  it("over the middle of an empty category marks only the drop into it, no gap on any row, and the release files the product there", async () => {
+    const { el, root } = await mountTree();
+    const { drops } = watch(el);
+    const food = root.querySelector<HTMLElement>('tr[data-row-key="folder:f"]')!;
+    expect(food.hasAttribute("aria-expanded")).toBe(false);
+    const overMiddle = (type: string) => {
+      const box = food.getBoundingClientRect();
+      nameOf(root, "folder:f").dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+          pointerId: 1,
+          clientX: box.x + box.width / 2,
+          clientY: box.y + box.height / 2,
+        }),
+      );
+    };
+    press(nameOf(root, "bread"), "pointerdown");
+    overMiddle("pointermove");
+    await el.updateComplete;
+    const cells = food.querySelectorAll(":scope > td");
+    expect(food.querySelector(':scope > td[part~="drop-target"]')).not.toBeNull();
+    expect(food.querySelectorAll(':scope > td[part~="drop-into"]').length).toBe(cells.length);
+    const gaps = [
+      ...root.querySelectorAll<HTMLElement>(
+        'tr[data-row-key]:has(> td[part~="drop-gap-before"], > td[part~="drop-gap-after"])',
+      ),
+    ].map((row) => row.dataset.rowKey);
+    expect(gaps).toEqual([]);
+    overMiddle("pointerup");
+    expect(drops).toEqual([{ keys: ["bread"], folderId: "f" }]);
+  });
+
   it("sends nothing when released after a refresh removed the category it would drop into, and the next drag still drops", async () => {
     const { el, root } = await mountTree();
     const { drops } = watch(el);

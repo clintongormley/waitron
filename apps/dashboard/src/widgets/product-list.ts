@@ -622,7 +622,9 @@ export class ProductList extends LitElement {
     const order = table.sortedSiblings([...siblings, moving]);
     const next = order[order.indexOf(moving) + 1];
     if (next) return { key: next.key, side: "before" };
-    return { key: lastShownRow(root, target), side: "after" };
+    // With nothing drawn under the target, a gap after it would sit on the row the drop goes into.
+    const last = lastShownRow(root, target);
+    return last === target ? undefined : { key: last, side: "after" };
   }
 
   #ghostOf(keys: readonly string[]): DragGhost {
