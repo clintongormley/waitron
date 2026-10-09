@@ -1473,10 +1473,33 @@ describe("the sharded packages' scripts", () => {
     }
   });
 
-  it("share one test:shard and one test:merge across every sharded package", () => {
+  it("share one test:shard across every sharded package", () => {
     // They are hand-copied across packages.
     expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:shard"])).size).toBe(1);
-    expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:merge"])).size).toBe(1);
+  });
+
+  it("merge a browser-mode package's blobs through the shard coverage merge, and the rest through plain v8", () => {
+    // A browser package's plain merge reads coverage LOWER than an unsharded run: see
+    // scripts/vitest-shard-coverage-merge.mjs. "Browser-mode" is read as text: the package's
+    // vitest.config.ts imports @vitest/browser-playwright.
+    const plain = "vitest --merge-reports .vitest-reports --coverage";
+    const browser = `${plain} --coverage.provider=custom --coverage.customProviderModule=../../scripts/vitest-shard-coverage-merge.mjs`;
+    const dirs = new Map(
+      pnpmLs(["ls", "-r", "--depth", "-1", "--json"]).map((pkg) => [pkg.name, pkg.path]),
+    );
+    const usesBrowser = (pkg) =>
+      readFileSync(join(dirs.get(pkg), "vitest.config.ts"), "utf8").includes(
+        "@vitest/browser-playwright",
+      );
+    const expected = new Map(
+      shardedPackages.map((pkg) => [pkg, usesBrowser(pkg) ? browser : plain]),
+    );
+
+    expect(new Map(shardedPackages.map((pkg) => [pkg, scripts.get(pkg)?.["test:merge"]]))).toEqual(
+      expected,
+    );
+    expect([...expected.values()]).toContain(browser);
+    expect([...expected.values()]).toContain(plain);
   });
 });
 

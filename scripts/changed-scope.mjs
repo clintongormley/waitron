@@ -108,6 +108,10 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
       "packages/workforce-es",
     ],
   ],
+  [
+    "scripts/vitest-shard-coverage-merge.mjs",
+    ["apps/dashboard", "apps/till", "packages/venue-service"],
+  ],
 ]);
 
 /**

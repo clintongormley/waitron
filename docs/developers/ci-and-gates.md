@@ -487,6 +487,20 @@ read 81.54% and 86.63% statements alone; `PLAYWRIGHT_BROWSERS_PATH=<empty folder
 (statements / branches / functions / lines), the same as an unsharded `test:coverage`. The control,
 one till test file run under the same empty folder, failed with "Executable doesn't exist".
 
+The three browser packages' `test:merge` names a coverage provider of its own,
+`scripts/vitest-shard-coverage-merge.mjs`: v8's, with only the merge changed. On Vitest 4.1.11 a
+shard adds each `coverage.include` file it never loaded as an untested copy built by the server-side
+transform, and for some functions that copy's end position differs from the browser-loaded one, so
+a plain merge keeps both and the untested one is never hit. The error only ever LOWERS coverage.
+The wrapper drops a file's untested copies wherever a shard loaded it, and keeps one, at zero, where
+none did. Measured 2026-10-09 on `packages/venue-service`, four `test:shard` blobs: `pnpm test:merge`
+exited 0 at 98.38 / 95.16 / 99.32 / 99.2, every count equal to an unsharded `pnpm test:coverage`;
+`pnpm exec vitest --merge-reports .vitest-reports --coverage` exited 1 at 98.09 / 95.16 / 97.44 /
+99.2 (functions 2,635 of 2,704 against 2,635 of 2,653). A throwaway source file no test loaded
+appeared in the wrapper's json report with every count zero. On `apps/till`'s two blobs the plain
+merge and the wrapper printed the same counts. On a Vitest upgrade, run a plain merge over a
+browser package's blobs: if it gives the unsharded totals, delete the wrapper.
+
 ### Every test job prints which file is running
 
 Every `Run the … shard` step, and the stream tests' step, adds the reporter
