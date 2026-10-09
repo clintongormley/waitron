@@ -883,16 +883,16 @@ Clear is a clearing action, not a labeled inheritance choice. Test the actual in
 On a department only, "When counter service is used" carries decision 10's hint when How
 orders start is Table service. A zone adds no hint beyond the inherited-value placeholder. Field names per decision 10. `disabled` disables every field (decision 18).
 
-- [ ] **Step 1: Failing tests** (Chromium): a department value draws each field's choice; changing
+- [x] **Step 1: Failing tests** (Chromium): a department value draws each field's choice; changing
   each fires the event with the new value; a zone with all `null` shows each placeholder naming the
   department's value only in EN/ES; clearing each fires null; Print/Don't print sends numbered/none;
   receipt choices exactly auto/on_request; assert rendered empty placeholder equals inherited text with
   no prefix/follow option label; the
   names are semantic; `disabled` disables all four. a11y: department, zone and disabled states,
   both themes. Run; watch them fail.
-- [ ] **Step 2: Implement; Step 3: run** the venue-service browser files; LOOK in EN and ES, both
+- [x] **Step 2: Implement; Step 3: run** the venue-service browser files; LOOK in EN and ES, both
   themes, 1280 and 390.
-- [ ] **Step 4: Commit** — `feat(venue-service): the service settings fields a department and a zone share (A366)`.
+- [x] **Step 4: Commit** — `feat(venue-service): the service settings fields a department and a zone share (A366)`.
 
 ---
 
