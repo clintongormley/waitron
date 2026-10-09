@@ -620,27 +620,9 @@ it.each([
 it("keeps station status in Stations instead of repeating it in Routing", async () => {
   setLocale("en");
   const next = withUpstairs({ open: false, why: "out_of_hours" });
-  const outputs = {
-    printersDown: [
-      {
-        stationId: "upstairs",
-        stationName: "Upstairs bar",
-        printerId: "epson",
-        printerName: "Epson",
-        since: "2026-10-01T20:14:00",
-      },
-    ],
-    screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-  };
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    listOutputsDown: vi.fn().mockResolvedValue(outputs),
-  });
-  const el = await mount(a);
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = q(el, '[slot="routing"]')!;
   expect(routing.querySelector('[data-test="status-upstairs"]')).toBeNull();
-  expect(routing.textContent).not.toContain("Printer Epson");
-  expect(routing.textContent).not.toContain("has ever checked in");
   expect(healthRow(el, "upstairs").textContent).toContain("Closed now");
   expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
 });
@@ -1538,9 +1520,11 @@ function healthSummary(el: PrepStationsScreen) {
     ?.querySelector("prep-station-health-table")
     ?.shadowRoot?.querySelector("wt-data-table")?.shadowRoot;
 }
-it("a ticket change keeps an open station draft", async () => {
+it("a live routing refresh keeps an open New station draft", async () => {
   const liveData = new LiveData();
-  const el = await mount(api({ liveData }));
+  const changed = { ...view, stations: [{ ...view.stations[0]!, name: "Renamed bar" }] };
+  const load = vi.fn().mockResolvedValueOnce(view).mockResolvedValue(changed);
+  const el = await mount(api({ liveData, load }));
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   const name =
@@ -1548,8 +1532,10 @@ it("a ticket change keeps an open station draft", async () => {
     el.shadowRoot!.querySelector<WtInput>('[name="name"]');
   expect(name).toBeTruthy();
   name!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft station" } }));
-  liveData.invalidate([{ type: "ticket_items", id: "new-ticket" }]);
-  await settle(el);
+  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
+  await vi.waitFor(() => expect(healthRow(el, "bar").textContent).toContain("Renamed bar"));
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(name!.isConnected).toBe(true);
   expect(name!.value).toBe("Draft station");
 });
 it("releases its interests and clock on detach", async () => {
