@@ -52,8 +52,8 @@ export function receiptLogoSource(
   department: DepartmentReceiptConfig | null,
   venue: VenueReceiptConfig,
 ): "department" | "venue" | null {
-  if (department?.logo !== undefined) return "department";
-  return venue.logo !== undefined ? "venue" : null;
+  if (department?.logo) return "department";
+  return venue.logo ? "venue" : null;
 }
 
 /** Null renders venue-only; an empty department inherits only its logo and optional texts. */
@@ -68,8 +68,8 @@ export function resolveReceiptTrim(
   for (const field of ["phone", "email"] as const) {
     if (contact[field] !== undefined) result[field] = contact[field];
   }
-  const logo = department?.logo ?? venue.logo;
-  if (logo !== undefined) result.logo = logo;
+  const logo = department?.logo || venue.logo;
+  if (logo) result.logo = logo;
   for (const field of ["headerSubtitle", "footerMessage"] as const) {
     const text =
       resolveReceiptText(department?.[field], printedLanguage, currentReceiptLanguage) ??

@@ -67,6 +67,15 @@ describe("receipt trim", () => {
     });
   });
 
+  it("clearing a department logo restores the venue filename and raster owner", () => {
+    expect(receipt.resolveReceiptTrim({ logo: "" }, venue, "ca-ES", "es-ES").logo).toBe(
+      "venue.png",
+    );
+    expect(receipt.receiptLogoSource({ logo: "" }, venue)).toBe("venue");
+    expect(receipt.receiptLogoSource({}, { logo: "" })).toBeNull();
+    expect(receipt.resolveReceiptTrim({}, { logo: "" }, "ca-ES", "es-ES")).toEqual({});
+  });
+
   it("uses venue fields alone for a null department", () => {
     expect(receipt.resolveReceiptTrim(null, venue, "ca-ES", "es-ES")).toEqual({
       logo: "venue.png",
