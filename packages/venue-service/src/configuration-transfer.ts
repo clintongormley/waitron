@@ -1,7 +1,7 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { civilDateOf } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { holidayCityKey, localHolidayName } from "./holiday-rules.js";
+import { holidayCityKey } from "./holiday-rules.js";
 import type { PackLookup } from "./holidays.js";
 import {
   addDays,
@@ -292,10 +292,10 @@ export function validateHolidayConfiguration(
   tables: Tables,
   findPack: PackLookup = getCountryPack,
 ): void {
-  const allowance = new Map<unknown, number>();
+  const geographyIds = new Set<unknown>();
   const places = new Set<string>();
   for (const row of tables.holiday_geographies ?? []) {
-    if (typeof row.id !== "string" || allowance.has(row.id)) refuse("holiday_geographies.id");
+    if (typeof row.id !== "string" || geographyIds.has(row.id)) refuse("holiday_geographies.id");
     const pack = typeof row.country === "string" ? findPack(row.country) : undefined;
     if (pack === undefined || pack.countryCode !== row.country)
       refuse("holiday_geographies.country");
@@ -315,26 +315,7 @@ export function validateHolidayConfiguration(
       !(calendar?.areasForProvince(province as string) ?? []).some(({ key }) => key === area)
     )
       refuse("holiday_geographies.area_key");
-    allowance.set(row.id, calendar?.localEntryLimit ?? 0);
-  }
-
-  const entryIds = new Set<unknown>();
-  const taken = new Set<string>();
-  const perYear = new Map<string, number>();
-  for (const row of tables.local_holidays ?? []) {
-    if (typeof row.id !== "string" || entryIds.has(row.id)) refuse("local_holidays.id");
-    entryIds.add(row.id);
-    const limit = allowance.get(row.geography_id);
-    if (limit === undefined) refuse("local_holidays.geography_id");
-    if (!isLocalDate(row.date)) refuse("local_holidays.date");
-    const day = JSON.stringify([row.geography_id, row.date]);
-    if (taken.has(day)) refuse("local_holidays.date");
-    taken.add(day);
-    if (localHolidayName(row.name) !== row.name) refuse("local_holidays.name");
-    const year = JSON.stringify([row.geography_id, row.date.slice(0, 4)]);
-    const count = (perYear.get(year) ?? 0) + 1;
-    if (count > limit) refuse("local_holidays");
-    perYear.set(year, count);
+    geographyIds.add(row.id);
   }
 }
 
@@ -669,7 +650,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "zone_closed_times" },
     { name: "special_date_hours_periods" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },
-    { name: "local_holidays" },
   ],
   validate: validateVenueServiceConfiguration,
 } as const;

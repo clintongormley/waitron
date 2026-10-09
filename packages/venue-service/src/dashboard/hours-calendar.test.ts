@@ -1396,27 +1396,19 @@ describe("Opening hours named month", () => {
       let reject!: (value: unknown) => void;
       let resolve!: (value: unknown) => void;
       let reads = 0;
-      const api = new NamedDaysApi((async (_path, method) => {
+      const request = (async (_path, method) => {
         if (method === "PUT")
-          return new Promise((yes, no) => {
+          return new Promise<unknown>((yes, no) => {
             resolve = yes;
             reject = no;
           });
         reads++;
         const model = namedModel();
-        Object.assign(model.area, { addressKey });
+        model.area.addressKey = addressKey;
         return model;
-      }) as DashboardRequest);
-      const el = await namedMount((async (_path, method) => {
-        if (method === "PUT")
-          return new Promise((yes, no) => {
-            resolve = yes;
-            reject = no;
-          });
-        const model = namedModel();
-        Object.assign(model.area, { addressKey });
-        return model;
-      }) as DashboardRequest);
+      }) as DashboardRequest;
+      const api = new NamedDaysApi(request);
+      const el = await namedMount(request);
       el.namedApi = api;
       el.remove();
       document.body.append(el);

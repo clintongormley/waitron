@@ -1210,6 +1210,13 @@ Tasks 26–29 and whole-branch validation remain before finish-branch.
   the venue-service node project, its touched browser files and the server package; commit
   `refactor(venue-service): local holidays are own named days (A366)`.
 
+**2026-10-09 implementation checkpoint, pending controller review:** local API/editor/facts,
+owner geography source, cap enforcement and transfer entries retired. Calendar retains area
+choice, public holidays and own named-day coverage, including repeats. `local_holidays` schema
+and classification remain for Task 27. Required project runs and retained-assertion supplements,
+controls and LOOK receipts are in `task26-report.md` in the campaign receipts directory. Task 26
+has not been marked reviewed or complete; Tasks 27–29 remain, and the branch has not landed.
+
 ---
 
 ### Task 27: Migration 0036 — named days lose their colour; local holidays go

@@ -48,17 +48,13 @@ export {
 } from "./hours.js";
 export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 export {
-  deleteLocalHoliday,
-  deleteRetainedHolidayGeography,
   duplicateHolidayNamedSpecialDates,
   readHolidayFacts,
   readHolidays,
-  readLocalHolidayModel,
+  readHolidayAreaModel,
   saveHolidayArea,
-  saveLocalHoliday,
 } from "./holidays.js";
 export type * from "./holiday-types.js";
-export { LOCAL_HOLIDAY_NAME_MAX } from "./holiday-types.js";
 export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export { localTimeOccurrences, offsetMinutes } from "./hours-occurrences.js";
 export { isLocalDate } from "./hours-rules.js";

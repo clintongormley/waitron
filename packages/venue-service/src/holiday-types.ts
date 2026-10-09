@@ -2,9 +2,6 @@
 import type { NamedDayKind } from "./named-day-rules.js";
 import type { HolidayFact, LocalDate } from "./hours-types.js";
 
-/** The longest local holiday name, in Unicode code points, after trimming. */
-export const LOCAL_HOLIDAY_NAME_MAX = 200;
-
 export interface HolidayCoverage {
   year: number;
   country: string;
@@ -40,23 +37,12 @@ export interface HolidayGeography {
   matchesVenue: boolean;
 }
 
-export interface LocalHolidayInput {
-  date: LocalDate;
-  name: string;
-}
-
-export interface LocalHoliday extends LocalHolidayInput {
-  id: string;
-  geographyId: string;
-}
-
-export interface LocalHolidayModel {
+export interface HolidayAreaModel {
   venue: { country: string; provinceCode: string | null; city: string | null };
-  localEntryLimit: number;
+  localHolidaysPerYear: number;
   areaOptions: readonly { key: string; name: string }[];
   areaRequired: boolean;
-  geographies: readonly HolidayGeography[];
-  entries: readonly LocalHoliday[];
+  chosen: string | null;
 }
 
 export interface NamedDay {
@@ -86,6 +72,7 @@ export interface NamedDaysModel {
   holidayCoverage: readonly HolidayCoverage[];
   holidaySources: readonly HolidaySource[];
   area: {
+    addressKey: string;
     options: readonly { key: string; name: string }[];
     required: boolean;
     chosen: string | null;

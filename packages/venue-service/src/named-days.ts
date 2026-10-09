@@ -3,9 +3,10 @@ import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { venueLocalMoment } from "./hours-clock.js";
 import { readCalendarDays, type HolidayReader } from "./hours.js";
-import { readHolidays, readLocalHolidayModel } from "./holidays.js";
+import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import type { NamedDaysModel, NamedDay } from "./holiday-types.js";
 export type { NamedDaysModel, NamedDay, NamedCalendarDay } from "./holiday-types.js";
+import { holidayCityKey } from "./holiday-rules.js";
 import { rangeDates } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { occursOn, repeatKey, type NamedDayKind } from "./named-day-rules.js";
@@ -87,7 +88,7 @@ export async function readNamedDaysModel(
   const clock = await readLocationClock(tx, cfg.locationId);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
   const read = await readHolidays(tx, cfg, from, to);
-  const local = await readLocalHolidayModel(tx, cfg);
+  const area = await readHolidayAreaModel(tx, cfg);
   const named = await namedDaysOn(tx, cfg, dates);
   const stationRows = await tx
     .select({ id: specialDateHours.specialDateId })
@@ -145,10 +146,15 @@ export async function readNamedDaysModel(
     holidayCoverage: read.coverage,
     holidaySources: read.sources,
     area: {
-      options: local.areaOptions,
-      required: local.areaRequired,
-      chosen: local.geographies.find(({ matchesVenue }) => matchesVenue)?.areaKey ?? null,
+      addressKey: JSON.stringify([
+        area.venue.country,
+        area.venue.provinceCode,
+        holidayCityKey(area.venue.city ?? ""),
+      ]),
+      options: area.areaOptions,
+      required: area.areaRequired,
+      chosen: area.chosen,
     },
-    localHolidaysPerYear: local.localEntryLimit,
+    localHolidaysPerYear: area.localHolidaysPerYear,
   };
 }

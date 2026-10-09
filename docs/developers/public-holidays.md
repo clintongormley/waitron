@@ -1,5 +1,10 @@
 # Public holidays
 
+> 2026-10-09 branch checkpoint, pending review: Task 26 replaces the local-holiday list with own
+> named holidays and retains holiday-area choice in Opening hours → Calendar. The yearly country
+> number becomes information. The `local_holidays` table remains until Task 27. The text below
+> describes the earlier implementation; Task 29 rewrites it. This checkpoint has not landed.
+
 A venue manager planning opening hours needs to know which days are public holidays where the venue
 is. Waitron shows them on the Station hours page (`/manage/hours`) in two layers. The national and regional
 holidays come from the official list, transcribed into the country's pack and shipped with the

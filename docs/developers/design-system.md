@@ -2993,7 +2993,7 @@ Station hours offers Week and Named days. Create, copy or delete a named day thr
 in Named days to Opening hours → Calendar. You see one-off days from the venue’s yesterday
 onward; repeating days follow each station’s standard week. Edit shows the stored date and name
 as text and saves station cells with the day’s other fields unchanged. A stored whole-venue closure
-locks those cells; the default station stays open. The local-holiday editor remains until Task 26.
+locks those cells; the default station stays open. Station hours has no local-holiday editor (Task 26 implementation checkpoint, 2026-10-09).
 
 ### Tabbed management pages
 
@@ -3078,22 +3078,17 @@ when it is still Monday to Friday, 09:00–17:00, with a link to that department
   values unchanged. A whole-venue closure keeps the station cells locked. Create, copy and delete
   lead you to Opening hours → Calendar. Repeating named days follow the stations' standard weeks.
 
-Under the Named days table sits the Local holidays section (`local-holidays-editor.ts`), with
-its own `h2`. A line names the venue's city and yearly allowance, or says why none can be entered
-yet. Where the province's official list needs an area, a dropdown chooses it (a viewer reads the
-choice as text). Then come the year's count against the allowance, Add a local holiday, and a
-`wt-data-table` of the current address's entries whose row menu holds Edit and Remove. Last, each
-earlier address still stored gets a line naming its city, with a Remove button. A viewer gets
-none of these actions: no Add a local holiday, no row menu and no Remove. In the Calendar,
-the date panel lists each holiday on the chosen date under its heading, with its kind (national,
-regional or local) and its source: the official source, linked where it has an address, or
-"Entered by you for" the city. A line follows on how complete that year's official holidays are,
-and a second on its local holidays when the calendar's read includes that year's coverage. Above
-the month grid, a line names each year shown whose official holidays are not known to be complete.
+**2026-10-09, Task 26 implementation checkpoint, pending review:** Station hours no longer
+shows a Local holidays editor. In Opening hours → Calendar, you choose the holiday area when
+the official list needs it and add your town's holidays as own named days. The country's yearly
+number is information; it does not limit how many own holidays you add. An own holiday occurring
+in the year, including a yearly repeat, supplies that year's owner-entered local coverage.
+Public holidays remain separate from own named days. The full holidays documentation rewrite
+belongs to Task 29; this checkpoint has not landed.
 
-In the week grid and the date panel a period stays on one line, so hours wrap only between
-periods. The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
-Delete and Clear schedule are `compact`, as are the local holiday dialogs.
+In the week grid and date panel a period stays on one line, so hours wrap only between periods.
+The day, date and duplicate editors are `standard` modals; the seven-day confirmation,
+Delete and Clear schedule are `compact`.
 
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.

@@ -44,7 +44,6 @@ import {
 } from "./hours-cell-editor.js";
 import "./hours-cell-editor.js";
 import { datesListStyles, renderDatesList } from "./hours-dates-list.js";
-import "./local-holidays-editor.js";
 import {
   browserToday,
   format,
@@ -1200,18 +1199,7 @@ export class HoursScreen extends LitElement {
                 }}
               >
                 <div slot="week">${this.view === "week" ? this.#week() : nothing}</div>
-                <div slot="dates">
-                  ${
-                    this.view === "dates"
-                      ? html`${this.#dates()}
-                          <local-holidays-editor
-                            .api=${this.api}
-                            ?readOnly=${this.readOnly}
-                            .today=${model.civilDate}
-                          ></local-holidays-editor>`
-                      : nothing
-                  }
-                </div>
+                <div slot="dates">${this.view === "dates" ? this.#dates() : nothing}</div>
               </wt-tabs>
               ${this.#modal()}`
       }`;

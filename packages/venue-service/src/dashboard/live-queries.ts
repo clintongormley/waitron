@@ -52,7 +52,6 @@ export const QUERY_DEPENDENCIES = {
     "station_fallbacks",
     "tenants",
     "holiday_geographies",
-    "local_holidays",
   ],
   "named-days": [
     "special_dates",
@@ -63,9 +62,8 @@ export const QUERY_DEPENDENCIES = {
     "tenants",
     "locations",
     "holiday_geographies",
-    "local_holidays",
   ],
-  holidays: ["tenants", "locations", "holiday_geographies", "local_holidays", "special_dates"],
+  holidays: ["tenants", "locations", "holiday_geographies", "special_dates"],
   "opening-hours": [
     "menu_periods",
     "menu_period_staff_menus",

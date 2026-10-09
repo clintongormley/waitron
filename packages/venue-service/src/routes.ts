@@ -64,16 +64,7 @@ import {
 import type { RouteTarget } from "./routing.js";
 import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
-import {
-  deleteLocalHoliday,
-  deleteRetainedHolidayGeography,
-  duplicateHolidayNamedSpecialDates,
-  readHolidays,
-  readLocalHolidayModel,
-  saveHolidayArea,
-  saveLocalHoliday,
-} from "./holidays.js";
-import type { LocalHolidayInput } from "./holiday-types.js";
+import { duplicateHolidayNamedSpecialDates, readHolidays, saveHolidayArea } from "./holidays.js";
 import { deleteSpecialDate, readHoursModel, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { CellAddress, RoutingChange } from "./routing-types.js";
@@ -127,11 +118,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "special_date.keeps_week": 409,
   "station.always_open": 409,
   "holiday.invalid": 400,
-  "holiday.not_found": 404,
-  "holiday_geography.not_found": 404,
-  "holiday.date_taken": 409,
-  "holiday.local_limit": 409,
-  "holiday.geography_current": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);
@@ -333,13 +319,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.get("/management-api/venue-service/local-holidays", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        return c.json(await viewed(sessionId, (tx) => readLocalHolidayModel(tx, ctx.cfg)));
-      }),
-    );
-
     app.put("/management-api/venue-service/holiday-area", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -349,50 +328,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           return saveHolidayArea(tx, ctx.cfg, body);
         });
         return geography === null ? c.body(null, 204) : c.json(geography);
-      }),
-    );
-
-    app.post("/management-api/venue-service/local-holidays", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<LocalHolidayInput>(c);
-        const saved = await gated(sessionId, (tx) => {
-          onlyKeys(body, ["date", "name"]);
-          return saveLocalHoliday(tx, ctx.cfg, null, body);
-        });
-        return c.json(saved, 201);
-      }),
-    );
-
-    app.put("/management-api/venue-service/local-holidays/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "LocalHolidayId");
-        const body = await readJsonBody<LocalHolidayInput>(c);
-        return c.json(
-          await gated(sessionId, (tx) => {
-            onlyKeys(body, ["date", "name"]);
-            return saveLocalHoliday(tx, ctx.cfg, id, body);
-          }),
-        );
-      }),
-    );
-
-    app.delete("/management-api/venue-service/local-holidays/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "LocalHolidayId");
-        await gated(sessionId, (tx) => deleteLocalHoliday(tx, ctx.cfg, id));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.delete("/management-api/venue-service/holiday-geographies/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "HolidayGeographyId");
-        await gated(sessionId, (tx) => deleteRetainedHolidayGeography(tx, ctx.cfg, id));
-        return c.body(null, 204);
       }),
     );
 

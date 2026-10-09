@@ -363,6 +363,7 @@ export class HoursCalendar extends LitElement {
 
   #detach?: () => void;
   #connection = {};
+  #areaRequest = {};
   #watchedMonth = "";
   #venueMonth?: Month;
   #days = new Map<LocalDate, CalendarDay>();
@@ -396,6 +397,11 @@ export class HoursCalendar extends LitElement {
           if (this.month === "" && this.#venueMonth && this.shownMonth !== this.#venueMonth) {
             this.#show(this.#venueMonth, undefined, false);
             return;
+          }
+          if (this.namedModel?.area.addressKey !== model.area.addressKey) {
+            this.#areaRequest = {};
+            this.areaBusy = false;
+            this.areaError = "";
           }
           this.namedModel = model;
           this.readError = "";
@@ -946,18 +952,20 @@ export class HoursCalendar extends LitElement {
   }
   async #saveNamedArea(value: string) {
     const connection = this.#connection;
+    const request = (this.#areaRequest = {});
+    const current = () =>
+      this.isConnected && connection === this.#connection && request === this.#areaRequest;
     this.areaBusy = true;
     this.areaError = "";
     try {
       await this.namedApi!.saveHolidayArea(value);
     } catch {
-      if (this.isConnected && connection === this.#connection)
-        this.areaError = t("hours.save_error");
+      if (current()) this.areaError = t("hours.save_error");
       return;
     } finally {
-      if (connection === this.#connection) this.areaBusy = false;
+      if (current()) this.areaBusy = false;
     }
-    if (this.isConnected && connection === this.#connection) this.namedApi!.rereadWatches();
+    if (current()) this.namedApi!.rereadWatches();
   }
 
   override render() {

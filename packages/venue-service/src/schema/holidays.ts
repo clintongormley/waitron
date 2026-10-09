@@ -2,10 +2,6 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { day, id, label, locations, newId, table } from "@waitron/db";
 
-/**
- * The address a venue's local holidays were entered for. `city` keeps the spelling the address had
- * when the row was made; `city_key` is the normalized form the current address is compared with.
- */
 export const holidayGeographies = table(
   "holiday_geographies",
   {
@@ -33,7 +29,6 @@ export const holidayGeographies = table(
   ],
 );
 
-// The yearly allowance is checked by the writer in `../holidays.ts`; no constraint here counts it.
 export const localHolidays = table(
   "local_holidays",
   {
