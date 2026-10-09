@@ -72,3 +72,5 @@ export default class FileProgressReporter {
     }
   }
 }
+
+// A452 probe — never merged.
