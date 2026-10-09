@@ -833,6 +833,7 @@ export class MenusScreen extends LitElement {
    * name order. */
   protected override updated(changed: PropertyValues): void {
     this.#returnFocus();
+    if (changed.has("structure") || changed.has("products")) void this.#keepSelectionShown();
     if (!changed.has("layout") || this.layout !== "narrow") return;
     const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
       'wt-data-table[data-test="menus"]',
@@ -855,7 +856,7 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
-    if (changed.has("structure")) this.#keepSelectionDrawn();
+    if (changed.has("structure")) this.#keepSelectionOwned();
     this.#trackMoveDraft();
     if (changed.has("structure") || changed.has("path")) {
       this.#resolvePath();
@@ -2488,7 +2489,7 @@ export class MenusScreen extends LitElement {
       >
       <wt-button
         data-test="selection-move"
-        variant=${count > 0 && !this.busy ? "primary" : "secondary"}
+        variant=${count > 0 ? "primary" : "secondary"}
         .disabled=${count === 0 || this.busy}
         @click=${() => {
           if (count === 0 || this.busy) return;
@@ -2500,7 +2501,7 @@ export class MenusScreen extends LitElement {
       >
       <wt-button
         data-test="selection-remove"
-        variant=${removable && !this.busy ? "danger" : "secondary"}
+        variant=${removable ? "danger" : "secondary"}
         .disabled=${!removable || this.busy}
         @click=${() => {
           if (!removable || this.busy) return;
@@ -2528,8 +2529,9 @@ export class MenusScreen extends LitElement {
     </div>`;
   }
 
-  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows still drawn. */
-  #keepSelectionDrawn(): void {
+  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the menu still
+   * owns. */
+  #keepSelectionOwned(): void {
     // An empty menu's table draws no toolbar, so nothing could turn a mode off or clear the search.
     if (this.structure?.nodes.length === 0) {
       this.structureReordering = false;
@@ -2537,12 +2539,25 @@ export class MenusScreen extends LitElement {
       this.structureSearch = "";
     }
     const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
-    const kept = this.structureSelecting
-      ? this.structureSelected.filter((key) => owned.has(key))
-      : [];
+    this.#keepSelection((key) => owned.has(key));
+  }
+
+  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the search and the
+   * Available filter still show (a closed section hides none), once the tree has drawn a change: a
+   * row renamed out of the search, or a product the filter now hides, can no longer be unticked. */
+  async #keepSelectionShown(): Promise<void> {
+    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
+    if (!tree) return;
+    await tree.updateComplete;
+    const shown = tree.shownSelectableKeys();
+    this.#keepSelection((key) => shown.has(key));
+  }
+
+  #keepSelection(keep: (key: string) => boolean): void {
+    const kept = this.structureSelecting ? this.structureSelected.filter(keep) : [];
     if (kept.length !== this.structureSelected.length) this.structureSelected = kept;
     const trim = (keys: string[] | null): string[] | null => {
-      const left = keys?.filter((key) => owned.has(key)) ?? [];
+      const left = keys?.filter(keep) ?? [];
       if (left.length === keys?.length) return keys;
       return left.length > 0 ? left : null;
     };

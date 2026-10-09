@@ -4391,6 +4391,113 @@ describe("the Structure tree", () => {
       expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
     });
 
+    it("drops a selected section a live rename hides from the search, so Move cannot send it", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      type(q(el, 'wt-input[name="structure-search"]')!, "Drinks");
+      await settleStructure(el);
+      await pressSelect(el);
+      await tick(el, "m-drinks");
+      expect(structure(el).selected).toEqual(["m-drinks"]);
+
+      const nodes = lunchNodes();
+      const rename = (items: MenuStructureNode[]) => {
+        for (const node of items) {
+          if (node.ref.kind === "section" && node.ref.sectionId === "s-drinks")
+            node.internalName = "Beverages";
+          rename(node.children ?? []);
+        }
+      };
+      rename(nodes);
+      client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
+      live.invalidate([{ type: "sections" }]);
+      await vi.waitFor(() => expect(structure(el).nodes[1]!.internalName).toBe("Beverages"));
+      await settleStructure(el);
+      expect(rowOf(el, "m-drinks")).toBeNull();
+      expect(structure(el).selected).toEqual([]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+      const move = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!;
+      expect(move.disabled).toBe(true);
+      move.click();
+      await el.updateComplete;
+      expect(modal(el, "move-selected").open).toBe(false);
+      expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
+    });
+
+    it("drops a selected product the Available filter hides after a live change, from the open Remove confirm too", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      await chooseOption(inStructure(el, 'wt-combobox[data-filter="available"]')!, "yes");
+      await settleStructure(el);
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await tick(el, "m-drinks/m-lemonade");
+      await openRemove(el);
+      expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
+        "Remove 2 items from their sections?",
+      );
+
+      client.listLibraryProducts.mockResolvedValue(
+        products.map((each) => (each.id === "p-burger" ? { ...each, available: false } : each)),
+      );
+      live.invalidate([{ type: "products" }]);
+      await vi.waitFor(() =>
+        expect(modal(el, "remove-selected").getAttribute("heading")).toBe(
+          "Remove 1 item from its section?",
+        ),
+      );
+      await settleStructure(el);
+      expect(rowOf(el, "m-burger")).toBeNull();
+      expect(structure(el).selected).toEqual(["m-drinks/m-lemonade"]);
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() =>
+        expect(client.removeSectionMembers).toHaveBeenCalledExactlyOnceWith([
+          { listId: "s-drinks", memberId: "m-lemonade" },
+        ]),
+      );
+    });
+
+    it("keeps a selected row inside a section the person closed when a live update arrives", async () => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountLunch(client);
+      await toggleRow(el, "m-drinks");
+      await pressSelect(el);
+      await tick(el, "m-drinks/m-lemonade");
+      await toggleRow(el, "m-drinks");
+      expect(rowOf(el, "m-drinks/m-lemonade")).toBeNull();
+
+      const nodes = lunchNodes();
+      nodes[2]!.internalName = "Picks";
+      client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
+      live.invalidate([{ type: "sections" }]);
+      await vi.waitFor(() => expect(structure(el).nodes[2]!.internalName).toBe("Picks"));
+      await settleStructure(el);
+      expect(structure(el).selected).toEqual(["m-drinks/m-lemonade"]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
+    });
+
+    it("keeps Remove red and Move primary, both disabled, while a bulk remove is being sent", async () => {
+      const removing = deferred<void>();
+      const client = api({ removeSectionMembers: vi.fn(() => removing.promise) });
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      await tick(el, "m-burger");
+      await openRemove(el);
+      inModal(el, "remove-selected", '[data-test="remove-selected-save"]').click();
+      await vi.waitFor(() => expect(client.removeSectionMembers).toHaveBeenCalledOnce());
+      await el.updateComplete;
+      const move = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!;
+      expect(removeButton(el).disabled).toBe(true);
+      expect(removeButton(el).variant).toBe("danger");
+      expect(move.disabled).toBe(true);
+      expect(move.variant).toBe("primary");
+      removing.resolve();
+      await vi.waitFor(() => expect(modal(el, "remove-selected").open).toBe(false));
+    });
+
     it("holds Select and Done while a write is out", async () => {
       const removing = deferred<void>();
       const client = api({ removeSectionMember: vi.fn(() => removing.promise) });

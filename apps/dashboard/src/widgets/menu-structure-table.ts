@@ -509,6 +509,18 @@ export class MenuStructureTable extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
+  /** The keys of the rows that take a box and that the search and the Available filter show,
+   * including rows inside a closed section. */
+  shownSelectableKeys(): Set<string> {
+    const shown = this.#table()?.shownKeys() ?? [];
+    return new Set(
+      shown.filter((key) => {
+        const row = this.#rowByKey.get(key);
+        return row !== undefined && this.#rowSelectable(row);
+      }),
+    );
+  }
+
   /** Opens or closes the row `key` once the rows last given are drawn, without reporting it as a
    * person's change. */
   async setExpanded(key: string, expanded: boolean): Promise<void> {
@@ -859,6 +871,7 @@ export class MenuStructureTable extends LitElement {
         .rowKey=${(row: Row) => row.key}
         .rowParent=${(row: Row) => row.parentKey}
         .selectable=${this.selecting}
+        selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}
         .rowSelectable=${(row: Row) => this.#rowSelectable(row)}
         .selectionLabel=${(row: Row) =>

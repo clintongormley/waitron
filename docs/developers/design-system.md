@@ -909,7 +909,9 @@ tests ran rows 30.3 px tall at a device pixel ratio of 1, each revealed from the
 correction.
 
 Any table, flat or a tree, answers `filterValues(key)` and takes a filter choice with
-`chooseFilter(key, values)` (below, "Remembered, searchable, filterable tables").
+`chooseFilter(key, values)` (below, "Remembered, searchable, filterable tables"). `shownKeys()`
+lists the keys of the rows the search and filters show now, in a tree with the rows it keeps around
+a match, and including rows a closed branch hides.
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
 `apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). It draws no row for
@@ -959,8 +961,9 @@ shown only because something inside it matches has no box, so Select all never t
 hidden rows would go with it; a section whose own name matches keeps its box, and none has one under
 the Available filter, which no section answers. The selection clears when the mode turns off, the
 search or a filter changes, another menu opens, or a bulk change succeeds; a live update drops a
-ticked row it takes away, from the selection and from an open confirm or dialog, which closes once
-nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
+ticked row it takes away, or one the search or the Available filter no longer shows with a box (a
+row inside a section the person closed stays), from the selection and from an open confirm or
+dialog, which closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
 travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
 the confirm and the dialog count what is sent. Remove from menu asks first, naming how many items
 leave their sections and listing each with the list it leaves; it stays quiet and disabled while a section the menu owns is selected, with a line saying a

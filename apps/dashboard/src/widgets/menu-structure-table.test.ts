@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
@@ -7,7 +7,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
 import type { CategorySummary, MenuHome, MenuStructureNode, Product } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -2455,6 +2455,50 @@ describe("Select mode while a search or filter hides rows", () => {
     ]);
   });
 
+  it("names the rows the search and filter leave a box on, closed sections' rows included", async () => {
+    const lemonade = { ...product("p-lemonade", "Lemonade"), available: false };
+    const el = await mount({
+      selecting: true,
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((each) => (each.id === "p-lemonade" ? lemonade : each)),
+    });
+    expect(shown(el)).not.toContain("m-drinks/m-lager");
+    expect([...el.shownSelectableKeys()]).toEqual([
+      "m-burger",
+      "m-drinks",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer",
+      "m-drinks/m-beer/m-lager-2",
+      "m-drinks/m-lemonade",
+      "m-fav",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks",
+      "m-fav/m-fav-drinks/m-lager",
+      "m-fav/m-fav-drinks/m-beer",
+      "m-fav/m-fav-drinks/m-beer/m-lager-2",
+      "m-fav/m-fav-drinks/m-lemonade",
+      "included-wine",
+    ]);
+    el.search = "Lemonade";
+    await settle(el);
+    expect([...el.shownSelectableKeys()]).toEqual([
+      "m-drinks/m-lemonade",
+      "m-fav/m-fav-lemonade",
+      "m-fav/m-fav-drinks/m-lemonade",
+    ]);
+    el.search = "";
+    await settle(el);
+    await chooseOption(inTable(el, 'wt-combobox[data-filter="available"]')!, "yes");
+    await settle(el);
+    expect([...el.shownSelectableKeys()]).toEqual([
+      "m-burger",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer/m-lager-2",
+      "m-fav/m-fav-drinks/m-lager",
+      "m-fav/m-fav-drinks/m-beer/m-lager-2",
+    ]);
+  });
+
   it("keeps a box on a section whose own name matches", async () => {
     const el = await mount({ selecting: true, search: "drinks" });
     expect(boxKeys(el)).toContain("m-drinks");
@@ -2539,6 +2583,16 @@ describe("Select mode", () => {
     item(el, "select-m-fav").click();
     await settle(el);
     expect(changes).toEqual([{ target: el, detail: { selected: ["m-burger", "m-fav"] } }]);
+  });
+
+  it("names the select-all box in the screen's language", async () => {
+    const before = currentLocale();
+    setLocale("es");
+    onTestFinished(() => setLocale(before));
+    const el = await mount({ selecting: true });
+    expect(item(el, "select-all").getAttribute("aria-label")).toBe(
+      "Seleccionar todos los elementos",
+    );
   });
 
   it("forwards a slotted selection bar into the table's toolbar-bottom slot", async () => {
