@@ -333,6 +333,25 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
   return null;
 }
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
+
+/**
+ * Clicks a dialog's button and waits for the dialog's `wt-close`, which everything a screen does on
+ * close follows. Chromium reports a native dialog's close only with its next rendered frame, which a
+ * busy runner can hold back past `vi.waitFor`'s one second.
+ */
+async function clickAndAwaitClose(
+  el: PrintersScreen,
+  modal: string,
+  button: string,
+): Promise<void> {
+  const dialog = q(el, `[data-test=${modal}]`)!;
+  const closed = new Promise((resolve) =>
+    dialog.addEventListener("wt-close", resolve, { once: true }),
+  );
+  q(el, `[data-test=${button}]`)!.click();
+  await closed;
+}
+
 type Dropdown = HTMLElement & { value: string };
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
 /** A sentence holding a relative time, with the time standing as `{time}`, and the moment it shows. */
@@ -499,7 +518,7 @@ describe("guided printer calibration", () => {
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     expect(q(el, "[data-test=calibration-step-2]")!.checkVisibility()).toBe(true);
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
     q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
@@ -802,7 +821,7 @@ describe("guided printer calibration", () => {
       const el = await openStepThree(api);
       q(el, "[data-test=test-printer-drawer]")!.click();
       await flush(el);
-      q(el, "[data-test=cancel-edit-printer]")!.click();
+      await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
       await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
       await openPrinter(el);
       if (outcome === "resolve") resolve({ jobId: "late" });
@@ -819,7 +838,7 @@ describe("guided printer calibration", () => {
     const el = await openStepThree(api);
     expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
@@ -1063,7 +1082,7 @@ describe("printer configuration tabs", () => {
       expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
     );
     await vi.waitFor(() => expect(button.isConnected).toBe(false));
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
     await flush(el);
     expect(el.shadowRoot!.activeElement).toBe(
@@ -1088,7 +1107,7 @@ describe("printer configuration tabs", () => {
     await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
     await flush(el);
     await vi.waitFor(() => expect(button.isConnected).toBe(false));
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
     await flush(el);
 
@@ -1107,7 +1126,7 @@ describe("printer configuration tabs", () => {
     await flush(el);
     await selectTab(el, "printers");
     const button = await pressEmptyAction(el, "printers-table");
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     await flush(el);
     expect(el.shadowRoot!.activeElement).toBe(button);
@@ -1131,7 +1150,7 @@ describe("printer configuration tabs", () => {
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
     await flush(el);
     await vi.waitFor(() => expect(button.isConnected).toBe(false));
-    q(el, "[data-test=cancel-new-agent]")!.click();
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
     await vi.waitFor(() => expect(q(el, "[data-test=new-agent-modal]")).toBeNull());
     await flush(el);
     expect(el.shadowRoot!.activeElement).toBe(
@@ -1145,7 +1164,7 @@ describe("printer configuration tabs", () => {
     await flush(el);
     await selectTab(el, "agents");
     const button = await pressEmptyAction(el, "agents-table");
-    q(el, "[data-test=cancel-new-agent]")!.click();
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
     await vi.waitFor(() => expect(q(el, "[data-test=new-agent-modal]")).toBeNull());
     await flush(el);
     expect(el.shadowRoot!.activeElement).toBe(button);
@@ -5577,7 +5596,7 @@ describe("printers-screen agent joining edges", () => {
     typeField(el, "[data-test=edit-agent-name]", "Kitchen Pi");
     await flush(el);
     const staleSave = q(el, "[data-test=save-agent]")!;
-    q(el, "[data-test=cancel-edit-agent]")!.click();
+    await clickAndAwaitClose(el, "edit-agent-modal", "cancel-edit-agent");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-agent-modal]")).toBeNull());
 
     staleSave.click();
@@ -6050,7 +6069,7 @@ describe("printers-screen discovery and add edges", () => {
     await flush(el);
     q(el, "[data-test=confirm-add-printer]")!.click();
     await el.updateComplete;
-    q(el, "[data-test=cancel-printer-name]")!.click();
+    await clickAndAwaitClose(el, "name-printer-modal", "cancel-printer-name");
     await vi.waitFor(() => expect(q(el, "[data-test=name-printer-modal]")).toBeNull());
 
     release();
@@ -6266,7 +6285,7 @@ describe("printers-screen printer editor edges", () => {
     await openCalibration(el);
     q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
 
     release();
@@ -6476,7 +6495,7 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
     await flush(el);
     await openDiscovery(el);
     const staleScan = q(el, "[data-test=scan-printers]")!;
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     const reads = vi.mocked(api.listDiscoveredPrinters).mock.calls.length;
 
@@ -6577,7 +6596,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     typeField(el, "[data-test=edit-agent-name]", "");
     q(el, "[data-test=save-agent]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-edit-agent]")!.click();
+    await clickAndAwaitClose(el, "edit-agent-modal", "cancel-edit-agent");
     await vi.waitFor(() => expect(q(el, "[data-test=edit-agent-modal]")).toBeNull());
     q(el, "[data-test=edit-agent-a1]")!.click();
     await flush(el);
@@ -6827,7 +6846,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     await openDiscovery(el);
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     await openDiscovery(el);
     typeField(el, "[data-test=probe-host]", " ");
@@ -7043,7 +7062,7 @@ describe("printers-screen Bluetooth pairing", () => {
     await openPair(el);
     typeField(el, sel("bluetooth-pin"), PIN);
     await flush(el);
-    q(el, sel("cancel-pair"))!.click();
+    await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
     await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
     await openPair(el);
     expect(pinField(el).value).toBe("");
@@ -7057,7 +7076,7 @@ describe("printers-screen Bluetooth pairing", () => {
     q(el, sel("confirm-pair"))!.click();
     await flush(el);
     expect(pair).toHaveBeenCalledOnce();
-    q(el, sel("cancel-pair"))!.click();
+    await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
     await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
     answer({ command: pendingCommand("pair") });
     await flush(el);
@@ -7081,7 +7100,7 @@ describe("printers-screen Bluetooth pairing", () => {
     await flush(el);
     q(el, sel("confirm-pair"))!.click();
     await flush(el);
-    q(el, sel("cancel-pair"))!.click();
+    await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
     await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
     await openPair(el);
     refuse({ code: "management.request_invalid", params: { field: "pin" } });
@@ -7110,9 +7129,9 @@ describe("printers-screen Bluetooth pairing", () => {
     await flush(el);
     q(el, sel("confirm-pair"))!.click();
     await flush(el);
-    q(el, sel("cancel-pair"))!.click();
+    await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
     await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     answer({ command: pendingCommand("pair") });
     await flush(el);
@@ -7279,7 +7298,7 @@ describe("printers-screen Bluetooth pairing", () => {
     q(el, sel("confirm-pair"))!.click();
     await flush(el);
     expect(q(el, sel(`discovered-command-${ADDRESS}`))).not.toBeNull();
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     await openDiscovery(el);
     expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
@@ -7417,7 +7436,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
     expect(text(el, sel(`pair-${OTHER}`))).toBe(t("printers.bluetooth_pair"));
     expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_hide_others"));
-    q(el, "[data-test=cancel-new-printer]")!.click();
+    await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     await openDiscovery(el);
     expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
@@ -7556,7 +7575,7 @@ describe("printers-screen Bluetooth pairing", () => {
       ).toBe(true);
       expect(api.deactivatePrinter).not.toHaveBeenCalled();
 
-      q(el, sel("cancel-edit-printer"))!.click();
+      await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
       await flush(el);
 
       await vi.waitFor(() => expect(q(el, sel("edit-printer-modal"))).toBeNull());
@@ -7620,7 +7639,7 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(q(el, sel("edit-printer-modal"))).not.toBeNull();
       expect(api.deactivatePrinter).not.toHaveBeenCalled();
 
-      q(el, sel("cancel-edit-printer"))!.click();
+      await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
       await flush(el);
 
       await vi.waitFor(() => expect(q(el, sel("edit-printer-modal"))).toBeNull());
@@ -7747,7 +7766,7 @@ describe("printers-screen Bluetooth pairing", () => {
         expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
         expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
         expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
-        q(el, sel("cancel-new-printer"))!.click();
+        await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
         await vi.waitFor(() => expect(q(el, sel("new-printer-modal"))).toBeNull());
         expect(text(el, sel("forget-pairing-p8"))).toBe(t("printers.bluetooth_forget"));
         expect(api.createPrinter).not.toHaveBeenCalled();
@@ -7980,7 +7999,7 @@ describe("printers-screen Bluetooth pairing", () => {
       const { el, passive } = await mountQuiet([barPrinter]);
       passive.mockResolvedValue([succeeded(true)]);
       await submitPair(el);
-      q(el, "[data-test=cancel-new-printer]")!.click();
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
       await flush(el);
@@ -8039,7 +8058,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      q(el, sel("cancel-printer-name"))!.click();
+      await clickAndAwaitClose(el, "name-printer-modal", "cancel-printer-name");
       await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
       expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
       expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
@@ -8115,7 +8134,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await fadeNotice(el, `discovered-command-${ADDRESS}`);
       const reopenWith = async (report: DiscoveredPrinter) => {
-        q(el, "[data-test=cancel-new-printer]")!.click();
+        await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
         await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
         vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([report]);
         passive.mockResolvedValue([report]);
@@ -8147,7 +8166,7 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
         `${t("printers.bluetooth_forget_failed")}: Device busy`,
       );
-      q(el, "[data-test=cancel-new-printer]")!.click();
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
       vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([failed]);
       await openDiscovery(el);
@@ -8229,7 +8248,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      q(el, sel("cancel-printer-name"))!.click();
+      await clickAndAwaitClose(el, "name-printer-modal", "cancel-printer-name");
       await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
       await fadeNotice(el, `discovered-command-${ADDRESS}`);
       expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
@@ -8256,7 +8275,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
       await flush(el);
-      q(el, sel("cancel-printer-name"))!.click();
+      await clickAndAwaitClose(el, "name-printer-modal", "cancel-printer-name");
       await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
       q(el, sel(`forget-device-${ADDRESS}`))!.click();
       await flush(el);
@@ -8358,7 +8377,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(passive).toHaveBeenCalledTimes(1);
-      q(el, "[data-test=cancel-new-printer]")!.click();
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
       expect(passive).toHaveBeenCalledTimes(1);
@@ -8908,7 +8927,7 @@ describe("printers-screen Bluetooth pairing", () => {
       const reason = `${t("printers.bluetooth_forget_failed")}: Device busy`;
       expect(text(el, sel("printer-command-p4"))).toBe(reason);
       await openDiscovery(el);
-      q(el, "[data-test=cancel-new-printer]")!.click();
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
       await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
       await flush(el);
       expect(text(el, sel("printer-command-p4"))).toBe(reason);

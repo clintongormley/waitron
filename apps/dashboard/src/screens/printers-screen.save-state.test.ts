@@ -637,7 +637,13 @@ describe("the calibration wizard's Save, when an add opened it", () => {
 
   it("a printer page's wizard, opened after an added printer's wizard was closed unsaved, opens with Save quiet", async () => {
     const { el, api } = await addFromDiscovery(unregistered);
+    const closed = new Promise((resolve) =>
+      q(el, "[data-test=edit-printer-modal]")!.addEventListener("wt-close", resolve, {
+        once: true,
+      }),
+    );
     q(el, "[data-test=cancel-edit-printer]")!.click();
+    await closed;
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
     expect(api.deactivatePrinter).not.toHaveBeenCalled();
     q(el, "[data-test=printer-row-p1]")!.click();
@@ -941,7 +947,13 @@ describe("under the dashboard's leave coordinator", () => {
     expect(await state(el, "confirm-pair")).toEqual(ready);
     await typeInto(el, "[data-test=bluetooth-pin]", "");
     expect(await state(el, "confirm-pair")).toEqual(quiet);
+    const closed = new Promise((resolve) =>
+      q(el, "[data-test=pair-printer-modal]")!.addEventListener("wt-close", resolve, {
+        once: true,
+      }),
+    );
     q(el, "[data-test=cancel-pair]")!.click();
+    await closed;
     await vi.waitFor(() => expect(q(el, "[data-test=pair-printer-modal]")).toBeNull());
 
     q(el, "[data-test=register-SN-1]")!.click();

@@ -600,7 +600,13 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         q(el, '[data-test="register-SN-1"]')!.click();
         await flush(el);
         await expectNoA11yViolations(host);
+        const closed = new Promise((resolve) =>
+          q(el, "[data-test=name-printer-modal]")!.addEventListener("wt-close", resolve, {
+            once: true,
+          }),
+        );
         q(el, '[data-test="cancel-printer-name"]')!.click();
+        await closed;
         await flush(el);
         await vi.waitFor(() => expect(q(el, '[data-test="name-printer-modal"]')).toBeNull());
         q(el, '[data-test="cancel-new-printer"]')!.click();
@@ -760,7 +766,13 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await flush(el);
       expect(q(el, "[data-test=name-printer-modal]")).not.toBeNull();
       await expectNoA11yViolations(host);
+      const closed = new Promise((resolve) =>
+        q(el, "[data-test=name-printer-modal]")!.addEventListener("wt-close", resolve, {
+          once: true,
+        }),
+      );
       q(el, "[data-test=cancel-printer-name]")!.click();
+      await closed;
       await vi.waitFor(() => expect(q(el, "[data-test=name-printer-modal]")).toBeNull());
       await flush(el);
       expect(q(el, '[data-test="register-00:11:22:33:44:55"]')).not.toBeNull();
