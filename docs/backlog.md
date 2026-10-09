@@ -1291,7 +1291,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   APPROVED 2026-10-07; remaining work is slices 4 and 7, slice 5 Part B, and slice 6 Parts B/C.**
   Station-hours and fallback retirement, period routing, combined tickets and department
   receipts remain; retiring watchers waits for combined tickets. Slice 6's remaining parts
-  add the closed-times summary and floor-plan entry. Slice 7 applies the owner's receipt answers.
+  add the closed-times summary and floor-plan entry. Slice 7's 2026-10-10 docs revision is complete;
+  its build remains open after landed 3A/6A.
+  Keep live venue defaults, omit optional current address on A4, and add no consent step.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
@@ -2571,6 +2573,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
+
+- **Remove the consent step from emailed receipts** (owner, 2026-10-09). Giving the email
+  address is enough. Slice 7 supplies department/default contact selection; removing current
+  consent schema/checks/staging/reservation/client and future F1 consent flow is separate work.
+  Keep provider/delivery gates and fiscal facts; preserve independent A448 verbatim.
+  [Source inventory and future failing cases](backlog/printers.md#remove-the-consent-step-from-emailed-receipts)
 
 - **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the log do. [Detail](backlog/printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
 

@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slices 4, 6 and 7, and slice 5 Part B, each planned
+  APPROVED 2026-10-07; remaining work is slices 4 and 7, slice 5 Part B and slice 6 Parts B/C, each planned
   then built without stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -14,7 +14,8 @@ their full text.
   a period, with last-order and leftover windows set by its signed end offset. Zones can be closed for part of
   their department's time; prep stations lose their hours and fallbacks; routing cells can name
   periods; a printer shared by stations prints one combined ticket; watchers become kitchen
-  screens and monitors on device profiles; receipts move to departments with translated text.
+  screens and monitors on device profiles; receipts gain department overrides/translated text with
+  live venue defaults.
   [Spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
   the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
   §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
@@ -24,10 +25,12 @@ their full text.
   screen; a kitchen display's screen has buttons; a monitor has none), with the decisions the
   revision added listed at its end.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
-  revised 2026-10-09 to the owner's receipt answers, in two pull requests: each department's
+  revised 2026-10-10 to the owner's later receipt overrides, in two pull requests: each department's
   receipt with translated subtitle and footer, then the department page's Receipt tab after
-  slice 6. Lane E's build follows slice 6 Part A before
-  slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
+  slice 6. Parts 3A and 6A have landed (#1469/#1488); Lane E's slice 7 build is open.
+  This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
+  A4 omits optional current address, and slice 7 adds no consent step. The separate core
+  delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
   requests that can both start now that slices 1, 2 and 3 Part A have landed: Part A — combined

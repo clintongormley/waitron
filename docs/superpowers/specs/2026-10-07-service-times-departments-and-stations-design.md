@@ -10,7 +10,10 @@
 > named-date and default-opening checks move to the retained Hours model and station-state
 > readers. See [slice 1 plan](../plans/2026-10-07-a366-slice-1-service-periods.md).
 
-> **2026-10-09 receipt revision:** the owner's 2026-10-08 ~22:30 answers 1–16 supersede
+> **2026-10-10 receipt overrides:** the completed 2026-10-09 ~10:10–10:15 answers in
+> Lane E `questions.md:1976–1985` supersede the earlier Lane B receipt answers: venue
+> logo/subtitle/footer remain live defaults; A4 omits optional current address; emailed receipts
+> have no consent step. Core consent removal is separate backlog work. These changes supersede
 > the receipt mock-up and earlier slice 7 defaults. Section 11 and the
 > [revised slice 7 plan](../plans/2026-10-08-a366-slice-7-receipts-per-department.md)
 > state the target contract. Slice 1 landed in #1460; receipt work remains unbuilt.
@@ -22,7 +25,8 @@
 > Empty zone hints contain only the inherited value. Receipt modes are auto/on_request
 > (Always/On request), with pre-live reset instead of converting obsolete modes. Cancel
 > precedes Save everywhere. Slice 3A landed in #1469 at
-> `87b46b024fcac68a6240949964768b9fbc7d4972`; 6A and then 7A remain pending in Lane E.
+> `87b46b024fcac68a6240949964768b9fbc7d4972`; 6A landed in #1488 at
+> `06772ee256dc58cc1de5af2074870cef7d0b9f87`. Slice 6 B/C and receipt build remain open.
 
 **Status:** owner decisions of 2026-10-07, from one brainstorm with mockups. The owner approved
 this written spec on 2026-10-07, including section 15's three defaults. Backlog item **A366**. Behaviour below is the target design, not a
@@ -38,8 +42,10 @@ with source pointers. The dated slice 6 plan inventory describes the newer base 
   §5's authored receipt fields, preview and top-block order, §6 (prep stations) and §7 (hours),
   except §7.1's public-holiday sources.
 - [Invoice PDF, email and office printing](2026-10-03-invoice-pdf-email-and-office-printing-design.md):
-  its venue-wide withdrawal-contact source is superseded by section 11's separate department/
-  default contact resolver. The accepted consent snapshot and other delivery rules remain.
+  section 11 replaces its planned venue-wide offer contact with department/default contact,
+  and the owner withdrew the product consent step. Existing core consent remains until
+  [the separate delivery rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).
+  This does not settle the independent A448 compliance question or change fiscal facts.
 - [Devices, menus and service zones](2026-10-04-devices-menus-and-service-zones-design.md): §2
   (menus and the department timetable) and the station and watcher bindings in §4.
 - [Product folders, menus that include menus, and prep station routing](2026-09-30-catalogue-menus-routing-design.md):
@@ -84,7 +90,8 @@ instead of three, and for configuration pages that are only about configuration.
   copy in another of the country's receipt languages (#1022). The receipt's subtitle and footer
   hold one text each (`packages/layouts/src/types.ts`).
   _(2026-10-09: this describes the pre-slice-7 shape. Section 11 replaces the authored fields
-  with department fields and per-language maps; the address switch stays venue-wide.)_
+  with department overrides/maps; global strings/logo stay as live defaults and the address
+  switch stays venue-wide. The 2026-10-10 revision in §11 is the current target.)_
 - **Local holidays are capped at two a year** (`holiday.local_limit`,
   `packages/venue-service/src/holidays.ts`), Spain's count of official local holidays per town.
   Nothing outside the opening-hours calendar reads holidays.
@@ -263,7 +270,8 @@ Nothing on them shows live state. Live controls are in section 10.
   plan", which opens the full-screen editor; a zone without tables shows "Add a floor plan". There
   is no separate "tonight" plan in this design.
 - **Receipt tab:** section 11; authored fields require `layout.configure`. The global address
-  switch, receipt language and sales description stay in Venue settings. Slice 7 Part A first
+  switch, live logo/subtitle/footer defaults, receipt language and sales description stay in
+  Venue settings. Slice 7 Part A first
   provides a department picker there; Part B moves the department editor into this tab.
 
 ### 9.2 Opening hours
@@ -354,72 +362,88 @@ the dashboard.
 
 ## 11. Receipts per department
 
-**Revised 2026-10-09 from the owner's answers of 2026-10-08 ~22:30.** You edit one
-department's authored receipt fields. Part A provides a Department picker in Venue settings →
-Receipts that chooses both what you edit and what you preview; global settings are below it.
-Part B puts the editor in the department's Receipt tab after slice 6 provides that page.
+**Owner overrides applied 2026-10-10.** The later Lane E answers override the earlier
+2026-10-08 receipt answers. You edit one department's overrides. Part A keeps a Department
+picker and preview in Venue settings → Receipts with independent global defaults below;
+Part B moves only the department editor into the landed slice 6 page's Receipt tab.
 
-- **Only logo, phone, email, subtitle and footer move to departments.** Logo and contact fields
-  are the same in every language. Trading name and its print switch keep their existing
-  department-policy ownership and are recorded on the sale; Print a receipt (always, on
-  request; auto/on_request), with the zones that differ, remains the service setting of section 6.
-- **Current authored fields, recorded department.** A print, reprint, copy, A4 invoice and till
-  receipt read that sale's recorded department's current fields, including when the department
-  has been disabled. Only the trading name and its switch are the sale's receipt-header snapshot.
-  A null department or absent header prints **no department authored fields**, with no default
-  department fallback or trading name. Legal identity/NIF remain; the **current venue address** follows the
-  **one global Print the address switch**. That switch stays in Venue settings.
-- **Exact top order on thermal, A4, preview and till:** logo, trading name, **subtitle**, legal
-  name, current address (global switch), phone, email, DUPLICADO, NIF. Absent optional fields
-  are omitted without reordering. Keep the fiscal QR prefix and mandatory filed full-invoice
-  particulars; the optional current address also follows this order on full invoices, while
-  their filed domicile remains separate and the global switch cannot hide it. Label the field
-  “Subtitle” / “Subtítulo”, with a placeholder saying it prints under the trading name.
-- **Subtitle and footer, written per language.** Use the installed pack's receipt languages
-  plus the current receipt language, with that language first; Spain offers Spanish, Catalan,
-  Galician and Basque, without adding English. Resolve each field separately: text in the
-  printed language → text in the venue's **CURRENT receipt language** → nothing. Blank means
-  unwritten. Never take a third language's text. The original/reprint keeps the filed language
-  even when the venue's receipt language has since changed.
-- **Languages are stacked, not tabs.** Each heading names the language and carries ⚠ when a
-  field there is missing but exists in another language, including a missing current-language
-  field. No warning when all optional text is empty; explain the warning once. A refusal
-  naming a language appears under that exact field and scrolls it into view, with the localized
-  form summary on its own line above the buttons. Translations remain optional.
-- **Independent preview language.** Its picker starts on the current receipt language and
-  changes only the preview. Preview uses the department draft, current fallback language and
-  global address-switch draft, with the same order and resolution as printing.
-- **Permissions and draft safety.** Require `layout.configure` wherever receipt fields are
-  edited. All saving forms use `draftScopeFor`, `saveActionState` and a save-handler early
-  return, with unsaved-change tests and #1422 reconnect coverage. Save stays quiet/disabled
-  until its draft changes. Switching departments negotiates that department's draft only;
-  global drafts survive, and late work cannot overwrite another department's draft. No disabled
-  default entry is needed for no-department printing; explicit disabled-department maintenance
-  links can still open that department.
-- **Consent has a separate contact fallback.** For invoice email delivery, a missing department
-  uses the location's designated default department's contact. Retain the watcher default:
-  missing/invalid department email also tries the default, and no valid default email means
-  no email offer. Email and optional valid phone come from the **same** chosen contact, with
-  provider availability still required. Offer and consent check share that resolver; accepted
-  consent records that contact and is not rewritten by later edits. This rule never supplies
-  authored fields to a no-department printed receipt.
-- **Sale answers, not boot.** Each fresh sale, replay and bill-payment invoice answer carries
-  its current resolved trim and separate global address presentation. Boot carries no
-  department authored fields; an empty trim clears a previous department's fields.
+- **Venue logo/subtitle/footer remain live defaults.** An empty department logo uses the current
+  venue logo and its existing rasters. Resolve each department text map using the printed
+  language, then the CURRENT saved receipt language, then the venue's one-string value, then
+  nothing. Whitespace-only department entries are empty; never take a third department language. Try both department
+  candidates before the venue default, so the global string cannot mask a department fallback.
+  Global strings retain verbatim storage/render meaning in every language, including their
+  current empty/whitespace handling; no global maps,
+  copy, backfill or reset. Field overrides are independent: clearing one restores inheritance
+  for that field without clearing others. Clearing the global logo removes only that default.
+- **Empty hints contain only the effective inherited value.** For each empty locale input use
+  the same resolution as printing/preview: current-language department value if it supplies
+  the field, otherwise the venue string. Do not add an inheritance prefix or position explanation.
+  An empty logo shows the inherited thumbnail without authoring its filename. Live hint/default
+  updates never dirty the department draft. This map-first precedence and the venue-only rule
+  below are implementation interpretations to include in the parent's FYI.
+- **Phone/email belong to the department without inheritance.** Logo and contact fields are
+  language-independent. A missing department email may select a default contact for delivery
+  under the separate rule below; it does not print that contact. Existing global phone/email
+  remain stored/API-readable for venue-only receipts and the current consent checker until
+  the separate core rewrite. Global defaults saves preserve them. Trading name and its switch
+  remain recorded department-policy facts; Print a receipt is section 6's auto/on_request policy.
+- **Current fields, recorded department.** Prints/reprints/copies/A4/till read the saved
+  department's current fields, including disabled departments. A null department or absent
+  header prints only live VENUE fields, including its logo/subtitle/footer/contact, with no
+  department/default-department text or trading name. It never reads the default department
+  for rendering. A non-null department with an empty/malformed row inherits only the named
+  defaults; it does not acquire venue phone/email or another department's brand.
+- **Exact top order:** logo, recorded trading name, subtitle, legal name, optional current
+  address on thermal/till, phone, email, DUPLICADO, NIF. Omit absent fields without reordering.
+  Thermal/till optional address follows the ONE venue-wide Print the address switch, including
+  thermal full invoices. A4 has a visible logo/subtitle in that order but NO optional current
+  address, even with missing/different filed domicile. Mandatory filed full-invoice domicile,
+  recipient and fiscal QR particulars remain. Pass the output surface explicitly; F1 alone
+  does not identify A4. Label the field “Subtitle” / “Subtítulo”.
+- **Translated department text.** Offer the pack's receipt languages plus current receipt
+  language first: Spain offers Spanish, Catalan, Galician and Basque, without adding English.
+  Original/reprint language stays the filed sales.locale; the fallback is the current saved
+  language, not an unsaved language draft. Stack headings and fields, never language tabs.
+  Warn with ⚠ only when a department language lacks a field another department language has;
+  inherited strings do not count as authored translations. All-empty maps show no warning.
+  A known locale refusal appears under that field, scrolls into view and adds the localized
+  bottom form summary. Translations remain optional.
+- **Preview and drafts.** The independent preview picker starts on the current receipt language.
+  Compose authored department draft plus separate global defaults/switch draft without writing
+  inherited values. Use the same field resolver/order as printing. Global logo/string/switch,
+  receipt-language and sales-description scopes stay independent of department selection.
+  Require layout.configure, draftScopeFor/saveActionState/early return, unsaved-change and
+  reconnect checks. Department switching negotiates only its draft; global drafts survive late
+  reads/saves. Explicit disabled-department maintenance remains available.
+- **Email contact, with no new consent step.** Giving the customer email address is sufficient
+  under the owner's product decision. Contact selection uses authoritative order context or
+  saved sale department; missing department or invalid/missing department email tries the
+  location's designated default, including disabled default. Email and optional valid phone
+  come from the SAME contact; no valid default email means no offer. Provider availability
+  remains required. Do not borrow venue contact for this rule or use it for printing.
+  Slice 7 supplies the independent contact selector, and drops planned consent-check sharing,
+  new contact-echo checks and accepted snapshot work. Existing APIs still require legacy stored
+  consent/global contact: leave schema/checker/client/staging/reservation unchanged here, without
+  fabricated evidence or a compatibility schema. Completing consent-free core delivery/F1 UI
+  belongs to [one backlog item](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts);
+  the independent A448 compliance entry stays verbatim, with no legal conclusion in this slice.
+- **Sale answers, not boot.** Fresh sale/replay/invoice-first/bill answers carry current composed
+  trim and separate global address presentation. Boot owns no receipt presentation. A clear
+  presentation replaces the previous receipt's fields; replay retains original fiscal facts.
 
-The taxpayer's legal name, tax number, current venue address, **global Print the address switch**,
-receipt language and description of what the business sells stay in Venue settings. Authored
-fields live in venue-service's `department_receipts`; media reads department rows for logo usage.
-Malformed imported optional fields and pictures are dropped defensively. Keep bounded logo
-reads, unchanged-picture reuse and the requirement for a printable picture at both paper widths
-when saving a logo. Bound optional receipt retrieval and contain recoverable automatic-print
-failures so they do not undo a sale, with real read/format/enqueue/transaction probes during
-implementation. This is no universal guarantee that a failed engine transaction can commit.
+Keep the taxpayer identity, address/switch, live default editor, receipt language and sales
+description in Venue settings. Keep tenant_receipts and its existing authored APIs/strings/pictures;
+add explicit overrides in venue-service's department_receipts. Media counts the global reference
+plus each explicit department reference, including disabled departments, without multiplying
+inherited uses. Global usage links to defaults; department links follow the current editor host.
 
-No old authored fields are carried over and no backfill or compatibility reader is added.
-The existing global address switch persists without a reset; department receipts start empty.
-The revised plan retains the existing global singleton for that switch and requires actual
-SQL/upgrade/foreign-key probes before making migration-runtime claims.
+Bound optional global/department JSON fields and rasters before materializing oversized values.
+Contain failures independently so one source's failure does not discard good fields from the
+other. Reuse valid old global pictures; require both valid widths only when saving an explicit
+logo. Probe read/format/enqueue/transaction failures and actual SQL/upgrade/FK behavior during
+implementation; this docs revision makes no runtime guarantee about engine failure. No consent,
+fiscal filing, tax/hash or golden-data change is authorized as inheritance.
 
 ## 12. What goes away
 
@@ -429,9 +453,10 @@ service style (the recorded order mode stays); single-department list bypass; ob
 never value; inheritance-prefix hints and labeled follow options; the tree table,
 "Ready for service" section and old department/zone tabs; the "?" help on Order number; the
 station fallback setting; the "Where is this made?" tester; watchers and the Tickets and Watchers tabs; the two-a-year local-holiday
-cap; Venue settings' authored logo, phone, email, single-string subtitle and footer, which become
-department fields (subtitle/footer per language); boot-authored receipt trim and the preview-only
-department picker. The venue-wide address switch remains. The earlier slice 7 plan's default
+cap; boot-owned receipt presentation and the preview-only department picker. Global logo,
+single-string subtitle/footer, authored APIs, stored contact and venue-wide address switch remain.
+Departments gain explicit overrides and text maps. Slice 7's planned consent-check sharing is
+withdrawn; existing core consent is retired only by its separate backlog work. The earlier slice 7 plan's default
 department print fallback, any-language third fallback, per-department address switch and
 language tabs are superseded design defaults, not behaviours claimed to have been implemented.
 
@@ -441,7 +466,7 @@ slice that changes a shipped table says "venue reset needed" in its pull request
 ## 13. Build order
 
 The numbered slices describe the product areas. Owner-approved lane order overrides the original
-serial order: slices 1 and 3A have landed; Lane E builds slice 6 Part A now, then slice 7.
+serial order: slices 1, 3A and 6A have landed; Lane E next builds slice 7 Part A.
 Slice 6 Parts B/C stay with Lane D after slice 2/A429 respectively. Active slices 2 and 5 have
 an explicit overlap waiver with 6A; whoever lands second reconciles source and regenerates journal
 clashes. No other-lane checkout edits. Item 7 retains the approved two-PR split:
@@ -461,8 +486,8 @@ clashes. No other-lane checkout edits. Item 7 retains the approved two-PR split:
    in the same words for both; the tree table and old tabs removed.
 7. **Receipts per department**, with translated subtitle and footer, in two PRs: Part A's
    standalone department editor and Part B's Department Receipt tab (depends on slice 6).
-   _(2026-10-09 lane order: slice 3A already landed #1469; BUILD proceeds with A366-6A, then
-   A366-7A. Do not repeat the landed slice 3A build or receipt STEP 0 documentation work.)_
+   _(2026-10-10: slice 3A landed #1469 and 6A #1488; owner-override docs revision is complete,
+   receipt build is open. Slice 6 B/C remain separate; do not repeat landed builds.)_
 
 ## 14. Later work, not in this design
 

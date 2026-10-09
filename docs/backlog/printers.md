@@ -3,6 +3,87 @@
 The open entries are listed in [the backlog](../backlog.md), under "Printers, the print agent and receipts". This file holds
 their full text.
 
+## Remove the consent step from emailed receipts
+
+**Open, owner answer 2026-10-09; source audit 2026-10-10 on main
+06772ee256dc58cc1de5af2074870cef7d0b9f87.** The owner said: “We don't need customer consent
+to send them an email; just giving us the email address is sufficient.” Remove the separate
+product consent step. This records a product decision, not a legal conclusion; keep the
+independent **A448** entry and its compliance evidence unchanged.
+
+Slice 7 owns the independent department/default contact selector, receipt presentation and live
+venue defaults. It drops its planned consent-check sharing and accepted-snapshot work. It does
+not remove current core consent, broaden F1/F2 eligibility, add a client delivery rollout or
+pretend an email request works without today's required data. Keep existing global contact
+readers until this rewrite; do not fill consent fields with made-up evidence, bypass the checker,
+or add a compatibility schema. The new contact selector is not yet the current staging API.
+
+### Current source inventory (read, not runtime verification)
+
+| Reader/writer or constraint | Current source | Future change to examine |
+| --- | --- | --- |
+| Consent type/export | `packages/db/src/schema/invoice-deliveries.ts:20`, `:50`; `packages/db/src/index.ts:291` | Remove statementVersion/language/recordedAt/personId/contactEmail/contactPhone consent contract; keep ordinary delivery recipient/operator metadata |
+| Staged order shape | `packages/db/src/schema/orders.ts:40`, `:99`; DB export `index.ts:73` | Remove required consent from StagedInvoiceDelivery email branch and persisted working_orders.invoice_delivery |
+| Email CHECK and shipped SQL | `schema/invoice-deliveries.ts:89–92`; `packages/db/drizzle/0116_invoice_delivery_foundation.sql:37`, `:64` | Email currently requires BOTH recipient and consent. Choose minimal fresh pre-live schema migration/reset separately, never edit shipped SQL or use a fake consent value |
+| Order transition SQL | `packages/db/drizzle/0117_bill_invoice_delivery_transition.sql:16`, `:34`, `:57`, `:78` | It compares invoice_delivery as a whole field; retain revision/placed-order restrictions when the payload changes |
+| Consent validation/creation | `apps/server/src/invoice-choice-delivery.ts:30–100` | Reads accepted=true/version, allowed language, provider availability and getReceipt global contact echoes; stamps server staff/time. Remove consent requirements/stamping, retain recipient/provider/F1 gates and use A5's department/default contact selection |
+| Invoice choice route and write | `apps/server/src/till-api.ts:1747–1787`; `working-order.ts:3478–3495` | Route carries delivery and provider/authenticated staff context; checker result is written under revision lock. Keep auth/action/zone/revision protections without consent |
+| Bill read response | `apps/server/src/parties.ts:38`, `:421`, `:467`, `:508` | Reads and returns whole staged invoiceDelivery, including consent today. Update returned contracts without leaking retired evidence |
+| Staged reservation and issuer fallback | `invoice-choice-delivery.ts:104–136`; `working-order.ts:5689`; `receipt-print.ts:219` | Copies staged payload and falls back to consent.personId for unattributed sale. Replace that fallback with an explicit authenticated operator source, preserve active/original/duplicate/idempotency behavior |
+| Reserved request and write | `apps/server/src/invoice-delivery.ts:16–23`, `:39–160` | EmailDeliveryRequest requires consent; insert normalizes consent.recordedAt. Remove dependency while retaining recipient/operator and reservation rules |
+| Retry writer | `invoice-delivery.ts:325–361`, especially `:350` | Copies stored consent into new generation. Keep recipient, designation, attempts/due times and report identity without copying retired evidence |
+| Whole-row delivery readers | `invoice-delivery.ts:181`, `:262` (claim/report), `invoice-print.ts:72` (receipt claim) | Read complete rows but do not inspect consent; verify changed row types without changing claim/print behavior |
+| Worker and transport | `invoice-email-worker.ts:64–109`; `invoice-email.ts:22–54`; `email-delivery.ts:39`; `boot.ts:1431`, `:1461–1473` | Worker selects full delivery and sends recipient+document, not consent; boot provider gate resolves SMTP/local capture. Preserve primary-only claims, retries, timeout/outcome handling and provider availability |
+| Global contact dependency | `packages/layouts/src/receipt-store.ts:43`; `apps/server/src/management-api.ts:1216`, `:1232`; global defaults editor | Current checker reads global phone/email. Retire that dependency only after the checker actually uses department/default contact; do not confuse this with logo/text inheritance |
+| Current till client | `apps/till/src/api/client.ts:2441` and invoice-recipient-dialog siblings | setOrderInvoiceChoice currently sends recipient/invoice type only. No email consent control found in current till source; future delivery UI must accept address without checkbox/version/contact echo |
+| Core table classification | `packages/db/src/classification.ts:137` | Delivery rows are state; preserve classifications and unrelated foreign keys/constraints. No new fiscal/append-only record is part of removing a UI step |
+
+All direct InvoiceEmailConsent/consent property matches at this base are covered by the schema,
+checker/staging, reservation and retry rows above. Whole-row reads and parties' staged read are
+listed because identifier searches alone miss them. Re-run the search on the implementation base.
+Tests that currently carry/assert this payload: `invoice-delivery.test.ts`, `invoice-print-api.test.ts`,
+`receipt-print.test.ts`, `unpaid-invoice-delivery.test.ts`, `till-api.receipt.test.ts`,
+`bill-payments-api.test.ts`, `bill-payments.test.ts`, `boot.invoice-delivery.test.ts`; also inspect
+`bill-payments.card.test.ts` staged-flow coverage and invoice-email worker tests in the boot suite.
+Keep delivery/fiscal behavioral assertions while deliberately retiring consent assertions.
+
+The manually parked **feat/invoice-delivery-part-2**, read-only at `80961deeb`, has a clean status
+at this audit. Its current invoice-recipient-dialog/client do not contain an email consent UI;
+its server retains the same checker and reservation/retry consent paths. This is a source
+inventory, not permission to edit, resume or land that branch. Reconcile its latest tree and
+planned delivery UI before the future rewrite; do not build the historical consent UI meanwhile.
+
+Prose audit paths: the 2026-10-03 invoice-PDF/email spec (owner-overrides note, Email it,
+metadata, delivery actions and advisor questions); its reconciled plan (owner decision 2,
+getReceipt/withdrawal-contact audit, Tasks 2/4/6, staged issuance and retry checkpoints);
+2026-10-03 full-invoices-at-till spec/plan; `docs/backlog/fiscal.md` A231d/A231p detail;
+`docs/backlog.md` A448; and A366 §11/slice 7 plan. Add dated supersession pointers for product
+flow in historical docs, preserving their research and independent questions. Unrelated card
+offline consent, remembered-login consent and workforce research are outside this inventory.
+
+### Future failing cases before the rewrite
+
+- A valid, authenticated eligible F1 email choice with recipient and revision but **no consent**
+  must stage; today's checker rejects delivery.consent. Malformed recipient, unavailable provider,
+  invalid/default-less contact, wrong action/zone or stale revision must still refuse.
+- An email reservation with valid recipient/operator and no consent must insert; today's
+  email CHECK requires consent. Claim/send/report/retry must preserve delivery identity and
+  recipient without requiring, creating or copying consent. No timestamp/person/contact may
+  masquerade as an acceptance event. Preserve original after failed/unknown and duplicate after sent.
+- A valid legacy-staged email must not derive operator attribution from consent.personId after
+  the shape is retired. Bill replies, replay and card/collection issuance must use the chosen
+  operator contract and stage/reserve once; choose that contract explicitly before implementation.
+- Entering an email and submitting the future F1 delivery UI must work without consent checkbox,
+  statement text/version, withdrawal-contact echo or separate acceptance action. Draft/reconnect/
+  late-refresh/idempotency tests still apply. Keep public F1 rollout gates and F2 email eligibility
+  unchanged until their own authorized rollout.
+- Editing venue defaults or department contact cannot create/rewrite consent evidence. Contact
+  selection and provider gates use slice 7's rule; null-sale printing stays venue-only. Preserve
+  mandatory filed domicile, tax totals, invoice numbering, hashes and golden fiscal tests UNEDITED.
+
+Run real route/store/provider tests during this later work. No product behavior, schema migration,
+email delivery or legal requirement was verified at runtime by this documentation audit.
+
 ## What the AppArmor profile (A129, #862; A134, #887) left open
 
 - **What the AppArmor profile (A129, #862; A134, #887) left open:**
