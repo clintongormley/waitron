@@ -1,934 +1,782 @@
 # Receipts per department, slice 7 — implementation plan (A366)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
-> (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
-> checkbox (`- [ ]`) syntax. Each task is test-first: write the failing behavioural test, run it,
-> watch it fail for the stated reason, then the minimal implementation.
+> **Revision 2026-10-09, A366-7A STEP 0.** This is a plan, not an implementation report.
+> The owner's answers 1–16 under **2026-10-08 ~22:30 OWNER going through the A366-7p decisions
+> IN DETAIL** in `/Users/clintongormley/waitron-campaign-b/questions.md:2143` govern every task.
+> They replace the earlier plan defaults and mock-up wherever those disagree.
 >
-> **Existing assertions.** The campaign queue's owner decision of 2026-10-05 governs: a check that
-> pins behaviour this plan removes (listed under "Behaviour this slice removes") is changed to check
-> the new behaviour at least as strictly, and listed in the pull request's "Changed test checks"
-> section with `file:line`, before and after. Anything else is a STOP. No golden huella,
-> `inmutabilidad` or fiscal filing test is touched by this plan; if one fails, STOP.
+> **Driver and checkpoints.** Implement routine work inline with `superpowers:executing-plans`.
+> Each A1–A13 task is one coherent green checkpoint: write meaningful failing behavioural tests,
+> run them and see the expected failure, implement, then run focused tests and affected types.
+> Do not turn each task into a whole-package coverage run or a separate review ceremony.
+> Keep receipts for changed assertions and complete each task's applicable LOOK once at its end.
 >
-> **Size.** Each task is sized for one implementer well under 100 tool calls. An implementer past
-> about 150 calls with the task unfinished stops at a passing or cleanly red point, commits, and
-> returns a handover: done, left, files, each check's state.
+> **Build gate.** Documentation overlap is explicitly waived for this revision. BUILD is separate:
+> wait for same-lane **A366-3A to land, then A366-6A, before A366-7A**. Do not generate migrations
+> alongside parked 3A. Re-ground this plan on those landings before implementation.
 >
-> **Every commit is green.** Each task ends with its package suites passing and every touched
-> package typechecking. The order is chosen for that: the new shape, table and routes are added
-> beside the old ones; the readers move one path at a time; the venue-wide row and its routes are
-> removed last.
->
-> **Base.** Written 2026-10-08 against `main` `ecba0d379` plus slice 1's branch
-> `feat/service-periods-slice-1` at commit **`1ed9857ca9dd6589dd280b5ac3df35cce27f5fc1`**, which
-> had not landed. Every `file:line` below was read at `main` `ecba0d379`. Slice 1's branch changed
-> no line of the receipt code this plan cites (a search of its diff for `receipt`, `tradingName`,
-> `trading_name`, `headerSubtitle`, `footerMessage`, `invoice_locales`, `tenant_receipts` and
-> `sale_polic` found no changed non-test line); it changes the menu setup in
-> `apps/server/src/till-api.receipt.test.ts` and `sale-till-source.receipt.test.ts`, and adds
-> venue-service migrations `0032` and `0033`. Before building, diff what changed after that commit:
-> `git diff 1ed9857ca <slice-1 merge sha> -- packages/module/src/module.ts packages/venue-service/src/classification.ts packages/venue-service/src/configuration-transfer.ts packages/venue-service/src/index.ts apps/server/src/till-api.ts apps/till/src/till-app.ts apps/till/src/api/client.ts apps/server/src/till-api.receipt.test.ts scripts/schema-constraints.test.ts scripts/migration-upgrade.test.ts`
-> and re-read any cited line that moved (the review of 2026-10-08 found the branch already at
-`124c4d773`, a descendant of `1ed9857ca`, with the same result for that search). Slices 2 to 6 may have landed by the time this is built;
-> section "What this slice needs from slices 2 to 6" names the files they share.
+> **Base inspected:** `main` **`7e4277dc4848ebdfbd7f6c7db84e0cb545141c74`**.
+> Slice 1 actually landed as **`685a6074b152eeb904a66cfac9f83e8f432196ab`** (#1460), rather than
+> the old inspected branch commit **`1ed9857ca9dd6589dd280b5ac3df35cce27f5fc1`**.
+> All current source pointers below refer to this main tree. They are read inventories or stated
+> inferences; no product tests, migrations, rendering or fault probes were run during STEP 0.
 
-**Goal:** each department prints its own receipt: its own logo, phone, email, "print the address"
-switch, and a subtitle and footer written once per language a receipt or a copy can print in. A
-language not yet written prints the receipt language's text. The legal name, tax number, address,
-receipt language and the description sent to the tax agency stay venue-wide in Venue settings.
+**Goal:** you can give each department its own logo, phone, email, subtitle and footer. Subtitle
+and footer are written per receipt language. Every receipt surface uses the sale's recorded
+department and its current authored fields; the trading name and its switch remain the sale's
+snapshot. A sale with a null department or no header prints **no department authored fields**.
+The legal identity and tax number remain, and the **current venue address** is governed by one
+**global Print the address switch**. Neither that switch nor the address moves to a department.
 
-**Architecture:** today the authored receipt text is one venue-wide JSON row, `tenant_receipts`
-(core set, `packages/db/src/schema/tenant-receipts.ts:18-26`), read live at every print and
-reprint (`getPrintedReceipt`, `apps/server/src/receipt-print.ts:162`). This slice adds a
-venue-service table, `department_receipts`, one row per department, with the same fields except
-that `headerSubtitle` and `footerMessage` become maps keyed by receipt-language tag (`es-ES`,
-`ca-ES`, …). A sale already records its department (`sale_receipt_headers.department_id`,
-`packages/venue-service/src/schema/service.ts:140-160`, written in the sale's transaction by
-`recordSaleReceiptHeader`, `packages/venue-service/src/operations.ts:614-627`); every print,
-reprint, copy, A4 page and the till's on-screen receipt reads THAT department's current text,
-resolved to the language being printed. A sale with no recorded department uses the location's
-default department (`departments.is_default`, `service.ts:37-44`). The new store's reads never throw:
-a print runs inside the sale's transaction, where a throw undoes the sale (decision 19). Validation stays a pure
-function in `@waitron/layouts`; the table and its store live in venue-service and are reached from
-`apps/server` through new venue-service seats, as `readSaleReceiptHeader` is
-(`packages/module/src/module.ts:439-453`). The dashboard's Venue settings → Receipts page edits one
-department's receipt at a time (Part A); the department page's Receipt tab (spec §9.1) takes that
-editor over once slice 6 has built the page (Part B).
+**Architecture:** add `department_receipts` to venue-service, one row per department, reached
+through `VenueServiceContribution` seats. Keep `tenant_receipts` as the existing singleton storage
+for the global address switch, with readers/writers narrowed to that setting; remove its authored
+field APIs and consumers in A13. Do not copy old authored fields into departments. Validation and
+receipt layout stay in layouts; browser-safe receipt types and text resolution live in shared.
+The dashboard imports those pure shared exports, not layouts' database-bearing index. Part A
+keeps a working department picker/editor in Venue settings → Receipts. Part B moves that editor
+into slice 6's Department → Receipt tab and leaves global settings in Venue settings.
 
-**Tech stack:** TypeScript, drizzle on SQLite (`node:sqlite`), Hono, Lit, Vitest (node and real
-Chromium browser projects), sharp for the logo rasters.
+**Spec:** [Service times, departments, zones and prep stations](../specs/2026-10-07-service-times-departments-and-stations-design.md),
+§2's dated receipt note, §6's print policy, §9.1, §11, §12 and §13 item 7. The revised §11 is the
+receipt contract. The old screen-4 mock-up is illustrative: its English choice, language tabs,
+address placement and any earlier plan fallback are superseded by the owner's answers.
 
-**Spec:** [Service times, departments, zones and prep stations](../specs/2026-10-07-service-times-departments-and-stations-design.md)
-§2 (the receipt bullet), §6 ("Print a receipt"), §9.1 (Receipt tab), §11, §12 ("Venue settings'
-receipt fields that move to departments"), §13 item 7. The approved mock-up is screen 4 of
-`all-screens-v3.html` in the brainstorm session (outside the tree); its text is quoted under
-"The mock-up" below. Backlog: A366.
+**Two PRs, FULL path:** Part A is A1–A13; Part B is B1–B3 after slice 6. Both follow the two
+run-it review path below. Part B's dependency remains even though the lane now also waits for
+6A before building Part A. A smaller Part B is acceptable if landed 6A already provides its host;
+re-read that host before choosing exact files.
 
-**Risk path:** FULL ceremony with two run-it reviews: a new table and a dropped one (migrations),
-a changed cross-package contract (`VenueServiceContribution`, `packages/module/src/module.ts`; the
-till's boot and sale answers), and what prints on a fiscal document — around, never inside, the
-mandated elements (`packages/layouts/src/types.ts:3-6`).
+**Optional reset statement for Part A:** “Optional venue reset: old authored receipt fields are
+not carried over; each department starts empty. The existing global Print the address setting
+persists without a reset.” No automatic reset is planned. No backfill, compatibility reader or data conversion
+is authorised. This plan retains the global table so a table-drop migration is not needed for
+that setting. Actual new SQL, upgrades and foreign-key writes still need the implementation
+probes in A2/A13; source reading is not evidence that they will succeed. Part B says “no venue
+reset needed” unless its eventual change establishes otherwise.
 
-**Venue reset: needed, optional.** Each pull request's first line reads **"venue reset needed —
-optional: the venue-wide receipt text (logo, slogan, phone, email, footer) is not carried over;
-without a reset each department starts with an empty receipt and is filled in again"** (Part B's
-first line says "no venue reset needed" unless its own migration says otherwise). Dropping
-`tenant_receipts` and creating `department_receipts` both succeed on a box with rows (no foreign
-key points at `tenant_receipts`: its only constraint is `tenant_receipts_singleton_ck`,
-`tenant-receipts.ts:25`; check again at Task A13 with the `REFERENCES` grep).
+## Current source inventory and re-grounding
 
----
+### Slice 1: compare the inspected branch with the landing
 
-## The mock-up (screen 4, "Department ▸ Receipt", approved 2026-10-07)
+STEP 0 ran `git rev-parse 685a6074b 1ed9857ca` and read this comparison:
 
-Quoted from the brainstorm file's text, because the file is outside the tree:
+```sh
+git diff 1ed9857ca9dd6589dd280b5ac3df35cce27f5fc1 685a6074b152eeb904a66cfac9f83e8f432196ab -- packages/module/src/module.ts packages/venue-service/src/classification.ts packages/venue-service/src/configuration-transfer.ts packages/venue-service/src/index.ts apps/server/src/till-api.ts apps/till/src/till-app.ts apps/till/src/api/client.ts apps/server/src/till-api.receipt.test.ts scripts/schema-constraints.test.ts scripts/migration-upgrade.test.ts
+```
 
-> Subtitle and footer are written in each language a receipt or a copy can print in. Trading name,
-> phone and email are the same in every language.
-> Departments › Restaurant and bar — tabs Settings · Zones · **Receipt**
-> Print a receipt [Always ▾]
-> **At the top** — Logo [Upload…] · Trading name [Bar Casa Delgado] · ☐ Print the trading name
-> above the legal name · Phone [+34 910 000 000] · Email [hola@casadelgado.es]
-> **Translated text** — Español (receipts) · English (copies) · Català (copies) ⚠
-> Subtitle [Tapas · Cócteles · Música] · Footer message [¡Gracias por su visita!]
-> ⚠ = not yet translated; that copy prints the Spanish text. Legal name, tax number and address:
-> Venue settings. Receipt language: Venue settings.
-> Preview [Español ▾] — [logo] / Bar Casa Delgado / Tapas · Cócteles · Música / Casa Delgado S.L.
-> / NIF B12345678 / Calle Mayor 1, Madrid / +34 910 000 000 / … / ¡Gracias por su visita!
+In that listed path set only `till-api.receipt.test.ts` and `till-app.ts` differ. The test gained
+recorded-name/content-translation cases: retain those behavioural assertions when moving its
+receipt fixtures. The till changes concern its icon and backlog pointers. A separate diff of
+`apps/server/src/sale-till-source.receipt.test.ts` and `packages/venue-service/drizzle` returned
+no changes between those two commits. These are Git comparisons, not runtime verification.
+Re-read current functions after the mandatory 3A/6A landings; regenerate new migrations from
+that tree, never hand-renumber snapshots or edit shipped SQL.
 
-Two things in it differ from the code and are settled by decisions 9 and 10: the mock offers
-English, which Spain's pack does not list as a receipt language
-(`packages/country-es/src/spain.ts:293`: `["es-ES", "ca-ES", "gl-ES", "eu-ES"]`); and the mock's
-preview puts the subtitle above the legal name, where today's receipt prints it below
-(`apps/server/src/receipt-document.ts:149-163`, pinned at `receipt-ticket.test.ts:2586-2640`).
+### Current receipt and consent call paths (source reads)
 
----
+| Path | Current pointer and what was read | Planned boundary |
+| --- | --- | --- |
+| Department recorded at issuance | `packages/venue-service/src/operations.ts:614` records a null department for a null zone; `:628` reads the saved department and trading-name snapshot; `packages/module/src/module.ts:467` already exposes `departmentId` | Use this saved id for rendering; no default-department print lookup |
+| Department list | `operations.ts:50` declares `Department`; `:58` explicitly selects fields and orders by `isDefault`, but does not return it; `packages/venue-service/src/routes.ts:594` serves the list | Add `isDefault` to projection/contracts for editor selection and consent lookup, not a new schema column |
+| Current authored store | `packages/layouts/src/receipt-store.ts:95` explicitly says a failed read still throws; `:101` selects the printed config; `:114` reuses stored rasters; `:133` writes a validated pair | Move authored storage; preserve defensive field/picture handling and implement bounded optional-read containment |
+| Thermal preparation | `apps/server/src/receipt-print.ts:145` builds bytes, `:162` reads live authored fields, `:163` reads address, `:164` reads saved header | Resolve department trim separately from the current global address |
+| Automatic/original/copy jobs | `receipt-print.ts:202` automatic enqueue; `:257` reprint; `:271` copy; `:341` original status; `:392` explicit original also enrols invoice delivery | Keep policy, printer/profile, original/copy and delivery semantics; contain optional receipt failures |
+| Shared top block | `apps/server/src/receipt-document.ts:149` logo, `:150` trading name, `:154` legal name, `:155` subtitle, `:156` address; `:164` full-invoice filed domicile | Move subtitle before legal name; preserve the separate mandatory F1 domicile |
+| Exact thermal assertion | `apps/server/src/receipt-ticket.test.ts:2586`, exact list at `:2630`, both paper widths | Deliberately reverse legal-name/subtitle positions, keeping QR, centring and every other assertion |
+| A4 data/layout/PDF | `apps/server/src/invoice-document.ts:91` reads live receipt; `invoice-page.ts:20` permits text/QR only and `:80` skips logo; `invoice-pdf.ts:20` renders text/QR | Department trim plus bounded logo rendering on A4, sharing top-block order |
+| Consent check | `apps/server/src/invoice-choice-delivery.ts:30` checks staged delivery; `:78` uses `getReceipt`, `:85` compares email and phone; `:105` reserves the staged choice | Resolve the order's contact with its own default rule; preserve the recorded consent payload |
+| Consent caller/gates | `apps/server/src/working-order.ts:3468` is the checked-delivery call; `till-api.ts:1717` gates invoice choice, `:1736` obtains provider availability; `boot.ts:1430` supplies it | Pass authoritative order context, never a caller-supplied department; share contact selection with any offer |
+| Sale/replay answers | `apps/server/src/till-sale.ts:203` result shape; `:626` settled replay; new-ticket constructors `:829`, `:1364`, `:1514` | Every answer with an invoice carries freshly resolved trim and global address presentation |
+| Bill payment answers | `apps/server/src/bill-payments.ts:741` makes its own ticket; `:922` uses it or `readSettledTicket` | Cover both branches, including a previously issued invoice |
+| Till boot/view | `apps/server/src/till-api.ts:1182` reads boot receipt; `:1234` returns it; till `till-app.ts:2281` saves it, `:8612` passes it; `screens/till-ticket-view.ts:530` renders its logo and `:545` legal name before subtitle | No department authored fields from boot; view uses the current answer's presentation |
+| Address | `apps/server/src/venue-address.ts:31` applies `printAddress`; `:37` reads current address; `:46` reads it unconditionally | Global setting separate from trim; no new sale address snapshot |
+| Management/preview | `management-api.ts:1229` / `:1245` current GET/PUT; `:1268` reuses pictures; `receipt-preview-api.ts:191` preview, inactive-department check `:215` | New department routes and separately validated global settings; identical preview semantics |
+| Dashboard drafts | `apps/dashboard/src/screens/receipts-screen.ts:220`, `:237`, `:257` draft scopes; `:274` save state; `:371` connect, `:379` dispose/reset | Carry A331 to every new scope and cover reconnect (#1422) |
+| Browser queries/types | `apps/dashboard/src/api/client.ts:2585`, `:2605`, `:2612`, `:2626`; live query `api/live-queries.ts:326`; till client `:123`, `:837` | Replace authored venue read/query; retain a distinct global-settings query |
+| Media | `packages/media/src/images.ts:91` usage type, `:230` tenant usage, `:659` count; `module.ts:30` dependencies; dashboard `image-library.ts:32`, `:44`, `live-queries.ts:11` | Read department rows; each use names/links its department |
+| Existing global row/guard | `packages/db/src/schema/tenant-receipts.ts:18` plain JSON/singleton; core transfer `configuration-transfer.ts:63`; `scripts/schema-constraints.test.ts:628` | Retain the table, classification, transfer and singleton assertion for the global switch |
 
-## What this slice needs from slices 2 to 6
+The source search for `invoiceEmailAvailable`, `checkedInvoiceChoiceDelivery`, `contactEmail`,
+`contactPhone` and `emailAvailable` in non-test server/till files found the staged check and
+provider callback, but no current till contact-offer UI. That is an inventory, not proof about
+all runtime consumers. A5 supplies one shared contact resolver to the check and the offer
+contract without building A231's later F1 customer UI or changing its rollout gates.
 
-### 1. Every file this slice changes
+### Read-only overlap audit: slices 2/3/5
 
-**Part A (Tasks A1–A13).**
+Input: `/Users/clintongormley/waitron-campaign-e/receipts/a366-7a-step0/orientation.json`.
+Read-only `git rev-parse HEAD`, `git status --short` and diff hunks against the inspected main
+were also read in the three named worktrees. Do not edit, reset, install or run tests there.
 
-- `packages/shared/src/receipt-text.ts` (new) and its test, `packages/shared/src/index.ts`
-- `packages/layouts/src/`: `types.ts`, `validate.ts` and its test, `errors.ts` and its test,
-  `index.ts` and its test; `receipt-store.ts` and its test
-  (deleted in A13), `defaults.ts`
-- `packages/venue-service/src/`: `schema/receipts.ts` (new), `schema/index.ts`,
-  `department-receipts.ts` (new) and its test, `classification.ts` and its test,
-  `configuration-transfer.ts` and its test, `service.ts`, `index.ts`, `migrations.test.ts`,
-  `routes.ts` (the `departments-and-zones` answer gains `isDefault`, `:584`) and its test;
-  `drizzle/` (one generated migration)
-- `packages/module/src/module.ts` (`VenueServiceContribution`)
-- `packages/db/src/`: `schema/tenant-receipts.ts` (deleted), `schema/index.ts`, `index.ts:146`,
-  `classification.ts:117` and its test, `configuration-transfer.ts:63`; `drizzle/` (one generated
-  migration)
-- `packages/media/src/images.ts` (`:91-92`, `:230-233`, `:267`, `:659-665`) and its test,
-  `dashboard/client.ts:40`, `dashboard/image-library.ts:32`, `:44` and its test,
-  `dashboard/live-queries.ts:11`, `dashboard/strings.ts` (`image.receipt_logo`), `module.ts:30`
-  (`requires`, decision 5); `packages/media/package.json` (a dependency on `@waitron/venue-service`)
-- `apps/server/src/`: `management-api.ts` (`:1228-1285`), `receipt-logo.ts`, `receipt-print.ts`
-  (`:145-178`), `receipt-document.ts` (`:21-26`), `till-sale.ts` (`:203`, `:626-692`, `:829`,
-  `:1364`, `:1514`), `bill-payments.ts` (`:741`, `:922-942`), `till-api.ts` (`:1182-1183`,
-  `:1226-1230`), `invoice-document.ts` (`:91-92`), `invoice-choice-delivery.ts` (`:30-101`),
-  `working-order.ts` (`:3436`, the one call of `checkedInvoiceChoiceDelivery`),
-  `receipt-preview-api.ts` (`:191-309`), `sample-receipt.ts`, `venue-address.ts`,
-  `testing/full-invoice-fixture.ts`, `configuration-import.test.ts` and
-  `testing/fixtures/configuration-v1-before-printing-retirement.json:248`, and the tests listed in
-  each task. The server needs no live-source change: its resource names come from the
-  classification lists (`packages/venue-service/src/classification.ts:43-44`,
-  `apps/server/src/live-resources.ts`)
-- `apps/till/src/`: `layout.ts:10-19`, `api/client.ts` (`:95`, `:121-123`, `:835`),
-  `till-app.ts` (`:1910`, `:2243`, `:8523`), `screens/till-ticket-view.ts` (`:461`, `:527-560`,
-  `:685-689`), and their tests
-- `apps/dashboard/src/`: `api/client.ts` (`:477-490`, `:2567-2602`), `api/live-queries.ts:316`,
-  `screens/receipts-screen.ts` and its eight test files, `dashboard-app.ts:1676-1690`,
-  `dashboard-app.venue-settings-unsaved.test.ts` (`:409`, `:498`), `i18n/strings.ts` (`:339-384`,
-  `:899-900`, Spanish `:2783-2829`, `:3351-3352`), `i18n/codes.ts:445-456`,
-  `api/client-routes.test.ts`, `api/client.test.ts`, and the app tests that stub `getReceipt`:
-  `dashboard-app.a11y.test.ts:77`, `dashboard-app.test.ts:134`,
-  `dashboard-app.unsaved-changes.test.ts:897`, `dashboard-app.settings-panels.test.ts:100`,
-  `screens/receipts-screen.location.test.ts:50`, `content-languages-screen.test.ts` and its
-  `.a11y.test.ts`, `api/live-queries.test.ts`
-- `scripts/schema-constraints.test.ts:633`, `scripts/migration-upgrade.test.ts`
-- `docs/developers/design-system.md` (any sentence that describes the Receipts page as
-  venue-wide or its department picker as a preview choice; at 2026-10-08 the page is named at
-  `:395`, `:1634`, `:1850`, `:1855`, `:2590`, `:2602`, `:2897`, `:2903`, `:3133` and `:3137`, none of
-  which lists its fields; `:1850` describes "Preview department changes"), `docs/backlog.md`
+| Slice/worktree | Head read in STEP 0 | Relevant overlaps from orientation and current diff |
+| --- | --- | --- |
+| `waitron-feat-service-periods-slice-2` | `30056a2ccf6f1b2779b31a7141b43c6f91c11d19` | `module.ts`, venue-service classification/transfer/exports/routes/operations/service/schema/journal/migration tests, server till API/working-order, till client/app, schema guard, backlog/design-system. Current working tree has additional edits, including transfer/routes/exports. Diff hunks read include zone/service pricing and journal `0035_tough_prodigy` |
+| `waitron-feat-service-periods-slice-3-station-controls` | `8a381614961aac1912177c49127d214c38723976` | Module seats, venue-service classification/exports/routes/operations/service/schema/journal/migration tests, server till API/working-order, till client/app, schema guard, backlog/design-system. Journal names `0035_station_destinations_and_period_extensions` and `0036_station_destination_not_self` |
+| `waitron-feat-service-periods-slice-5-monitors` | `0d3b07d919dbe6e4b8b3e6a07793bd69de219c90` | Module seats, venue-service classification/transfer/exports/service/schema/journal/migration tests, core classification/schema, server management/till API/working-order/receipt-print test, till layout/client/app, dashboard live queries/strings/codes, upgrade/schema guards. Receipt-print test removes a device's old station binding; preserve its drawer assertions |
 
-**Part B (Tasks B1–B3, outline only).** The department page slice 6 builds (file unknown today;
-`packages/venue-service/src/dashboard/venue-operations-screen.ts` is today's page),
-`packages/dashboard-kit/src/contract.ts`, `apps/dashboard/src/dashboard-app.ts`,
-`apps/dashboard/src/screens/receipts-screen.ts`, `packages/media/src/dashboard/image-library.ts`,
-venue-service dashboard strings.
+The complete shared-path sets are in the STEP 0 writer report. Different inspected hunks suggest
+integration work, not a guarantee of conflict-free rebasing. The migration journals overlap.
+The docs waiver permits this revision; it does not permit concurrent BUILD. After 3A then 6A
+land, inspect every changed shared path (and any landed 2/4/5 work), integrate their contracts,
+and generate against the landed journal. Part B requires the actual slice 6 department host.
 
-### 2. Does this slice need slice 2, 3, 4, 5 or 6?
+## Decisions 1–20 (owner answers applied)
 
-| Slice | What it builds (spec) | Needed by this slice? | What was checked |
-| --- | --- | --- | --- |
-| 2 | Zone closed times, refusing new orders in a closed zone, named days, real weeks, the Calendar (§6 "Closed times", §7, §9.2, §13 item 2) | **Believed independent.** | Its plan lists receipts as out of scope (`docs/superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md:70-71`). A receipt's department comes from the sale's zone at issuance (`recordSaleReceiptHeader`, `operations.ts:614-627`, through `resolveSalePolicy`, `:571-612`); nothing in §6–§7 changes a zone's department or the sale paths that call it. |
-| 3 | Manager extensions; station "Close for today" / "Open for today" on the till and kitchen display (§5, §8, §10, §13 item 3) | **Believed independent.** | Nothing in §5's extension or §10's controls prints a receipt. Both change `apps/till/src/till-app.ts` and `apps/server/src/till-api.ts` in different areas (this slice: the boot answer's `receipt` and the ticket view's input). |
-| 4 | Station hours and fallbacks removed; period choices in routing cells; combined kitchen tickets on shared printers; Stations page slimmed (§8, §9.3, §13 item 4) | **Believed independent.** | §8's combined tickets are kitchen tickets (`apps/server/src/kitchen-print.ts`), a different print path from the receipt (`receipt-print.ts`). Shares only `packages/module/src/module.ts` and venue-service's classification, transfer list and migration journal. |
-| 5 | Monitors; watchers retired (§9.4, §13 item 5) | **Believed independent.** | Its plan (`2026-10-08-a366-slice-5-monitors.md`) changes no receipt content; it edits a `devices` insert in `apps/server/src/receipt-print.test.ts:1437` (its Task A10b) and shares `module.ts`, venue-service's classification, transfer list, `index.ts` and journal, `till-api.ts`, `till-app.ts` and `apps/till/src/api/client.ts`. |
-| 6 | Departments: the list, Settings and Zones tabs, "How orders start", service settings in the same words for department and zone; the tree table and old tabs removed (§6, §9.1, §13 item 6) | **Part A: believed independent. Part B: needs slice 6.** | §9.1 puts the Receipt tab on the department page slice 6 builds ("Receipt tab: section 11"), and §11's first line ("Print a receipt … with the zones that differ") is the §6 service setting slice 6 restates "in the same words for both". Part A changes no file of today's Departments page: its "Preview" link to `/manage/venue-settings/view/receipts?departmentId=<id>` (`venue-operations-screen.ts:1181-1184`) already opens the department Part A's Receipts page edits. No slice 6 plan exists, so Part B's tasks are outlined without file detail. |
+1. **Two PRs.** Part A builds the standalone department editor; Part B integrates the Department
+   Receipt tab. Neither part may bypass the 3A → 6A → 7A BUILD order. Part B depends on slice 6.
+2. **Data ownership.** `department_receipts` belongs to venue-service: `department_id` primary
+   key/FK to `departments.id`, `receipt` plain JSON, `logo_rasters` nullable JSON, `updated_at`.
+   Use the shared column vocabulary, classify it `state`, export it in that module's configuration
+   transfer with a declared id reference. No row means empty authored fields. Its JSON holds
+   only logo/phone/email/subtitle/footer, never `printAddress`, trading name or legal identity.
+   The existing core singleton holds only the global switch in the new API/read contract.
+3. **Current authored fields on reprints.** Read the recorded department's current row for every
+   print, copy, reprint, A4 and on-screen answer. Keep the recorded trading name and
+   `printTradingName`. Do not snapshot new authored fields or rewrite filed facts. Preparing a
+   new reprint/copy differs from retrying transport of an existing failed job: the latter keeps
+   that job's bytes/history (`receipt-print.ts:406`), rather than rewriting the queued document.
+4. **No-department rendering.** A null `departmentId` or absent sale header resolves to `{}` and
+   no logo. Never query a default department on this rendering path. Legal identity/NIF still
+   print; the current address prints according to the global switch. A non-null recorded
+   department may be disabled: its current row still applies. Missing/invalid optional data
+   yields empty fields, not another department's brand. A null-department header must not show
+   a trading name either, even if inconsistent imported header data contains one; leave the
+   recorded row unchanged and render venue identity only in that block.
+5. **Media ownership.** Media reads `department_receipts` directly, adds the workspace dependency
+   and descriptor `requires` for venue-service, and names each department in usage results.
+   Re-run the workspace-cycle/module dependency guards during implementation; this plan makes
+   no executed claim that the proposed dependency is acyclic. Count disabled departments too,
+   because their receipts remain live on reprints. Part A links to its picker; Part B links to
+   the Department Receipt tab.
+6. **Allowed languages.** Installed pack receipt choices plus the current venue receipt language,
+   deduplicated with that language first. Spain: `es-ES`, `ca-ES`, `gl-ES`, `eu-ES`
+   (`packages/country-es/src/spain.ts:293`, `apps/server/src/venue-locale.ts:80`). No automatic
+   English or content-language list. Unknown keys are refused without echoing arbitrary keys.
+7. **Text resolution has exactly two candidates.** For each field separately: nonblank text in
+   the printed language → nonblank text in the **CURRENT venue receipt language** → nothing.
+   Whitespace-only means unwritten. Never take text from a third language. Originals/reprints
+   retain the filed `sales.locale`; that differs from the current fallback language after a
+   venue change. If neither candidate has a footer, another language's footer stays unprinted.
+8. **Warning per language.** Put ⚠ beside a language heading when that language lacks a subtitle
+   or footer another language has. Include the current receipt language. No warning when all
+   optional texts are empty. This warning does not make translations mandatory.
+9. **Mock language labels.** Label the current language “(receipts)” and others “(copies)”. Use
+   decision 6's choices; the mock's English is not an added language.
+10. **Exact top order.** Logo → recorded trading name (if enabled) → subtitle → legal name →
+    current address (global switch) → phone → email → DUPLICADO (when applicable) → NIF.
+    Omit absent optional elements without reordering the rest. Thermal, A4, preview and till
+    match. The fiscal QR/VERI*FACTU prefix and filed F1 recipient/issuer particulars remain
+    separately mandated; the global switch never suppresses a mandatory filed domicile. Apply
+    the optional current-address block to F1 too, rather than retaining the current suppression
+    at `receipt-document.ts:156`; keep the filed domicile separately even if its text matches.
+11. **One global address switch.** `VenueReceiptSettings = { printAddress?: boolean }`; absent
+    means show the current address, `false` hides the optional venue address. Keep it in Venue
+    settings and the existing global row. Explicit null, numbers, strings and department-level
+    `printAddress` are refused. Only logo, phone, email, subtitle and footer move.
+12. **Subtitle wording.** “Subtitle” / “Subtítulo”, with a placeholder explaining that it prints
+    under the trading name, above the legal name. Use shared field primitives and semantic names.
+13. **Permission.** Department receipt reads/writes/previews require `layout.configure`, wherever
+    mounted. Accept an explicit disabled department of this location for maintenance/reprints;
+    refuse unknown/other-location ids. The Department page keeps its existing management gate;
+    its Receipt tab also requires this permission. Global switch edits use the same permission.
+14. **Part A picker.** “Department” selects both edit and preview context, above department fields;
+    global switch, receipt language and sales description are below. Normally list active
+    departments; select the active default, else the first active. Do not add a disabled default
+    solely for missing-sale fallback. An explicit disabled-department URL/media link remains
+    editable with a disabled label; that maintenance reason is separate. A department read/list
+    failure does not disable loaded global settings. Changing departments negotiates only that
+    department's draft; preserve global drafts and isolate late saves/reads.
+15. **Independent preview language.** Starts at the current receipt language; changing it changes
+    neither the saved receipt language nor an authored draft. Preview gets that printed language
+    and the current fallback language explicitly. Use POST with the bounded draft payload (A6),
+    rather than making URL size an unmeasured guarantee about GET. Preview includes the unsaved
+    global switch and matches the renderer.
+16. **Stacked translations.** All languages visible one after another; no language tabs. Each
+    heading names the language and its warning; explain the warning once. Names stay
+    `headerSubtitle-<tag>` / `footerMessage-<tag>`. A refusal naming field+language appears
+    under that exact field, scrolls it into view and adds the localized bottom summary above
+    the buttons. It does not open/switch a language tab.
+17. **Separate consent contact resolver.** Determine the order's department from authoritative
+    venue-service order/zone context; for a completed-sale offer use its saved department.
+    Missing department uses the location's `isDefault` department **for consent only**.
+    Watcher default retained: missing/invalid department email also tries that default; if the
+    default lacks a valid email, no email offer and `invoice_delivery.email_unavailable` on
+    attempted selection. Take optional valid phone from the SAME selected contact, never mix
+    departments. A disabled default remains eligible as the designated contact; it need not be
+    an automatic editor choice. Provider availability is an additional gate. Check the same
+    chosen email/phone as the offer, and store the accepted consent snapshot. Later text edits
+    do not rewrite recorded consent; stale echoed contact is refused for a new selection.
+18. **Each till answer carries its own presentation.** No boot-authored department fields.
+    Fresh sale, replay, invoice-first and bill-payment answers with an invoice carry
+    `receiptTrim` plus separate current address/global setting. The switch is not in trim.
+    Read current trim on replay; retain filed language/identity/trading-name facts. Empty
+    trim clears the previous department's logo/text. Do not fill a missing invoice from boot.
+19. **Defensive, bounded reads and failure containment.** Imported optional rows can be malformed;
+    bad fields/maps/entries/rasters are dropped, preserving good fields where possible.
+    Optional authored read failures are contained at the receipt-read boundary and return
+    empty trim/no picture with a bounded diagnostic. This is not a promise that every database
+    read, failed transaction or commit can succeed under engine failure. Follow the explicit
+    boundaries/probes below so a recoverable optional print failure does not undo the sale.
+20. **Existing picture rules.** Unchanged logo reuses its stored valid 58/80 mm pair. A new logo
+    is written only with both valid pictures. Clearing logo clears pictures. Decode only bounded
+    dimensions/base64 lengths as today's store does; render a changed image outside the write
+    transaction. Bad pictures do not cause an imported row to throw during optional rendering.
 
-**Conclusion.** Part A (Tasks A1–A13) is believed independent of slices 2 to 6 and can be built as
-soon as slice 1 lands (it is believed independent of slice 1 too, by the diff search under
-"Base"; waiting for slice 1 avoids a venue-service migration-number clash and re-basing the two
-receipt tests slice 1 rewrites). Part B (Tasks B1–B3) needs slice 6's department page and must not
-start before slice 6 lands.
+## Types, validation and failure boundaries
 
-### 3. Files shared with slices 2 to 6 (same files, different areas)
-
-- **Slice 1 (unlanded):** `packages/module/src/module.ts`, `packages/venue-service/src/classification.ts`,
-  `configuration-transfer.ts`, `apps/server/src/till-api.ts`, `apps/till/src/till-app.ts`,
-  `apps/till/src/api/client.ts`, `apps/server/src/till-api.receipt.test.ts` (menu setup),
-  `scripts/schema-constraints.test.ts`, `scripts/migration-upgrade.test.ts`, the venue-service
-  journal.
-- **Slice 2:** venue-service `classification.ts`, `configuration-transfer.ts`, `index.ts`,
-  `migrations.test.ts`, the journal, `packages/module/src/module.ts`, `scripts/schema-constraints.test.ts`,
-  `scripts/migration-upgrade.test.ts`, and `apps/server/src/working-order.ts`, `till-sale.ts`,
-  `till-api.ts`, `apps/till/src/till-app.ts` (its plan's task file lists, around its lines
-  697-707 and 772-799). Different functions: slice 2's refuse new orders in a closed zone.
-- **Slice 3:** `apps/till/src/till-app.ts`, `apps/server/src/till-api.ts` (inferred from §10).
-- **Slice 4:** `packages/module/src/module.ts`, venue-service classification, transfer list and
-  journal (inferred from §8).
-- **Slice 5:** as in the table; also `apps/server/src/working-order.ts`,
-  `scripts/schema-constraints.test.ts` and `scripts/migration-upgrade.test.ts`.
-- **Slice 6:** today's `venue-operations-screen.ts` (the "Preview" link Part A leaves alone; slice 6
-  is expected to remove or move it), the department sale-policy routes
-  (`packages/venue-service/src/routes.ts:723-766`, `:852-889`), venue-service dashboard strings.
-
-A drizzle migration-number clash in any shared journal is repaired by regeneration, never by hand
-(CLAUDE.md §3).
-
----
-
-## Decisions this plan makes that the spec does not
-
-Each has the default this plan builds; the owner may override any. **Decision 1 departs from the
-approved spec's build order**; the rest fill gaps it leaves.
-
-1. **Departs from §13 ("each slice is its own plan and pull request, in this order"): two pull
-   requests, the first buildable before slices 2–6.** DEFAULT: Part A (Tasks A1–A13) is its own
-   pull request, buildable as soon as slice 1 lands; Part B (Tasks B1–B3) is a second pull request
-   after slice 6 lands. Why: everything but the Receipt tab's place on the department page is
-   independent of slices 2–6, and Part A leaves a working editor (the Venue settings → Receipts page,
-   one department at a time) for Part B to move. If slice 6's plan chooses to build the Receipt tab
-   itself, Part B shrinks to what slice 6 leaves.
-2. **Where the department's receipt is stored: a venue-service table.** DEFAULT:
-   `department_receipts` (venue-service set): `department_id` primary key and foreign key to
-   `departments.id`; `receipt` (JSON: `logo?`, `phone?`, `email?`, `printAddress?`,
-   `headerSubtitle?` and `footerMessage?` each a map of receipt-language tag to text); `logo_rasters`
-   (JSON, nullable: one raster per paper width, as `tenant_receipts` keeps inside its JSON today,
-   `types.ts:18-26`); `updated_at`. Classified `state`; in venue-service's configuration transfer
-   with `department_id` carried as `department_sale_policies.department_id` is
-   (`packages/venue-service/src/configuration-transfer.ts:608`). No row means an empty receipt, as no
-   `tenant_receipts` row means `DEFAULT_RECEIPT` today (`packages/layouts/src/defaults.ts:3`).
-   Considered and rejected: keeping the rows in core keyed by `department_id`. A foreign key from a
-   core table into venue-service's `departments` would make the core set name venue-service in its
-   `requires` (`packages/composition/src/modules.ts:86-87`: "`requires` must name every set whose
-   table this set's SQL `REFERENCES`"), and every module builds on core; without the key the
-   column breaks CLAUDE.md §3's rule that an id column is a foreign key. (Inferred from those
-   rules; not tried.)
-3. **A sale's receipt reads its department's CURRENT text, as today's reads the venue's current
-   text.** DEFAULT: the department is the one the sale recorded (`sale_receipt_headers.department_id`);
-   the text is read live at every print, reprint, copy, A4 page and on-screen view, exactly as
-   `getPrintedReceipt` is today (`receipt-print.ts:162`; pinned by `receipt-print.test.ts:2162`
-   "reprints with the trim saved since, as it does the slogan", and
-   `till-api.receipt.test.ts:2215`). The trading name and its switch stay the sale's snapshot
-   (`receipt-print.test.ts:1873`). Nothing new is snapshotted per sale.
-4. **A sale with no recorded department prints the default department's receipt.** A sale recorded
-   with no zone stores `department_id` null (`operations.ts:620-626`), and a sale with no header row
-   reads `null` (`readSaleReceiptHeader`, `:629-639`). Which sale paths reach either is not traced
-   here; the rule is a safe default for both. DEFAULT: both use the location's department marked
-   `is_default` (one per location, `departments_one_default_per_location_key`, `service.ts:42-44`),
-   active or not — a disabled default can exist, because `deactivateDepartment` refuses only the
-   last active department and does not read `is_default` (`operations.ts:269-275`). So the
-   department receipt routes accept an inactive department of this location (decision 13), and the
-   Receipts page lists the default department even when it is disabled, marked "(disabled)"
-   (decision 14). If the location has no default department, the receipt prints no authored text.
-5. **Media counts a department's logo by reading `department_receipts` directly.** DEFAULT:
-   `packages/media` adds a dependency on `@waitron/venue-service` and reads the table as it already
-   reads catalogue's (`packages/media/src/images.ts:200-233`); measured 2026-10-08 that no package
-   in `@waitron/venue-service`'s dependency closure depends on `@waitron/media` (a script over every
-   `package.json`), so no loop forms — the implementer re-runs `scripts/workspace-cycles.test.ts`.
-   The usage becomes `{ kind: "receipt"; departmentId; departmentName }`, and the image library's
-   link opens that department (`/manage/venue-settings/view/receipts?departmentId=<id>` in Part A).
-   Media's descriptor names catalogue in `requires` (`packages/media/src/module.ts:30`); it names
-   venue-service too, so the composition never enables media without the table it reads.
-6. **The languages a department writes are the venue's receipt languages.** DEFAULT: the
-   receipt-language choices of the installed country pack (`readVenueReceiptLanguageRules(...).choices`,
-   `apps/server/src/venue-locale.ts:80-87`; Spain `es-ES`, `ca-ES`, `gl-ES`, `eu-ES`), plus the
-   venue's current receipt language if it is not among them, the receipt language first. A key
-   outside that list is refused `receipt.invalid` with `reason: "language_unknown"`, without naming
-   the key (see Global constraints). These are the languages a copy can print in (`till-sale.ts:704-712`), so "each
-   language a receipt or a copy can print in" (§11) is this list.
-7. **Which text prints for a language.** DEFAULT, for the subtitle and the footer separately: the
-   text written for the language being printed; if that is blank or missing, the text written for
-   the venue's CURRENT receipt language (first of `locations.invoice_locales`); if that is blank
-   too, the first text written in decision 6's order; otherwise nothing. The second step is §11's
-   "its copy prints the receipt language's text". The third keeps a receipt from losing its text
-   when the venue changes its receipt language to one nobody has written yet (Spanish written,
-   receipt language changed to Catalan: Catalan receipts print the Spanish text until Catalan is
-   written). An original or reprint prints in the sale's filed language (`sales.locale`).
-8. **"Not yet translated" is per language.** DEFAULT: a language is marked ⚠ when another language
-   has a subtitle or a footer that this language lacks — the receipt language included, so a venue
-   that has just changed its receipt language sees it marked. When no language has a subtitle or a
-   footer, nothing is marked: both fields are optional, as the slogan and footer are today.
-9. **The mock's "English (copies)" is illustrative.** DEFAULT: the editor lists the languages of
-   decision 6 — for a Spanish venue Spanish, Catalan, Galician and Basque, the receipt language
-   labelled "(receipts)" and the others "(copies)" — and does not add English. Adding a language to
-   Spain's receipt languages is outside this slice.
-10. **The printed order of the top block does not change.** DEFAULT: logo, trading name, legal
-    name, subtitle, address, phone, email, DUPLICADO, NIF, as today (`receipt-document.ts:149-163`,
-    pinned exactly at `receipt-ticket.test.ts:2586-2640`). The mock's preview puts the subtitle
-    above the legal name; the spec's text says nothing about order, and the order in the code is the
-    one the receipt tests and the W111 work settled.
-11. **"Print the address" moves to the department with the rest of the top block.** DEFAULT: it is
-    in the same JSON today (`printAddress`, `types.ts:12-13`), §11's list of what stays in Venue
-    settings names the address itself, not the switch, and a second department at the same premises
-    may print its own phone and email without the street. The address lines themselves stay the
-    location's (`locations.address_*`, edited in Venue settings → Venue details).
-12. **The subtitle's label becomes "Subtitle" / "Subtítulo"** (today "Slogan" / "Eslogan",
-    `apps/dashboard/src/i18n/strings.ts:899`, Spanish `:3351`), the spec's and the mock's word. Its
-    hint stays "Printed under the legal name, e.g. a tagline" in substance.
-13. **Who may edit a department's receipt: unchanged.** DEFAULT: the department receipt routes
-    require `layout.configure`, as `GET/PUT /management-api/receipt` do today
-    (`management-api.ts:1228-1285`), and accept any department of this location, active or not
-    (decision 4); the preview accepts the same departments, where today it refuses an inactive one
-    (`receipt-preview-api.ts:215-237`). The page stays a manager-only Venue settings panel
-    (`dashboard-app.ts:276-282`, `requiresManager: true`). Part B shows the department page's Receipt
-    tab only to someone who also holds `layout.configure`; the department page itself keeps
-    `venue_service.manage` (`packages/venue-service/src/dashboard/index.ts:21`).
-14. **Part A's Receipts page edits one department at a time, chosen on the page.** DEFAULT: today's
-    "Preview for" picker (`receipts-screen.ts:1133-1143`, shown with two or more active
-    departments, kept in `?departmentId=`) becomes "Department", above the department's fields, and
-    picks what is edited as well as what is previewed. It lists the active departments, plus the
-    default department marked "(disabled)" when it is disabled (decision 4); the departments list
-    the page reads gains `isDefault` (`GET /management-api/venue-service/departments-and-zones`,
-    `packages/venue-service/src/routes.ts:584`; client `getVenueDepartments`,
-    `apps/dashboard/src/api/client.ts:2567-2572`). Without `?departmentId=` the default department
-    is edited. The section heading "Every location" (`receipts.venue_wide`) becomes the department's
-    name. With one department the picker is hidden and that department is edited. Switching
-    department with unsaved edits to THAT department's receipt asks the leave question about that
-    draft only; the receipt-language and description drafts (`receipts-screen.ts:213-248`) are the
-    venue's and survive the switch. The app keeps letting a `departmentId`-only navigation through
-    without its own page-leave question (`dashboard-app.ts:1676-1690`); the page asks instead. A
-    save still in flight when the department changes commits to the department it was sent for and
-    never into the newly picked department's draft. If the departments list fails to load, the
-    page says so where the department section would be and the venue-wide section still works.
-    The receipt language and the description stay on the page, below, in their own section, as
-    today.
-15. **The preview has its own language picker.** DEFAULT: "Preview" gains a language picker
-    listing decision 6's languages, defaulting to the receipt language; the preview draws the
-    picked language's subtitle and footer, with decision 7's fallback, and the fixed words in that
-    language — as a copy in that language would print. Today the preview draws in the receipt
-    language picked in the form (`receipts-screen.ts:509-512`, `:637-643`); that picker keeps
-    choosing the receipt language and no longer drives the preview. The preview stays a GET with
-    the draft in its query string (`client.ts:2591-2600`), and Node refuses a request head over
-    16 KiB (`http.maxHeaderSize`; no override found in `apps/server/src`): sending every language's
-    200-character texts could pass that (arithmetic, not measured: eight entries of 3-byte
-    characters, URL-encoded, are about 14 KiB). So the dashboard resolves the picked language's two
-    texts itself with Task A1's `resolveReceiptText` and sends a one-language map, keeping the query
-    today's size. The resolver lives in `@waitron/shared`, beside `resolveContentText`, which the
-    Receipts page already imports (`receipts-screen.ts:4`): the dashboard's production code imports
-    nothing from `@waitron/layouts`, whose index "pulls @waitron/db into the browser bundle"
-    (`apps/dashboard/src/screens/canvas-editor/card-contracts.ts:1-2`).
-16. **The translated fields are one tab per language.** DEFAULT: a `wt-tabs` strip of decision 6's
-    languages above the Subtitle and Footer message fields, as in the mock; a tab carries ⚠ per
-    decision 8, and a note under the strip says what ⚠ means. Each language's fields are named
-    `headerSubtitle-<tag>` and `footerMessage-<tag>` (semantic names, CLAUDE.md §3). A refusal that
-    names a language opens that tab and shows the message under its field.
-17. **Invoice-email consent quotes the sale's department's contact.** Today email delivery is
-    offered only when the venue-wide receipt email is valid, and the consent must echo that email
-    and phone (`apps/server/src/invoice-choice-delivery.ts:78-86`). DEFAULT: the check reads the
-    department the order's zone belongs to (decision 4's default department when there is none),
-    found with `VENUE_SERVICE.findOrderContext` as the sale paths do (`working-order.ts:5627`).
-18. **The till's on-screen receipt takes its text from the sale, not from boot.** DEFAULT: the boot
-    answer drops `receipt` (`till-api.ts:1182`) and sends the location's address unconditionally
-    (`readLocationAddress`, `apps/server/src/venue-address.ts`); each sale and replay answer carries
-    `receiptTrim` — the sale's department's logo, phone, email, `printAddress`, and the subtitle and
-    footer resolved for the sale's language — and `till-ticket-view.ts` reads that. That includes
-    the bill-payment answer: `bill-payments.ts:741` builds its own ticket with `receiptHeader`,
-    returned to the till as `BillPaymentResult.invoice` (`apps/till/src/api/client.ts:980`), and
-    `resultOf` (`bill-payments.ts:922-942`) reads `readSettledTicket` only when no ticket is passed.
-19. **The store's reads never throw.** A receipt is built inside the sale's transaction
-    (`receipt-print.ts:155-160`), so a throw there undoes the filed sale. Today's store drops a
-    field of the wrong type and reads a malformed logo picture as none, on purpose, because a
-    configuration import copies the row unchecked (`packages/layouts/src/receipt-store.ts:26-31`) and
-    the read "runs inside a sale's transaction, where a throw would roll the sale back"
-    (`:72-75`, returning `null` for a bad picture at `:76-83`). DEFAULT: the department store does the same field by field — a map that is not an
-    object, an entry that is not a string, a picture that is not well formed — and an import of a
-    configuration bundle is not validated for this table either, as today's is not.
-20. **Saving keeps today's logo-picture rules.** DEFAULT: an unchanged logo reuses its stored
-    pictures instead of drawing them again (today `management-api.ts:1258-1268` with
-    `getStoredLogoRasters`, `receipt-store.ts:114-131`), and a logo is never written without a
-    printable picture for every paper width (today `receipt-store.ts:133-149`). Both move to the
-    department seats.
-
-## Global constraints
-
-- Every commit `git commit -s`. Never `--no-verify`.
-- Work in this branch's worktree; never commit to `main`.
-- A shipped migration file is never edited. New migrations only, generated by drizzle-kit against
-  the current tree; the number is whatever it assigns.
-- No data-migration code before go-live (CLAUDE.md §3): the venue-wide row is not copied into
-  departments.
-- Every foreign key is declared in the TypeScript schema; `department_receipts.department_id`
-  references `departments.id`.
-- Columns come from `packages/db/src/schema/columns.ts` (`id`, `json`, `tsString`), never straight
-  from `drizzle-orm/sqlite-core` (guard `scripts/column-vocabulary.test.ts`).
-- Error codes name the domain concept. `receipt.invalid` stays the refusal for authored text
-  (`packages/layouts/src/errors.ts:8-23`) and gains an optional `language` param, set only to one of
-  the venue's receipt-language tags: the file's rule is that no param echoes a caller-supplied value
-  (`errors.ts:4-7`), so an unknown key is refused `reason: "language_unknown"` WITHOUT naming it, and
-  the comment at `:4-7` is updated to say `language` is always a known tag. An unknown or
-  other-location department is `department.not_found` (already used by the preview,
-  `receipt-preview-api.ts:215-237`).
-- venue-service functions take `cfg: VenueScope`. Multi-table writes take one `tx: Transaction`;
-  queries on one transaction are awaited in turn, never `Promise.all`.
-- The logo rasters are drawn OUTSIDE the transaction, as today (`management-api.ts:1274`).
-- No authored field may suppress or reorder a mandated receipt element (`types.ts:3-6`). The QR
-  block, the filed issuer, the F1 domicile and the invoice block are not touched.
-- New UI reads `--wt-*` tokens only; a screen does not draw its own `<select>`, `<textarea>` or text
-  `<input>`; forms follow `docs/developers/design-system.md` → Forms and A331's save rule
-  (`draftScopeFor` + `saveActionState` + an early return in the save handler; the Receipts page
-  already has all three, `receipts-screen.ts:209-280`, `:797`), with the `*.unsaved.test.ts`
-  reconnect case kept (#1422).
-- Strings in English and Spanish.
-- Coverage stays at 98/98/98/95 in every package touched. Of the packages this slice changes,
-  `packages/shared` and `packages/db` are mutation-tested (CLAUDE.md §2 lists `ui`, `ui-core`,
-  `shared`, `fiscal` and `db`; `packages/layouts` has no `mutation` script, checked 2026-10-08).
-- Comments only for an invariant or a non-obvious why; no history. Cut the stale comment at
-  `till-api.receipt.test.ts:2228-2229` when touching that case (it says the reprint must NOT read
-  the current text; the assertions below it check that it does).
-
-## Behaviour this slice removes
-
-Tests pinning these may change, under the queue's 2026-10-05 rule:
-
-- One venue-wide receipt text: `tenant_receipts`, `GET/PUT /management-api/receipt`
-  (`management-api.ts:1228-1285`), `getReceipt` / `getPrintedReceipt` / `putReceipt`
-  (`packages/layouts/src/receipt-store.ts`), the dashboard live query `getReceipt`
-  (`apps/dashboard/src/api/live-queries.ts:316`), the till boot answer's `receipt`.
-- A subtitle and a footer that are one string printed in every language.
-- The "Every location" section heading and the "Slogan" label on the Receipts page.
-- The Receipts page's "Preview for" picker choosing only what the preview draws, and a
-  `departmentId`-only navigation keeping unsaved edits without asking
-  (`dashboard-app.venue-settings-unsaved.test.ts:409`); the page now asks about the department's
-  draft (decision 14).
-- The preview refusing an inactive department (`receipt-preview-api.ts:215-237`).
-- The preview drawing in the receipt language picked in the form.
-- Media's receipt usage carrying no department (`packages/media/src/images.ts:91`).
-- Invoice-email consent checked against the venue-wide email.
-
-## Review focus
-
-The conditions most likely to bite a person that no single task's happy path exercises. Each has
-its test in the task named.
-
-1. **A copy in a language not yet written.** The Restaurant writes a Spanish subtitle and a
-   Catalan footer only, Spanish being the receipt language. A Catalan copy prints the Spanish
-   subtitle and the Catalan footer; a Galician copy prints the Spanish subtitle and, having no
-   Galician or Spanish footer, the Catalan one (decision 7's third step); a Spanish original prints
-   the Spanish subtitle and the Catalan footer (Tasks A1 and A4).
-2. **Two departments, one printer.** A Restaurant sale and a Deli sale printed one after the other
-   on the same receipt printer each print their own logo, phone and footer; a reprint of the
-   Restaurant sale made after the Deli's receipt was edited still prints the Restaurant's (Task A4).
-3. **A sale with no department.** A sale whose header records no department, or that has no header
-   row (set up directly in the test), prints the default department's text, also when that
-   department is disabled; a location whose default department has no row prints none and still
-   prints every mandated element (Task A4).
-4. **A corrupt department row.** A department row with a number where a map should be, a
-   non-string entry and a malformed logo picture: a sale under it still files and its receipt
-   prints the mandated elements and whatever fields are well formed (Tasks A2 and A4).
-5. **A department renamed or disabled after the sale.** Its sale's reprint keeps the trading name it
-   was printed with (existing check) and prints the department's current text (Task A4).
-6. **The receipt language changed.** An original reprint prints in the filed language; where that
-   language has no text, the current receipt language's text; where neither has, the first written
-   (Tasks A1 and A4).
-7. **Unsaved edits and the department picker.** Edit the Restaurant's footer and the venue's
-   description, pick Deli: the leave question asks about the Restaurant's receipt; Keep stays on
-   Restaurant with the edit; Discard opens Deli clean and the description edit is still there. A
-   Restaurant save that returns after Deli is picked does not change Deli's draft (Task A10).
-8. **A logo shared by two departments.** The library counts two uses; deleting it is refused while
-   either uses it; each use links to its own department (Task A8).
-9. **Export and import.** A configuration bundle carries each department's receipt, logo rasters
-   included, under the importing venue's department ids (Task A2).
-
----
-
-## Part A — the receipt moves to departments (first pull request)
-
-### Task A1: The per-language receipt shape, its validation and its resolver (shared, layouts)
-
-**Files:** `packages/shared/src/receipt-text.ts` (new) and its test, `packages/shared/src/index.ts`;
-`packages/layouts/src/types.ts`, `validate.ts`, `errors.ts`, `index.ts`, and their tests.
-
-**Interfaces:**
+These are target interfaces, not code already present. Shared owns browser-safe types/resolution;
+layouts owns validation and printing; venue-service owns plain-JSON persistence and its seats.
+The module contract uses pure shared types, not an import from layouts or a database table type.
+The dashboard does not import layouts' index. No new dependency loop is assumed safe.
 
 ```ts
-// packages/shared/src/receipt-text.ts — browser-safe, imported by the dashboard (decision 15)
-/** Receipt-language tag → text. A blank or missing entry means "not written". */
-export type ReceiptText = Readonly<Record<string, string>>;
-
-export function resolveReceiptText(
-  text: ReceiptText | undefined,
-  language: string,
-  languages: readonly string[], // decision 6, receipt language first
-): string | undefined; // decision 7
-
-export function untranslatedLanguages(
-  texts: readonly (ReceiptText | undefined)[], // the subtitle's and the footer's maps
-  languages: readonly string[],
-): string[]; // decision 8
-
-// packages/layouts/src/types.ts and validate.ts
-export interface DepartmentReceiptConfig {
+// Pure shared contracts (new); no printAddress in either authored shape.
+type ReceiptText = Readonly<Record<string, string>>;
+interface DepartmentReceiptConfig {
+  logo?: string;
+  phone?: string;
+  email?: string;
   headerSubtitle?: ReceiptText;
   footerMessage?: ReceiptText;
+}
+interface PrintedReceiptTrim {
+  logo?: string;
   phone?: string;
   email?: string;
-  /** Absent prints the location's address; `false` prints none. */
-  printAddress?: boolean;
-  /** A `@waitron/media` library filename. */
-  logo?: string;
-}
-
-/** What one printed receipt shows: the two texts already resolved for its language. */
-export interface PrintedReceiptTrim {
   headerSubtitle?: string;
   footerMessage?: string;
-  phone?: string;
-  email?: string;
-  printAddress?: boolean;
-  logo?: string;
 }
-
-export function validateDepartmentReceipt(
-  value: unknown,
-  languages: readonly string[], // decision 6, receipt language first
-): DepartmentReceiptConfig; // throws receipt.invalid
-
-export function printedTrimFor(
-  config: DepartmentReceiptConfig,
-  language: string,
-  languages: readonly string[],
-): PrintedReceiptTrim; // resolves both texts with resolveReceiptText
+interface VenueReceiptSettings { printAddress?: boolean }
+// Current address plus the global switch, independently of department trim.
+interface ReceiptPresentation {
+  receiptTrim: PrintedReceiptTrim;
+  venueAddress: readonly string[];
+  venueReceiptSettings: VenueReceiptSettings;
+}
+resolveReceiptText(text: ReceiptText | undefined, printedLanguage: string,
+  currentReceiptLanguage: string): string | undefined;
+untranslatedLanguages(texts: readonly (ReceiptText | undefined)[],
+  languages: readonly string[]): string[];
 ```
 
-`ReceiptConfig` and `validateReceiptConfig` stay until Task A13 removes them.
+`validateDepartmentReceipt(value, languages)` rejects wrong shapes, unknown fields, nulls,
+non-string map entries, unknown language keys and entries over the current 200-character bound.
+Blank optional text may be dropped. Keep current logo filename, 30-character phone and
+254-character email rules from `packages/layouts/src/validate.ts:18`; preserve normalization
+semantics rather than silently coercing input. Add typed `receipt.invalid` field/language/reason
+params and localized wording. An invalid known language entry can name its allowed language;
+an unknown key must not become a param or an object property written to storage. Test own keys,
+arrays and prototype-shaped keys. The global validator allows only `printAddress?: boolean`.
+Stored legacy authored keys are ignored by the new global reader, never offered as department data.
 
-- [ ] **Step 1: failing tests.** `packages/shared/src/receipt-text.test.ts`: decision 7's three steps — the exact
-  language; a blank entry falls back to the receipt language (the first of `languages`); with that
-  blank too, the first written in `languages`' order; nothing written → `undefined`; subtitle and
-  footer resolved separately (Review focus 1); whitespace-only counts as blank.
-  `untranslatedLanguages`: marked when another language has text this one lacks, the receipt
-  language included; nothing marked when nothing is written. `validate.test.ts`: a map entry over
-  200 characters is refused with `field: "footerMessage"` and that `language`; an unknown key is
-  refused `reason: "language_unknown"` and the refusal's params do not contain the key; a non-object
-  map, a non-string entry and an unknown top-level key are refused as today; blank entries are
-  dropped from the result; phone, email, logo and `printAddress` keep today's rules
-  (`validate.ts:18-63`).
-- [ ] **Step 2:** run them; they fail because the module and functions do not exist.
-- [ ] **Step 3:** implement. Add `language?: string` and `reason: "language_unknown"` to the
-  `receipt.invalid` params (`errors.ts:8-23`), update the comment at `:4-7`, extend `errors.test.ts`.
-- [ ] **Step 4:** `pnpm --filter @waitron/shared test:coverage` and `pnpm --filter @waitron/shared
-  mutation` (its floor of 90 breaks the run, CLAUDE.md §2); `pnpm --filter @waitron/layouts
-  test:coverage`. Prove the fallbacks by deletion too: remove each fallback step of
-  `resolveReceiptText` in turn and watch a named case fail, then restore.
-- [ ] **Step 5:** commit.
+Seats beside `readSaleReceiptHeader`:
 
-### Task A2: The `department_receipts` table, its store and its seats (venue-service)
+- `readDepartmentReceipt(tx, cfg, departmentId)` → authored JSON, no rasters.
+- `readPrintedDepartmentReceipt(tx, cfg, departmentId, paperWidth)` → sanitized authored fields
+  and a valid picture or null. A disabled recorded department remains readable.
+- `readDepartmentLogoRasters(tx, cfg, departmentId)` → validated pair for unchanged-logo reuse.
+- `writeDepartmentReceipt(tx, cfg, departmentId, receipt, rasters)` → scoped write; validation
+  and authorisation errors remain refusals, not successful empty writes.
+- `receiptDepartmentForSale(tx, cfg, saleId)` → saved id or null, **no default lookup**.
+- `receiptDepartmentForOrder(tx, cfg, orderId)` → authoritative order department or null,
+  **no default lookup**. A separate default/contact operation implements decision 17.
 
-**Files:** `packages/venue-service/src/schema/receipts.ts` (new), `schema/index.ts`,
-`department-receipts.ts` (new) and its test, `classification.ts` and its test,
-`configuration-transfer.ts` and its test, `service.ts`, `index.ts`, `migrations.test.ts`,
-`packages/module/src/module.ts`; `packages/venue-service/drizzle/` (generated);
-`scripts/schema-constraints.test.ts`, `scripts/migration-upgrade.test.ts` only if they fail and
-the change is a list entry for the new table.
+**Bounds to implement and measure:** authored JSON returned for parsing is capped at 64 KiB;
+only approved language entries are retained. Query/projection must enforce the byte bound
+before a huge imported payload is materialized in JS. Select a single department row, not a
+full-table scan; select only the requested bounded picture for printing. For picture reuse,
+read the two bounded pictures. Reuse printing's current width/height/encoded-length limits.
+The global reader projects only `printAddress` from the existing singleton; it does not load
+old embedded logo pictures or apply the department payload cap to that old JSON and thereby
+lose a valid global `false`. Test that projection with a large legacy logo payload and malformed
+JSON through the actual engine; do not assume JSON expressions cannot refuse a bad row.
+No filesystem access, sharp work, retries or per-line receipt reads in a sale's write
+transaction. Await queries in turn. A null-sale render does zero department/default reads;
+consent takes at most the selected contact and one default lookup, with no duplicate read
+when they are the same department. Demonstrate these query/payload bounds in tests.
+These are size/count bounds, not a strict wall-clock deadline for synchronous engine calls.
 
-**Interfaces** (seats on `VenueServiceContribution`, beside `readSaleReceiptHeader`,
-`module.ts:439-453`):
+**Containment to implement, not an asserted engine guarantee:**
 
-```ts
-/** The stored receipt, rasters left out; `{}` when the department has none. Never throws on a bad row (decision 19). */
-readDepartmentReceipt(tx, cfg, departmentId: string): Promise<StoredDepartmentReceipt>;
-/** The stored receipt and the raster for one paper width (null when absent or malformed). */
-readPrintedDepartmentReceipt(tx, cfg, departmentId: string, paperWidth: PaperWidth):
-  Promise<{ receipt: StoredDepartmentReceipt; logo: StoredLogoRaster | null }>;
-/** The stored rasters, for reuse when the logo is unchanged (decision 20). */
-readDepartmentLogoRasters(tx, cfg, departmentId: string):
-  Promise<{ logo: string; rasters: Record<PaperWidth, StoredLogoRaster> } | null>;
-/** Refuses a logo without a raster for every paper width (decision 20). */
-writeDepartmentReceipt(tx, cfg, departmentId: string, receipt: StoredDepartmentReceipt,
-  logoRasters: Record<PaperWidth, StoredLogoRaster> | null): Promise<void>;
-/** Decision 4: the sale's recorded department, else the location's default, else null. */
-receiptDepartmentForSale(tx, cfg, saleId: string): Promise<string | null>;
-/** Decision 4 for an order not yet a sale (decision 17). */
-receiptDepartmentForOrder(tx, cfg, orderId: string): Promise<string | null>;
-```
+- Sanitizing and optional receipt SELECT/projection/parse errors return empty trim/no logo;
+  diagnostic records operation/id/code, not imported JSON, contact values or secrets. Query
+  errors in ordinary management saves/authorisation do not become successful responses.
+- A missing/malformed optional authored row still allows legal/fiscal document content. If
+  required issuer/header/address preparation cannot be completed, skip that automatic receipt
+  rather than inventing identity/address. Do not swallow the sale's fiscal writes, tender writes,
+  invoice numbering, mandatory drawer work or transaction/commit failures.
+- Put automatic optional document preparation/formatting and its document-job/delivery writes
+  behind a scoped failure boundary. Preparation failure queues no partial job. If optional
+  enqueue/reservation can partially write, use a savepoint enclosing ONLY those optional writes;
+  a savepoint is a rollback point inside the same transaction. Roll that work back on a
+  recoverable refusal and keep the sale transaction usable. Do not
+  open a second sale transaction or catch around the whole sale. Inspect the actual store API
+  and run the savepoint/refusal probe before choosing the exact implementation.
+- Explicit print/reprint/copy/A4 requests may return a print failure; they must not alter an
+  already-issued sale. Preserve original-print status/retry and idempotency semantics. Never
+  silently declare an email/A4 delivery reserved after it failed.
+- Inject optional row-read, logo-decode, formatting and enqueue/reservation failures through the
+  real relevant paths. Assert one committed invoice/tender/header, unchanged invoice number on
+  replay, correct absence/rollback of partial document/delivery rows and appropriate failure
+  reporting. For an engine fault that invalidates the transaction itself, report that limit;
+  no universal “reads never throw” or “printing can never undo a sale” claim is authorised.
 
-`StoredDepartmentReceipt` is declared in venue-service as plain JSON, as `tenant_receipts` keeps
-its row free of the layouts type (`tenant-receipts.ts:14-16`); `apps/server` validates with
-Task A1's `validateDepartmentReceipt` before writing. The `departments-and-zones` answer
-(`routes.ts:584`) gains `isDefault` for decision 14.
+## Scope, retired behaviour and changed checks
 
-- [ ] **Step 1: failing tests** (`department-receipts.test.ts`, `useVenueDb`): a department with
-  no row reads `{}`; write then read round-trips both maps and the rasters; a second write replaces
-  the first (upsert on `department_id`); the read leaves rasters out; a write for a department of
-  another location is refused `department.not_found`; a write with a logo and no rasters is refused;
-  decision 19's corrupt rows (inserted directly) read without throwing, dropping exactly the bad
-  fields, and a malformed raster reads as `null`; `receiptDepartmentForSale` returns the recorded
-  department, the default department when the header's department is null, the default department
-  when there is no header row, the default department when it is disabled, and `null` when the
-  location has no default; a disabled department's receipt still reads (Review focus 5);
-  `departments-and-zones` names the default department.
-- [ ] **Step 2:** watch them fail.
-- [ ] **Step 3:** schema (decision 2), `classify("department_receipts", "state", STATE)`, the
-  transfer entry beside `department_sale_policies` (`configuration-transfer.ts:608`), the store, the
-  seats in `service.ts` and `module.ts`. Generate the migration with drizzle-kit for the
-  venue-service set; it only adds a table.
-- [ ] **Step 4:** a transfer test: export then import into a venue whose departments have other
-  ids carries each receipt to the matching department, rasters included (Review focus 9).
-- [ ] **Step 5:** guards: `pnpm exec vitest run scripts/schema-constraints.test.ts
-  scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
-  scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts
-  scripts/id-columns-are-references.test.ts scripts/column-vocabulary.test.ts
-  scripts/module-graph-honesty.test.ts scripts/migrations-match-schema.test.ts
-  scripts/migration-upgrade.test.ts`, then `pnpm --filter @waitron/fiscal-verifactu exec vitest run
-  inmutabilidad` (must pass unedited), `pnpm --filter @waitron/venue-service test:coverage`.
-- [ ] **Step 6:** commit.
+Implementation paths are an inventory; re-read siblings and consumers when the base changes.
 
-### Task A3: The department receipt routes (server)
+| Task | Main path set |
+| --- | --- |
+| A1 | `packages/shared/src/receipt-text.ts`/types/tests/exports; layouts types/validate/errors/exports/tests |
+| A2 | venue-service schema/receipts, department-receipts/store/tests, classification, configuration-transfer, operations/list type, routes list projection, service/index, module contract; generated venue-service SQL/journal/snapshot; focused migration/schema/transfer guards |
+| A3 | server management API/logo routes/tests; new global settings store/helpers/tests in layouts; dashboard API contracts are added alongside old ones |
+| A4 | server receipt-print/document/ticket/tests, sample helpers and safe optional enqueue boundary; current receipt-address helper |
+| A5 | server invoice-document/page/pdf/tests, invoice-choice-delivery/tests, working-order invoice-choice call, relevant till API/offer contract tests |
+| A6 | server receipt-preview-api/sample-receipt/tests; dashboard preview API method and its route tests |
+| A7 | server till-sale, bill-payments, till-api and receipt/source/bill/replay tests; till layout/client/app/ticket view and tests |
+| A8 | media images/tests, descriptor/package manifest, dashboard usage types/library/live queries/strings/tests; lockfile if dependency install changes it |
+| A9–A12 | dashboard receipts screen and its sibling tests, API/live queries, app navigation/unsaved/permission tests, EN/ES strings/codes; shared UI only if a needed primitive lacks the contract |
+| A13 | old layouts authored store/defaults/exports/tests, server old management imports/routes/fixtures, dashboard old API/query/stubs, till boot fixtures; root guards as warranted, design-system and dated historical spec pointers, A366 backlog |
+| B1–B3 | landed slice 6 host and its tests, dashboard-kit contract/app host if needed, reusable receipt editor/tests, media links, venue-service strings, Venue settings global panel |
 
-**Files:** `apps/server/src/management-api.ts`, `receipt-logo.ts`,
-`management-api.accounts-and-receipt-config.test.ts` (new cases beside the old), `boot.test.ts` if
-it lists routes.
+`tenant_receipts`, its core schema/export/classification/transfer and singleton guard remain.
+Do not remove them or generate a core table-drop migration. The narrowed store may replace
+`receipt-store.ts` with a global-settings store; keeping a filename is not keeping old semantics.
+Audit the retained schema's old authored-store/DEFAULT_RECEIPT comments at
+`packages/db/src/schema/tenant-receipts.ts:10` and narrow or delete stale prose; changing a
+comment does not authorise changing the table's SQL shape.
+Old authored fields present in imported JSON must be ignored without copying/backfilling them.
+Audit configuration export/import so the *new* global contract carries the switch only; historical
+fixtures are not rewritten as if they had originally been authored with the new shape.
 
-**Routes** (both `layout.configure`, decision 13; any department of this location, active or not):
+**Retired behaviour:** the venue-wide authored row APIs (`getReceipt`, `getPrintedReceipt`,
+`putReceipt`, old GET/PUT `/management-api/receipt`), one-string subtitle/footer in all languages,
+boot-authored till trim, preview-only department picker, “Every location”/“Slogan” labels,
+implicit preview-language coupling, inactive-preview refusal, media receipt use without a
+department and venue-wide email consent. Retain separately the global row/switch/current address.
+The previous plan's default-department print fallback, per-department switch, any-language third
+fallback and language tabs were planned defaults, not claims about existing implemented code;
+remove them everywhere in the implementation artefacts.
 
-- `GET /management-api/departments/:id/receipt` → `{ receipt: DepartmentReceiptConfig,
-  languages: string[], untranslated: string[], venueAddress: string[] }` (`languages` per decision
-  6, receipt language first; `untranslated` per decision 8; `venueAddress` the location's lines
-  whatever the switch says).
-- `PUT /management-api/departments/:id/receipt` `{ receipt }` → validate with
-  `validateDepartmentReceipt(receipt, languages)`; a logo must exist in the media library (today's
-  `logoNotFound`, `management-api.ts:405-407`); reuse the stored rasters when the logo is unchanged,
-  else draw them outside the transaction (decision 20); write through `writeDepartmentReceipt`. A
-  missing body is `management.request_invalid {field: "receipt"}`.
+**Changed test checks — PR inventory required**, with precise final `file:line`, old assertion,
+new assertion and owner answer. A checkpoint can add focused failing tests before later
+retirement, but no untouched behavioural assertion is weakened just to make a refactor pass.
 
-An unknown or other-location department is `department.not_found` (404).
+| Existing assertion/area | Intentional change; assertions to retain |
+| --- | --- |
+| `apps/server/src/receipt-ticket.test.ts:2630` exact ordered list | Answer 7 moves subtitle before legal name on both 58/80 mm; retain QR prefix, centring, every remaining line and fiscal facts |
+| Receipt-print current trim/reprint cases (`receipt-print.test.ts`, including current-trim case near `:2162`) | Move fixtures from tenant authored row to department row; retain reprint-live-text and snapshot-trading-name assertions, add null/absent-header controls |
+| `till-api.receipt.test.ts`, `sale-till-source.receipt.test.ts` | Per-answer trim/global address replaces boot-authored trim; retain slice 1's recorded names/translations and fiscal/content snapshots |
+| Layouts validation/store tests | Department maps replace strings; department address key is refused, global boolean validator keeps false/absent behavior; preserve logo safety and authorization assertions |
+| Management receipt / preview tests | Department routes plus separate global route; inactive explicit preview now allowed, independent preview language; preserve permission/location and malformed-input checks |
+| Dashboard receipt/save/a11y/unsaved tests | Picker edits as well as previews; stacked translations and correct refusal scroll; Save requires a changed draft; global switch has its own draft; keep all leave/save/reconnect behavior |
+| `dashboard-app.venue-settings-unsaved.test.ts` departmentId navigation (near `:409`) | Page negotiates department draft; global draft survives; app does not double-prompt; retain cross-panel unsaved checks |
+| Till boot/client/bill/replay tests | Remove only authored boot data checks; assert every invoice answer has its own empty-or-resolved trim and current global address presentation |
+| Invoice page/PDF/consent tests | Add A4 logo/order and optional current address before phone on F1 (current suppression at `receipt-document.ts:156` goes); retain separately filed domicile, recipient and fiscal facts. Check selected department/default consent contact with separate null-sale print control; retain consent version/time/person, availability and delivery idempotency assertions |
+| Media library/usage tests | Name/count each department rather than one anonymous tenant use; retain in-use deletion refusal |
+| Core schema guard `scripts/schema-constraints.test.ts:628` | **Keep** `tenant_receipts_singleton_ck`; add the department FK/key checks without retiring the global invariant |
+| Historical configuration fixture/current import tests | Old authored fields no longer render; current switch persists. Preserve unrelated transfer/id/reference checks |
 
-- [ ] **Step 1: failing tests:** read of a department with no row; save and read back both maps;
-  refusals — a 201-character Catalan footer names `field` and `language`; an unknown language
-  (named in no param); a missing logo; another location's department; a person without
-  `layout.configure` is refused as today's receipt route refuses; an inactive department is
-  accepted; the rasters are written for both paper widths when a logo is saved, reused (not
-  redrawn — spy on the drawing function) when a save keeps the logo, and cleared when it is removed.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement. The old `/management-api/receipt` routes
-  stay until Task A13.
-- [ ] **Step 4:** `pnpm exec vitest run scripts/errors-reachable.test.ts`, then the server's focused
-  files.
-- [ ] **Step 5:** commit.
+Golden huella fixtures, `inmutabilidad` and fiscal filing assertions are untouched. Run relevant
+required guard/fiscal checks unedited when migration/schema work requires them; if an unchanged
+fiscal test fails, stop that code checkpoint and diagnose. Never rewrite it to fit this slice.
+The historical engine-grants inventory `packages/fiscal-verifactu/src/privileges.expected.ts`
+also stays unchanged; it is not a current receipt-storage consumer to retire.
 
-### Task A4: Printing, reprints and copies read the sale's department (server)
+## Validation and FULL review path
 
-**Files:** `apps/server/src/receipt-print.ts` (`buildReceiptBytes`, `:145-178`),
-`receipt-document.ts` (`ReceiptTrim`, `:21-26`), and the tests named below.
+For each task choose focused behavioural files/cases and the types affected by that task. A
+focused command must print a Tests count and exercise the intended path; a zero selection or
+skipped suite is not a passing receipt. Use `pnpm --filter <package> exec vitest run <file>` and
+`pnpm --filter <package> typecheck`; database tests use `useVenueDb` with real migrations and
+append-only setup. Run browser tests with measured memory headroom and a deadline. Do not run
+whole-workspace tests or each package's full coverage suite after every task. Task-end evidence
+contains the expected red, focused green, types, changed assertions and the applicable LOOK;
+do not repeat an unchanged LOOK for each edit.
 
-`buildReceiptBytes` asks `receiptDepartmentForSale`, reads `readPrintedDepartmentReceipt` for the
-printer's paper width, and builds the trim with `printedTrimFor(receipt, invoiceLocale,
-languages)`, where `invoiceLocale` is the language being printed (`language ?? ticket.locale`,
-`:173-177`) and `languages` is decision 6's list (the current receipt language from
-`readReceiptLanguage`, `packages/catalogue/src/operations.ts:1345-1367`, first). The address
-follows the department's `printAddress` (`readReceiptAddress`, `venue-address.ts`).
+At each PR's end, run its remaining focused integration/root checks, then let the normal
+pre-push hook run local checks once. Never bypass it. Required package suites and coverage are
+CI's broad validation; read change selection and wait for required **current-head SHA** checks.
+A broad local run is for an actual cross-package concern/failure, not the finishing ritual.
+Use `git commit -s` for implementation commits; never edit shipped migrations or commit to main.
 
-- [ ] **Step 1: failing tests** in `receipt-print.test.ts` and `receipt-language.test.ts`: Review
-  focus 1 to 6, each as a print-bytes assertion on the ESC/POS text; Review focus 4 also asserts
-  the sale filed (its fiscal record exists). A test helper that today writes a `tenant_receipts`
-  row writes a department receipt instead — list each such helper in the pull request's "Changed
-  test checks".
-- [ ] **Step 2:** watch them fail.
-- [ ] **Step 3:** implement. The till's own reprint and copy (`till-sale.ts:695-723`), the
-  dashboard Orders reprint (`orders-reprint.ts:11-48`), the automatic original
-  (`enqueueSaleReceipt`, `receipt-print.ts:202-225`) and the bill-payment print
-  (`bill-payments.ts:755`) all reach `buildReceiptBytes`; check each by a test, not by reading.
-- [ ] **Step 4:** change the existing checks that read the venue-wide row:
-  `receipt-print.test.ts:943` ("prints the tenant's authored receipt trim from tenant_receipts"),
-  `:2162` (stays a current-text check, now the department's), `:2021-2103` (top block),
-  `till-api.receipt.test.ts:2215` (and cut its stale comment at `:2228-2229`). Each keeps its
-  assertion strength and goes in "Changed test checks". `receipt-ticket.test.ts` takes a resolved
-  `ReceiptTrim` and should need no change; if one of its checks fails, STOP.
-- [ ] **Step 5:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts`
-  and `inmutabilidad` (must pass unedited); the server's focused files.
-- [ ] **Step 6:** commit.
+Each PR takes **two FULL run-it reviews** using the project's direct-driver review workflow in
+throwaway checkouts with the complete candidate tree and dependencies installed. Read completed
+findings, not a successful wrapper exit. The first reviews the complete branch against this
+contract and changed-check inventory. The second puts the checklist aside and exercises the
+feature as a person would, per review item below, looking for missed behavior and false claims.
+Do not substitute two static reads for two run-it reviews. Triage findings in the feature
+worktree, keep focused receipts for fixes, and follow `finish-branch`'s exact-head approval rules.
+No product reviewer, tests or implementation runs are part of STEP 0.
 
-### Task A5: The A4 page and the invoice-email consent (server)
+| Review item (both reviews; second explores without the checklist) | Required observation in implementation |
+| --- | --- |
+| Language resolution | Distinct subtitle/footer maps; exact language, current-language fallback, then no text despite another-language value; change current language after sale |
+| Two departments and null-sale | Same printer, distinct logos/text; null and absent header never borrow default fields, yet legal/NIF/current address/global switch remain |
+| Reprint/copy/A4/till order | Rename/disable after sale; current authored text, recorded trading name; subtitle above legal name, A4 logo, duplicate and QR/mandatory fields preserved |
+| Optional failures | Corrupt imported rows, read/format/job failures with retained operation evidence; sale commits once and optional partial writes do not survive recoverable failure |
+| Consent separation | Null/invalid-email department uses default only for contact; invalid default suppresses email; same selected phone/email; stale contact refusal and accepted snapshot unchanged |
+| Editor | Stacked headings/warnings; locale refusal scroll+inline+bottom summary; picker, Keep/Discard, global draft, late save, passive reads and #1422 reconnect |
+| Media/transfer | Shared logo counted twice (including disabled); correct links/refusal; imported remapped department receipt and preserved global switch |
+| Presentation | EN/ES UI, receipt languages, both themes, desktop/390 px; thermal 58/80, A4 and preview legible with long fields and no logo |
 
-**Files:** `apps/server/src/invoice-document.ts` (`:91-92`), `invoice-choice-delivery.ts`
-(`:30-101`), its one caller `working-order.ts:3436` (inside `setOrderInvoiceChoice`, reached from
-`till-api.ts:1741`; it already has the order id and `order.locationId`),
-`testing/full-invoice-fixture.ts`, and their tests (`invoice-document.test.ts:188-240`,
-`invoice-pdf.test.ts`, `boot.invoice-delivery.test.ts`, `unpaid-invoice-delivery.test.ts`,
-`bill-payments.test.ts`, `bill-payments-api.test.ts`).
+## Part A — department authored fields and the standalone editor
 
-- `readInvoiceDocument` reads the sale's department's text resolved for `sale.locale`.
-- Decision 17: `checkedInvoiceChoiceDelivery` takes the order's department
-  (`receiptDepartmentForOrder`) and checks the consent's `contactEmail`/`contactPhone` against
-  that department's receipt.
+### Task A1: Pure shapes, validators and two-candidate text resolution
 
-- [ ] **Step 1: failing tests:** the A4 page of a Deli sale shows the Deli's footer in the sale's
-  language; consent for a Restaurant order echoing the Deli's email is refused
-  `management.request_invalid {field: "delivery.consent"}`, echoing the Restaurant's is accepted;
-  email delivery is unavailable when the order's department has no valid email even if another
-  department has one.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement. **Step 4:** change the existing checks
-  that read the venue-wide row (`invoice-document.test.ts:188-240`'s `after.receipt`, the consent
-  fixtures) and list them.
-- [ ] **Step 5:** commit.
+**Files:** shared receipt contracts/resolver and exports/tests; layouts types/validate/errors and
+exports/tests. Keep legacy authored functions until their consumers move in A13.
 
-### Task A6: The preview takes a department receipt (server)
+- [ ] Write and run failing tests for exact-language text, blank → current language, blank in
+  both → undefined **even with a populated third language**, independent subtitle/footer and
+  changed current language. Warnings include the current language, omit all-empty maps.
+- [ ] Add validation cases: allowed maps, 201-character known-language text identifies field and
+  language; unknown language refuses without echo; null/array/non-string/prototype-shaped keys;
+  phone/email/logo existing rules; department `printAddress` refused; global false accepted and
+  explicit null/unknown keys refused. Observe the expected failures before implementing.
+- [ ] Implement shared pure shapes and resolver; validators stay pure in layouts. Preserve
+  existing receipt error vocabulary, add typed locale params/EN/ES wording, check siblings.
+- [ ] Run focused shared/layouts tests, affected types and error reachability guard when changed.
+  Use deletion controls for the exact/current-language choices and warning detection, restoring
+  the implementation afterward. Do not mandate full shared mutation/coverage for this task.
+- [ ] Record one green checkpoint and its changed-check receipts; sign off any commit.
 
-**Files:** `apps/server/src/receipt-preview-api.ts` (`:191-309`), `sample-receipt.ts`, and
-`receipt-preview-api.test.ts`.
+### Task A2: Department table, bounded store, seats and distinct department lookups
 
-The query's `receipt` is a `DepartmentReceiptConfig` (validated with Task A1's validator against
-decision 6's languages); `departmentId` picks the trading name and the department, any department of
-this location, active or not (absent → the default department); `language` picks the printed
-language (decision 15); the marks name `headerSubtitle` and `footerMessage` as today.
+**Files:** venue-service schema/store/classification/transfer/service/index/operations/routes-list
+and tests; module seats; generated venue-service migration; relevant root schema/migration guards.
 
-- [ ] **Step 1: failing tests:** the preview in Catalan draws the Catalan footer and, with none,
-  the Spanish one; an inactive department previews; an unknown language key is refused as in
-  Task A3.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement; the route's active-only filter
-  (`receipt-preview-api.ts:232`) goes — no existing test pins it (`receipt-preview-api.test.ts:212`
-  refuses a malformed and an unknown department, both still refused). **Step 4:** change the
-  existing checks whose `receipt` fixture is a plain-string trim, and list them.
-- [ ] **Step 5:** commit.
+- [ ] Test first through `useVenueDb`: no row → empty; maps/pictures round-trip; keyed replacement;
+  another-location refusal; inactive recorded department read; missing/null sale header → null
+  with **no default lookup**; authoritative order context lookup; separate designated default
+  lookup; list response includes `isDefault`. Observe expected failure.
+- [ ] Test malformed JSON/field/map/entry/picture/oversized payloads through the real store;
+  preserve each good field, bound returned payload and query count. Inject an optional SELECT
+  failure and check empty rendering result plus a bounded diagnostic, not a successful save.
+- [ ] Declare table/FK/key in TypeScript, `state` classification and remapped transfer reference;
+  add plain-JSON store/seats and explicit list `isDefault` projection. Do not import layouts'
+  runtime index into venue-service. Validate at the server boundary before writes; store enforces
+  location and both-picture requirements. No new core table or authored carryover.
+- [ ] Only after the BUILD gate, generate SQL against the landed venue-service journal. Inspect
+  actual SQL for table rebuilds and incoming foreign keys. Apply the upgrade from a populated
+  predecessor with installed triggers, try real valid/invalid FK writes and record outcome.
+  This plan does not assume a generated migration is additive or succeeds with rows.
+- [ ] Export/import between different department ids, including pictures and the unchanged global
+  false address setting. Invalid imported optional data must not bypass read bounds.
+- [ ] Focused store/list/transfer tests and types; run the relevant root guard set once for this
+  checkpoint: schema-constraints, classification-complete, column-vocabulary,
+  two-file-foreign-keys, id-columns-are-references, module-graph-honesty,
+  migrations-match-schema, journal-monotonic, migration-upgrade, append-only-triggers and
+  behavioural-triggers. Run fiscal `inmutabilidad` unedited if required by the actual generated
+  migration/rebase. Retain SQL/upgrade/FK receipts; do not claim outcomes before running.
 
-### Task A7: The till shows the sale's department's text
+### Task A3: Scoped department routes and a separately validated global settings API
 
-**Files:** `apps/server/src/till-sale.ts` (`TillSaleResult`, `:203`; the four answers that read the
-header, `:679`, `:829`, `:1364`, `:1514`), `bill-payments.ts` (`:741`), `till-api.ts`
-(`:1182-1183`), `apps/till/src/layout.ts` (`:10-19`), `api/client.ts` (`:95`, `:121-123`, `:835`,
-`:980`), `till-app.ts` (`:1910`, `:2243`, `:8523`), `screens/till-ticket-view.ts` (`:461`,
-`:527-560`, `:685-689`), and their tests (`till-ticket-view.test.ts:638`, `:1240-1330`,
-`.a11y.test.ts`, `till-app.test.ts`, `api/client.test.ts`, `till-api.test.ts`,
-`bill-payments-api.test.ts`).
+**Files:** server management-api/receipt-logo/tests; layouts global-settings store/tests;
+dashboard API types/methods/tests (additive until A13).
 
-Decision 18: `TillSaleResult.receiptTrim?: PrintedReceiptTrim`, filled for every answer that carries
-`receiptHeader`, the bill-payment answer included; the boot answer drops `receipt` and its
-`venueAddress` becomes the location's lines whatever any switch says; the ticket view prints the
-address only when `receiptTrim.printAddress !== false`.
+- [ ] Failing route cases: missing row, map round-trip, known-language refusal, unknown language
+  without echoed key, department address key refusal, unknown/other-location id, permission
+  refusal, explicit inactive department accepted; global false/absent and null refusal.
+- [ ] Add GET/PUT `/management-api/departments/:id/receipt` with `layout.configure` and location
+  scope. GET returns authored config, allowed languages, warning languages and current address;
+  PUT body `{ receipt }` validates server-derived languages. Do not accept trading/legal fields.
+- [ ] Add GET/PUT `/management-api/receipt-settings` with `{ settings }` holding the global
+  switch only. Read the existing singleton's `printAddress`; ignore old authored keys. New
+  writes replace it with the narrowed settings shape. Retain legacy endpoints only while their
+  remaining consumers are moved; retire them in A13, not as a compatibility promise.
+  Test global `false` beside a large old logo payload: the narrowed projection preserves the
+  switch without reading/carrying over those authored fields.
+- [ ] Keep filename existence checks; reuse unchanged valid pair without drawing (spy/control),
+  render changed image outside transaction, clear pictures on removal. Assert every paper width
+  before writing. Scope raster reuse to department+logo so another department's saved picture
+  cannot satisfy a stale save. Re-check the read/write race and current asset before writing.
+- [ ] Run focused route/store tests, affected types and error registry guards; record checkpoint.
 
-- [ ] **Step 1: failing tests:** server — a sale answer, a replay answer and a bill-payment answer
-  each carry the sale's department's trim in the sale's language; till — the view draws the
-  subtitle, footer, logo, phone and email from `receiptTrim`, hides the address when
-  `printAddress` is `false`, and draws none of them when `receiptTrim` is absent.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement. **Step 4:** change the view's existing
-  trim checks (`till-ticket-view.test.ts:1278-1330`) to feed `receiptTrim`; list them.
-- [ ] **Step 5:** commit.
+### Task A4: Thermal print/reprint/copy, exact order and optional failure containment
 
-### Task A8: Media counts each department's logo
+**Files:** server receipt-print/document/ticket tests, address/sample helpers and the chosen
+optional document enqueue boundary. Keep drawer and fiscal paths separately intact.
 
-**Files:** `packages/media/package.json`, `src/module.ts:30`, `src/images.ts` (`:91-92`,
-`:230-233`, `:267`, `:659-665`) and `images.test.ts`, `src/dashboard/client.ts:40`,
-`dashboard/image-library.ts` (`:32`, `:44`) and its test, `dashboard/live-queries.ts:11`,
-`dashboard/strings.ts` (`image.receipt_logo`).
+- [ ] Reproduce changed behavior with failing tests: two departments on one printer; null id and
+  absent header with a richly authored default still show NO department fields; disabled recorded
+  department/current edited fields; current address changed after issuance with global true/false;
+  each language candidate and no-third-language control. Preserve the snapshot trading-name cases.
+  Include a null-id header containing an inconsistent trading name: it still shows no brand.
+- [ ] Change the exact top-order pin at `receipt-ticket.test.ts:2630` to subtitle before legal
+  name for both widths; preserve every other ordered line/centering/QR assertion. Record this
+  changed check with owner answer 7. Test absent trading name and duplicate optional elements.
+- [ ] Resolve using saved department only; read current receipt language separately from filed
+  language; apply global address setting independently. Use existing bounded bitmap decoder.
+  Route automatic, explicit original, reprint and translated copy through that presentation.
+- [ ] Implement decision 19's recoverable optional failure boundary after investigating the real
+  transaction/savepoint API. First observe injected read/format/partial-job failures in focused
+  tests; then contain them. Run an actual refusal/savepoint probe: optional partial rows roll
+  back, sale/tender/header/numbering commit once, replay adds no sale. Do not catch fiscal or
+  drawer writes. A failure invalidating the whole engine transaction is a stated limit.
+- [ ] Preserve original-versus-copy status and explicit delivery enrolment. Test failed enqueue
+  never records successful delivery and later retry remains possible; already-issued manual
+  print failure does not rewrite fiscal facts. Run focused thermal/print/sale integration cases
+  and affected types. LOOK once at task end for thermal 58/80 and retain bytes/screens/evidence.
 
-- [ ] **Step 1: failing tests:** Review focus 8 — one logo used by two departments is listed twice,
-  each with its department's id and name; the count is 2; a delete is refused while either uses it
-  (today's refusal, by the same path); the library's text names the department and its link is
-  `/manage/venue-settings/view/receipts?departmentId=<id>`.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement (decision 5); the live query depends on
-  `department_receipts` and `departments` in place of `tenant_receipts`.
-- [ ] **Step 4:** `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts
-  scripts/module-graph-honesty.test.ts scripts/live-subscriptions.test.ts`;
-  `pnpm --filter @waitron/composition exec vitest run`; `pnpm --filter @waitron/media test:coverage`.
-- [ ] **Step 5:** commit.
+### Task A5: A4 logo/order and invoice-delivery consent contact
 
-### Task A9: The Receipts page edits one department (dashboard)
+**Files:** server invoice-document/page/pdf and tests; invoice-choice-delivery/tests;
+working-order invoice-choice call; till API offer/check contract and tests as needed.
 
-**Files:** `apps/dashboard/src/api/client.ts` (`ReceiptConfig` copy `:477-490`, the receipt methods
-`:2567-2602`), `api/live-queries.ts:316`, `screens/receipts-screen.ts`, `i18n/strings.ts`, and the
-tests: `receipts-screen.test.ts`, `.trim.test.ts`, `.top-block.test.ts`, `.save-state.test.ts`,
-`.location.test.ts:50`, and every other dashboard test that stubs or names `getReceipt` (`grep -rln
-getReceipt apps/dashboard/src`: at 2026-10-08 also the receipts page's `.a11y`, `.language`,
-`.unsaved` tests, `content-languages-screen.test.ts` and `.a11y.test.ts`,
-`dashboard-app.a11y.test.ts:77`, `dashboard-app.test.ts:134`,
-`dashboard-app.unsaved-changes.test.ts:897`, `dashboard-app.settings-panels.test.ts:100`,
-`dashboard-app.venue-settings-unsaved.test.ts`, `api/live-queries.test.ts`), `api/client.test.ts`,
-`api/client-routes.test.ts`.
+- [ ] Failing A4 cases cover the same null/disabled/current-language/current-address rules,
+  subtitle before legal name and a visible logo. Current `invoice-page.ts:80` skips the logo;
+  adding the department store alone would not satisfy owner answer 7.
+- [ ] Read the recorded department/current config in invoice-document, including bounded stored
+  picture. Add a page-logo element and render it in PDF with existing facilities, centered and
+  proportionate within the page's content bounds. Keep QR size/location rules, page breaks,
+  filed issuer domicile/recipient and mandated F1 fields. Assert the current optional address
+  before phone under the global switch even on F1, and the filed domicile separately unchanged.
+  Do image conversion outside the write
+  transaction; no new stored A4 raster or unreviewed dependency is required by this plan.
+- [ ] Failing consent matrix: valid department email selects its own email/phone; missing
+  department uses default; missing/invalid email falls back to default; invalid default gives
+  no offer/refusal; no phone borrowed from another contact; disabled designated default accepted;
+  invalid phone dropped from imported contact; stale email or phone echo refused. Pair the
+  no-department consent test with a receipt test proving no default-authored fields print.
+- [ ] Introduce one resolver for contact selection (order context before issuance, recorded id
+  for an issued-sale offer) and use it in `checkedInvoiceChoiceDelivery`. Pass `orderId` and
+  authoritative location/context from `setOrderInvoiceChoice`, not an untrusted request id.
+  Preserve provider availability, current consent language checks and stored version/time/person.
+  Do not refresh an already accepted staged/reserved consent snapshot from later receipt edits.
+- [ ] Make the same resolver available to the delivery offer. At this base no offer UI was found;
+  expose an authenticated order-scoped offer read only if the landed delivery interface needs
+  it, with the same session/action/zone gates as invoice choice and passive-read semantics.
+  It returns no offer when provider or contact is unavailable. Do not implement the later F1
+  customer screen or expand F1 rollout permissions. Cite the final offer consumer/interface in
+  the checkpoint; absence of a UI is not evidence that the check may use a different contact.
+- [ ] Run focused A4/PDF and actual invoice-choice route cases, types; LOOK at A4 once at task end
+  with/without logo, long content, duplicate and another receipt language. Preserve delivery
+  idempotency/accepted-consent assertions and untouched fiscal fixtures.
 
-Decision 14, without the switching rules (Task A10). The page loads the departments
-(`getVenueDepartments`, now with `isDefault`), picks `?departmentId=` or the default department,
-reads `GET /management-api/departments/:id/receipt` through a new live query `getDepartmentReceipt`
-(depending on `department_receipts`, `departments` and `locations`), and saves with `PUT` to the same
-path. In this task the subtitle and footer are still edited as ONE field each, written to and read
-from the receipt language's entry of the map; Task A11 adds the other languages.
+### Task A6: Preview uses a department draft, global draft switch and independent language
 
-- [ ] **Step 1: failing tests:** the department picker shows with two or more listed departments
-  and is labelled "Department"; a disabled default department is listed marked "(disabled)"; the
-  section heading is the department's name; with no `?departmentId=` the default department is
-  edited; Save writes to the picked department's route only; with one department no picker shows
-  and that department is edited; a departments list that fails to load shows its message where the
-  department section would be, and the description still saves; the A331 cases in
-  `.save-state.test.ts` hold for the department scope (opens quiet; untouched Save sends nothing;
-  quiet after save).
-- [ ] **Step 2:** watch them fail. **Step 3:** implement; `pnpm exec vitest run
-  scripts/live-subscriptions.test.ts`.
-- [ ] **Step 4:** change the existing checks this removes: the "Every location" heading, the
-  "Preview for" label, the `/management-api/receipt` routes in `client-routes.test.ts` and
-  `client.test.ts`, and the `getReceipt` stubs (a stub is fixture, the routes they answer are not);
-  list each.
-- [ ] **Step 5:** commit.
+**Files:** server receipt-preview-api/sample-receipt/tests; dashboard API preview method/tests.
 
-### Task A10: Switching department keeps edits safe (dashboard)
+- [ ] Failing preview cases: picked department draft maps, independent preview language and
+  current-language fallback, third language not used; unsaved global switch; explicit inactive
+  department; unknown/other-location/permission/malformed request refusals. Null department
+  explicitly previews venue-only trim, not default authored text.
+- [ ] Add POST `/management-api/receipt-preview` with bounded JSON `{ departmentId, receipt,
+  settings, language, paperWidth }`, where departmentId may be null for a venue-only preview.
+  Derive current receipt language/allowed keys at the server, validate both config and settings.
+  Use the same renderer, address helper and top order as printing, without storing the draft.
+  Bound payload/body parser and any image work; measure request handling during implementation.
+- [ ] GET stays only until callers migrate, then retires in A13. Do not call a compressed/single
+  resolved GET payload proof of arbitrary-language validation or header-size safety.
+- [ ] Use existing preview-safe sample fiscal data. Run focused real-route preview/API tests and
+  types. Inspect preview once at task end at both thermal widths; no sale/config writes occur.
 
-**Files:** `apps/dashboard/src/screens/receipts-screen.ts`, `dashboard-app.ts:1676-1690` (only if the
-page's own question needs a hook there), and the tests `receipts-screen.unsaved.test.ts`,
-`receipts-screen.test.ts`, `dashboard-app.venue-settings-unsaved.test.ts` (`:409`, `:498`).
+### Task A7: Fresh sale, replay, invoice-first and bill answers drive the till view
 
-Decision 14's switching rules: picking another department with unsaved edits to the current
-department's receipt asks the leave question about that draft only; the language and description
-drafts survive; a save in flight commits to the department it was sent for.
+**Files:** server till-sale/bill-payments/till-api and relevant receipt/source tests;
+till layout/API/client/app/ticket-view/tests.
 
-- [ ] **Step 1: failing tests:** Review focus 7 in full, in EN and ES; the same after a reconnect
-  (#1422's case, beside `receipts-screen.unsaved.test.ts:298`); a Back navigation that changes only
-  `departmentId` asks the same question; a switch with no department edits asks nothing.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement.
-- [ ] **Step 4:** change `dashboard-app.venue-settings-unsaved.test.ts:409` (today department
-  navigation keeps the edited appearance without asking; now it asks, and Keep keeps it) and list it.
-- [ ] **Step 5:** commit.
+- [ ] Failing wire/view cases for every ticket constructor and `readSettledTicket`, direct bill
+  ticket plus `resultOf`'s replay branch. Distinct departments, a later text/address/global-switch
+  edit, null/absent header and an empty trim after a rich previous receipt expose wrong caching.
+  Keep original transaction values, drawer side-effect gating, recorded names and replays.
+- [ ] Add `ReceiptPresentation` to each invoice answer: `receiptTrim`, current `venueAddress`
+  and separate `venueReceiptSettings`. Reuse one assembly helper at all constructors so
+  settlement/invoice-first/card/bill branches cannot silently omit it. Optional authored read
+  failure yields empty trim under decision 19; required facts are not replaced with defaults.
+- [ ] Remove authored `receipt` from boot and the till's boot-owned authored state; retain global
+  boot settings only where used for venue UI. Render each answer's presentation in ticket-view;
+  apply global switch, current address, subtitle-before-legal order and existing filed F1 domicile
+  rules. Do not take department trim from device profile, current zone, another answer or boot.
+- [ ] Assert a receipt-only replay resolves current authored text but returns original fiscal,
+  tender/change and trading facts and performs no repeat drawer/filing action. Run focused
+  server wire + till client/view/app cases and types; LOOK once at task end on phone/desktop,
+  both themes, with two departments and an empty/null-sale receipt.
 
-### Task A11: Translated subtitle and footer (dashboard)
+### Task A8: Media logo usage belongs to each department
 
-**Files:** `apps/dashboard/src/screens/receipts-screen.ts`, `i18n/strings.ts`, `i18n/codes.ts`
-(`:445-456`), and the tests: `receipts-screen.trim.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`.
+**Files:** media images/tests, module/package manifest; dashboard usage types/library/live
+queries/strings/tests; lockfile only as required by normal installation.
 
-Decisions 8, 9, 12 and 16: the "Translated text" block with one tab per language, ⚠ per decision 8
-with its note, and the "Subtitle" label. The draft's snapshot copies the two maps deeply: today's
-copies the body one level deep (`receipts-screen.ts:260-261`), which with maps would let an edit change
-the saved copy too and leave the page looking unchanged.
+- [ ] Failing tests: one logo used by two departments counts two, including a disabled one;
+  both uses name/link the right department, clearing one leaves the other, deletion refused
+  while in use, unreferenced asset still deletable. Old tenant-authored logo is not a current use.
+- [ ] Replace tenant logo queries/counts with department rows; include department identity and
+  location scoping, defend against malformed imported JSON without unbounded parsing. Add
+  workspace dependency and module `requires`; retire anonymous usage labeling.
+- [ ] Update live-query resources from tenant-authored receipt to `department_receipts` and
+  `departments`; keep any separately used global settings resource. Part A link opens explicit
+  department id (including disabled maintenance case); Part B updates only the host destination.
+- [ ] Run focused media/client/library tests, affected types, workspace-cycles and module seams/
+  graph/composition guards as applicable. Do not infer a safe package cycle from source imports.
 
-- [ ] **Step 1: failing tests:** the tabs list the route's `languages` with the receipt language
-  first and labelled "(receipts)", the rest "(copies)"; typing in the Catalan tab changes only the
-  Catalan entry of the save body and makes the page dirty (the deep-copy case); a language with
-  blank fields is absent from the body; ⚠ appears on Catalan when Spanish has a footer and Catalan
-  has none, and goes when Catalan's is typed (before saving); a refusal naming `language: "ca-ES"`
-  and `field: "footerMessage"` selects the Catalan tab and shows the message under its footer field
-  and in the bottom message; Keep and Discard cover an edit made in a tab that is not showing; axe
-  passes on the tabbed block with ⚠ in both themes.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement with `wt-tabs`, `wt-input` and
-  `wt-textarea`; no hand-drawn field.
-- [ ] **Step 4:** change the "Slogan" label checks and list them.
-- [ ] **Step 5:** commit.
+### Task A9: Standalone department editor with a separate global section
 
-### Task A12: The preview's language, and the look pass (dashboard)
+**Files:** dashboard receipts-screen, API/live queries/types, strings/codes and focused sibling
+screen/client/a11y/save-state tests.
 
-**Files:** `apps/dashboard/src/screens/receipts-screen.ts`, `api/client.ts` (`previewReceipt`,
-`:2588-2602`), `i18n/strings.ts`, and the tests: `receipts-screen.language.test.ts`,
-`receipts-screen.test.ts`, `.a11y.test.ts`.
+- [ ] Failing user-action tests: picker edits and previews the same department; active default
+  selection/first-active alternative, explicit disabled maintenance URL, no active department,
+  department load refusal while global fields remain usable; department address key never sent.
+- [ ] Load department config through scoped query, global switch via its own query, and receipt
+  language/description via their existing venue APIs. Department heading replaces “Every
+  location”; “Subtitle” uses the under-trading-name placeholder. Global Print the address,
+  receipt language and description sit below the department section. No authored default fallback.
+- [ ] Carry A331 immediately, not as a later polish step: separate `draftScopeFor` identities for
+  selected department and global switch plus existing language/description scopes;
+  `saveActionState` makes each Save quiet/disabled until changed, then active, and each save
+  handler returns early when that scope cannot submit. Submit only that scope's changed body.
+  Clearing/adding logo changes the department draft; preview/picker language does not.
+- [ ] Include `*.unsaved.test.ts` and save-state tests using real controls: pristine disabled,
+  changed enabled, reverted disabled, double/unchanged action sends no request, rejected save
+  keeps the draft, field refusal inline plus localized bottom summary, successful write closes/
+  commits before separately reporting refresh failure. A refusal alone never disables the action.
+- [ ] Passive subscription callbacks assign snapshots and never reset dirty drafts or rerun a
+  loader. Track read/action errors separately and retain a newer subscription snapshot over
+  an older reload. Run focused client/screen/a11y/save tests and types; inspect changed fields
+  once at task end at 390 px/desktop in EN/ES and both themes.
 
-Decision 15: the preview's own language picker; the request carries one language's resolved texts.
+### Task A10: Department switches, late work and reconnect keep drafts accountable
 
-- [ ] **Step 1: failing tests:** the preview's language picker lists the route's `languages` and
-  starts on the receipt language; picking Catalan requests the Catalan copy and the request's
-  `receipt` holds one language's texts, resolved with decision 7 (Review focus 1); the
-  receipt-language picker no longer changes the preview's language; switching department keeps the
-  preview's language when the new department offers it.
-- [ ] **Step 2:** watch them fail. **Step 3:** implement.
-- [ ] **Step 4:** change `receipts-screen.language.test.ts`'s "preview in picked language" checks
-  and list them.
-- [ ] **Step 5:** LOOK at the whole page in EN and ES, both themes, 1280 and 390 wide, with one
-  department and with three, with ⚠ showing and with a refused Catalan footer; save the screenshots
-  for the FYI. A screenshot that shows a defect is fixed in this task.
-- [ ] **Step 6:** commit.
+**Files:** dashboard receipts-screen unsaved/switch/save tests and dashboard-app venue-settings
+navigation/unsaved tests. Apply the same rules later in B2's host.
 
-### Task A13: The venue-wide receipt goes; documentation and backlog
+- [ ] Failing real-control journeys: dirty department+global switch/language/description, switch
+  department, Keep preserves all; Discard switches only department and retains global drafts;
+  clean switch is immediate. DepartmentId-only navigation gets one page-level negotiation,
+  never a second app prompt. Cross-panel navigation negotiates all outstanding scopes.
+- [ ] Isolate fetch, preview, error and save generations by submitted department id. Late success
+  commits the submitted baseline, never another department's draft; late failure stays attached
+  to the submitting context, not the selected department. Out-of-order snapshot/read cannot
+  restore old config or erase a newer action refusal. Unsubscribe on switch/disconnect.
+- [ ] Explicit #1422 reconnect test: type, detach and reattach the same element; either preserved
+  typed input remains dirty with a registered scope, or a deliberate discard makes it clean and
+  visibly resets it. Choose preservation for this editor; recreate scope registration without
+  adopting dirty values as the saved baseline. Global and department drafts both remain guarded.
+  Current `disconnectedCallback` resets scopes/fields: follow the whole lifecycle, not its name.
+- [ ] Run focused unsaved/reconnect/navigation cases and types. Record changed navigation
+  assertions. LOOK once at task end for Keep/Discard and a reconnect with a visible dirty field.
 
-**Files:** `packages/db/src/schema/tenant-receipts.ts` (deleted), `schema/index.ts`, `index.ts:146`,
-`classification.ts:117` and its test, `configuration-transfer.ts:63`; `packages/db/drizzle/`
-(generated); `packages/layouts/src/receipt-store.ts` and its test (deleted), `types.ts`
-(`ReceiptConfig` removed or reduced to what remaining callers need), `validate.ts`
-(`validateReceiptConfig` removed), `index.ts`; `apps/server/src/management-api.ts` (the
-`/management-api/receipt` routes removed), `configuration-transfer.test.ts`,
-`configuration-import.test.ts`, `testing/fixtures/configuration-v1-before-printing-retirement.json`;
-`apps/dashboard/src/api/client.ts`, `api/live-queries.ts:316`; `scripts/schema-constraints.test.ts:633`;
-`docs/developers/design-system.md`; `docs/backlog.md`.
+### Task A11: Stacked language fields, warnings and exact locale refusal placement
 
-- [ ] **Step 1:** `grep -rn 'tenant_receipts\|tenantReceipts\|getPrintedReceipt\|getStoredLogoRasters\|putReceipt\|getReceipt\b\|/management-api/receipt\b' apps packages scripts`
-  lists every remaining reader; each is gone or switched by Tasks A3–A12 except the definitions this
-  task deletes. `grep -rn 'REFERENCES.*tenant_receipts' packages/*/drizzle` finds no key into it.
-  `packages/fiscal-verifactu/src/privileges.expected.ts:109` is a frozen record of the old engine's
-  grants ("Nothing checks these letters against anything", its header) and stays unchanged;
-  `scripts/write-path-tables.test.ts` reads only its read-only rows, and `tenant_receipts` is `SIU`.
-- [ ] **Step 2: failing test first:** a core migration test (`packages/db`) that the migrated schema
-  has no `tenant_receipts`. Read how a configuration import treats a bundle that still carries a
-  `tenant_receipts` block — the fixture at
-  `testing/fixtures/configuration-v1-before-printing-retirement.json:248` holds an empty one — and pin
-  that behaviour with a test before deleting; say in the pull request which it is.
-- [ ] **Step 3:** delete; generate the core migration with drizzle-kit. Remove the singleton check
-  from `scripts/schema-constraints.test.ts:633` (a guard list entry for a table that no longer
-  exists; name it in "Changed test checks").
-- [ ] **Step 4:** guards as in Task A2 Step 5, plus `scripts/apply-migrations-callers.test.ts`,
-  `scripts/append-only-migration-sets.test.ts`, `scripts/write-path-tables.test.ts`,
-  `scripts/errors-reachable.test.ts`, `scripts/claude-md-pointers.test.ts`; the golden huella test
-  and `inmutabilidad` (unedited).
-- [ ] **Step 5:** docs: any `design-system.md` sentence describing the Receipts page as venue-wide,
-  or its department picker as a preview choice (`:1850`), says it edits one department at a time with translated subtitle and footer; the backlog's A366
-  entry says slice 7 Part A landed and Part B waits for slice 6 (open work only, under its area,
-  per the backlog rule of 2026-10-08).
-- [ ] **Step 6:** commit. The pull request's first line is the venue-reset line under "Venue
-  reset".
+**Files:** receipts-screen translation/render/refusal/a11y tests, strings/codes.
 
----
+- [ ] Failing tests: all allowed languages stacked, no tabs; receipt language first with correct
+  label; headings warn only per decision 8; all-empty optional fields show none; note once.
+  Typing one locale changes only that map entry, and clearing it sends the intended empty change.
+- [ ] Render two shared fields per heading with semantic names `headerSubtitle-<tag>` and
+  `footerMessage-<tag>`. Use shared tokens/primitives; keep user-visible hints as placeholders.
+  No forced translations or English choice. Ensure draft equality is by map values, not key order.
+- [ ] A refused known field+language attaches under that field and scrolls the field into view
+  after rendering, plus the localized bottom summary on its own line above buttons. Unknown
+  language refusal is safely summarized without creating arbitrary DOM ids/fields. Editing the
+  refused field clears only its own relevant message; no language tabs to select.
+- [ ] Run focused locale/refusal/map/save/a11y cases, affected types. LOOK once at task end in
+  EN/ES and both themes at 390 px and desktop, including a refusal in the last stacked language.
 
-## Part B — the department page's Receipt tab (second pull request, after slice 6) — OUTLINE
+### Task A12: Independent preview language and complete Part A presentation pass
 
-Slice 6's department page does not exist yet and no plan for it has been written, so these tasks
-name what each does and not its files. Re-ground them on slice 6 as it lands: read its page, its
-tab mechanism and where it left the trading name, "Print it" and the department's receipt print
-mode when it removed the tree table (§13 item 6).
+**Files:** receipts-screen preview/API tests and relevant strings; server preview render tests
+only if new findings require them.
 
-### Task B1: A seat for the Receipt tab
+- [ ] Failing tests: initial preview current language; changing preview language changes no saved
+  draft, changing receipt-language draft does not silently change independent preview selection;
+  fallback uses server's CURRENT saved receipt language until a language save succeeds. A successful
+  receipt-language save refreshes that current fallback while retaining an explicit preview choice.
+- [ ] Preview POST sends selected department's unsaved maps and global switch, not a resolved
+  string masquerading as validated maps. Handle stale response generations and passive reads.
+  Preview selection uses decision 6's languages; it is separate from the stacked editor fields.
+- [ ] Focused preview/API/types. Once at task end, do the complete LOOK: EN/ES UI, all receipt
+  choices, both themes, desktop/390 px, short/long/empty fields, logo/no logo, two departments,
+  null-sale venue-only sample, 58/80 thermal, A4, independent language and inline refusal scroll.
+  Use the managed dev stack (`wa-wt demo <worktree-name>`), record screenshots/bytes/PDF and
+  actual observations. This run complements, rather than repeats, earlier task-end LOOK evidence.
 
-Today's Departments page is venue-service module code
-(`packages/venue-service/src/dashboard/venue-operations-screen.ts`), and the Receipts editor is the
-dashboard app's (`apps/dashboard/src/screens/receipts-screen.ts`). The module cannot import the app:
-`apps/dashboard/package.json:24` depends on `@waitron/venue-service`, so the reverse import is a
-workspace loop (guard `scripts/workspace-cycles.test.ts`). The module contract has no seat for the
-app to add a tab to a module's page (`packages/dashboard-kit/src/contract.ts:56-63`). DEFAULT: the
-department receipt editor from Part A becomes its own element in the app
-(`dashboard-department-receipt`, property `departmentId`), and `DashboardModuleContext`
-(`contract.ts:14-17`) gains an optional host hook the app fills, for example
-`departmentReceipt?(departmentId: string, readOnly: boolean): TemplateResult`; the department page
-renders its Receipt tab from that hook and hides the tab when the hook is absent or the person
-lacks `layout.configure` (decision 13). Alternative the owner may prefer: move the editor, the
-paper preview (`apps/dashboard/src/widgets/print-paper.ts`) and the logo upload into a shared
-package and build the tab in venue-service.
+### Task A13: Retire old authored consumers, audit claims and finish Part A
 
-### Task B2: The Receipt tab
+**Files:** layouts legacy store/defaults/exports/tests; server management imports/routes/preview
+GET/fixtures and configuration tests; dashboard API/live-query/stubs/app tests; till boot
+fixtures; current documentation and dated historical pointers; root guards only as warranted.
 
-As the mock-up: "Print a receipt" for the department with the zones that differ (a read-out line,
-the zones edited on the Zones tab — §6, §9.1); "At the top": logo, trading name, "Print the trading
-name above the legal name" (today's `print_trading_name`,
-`packages/venue-service/src/schema/service.ts:106`), phone, email, "Print the address"; "Translated
-text" (Task A11's block); the preview with its language picker. The trading name, the switch and the
-print mode keep their current routes (`PATCH /management-api/venue-service/departments/:id` and
-`/sale-policy/:field`, `packages/venue-service/src/routes.ts:694-766`) unless slice 6 changed them;
-one Save covers the tab, so the tab holds one draft over both routes and reports a partial failure
-as the Receipts page does today (`receipts-screen.ts:827-839`). A331's rule in full:
-`draftScopeFor`, `saveActionState`, an early return in the save handler, and an
-`*.unsaved.test.ts` with the reconnect case.
+- [ ] Trace all consumers with identifier **and prose** searches for `tenant_receipts`,
+  `getReceipt`, `getPrintedReceipt`, `putReceipt`, `ReceiptConfig`, `printAddress`,
+  `headerSubtitle`, `footerMessage`, receipt routes, “Slogan”, “Every location”, “Preview for”,
+  default-department print fallback, “first written”/any-language fallback and language tabs.
+  Check READMEs/runbooks/specs and the whole base-to-tip prose path set, not only edited lines.
+- [ ] Retire old authored GET/PUT `/management-api/receipt`, legacy preview GET and associated
+  authored store/default/query/client methods only after their consumers move. Keep the narrowed
+  global settings store/API and singleton table/classification/transfer/export/constraint guard.
+  Current global writers serialize only the switch; imports/exports do not carry old authored
+  fields into new department config. No core drop/rebuild or backcompat adapter by assumption.
+- [ ] Prove with focused tests: old authored tenant values never appear in null or department
+  renders; global false survives normal startup/config round-trip without reset; department
+  config starts empty; unrelated imported data and fiscal invariants remain unchanged. Run
+  actual generated SQL/populated upgrade/FK probes from A2 after any migration change/rebase.
+- [ ] Update current A366 spec/developer design-system and backlog accurately. Earlier historical
+  specs/plans get dated supersession pointers, not silent rewrites: A261 venue-operations receipt
+  §5, the dated W111/current-address claims in
+  `docs/superpowers/plans/2026-10-05-venue-details.md`, and the invoice-email
+  design's “Owner decisions, 2026-10-03” / “Email it” contact wording in
+  `2026-10-03-invoice-pdf-email-and-office-printing-design.md`. Audit the reconciled delivery
+  plan `docs/superpowers/plans/2026-10-03-invoice-pdf-email-and-office-printing.md` too, where
+  `getReceipt`/venue-wide contact claims appear, plus
+  `docs/superpowers/plans/2026-10-03-full-invoices-at-till.md` where its receipt contact is
+  cited. Point superseded receipt/contact claims to A366 §11; retain unrelated dated receipts.
+  This STEP 0 edits only this plan, the A366 spec and a narrow backlog status; broader historical
+  pointers are an implementation retirement requirement, not authorised STEP 0 scope.
+- [ ] Run remaining focused integration and applicable root guards: schema/upgrade, module seats/
+  dependency/cycles, live-subscriptions, errors-reachable, style-token/native-fields and
+  claude-md-pointers for changed claims/paths. Keep receipt singleton guard and fiscal golden/
+  inmutabilidad checks unedited. Inventory changed assertions in the PR with final line pointers.
+- [ ] Take both FULL run-it reviews, triage/verify findings, normal pre-push local gate once, and
+  current-head CI package suites/coverage. Do not add full local package runs per task. Update
+  backlog to distinguish Part A/Part B still open; announce readiness for `finish-branch` or
+  continue it if already requested. Never merge without the owner's landing instruction.
 
-### Task B3: Venue settings → Receipts keeps the venue-wide part
+## Part B — Department → Receipt host (second PR, after slice 6)
 
-The Receipts tab of Venue settings keeps the receipt language and the description sent to the tax
-agency, and a line saying the rest of the receipt is set per department, linking to the
-Departments page. Its department picker and department section go. The media library's receipt
-link and any "Preview" link slice 6 kept open the department's Receipt tab. Docs and the backlog's
-A366 entry.
+This remains an outline until the actual slice 6 host is read. Re-ground file pointers on its
+landing, keep Part A's renderer/editor/contact rules, and use the same focused checkpoints,
+A331 contract, changed-check inventory and two FULL run-it reviews for this PR.
+
+### Task B1: Host contract and permission
+
+- [ ] Read landed Department page/tabs/routing and dashboard-kit hosting/leave contract. Test
+  first: Receipt tab available only with `layout.configure`, still under the page's management
+  permission; direct URL cannot bypass it; selected department id is authoritative.
+- [ ] Add the smallest host/seat required for the reusable editor. Generic dashboard-kit code
+  receives a host contract, not knowledge of venue-service table/layouts internals. Keep explicit
+  disabled-department maintenance access without a disabled-default fallback in the picker.
+- [ ] Focused host/permission/routes/types; record checkpoint and changed paths, not guessed
+  slice 6 filenames. Check dependency cycles if a new dependency is actually introduced.
+
+### Task B2: Receipt tab with complete form and preview behaviour
+
+- [ ] Mount Part A's department editor for the page's department. Global settings stay in Venue
+  settings; no per-department address switch. Show the existing print policy and zone differences
+  through slice 6's service-setting contracts; do not duplicate policy storage in receipt JSON.
+  Keep trading name/print switch in their existing department policy ownership.
+- [ ] Test first and implement A331 scopes, `saveActionState`, early return, `*.unsaved.test.ts`,
+  #1422 reconnect, late-save isolation, passive reads, Keep/Discard and tab/page leave handling.
+  Avoid nested duplicate scopes/prompts if the host already owns the same draft.
+- [ ] Stack all locale fields/headings/warnings; exact inline refusal+scroll+bottom summary;
+  independent preview language, global-switch-aware/current-address preview and exact top order.
+  If the tab combines service policy and authored edits under one Save, one server transaction
+  owns the logical write and returned baseline; never quietly submit the global switch too.
+- [ ] Focused hosted editor/policy/unsaved/a11y/type checks; full task-end LOOK once across theme,
+  width/language/locale-refusal states. Preserve all behavioural assertions moved with the editor.
+
+### Task B3: Venue settings keeps globals; links and retirement follow the host
+
+- [ ] Remove the standalone department picker/editor from Venue settings only once Department
+  Receipt tab is usable. Keep global Print the address, receipt language and sales description
+  with their A331 scopes/save guards/early returns/reconnect/unsaved suites. Describe the current
+  address as venue-wide; link to the department editor for authored fields.
+- [ ] Update media usage and department preview links to the actual host, preserve explicit id and
+  permission checks, retire Part A's old route/host prose via dated pointers where historical.
+  Update backlog: delete completed receipt work and keep only actual remaining A366 work.
+- [ ] Focused global-panel/link/navigation/types; task-end LOOK once, complete changed-check
+  inventory, both FULL run-it reviews, normal pre-push gate once, current-head CI suites/coverage.
+  Announce/continue `finish-branch`; do not merge automatically.

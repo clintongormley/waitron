@@ -24,8 +24,10 @@ their full text.
   screen; a kitchen display's screen has buttons; a monitor has none), with the decisions the
   revision added listed at its end.
   Slice 7's plan is written ahead of lane D too (A366-7p, 2026-10-08): [slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
-  in two pull requests — each department's receipt with translated subtitle and footer after
-  slice 1, the department page's Receipt tab after slice 6 — with its open decisions at its top.
+  revised 2026-10-09 to the owner's receipt answers, in two pull requests: each department's
+  receipt with translated subtitle and footer, then the department page's Receipt tab after
+  slice 6. Lane E's build waits for its slice 3 Part A to land, then slice 6 Part A, before
+  slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
   Slice 3's plan is written ahead of lane D (A366-3p, 2026-10-08): [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md),
   in two pull requests — keeping a period open and closing a station for today after slice 1, keeping
   a zone open after slice 2 — with its open decisions at its top.
