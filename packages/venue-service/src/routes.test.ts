@@ -748,6 +748,56 @@ describe("venue service management routes", () => {
     expect(await foreign.json()).toMatchObject({ error: { code: "department.not_found" } });
   });
 
+  it("writes order start through both policy routes and refuses unknown values", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, async (tx) => {
+      const row = await createDepartment(
+        tx,
+        { locationId: fx.locationId },
+        { name: "Start route", defaultServiceMode: "prepay" },
+      );
+      await configureZone(
+        tx,
+        { locationId: fx.locationId },
+        { zoneId: fx.zoneId, departmentId: row.id },
+      );
+      return row;
+    });
+    for (const [path, value] of [
+      [
+        `/management-api/venue-service/departments/${department.id}/sale-policy/orderStart`,
+        "table",
+      ],
+      [`/management-api/venue-service/zones/${fx.zoneId}/sale-policy/orderStart`, "counter"],
+    ] as const) {
+      expect((await send(fx.app, "PATCH", path, fx.managerCookie, { value })).status).toBe(204);
+      const bad = await send(fx.app, "PATCH", path, fx.managerCookie, { value: "tab" });
+      expect(bad.status).toBe(400);
+      expect(await bad.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "orderStart" } },
+      });
+    }
+    expect(
+      db.all(
+        sql`select d.default_service_mode, p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${department.id}`,
+      ),
+    ).toEqual([{ default_service_mode: "table_tab", order_start: "table" }]);
+    expect(
+      db.all(
+        sql`select s.service_mode, p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
+      ),
+    ).toEqual([{ service_mode: "prepay", order_start: "counter" }]);
+    const zonePath = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy/orderStart`;
+    expect((await send(fx.app, "PATCH", zonePath, fx.managerCookie, { value: null })).status).toBe(
+      204,
+    );
+    expect(
+      db.all(
+        sql`select s.service_mode, p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
+      ),
+    ).toEqual([{ service_mode: null, order_start: null }]);
+  });
+
   it.each(["department", "zone"] as const)(
     "refuses Never and malformed %s receipt modes without changing rows",
     async (kind) => {

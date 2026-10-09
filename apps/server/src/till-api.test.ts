@@ -1809,7 +1809,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       update department_sale_policies set receipt_print_mode = 'on_request'
       where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
     await suite.db.execute(sql`
-      update zone_sale_policies set receipt_print_mode = 'never' where zone_id = ${counterZoneId}`);
+      update zone_sale_policies set receipt_print_mode = 'auto' where zone_id = ${counterZoneId}`);
     try {
       for (const path of [
         "/api/default-service-zone/offers",
@@ -1818,7 +1818,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         const response = await app.request(path, { headers });
         expect(response.status).toBe(200);
         expect(await response.json()).toMatchObject({
-          context: { zoneId: counterZoneId, receiptPrintMode: "never" },
+          context: { zoneId: counterZoneId, receiptPrintMode: "auto" },
         });
       }
       await suite.db.execute(sql`

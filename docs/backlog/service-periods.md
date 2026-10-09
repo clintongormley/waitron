@@ -40,11 +40,11 @@ their full text.
   department page always has its parent link, empty zone hints contain only the inherited value,
   collection tickets offer Print / Don't print with clear-to-null, and receipt modes finish as
   auto/on_request (Always/On request). All footers put Cancel before Save. Part A, Tasks A1–A15,
-  remains one pending Lane E PR from landed slices 1/3A; Parts B/C remain Lane D work after
+  remains one Lane E PR from landed slices 1/3A. Its storage and policy writers are in progress;
+  the department screens and the remaining tasks are not built. Parts B/C remain Lane D work after
   slice 2/A429. Lane E's slice 7 follows 6A, with no current branch. The explicit overlap waiver
   permits independent slice 2/5 checkouts; whoever lands second reconciles source and regenerates
-  migration clashes. No conversion of obsolete receipt data, only pre-live reset. This status
-  records the approved plan; it does not say 6A has been built.
+  migration clashes. No conversion of obsolete receipt data, only pre-live reset. The 6A branch has not landed.
 
 ## Split an order's recorded service mode into two facts
 

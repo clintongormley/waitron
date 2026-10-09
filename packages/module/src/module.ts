@@ -77,13 +77,14 @@ export interface OrderServiceContext {
 }
 
 export interface EffectiveSalePolicy {
+  readonly orderStart: "table" | "counter";
   readonly zoneId: string;
   readonly departmentId: string;
   readonly departmentName: string;
   readonly tradingName: string;
   readonly paidWhen: "prepay" | "ticket_then_pay";
   readonly collectionNumber: "none" | "numbered";
-  readonly receiptPrintMode: "auto" | "on_request" | "never";
+  readonly receiptPrintMode: "auto" | "on_request";
   readonly printTradingName: boolean;
 }
 

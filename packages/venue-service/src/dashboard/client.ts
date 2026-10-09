@@ -22,8 +22,9 @@ export interface ServiceZone {
 }
 export type PaidWhen = "prepay" | "ticket_then_pay";
 export type CollectionNumber = "none" | "numbered";
-export type ReceiptPrintMode = "auto" | "on_request" | "never";
+export type ReceiptPrintMode = "auto" | "on_request";
 export interface DepartmentSalePolicy {
+  orderStart: "table" | "counter";
   departmentId: string;
   paidWhen: PaidWhen;
   collectionNumber: CollectionNumber;
@@ -31,6 +32,7 @@ export interface DepartmentSalePolicy {
   printTradingName: boolean;
 }
 export interface ZoneSalePolicy {
+  orderStart: "table" | "counter" | null;
   zoneId: string;
   paidWhen: PaidWhen | null;
   collectionNumber: CollectionNumber | null;
@@ -224,11 +226,9 @@ export class VenueServiceApi {
     );
   }
 
-  setZoneSalePolicyOverride<K extends "paidWhen" | "collectionNumber" | "receiptPrintMode">(
-    zoneId: string,
-    field: K,
-    value: ZoneSalePolicy[K],
-  ): Promise<void> {
+  setZoneSalePolicyOverride<
+    K extends "orderStart" | "paidWhen" | "collectionNumber" | "receiptPrintMode",
+  >(zoneId: string, field: K, value: ZoneSalePolicy[K]): Promise<void> {
     return this.request(
       `/management-api/venue-service/zones/${zoneId}/sale-policy/${field}`,
       "PATCH",

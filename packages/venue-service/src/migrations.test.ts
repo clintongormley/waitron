@@ -395,6 +395,63 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     return v;
   }
 
+  it.each(["department", "zone"] as const)(
+    "receipt storage refuses Never on %s inserts and updates",
+    async (kind) => {
+      const v = await orderStartPolicies();
+      const insert =
+        kind === "department"
+          ? sql`insert into department_sale_policies (department_id, receipt_print_mode) values (${v.departmentId}, 'never')`
+          : sql`insert into zone_sale_policies (zone_id, receipt_print_mode) values (${v.zoneId}, 'never')`;
+      await expect(withTransaction(db, (tx) => tx.execute(insert))).rejects.toThrow(
+        kind === "department"
+          ? "department_sale_policies_receipt_mode_ck"
+          : "zone_sale_policies_receipt_mode_ck",
+      );
+      await db.execute(
+        kind === "department"
+          ? sql`insert into department_sale_policies (department_id) values (${v.departmentId})`
+          : sql`insert into zone_sale_policies (zone_id) values (${v.zoneId})`,
+      );
+      const read = () =>
+        db.all(
+          kind === "department"
+            ? sql`select receipt_print_mode from department_sale_policies where department_id = ${v.departmentId}`
+            : sql`select receipt_print_mode from zone_sale_policies where zone_id = ${v.zoneId}`,
+        );
+      expect(read()).toEqual([{ receipt_print_mode: kind === "department" ? "auto" : null }]);
+      for (const mode of ["auto", "on_request", ...(kind === "zone" ? [null] : [])]) {
+        await db.execute(
+          kind === "department"
+            ? sql`update department_sale_policies set receipt_print_mode = ${mode} where department_id = ${v.departmentId}`
+            : sql`update zone_sale_policies set receipt_print_mode = ${mode} where zone_id = ${v.zoneId}`,
+        );
+        expect(read()).toEqual([{ receipt_print_mode: mode }]);
+      }
+      const before = read();
+      const update =
+        kind === "department"
+          ? sql`update department_sale_policies set receipt_print_mode = 'never' where department_id = ${v.departmentId}`
+          : sql`update zone_sale_policies set receipt_print_mode = 'never' where zone_id = ${v.zoneId}`;
+      await expect(withTransaction(db, (tx) => tx.execute(update))).rejects.toThrow(
+        kind === "department"
+          ? "department_sale_policies_receipt_mode_ck"
+          : "zone_sale_policies_receipt_mode_ck",
+      );
+      expect(read()).toEqual(before);
+      if (kind === "department")
+        await expect(
+          withTransaction(db, (tx) =>
+            tx.execute(
+              sql`update department_sale_policies set receipt_print_mode = null where department_id = ${v.departmentId}`,
+            ),
+          ),
+        ).rejects.toThrow(
+          "NOT NULL constraint failed: department_sale_policies.receipt_print_mode",
+        );
+    },
+  );
+
   it("order start defaults to counter for a department and null for a zone", async () => {
     const v = await orderStartPolicies();
     await db.execute(sql`insert into department_sale_policies (department_id)

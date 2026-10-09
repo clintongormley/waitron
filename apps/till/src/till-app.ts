@@ -1982,7 +1982,7 @@ export class TillApp extends LitElement {
   /** The ticket's lines come from this filed result, never the client basket. */
   @state() private result?: TillSaleResult;
   /** The current counter zone's choice; non-auto modes offer the original on completion. */
-  @state() private receiptPrintMode: "auto" | "on_request" | "never" = "auto";
+  @state() private receiptPrintMode: "auto" | "on_request" = "auto";
   /** Whether the issuance-time original action is still available for the ticket currently shown. */
   @state() private originalReceiptAvailable = false;
   @state() private originalReceiptPrint?: OriginalReceiptPrint;

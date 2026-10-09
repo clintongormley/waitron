@@ -3493,6 +3493,60 @@ describe("venue detail edits and configuration boundaries", () => {
   );
 });
 
+it.each(["department_sale_policies", "zone_sale_policies"])(
+  "refuses obsolete %s receipt data before changing the target venue",
+  async (table) => {
+    const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const exported = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-06T10:00:00Z"),
+      versions,
+    );
+    const bad = {
+      ...exported,
+      tables: {
+        ...exported.tables,
+        [table]: exported.tables[table]!.map((row) => ({ ...row, receipt_print_mode: "never" })),
+      },
+    };
+    expect(bad.tables[table]).not.toHaveLength(0);
+    const before = {
+      departments: targetSuite.db.all(sql`select * from departments`),
+      departmentPolicies: targetSuite.db.all(sql`select * from department_sale_policies`),
+      zonePolicies: targetSuite.db.all(sql`select * from zone_sale_policies`),
+    };
+    await expect(
+      withTransaction(targetSuite.db, (tx) =>
+        importConfigurationTables(
+          tx,
+          bad,
+          { locationId: target.locationId },
+          ALL_MODULES,
+          versions,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: `${table}.receipt_print_mode` },
+    });
+    expect(targetSuite.db.all(sql`select * from departments`)).toEqual(before.departments);
+    expect(targetSuite.db.all(sql`select * from department_sale_policies`)).toEqual(
+      before.departmentPolicies,
+    );
+    expect(targetSuite.db.all(sql`select * from zone_sale_policies`)).toEqual(before.zonePolicies);
+  },
+);
+
 it("transfers department receipt choices and explicit or inherited zone choices in format 2", async () => {
   const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
     db: suite.db,

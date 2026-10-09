@@ -697,7 +697,7 @@ place of the old one (Tasks A12–A13 move the callers onto it); given neither, 
 writes `counter` (style `prepay`). Provisioning writes `counter`.
 Nothing READS `order_start` for an order's flow yet.
 
-- [ ] **Receipt checkpoint 1: refuse Never at the boundaries, then move its fixtures.**
+- [x] **Receipt checkpoint 1: refuse Never at the boundaries, then move its fixtures.**
   Add RED cases rejecting never through the department/zone per-field routes and current-version
   configuration import, with status/code/field and unchanged rows. Keep auto/on_request/null
   readback and round-trip controls. Remove never from route validators, old tree choices and
@@ -705,13 +705,13 @@ Nothing READS `order_start` for an order's flow yet.
   unchanged while successful never fixtures move to on_request, preserving opposing department
   and zone values. Keep existing on_request assertions and list changed never checks separately.
   Run focused affected files and scoped types. Preserve fiscal, payment, drawer and login checks.
-- [ ] **Receipt checkpoint 2: storage refuses Never.** Re-scan every consumer. Add RED raw never
+- [x] **Receipt checkpoint 2: storage refuses Never.** Re-scan every consumer. Add RED raw never
   insert/update refusal tests for both sale-policy CHECKs, then narrow receiptMode and public,
   dashboard and till types to auto/on_request. Department null still refuses; zone null and both
   supported explicit values remain accepted. List incoming foreign keys/triggers, generate the
   receipt-check contraction separately from column additions, read SQL and run A1 migration
   guards. No conversion UPDATE or compatibility reader: reset obsolete pre-live venue data.
-- [ ] **Receipt checkpoint 3: HTTP/import/printing regressions.** Per-field routes reject never
+- [x] **Receipt checkpoint 3: HTTP/import/printing regressions.** Per-field routes reject never
   with 400 management.request_invalid and field receiptPrintMode; A4 adds the same combined PUT
   regression when those endpoints exist. Arrays/numbers/unknown strings and department null
   refuse; zone null reads the department value. Current-version import rejects never with
@@ -723,18 +723,18 @@ Nothing READS `order_start` for an order's flow yet.
   ungated originals/reprints, collection-ticket and drawer assertions. Run focused consumer
   cases and scoped types; package suites/coverage remain CI's job.
 
-- [ ] **Step 1: Failing tests:** `resolveSalePolicy` answers `orderStart` (department `table`, zone
+- [x] **Step 1: Failing tests:** `resolveSalePolicy` answers `orderStart` (department `table`, zone
   override `counter` → `counter`; zone `null` → the department's); the department route writes it,
   and `"tab"` is refused 400 `management.request_invalid` with `field: "orderStart"` (the route
   names the field, `routes.ts:152`, as `routes.test.ts` pins for `paidWhen`); each mirroring rule
   above, both directions, read back from both columns; `createDepartment({ name, orderStart:
   "table" })` stores `table_tab` beside it; the live query lists the two sale-policy tables. Run;
   watch them fail.
-- [ ] **Step 2: Implement.** One private helper per direction, used by every writer; retain slice 3A
+- [x] **Step 2: Implement.** One private helper per direction, used by every writer; retain slice 3A
   keepOpen/orderable/sendable fields in all response shapes and existing whole-shape pins.
-- [ ] **Step 3: Run** focused affected venue-service/server node files, `pnpm exec vitest run
+- [x] **Step 3: Run** focused affected venue-service/server node files, `pnpm exec vitest run
   scripts/live-subscriptions.test.ts`; typecheck venue-service, module, server, dashboard and till.
-- [ ] **Step 4: Commit** — `feat(venue-service): the service settings carry how orders start (A366)`.
+- [x] **Step 4: Commit** — `feat(venue-service): the service settings carry how orders start (A366)`.
 
 ---
 

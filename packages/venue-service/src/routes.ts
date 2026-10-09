@@ -132,14 +132,18 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
   if (
     zone &&
     value === null &&
-    (field === "paidWhen" || field === "collectionNumber" || field === "receiptPrintMode")
+    (field === "orderStart" ||
+      field === "paidWhen" ||
+      field === "collectionNumber" ||
+      field === "receiptPrintMode")
   )
     return null;
+  if (field === "orderStart" && (value === "table" || value === "counter")) return value;
   if (field === "paidWhen" && PAID_WHEN.has(value as string))
     return value as "prepay" | "ticket_then_pay";
   if (field === "collectionNumber" && COLLECTION_NUMBER.has(value as string))
     return value as "none" | "numbered";
-  if (field === "receiptPrintMode" && RECEIPT_PRINT_MODE.has(value as string))
+  if (field === "receiptPrintMode" && typeof value === "string" && RECEIPT_PRINT_MODE.has(value))
     return value as "auto" | "on_request";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
   throw new AppError("management.request_invalid", { field });
@@ -669,7 +673,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         const value = requireSalePolicyField(field, body.value, false);
         await gated(sessionId, async (tx) => {
-          if (field === "paidWhen")
+          if (field === "orderStart")
+            await setDepartmentSalePolicyField(
+              tx,
+              ctx.cfg,
+              departmentId,
+              "orderStart",
+              value as "table" | "counter",
+            );
+          else if (field === "paidWhen")
             await setDepartmentSalePolicyField(
               tx,
               ctx.cfg,
@@ -798,7 +810,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         const value = requireSalePolicyField(field, body.value, true);
         await gated(sessionId, async (tx) => {
-          if (field === "paidWhen")
+          if (field === "orderStart")
+            await setZoneSalePolicyOverride(
+              tx,
+              ctx.cfg,
+              zoneId,
+              "orderStart",
+              value as "table" | "counter" | null,
+            );
+          else if (field === "paidWhen")
             await setZoneSalePolicyOverride(
               tx,
               ctx.cfg,

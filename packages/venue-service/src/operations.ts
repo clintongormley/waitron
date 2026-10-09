@@ -149,19 +149,40 @@ async function requireDepartmentName(
   throw new AppError("department.name_taken", { name });
 }
 
+type OrderStart = "table" | "counter";
+
+function startForStyle(style: ServiceMode | null): OrderStart | null {
+  return style === null ? null : style === "table_tab" ? "table" : "counter";
+}
+
+function styleForStart(start: OrderStart | null, previous: ServiceMode | null): ServiceMode | null {
+  if (start === null) return null;
+  if (start === "table") return "table_tab";
+  return previous === "ticket_then_pay" ? "ticket_then_pay" : "prepay";
+}
+
 export async function createDepartment(
   tx: Transaction,
   cfg: VenueScope,
-  input: { name: string; tradingName?: string; defaultServiceMode: ServiceMode },
+  input: {
+    name: string;
+    tradingName?: string;
+    defaultServiceMode?: ServiceMode;
+    orderStart?: OrderStart;
+  },
 ): Promise<Department> {
   await requireDepartmentName(tx, cfg, input.name);
+  const style =
+    input.orderStart === undefined
+      ? (input.defaultServiceMode ?? "prepay")
+      : styleForStart(input.orderStart, input.defaultServiceMode ?? null)!;
   const [row] = await tx
     .insert(departments)
     .values({
       locationId: cfg.locationId,
       name: input.name,
       tradingName: input.tradingName ?? input.name,
-      defaultServiceMode: input.defaultServiceMode,
+      defaultServiceMode: style,
     })
     .returning({
       id: departments.id,
@@ -170,7 +191,9 @@ export async function createDepartment(
       defaultServiceMode: departments.defaultServiceMode,
       active: departments.active,
     });
-  await tx.insert(departmentSalePolicies).values({ departmentId: row!.id });
+  await tx
+    .insert(departmentSalePolicies)
+    .values({ departmentId: row!.id, orderStart: startForStyle(style)! });
   const [location] = await tx
     .select({ menuId: locations.catalogueId })
     .from(locations)
@@ -184,15 +207,33 @@ export async function updateDepartment(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  input: { name: string; tradingName: string; defaultServiceMode: ServiceMode },
+  input: {
+    name: string;
+    tradingName: string;
+    defaultServiceMode?: ServiceMode;
+    orderStart?: OrderStart;
+  },
 ): Promise<void> {
   await requireDepartmentName(tx, cfg, input.name, departmentId);
+  const [existing] = await tx
+    .select({ style: departments.defaultServiceMode })
+    .from(departments)
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
+  if (existing === undefined) throw new AppError("department.not_found", { departmentId });
+  const style =
+    input.orderStart === undefined
+      ? (input.defaultServiceMode ?? (existing.style as ServiceMode))
+      : styleForStart(input.orderStart, existing.style as ServiceMode)!;
   const [row] = await tx
     .update(departments)
-    .set(input)
+    .set({ name: input.name, tradingName: input.tradingName, defaultServiceMode: style })
     .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
     .returning({ id: departments.id });
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
+  await tx
+    .update(departmentSalePolicies)
+    .set({ orderStart: startForStyle(style)! })
+    .where(eq(departmentSalePolicies.departmentId, departmentId));
 }
 
 /** Leaves its zones disabled: disabling the department switched them off. */
@@ -440,7 +481,12 @@ export async function listVenueReadiness(
 export async function configureZone(
   tx: Transaction,
   cfg: VenueScope,
-  input: { zoneId: string; departmentId: string; serviceMode?: ServiceMode | null },
+  input: {
+    zoneId: string;
+    departmentId: string;
+    serviceMode?: ServiceMode | null;
+    orderStart?: OrderStart | null;
+  },
 ): Promise<void> {
   const [zone] = await tx
     .select({ id: floorZones.id, active: floorZones.active })
@@ -457,29 +503,45 @@ export async function configureZone(
   if (zone.active && !department.active) {
     throw new AppError("zone.department_inactive", { zoneId: input.zoneId });
   }
+  const [existing] = await tx
+    .select({ style: zoneServicePolicies.serviceMode })
+    .from(zoneServicePolicies)
+    .where(eq(zoneServicePolicies.zoneId, input.zoneId));
+  const style =
+    input.orderStart === undefined
+      ? (input.serviceMode ?? null)
+      : styleForStart(input.orderStart, (existing?.style as ServiceMode | null) ?? null);
   await tx
     .insert(zoneServicePolicies)
     .values({
       locationId: cfg.locationId,
       zoneId: input.zoneId,
       departmentId: input.departmentId,
-      serviceMode: input.serviceMode ?? null,
+      serviceMode: style,
     })
     .onConflictDoUpdate({
       target: [zoneServicePolicies.zoneId],
-      set: { departmentId: input.departmentId, serviceMode: input.serviceMode ?? null },
+      set: { departmentId: input.departmentId, serviceMode: style },
     });
   await tx
     .insert(zoneSalePolicies)
-    .values({ zoneId: input.zoneId })
-    .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
+    .values({ zoneId: input.zoneId, orderStart: startForStyle(style) })
+    .onConflictDoUpdate({
+      target: zoneSalePolicies.zoneId,
+      set: { orderStart: startForStyle(style) },
+    });
 }
 
 /** Create the floor zone and its service assignment in the caller's one write transaction. */
 export async function createServiceZone(
   tx: Transaction,
   cfg: VenueScope,
-  input: { name: string; departmentId: string; displayOrder?: number },
+  input: {
+    name: string;
+    departmentId: string;
+    displayOrder?: number;
+    orderStart?: OrderStart | null;
+  },
 ): Promise<{ id: string }> {
   const [department] = await tx
     .select({ id: departments.id })
@@ -521,7 +583,11 @@ export async function createServiceZone(
     }
     throw error;
   }
-  await configureZone(tx, cfg, { zoneId, departmentId: input.departmentId });
+  await configureZone(tx, cfg, {
+    zoneId,
+    departmentId: input.departmentId,
+    orderStart: input.orderStart,
+  });
   return { id: zoneId };
 }
 
@@ -564,6 +630,7 @@ export async function resolveZoneContext(
 type DepartmentSalePolicyRow = typeof departmentSalePolicies.$inferSelect;
 
 export interface EffectiveSalePolicy {
+  orderStart: "table" | "counter";
   zoneId: string;
   departmentId: string;
   departmentName: string;
@@ -585,10 +652,12 @@ export async function resolveSalePolicy(
       departmentId: departments.id,
       departmentName: departments.name,
       tradingName: departments.tradingName,
+      departmentOrderStart: departmentSalePolicies.orderStart,
       departmentPaidWhen: departmentSalePolicies.paidWhen,
       departmentCollectionNumber: departmentSalePolicies.collectionNumber,
       departmentReceiptMode: departmentSalePolicies.receiptPrintMode,
       printTradingName: departmentSalePolicies.printTradingName,
+      zoneOrderStart: zoneSalePolicies.orderStart,
       zonePaidWhen: zoneSalePolicies.paidWhen,
       zoneCollectionNumber: zoneSalePolicies.collectionNumber,
       zoneReceiptMode: zoneSalePolicies.receiptPrintMode,
@@ -610,6 +679,7 @@ export async function resolveSalePolicy(
     departmentId: row.departmentId,
     departmentName: row.departmentName,
     tradingName: row.tradingName,
+    orderStart: row.zoneOrderStart ?? row.departmentOrderStart,
     paidWhen: row.zonePaidWhen ?? row.departmentPaidWhen,
     collectionNumber: row.zoneCollectionNumber ?? row.departmentCollectionNumber,
     receiptPrintMode: row.zoneReceiptMode ?? row.departmentReceiptMode,
@@ -646,12 +716,12 @@ export async function readSaleReceiptHeader(tx: Transaction, saleId: string) {
 
 type DepartmentPolicyField = Pick<
   DepartmentSalePolicyRow,
-  "paidWhen" | "collectionNumber" | "receiptPrintMode" | "printTradingName"
+  "orderStart" | "paidWhen" | "collectionNumber" | "receiptPrintMode" | "printTradingName"
 >;
 type ZoneSalePolicyRow = typeof zoneSalePolicies.$inferSelect;
 type ZonePolicyField = Pick<
   ZoneSalePolicyRow,
-  "paidWhen" | "collectionNumber" | "receiptPrintMode"
+  "orderStart" | "paidWhen" | "collectionNumber" | "receiptPrintMode"
 >;
 
 export async function listSalePolicies(tx: Transaction, cfg: VenueScope) {
@@ -675,6 +745,7 @@ export async function listSalePolicies(tx: Transaction, cfg: VenueScope) {
       return {
         ...raw,
         effective: {
+          orderStart: raw.orderStart ?? inherited.orderStart,
           paidWhen: raw.paidWhen ?? inherited.paidWhen,
           collectionNumber: raw.collectionNumber ?? inherited.collectionNumber,
           receiptPrintMode: raw.receiptPrintMode ?? inherited.receiptPrintMode,
@@ -693,7 +764,7 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
   value: DepartmentPolicyField[K],
 ): Promise<void> {
   const [department] = await tx
-    .select({ id: departments.id })
+    .select({ id: departments.id, style: departments.defaultServiceMode })
     .from(departments)
     .where(
       and(
@@ -703,6 +774,13 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
       ),
     );
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
+  if (field === "orderStart")
+    await tx
+      .update(departments)
+      .set({
+        defaultServiceMode: styleForStart(value as OrderStart, department.style as ServiceMode)!,
+      })
+      .where(eq(departments.id, departmentId));
   await tx
     .update(departmentSalePolicies)
     .set({ [field]: value })
@@ -718,6 +796,21 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
 ): Promise<void> {
   if (!(await listServiceZones(tx, cfg)).some((zone) => zone.id === zoneId)) {
     throw new AppError("service_zone.not_found", { zoneId });
+  }
+  if (field === "orderStart") {
+    const [existing] = await tx
+      .select({ style: zoneServicePolicies.serviceMode })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    await tx
+      .update(zoneServicePolicies)
+      .set({
+        serviceMode: styleForStart(
+          value as OrderStart | null,
+          existing!.style as ServiceMode | null,
+        ),
+      })
+      .where(eq(zoneServicePolicies.zoneId, zoneId));
   }
   await tx
     .update(zoneSalePolicies)

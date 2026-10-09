@@ -1479,7 +1479,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       });
       await tx
         .update(departmentSalePolicies)
-        .set({ receiptPrintMode: "never" })
+        .set({ receiptPrintMode: "on_request" })
         .where(eq(departmentSalePolicies.departmentId, department.id));
       const table = await createTable(tx, venue.cfg, {
         label: `D-${randomUUID().slice(0, 8)}`,

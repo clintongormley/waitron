@@ -4081,7 +4081,7 @@ describe("till-app", () => {
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
   });
 
-  it.each(["on_request", "never"] as const)(
+  it.each(["on_request"] as const)(
     "%s offers an original at completion and switches to duplicate reprint after it succeeds",
     async (receiptPrintMode) => {
       const printReceipt = vi.fn().mockResolvedValue(undefined);

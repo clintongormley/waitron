@@ -2677,7 +2677,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
     });
     await tx.execute(sql`update devices set receipt_printer_id=${printer.id} `);
     await tx.execute(sql`
-      update department_sale_policies set receipt_print_mode='never'
+      update department_sale_policies set receipt_print_mode='on_request'
       where department_id in (
         select department_id from zone_service_policies
         where location_id=${cfg.locationId} and is_counter_default

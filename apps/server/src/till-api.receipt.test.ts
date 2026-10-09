@@ -281,7 +281,7 @@ let venueReceiptPrinter: string | null = null;
  *  payment slips; `null` leaves them with no printer. */
 async function configureReceipt(
   cfg: TillConfig,
-  opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
+  opts: { mode?: "auto" | "on_request"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     if (opts.mode !== undefined) {
@@ -1028,7 +1028,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       await publishWorkingMenu(tx, each.catalogueId);
     });
     const printerId = await makePrinter(cfg);
-    await configureReceipt(cfg, { mode: "never", printerId });
+    await configureReceipt(cfg, { mode: "on_request", printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     mountCatalogueApi(
@@ -1121,7 +1121,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       sql`update department_sale_policies set print_trading_name = 1 where department_id in (select id from departments where location_id = ${cfg.locationId})`,
     );
     const printerId = await makePrinter(cfg);
-    await configureReceipt(cfg, { mode: "never", printerId });
+    await configureReceipt(cfg, { mode: "on_request", printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -1184,16 +1184,16 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
   it("re-enqueues the filed receipt to the device's printer WITHOUT re-filing, bypassing the print mode", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    // mode 'never' so the SALE itself auto-enqueues nothing — the reprint's job is the only one, and a
-    // reprint working under 'never' shows it bypasses the print-mode gate.
-    await configureReceipt(cfg, { mode: "never", printerId });
+    // mode 'on_request' so the SALE itself auto-enqueues nothing — the reprint's job is the only one, and a
+    // reprint working under 'on_request' shows it bypasses the print-mode gate.
+    await configureReceipt(cfg, { mode: "on_request", printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
 
     const workingOrderId = await ringSale(app, cfg, cookie, each.menuItemId);
-    // The filed sale exists, but mode 'never' enqueued no auto job.
+    // The filed sale exists, but mode 'on_request' enqueued no auto job.
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]);
@@ -1224,7 +1224,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
   it("reprints again on a second request, still filing nothing (each reprint is paper only)", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    await configureReceipt(cfg, { mode: "never", printerId });
+    await configureReceipt(cfg, { mode: "on_request", printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1263,7 +1263,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
   it("is a 200 no-op when the device has no receipt printer set (nothing to print to)", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     // A real filed sale, but no printer on the device.
-    await configureReceipt(cfg, { mode: "never", printerId: null });
+    await configureReceipt(cfg, { mode: "on_request", printerId: null });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2117,7 +2117,7 @@ describe("payment slip persisted capture facts", () => {
     "prints an integrated capture with card facts=%s and preserves fiscal rows",
     async (withCard) => {
       const { cfg, each, operatorId } = await setupVenue();
-      await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -2146,7 +2146,7 @@ describe("payment slip persisted capture facts", () => {
   );
   it("does not print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2166,7 +2166,7 @@ describe("payment slip persisted capture facts", () => {
         resolution: "203dpi",
       });
     });
-    await configureReceipt(cfg, { mode: "never", printerId });
+    await configureReceipt(cfg, { mode: "on_request", printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2198,7 +2198,7 @@ describe("payment slip persisted capture facts", () => {
 describe("payment slip with nothing to print", () => {
   it("prints nothing when the device has no payment slip printer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "never", printerId: null });
+    await configureReceipt(cfg, { mode: "on_request", printerId: null });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2216,7 +2216,7 @@ describe("payment slip with nothing to print", () => {
 
   it("prints nothing for a capture that records no settlement instant", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2316,7 +2316,7 @@ describe("persisted cash receipt facts", () => {
 
 it("duplicates use the filed issuer identity while optional trim follows the current layout", async () => {
   const { cfg, each, operatorId } = await setupVenue();
-  await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+  await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await login(app, cfg, operatorId);
@@ -2573,7 +2573,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   async function venueWithPrinters() {
     const venue = await setupVenue();
-    await configureReceipt(venue.cfg, { mode: "never" });
+    await configureReceipt(venue.cfg, { mode: "on_request" });
     // No drawers, so a cash sale on these printers queues documents only.
     const [r1, r2, s1] = [
       await makePrinter(venue.cfg, false),
@@ -3068,7 +3068,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
 
   it("keeps an F2 explicit receipt outside invoice delivery tracking", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);

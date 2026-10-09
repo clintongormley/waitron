@@ -45,7 +45,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         )[0]!.id;
       await tx
         .insert(departmentSalePolicies)
-        .values({ departmentId })
+        .values({ departmentId, orderStart: "counter" })
         .onConflictDoNothing({ target: departmentSalePolicies.departmentId });
 
       const existing = await tx

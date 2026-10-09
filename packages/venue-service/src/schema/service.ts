@@ -93,7 +93,7 @@ export const zoneServicePolicies = table(
 const orderStart = enumType(["table", "counter"]);
 const paidWhen = enumType(["prepay", "ticket_then_pay"]);
 const collectionNumber = enumType(["none", "numbered"]);
-const receiptMode = enumType(["auto", "on_request", "never"]);
+const receiptMode = enumType(["auto", "on_request"]);
 
 export const departmentSalePolicies = table(
   "department_sale_policies",

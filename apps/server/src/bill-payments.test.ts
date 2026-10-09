@@ -1121,10 +1121,8 @@ describe("the invoice at full payment", () => {
   it.each([
     { invoiceType: "F1", mode: "auto", documents: 1 },
     { invoiceType: "F1", mode: "on_request", documents: 1 },
-    { invoiceType: "F1", mode: "never", documents: 1 },
     { invoiceType: "F2", mode: "auto", documents: 1 },
     { invoiceType: "F2", mode: "on_request", documents: 0 },
-    { invoiceType: "F2", mode: "never", documents: 0 },
   ] as const)(
     "captured-card completion queues $documents original for $invoiceType in $mode mode",
     async ({ invoiceType, mode, documents }) => {
