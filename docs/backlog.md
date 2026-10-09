@@ -1593,9 +1593,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`apps/server/src/station-move.ts`) does so whoever moved it. Should it? A question for the owner.
   Left open by A439.
 
-- **Nothing shows who moved a dish yet** — each move records its device and, once someone can sign
-  in on a kitchen display, its person (`ticket_item_moves`), but no screen or report reads them.
-  Left open by A439.
+- **Nothing shows who moved a dish yet** — each move records its device and the person signed in on
+  it (`ticket_item_moves`; nobody on a kitchen display until someone can sign in on one), but no
+  screen or report reads them. Left open by A439.
 
 - **A till's own Station screen could move dishes too** — only a kitchen display's station screen
   draws Move to station; A439 left the till's out.

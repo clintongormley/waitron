@@ -576,7 +576,7 @@ function requireUuidId(
   return id;
 }
 
-/** The body of a move-station request on order `orderId`, from a till or a kitchen display. */
+/** The body of a move-station request on order `orderId`. */
 export function stationMoveRequest(
   orderId: string,
   body: Record<string, unknown>,

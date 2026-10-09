@@ -238,7 +238,6 @@ export class TillStationQueue extends LitElement {
         cursor: pointer;
       }
 
-      /* The dish row: qty× name (left) and the lens-specific secondary element (right). */
       .movable {
         display: flex;
         flex-direction: column;
@@ -253,6 +252,7 @@ export class TillStationQueue extends LitElement {
         align-self: stretch;
       }
 
+      /* The dish row: qty× name (left) and the lens-specific secondary element (right). */
       .line-main {
         display: flex;
         align-items: center;
@@ -622,12 +622,10 @@ export class TillStationQueue extends LitElement {
   /** Set for a merged queue: each dish and notice is labelled with its station's name. */
   @property({ attribute: false }) stationNames?: ReadonlyMap<string, string>;
   @property() fireControl: FireControlMode = "waiter";
-  /** For an enrolled device display: the server's device routes are the per-line advance alone, and the
-   *  collect and fire routes need a session, so both buttons are hidden. */
+  /** For an enrolled device display: the collect and fire routes need a session, so both buttons are hidden. */
   @property({ type: Boolean }) advanceOnly = false;
   /** Rail-only, like collect: kanban columns cut across orders, so a per-order action has no home there. */
   @property({ type: Boolean }) showReprint = false;
-  /** Draws Move beside each queued dish, which emits `move-station`. */
   @property({ type: Boolean }) canMove = false;
   /** Injectable clock for age colouring. Set in tests for deterministic bands. */
   @property({ attribute: false }) now?: number;
