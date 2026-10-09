@@ -1101,7 +1101,6 @@ editable. ‹ stops at today's business day. A331 rule for the staged day.
   watch them fail; implement; the package's node project; LOOK in EN and ES, both themes, 1280 and
   390; commit `feat(venue-service): zones on the Day tab (A366)`.
 
-
 2026-10-09 Task 23 checkpoint: implemented in the existing `dashboard/opening-hours-day.ts`
 extraction, with screen integration for the named-day editor. The Day grid now places each zone’s
 narrow closed-time layer after its department; its combined staged draft saves changed department
@@ -1118,7 +1117,9 @@ unsaved and accessibility assertions were retained. Eight installed-checkout del
 failed at the intended assertions and passed after restoration; the source hashes and discarded
 initial probes are retained in the campaign’s Task 23 receipts. LOOK captured normal/own/closed
 states once across EN/ES, light/dark and actual CSS widths 1280/390; the visible hour range is roughly
-09:00–13:00, not the full business day. Implementation done, pending controller review. Remaining
+09:00–13:00, not the full business day. Task-scoped review approved the implementation at
+`188e0a6c6720053b526cef17d7a187072a284d17`, with no Critical or Important findings. The disclosed
+Lit and experimental Web Crypto warnings remain a Minor finding for whole-branch review. Remaining
 slice work starts at Task 24; this checkpoint does not complete slice 2.
 
 ---
