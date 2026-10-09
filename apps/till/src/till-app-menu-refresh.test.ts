@@ -2332,3 +2332,48 @@ describe("zone-only menu-state changes", () => {
     expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
   });
 });
+
+for (const kind of ["counter", "table"] as const) {
+  it(`redraws the ${kind} zone control after a poll changes only its closing time`, async () => {
+    const initialService: ZoneOfferCatalogue["service"] = {
+      open: true,
+      zoneOpen: true,
+      periodName: "Lunch",
+      keepOpen: null,
+      zoneKeepOpen: {
+        zoneId: kind === "counter" ? "zone-counter" : "zone-dining",
+        zoneName: "Terrace",
+        closesAt: "14:00",
+        running: true,
+        extendedUntil: null,
+      },
+    };
+    let service = initialService;
+    const stubs = {
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...V1, service }),
+      listZoneOffers: vi.fn((zone: string) =>
+        Promise.resolve({ ...(zone === "zone-dining" ? DINING : V1), service }),
+      ),
+      menuState: vi.fn(() => Promise.resolve({ ...menuState("v1"), service })),
+    };
+    const { el } = await mountApp(kind === "counter" ? stubs : tableStubs(DINING, stubs));
+    if (kind === "counter") await toCounter(el);
+    else await toTable(el);
+    const screen = () => (kind === "counter" ? counter(el) : tableScreen(el));
+    const widget = () =>
+      screen().shadowRoot!.querySelector<
+        HTMLElement & { zoneKeepOpen: ZoneOfferCatalogue["service"]["zoneKeepOpen"] }
+      >('till-keep-open[subject="zone"]');
+    expect(widget()).not.toBeNull();
+    expect(widget()!.zoneKeepOpen!.closesAt).toBe("14:00");
+    api.listZoneOffers.mockImplementation((zone: string) =>
+      Promise.resolve({ ...(zone === "zone-dining" ? DINING : V1), service }),
+    );
+    service = {
+      ...initialService,
+      zoneKeepOpen: { ...initialService.zoneKeepOpen!, closesAt: "14:30", extendedUntil: "14:30" },
+    };
+    await poll(el);
+    await expect.poll(() => widget()!.zoneKeepOpen!.closesAt).toBe("14:30");
+  });
+}

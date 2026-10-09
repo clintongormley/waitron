@@ -1,3 +1,4 @@
+import { zoneKeepOpen, servicePeriodStyles } from "../widgets/service-period.js";
 import { tillPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -67,6 +68,7 @@ function partyPaid(table: TableState): boolean {
 export class TillFloorScreen extends LitElement {
   static override styles = [
     baseStyles,
+    servicePeriodStyles,
     floorTrayStyles,
     signalChipStyles,
     css`
@@ -691,6 +693,19 @@ export class TillFloorScreen extends LitElement {
             : nothing
         }
         ${refusedZone === undefined ? nothing : html`<p data-zone-closed role="status">${t("menu.zone_closed").replace("{zone}", () => refusedZone.name)}</p>`}
+        ${(() => {
+          const zone = this.zones.find((z) => z.id === activeKey);
+          return zone?.closesAt
+            ? html`<div class="service-period" data-zone-control>
+                <p role="status">
+                  ${t(zone.closed ? "keep_open.zone_closed" : "keep_open.zone_closes")
+                    .replace("{zone}", () => zone.name)
+                    .replace("{time}", () => zone.closesAt!)}
+                </p>
+                ${zoneKeepOpen({ zoneId: zone.id, zoneName: zone.name, closesAt: zone.closesAt, running: !zone.closed, extendedUntil: null }, this.api, zone.id)}
+              </div>`
+            : nothing;
+        })()}
         ${this.#stationSummary()}
         ${
           view === "map"

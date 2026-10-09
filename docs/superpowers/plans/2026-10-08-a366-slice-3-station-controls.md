@@ -1253,7 +1253,7 @@ Re-ground every task against slice 2 as landed: `zone_closed_times`, `closedZone
 `zone_extensions_day_key` (`zone_id`, `business_day`); check `zone_extensions_step_ck`. `state`;
 not transferred.
 
-- [ ] Steps: as Task A1 (failing migration test; generate; read the SQL — only `CREATE TABLE`;
+- [x] Steps: as Task A1 (failing migration test; generate; read the SQL — only `CREATE TABLE`;
   classification, guards, clear list; the guard and upgrade runs; commit
   `feat(venue-service): zone extensions (A366)`).
 
@@ -1279,7 +1279,7 @@ same shape of pure function as `withExtension`, applied to closed ranges. `keepZ
 department is open at every minute from `max(now, starts_at)` to `until` through Task A9's
 `departmentDay` with its extension applied.
 
-- [ ] Steps: failing tests (review focus 7; a zone with no closed time left today → `not_closing`;
+- [x] Steps: failing tests (review focus 7; a zone with no closed time left today → `not_closing`;
   a zone whose department is closed now → `department_closed`; `null` removes the row; the
   pricing path reads no `zone_extensions` row; `closedZoneIdsAt` at 01:00 leaves the Terrace open,
   at 01:30 closed — fails today: no extension is read); watch them fail
@@ -1298,7 +1298,7 @@ department is open at every minute from `max(now, starts_at)` to `until` through
 **Route:** `PUT /api/service-zones/:zoneId/zone-extension` — `{ until | null }`, optional
 `override`; same authorization, gating and map rows as Task A11.
 
-- [ ] Steps: failing tests through the real routes (seat a Terrace table at 01:00 after keeping
+- [x] Steps: failing tests through the real routes (seat a Terrace table at 01:00 after keeping
   the Terrace open until 01:30 → 200; at 01:30 → 409 `service_zone.closed`; with the department
   closing at 01:00 the PUT → 409 `zone_extension.not_allowed` `department_closed`; a staff PUT → 403
   then 204 with an override; `/api/zones` answers `closesAt`); watch them fail; implement; the
@@ -1320,7 +1320,7 @@ notice and the period line), `screens/till-floor-screen.ts` (the zone bar), `til
 closing time left today." / "Esta zona no puede seguir abierta cuando {department} ha cerrado, o
 hoy ya no tiene hora de cierre."; code `zone_extension.invalid` as `period_extension.invalid`.
 
-- [ ] Steps: failing tests (the zone button in the closed-zone notice and beside the period line
+- [x] Steps: failing tests (the zone button in the closed-zone notice and beside the period line
   while the zone closes later today; the floor's zone bar; the dialog and override paths; axe in
   both themes; save-state and unsaved cases); watch them fail; implement; the till's whole suite;
   LOOK at the counter, table order and floor screens in EN and ES, both themes, 1280 and 390, with

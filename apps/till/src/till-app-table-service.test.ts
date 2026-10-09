@@ -50,6 +50,7 @@ const floorZone: FloorZone = {
   name: "Comedor",
   displayOrder: 0,
   active: true,
+  closesAt: null,
   closed: false,
 };
 

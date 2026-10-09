@@ -29,6 +29,8 @@ export class TillKeepOpen extends LitElement {
   ];
   @property({ attribute: false }) api?: TillApi;
   @property() zoneId = "";
+  @property() subject: "period" | "zone" = "period";
+  @property({ attribute: false }) zoneKeepOpen: MenuState["service"]["zoneKeepOpen"] = null;
   @property({ attribute: false }) keepOpen: MenuState["service"]["keepOpen"] = null;
   @state() private busy = false;
   @state() private period: KeepOpenPeriod | null = null;
@@ -44,9 +46,16 @@ export class TillKeepOpen extends LitElement {
   }
   override willUpdate(changed: PropertyValues): void {
     const old = changed.get("keepOpen") as typeof this.keepOpen | undefined;
+    const oldZone = changed.get("zoneKeepOpen") as typeof this.zoneKeepOpen | undefined;
     if (
       changed.has("zoneId") ||
-      (changed.has("keepOpen") && old?.periodId !== this.keepOpen?.periodId)
+      changed.has("subject") ||
+      (this.subject === "zone" &&
+        changed.has("zoneKeepOpen") &&
+        oldZone?.zoneId !== this.zoneKeepOpen?.zoneId) ||
+      (this.subject === "period" &&
+        changed.has("keepOpen") &&
+        old?.periodId !== this.keepOpen?.periodId)
     )
       this.#reset();
   }
@@ -65,8 +74,11 @@ export class TillKeepOpen extends LitElement {
       this.isConnected &&
       generation === this.#generation &&
       this.zoneId === zone &&
-      this.keepOpen?.periodId === periodId
+      this.#subjectId() === periodId
     );
+  }
+  #subjectId(): string | undefined {
+    return this.subject === "zone" ? this.zoneKeepOpen?.zoneId : this.keepOpen?.periodId;
   }
   #code(error: unknown): string {
     return typeof error === "object" &&
@@ -81,7 +93,7 @@ export class TillKeepOpen extends LitElement {
       !this.isConnected ||
       !this.api ||
       !this.zoneId ||
-      !this.keepOpen ||
+      !this.#subjectId() ||
       this.busy ||
       this.period ||
       this.authorizers
@@ -89,12 +101,13 @@ export class TillKeepOpen extends LitElement {
       return;
     const generation = ++this.#generation,
       zone = this.zoneId,
-      periodId = this.keepOpen.periodId;
+      periodId = this.#subjectId()!;
     this.busy = true;
     this.refusal = null;
     try {
       const answer = await this.api.keepOpen(zone);
-      if (this.#current(generation, zone, periodId)) this.period = answer.period;
+      if (this.#current(generation, zone, periodId))
+        this.period = this.subject === "zone" ? answer.zone : answer.period;
     } catch (error) {
       if (this.#current(generation, zone, periodId)) this.refusal = this.#code(error);
     } finally {
@@ -105,7 +118,7 @@ export class TillKeepOpen extends LitElement {
     if (
       !this.isConnected ||
       !this.api ||
-      !this.keepOpen ||
+      !this.#subjectId() ||
       !this.period ||
       this.period.id !== intent.periodId ||
       this.busy
@@ -113,14 +126,19 @@ export class TillKeepOpen extends LitElement {
       return;
     const generation = ++this.#generation,
       zone = this.zoneId,
-      periodId = this.keepOpen.periodId;
+      periodId = this.#subjectId()!;
     this.#intent = intent;
     this.busy = true;
     this.refusal = null;
     this.refusalField = null;
     this.pinError = null;
     try {
-      await this.api.keepPeriodOpen(zone, override ? { ...intent, override } : intent);
+      if (this.subject === "zone")
+        await this.api.keepZoneOpen(
+          zone,
+          override ? { until: intent.until, override } : { until: intent.until },
+        );
+      else await this.api.keepPeriodOpen(zone, override ? { ...intent, override } : intent);
       if (!this.#current(generation, zone, periodId)) return;
       this.shadowRoot!.querySelector("till-keep-open-dialog")?.commit();
       this.#reset();
@@ -153,10 +171,11 @@ export class TillKeepOpen extends LitElement {
           typeof error.field === "string"
             ? error.field
             : null;
-        if (code.startsWith("period_extension.")) {
+        if (code.startsWith(this.subject === "zone" ? "zone_extension." : "period_extension.")) {
           try {
             const answer = await this.api.keepOpen(zone);
-            if (this.#current(generation, zone, periodId)) this.period = answer.period;
+            if (this.#current(generation, zone, periodId))
+              this.period = this.subject === "zone" ? answer.zone : answer.period;
           } catch {
             /* The write refusal survives a failed refresh. */
           }
@@ -167,19 +186,20 @@ export class TillKeepOpen extends LitElement {
     }
   }
   override render() {
-    if (!this.keepOpen) return nothing;
+    if (!this.#subjectId()) return nothing;
     return html`<wt-button
         data-action
         variant="secondary"
         ?disabled=${this.busy || this.period !== null || this.authorizers !== null}
         @click=${() => this.#act()}
-        >${t("keep_open.button").replace("{period}", () => this.keepOpen!.periodName)}</wt-button
+        >${this.subject === "zone" ? t("keep_open.zone_button").replace("{zone}", () => this.zoneKeepOpen!.zoneName) : t("keep_open.button").replace("{period}", () => this.keepOpen!.periodName)}</wt-button
       >
       ${this.refusal && this.period === null ? html`<p class="refusal" role="alert">${codeMessage(this.refusal)}</p>` : nothing}
       ${
         this.period !== null
           ? html`<till-keep-open-dialog
               .period=${this.period}
+              .subject=${this.subject}
               .busy=${this.busy || this.authorizers !== null}
               .refusal=${this.refusal}
               .refusalField=${this.refusalField}

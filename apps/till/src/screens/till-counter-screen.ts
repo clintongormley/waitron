@@ -291,13 +291,7 @@ export class TillCounterScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${
-        this.service?.zoneOpen === false
-          ? html`<p role="status" data-zone-closed>
-              ${t("menu.zone_closed").replace("{zone}", () => this.zoneName)}
-            </p>`
-          : servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId)
-      }
+      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName)}
       ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
       ${
         this.service?.open === true && this.service.zoneOpen

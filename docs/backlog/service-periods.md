@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 3 Part B and slices 4–7, each planned then built without
+  APPROVED 2026-10-07; remaining work is slices 4–7, each planned then built without
   stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -28,8 +28,6 @@ their full text.
   receipt with translated subtitle and footer, then the department page's Receipt tab after
   slice 6. Lane E's build follows slice 6 Part A before
   slice 7 Part A; the documentation revision is complete and receipt implementation stays open.
-  Slice 3's plan is written ahead of lane D (A366-3p, 2026-10-08): [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md),
-  with the zone-extension writer, server route and till controls after slice 2 remaining in Part B.
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
   in two pull requests — combined tickets on shared printers, period choices in routing cells and
   the station editor after slice 1; station hours, fallbacks and the tester removed, with each

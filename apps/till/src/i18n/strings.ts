@@ -4,6 +4,10 @@
 export const en = {
   "keep_open.line_until": "{period} · until {time}",
   "keep_open.line_extended": "{period} · kept open until {time}",
+  "keep_open.zone_button": "Keep {zone} open later",
+  "keep_open.zone_heading": "Keep {zone} open later today",
+  "keep_open.zone_closes": "{zone} closes at {time} today.",
+  "keep_open.zone_closed": "{zone} is closed now.",
   "keep_open.button": "Keep {period} open later",
   "keep_open.heading": "Keep {period} open later today",
   "keep_open.ends": "{period} ends at {time} today.",
@@ -1163,6 +1167,10 @@ export type StringKey = keyof typeof en;
 export const es: Record<StringKey, string> = {
   "keep_open.line_until": "{period} · hasta las {time}",
   "keep_open.line_extended": "{period} · horario ampliado hasta las {time}",
+  "keep_open.zone_button": "Ampliar el horario de {zone}",
+  "keep_open.zone_heading": "Ampliar hoy el horario de {zone}",
+  "keep_open.zone_closes": "Hoy {zone} cierra a las {time}.",
+  "keep_open.zone_closed": "{zone} está cerrada ahora.",
   "keep_open.button": "Ampliar el horario de {period}",
   "keep_open.heading": "Ampliar hoy el horario de {period}",
   "keep_open.ends": "Hoy {period} termina a las {time}.",

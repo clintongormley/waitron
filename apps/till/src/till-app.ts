@@ -1021,6 +1021,19 @@ function keepOpenMoved(
   );
 }
 
+function zoneKeepOpenMoved(
+  next: MenuStateAnswer["service"]["zoneKeepOpen"],
+  current: MenuStateAnswer["service"]["zoneKeepOpen"] | undefined,
+): boolean {
+  return (
+    next?.zoneId !== current?.zoneId ||
+    next?.zoneName !== current?.zoneName ||
+    next?.closesAt !== current?.closesAt ||
+    next?.running !== current?.running ||
+    next?.extendedUntil !== current?.extendedUntil
+  );
+}
+
 /**
  * Owns the one {@link WorkingOrderStore}, which belongs to the till and survives a change of operator,
  * and the one {@link TillApi}. Screens emit composed events; this element decides what happens next. A
@@ -3038,7 +3051,8 @@ export class TillApp extends LitElement {
         state.service.open !== this.counterService?.open ||
         state.service.zoneOpen !== this.counterService?.zoneOpen ||
         state.service.periodName !== this.counterService?.periodName ||
-        keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen);
+        keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen) ||
+        zoneKeepOpenMoved(state.service.zoneKeepOpen, this.counterService?.zoneKeepOpen);
       const busy = this.submitting || this.parking || this.placing;
       if (
         (menusMoved(this.menus, state.menus) || serviceMoved) &&
@@ -3058,7 +3072,8 @@ export class TillApp extends LitElement {
         state.service.open !== this.tableService?.open ||
         state.service.zoneOpen !== this.tableService?.zoneOpen ||
         state.service.periodName !== this.tableService?.periodName ||
-        keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen);
+        keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen) ||
+        zoneKeepOpenMoved(state.service.zoneKeepOpen, this.tableService?.zoneKeepOpen);
       if (!menusMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
       else
         void this.#reloadTableOffers(zoneId).then((read) => {
@@ -9046,6 +9061,7 @@ export class TillApp extends LitElement {
         @keep-open-changed=${(e: CustomEvent<{ zoneId: string }>) => {
           e.stopPropagation();
           void this.#menuPoll.readNow(e.detail.zoneId);
+          void this.#refreshFloorZones();
         }}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
