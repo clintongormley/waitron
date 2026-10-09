@@ -457,32 +457,35 @@ describe("seedDemoRestaurant", () => {
       const { rows: departmentRows } = await tx.execute<{
         name: string;
         trading_name: string;
-        default_service_mode: string;
+        order_start: string;
       }>(sql`
-        select name, trading_name, default_service_mode
-        from departments
-        order by name`);
+        select d.name, d.trading_name, p.order_start
+        from departments d
+        join department_sale_policies p on p.department_id = d.id
+        order by d.name`);
       const { rows: serviceZoneRaw } = await tx.execute<{
         zone_name: string;
         department_name: string;
-        service_mode: string;
+        order_start: string;
         is_counter_default: number;
         menus: string;
       }>(sql`
         select z.name as zone_name, d.name as department_name,
-               coalesce(p.service_mode, d.default_service_mode) as service_mode,
+               coalesce(zp.order_start, dp.order_start) as order_start,
                p.is_counter_default,
                json_group_array(c.name order by dm.display_order) as menus
         from zone_service_policies p
         join floor_zones z on z.id = p.zone_id
         join departments d on d.id = p.department_id
+        join department_sale_policies dp on dp.department_id = d.id
+        join zone_sale_policies zp on zp.zone_id = z.id
         join (
           select department_id, menu_id, 0 as display_order from menu_periods
           union
           select department_id, menu_id, display_order + 1 from menu_period_staff_menus
         ) dm on dm.department_id = p.department_id
         join catalogues c on c.id = dm.menu_id
-        group by z.name, d.name, p.service_mode, d.default_service_mode, p.is_counter_default
+        group by z.name, d.name, zp.order_start, dp.order_start, p.is_counter_default
         order by z.name`);
       const serviceZoneRows = serviceZoneRaw.map((row) => ({
         ...row,
@@ -596,47 +599,47 @@ describe("seedDemoRestaurant", () => {
       {
         name: "Deli",
         trading_name: "Deli Delgado",
-        default_service_mode: "prepay",
+        order_start: "counter",
       },
       {
         name: "Restaurant and bar",
         trading_name: "Bar Casa Delgado",
-        default_service_mode: "table_tab",
+        order_start: "table",
       },
     ]);
     expect(read.serviceZones).toEqual([
       {
         zone_name: "Deli counter",
         department_name: "Deli",
-        service_mode: "prepay",
+        order_start: "counter",
         is_counter_default: false,
         menus: ["Deli takeaway"],
       },
       {
         zone_name: "Dining room",
         department_name: "Restaurant and bar",
-        service_mode: "table_tab",
+        order_start: "table",
         is_counter_default: false,
         menus: ["Casa Delgado", "Menú del Día"],
       },
       {
         zone_name: "Downstairs bar",
         department_name: "Restaurant and bar",
-        service_mode: "prepay",
+        order_start: "counter",
         is_counter_default: true,
         menus: ["Casa Delgado", "Menú del Día"],
       },
       {
         zone_name: "Terrace",
         department_name: "Restaurant and bar",
-        service_mode: "table_tab",
+        order_start: "table",
         is_counter_default: false,
         menus: ["Casa Delgado", "Menú del Día"],
       },
       {
         zone_name: "Upstairs bar",
         department_name: "Restaurant and bar",
-        service_mode: "prepay",
+        order_start: "counter",
         is_counter_default: false,
         menus: ["Casa Delgado", "Menú del Día"],
       },
