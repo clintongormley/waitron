@@ -878,3 +878,49 @@ it.each([
     ]);
   },
 );
+
+it("a reserved-name Enable refreshes the shell without accepting or navigating away from Rename", async () => {
+  const { shell, request, loaded, failWrite } = await mount(
+    "/manage/venue-operations/department/d1",
+  );
+  failWrite({ code: "department.name_disabled", params: { name: "Deli", departmentId: "d2" } });
+  emit(shell.shadowRoot!.querySelector("department-page")!, "rename-department", {
+    departmentId: "d1",
+  });
+  const editor = await dialogs(shell);
+  await saveName(editor, "Deli");
+  await expect
+    .poll(() => editor.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
+    .not.toBeNull();
+  const next = view();
+  next.departments[1]!.active = true;
+  loaded(next);
+  failWrite(undefined);
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
+  await expect.poll(() => shell.model.departments[1]!.active).toBe(true);
+  await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
+  expect(editor.dialog?.kind).toBe("rename-department");
+  const field = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+  await field.updateComplete;
+  expect(field.shadowRoot!.querySelector("input")!.value).toBe("Deli");
+  expect(field.error).toBe("A department with this name already exists.");
+  expect(editor.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
+      .disabled,
+  ).toBe(false);
+  expect(shell.model.departments[0]!.name).toBe("Restaurant");
+  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(alert(shell)).toBe("");
+  expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toEqual([
+    [
+      "/management-api/venue-service/departments/d1",
+      "PATCH",
+      { name: "Deli", tradingName: "Casa", defaultServiceMode: "prepay" },
+    ],
+    ["/management-api/venue-service/departments/d2", "PATCH", { active: true }],
+  ]);
+  expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
+    passive: true,
+  });
+});

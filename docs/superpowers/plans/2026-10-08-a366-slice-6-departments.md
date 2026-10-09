@@ -1797,3 +1797,21 @@ Receipts and the detailed old-to-new audit delta stay in Lane E's
 `receipts/a366-6a/a10-switch/`. This is not retirement approval or public LOOK.
 Next reconcile the late/drafts inventory with subsequent carried tests, complete
 A10's public switch and mounted public checks, then A13–A15 and branch gates.
+
+
+### Implementation checkpoint: A10 late-completion and reconnect audit (2026-10-09)
+
+The bounded source audit found three retained assertions missing from the replacement
+suites: successful Enable after newer name input, Rename after enabling the conflicting
+row, and Settings reconnect after a tick outside the page. Added checks carry all three.
+The English/Spanish department/zone Rename cases first failed because Enable closed
+Rename. The fix reports the now-active name conflict, retains the attempted name and
+original baseline, and emits the passive-refresh event without accepting the rename.
+The shell case checks that the existing row becomes active while the current row keeps
+its name, the dialog stays open and the address stays on the same department.
+
+No existing assertion or legacy suite is retired at this checkpoint. The full retirement
+inventory and public switch remain pending. Resume at that inventory, remove the staged
+DashboardApp create spy when switching, and run mounted public navigation and LOOK.
+A13–A15 and the authorised branch gates remain. Detailed audit, execution and visual
+receipts stay in Lane E's `receipts/a366-6a/a10-public-switch/`.

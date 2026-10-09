@@ -311,6 +311,11 @@ export class DepartmentDialogs extends LitElement {
             break;
         }
       if (this.current(dialog, generation)) {
+        if (enable && (dialog.kind === "rename-department" || dialog.kind === "rename-zone")) {
+          this.fieldRefusal({ code: `${enable.kind}.name_taken` }, submitted);
+          this.emit("written", detail);
+          return;
+        }
         this.scope?.commit(submitted);
         if (this.scope?.isDirty()) this.emit("written", detail);
         else {

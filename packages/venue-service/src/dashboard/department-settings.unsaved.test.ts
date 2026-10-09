@@ -716,3 +716,45 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
     finish?.();
   }
 });
+
+it("Settings left out of the page for a tick protects its retained native draft", async () => {
+  const request = vi.fn(async (path: string, method = "GET") => {
+    if (method !== "GET") throw new Error("Unexpected Settings write");
+    return path.endsWith("/profiles")
+      ? []
+      : {
+          departmentId: "d1",
+          receivingProfileId: null,
+          destinationDepartmentIds: [],
+        };
+  });
+  const el = await mount(request as DashboardRequest);
+  await expect.poll(() => request.mock.calls.length).toBe(2);
+  const field =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=tradingName]")!;
+  await field.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(field.shadowRoot!.querySelector("input")!),
+    "Retained draft",
+  );
+  await el.updateComplete;
+  expect(unload()).toBe(true);
+  el.remove();
+  expect(unload()).toBe(false);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  app.shadowRoot!.append(el);
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(unload()).toBe(true);
+  expect(field.shadowRoot!.querySelector("input")!.value).toBe("Retained draft");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await choice("keep");
+  expect(field.shadowRoot!.querySelector("input")!.value).toBe("Retained draft");
+  expect(unload()).toBe(true);
+  expect(request.mock.calls.filter((call) => call[1] !== undefined && call[1] !== "GET")).toEqual(
+    [],
+  );
+  await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), "Casa");
+  await el.updateComplete;
+  expect(unload()).toBe(false);
+});

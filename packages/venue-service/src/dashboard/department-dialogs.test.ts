@@ -1204,3 +1204,121 @@ it.each(["en", "es"])(
     expect(save(el).disabled).toBe(false);
   },
 );
+
+it.each(["en", "es"].flatMap((locale) => ["department", "zone"].map((kind) => ({ locale, kind }))))(
+  "a successful reserved-name Enable keeps the refused Rename draft in $locale for $kind",
+  async ({ locale, kind }) => {
+    await page.viewport(390, 900);
+    try {
+      const name = kind === "department" ? "Deli" : "Deli counter";
+      const dialog = dialogs[kind === "department" ? 1 : 3]!;
+      const request = vi.fn(async (_path: string, _method?: string, body?: unknown) => {
+        if (!(body as { active?: boolean })?.active)
+          throw { code: `${kind}.name_disabled`, params: { name, [`${kind}Id`]: "reserved" } };
+      });
+      const { el } = await mount(dialog, request);
+      setLocale(locale);
+      await el.updateComplete;
+      await change(el, "name", name);
+      save(el).click();
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
+        .not.toBeNull();
+      const enable = el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!;
+      expect(field(el, "name").error).toBe(
+        locale === "en"
+          ? `A disabled ${kind} already has this name. Enable it instead.`
+          : kind === "department"
+            ? "Un departamento deshabilitado ya tiene este nombre. Habilítalo en su lugar."
+            : "Una zona deshabilitada ya tiene este nombre. Habilítala en su lugar.",
+      );
+      expect(enable.textContent!.trim()).toBe(
+        `${locale === "en" ? "Enable" : "Habilitar"} ${name}`,
+      );
+      expect(enable.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      expect(enable.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+      const written: unknown[] = [];
+      const saved: unknown[] = [];
+      el.addEventListener("written", (event) => written.push((event as CustomEvent).detail));
+      el.addEventListener("saved", (event) => saved.push((event as CustomEvent).detail));
+      enable.click();
+      await expect.poll(() => request.mock.calls.length).toBe(2);
+      await el.updateComplete;
+      expect(el.dialog).toEqual(dialog);
+      expect(field(el, "name").error).toBe(
+        locale === "en"
+          ? `A ${kind} with this name already exists.`
+          : `Ya existe ${kind === "department" ? "un departamento" : "una zona"} con este nombre.`,
+      );
+      expect(field(el, "name").shadowRoot!.querySelector("input")!.value).toBe(name);
+      expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+      expect(save(el).disabled).toBe(false);
+      expect(saved).toEqual([]);
+      expect(written).toEqual([
+        kind === "department" ? { departmentId: "reserved" } : { zoneId: "reserved" },
+      ]);
+      expect(request).toHaveBeenLastCalledWith(
+        kind === "department"
+          ? "/management-api/venue-service/departments/reserved"
+          : "/management-api/zones/reserved",
+        "PATCH",
+        { active: true },
+      );
+      await change(
+        el,
+        "name",
+        dialog.kind === "rename-department" || dialog.kind === "rename-zone" ? dialog.row.name : "",
+      );
+      expect(save(el).disabled).toBe(true);
+      el.remove();
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
+
+it.each(dialogs.slice(0, 4))(
+  "$kind leaves newer native text free of an earlier Enable success",
+  async (dialog) => {
+    let finish!: (value: unknown) => void;
+    const kind = dialog.kind.endsWith("department") ? "department" : "zone";
+    let calls = 0;
+    const request = vi.fn(async () => {
+      if (++calls === 1)
+        throw {
+          code: `${kind}.name_disabled`,
+          params: { name: "Reserved", [`${kind}Id`]: "disabled" },
+        };
+      return new Promise<unknown>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const { el } = await mount(dialog, request);
+    await change(el, "name", "Reserved");
+    save(el).click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
+      .not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
+    await expect.poll(() => request.mock.calls.length).toBe(2);
+    await field(el, "name").updateComplete;
+    const native = field(el, "name").shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(native), "New available name");
+    await el.updateComplete;
+    finish(undefined);
+    await expect.poll(() => save(el).disabled).toBe(false);
+    expect(field(el, "name").error).toBe("");
+    expect(native.value).toBe("New available name");
+    expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+    expect(await bottom(el)).toBe("");
+    expect(el.dialog).toEqual(dialog);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenLastCalledWith(
+      kind === "department"
+        ? "/management-api/venue-service/departments/disabled"
+        : "/management-api/zones/disabled",
+      "PATCH",
+      { active: true },
+    );
+  },
+);
