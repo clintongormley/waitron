@@ -2256,12 +2256,14 @@ offered when the profile shows that screen. **Owner 2026-10-09 (decision 17):** 
 a pass screen or a pass monitor, one or the other, the monitor offered only when the profile
 offers one; choosing it shows its station and zone lists within the profile's monitor row.
 Changing the profile clears a choice the new profile does not offer (as the binding is cleared
-today, `devices-screen.ts:1176-1182`). In Edit, each recorded removal and each switched-off entry
-is listed marked "No longer available" ("Ya no está disponible"), not editable and not part of the
-draft: opening the dialog does not make it changed; saving clears the removals (decision 21).
-Because a narrowing now keeps the device's stored choice (decision 21, owner 2026-10-09), the
-draft must be built only from the entries the read marks `available: true`, never from the stored
-rows, so a save cannot send back an entry the profile took away. The device list reads "Station
+today, `devices-screen.ts:1176-1182`). In Edit, each recorded removal is listed marked "No longer
+available" ("Ya no está disponible"), not editable and not part of the draft, while a switched-off
+entry stays in the choice, marked as switched off: opening the dialog does not make it changed; a
+save that changes the kitchen choice clears the removals, and a save that does not touch it sends
+no kitchen screens and leaves them (decision 21). Because a narrowing now keeps the device's stored
+choice (decision 21, owner 2026-10-09), the draft must be built only from the entries the read
+marks available or switched off, never from the stored rows, so a save cannot send back an entry
+the profile took away. The device list reads "Station
 screen: Grill, Fryer" / "Pass screen: every station · Terrace" / "Pass monitor: every station ·
 every zone", with "(Deli no longer available)" after a list that lost one; after a profile save
 gives Deli back to the device, the list shows Deli with no such note. Save rule: the kitchen
